@@ -12,6 +12,17 @@
 // The answer isn't simply "same" or "different", because the graphics card does its sums in a slightly different order from the processor, and a
 // corner can land one unit away. What matters most is a hole: a pixel with a surface in the old pictures and none in the new, because that's a wrong
 // pixel on the screen. So holes, and changes to colour, direction and distance, are all counted apart.
+//
+// TIES
+//
+// The surface pictures are painted over the game's finished depth buffer, and they don't write to it. A polygon gets to paint a pixel if it's as near as the
+// depth the game kept, or within a small margin of it. So when two polygons can both paint a pixel, say a sign flat on a wall, it isn't the nearer that stays
+// but the one painted last. Those two polygons tie. The two routes paint in a different order, so on a tie they can keep different polygons, and neither
+// has left anything out.
+//
+// To find those pixels, the old route's pictures are painted once more with every polygon in the opposite order. A pixel only one polygon can paint comes out the
+// same whatever the order, so a pixel that changes has a tie on it. A place where the routes differ and there's no tie isn't explained by the order of painting.
+// It's either the new route drawing something else, or a tie that only exists on the new route, because the card worked out a corner slightly differently.
 
 #include "static_frame.h"
 
@@ -107,6 +118,11 @@ static bool ColoursDiffer(const uint8_t *a, const uint8_t *b)
 	return Difference(a[0], b[0]) > kColourRounding || Difference(a[1], b[1]) > kColourRounding || Difference(a[2], b[2]) > kColourRounding;
 }
 
+static int LargestColourStep(const uint8_t *a, const uint8_t *b)
+{
+	return (std::max)(Difference(a[0], b[0]), (std::max)(Difference(a[1], b[1]), Difference(a[2], b[2])));
+}
+
 static bool NormalsDiffer(const uint8_t *a, const uint8_t *b, bool tenBit)
 {
 	if (!tenBit)
@@ -144,6 +160,11 @@ void StaticFrame_Compare(const SurfacePicturesInMemory &oldRoute, const SurfaceP
 
 			differences->pixelsCompared++;
 
+			if (oldHasSurface)
+			{
+				differences->pixelsWithSurface++;
+			}
+
 			if (oldHasSurface != newHasSurface)
 			{
 				if (oldHasSurface)
@@ -168,6 +189,13 @@ void StaticFrame_Compare(const SurfacePicturesInMemory &oldRoute, const SurfaceP
 				differences->colourChanged++;
 			}
 
+			int const colourStep = LargestColourStep(oldColour, newColour);
+
+			if (colourStep > differences->largestColourStep)
+			{
+				differences->largestColourStep = colourStep;
+			}
+
 			if (NormalsDiffer(oldRoute.normal + y * oldRoute.normalPitch + x * 4, newRoute.normal + y * newRoute.normalPitch + x * 4, normalIsTenBit))
 			{
 				differences->normalChanged++;
@@ -187,6 +215,115 @@ void StaticFrame_Compare(const SurfacePicturesInMemory &oldRoute, const SurfaceP
 			if (change > differences->largestDistanceChange)
 			{
 				differences->largestDistanceChange = change;
+			}
+		}
+	}
+}
+
+static uint8_t const *ColourAt(const SurfacePicturesInMemory &pictures, uint32_t x, uint32_t y)
+{
+	return pictures.colour + y * pictures.colourPitch + x * 4;
+}
+
+static float DistanceAt(const SurfacePicturesInMemory &pictures, uint32_t x, uint32_t y)
+{
+	float distance;
+
+	memcpy(&distance, pictures.distance + y * pictures.distancePitch + x * 4, sizeof(distance));
+
+	return distance;
+}
+
+// Do two sets of pictures differ on this pixel, in any way the compare counts?
+static bool PicturesDifferAt(const SurfacePicturesInMemory &a, const SurfacePicturesInMemory &b, uint32_t x, uint32_t y, bool normalIsTenBit)
+{
+	bool const surfaceInA = ColourAt(a, x, y)[3] == 255;
+	bool const surfaceInB = ColourAt(b, x, y)[3] == 255;
+
+	if (surfaceInA != surfaceInB)
+	{
+		return true;
+	}
+
+	if (!surfaceInA)
+	{
+		return false;
+	}
+
+	return ColoursDiffer(ColourAt(a, x, y), ColourAt(b, x, y))
+		|| NormalsDiffer(a.normal + y * a.normalPitch + x * 4, b.normal + y * b.normalPitch + x * 4, normalIsTenBit)
+		|| fabsf(DistanceAt(a, x, y) - DistanceAt(b, x, y)) > kDistanceRounding;
+}
+
+// Red, green and blue from the picture's blue, green, red and alpha.
+static uint32_t WebColour(const uint8_t *colour)
+{
+	return ((uint32_t)colour[2] << 16) | ((uint32_t)colour[1] << 8) | (uint32_t)colour[0];
+}
+
+// Adds a pixel that differs to what's known about where they differ. Pixels arrive reading each row from the top, so the first to arrive is the first one.
+static void NotePixelThatDiffers(const SurfacePicturesInMemory &a, const SurfacePicturesInMemory &b, uint32_t x, uint32_t y, uint32_t width, uint32_t height, bool normalIsTenBit, WhereTheyDiffer *where)
+{
+	if (!where->pixels)
+	{
+		where->left = where->right = (int)x;
+		where->top = where->bottom = (int)y;
+		where->firstX = (int)x;
+		where->firstY = (int)y;
+		where->firstColourBefore = WebColour(ColourAt(a, x, y));
+		where->firstColourAfter = WebColour(ColourAt(b, x, y));
+		where->firstDistanceBefore = DistanceAt(a, x, y);
+		where->firstDistanceAfter = DistanceAt(b, x, y);
+	}
+
+	where->pixels++;
+	where->left = (std::min)(where->left, (int)x);
+	where->right = (std::max)(where->right, (int)x);
+	where->bottom = (std::max)(where->bottom, (int)y);
+
+	// a pixel on the picture's edge has nothing beyond it, so it can't be surrounded
+	if (x > 0 && y > 0 && x + 1 < width && y + 1 < height
+		&& PicturesDifferAt(a, b, x - 1, y, normalIsTenBit) && PicturesDifferAt(a, b, x + 1, y, normalIsTenBit)
+		&& PicturesDifferAt(a, b, x, y - 1, normalIsTenBit) && PicturesDifferAt(a, b, x, y + 1, normalIsTenBit))
+	{
+		where->solidPixels++;
+	}
+}
+
+void StaticFrame_WhereTheyDiffer(const SurfacePicturesInMemory &before, const SurfacePicturesInMemory &after, uint32_t width, uint32_t height, bool normalIsTenBit, WhereTheyDiffer *where)
+{
+	memset(where, 0, sizeof(*where));
+
+	for (uint32_t y = 0; y < height; y++)
+	{
+		for (uint32_t x = 0; x < width; x++)
+		{
+			if (PicturesDifferAt(before, after, x, y, normalIsTenBit))
+			{
+				NotePixelThatDiffers(before, after, x, y, width, height, normalIsTenBit, where);
+			}
+		}
+	}
+}
+
+void StaticFrame_SplitByTies(const SurfacePicturesInMemory &oldRoute, const SurfacePicturesInMemory &newRoute, const SurfacePicturesInMemory &oldRouteBackwards, uint32_t width, uint32_t height, bool normalIsTenBit, TiesBetweenPolygons *ties)
+{
+	memset(ties, 0, sizeof(*ties));
+
+	for (uint32_t y = 0; y < height; y++)
+	{
+		for (uint32_t x = 0; x < width; x++)
+		{
+			bool const aTie = PicturesDifferAt(oldRoute, oldRouteBackwards, x, y, normalIsTenBit);
+
+			if (aTie)
+			{
+				ties->pixelsThatTie++;
+			}
+
+			if (PicturesDifferAt(oldRoute, newRoute, x, y, normalIsTenBit))
+			{
+				NotePixelThatDiffers(oldRoute, newRoute, x, y, width, height, normalIsTenBit, aTie ? &ties->onATie : &ties->notOnATie);
 			}
 		}
 	}

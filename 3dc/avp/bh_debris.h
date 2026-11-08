@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a spent case thrown out of a gun
 #ifndef BH_DEBRI_H
 #define BH_DEBRI_H
 
@@ -33,6 +35,7 @@ typedef struct HierarchicalDebrisBehaviourType {
 // extern functions
 
 extern DISPLAYBLOCK *MakeDebris(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr);
+extern DISPLAYBLOCK *MakeThrownCase(char *shapeName, VECTORCH *positionPtr, MATRIXCH *turnPtr, VECTORCH *impulsePtr);
 extern DISPLAYBLOCK *MakeHierarchicalDebris(STRATEGYBLOCK *parent_sbPtr,SECTION_DATA *root, VECTORCH *positionPtr, MATRIXCH *orientation, int *wounds, int speed);
 extern void Pop_Section(STRATEGYBLOCK *sbPtr,SECTION_DATA *section_data, VECTORCH *blastcentre, int *wounds);
 extern void CreateShapeInstance(MODULEMAPBLOCK *mmbptr, char *shapeNamePtr);

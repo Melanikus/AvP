@@ -1,5 +1,8 @@
 /* KJL 14:30:27 06/05/98 - weapon targeting code */
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the smart gun can see the M79's grenades, like other grenades;
+//   a ghost of an NPC can be locked on to as the real one can, in a game that plays as single player
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the smart gun's target filter only reads characters whose data it knows how to read
 #include "3dc.h"
@@ -44,6 +47,7 @@
 #include "paintball.h"
 #include "pldghost.h"
 #include "pldnet.h"
+#include "npc_ghosts.h"
 
 /*KJL****************************************************************************************
 *                                       G L O B A L S                                       *
@@ -220,7 +224,11 @@ void CalculatePlayersTarget(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA *wea
 		GLOBALASSERT(PlayersTarget.DispPtr->HModelControlBlock==PlayersTarget.HModelSection->my_controller);
 	}
 
-	if (AvP.Network!=I_No_Network) 
+	// Modified 2026-11-06 by Melanikus for the AvP port: only a Predator holding one of these two has sights for other machines to draw (decal.cpp), so nobody else sends them
+	if ((AvP.Network!=I_No_Network)
+	   &&(AvP.PlayerType == I_Predator)
+	   &&((weaponPtr->WeaponIDNumber == WEAPON_PRED_RIFLE)
+	    ||(weaponPtr->WeaponIDNumber == WEAPON_PRED_SHOULDERCANNON)) )
 	{
 		AddNetMsg_PredatorLaserSights(&PlayersTarget.Position,&LOS_ObjectNormal,PlayersTarget.DispPtr);
 	}
@@ -814,6 +822,17 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 					{
 						return 1;
 					}
+
+					// As the real ones above: this view shows machines. A corpse's ghost has another type, so these are alive.
+					if (ghostDataPtr->type==I_BehaviourXenoborg)
+					{
+						return 1;
+					}
+
+					if (ghostDataPtr->type==I_BehaviourMarine && NpcGhosts_MarineIsAnAndroid(ghostDataPtr->subtype))
+					{
+						return 1;
+					}
 				}
 				break;
 			}
@@ -836,6 +855,12 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 				{
 					NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)candidate->SBdataptr;
 
+					// An android has no body heat, as with the real one above
+					if (ghostDataPtr->type==I_BehaviourMarine && NpcGhosts_MarineIsAnAndroid(ghostDataPtr->subtype))
+					{
+						return 0;
+					}
+
 					if (ghostDataPtr->type==I_BehaviourMarinePlayer || ghostDataPtr->type==I_BehaviourMarine)
 					{
 						return 1;
@@ -853,6 +878,12 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 				if (candidate->I_SBtype==I_BehaviourNetGhost)
 				{
 					NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)candidate->SBdataptr;
+
+					// An NPC predator is an enemy whatever kind of game this is, as with the real one above. The game type only says who other players are.
+					if (ghostDataPtr->type==I_BehaviourPredator)
+					{
+						return 1;
+					}
 
 					if (ghostDataPtr->type==I_BehaviourPredatorPlayer || ghostDataPtr->type==I_BehaviourPredator)
 					{
@@ -888,7 +919,13 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 		return 0;
 	} else if (weaponPtr->WeaponIDNumber == WEAPON_SMARTGUN) {
 		/* Don't target marines if Friendly Fire is disabled. */
-		if (netGameData.disableFriendlyFire && (netGameData.gameType==NGT_CoopDeathmatch || netGameData.gameType==NGT_Coop)) {
+		// In a game that plays as single player a marine NPC can be locked on to, as in single player, and only another marine player is a friend
+		if (SameAsSinglePlayer()) {
+			if (netGameData.disableFriendlyFire && candidate->I_SBtype==I_BehaviourNetGhost && candidate->SBdataptr
+				&& ((NETGHOSTDATABLOCK *)candidate->SBdataptr)->type==I_BehaviourMarinePlayer) {
+				return(0);
+			}
+		} else if (netGameData.disableFriendlyFire && (netGameData.gameType==NGT_CoopDeathmatch || netGameData.gameType==NGT_Coop)) {
 			/* This reads every candidate's data block as a NETGHOSTDATABLOCK. Only the types the switch below can
 			accept are tested (the result for any other type is 0 either way), and only when they have a data block:
 			a candidate without one, or with a smaller block, used to be read through NULL / past its block. The
@@ -968,12 +1005,23 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 					case I_BehaviourRocket:
 					case I_BehaviourFrisbee:
 					case I_BehaviourGrenade:
+					case I_BehaviourM79Grenade:
+					case I_BehaviourM79FireGrenade:
+					case I_BehaviourM79FragGrenade:
 					case I_BehaviourFlareGrenade:
 					case I_BehaviourFragmentationGrenade:
 					case I_BehaviourClusterGrenade:
 					case I_BehaviourNPCPredatorDisc:
 					case I_BehaviourPredatorDisc_SeekTrack:
 					case I_BehaviourAlien:
+						return(1);
+						break;
+					// The ghosts of the NPCs the real list above allows. A corpse's ghost has another type, so these are alive.
+					case I_BehaviourPredator:
+					case I_BehaviourQueenAlien:
+					case I_BehaviourFaceHugger:
+					case I_BehaviourXenoborg:
+					case I_BehaviourMarine:
 						return(1);
 						break;
 					case I_BehaviourProximityGrenade:

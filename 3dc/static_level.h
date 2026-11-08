@@ -1,4 +1,6 @@
 // The level's still polygons, sent to the graphics card once. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   hands over what was sent to the card, for the NORMAL LINES view
 // See static_level.cpp for how it works. The first half of this file knows nothing about the graphics card, so a test can check it on its own.
 
 #ifndef STATIC_LEVEL_H
@@ -126,6 +128,10 @@ bool StaticLevel_Ready();
 const StaticRange *StaticLevel_RangesOf(int moduleNumber, int *count);
 bool StaticLevel_PolygonIsIn(int moduleNumber, int polygonNumber);
 bool StaticLevel_ModuleIsWhole(int moduleNumber);
+
+// What the card was sent, for the NORMAL LINES view. Only kept with -dev, and otherwise these give back nothing.
+const StaticVertex *StaticLevel_KeptVertices(size_t *count);
+const uint32_t *StaticLevel_KeptIndices(size_t *count);
 
 // The buffers, for the code that draws them. It sets the stream, the indices and the declaration itself.
 IDirect3DVertexBuffer9 *StaticLevel_VertexBuffer();

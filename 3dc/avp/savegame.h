@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   declares SaveBlockArrayFits, the shared check that a counted list from a save file fits its block and array
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a block for a gun's own state
 #ifndef savegame_h_
 #define savegame_h_ 1
 
@@ -32,6 +34,7 @@ typedef enum save_block_type
 	SaveBlock_MessageHistory,
 	SaveBlock_WeaponsCGlobals,
 	SaveBlock_SoundState,
+	SaveBlock_GunOwnState, // one gun's own state, straight after the player. See weapon_hooks.h
 }SAVE_BLOCK_TYPE;
 
 

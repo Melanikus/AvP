@@ -1,0 +1,363 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the end mark needs both bytes",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (file[at] == 0xff && file[at + 1] == 0xff)",
+					"to": "if (file[at] == 0xff)"
+				}
+			]
+		},
+		{
+			"name": "a start past the end of the file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (at > fileSize || fileSize - at < 2)",
+					"to": "if (fileSize - at < 2)"
+				}
+			]
+		},
+		{
+			"name": "less than two bytes left",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (at > fileSize || fileSize - at < 2)",
+					"to": "if (at > fileSize)"
+				}
+			]
+		},
+		{
+			"name": "a name running off the file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (nameAt + nameLength >= fileSize || nameLength > kSoundBankLongestName)",
+					"to": "if (nameLength > kSoundBankLongestName)"
+				}
+			]
+		},
+		{
+			"name": "a name past the limit",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (nameAt + nameLength >= fileSize || nameLength > kSoundBankLongestName)",
+					"to": "if (nameAt + nameLength >= fileSize)"
+				}
+			]
+		},
+		{
+			"name": "the limit is exact",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "nameLength > kSoundBankLongestName)",
+					"to": "nameLength >= kSoundBankLongestName)"
+				}
+			]
+		},
+		{
+			"name": "low letters in a name",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (letter < 0x20 || letter > 0x7e)",
+					"to": "if (letter > 0x7e)"
+				}
+			]
+		},
+		{
+			"name": "high letters in a name",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (letter < 0x20 || letter > 0x7e)",
+					"to": "if (letter < 0x20)"
+				}
+			]
+		},
+		{
+			"name": "an empty name",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (nameLength == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "RIFF letters",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (fileSize - riffAt < 8 || !SoundBank_LettersAre(file + riffAt, \"RIFF\"))",
+					"to": "if (fileSize - riffAt < 8)"
+				}
+			]
+		},
+		{
+			"name": "room for the RIFF heading",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (fileSize - riffAt < 8 || !SoundBank_LettersAre(file + riffAt, \"RIFF\"))",
+					"to": "if (!SoundBank_LettersAre(file + riffAt, \"RIFF\"))"
+				}
+			]
+		},
+		{
+			"name": "a RIFF past the file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (riffSize > fileSize - insideAt)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the RIFF size can't wrap",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (riffSize > fileSize - insideAt)",
+					"to": "if (insideAt + riffSize > fileSize)"
+				}
+			]
+		},
+		{
+			"name": "WAVE letters",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (insideEnd - insideAt < 4 || !SoundBank_LettersAre(file + insideAt, \"WAVE\"))",
+					"to": "if (insideEnd - insideAt < 4)"
+				}
+			]
+		},
+		{
+			"name": "room for WAVE",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (insideEnd - insideAt < 4 || !SoundBank_LettersAre(file + insideAt, \"WAVE\"))",
+					"to": "if (!SoundBank_LettersAre(file + insideAt, \"WAVE\"))"
+				}
+			]
+		},
+		{
+			"name": "format block letters",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (insideEnd - place < 8 || !SoundBank_LettersAre(file + place, \"fmt \"))",
+					"to": "if (insideEnd - place < 8)"
+				}
+			]
+		},
+		{
+			"name": "format block sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if ((formatSize != 16 && formatSize != 18) || insideEnd - place < formatSize)",
+					"to": "if (insideEnd - place < formatSize)"
+				}
+			]
+		},
+		{
+			"name": "format block fits",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if ((formatSize != 16 && formatSize != 18) || insideEnd - place < formatSize)",
+					"to": "if (formatSize != 16 && formatSize != 18)"
+				}
+			]
+		},
+		{
+			"name": "18 byte format accepted",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if ((formatSize != 16 && formatSize != 18) ||",
+					"to": "if ((formatSize != 16) ||"
+				}
+			]
+		},
+		{
+			"name": "plain audio only",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (kind != 1 || (formatSize == 18",
+					"to": "if ((formatSize == 18"
+				}
+			]
+		},
+		{
+			"name": "channels",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if ((channels != 1 && channels != 2) || (bits != 8 && bits != 16))",
+					"to": "if (bits != 8 && bits != 16)"
+				}
+			]
+		},
+		{
+			"name": "bits",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if ((channels != 1 && channels != 2) || (bits != 8 && bits != 16))",
+					"to": "if (channels != 1 && channels != 2)"
+				}
+			]
+		},
+		{
+			"name": "samples per second",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (samples == 0 || bytesPerSec == 0)",
+					"to": "if (bytesPerSec == 0)"
+				}
+			]
+		},
+		{
+			"name": "bytes per second",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (samples == 0 || bytesPerSec == 0)",
+					"to": "if (samples == 0)"
+				}
+			]
+		},
+		{
+			"name": "a block past the RIFF",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (blockSize > insideEnd - place)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a block size can't wrap",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (blockSize > insideEnd - place)",
+					"to": "if (place + blockSize > insideEnd)"
+				}
+			]
+		},
+		{
+			"name": "the walk stops at the RIFF's end",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (insideEnd - place < 8)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the next entry is after this one",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "entry->nextEntryAt = insideEnd;",
+					"to": "entry->nextEntryAt = place;"
+				}
+			]
+		},
+		{
+			"name": "a negative pitch stays negative",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "const int pitch  = (signed char)file[at + 1];",
+					"to": "const int pitch  = file[at + 1];"
+				}
+			]
+		},
+		{
+			"name": "the whole file stops at a bad entry",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sound_bank.h",
+					"from": "if (verdict != SOUND_BANK_ENTRY_IS_GOOD)\n\t\t{\n\t\t\treturn verdict;\n\t\t}\n\t\tat = entry.nextEntryAt;",
+					"to": "if (verdict != SOUND_BANK_ENTRY_IS_GOOD)\n\t\t{\n\t\t\treturn SOUND_BANK_REACHED_THE_END_MARK;\n\t\t}\n\t\tat = entry.nextEntryAt;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game checks the whole file",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "SoundBank_CheckWholeFile(bytes.data(), bytes.size(), NULL)",
+					"to": "SOUND_BANK_REACHED_THE_END_MARK"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the new sounds load after the game's own",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "\tLoadNewWeaponSounds();\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the new sounds load before the game's own",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "\tLoadNewWeaponSounds();\n}",
+					"to": "}"
+				},
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "\tFileStream fStream;\n\tfStream.Open(filename, FileStream::FileRead, FileStream::SkipFastFileCheck);",
+					"to": "\tLoadNewWeaponSounds();\n\n\tFileStream fStream;\n\tfStream.Open(filename, FileStream::FileRead, FileStream::SkipFastFileCheck);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a taken number is left alone",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "if (GameSounds[wanted.number].loaded)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the slots stop short of the new numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.h",
+					"from": "SID_ENDOF_LOADSLOTS=796",
+					"to": "SID_ENDOF_LOADSLOTS=800"
+				}
+			]
+		}
+	]
+}

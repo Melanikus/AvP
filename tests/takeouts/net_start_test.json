@@ -5,6 +5,326 @@
 	],
 	"rows": [
 		{
+			"name": "SOURCE: an honest goodbye is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kMostLeavingsEachSecond = NET_MESSAGEITERATIONS;",
+					"to": "kMostLeavingsEachSecond = 2;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the build doesn't check the version",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "#include \"net_version_check.h\"\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the version isn't checked against the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "static_assert(kMultiplayerVersion == kVersionTheseSizesBelongTo,",
+					"to": "static_assert(true,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "kSizesNow == kSizesAtThatVersion",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game description isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the multiplayer level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "59 * MAX_NO_OF_MULTIPLAYER_EPISODES +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the co-op level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "60 * MAX_NO_OF_COOPERATIVE_EPISODES +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor how many kinds of message",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: leaving waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the start of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_StartGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();",
+					"to": "// AddNetMsg_EndGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sending now still waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.sendTimer = 0;\n\tNetSendMessages();",
+					"to": "NetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corpse's honest message counts as a refusal",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (type == I_BehaviourNetCorpse)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "one address can fill the list of games",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (gamesFromThisAddress >= kMostGamesFromOneAddress)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an answer from some other program is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an answer not marked as the game's is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.marker == kMarker && header.messageType == NETSYS_SESSION_INFO)",
+					"to": "if (header.messageType == NETSYS_SESSION_INFO)"
+				}
+			]
+		},
+		{
+			"name": "an answer says where it's from, and is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "newSession.host = address.host;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a machine sends every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static const int kSendsEachSecond = 60;",
+					"to": "static const int kSendsEachSecond = 1000000000;"
+				}
+			]
+		},
+		{
+			"name": "a connection that never starts keeps its place",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (now - halfOpenSince[i] >= kMostMillisecondsHalfOpen)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a silent player keeps their place",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "what a player sends doesn't count as being heard from",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (connection <= kMostClients)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a client can send any number of bytes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kMostBytesEachSecond, (int)size)",
+					"to": "kMostBytesEachSecond, 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an autogun message is let in outside the campaign mode",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!SameAsSinglePlayer() || objectId == GHOST_PLAYEROBJECTID",
+					"to": "if (objectId == GHOST_PLAYEROBJECTID"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level keeps its autoguns in every network game",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "if(!SameAsSinglePlayer())\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);",
+					"to": "if(false)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can place an autogun in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "if (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO SENTRYGUNS IN MULTIPLAYER MODE\");\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a load doesn't answer anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t// With nowhere to put an event, ENet acknowledges what's arrived and keeps it for later\n\tenet_host_service(host, NULL, 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a load answers at every step",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (hasAnsweredWhileLoading && gap < kAnswerWhileLoadingEveryMilliseconds)\n\t{\n\t\treturn;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "what a client can't afford is passed on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_ClientCanAfford(data, size, connection))\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a real client doesn't say its version",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = kMultiplayerVersion;\n",
+					"to": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n"
+				}
+			]
+		},
+		{
+			"name": "a system message's header keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newMessageHeader, 0, sizeof(newMessageHeader));\n\tnewMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 1;",
+					"to": "newMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 1;"
+				}
+			]
+		},
+		{
+			"name": "a game message's header keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newMessageHeader, 0, sizeof(newMessageHeader));\n\tnewMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 0;",
+					"to": "newMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 0;"
+				}
+			]
+		},
+		{
+			"name": "a search's question keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newHeader, 0, sizeof(newHeader));\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a message with nobody to send it to is not stopped",
 			"changes": [
 				{
@@ -169,8 +489,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\tENetAddress destAddress;",
-					"to": "OpenDiscoverySocket();\n\n\tENetAddress destAddress;"
+					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\t// A new search starts",
+					"to": "OpenDiscoverySocket();\n\n\t// A new search starts"
 				}
 			]
 		},
@@ -179,8 +499,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "Con_PrintError(\"Couldn't send broadcast packet\");\n\t\t\tNet_StopSearchingForSessions();",
-					"to": "Con_PrintError(\"Couldn't send broadcast packet\");"
+					"from": "if (!AskEveryoneAboutGames())\n\t{\n\t\tNet_StopSearchingForSessions();\n\t\treturn;\n\t}",
+					"to": "AskEveryoneAboutGames();"
 				}
 			]
 		},
@@ -225,36 +545,6 @@
 			]
 		},
 		{
-			"name": "leaving says nothing to the server",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (AvP.Network != I_Host && ServerPeer)",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "leaving with no server is an error",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (AvP.Network != I_Host && ServerPeer)",
-					"to": "if (AvP.Network != I_Host)"
-				}
-			]
-		},
-		{
-			"name": "a goodbye that cannot be sent stops it leaving",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "Con_PrintError(\"Net_Disconnect - Problem sending destroy player system message!\");",
-					"to": "Con_PrintError(\"Net_Disconnect - Problem sending destroy player system message!\"); return;"
-				}
-			]
-		},
-		{
 			"name": "leaving does not forget the server",
 			"changes": [
 				{
@@ -289,8 +579,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "// The ENet host owned this, and has just freed it\n\tServerPeer = NULL;\n\n\tServerAddress.host",
-					"to": "ServerAddress.host"
+					"from": "// The ENet host owned this, and has just freed it\n\tServerPeer = NULL;\n\n\t// Whatever this was belonged to the last game.",
+					"to": "// Whatever this was belonged to the last game."
 				}
 			]
 		},
@@ -301,6 +591,1206 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)",
 					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a connection keeps the ID of whoever had its place before",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "whoever had this place in ENet's list before\n\t\t\t\t\teEvent.peer->data = NULL;",
+					"to": "whoever had this place in ENet's list before"
+				}
+			]
+		},
+		{
+			"name": "a message with no header is read anyway",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (size < sizeof(MessageHeader))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a message not marked as the game's goes through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.marker != kMarker)\n\t{\n\t\tLogDroppedMessage",
+					"to": "if (false)\n\t{\n\t\tLogDroppedMessage"
+				}
+			]
+		},
+		{
+			"name": "dropping says so every time",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (LogThisDrop(droppedMessages))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a message too big for the buffer goes in",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (eEvent.packet->dataLength > kMostMessageBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any number but 1 is a game message on the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.isSystemMessage)\n\t{\n\t\t// The only thing a client ever asks",
+					"to": "if (header.isSystemMessage == 1)\n\t{\n\t\t// The only thing a client ever asks"
+				}
+			]
+		},
+		{
+			"name": "any system message lets someone in",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.messageType != NET_CREATEPLAYERORGROUP)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "someone can be let in twice",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (id != 0)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a short request to join is read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (size != sizeof(MessageHeader) + sizeof(PlayerDetails))",
+					"to": "else if (size > sizeof(MessageHeader) + sizeof(PlayerDetails))"
+				}
+			]
+		},
+		{
+			"name": "a long request to join is read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (size != sizeof(MessageHeader) + sizeof(PlayerDetails))",
+					"to": "else if (size < sizeof(MessageHeader) + sizeof(PlayerDetails))"
+				}
+			]
+		},
+		{
+			"name": "someone not let in can send to the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (id == 0)\n\t{\n\t\tLogDroppedMessage(",
+					"to": "if (false)\n\t{\n\t\tLogDroppedMessage("
+				}
+			]
+		},
+		{
+			"name": "a client can say it is someone else",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.fromID != id)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a player's name with no end stays that way",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "player.name[kPlayerNameSize - 1] = '\\0';",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game's name with no end stays that way",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "session.sessionName[kSessionNameSize - 1] = '\\0';\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the game takes more than it said it would",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "netSession.nPlayers >= netSession.maxPlayers || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the game having no room goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "!AddPlayerToGame(id, player.name)",
+					"to": "(AddPlayerToGame(id, player.name), false)"
+				}
+			]
+		},
+		{
+			"name": "someone there is no room for stays connected",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_peer_disconnect(peer, 0);\n\t\treturn;\n\t}\n\n\tif (SendSystemMessageTo",
+					"to": "return;\n\t}\n\n\tif (SendSystemMessageTo"
+				}
+			]
+		},
+		{
+			"name": "someone who cannot be told stays in the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_PlayerHasGone(id);\n\t\tenet_peer_disconnect(peer, 0);",
+					"to": "enet_peer_disconnect(peer, 0);"
+				}
+			]
+		},
+		{
+			"name": "someone who cannot be told stays connected",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_PlayerHasGone(id);\n\t\tenet_peer_disconnect(peer, 0);",
+					"to": "Net_PlayerHasGone(id);"
+				}
+			]
+		},
+		{
+			"name": "the connection does not remember the ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer->data = (void *)(uintptr_t)id;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the game does not count who joins",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "netSession.nPlayers++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the answer goes to the wrong connection",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "SendSystemMessageTo(peer, NET_SETPLAYERID,",
+					"to": "SendSystemMessageTo(&host->peers[0], NET_SETPLAYERID,"
+				}
+			]
+		},
+		{
+			"name": "an answer that cannot be sent is never freed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// ENet frees a packet when it's been delivered, and this one won't be\n\t\tenet_packet_destroy(packet);",
+					"to": "// ENet frees a packet when it's been delivered, and this one won't be"
+				}
+			]
+		},
+		{
+			"name": "a message goes back to who sent it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer != except && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a connection not let in hears everything",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " && IDOfConnection(peer) != 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a packet sent to nobody is never freed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (packet->referenceCount == 0)\n\t{\n\t\tenet_packet_destroy(packet);\n\t}\n}\n\n// What a host does",
+					"to": "}\n\n// What a host does"
+				}
+			]
+		},
+		{
+			"name": "clients are not told what others say",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "SendToClients(packet, from);",
+					"to": "enet_packet_destroy(packet);"
+				}
+			]
+		},
+		{
+			"name": "the host itself never hears a client",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "SendToClients(packet, from);\n\t}\n\n\treturn true;",
+					"to": "SendToClients(packet, from);\n\t}\n\n\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a client hears no game messages",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "and isn't from the host\");\n\t\t\treturn false;\n\t\t}\n\n\t\treturn true;",
+					"to": "and isn't from the host\");\n\t\t\treturn false;\n\t\t}\n\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "any system message gives a client its ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.messageType != NET_SETPLAYERID)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a short ID is read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (size != sizeof(MessageHeader) + sizeof(NetID))",
+					"to": "else if (size > sizeof(MessageHeader) + sizeof(NetID))"
+				}
+			]
+		},
+		{
+			"name": "a long ID is read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (size != sizeof(MessageHeader) + sizeof(NetID))",
+					"to": "else if (size < sizeof(MessageHeader) + sizeof(NetID))"
+				}
+			]
+		},
+		{
+			"name": "a host can change a client's ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (AvPNetID != 0)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "the ID is not kept",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "AvPNetID = id;\n\t\tthisClientPlayer.ID = id;",
+					"to": "thisClientPlayer.ID = id;"
+				}
+			]
+		},
+		{
+			"name": "the ID is not kept with the player's details",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "AvPNetID = id;\n\t\tthisClientPlayer.ID = id;",
+					"to": "AvPNetID = id;"
+				}
+			]
+		},
+		{
+			"name": "the ID from the last game stays",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// Whatever this was belonged to the last game. The host gives this game's.\n\tAvPNetID = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a host takes more connections than players",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "static const size_t kMostClients = 7;",
+					"to": "static const size_t kMostClients = 32;"
+				}
+			]
+		},
+		{
+			"name": "a join with no answer stays open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// There's no game, so nothing should stay open\n\t\tenet_host_destroy(host);\n\t\thost = NULL;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a join ENet cannot start stays open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Failed to connect to server host\");\n\t\tenet_host_destroy(host);\n\t\thost = NULL;",
+					"to": "Failed to connect to server host\");"
+				}
+			]
+		},
+		{
+			"name": "Escape does not stop the wait",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (DebouncedKeyboardInput[KEY_ESCAPE] || !ServerPeer)",
+					"to": "if (!ServerPeer)"
+				}
+			]
+		},
+		{
+			"name": "the wait goes on with no host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (DebouncedKeyboardInput[KEY_ESCAPE] || !ServerPeer)",
+					"to": "if (DebouncedKeyboardInput[KEY_ESCAPE])"
+				}
+			]
+		},
+		{
+			"name": "giving up on the wait leaves the connection open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_Disconnect();\n\t\tAvPNetID = 0;",
+					"to": "AvPNetID = 0;"
+				}
+			]
+		},
+		{
+			"name": "giving up on the wait keeps the ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_Disconnect();\n\t\tAvPNetID = 0;",
+					"to": "Net_Disconnect();"
+				}
+			]
+		},
+		{
+			"name": "giving up on the wait stays in the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "AvPNetID = 0;\n\t\tAvP.Network = I_No_Network;\n\t\treturn NET_FAIL;",
+					"to": "AvPNetID = 0;\n\t\treturn NET_FAIL;"
+				}
+			]
+		},
+		{
+			"name": "the game is not told the host has gone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_HostHasGone();\n\t\treturn NET_NO_MESSAGES;",
+					"to": "return NET_NO_MESSAGES;"
+				}
+			]
+		},
+		{
+			"name": "a connection closing keeps its ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "eEvent.peer->data = NULL;\n\n\t\t\t\t\tif (AvP.Network == I_Host)",
+					"to": "if (AvP.Network == I_Host)"
+				}
+			]
+		},
+		{
+			"name": "a player whose connection closes stays in the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "netSession.nPlayers--;\n\t\t\t\t\t\t\tNet_PlayerHasGone(id);",
+					"to": "netSession.nPlayers--;"
+				}
+			]
+		},
+		{
+			"name": "the game does not count who goes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "netSession.nPlayers--;\n\t\t\t\t\t\t\tNet_PlayerHasGone(id);",
+					"to": "Net_PlayerHasGone(id);"
+				}
+			]
+		},
+		{
+			"name": "a connection never let in counts as a player going",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (id != 0)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tnetSession.nPlayers--;",
+					"to": "if (true)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tnetSession.nPlayers--;"
+				}
+			]
+		},
+		{
+			"name": "a client forgets nothing when its host goes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (eEvent.peer == ServerPeer)\n\t\t\t\t\t{\n\t\t\t\t\t\tServerPeer = NULL;",
+					"to": "else if (eEvent.peer == ServerPeer)\n\t\t\t\t\t{"
+				}
+			]
+		},
+		{
+			"name": "the game loop goes round for ever with no host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// The callers go round until this says there's nothing more, and with no host there never will be. A level can still be running with no host: the console's disconnect command leaves it that way.\n\treturn NET_NO_MESSAGES;",
+					"to": "return NET_OK;"
+				}
+			]
+		},
+		{
+			"name": "the host sends to everyone connected",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "SendToClients(packet, NULL);",
+					"to": "enet_host_broadcast(host, 0, packet);"
+				}
+			]
+		},
+		{
+			"name": "two players can get the same ID",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "lastPlayerID++;",
+					"to": "lastPlayerID = timeGetTime();"
+				}
+			]
+		},
+		{
+			"name": "an ID can be 0",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "static NetID lastPlayerID = 0;\n\n\tlastPlayerID++;\n\treturn lastPlayerID;",
+					"to": "static NetID lastPlayerID = 0;\n\n\treturn lastPlayerID++;"
+				}
+			]
+		},
+		{
+			"name": "a name with no end in the description",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "to[size - 1] = '\\0';",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game hands on system messages",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "void MinimalNetCollectMessages(void)",
+					"to": "static void ProcessSystemMessage(uint8_t *, size_t) {}\nvoid MinimalNetCollectMessages(void)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game says it has room when it has none",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (freePlayerIndex == NET_NOEMPTYSLOTINPLAYERLIST) {\n\t\treturn false;",
+					"to": "if (freePlayerIndex == NET_NOEMPTYSLOTINPLAYERLIST) {\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game says it has no room when it has",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Inform_PlayerHasConnected(id);\n\treturn true;",
+					"to": "Inform_PlayerHasConnected(id);\n\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can leave twice",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (PlayerIdInPlayerList(id) != NET_IDNOTINPLAYERLIST)\n\t{\n\t\tProcessNetMsg_PlayerLeaving(id);",
+					"to": "if (true)\n\t{\n\t\tProcessNetMsg_PlayerLeaving(id);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client with no host goes on playing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "bool const inTheMenus = netGameData.myGameState == NGS_Joining;\n\n\tnetGameData.myGameState = NGS_Error_HostLost;",
+					"to": "bool const inTheMenus = netGameData.myGameState == NGS_Joining;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level with no host never ends",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!inTheMenus)\n\t{\n\t\tAvP.MainLoopRunning = 0;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus wait on a host that has gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "// The host has gone, so there's no game to join. Back to the main menus.\n\t\t\tNet_Disconnect();",
+					"to": "// The host has gone, so there's no game to join. Back to the main menus."
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host does not describe names",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client does not take names",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the message has no room for names",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;",
+					"to": "unsigned char startFlag;\n} GAMEDESCRIPTION_PLAYERDATA;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an older game cannot tell",
+			"changes": [
+				{
+					"file": "3dc/networking.h",
+					"from": "const int kMultiplayerVersion = 110;",
+					"to": "const int kMultiplayerVersion = 109;"
+				}
+			]
+		},
+		{
+			"name": "a host thinks it has lost its host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Peer && !ServerPeer)",
+					"to": "if (!ServerPeer && host)"
+				}
+			]
+		},
+		{
+			"name": "a game on no network thinks it has lost its host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Peer && !ServerPeer)",
+					"to": "if (AvP.Network != I_Host && !ServerPeer)"
+				}
+			]
+		},
+		{
+			"name": "a host passes on what it has not checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, false))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a client can speak for the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, false))",
+					"to": "if (!Net_GameMessageIsGood(data, size, true))"
+				}
+			]
+		},
+		{
+			"name": "a client reads what it has not checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a client takes anyone as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (!Net_GameMessageIsGood(data, size, true))"
+				}
+			]
+		},
+		{
+			"name": "a client takes nobody as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (!Net_GameMessageIsGood(data, size, false))"
+				}
+			]
+		},
+		{
+			"name": "a client with no ID yet takes a sender with no ID as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "hostPlayerID != 0 && header.fromID == hostPlayerID",
+					"to": "header.fromID == hostPlayerID || header.fromID == 77"
+				}
+			]
+		},
+		{
+			"name": "a client does not remember who the host is",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "hostPlayerID = header.fromID;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the last game's host still counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "AvPNetID = 0;\n\thostPlayerID = 0;",
+					"to": "AvPNetID = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk starts in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize,",
+					"to": "NetCheckParts(message, size,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a message with no header is walked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (size < kMessageHeaderSize)\n\t{\n\t\tNet_NoteRefused(",
+					"to": "if (false)\n\t{\n\t\tNet_NoteRefused("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chat line need not end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "return NetChatPartLength(part, bytesLeft);",
+					"to": "return 2;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part nobody knows carries on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "If it ever did, nothing after it could be read.\n\t\t\t\treturn;",
+					"to": "If it ever did, nothing after it could be read.\n\t\t\t\tbreak;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client can restart a game for everyone",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "if (AvP.Network != I_Host) return;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part has the wrong length in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true }",
+					"to": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_RESTARTGAME), false, true }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part with nothing after it has a length",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_EndGame, 0, false, true }",
+					"to": "{ NetMT_EndGame, 1, false, true }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part is missing from the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a kind whose length varies is fixed in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false, kMostHitsEachSecond }",
+					"to": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), false, false, kMostHitsEachSecond }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chat line is fixed in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ChatBroadcast, 2, true, false, kMostChatLinesEachSecond }",
+					"to": "{ NetMT_ChatBroadcast, 2, false, false, kMostChatLinesEachSecond }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say GameDescription",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true }",
+					"to": "{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say AllGameScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true }",
+					"to": "{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say PlayerScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true }",
+					"to": "{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say ScoreChange",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true }",
+					"to": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say SpeciesScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true }",
+					"to": "{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say EndGame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_EndGame, 0, false, true }",
+					"to": "{ NetMT_EndGame, 0, false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say RestartNetworkGame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true }",
+					"to": "{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say StrategySynch",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true }",
+					"to": "{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say PlatformLiftState",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, true }",
+					"to": "{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client cannot say where it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, false }",
+					"to": "{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, true }"
+				}
+			]
+		},
+		{
+			"name": "a message as big as it gets is refused",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (eEvent.packet->dataLength > kMostMessageBytes)",
+					"to": "if (eEvent.packet->dataLength >= kMostMessageBytes)"
+				}
+			]
+		},
+		{
+			"name": "a full buffer loses the end of its message",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "const int kPacketBufferSize = kMostMessageBytes;",
+					"to": "const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's buffer has no room for the header",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static uint8_t msg[kMostMessageBytes];",
+					"to": "static uint8_t msg[NET_MESSAGEBUFFERSIZE];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a damage message with no place in the table is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: scores can name any place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change in scores can name any victim",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))",
+					"to": "if (!NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change in scores can name any killer",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))",
+					"to": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead alien can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)",
+					"to": "killerIndex != NET_IDNOTINPLAYERLIST"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a game looks before the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {",
+					"to": "if (netGameData.playerData[myIndex].startFlag) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal can be any number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost can be any ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "(messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES)) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost can be any weapon",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": " || (messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES))",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a weapon left behind can be any number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a death code nobody knows gives nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "if (!retval) {\n\t\tretval=FirstDeath;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the one who died can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {",
+					"to": "if (!NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the killer can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {",
+					"to": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien)) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can describe themselves as any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))\n\t\t{\n\t\t\treturn;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can be any kind now",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))",
+					"to": "if (!NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can be any kind next",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))",
+					"to": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the description can say any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;",
+					"to": "(NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal can name any module",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex, ModuleArraySize)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal on no module is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex",
+					"to": "!NetNumberFitsTable(messagePtr->ModuleIndex"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a far alien's module is checked only against the AI modules",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!FALLP_AuxLocs || !NetNumberFitsTable((int)messagePtr->targetModuleIndex, ModuleArraySize)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the unused decal cull is back",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "int QuadWithinFrustum(void)",
+					"to": "int DecalWithinFrustum(DECAL *decalPtr) { return 2; }\n\nint QuadWithinFrustum(void)"
 				}
 			]
 		},
@@ -331,6 +1821,301 @@
 					"file": "3dc/networking.cpp",
 					"from": "\t\tif (LogThisDrop(noGameToSendIn))",
 					"to": "\t\tnoGameToSendIn++;\n\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "leaving with no server is an error",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// This also runs from the console's disconnect command, in a game that isn't on any network\n\tif (host)",
+					"to": "// This also runs from the console's disconnect command, in a game that isn't on any network\n\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun's sending is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)\n{",
+					"to": "void AddNetMsg_PlayerAutoGunState_Gone(STRATEGYBLOCK *sbPtr)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun handler's declaration is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun ghost's flash is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing)\n{",
+					"to": "void HandleGhostAutoGunMuzzleFlash_Gone(STRATEGYBLOCK *sbPtr, int firing)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: where the autogun ghost's flash goes is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)\n{",
+					"to": "static void CalculatePosnForGhostAutoGunMuzzleFlash_Gone(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun ghost's sound isn't declared",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.h",
+					"from": "extern void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the handler no longer plays the autogun's sound",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n\t\t\tHandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);\n",
+					"to": "\t\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n"
+				},
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "UpdateGhost(sbPtr, &position, &orientation, 0, 0);\n\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n\t\tHandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);\n",
+					"to": "UpdateGhost(sbPtr, &position, &orientation, 0, 0);\n\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n"
+				}
+			]
+		},
+		{
+			"name": "GUARD: an autogun message is refused by name again, as net-fixes had it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\t\tProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);\n",
+					"to": "\t\t\t\tNet_NoteRefused(\"an autogun message came, and no network game has autoguns\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the campaign's level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "61 * kLevelListCampaignLevels;",
+					"to": "0;"
+				}
+			]
+		},
+		{
+			"name": "GUARD: pldnet.cpp loses the autogun's header",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "#include \"bh_agun.h\"\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun's sending isn't declared",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "extern void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a connection gets every channel ENet allows",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "enet_host_create(address, connections, kNetChannels,",
+					"to": "enet_host_create(address, connections, 0,"
+				}
+			]
+		},
+		{
+			"name": "a client asks for two channels",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);",
+					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);"
+				}
+			]
+		},
+		{
+			"name": "one address can take every place",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->duplicatePeers = kMostConnectionsFromOneAddress;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ENet takes a message of any size",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->maximumPacketSize = mostMessageBytes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ENet keeps any amount waiting",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->maximumWaitingData = kMostBytesWaitingForTheGame;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "packets have no checksum",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->checksum = enet_crc32;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game makes a host without its limits",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);",
+					"to": "host = enet_host_create(&ServerAddress, kMostClients, 0, incomingBandwidth, outgoingBandwidth);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an empty message is copied before its size is checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\tif (eEvent.packet->dataLength < kMessageHeaderSize)\n\t\t\t\t\t{\n\t\t\t\t\t\tLogDroppedMessage(\"a message too short to have a header\");\n\t\t\t\t\t\tenet_packet_destroy(eEvent.packet);\n\t\t\t\t\t\tbreak;\n\t\t\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the log never says an older version was told no",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tLogOlderVersionsToldNo();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an older version told no is logged again and again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\thost->olderConnectsRefused = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LEAVING: the host is let go without closing its connections",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);",
+					"to": "int const stillClosing = 0;"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: the host is let go before its connections are closed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);",
+					"to": "enet_host_destroy(host);\n\t\tint const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: a connection that never answered isn't said",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (stillClosing > 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: the host's connection closing isn't said",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && eEvent.peer == ServerPeer)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: a host says the host's connection closed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && eEvent.peer == ServerPeer)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a search asks with a header alone again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tbuf.dataLength = sizeof(question);\n",
+					"to": "\tbuf.dataLength = sizeof(MessageHeader);\n"
+				}
+			]
+		},
+		{
+			"name": "a host answers a question smaller than the answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (len == (int)kSearchQuestionBytes)",
+					"to": "if (len >= (int)sizeof(MessageHeader))"
+				}
+			]
+		},
+		{
+			"name": "a search's question is the size it used to be",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader) + sizeof(SessionDescription);",
+					"to": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader);"
 				}
 			]
 		}

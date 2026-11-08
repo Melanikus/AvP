@@ -28,6 +28,8 @@
 #include "d3d_render.h"
 #include "logString.h"
 #include "pixel_lights.h"
+#include "pixel_look.h"
+#include "shoulder_lamp.h"
 #include "light_total_picture.h"
 #include "surface_pictures.h"
 
@@ -48,8 +50,12 @@ enum
 
 // What a light's kind number means for one added per pixel, and the shapes in lightShapes.fxh.
 static const float kKindAddedPerPixel = 2.0f;
+
+// What a light's look says: 0 is a flare, 1 is any other light, and this is the marine's shoulder lamp
+static const float kLookCone = 2.0f;
 static const float kShapeGame = 1.0f;
 static const float kShapeFlare = 2.0f;
+static const float kShapeCone = 3.0f;
 
 // Which sampler each picture goes on, as lightShapes.fxh, lightShare.psh and lightOne.psh expect.
 enum
@@ -262,6 +268,14 @@ static float Largest(float a, float b, float c)
 	return (larger > c) ? larger : c;
 }
 
+// The same register in both, because lightShapes.fxh says so
+static void SetLampAimConstant(LPDIRECT3DDEVICE9 device)
+{
+	float const aim[4] = { ShoulderLamp_AimAcross(), ShoulderLamp_AimDown(), 0.0f, 0.0f };
+
+	device->SetPixelShaderConstantF(25, aim, 1);
+}
+
 float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, const RECT *reach, const bool *reachesScreen, IDirect3DTexture9 *depth)
 {
 	device->SetRenderTarget(0, totalSurface);
@@ -272,6 +286,7 @@ float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int n
 
 	d3d.effectSystem->SetActive(d3d.lightTotalEffect);
 	SetScreenConstant(device);
+	SetLampAimConstant(device);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
@@ -299,7 +314,7 @@ float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int n
 		{
 			light[0], light[1], light[2], 1.0f / light[kLightRange],
 			perPixel ? Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]) : (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f,
-			perPixel ? ((light[kLightLook] == 0.0f) ? kShapeFlare : kShapeGame) : light[kLightKind],
+			perPixel ? ((light[kLightLook] == 0.0f) ? kShapeFlare : (light[kLightLook] == kLookCone) ? kShapeCone : kShapeGame) : light[kLightKind],
 			perPixel ? 1.0f : 0.0f,
 			0.0f,
 		};
@@ -349,18 +364,24 @@ void PixelLights_AddLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3
 	float const bright = Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]);
 	float const perBright = (bright > 0.0f) ? 1.0f / bright : 0.0f;
 
+	// how the light looks, for this run of the game. See pixel_look.h
+	float look[4];
+	PixelLook_Numbers(look);
+
 	// see lightOne.psh for what each of these is
-	float const constants[4 * 4] =
+	float const constants[5 * 4] =
 	{
 		light[0], light[1], light[2], 1.0f / light[kLightRange],
 		light[kLightRed] * perBright, light[kLightGreen] * perBright, light[kLightBlue] * perBright, 0.0f,
 		softWidth, softStaysWideTo, 0.0f, 0.0f,
-		bright, light[kLightLook], 0.0f, 0.0f,
+		bright, (light[kLightLook] == 0.0f) ? 0.0f : 1.0f, (light[kLightLook] == kLookCone) ? 1.0f : 0.0f, 0.0f,
+		look[0], look[1], look[2], 0.0f,
 	};
 
 	d3d.effectSystem->SetActive(d3d.lightOneEffect);
 	SetScreenConstant(device);
-	device->SetPixelShaderConstantF(1, constants, 4);
+	device->SetPixelShaderConstantF(1, constants, 5);
+	SetLampAimConstant(device);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
@@ -368,6 +389,29 @@ void PixelLights_AddLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3
 	ReadPicture(device, kSamplerTotals, totalTexture);
 	ReadPicture(device, kSamplerMask, mask);
 
+	SetRectangleState(device, false, true);
+	DrawRectangle(device);
+
+	StopReadingPictures(device);
+}
+
+// The glint where the painted shoulder lamp lands. See shaders/lightLampShine.psh for what these are. The caller puts back the card's settings afterwards.
+void PixelLights_AddLampGlint(LPDIRECT3DDEVICE9 device, IDirect3DTexture9 *depth, const float *lampSwingSpotPlace)
+{
+	if (d3d.lightLampShineEffect == kNullEffectID)
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.lightLampShineEffect);
+	SetScreenConstant(device);
+	device->SetPixelShaderConstantF(1, lampSwingSpotPlace, 4);
+
+	ReadPicture(device, kSamplerDepth, depth);
+	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
+	ReadPicture(device, kSamplerColours, SurfacePictures_Colour());
+
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 	SetRectangleState(device, false, true);
 	DrawRectangle(device);
 

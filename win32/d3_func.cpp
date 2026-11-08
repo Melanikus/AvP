@@ -39,6 +39,7 @@
 //   the settings file can't say where shaders come from
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the marine's shoulder lamp has a shader of its own, and a way of blending that brightens what's already there
+//   the painted lamp's glint has a shader of its own
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
@@ -2888,6 +2889,7 @@ bool InitialiseDirect3D()
 	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
 	d3d.lightShareEffect = d3d.effectSystem->Add("lightShare", "shadowBlur.vsh", "lightShare.psh", d3d.mainDecl);
 	d3d.lightOneEffect = d3d.effectSystem->Add("lightOne", "shadowBlur.vsh", "lightOne.psh", d3d.mainDecl);
+	d3d.lightLampShineEffect = d3d.effectSystem->Add("lightLampShine", "shadowBlur.vsh", "lightLampShine.psh", d3d.mainDecl);
 	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
 
 	// we should bail out if the shaders can't be loaded

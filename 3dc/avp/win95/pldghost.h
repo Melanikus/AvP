@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an NPC ghost remembers its clothes and its beams
 /*---------------------------Patrick 28/3/97----------------------------
   Header for Multi-Player ghost object support header
   ----------------------------------------------------------------------*/
@@ -11,12 +13,16 @@
   Structures for ghosts and ghost data blocks
   ----------------------------------------------------------------------*/
 
+extern bool AlienModelIsLoaded(int alienType);
+
 typedef struct netghostdatablock
 {
 	NetID playerId;
 	signed int playerObjectId; /* -1 == player, all other numbers used for objects */
 	AVP_BEHAVIOUR_TYPE type;
 	INANIMATEOBJECT_TYPE IOType;
+	int npcClothesDrawn;	/* an NPC marine's ghost: the set of clothes it has, plus one. 0 until it has been told. */
+	unsigned char npcXenoBeams;	/* an NPC xenoborg's ghost: which of his beams are on, one bit each: see kNpcXenoBeamHead */
 	int subtype;
 	SHAPEANIMATIONCONTROLLER ShpAnimCtrl;
 

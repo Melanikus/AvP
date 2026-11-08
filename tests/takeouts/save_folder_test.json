@@ -1,0 +1,608 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "any error on the way is fine",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "if (::CreateDirectoryA(path.c_str(), NULL) != 0 || ::GetLastError() != ERROR_PATH_NOT_FOUND)",
+					"to": "if (::CreateDirectoryA(path.c_str(), NULL), true)"
+				}
+			]
+		},
+		{
+			"name": "a folder that's there already fails",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "if (::CreateDirectoryA(path.c_str(), NULL) != 0 || ::GetLastError() != ERROR_PATH_NOT_FOUND)",
+					"to": "if (::CreateDirectoryA(path.c_str(), NULL) != 0)"
+				}
+			]
+		},
+		{
+			"name": "the answer isn't emptied first",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "folder[0] = 0;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "no folder given isn't checked",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "if (!under || !under[0])",
+					"to": "if (under && !under[0])"
+				}
+			]
+		},
+		{
+			"name": "nowhere for the answer isn't checked",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "if (!folder || size == 0)",
+					"to": "if (size == 0)"
+				}
+			]
+		},
+		{
+			"name": "no room for the answer isn't checked",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "if (!folder || size == 0)",
+					"to": "if (!folder)"
+				}
+			]
+		},
+		{
+			"name": "the length check is one out",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "path.length() > size - 1",
+					"to": "path.length() > size"
+				}
+			]
+		},
+		{
+			"name": "the length check is one out the other way",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "path.length() > size - 1",
+					"to": "path.length() > size - 2"
+				}
+			]
+		},
+		{
+			"name": "too long gets the wrong reason",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "return kSaveFolderTooLong;",
+					"to": "return kSaveFolderCantMake;"
+				}
+			]
+		},
+		{
+			"name": "backslashes stay",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "std::replace(path.begin(), path.end(), '\\\\', '/');",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it goes on trying after it's failed",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "if (*saveFolder || noSaveFolder)",
+					"to": "if (*saveFolder)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: failing isn't written down",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "noSaveFolder = true;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Documents goes where the game's folder goes",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "SHGFP_TYPE_CURRENT, documents)",
+					"to": "SHGFP_TYPE_CURRENT, saveFolder)"
+				}
+			]
+		},
+		{
+			"name": "no profiles folder",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "!SaveFolder_MakeOne(path + \"User_Profiles/\", where) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no network settings folder",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": " || !SaveFolder_MakeOne(path + \"MPConfig/\", where)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "it does not say which folder it could not make",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "\t{\n\t\t*where = path;\n\t}\n\n\treturn false;",
+					"to": "\t{\n\t}\n\n\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "it does not say which path was too long",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "\t\t{\n\t\t\t*where = path;\n\t\t}\n\n\t\treturn kSaveFolderTooLong;",
+					"to": "\t\t{\n\t\t}\n\n\t\treturn kSaveFolderTooLong;"
+				}
+			]
+		},
+		{
+			"name": "an old complaint stays",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "\tif (where)\n\t{\n\t\twhere->clear();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tested part isn't used",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);",
+					"to": "whatWentWrong = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: finding the folder asks the log",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "noSaveFolder = true;\n",
+					"to": "noSaveFolder = true;\n\t\tLogErrorString(whatWentWrong, __LINE__, __FILE__);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a caller can get nothing back",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "SaveFolder_MakeOne(\"User_Profiles/\", NULL);\n",
+					"to": "return NULL;\n\t\tSaveFolder_MakeOne(\"User_Profiles/\", NULL);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what went wrong is not kept",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "_snprintf(saveFolderProblem, sizeof(saveFolderProblem) - 1, \"%s%s%s\", whatWentWrong, where.empty() ? \"\" : \": \", where.c_str());",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what went wrong can run past its space",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "sizeof(saveFolderProblem) - 1, \"%s%s%s\"",
+					"to": "100000, \"%s%s%s\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no folder for profiles in the start folder",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "SaveFolder_MakeOne(\"User_Profiles/\", NULL);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no folder for network settings in the start folder",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "SaveFolder_MakeOne(\"MPConfig/\", NULL);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: there is always something wrong",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "noSaveFolder ? saveFolderProblem : NULL",
+					"to": "saveFolderProblem"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never says what went wrong",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "if (char const *const problem = GetSaveFolderProblem())",
+					"to": "if (char const *const problem = NULL)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says it and then wipes it",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "\t\twriter->Empty();\n\t}\n\n\t// Making the log asked for the save folder, and if that went wrong, there was no log yet to say so in. It's said here and not when the log is made, because this empties whatever came before it,\n\t// and it's the first thing the game does (WinMain in winmain.cpp).\n\tif (char const *const problem = GetSaveFolderProblem())\n\t{\n\t\tLogErrorString(problem);\n\t}",
+					"to": "\t\tif (char const *const problem = GetSaveFolderProblem())\n\t\t{\n\t\t\tLogErrorString(problem);\n\t\t}\n\n\t\twriter->Empty();\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says it while it's being made",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "\t\tatexit(WriteLogAtExit);\n",
+					"to": "\t\tatexit(WriteLogAtExit);\n\n\t\tif (char const *const early = GetSaveFolderProblem())\n\t\t{\n\t\t\tLogErrorString(early);\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log still checks for a path that is never null",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "filePath = GetSaveFolderPath();",
+					"to": "char const *folder = GetSaveFolderPath();\n\t\tfilePath = folder ? folder : \"\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game doesn't empty the log first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tClearLog();\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed save tells nobody",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "NewOnScreenMessage(\"GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed save costs a save",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "NumberOfSavesLeft++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed save gives one back even when they are unlimited",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "if (!unlimitedSaves)\n\t\t{\n\t\t\tNumberOfSavesLeft++;",
+					"to": "if (true)\n\t\t{\n\t\t\tNumberOfSavesLeft++;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed save stops a debug build",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "NewOnScreenMessage(\"GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN\");",
+					"to": "NewOnScreenMessage(\"GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN\");\n\t\tGLOBALASSERT(\"Error saving file\"==0);"
+				}
+			]
+		},
+		{
+			"name": "a save goes straight over the old one",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "std::string(path) + \".new\"",
+					"to": "std::string(path)"
+				}
+			]
+		},
+		{
+			"name": "the first part is not written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "SaveFile_WriteOnePart(file, first, firstSize) && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the second part is not written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && SaveFile_WriteOnePart(file, second, secondSize)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the old save is never replaced",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH",
+					"to": "MOVEFILE_WRITE_THROUGH"
+				}
+			]
+		},
+		{
+			"name": "a failed replacement counts as saved",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (saved && !SaveFile_TakeThePlaceOf(newFile.c_str(), path))\n\t{\n\t\tsaved = false;",
+					"to": "if (saved && !SaveFile_TakeThePlaceOf(newFile.c_str(), path))\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a failed save leaves its file behind",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "::DeleteFileA(newFile.c_str());",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it replaces the old save even after a failed write",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (saved && !SaveFile_TakeThePlaceOf(",
+					"to": "if (!SaveFile_TakeThePlaceOf("
+				}
+			]
+		},
+		{
+			"name": "no name is not checked",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (!path)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a short write counts as written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && written == size;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it does not flush",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && ::FlushFileBuffers(file) != 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed close counts as saved",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (!::CloseHandle(file))\n\t{\n\t\tsaved = false;\n\t}",
+					"to": "::CloseHandle(file);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the save game opens the slot itself",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "bool const saved = packagePtr",
+					"to": "avp_CreateFile(filename,GENERIC_WRITE, 0, 0, CREATE_ALWAYS,FILE_FLAG_RANDOM_ACCESS, 0);\n\tbool const saved = packagePtr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the save game does not check it could compress",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "bool const saved = packagePtr && SaveFile_WriteSafely",
+					"to": "bool const saved = SaveFile_WriteSafely"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the compressed copy is never let go",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "DeallocateMem(packagePtr);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: compressing takes memory that can be nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/huffman.cpp",
+					"from": "outpackage = (HuffmanPackage*)AllocMem(sizeof(HuffmanPackage) + mostBytes);",
+					"to": "outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage) + mostBytes);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it tries again whatever went wrong",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "it never tries again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "static const int kSaveFileTries = 5;",
+					"to": "static const int kSaveFileTries = 1;"
+				}
+			]
+		},
+		{
+			"name": "it tries again with no pause",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "::Sleep(100);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "no slash on the end",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "path += \"/\";\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "it gives up too soon",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "static const int kSaveFileTries = 5;",
+					"to": "static const int kSaveFileTries = 2;"
+				}
+			]
+		},
+		{
+			"name": "a file being shared is not tried again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED",
+					"to": "why != ERROR_ACCESS_DENIED"
+				}
+			]
+		},
+		{
+			"name": "a file that is denied is not tried again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED",
+					"to": "why != ERROR_SHARING_VIOLATION"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it waits after the last try",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (tries + 1 < kSaveFileTries)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a new file left behind stops the next save",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
+					"to": "GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL"
+				}
+			]
+		},
+		{
+			"name": "a new file left behind adds to the next save",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
+					"to": "GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL"
+				}
+			]
+		}
+	]
+}

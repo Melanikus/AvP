@@ -1,3 +1,11 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a marine can hear the gun of a player on another machine;
+//   an NPC's voice is heard on other machines in a game that plays as single player;
+//   he remembers which set of clothes and face he got, so that other machines can draw it;
+//   a network game that plays the same as single player has marines, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   a marine targets a player on another machine by his species, and leaves a dead player alone
+//   a marine forgets the part of a target he last hit when that part may be gone, leaves a target that has left, and can be hit while far in a network game
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a marine's weapon named by a level or save file is checked: a level's gets the ordinary marine's, a save's part is left out
 //   a marine or civilian whose model isn't loaded isn't made, and the log says which model, instead of the game reading
@@ -12,6 +20,16 @@
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
+//   a sentry sent back to a spot outside every module keeps the module it has
+//   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
+//   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
+//   the head and the elevation animation are checked before use, because either can be missing
+//   a save can no longer put someone with no firing code into a firing state
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved marine has to be on a real path
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   CreateMarineBot gives back the marine it made, and a marine can be told to stand guard here and face a point, or to guard another spot, or to hurry
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine firing with no target no longer works out its aim from numbers nothing set;
 //   a target standing exactly on the marine no longer divides by nothing
@@ -25,6 +43,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "Player.h"
@@ -52,6 +71,7 @@
 #include "bh_corpse.h"
 #include "bh_dummy.h"
 #include "scream.h"
+#include "npc_kinds.h"
 #include "tables.h"
 #include "dxlog.h"
 #include "logString.h"
@@ -89,6 +109,7 @@ extern DAMAGE_PROFILE FallingDamage;
 
 extern enum PARTICLE_ID GetBloodType(STRATEGYBLOCK *sbPtr);
 extern HIERARCHY_SHAPE_REPLACEMENT* GetHierarchyAlternateShapeSetFromLibrary(const char* rif_name,const char* shape_set_name);
+extern int GetHierarchyAlternateShapeSetCollectionNumber(const char* rif_name, HIERARCHY_VARIANT_DATA const* variant);
 extern HIERARCHY_VARIANT_DATA* GetHierarchyAlternateShapeSetCollectionFromLibrary(const char* rif_name,int collection_index);
 extern SECTION * GetNamedHierarchyFromLibrary(const char * rif_name, const char * hier_name);
 extern STRATEGYBLOCK* CreateGrenadeKernel(AVP_BEHAVIOUR_TYPE behaviourID, VECTORCH *position, MATRIXCH *orient,int fromplayer);
@@ -160,6 +181,7 @@ static void Execute_Dying(STRATEGYBLOCK *sbPtr); /* used for near and far */
 
 static void ProcessFarMarineTargetModule(STRATEGYBLOCK *sbPtr, AIMODULE* targetModule);
 static void LobAGrenade(STRATEGYBLOCK *sbPtr);
+int Marine_TargetFilter(STRATEGYBLOCK *candidate);
 static void CreateMarineGunFlash(STRATEGYBLOCK *sbPtr);
 
 static void MarineFireFlameThrower(STRATEGYBLOCK *sbPtr);
@@ -238,7 +260,7 @@ void Marine_Sobbing(STRATEGYBLOCK *sbPtr);
 void Marine_TauntShout(STRATEGYBLOCK *sbPtr);
 
 void NPC_GetBimbleTarget(STRATEGYBLOCK *sbPtr,VECTORCH *output);
-void CreateMarineBot(VECTORCH *Position,int weapon);
+STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position,int weapon);
 void Convert_To_RunningOnFire(STRATEGYBLOCK *sbPtr);
 void GetPointToFaceMarineTowards(STRATEGYBLOCK *sbPtr,VECTORCH *output);
 void DoMarineHearing(STRATEGYBLOCK *sbPtr);
@@ -1188,23 +1210,6 @@ static void NoteRefusedFromAFile(char const *why)
 	LogString(std::string("npc: refused: ") + why);
 }
 
-// A marine's model is in a file the level loads, and which files those are is worked out from the level's own lists
-// (InitNPCs in npcsetup.cpp). When the two don't agree, the model isn't there. Making him anyway would read through
-// nothing in Create_HModel, whose only check is an assert, and asserts aren't in the game people play. So he isn't
-// made, and the log names the model and its file, so the level can be found and put right.
-static bool MarineModelIsLoaded(SECTION *root, MARINE_WEAPON_DATA const *weapon, char const *who)
-{
-	if (root)
-	{
-		return true;
-	}
-
-	std::string const model = weapon->HierarchyName ? weapon->HierarchyName : "(no name)";
-	std::string const file = weapon->Riffname ? weapon->Riffname : "(no name)";
-	NoteRefusedFromAFile((std::string(who) + " needs the model " + model + " from " + file + ", which isn't loaded, so he isn't made").c_str());
-	return false;
-}
-
 MARINE_WEAPON_DATA *GetThisNPCMarineWeapon(MARINE_NPC_WEAPONS this_id)
 {
 	int a;
@@ -1281,6 +1286,9 @@ void ChangeToAlternateAccoutrementSet(STRATEGYBLOCK *sbPtr, int index) {
 	if (variant_data==NULL) {
 		return;
 	}
+
+	/* A joiner's ghost of him is told this, so that he looks the same on every machine. */
+	marineStatusPointer->ClothesSet=GetHierarchyAlternateShapeSetCollectionNumber(marineStatusPointer->My_Weapon->Riffname, variant_data);
 
 	marineStatusPointer->Female=variant_data->female;
 	marineStatusPointer->Voice=variant_data->voice;
@@ -1367,11 +1375,15 @@ void CastMarineBot(int weapon) {
 	position.vy+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat32,BOTRANGE);
 	position.vz+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat33,BOTRANGE);
 
-	CreateMarineBot(&position, weapon);
+	if (CreateMarineBot(&position, weapon))
+	{
+		NewOnScreenMessage("MARINEBOT CREATED");
+	}
 
 }
 
-void CreateMarineBot(VECTORCH *Position, int weapon)
+// Gives back the new marine, or nothing if he couldn't be made.
+STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon)
 {
 	STRATEGYBLOCK* sbPtr;
 
@@ -1379,7 +1391,7 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 	sbPtr = CreateActiveStrategyBlock();
 	if(!sbPtr) {
 		NewOnScreenMessage("FAILED TO CREATE BOT: SB CREATION FAILURE");
-		return; /* failure */
+		return NULL; /* failure */
 	}
 	InitialiseSBValues(sbPtr);
 
@@ -1404,7 +1416,7 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 		/* dynamics block allocation failed... */
 		RemoveBehaviourStrategy(sbPtr);
 		NewOnScreenMessage("FAILED TO CREATE BOT: DYNBLOCK CREATION FAILURE");
-		return;
+		return NULL;
 	}
 
 	sbPtr->shapeIndex = 0;
@@ -1564,7 +1576,7 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 		if (!root_section) {
 			RemoveBehaviourStrategy(sbPtr);
 			NewOnScreenMessage("FAILED TO CREATE BOT: NO HMODEL");
-			return;
+			return NULL;
 		}
 		Create_HModel(&marineStatus->HModelController,root_section);
 		InitHModelSequence(&marineStatus->HModelController,(int)HMSQT_MarineRun,(int)MRSS_Standard,ONE_FIXED);
@@ -1600,6 +1612,7 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 
 		//initialise female to 0..
 		//may be changed by ChangeToAlternateAccoutrementSet
+		marineStatus->ClothesSet=0;
 		marineStatus->Female=0;
 		marineStatus->Voice=0;
 		marineStatus->Android=marineStatus->My_Weapon->Android;
@@ -1643,7 +1656,7 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 			/* no containing module can be found... abort*/
 			RemoveBehaviourStrategy(sbPtr);
 			NewOnScreenMessage("FAILED TO CREATE BOT: MODULE CONTAINMENT FAILURE");
-			return;
+			return NULL;
 		}
 		LOCALASSERT(sbPtr->containingModule);
 
@@ -1654,16 +1667,16 @@ void CreateMarineBot(VECTORCH *Position, int weapon)
 		}
 
 		MakeMarineNear(sbPtr);
-
-		NewOnScreenMessage("MARINEBOT CREATED");
 	}
 	else
 	{
 		/* no data block can be allocated */
 		RemoveBehaviourStrategy(sbPtr);
 		NewOnScreenMessage("FAILED TO CREATE BOT: MALLOC FAILURE");
-		return;
+		return NULL;
 	}
+
+	return sbPtr;
 }
 
 /*------------------------Patrick 24/2/97-----------------------------
@@ -1677,8 +1690,8 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 	LOCALASSERT(sbPtr);
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no marines, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
@@ -1687,7 +1700,7 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* make the assumption that the loader has initialised the strategy block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapeIndex;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -1866,7 +1879,7 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
 
-		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine the level places"))
+		if (!NpcModelIsLoaded(root_section, "a marine the level places", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))
 		{
 			RemoveBehaviourStrategy(sbPtr);
 			return;
@@ -1905,6 +1918,7 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		//initialise female to 0..
 		//may be changed by ChangeToAlternateAccoutrementSet
+		marineStatus->ClothesSet=0;
 		marineStatus->Female=0;
 		marineStatus->Voice=0;
 		marineStatus->Android=marineStatus->My_Weapon->Android;
@@ -2004,8 +2018,8 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 	generatorBlock = static_cast<GENERATOR_BLOCK*>(Generator->SBdataptr);
 	GLOBALASSERT(generatorBlock);
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no marines, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		return;
 	}
@@ -2208,7 +2222,7 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
 
-		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine a generator makes"))
+		if (!NpcModelIsLoaded(root_section, "a marine or civilian a generator makes", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))
 		{
 			RemoveBehaviourStrategy(sbPtr);
 			return;
@@ -2240,6 +2254,7 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 
 		//initialise female to 0..
 		//may be changed by ChangeToAlternateAccoutrementSet
+		marineStatus->ClothesSet=0;
 		marineStatus->Female=0;
 		marineStatus->Voice=0;
 		marineStatus->Android=marineStatus->My_Weapon->Android;
@@ -2344,7 +2359,11 @@ void SetMarineElevation(STRATEGYBLOCK *sbPtr) {
 
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -2402,7 +2421,11 @@ void CentreMarineElevation(STRATEGYBLOCK *sbPtr) {
 	}
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -2480,7 +2503,7 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 	InitWaypointSystem(0);
 
 	if ((Validate_Target(marineStatusPointer->Target,marineStatusPointer->Target_SBname)==0)
-		&&((marineStatusPointer->Target!=Player->ObStrategyBlock)||(Observer))) {
+		&&((marineStatusPointer->Target!=Player->ObStrategyBlock)||(Observer)||(AvP.Network!=I_No_Network))) {
 		marineStatusPointer->Target=NULL;
 		/* Were you suspicious of something before? */
 		if (marineStatusPointer->previous_suspicion) {
@@ -2576,6 +2599,8 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 			marineStatusPointer->roundsForThisTarget=0;
 			marineStatusPointer->sawlastframe=0;
 			marineStatusPointer->Target=Marine_GetNewTarget(&sbPtr->DynPtr->Position,sbPtr);
+			/* The part of the last target he hit belongs to its model, which may be gone by now */
+			marineStatusPointer->lasthitsection=NULL;
 
 			if (marineStatusPointer->Target) {
 				#if MARINE_STATE_PRINT
@@ -2643,7 +2668,8 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 				   &&(AvP.PlayerType!=I_Marine))||
 				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourAlienPlayer)||
 				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourPredatorPlayer)||
-				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourNetGhost)||
+				   // Another machine's player or thing: only an enemy makes him jump, not a friend or a friend's grenade
+				   ((nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourNetGhost)&&Marine_TargetFilter(nextReport->ObstacleSBPtr))||
 				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourXenoborg)||
 				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourPredatorAlien)||
 				   (nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourQueenAlien)||
@@ -5174,7 +5200,7 @@ void MakeMarineNear(STRATEGYBLOCK *sbPtr)
 	destroy this one, and try to force a generator to make a replacement */
 	if(sbPtr->I_SBtype==I_BehaviourMarine)
 	{
-		if(NumGeneratorNPCsVisible() >= MAX_VISIBLEGENERATORNPCS)
+		if(NumGeneratorNPCsVisible() >= NearNpcLimit())
 		{
 			DestroyAnyStrategyBlock(sbPtr);
 			ForceAGenerator();
@@ -5224,7 +5250,13 @@ void MakeMarineNear(STRATEGYBLOCK *sbPtr)
 	else marineStatusPointer->IAmCrouched = 0;
 
 	if (marineStatusPointer->behaviourState==MBS_Firing) {
-		Marine_Enter_Firing_State(sbPtr);
+		/* The player he was firing at may have left since he last looked */
+		if (Validate_Target(marineStatusPointer->Target,marineStatusPointer->Target_SBname)) {
+			Marine_Enter_Firing_State(sbPtr);
+		} else {
+			marineStatusPointer->Target=NULL;
+			Marine_Enter_Wait_State(sbPtr);
+		}
 		/* To avoid negative volleys */
 	}
 
@@ -5325,6 +5357,7 @@ void KillMarine(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple, int 
 	if(marineStatusPointer->death_target_sbptr)
 	{
 		RequestState(marineStatusPointer->death_target_sbptr,marineStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 	/* get rid of the gun flash, if we've got it */
@@ -5569,7 +5602,8 @@ void MarineIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,
 		return;
 	}
 
-	if(!(sbPtr->SBdptr))
+	/* In a network game a far marine can be hit by a player who's near him, and he has a corpse and a death target like any other */
+	if((!(sbPtr->SBdptr))&&(AvP.Network==I_No_Network))
 	{
 		DestroyAnyStrategyBlock(sbPtr);
 		return;
@@ -5969,7 +6003,14 @@ static STATE_RETURN_CONDITION Execute_MFS_SentryMode(STRATEGYBLOCK *sbPtr)
 
 			if (dist>SENTRY_SENSITIVITY) {
 				sbPtr->DynPtr->Position=marineStatusPointer->my_spot;
-				sbPtr->containingModule = (ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule));
+				// the spot comes from the level and may be outside every module. Then it keeps the module it has
+				{
+					MODULE *spotModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule);
+					if (spotModule)
+					{
+						sbPtr->containingModule = spotModule;
+					}
+				}
 
 			}
 		}
@@ -9235,17 +9276,19 @@ static STATE_RETURN_CONDITION Execute_MNS_SentryMode(STRATEGYBLOCK *sbPtr) {
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}
@@ -9514,17 +9557,19 @@ static STATE_RETURN_CONDITION Execute_MNS_Wait(STRATEGYBLOCK *sbPtr)
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}
@@ -9846,6 +9891,18 @@ static void SetMarineAnimationSequence_Null(STRATEGYBLOCK *sbPtr,HMODEL_SEQUENCE
 
 }
 
+// A Predator playing on another machine is a ghost here. The ghost's own code keeps its cloak up to date.
+static int TargetIsACloakedGhost(STRATEGYBLOCK *target)
+{
+	if (target->I_SBtype!=I_BehaviourNetGhost) {
+		return 0;
+	}
+
+	NETGHOSTDATABLOCK const *const ghost=(NETGHOSTDATABLOCK const *)target->SBdataptr;
+
+	return (ghost&&(ghost->type==I_BehaviourPredatorPlayer)&&ghost->CloakingEffectiveness)?1:0;
+}
+
 static int MarineCanSeeTarget(STRATEGYBLOCK *sbPtr)
 {
 	MARINE_STATUS_BLOCK *marineStatusPointer;
@@ -9883,6 +9940,10 @@ static int MarineCanSeeTarget(STRATEGYBLOCK *sbPtr)
 		}
 
 	} else {
+		if (TargetIsACloakedGhost(marineStatusPointer->Target)) {
+			targetIsCloaked=1;
+		}
+
 		/* Test for NPC predators being cloaked, or aliens hiding? */
 		if (marineStatusPointer->Target->I_SBtype==I_BehaviourPredator) {
 			PREDATOR_STATUS_BLOCK *predStatus=(PREDATOR_STATUS_BLOCK *)marineStatusPointer->Target->SBdataptr;
@@ -10051,6 +10112,11 @@ static int MarineCanSeeObject(STRATEGYBLOCK *sbPtr,STRATEGYBLOCK *target)
 		}
 
 	} else {
+		if (TargetIsACloakedGhost(target)) {
+			targetIsCloaked=1;
+			targetWasCloaked=1;
+		}
+
 		/* Test for NPC predators being cloaked, or aliens hiding? */
 		if (target->I_SBtype==I_BehaviourPredator) {
 			PREDATOR_STATUS_BLOCK *predStatus=(PREDATOR_STATUS_BLOCK *)target->SBdataptr;
@@ -10202,6 +10268,7 @@ void WarnMarineOfAttack(STRATEGYBLOCK *marine,STRATEGYBLOCK *attacker) {
 		marineStatusPointer->previous_suspicion=marineStatusPointer->suspicious;
 		marineStatusPointer->suspicious=1; /* It's right there! */
 		marineStatusPointer->Target=attacker;
+		marineStatusPointer->lasthitsection=NULL;
 
 		COPY_NAME(marineStatusPointer->Target_SBname,marineStatusPointer->Target->SBname);
 
@@ -10288,6 +10355,10 @@ static int MarineIsAwareOfTarget(STRATEGYBLOCK *sbPtr)
 			}
 
 		} else {
+			if (TargetIsACloakedGhost(marineStatusPointer->Target)) {
+				targetIsCloaked=1;
+			}
+
 			/* Test for NPC predators being cloaked, or aliens hiding? */
 			if (marineStatusPointer->Target->I_SBtype==I_BehaviourPredator) {
 				PREDATOR_STATUS_BLOCK *predStatus=(PREDATOR_STATUS_BLOCK *)marineStatusPointer->Target->SBdataptr;
@@ -10737,6 +10808,11 @@ static void DischargeLOSWeapon_Core(STRATEGYBLOCK *sbPtr)
 			}
 
 			if (marineStatusPointer->Target) {
+				/* A player on another machine can change gun at any moment, and that throws his model away, and the part this points at with it */
+				if (marineStatusPointer->Target->I_SBtype==I_BehaviourNetGhost) {
+					marineStatusPointer->lasthitsection=NULL;
+				}
+
 				if (marineStatusPointer->lasthitsection) {
 					/* Verify this section is valid? */
 					HMODELCONTROLLER *tctrl=NULL;
@@ -11113,8 +11189,9 @@ int SpeedRangeMods(VECTORCH *range,VECTORCH *speed) {
 
 	magrange=Approximate3dMagnitude(range);
 
-	/* A target can be standing exactly here, and the sum below divides by this distance. */
+	/* A target can be standing exactly here, and the sum below divides by this distance. A player on another machine says where he is, so he can be. */
 	if (magrange==0) return(0);
+
 	rmod=magrange>>2;
 
 	magspeed=Approximate3dMagnitude(speed);
@@ -11196,6 +11273,11 @@ int Marine_TargetFilter(STRATEGYBLOCK *candidate) {
 					return(0);
 				}
 
+				// In a network game the player on this machine can be waiting to come back, and a marine shouldn't stay after him
+				if (AvP.Network != I_No_Network && NPC_IsDead(candidate)) {
+					return(0);
+				}
+
 				switch(AvP.PlayerType)
 				{
 					case I_Alien:
@@ -11271,11 +11353,14 @@ int Marine_TargetFilter(STRATEGYBLOCK *candidate) {
 		case I_BehaviourNetGhost:
 			{
 				NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+				// A player on another machine goes by his own species, as the player on this one does above.
+				// A dead one's ghost has already turned into a corpse, so it isn't one of these.
 				switch (dataptr->type) {
-					case I_BehaviourMarinePlayer:
 					case I_BehaviourAlienPlayer:
 					case I_BehaviourPredatorPlayer:
-						//return(1);
+						return(1);
+						break;
+					case I_BehaviourMarinePlayer:
 						return(0);
 						break;
 					default:
@@ -13300,9 +13385,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSADAR(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;
@@ -14433,6 +14520,34 @@ void DoMarineHearing(STRATEGYBLOCK *sbPtr) {
 	}
 
 	/* Finally, test the player. */
+	VECTORCH playerHeardAt=Player->ObStrategyBlock->DynPtr->Position;
+
+	// Every other player, in a network game. All this machine knows is when his gun is flashing, so that's what can be heard of him.
+	if (AvP.Network!=I_No_Network) {
+		int other;
+
+		for (other=0; other<NumActiveStBlocks; other++) {
+			STRATEGYBLOCK *const otherPlayer=ActiveStBlockList[other];
+
+			if (otherPlayer->I_SBtype==I_BehaviourNetGhost && otherPlayer->DynPtr && NPC_IsAPlayer(otherPlayer)
+				&& ((NETGHOSTDATABLOCK *)otherPlayer->SBdataptr)->myGunFlash) {
+
+				offset.vx=sbPtr->DynPtr->Position.vx-otherPlayer->DynPtr->Position.vx;
+				offset.vy=sbPtr->DynPtr->Position.vy-otherPlayer->DynPtr->Position.vy;
+				offset.vz=sbPtr->DynPtr->Position.vz-otherPlayer->DynPtr->Position.vz;
+
+				dist=Approximate3dMagnitude(&offset);
+
+				/* The same range and priority as the player here, below. */
+				if (dist<=100000 && dist<neardist) {
+					nearest=-2;
+					neardist=dist;
+					playerHeardAt=otherPlayer->DynPtr->Position;
+				}
+			}
+		}
+	}
+
 	{
 		extern int playerNoise;
 
@@ -14450,6 +14565,7 @@ void DoMarineHearing(STRATEGYBLOCK *sbPtr) {
 					/* Got one! */
 					nearest=-2;
 					neardist=dist;
+					playerHeardAt=Player->ObStrategyBlock->DynPtr->Position;
 				}
 			}
 		}
@@ -14462,7 +14578,7 @@ void DoMarineHearing(STRATEGYBLOCK *sbPtr) {
 			/* Heard the player! */
 
 			marineStatusPointer->suspicious=MARINE_PARANOIA_TIME;
-			marineStatusPointer->suspect_point=Player->ObStrategyBlock->DynPtr->Position;
+			marineStatusPointer->suspect_point=playerHeardAt;
 			/* Set this to zero when you get a *new* suspicion. */
 			marineStatusPointer->previous_suspicion=0;
 			marineStatusPointer->using_squad_suspicion=0;
@@ -17249,6 +17365,18 @@ void Marine_MuteVoice(STRATEGYBLOCK *sbPtr) {
 	}
 }
 
+// One of his voice's sounds, here and, in a game that plays as single player, on every other machine, where only a ghost of him is.
+// A sound already playing on this handle isn't played again, so it isn't told again either.
+static void MarineScreamOnEveryMachine(int voice, int category, int pitch, int *handle, VECTORCH *place)
+{
+	if (!handle || *handle == SOUND_NOACTIVEINDEX)
+	{
+		AddNetMsg_NpcSound(kNpcSoundMarine, voice, category, pitch, place);
+	}
+
+	PlayMarineScream(voice, category, pitch, handle, place);
+}
+
 void Marine_OoophSound(STRATEGYBLOCK *sbPtr) {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
@@ -17262,7 +17390,7 @@ void Marine_OoophSound(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Oooph,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Oooph,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17280,7 +17408,7 @@ void Marine_SurpriseSound(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Surprise,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Surprise,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 		if (marineStatusPointer->Android==0) {
 			marineStatusPointer->Courage-=5000;
@@ -17304,7 +17432,7 @@ void Marine_WoundedScream(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Pain,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Pain,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17322,7 +17450,7 @@ void Marine_AcidScream(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Acid,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Acid,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17340,7 +17468,7 @@ void Marine_BurningScream(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_OnFire,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_OnFire,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 	/* Urgh, that was really grim. */
@@ -17360,7 +17488,7 @@ void Marine_DeathScream(STRATEGYBLOCK *sbPtr) {
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
 		/* I figure if you're screaming already, forget it. */
-		PlayMarineScream(marineStatusPointer->Voice,SC_Death,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Death,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 
@@ -17380,7 +17508,7 @@ void Marine_ElectrocutionScream(STRATEGYBLOCK *sbPtr) {
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
 		/* I figure if you're screaming already, forget it. */
-		PlayMarineScream(marineStatusPointer->Voice,SC_Electrocution,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Electrocution,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17399,7 +17527,7 @@ void Marine_BurningDeathScream(STRATEGYBLOCK *sbPtr) {
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
 		/* I figure if you're screaming already, forget it. */
-		PlayMarineScream(marineStatusPointer->Voice,SC_OnFire,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_OnFire,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 	/* That too was really quite unpleasant. */
@@ -17418,7 +17546,7 @@ void Marine_AngryScream(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Angry,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Angry,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17436,7 +17564,7 @@ void Marine_PanicScream(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Panic,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Panic,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17456,7 +17584,7 @@ void Marine_Sobbing(STRATEGYBLOCK *sbPtr) {
 	/* This is getting quite upsetting... */
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Sobbing,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Sobbing,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -17474,7 +17602,7 @@ void Marine_TauntShout(STRATEGYBLOCK *sbPtr) {
 	}
 
 	if (marineStatusPointer->soundHandle2==SOUND_NOACTIVEINDEX) {
-		PlayMarineScream(marineStatusPointer->Voice,SC_Taunt,marineStatusPointer->VoicePitch,
+		MarineScreamOnEveryMachine(marineStatusPointer->Voice,SC_Taunt,marineStatusPointer->VoicePitch,
 			&marineStatusPointer->soundHandle2,&sbPtr->DynPtr->Position);
 	}
 }
@@ -18168,6 +18296,80 @@ typedef struct marine_save_block
 #define SAVELOAD_BEHAV marineStatusPointer
 
 
+// Can a marine carry this weapon, in this level? Each level only loads the model files it uses, and the save file can
+// name any number at all.
+static BOOL Marine_Weapon_Is_Usable(int weapon_id)
+{
+	MARINE_WEAPON_DATA *weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(weapon_id));
+
+	return weapon && GetNamedHierarchyFromLibrary(weapon->Riffname, weapon->HierarchyName);
+}
+
+// Can this marine carry on with what a save file left it? The code that fires a gun uses the tip of the gun without
+// checking. In the game that's safe, for three reasons:
+// - A limb that holds a gun kills a marine or civilian when it's cut off. Androids survive that, but the game moves them
+//   to a model with the gun in the other hand straight away.
+// - A marine with a SADAR or Skeeter takes the gun apart to reload, and the tip goes with it until the reload puts it back
+//   (see Execute_MNS_Reloading). A game saved in between loads without the tip, so it's put back here, the way the reload
+//   does it. The marine then finishes reloading with the gun already whole.
+// - The only model with no gun at all is the weapon's plain model, which a marine wears while burning to death, and
+//   nothing a burning marine does fires a weapon (see RunAroundOnFireMission_Control).
+static BOOL Marine_Can_Carry_On(STRATEGYBLOCK *sbPtr, MARINE_STATUS_BLOCK *marineStatusPointer)
+{
+	HMODELCONTROLLER *controller = &marineStatusPointer->HModelController;
+	SECTION *model = controller->Root_Section;
+	MARINE_WEAPON_DATA *weapon = marineStatusPointer->My_Weapon;
+
+	if (!model || !weapon)
+	{
+		return FALSE;
+	}
+
+	// Someone with no firing code must never reach it, and every mission's firing state calls it unchecked. In the game
+	// they're always a non-combatant, or on fire, and never in that state.
+	if (weapon->WeaponFireFunction == NULL
+		&& ((marineStatusPointer->Mission != MM_NonCom && marineStatusPointer->Mission != MM_RunAroundOnFire)
+			|| marineStatusPointer->behaviourState == MBS_Firing))
+	{
+		return FALSE;
+	}
+
+	if (_stricmp(model->Rif_Name, weapon->Riffname) != 0)
+	{
+		return FALSE;
+	}
+
+	if (strcmp(model->Hierarchy_Name, weapon->HierarchyName) != 0)
+	{
+		return (strcmp(model->Hierarchy_Name, weapon->TemplateName) == 0) && (marineStatusPointer->Mission == MM_RunAroundOnFire);
+	}
+
+	if (weapon->GunflashName == NULL)
+	{
+		return TRUE;
+	}
+
+	if (marineStatusPointer->My_Gunflash_Section == NULL)
+	{
+		SECTION_DATA *clip = GetThisSectionData(controller->section_data, weapon->ClipName);
+
+		if (clip)
+		{
+			clip->flags &= ~(section_data_terminate_here|section_data_notreal);
+		}
+
+		// the first of these only tells the model code which object it's working on
+		ProveHModel_Far(controller, sbPtr);
+		Transmogrify_HModels(sbPtr, controller, model, 0, 1, 1);
+		ProveHModel_Far(controller, sbPtr);
+
+		marineStatusPointer->My_Gunflash_Section = GetThisSectionData(controller->section_data, weapon->GunflashName);
+		marineStatusPointer->My_Elevation_Section = GetThisSectionData(controller->section_data, weapon->ElevationSection);
+	}
+
+	return (marineStatusPointer->My_Gunflash_Section != NULL);
+}
+
 void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
 	STRATEGYBLOCK* sbPtr;
@@ -18184,6 +18386,9 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 		NoteRefusedFromAFile("a save named a marine weapon that isn't on the list, so that marine's part of the save is left out");
 		return;
 	}
+
+	// And this level has to have loaded that weapon's model: each level only loads the model files it uses. He stays as the level made him.
+	if(!Marine_Weapon_Is_Usable(block->weapon_id)) return;
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);
@@ -18246,6 +18451,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(lastframe_fallingspeed)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);
 	COPYELEMENT_LOAD(stateTimer)
 	COPYELEMENT_LOAD(internalState)
 	COPYELEMENT_LOAD(weaponTarget)		/* position for firing weapon at */
@@ -18296,7 +18502,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	marineStatusPointer->My_Weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -18318,6 +18524,12 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	Load_SoundState(&marineStatusPointer->soundHandle);
 	Load_SoundState(&marineStatusPointer->soundHandle2);
+
+	//a marine that can't work with what the save file gave it is left out of the game
+	if(!Marine_Can_Carry_On(sbPtr, marineStatusPointer))
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Marine(STRATEGYBLOCK* sbPtr)
@@ -18678,10 +18890,19 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeTwoPistols(STRATEGYBLOCK *sbP
 		marineStatusPointer->roundsForThisTarget++;
 
 		/* Alternate gun flash. */
-		if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
-		} else {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+		// the other muzzle is a named part of the model. If it's missing, the marine goes on firing from this one
+		{
+			SECTION_DATA *otherFlash;
+
+			if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
+			} else {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+			}
+
+			if (otherFlash) {
+				marineStatusPointer->My_Gunflash_Section=otherFlash;
+			}
 		}
 
 		/* look after the gun flash */
@@ -19023,9 +19244,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSkeeter(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;

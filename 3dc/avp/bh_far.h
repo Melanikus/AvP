@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   how many NPCs may be near at once comes from NearNpcLimit, which gives each player a share in a game that plays the same as single player
 
 /*------------------------Patrick 26/11/96-----------------------------
   Header file for FAR AI alien behaviour
@@ -42,5 +44,8 @@ extern void FarNpc_FlipAround(STRATEGYBLOCK *sbPtr);
 /* this define to help stop aliens coagulating in the environment */
 #define MAX_GENERATORNPCSPERMODULE	5
 #define MAX_VISIBLEGENERATORNPCS	8 //12
+
+// How many NPCs may be near at once. That limit is for what one player can see, so a game that plays the same as single player with several players gets it once for each.
+int NearNpcLimit(void);
 
 #endif

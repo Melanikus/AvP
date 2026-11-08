@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only an alien sends the message about moving while far, because that message reads an alien's block
 /*------------------------Patrick 26/11/96-----------------------------
   Source file for FAR AI alien behaviour etc....
   NB some of the functions in this file are re-used for other NPC AI.
@@ -678,7 +680,7 @@ void LocateFarNPCInModule(STRATEGYBLOCK *sbPtr, MODULE *targetModule)
 		if (ModuleCurrVisArray[(targetModule->m_index)])
 		{
 			/* the target is visible... */
-			if (NumGeneratorNPCsVisible() >= MAX_VISIBLEGENERATORNPCS)
+			if (NumGeneratorNPCsVisible() >= NearNpcLimit())
 			{
 				/* do nothing: there are already enough visible npcs */
 				return;
@@ -780,7 +782,7 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 		if (AIModuleIsVisible(targetModule))
 		{
 			/* the target is visible... */
-			if (NumGeneratorNPCsVisible() >= MAX_VISIBLEGENERATORNPCS)
+			if (NumGeneratorNPCsVisible() >= NearNpcLimit())
 			{
 				/* do nothing: there are already enough visible npcs */
 				return;
@@ -828,7 +830,8 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 			newPosition.vy -=(npcHeight + 100); 
 			#endif
 
-			if (AvP.Network != I_No_Network)
+			// Only for an alien. This message reads an alien's block, and every kind of NPC comes through here.
+			if (AvP.Network != I_No_Network && sbPtr->I_SBtype == I_BehaviourAlien)
 			{
 				//Multiplayer game
 				//send this new position to the other players
@@ -837,7 +840,7 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 		}
 		else {
 			newPosition = targetEntryPoint->position;
-			if (AvP.Network != I_No_Network)
+			if (AvP.Network != I_No_Network && sbPtr->I_SBtype == I_BehaviourAlien)
 			{
 				//Multiplayer game
 				//send this new position to the other players

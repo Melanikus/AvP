@@ -1,4 +1,6 @@
 // Which way each point of a polygon faces, on its way to the graphics card. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   keeps a copy of what it writes when the NORMAL LINES view asks, because the card's list can't be read back
 //
 // A "normal" is an arrow pointing straight out of a surface. Light falling square on a surface is strong, and light skimming along it
 // is weak, so to light a surface you have to know which way it faces. The shape data already holds a normal for every point, worked out
@@ -32,6 +34,8 @@
 
 #include <math.h>
 #include <string.h>
+
+#include <new>
 
 #include "3dc.h"
 #include "module.h"
@@ -69,6 +73,11 @@ static const uint32_t kTangentNumbersPerVertex = 4;
 
 static VertexBuffer *tangentList = 0;
 static float *openTangents = 0;   // only while the list is open: four numbers for each vertex
+
+// A copy of the list, only for the NORMAL LINES view, laid out the same and holding the same numbers, because the card's own can't be read back. See normal_lines.h.
+static bool copyWanted = false;
+static float *copyOfList = 0;
+static bool copyIsOfThisList = false;
 
 // A moving object's normals, after turning. Polygons that meet at a point share its normal, so the same one comes up several times while
 // an object is drawn. It's turned the first time and kept here with the number of that drawing, and every polygon after that reads it
@@ -128,6 +137,10 @@ void SurfaceNormals_Release()
 	verticesInList = 0;
 	openList = 0;
 
+	delete[] copyOfList;
+	copyOfList = 0;
+	copyIsOfThisList = false;
+
 	delete tangentList;
 	tangentList = 0;
 	openTangents = 0;
@@ -138,6 +151,17 @@ bool SurfaceNormals_Ready()
 	return normalList != 0;
 }
 
+void SurfaceNormals_KeepACopy(bool wanted)
+{
+	copyWanted = wanted;
+}
+
+const float *SurfaceNormals_TheCopy(uint32_t *vertices)
+{
+	*vertices = copyIsOfThisList ? verticesInList : 0;
+	return copyIsOfThisList ? copyOfList : 0;
+}
+
 void SurfaceNormals_Lock()
 {
 	void *memory = 0;
@@ -146,6 +170,22 @@ void SurfaceNormals_Lock()
 	{
 		openList = (float *)memory;
 		memset(openList, 0, verticesInList * kNumbersPerVertex * sizeof(float));
+	}
+
+	copyIsOfThisList = false;
+
+	if (copyWanted && openList)
+	{
+		if (!copyOfList)
+		{
+			copyOfList = new (std::nothrow) float[verticesInList * kNumbersPerVertex];
+		}
+
+		if (copyOfList)
+		{
+			memset(copyOfList, 0, verticesInList * kNumbersPerVertex * sizeof(float));
+			copyIsOfThisList = true;
+		}
 	}
 
 	if (tangentList && tangentList->Lock(&memory))
@@ -537,6 +577,7 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, u
 	}
 
 	float *place = openList + firstVertex * kNumbersPerVertex;
+	float *copyPlace = copyIsOfThisList ? copyOfList + firstVertex * kNumbersPerVertex : 0;
 	float const fourthNumber = (moduleBeingDrawn >= 0 && StaticLevel_PolygonIsIn(moduleBeingDrawn, polygonNumber)) ? 2.0f : 1.0f;
 
 	for (uint32_t corner = 0; corner < corners; corner++)
@@ -548,6 +589,14 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, u
 		*place++ = normal[1];
 		*place++ = normal[2];
 		*place++ = fourthNumber;
+
+		if (copyPlace)
+		{
+			*copyPlace++ = normal[0];
+			*copyPlace++ = normal[1];
+			*copyPlace++ = normal[2];
+			*copyPlace++ = fourthNumber;
+		}
 	}
 
 	// one tangent for the whole polygon, repeated at each corner. The checks above cover this list too: it's the same length.

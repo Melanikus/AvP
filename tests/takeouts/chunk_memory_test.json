@@ -1,0 +1,79 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "OLD: a multi switch gives its targets back the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tdelete[] Targets;\n\tdelete[] LinkedSwitches;\n",
+					"to": "\tdelete Targets;\n\tdelete[] LinkedSwitches;\n"
+				}
+			]
+		},
+		{
+			"name": "OLD: a multi switch gives its links back the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tdelete[] Targets;\n\tdelete[] LinkedSwitches;\n",
+					"to": "\tdelete[] Targets;\n\tdelete LinkedSwitches;\n"
+				}
+			]
+		},
+		{
+			"name": "OLD: a mission objective keeps its messages for good",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tdelete[] mission_targets;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a mission objective keeps its requests for good",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tdelete[] request_targets;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a hierarchy gives its list back the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "so it goes back with delete[]\n\tdelete[] point_effects;",
+					"to": "so it goes back with delete[]\n\tdelete point_effects;"
+				}
+			]
+		},
+		{
+			"name": "settings keep their block for good",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "\tdelete[] settings_block;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "settings made from nothing are made the other way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "settings_block=new unsigned char[sizeof(AVP_Environment_Settings)];\n",
+					"to": "settings_block=(unsigned char*)new AVP_Environment_Settings;\n"
+				}
+			]
+		}
+	]
+}
