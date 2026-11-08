@@ -513,8 +513,9 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			}
 		}
 
-		// Unless that stretch starts with a step up the alien hasn't made, onto a wall from the floor, say: then it heads for that step first,
-		// so it runs into the wall's foot and climbs, rather than heading on the floor for a point up the wall
+		// Unless that stretch starts with a step from one surface to another that the alien hasn't made, onto a wall from the floor, say, or
+		// down off one: then it heads for that step first, so it reaches the corner and turns onto the new surface, rather than heading for a
+		// point on a surface it isn't on
 		if (follower.heading > 1 && !OnTheKindNeeded(follower.points, follower.heading - 1, ask.down))
 		{
 			follower.heading--;

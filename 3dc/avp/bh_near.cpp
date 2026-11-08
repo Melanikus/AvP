@@ -1152,7 +1152,8 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	//   one would have acted, the log says which (AlienWays_WouldHaveAvoided), so a film still shows whether it's real. An alien on a way that
 	//   really can't get on is handed back by the alien ways' own rule (no headway for 1.5 s, then 3 s of the game's own steering), and these
 	//   tests act again then. While on a way it also doesn't break a breakable thing it presses against, or give up its target for one; that's
-	//   only with -alienways.
+	//   only with -alienways. In the other avoidance, switched off in this game (ALL_NEW_AVOIDANCE_ALIEN is 0), the test isn't called at all
+	//   while on a way, so its counts would stand still till the alien is off it: harmless while it's off, and worth knowing if it's ever on.
 	#if ALL_NEW_AVOIDANCE_ALIEN
 	if (!onAWay)
 	{
