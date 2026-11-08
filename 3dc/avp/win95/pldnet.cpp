@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   two test-only helpers a Hudson hostile network run uses. Nothing calls them until the network step: hudson.cpp refuses net= until then
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a player's class number from the network has to be one there is, or it's taken as the general one, as the character type beside
 //   it already was
@@ -14660,3 +14662,37 @@ static void ProcessNetMsg_LevelEventAsk(NETMESSAGE_LEVELEVENT *messagePtr, NetID
 	AddNetMsg_LevelEvent(NetMT_LevelEvent, messagePtr->source);
 }
 
+/*----------------------------------------------------------------------
+  For the hostile test run only. Nothing else calls these.
+  ----------------------------------------------------------------------*/
+
+void HudsonTest_AddRawPart(int kind, const void *part, int size)
+{
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if ((int)sizeof(NETMESSAGEHEADER) + size > numBytesLeft)
+	{
+		return;
+	}
+
+	((NETMESSAGEHEADER *)endSendBuffer)->type = (unsigned char)kind;
+	endSendBuffer += sizeof(NETMESSAGEHEADER);
+	memcpy(endSendBuffer, part, size);
+	endSendBuffer += size;
+}
+
+void HudsonTest_AddDescriptionWithout(NetID left)
+{
+	int const place = PlayerIdInPlayerList(left);
+
+	if (place == NET_IDNOTINPLAYERLIST)
+	{
+		return;
+	}
+
+	NetID const id = netGameData.playerData[place].playerId;
+
+	netGameData.playerData[place].playerId = 0;
+	AddNetMsg_GameDescription();
+	netGameData.playerData[place].playerId = id;
+}
