@@ -293,6 +293,28 @@ void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)
   		}
   	}
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: an alien on its way keeps going on a frame its state didn't ask (#109).
+	// A hunting alien that finds no next module by the marine scent goes to Wander for a frame, and Wander sends it straight back to Hunt.
+	// On the Hunt frame nothing asks the alien ways for its way, so its speed stays at the 0 it was given above, and its grip goes. A step
+	// onto another surface needs it to cling for a few frames running, so it never got made: Sixth's 4b40b6cd film had 23 of those stuck.
+	// So when its state didn't ask this frame, the guide drives it along the way it already has, for as long as the guide keeps it (half a
+	// second since it last asked, alien_ways_guide.h), and it keeps hold of what it's on. Its state still decides everything else, as in
+	// 1999: this only stops it standing still and letting go between two frames that both want it on its way.
+	{
+		VECTORCH keepGoing = {0,0,0};
+		bool keptDriving = false;
+
+		if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepDriving(sbPtr, &keepGoing))
+		{
+			sbPtr->DynPtr->UseStandardGravity = 0;
+			NPCSetVelocity(sbPtr, &keepGoing, alienStatusPointer->MaxSpeed);
+			keptDriving = true;
+		}
+
+		// The watch on one alien, if it was asked for (-alienwayswatch): one line for this frame
+		AlienWays_WatchLine(sbPtr, alienStatusPointer->Target != NULL, keptDriving);
+	}
+
 	if (ShowHiveState)
 	{
 		/* Alien position print. */
@@ -1451,6 +1473,7 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->BehaviourState = ABS_Hunt;
 		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
 		InitWaypointManager(&alienStatusPointer->waypointManager);
+		AlienWays_WatchNote(sbPtr, "Wander knows of its target, so it goes back to Hunt");
 
 		// Modified 2026-11-08 by Melanikus for the AvP port:
 		//   the target is kept here, before it's let go just below, so that this frame's way heads where Hunt's does. The 1999 code
@@ -1963,6 +1986,8 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 			alienStatusPointer->BehaviourState = ABS_Wander;
 			alienStatusPointer->CurveTimeOut = 0;
 			#endif
+			// Modified 2026-11-08 by Melanikus for the AvP port: the watch on one alien says which way Hunt left (-alienwayswatch, alien_ways.h)
+			AlienWays_WatchNote(sbPtr, "Hunt found no next module by the marine scent, so it goes to Wander");
 			return;
 		}
 
@@ -1975,11 +2000,13 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 				alienStatusPointer->BehaviourState = ABS_Wander;
 				alienStatusPointer->CurveTimeOut = 0;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
+				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent and has no target, so it goes to Wander");
 			} else {
 				alienStatusPointer->Target=NULL;
 				alienStatusPointer->BehaviourState = ABS_Hunt;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
 				alienStatusPointer->CurveTimeOut = 0;
+				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent, so it lets its target go and stays in Hunt");
 			}
 			return;
 		}

@@ -149,8 +149,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_claims.h",
-					"from": "if (k < 0 || static_cast<size_t>(k) >= joinOtherCount)",
-					"to": "if (k < 0)"
+					"from": "endInside = (std::min)(to, listEnd);",
+					"to": "endInside = to;"
 				}
 			]
 		},
@@ -241,6 +241,36 @@
 					"file": "3dc/avp/alien_ways_claims.h",
 					"from": "int const kAlienWaysClaimsMostAliens = 64;",
 					"to": "int const kAlienWaysClaimsMostAliens = 63;"
+				}
+			]
+		},
+		{
+			"name": "a join's place before the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "firstInside = (std::max)(from, 0LL),",
+					"to": "firstInside = from,"
+				}
+			]
+		},
+		{
+			"name": "places before the join list aren't counted as left out",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "\t\t\tignored += static_cast<size_t>((std::max)(0LL, (std::min)(to, 0LL) - from));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "places past the join list aren't counted as left out",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "\t\t\t\tignored += static_cast<size_t>((std::max)(0LL, to - (std::max)(from, listEnd)));\n",
+					"to": ""
 				}
 			]
 		}

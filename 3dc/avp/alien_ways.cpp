@@ -7,6 +7,9 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   an alien the guide keeps through a frame that didn't ask for it is let go at once if it's in a state that never asks, with its gravity
 //   back, and otherwise counted by state for a once-a-second line (#109)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an alien its state didn't ask about this frame is kept going along its way (AlienWays_KeepDriving), and one alien can be watched every
+//   frame (-alienwayswatch) (#109)
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -17,6 +20,7 @@
 #include "pvisible.h"
 #include "bh_ais.h"
 #include "bh_alien.h"
+#include "pheromone.h"
 
 #include "alien_ways.h"
 #include "alien_ways_build.h"
@@ -37,6 +41,10 @@ extern int NormalFrameTime;
 
 int AlienWaysSwitchedOn = 0;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
+int AlienWaysWatchPlace = -1;
+
+// The watch's places are the guide's
+static_assert(kAlienWaysMostWatchPlace == static_cast<int>(kAlienWaysMostFollowers) - 1, "-alienwayswatch's places are the guide's");
 
 namespace
 {
@@ -90,6 +98,10 @@ namespace
 	// that skips asking now and then is steered by the game's own code in those frames, so this says which states make the two take turns.
 	int missedFrames = 0;
 	int missedByState[kAlienWaysStateKinds] = {};
+
+	// The watch on one alien (-alienwayswatch): how many lines it has written this level, and this frame's notes for it
+	int watchLines = 0;
+	std::string watchNotes;
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -572,6 +584,24 @@ void AlienWays_Frame()
 	}
 }
 
+// The direction from one point to another, worked out in doubles so no distance in the level can overflow it, and made 65536 long, as the
+// game's directions are. False, with direction untouched, when the two are the same point.
+static bool DirectionTo(AlienWaysXYZ from, AlienWaysXYZ to, VECTORCH *direction)
+{
+	double const dx = static_cast<double>(to.x) - from.x, dy = static_cast<double>(to.y) - from.y, dz = static_cast<double>(to.z) - from.z;
+	double const length = sqrt(dx * dx + dy * dy + dz * dz);
+
+	if (!(length > 0.0))
+	{
+		return false;
+	}
+
+	direction->vx = static_cast<int>(dx / length * 65536.0);
+	direction->vy = static_cast<int>(dy / length * 65536.0);
+	direction->vz = static_cast<int>(dz / length * 65536.0);
+	return true;
+}
+
 bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH *goal, VECTORCH *direction)
 {
 	AlienWaysMap const *const map = ReadyMap();
@@ -621,19 +651,7 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 		return false;
 	}
 
-	// The direction, worked out in doubles so no distance in the level can overflow it, and made 65536 long, as the game's directions are
-	double const dx = static_cast<double>(towards.x) - ask.at.x, dy = static_cast<double>(towards.y) - ask.at.y, dz = static_cast<double>(towards.z) - ask.at.z;
-	double const length = sqrt(dx * dx + dy * dy + dz * dz);
-
-	if (!(length > 0.0))
-	{
-		return false;
-	}
-
-	direction->vx = static_cast<int>(dx / length * 65536.0);
-	direction->vy = static_cast<int>(dy / length * 65536.0);
-	direction->vz = static_cast<int>(dz / length * 65536.0);
-	return true;
+	return DirectionTo(ask.at, towards, direction);
 }
 
 void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)
@@ -678,6 +696,107 @@ bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
 	return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));
 }
 
+// Modified 2026-11-08 by Melanikus for the AvP port: keeps an alien going on a frame its state didn't ask, and the watch on one alien (#109)
+bool AlienWays_KeepDriving(STRATEGYBLOCK *alien, VECTORCH *direction)
+{
+	AlienWaysMap const *const map = ReadyMap();
+
+	if (!map || !AlienWays_On() || !alien || !alien->DynPtr || !direction)
+	{
+		return false;
+	}
+
+	// Only the states that ask for a way. One that never asks, attacking or dying say, is let go by the next AlienWays_Frame.
+	int const state = StateOf(alien);
+
+	if (state != ABS_Approach && state != ABS_Hunt && state != ABS_Wander)
+	{
+		return false;
+	}
+
+	DYNAMICSBLOCK const *const dynamics = alien->DynPtr;
+	AlienWaysXYZ const at = { dynamics->Position.vx, dynamics->Position.vy, dynamics->Position.vz };
+	AlienWaysXYZ const down = { dynamics->OrientMat.mat21, dynamics->OrientMat.mat22, dynamics->OrientMat.mat23 };
+	AlienWaysXYZ towards;
+
+	if (!theGuide.Drive(map, WhoIs(alien), at, down, &towards))
+	{
+		return false;
+	}
+
+	return DirectionTo(at, towards, direction);
+}
+
+// Whether this is the alien the watch is on, and the watch still has lines left this level
+static bool Watching(STRATEGYBLOCK *alien)
+{
+	return AlienWaysWatchPlace >= 0 && alien && watchLines < kAlienWaysMostWatchLines && AlienWays_On() && ReadyMap()
+		&& theGuide.PlaceOf(WhoIs(alien)) == AlienWaysWatchPlace;
+}
+
+void AlienWays_WatchNote(STRATEGYBLOCK *alien, const char *note)
+{
+	// A frame's notes are a few short sentences, so this much is never reached; it only stops a fault from growing the line
+	if (!note || !Watching(alien) || watchNotes.size() > 600)
+	{
+		return;
+	}
+
+	watchNotes += std::string(watchNotes.empty() ? "" : "; ") + note;
+}
+
+void AlienWays_WatchLine(STRATEGYBLOCK *alien, bool hasTarget, bool keptDriving)
+{
+	if (!Watching(alien) || !alien->DynPtr)
+	{
+		watchNotes.clear();
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dynamics = alien->DynPtr;
+	AlienWaysXYZ const at = { dynamics->Position.vx, dynamics->Position.vy, dynamics->Position.vz };
+	Watched const *const w = WatchedFor(WhoIs(alien), false);
+	bool const asked = w && w->lastAsked == frameNumber;
+	bool const answered = theGuide.GuidedThisFrame(WhoIs(alien));
+	double const speed = sqrt(static_cast<double>(dynamics->LinVelocity.vx) * dynamics->LinVelocity.vx + static_cast<double>(dynamics->LinVelocity.vy) * dynamics->LinVelocity.vy
+		+ static_cast<double>(dynamics->LinVelocity.vz) * dynamics->LinVelocity.vz) / 1000.0;
+	char speedText[32];
+	snprintf(speedText, sizeof(speedText), "%.1f", speed);
+
+	// The marine scent Hunt follows (FarNPC_GetTargetAIModuleForGlobalHunt, bh_far.cpp): in its AI module, and in each one next to it, up to 8
+	std::string scent = "marine scent: no AI module";
+
+	if (alien->containingModule && alien->containingModule->m_aimodule && PherAls_ReadBuf)
+	{
+		AIMODULE const *const here = alien->containingModule->m_aimodule;
+		scent = "marine scent here " + std::to_string(PherAls_ReadBuf[here->m_index]) + ", next door";
+		int shown = 0;
+
+		for (AIMODULE **next = here->m_link_ptrs; next && *next && shown < 8; next++, shown++)
+		{
+			scent += " " + std::to_string(PherAls_ReadBuf[(*next)->m_index]);
+		}
+
+		if (shown == 0)
+		{
+			scent += " none";
+		}
+	}
+
+	LogString("alien ways watch: frame " + std::to_string(frameNumber) + ", place " + std::to_string(AlienWaysWatchPlace) + ", "
+		+ AlienWaysStuck_StateName(StateOf(alien)) + " at " + Metres(at) + ": " + (watchNotes.empty() ? "its state said nothing" : watchNotes)
+		+ "; the alien ways " + (asked ? (answered ? "were asked and steered it" : "were asked but didn't steer it") : "weren't asked")
+		+ (keptDriving ? ", and the guide kept driving it" : "") + "; gravity " + (dynamics->UseStandardGravity ? "standard" : "off, holding on")
+		+ "; " + speedText + " m/s; " + (hasTarget ? "has a target" : "no target") + "; " + scent);
+	watchNotes.clear();
+	watchLines++;
+
+	if (watchLines == kAlienWaysMostWatchLines)
+	{
+		LogString("alien ways watch: that's this level's most, " + std::to_string(kAlienWaysMostWatchLines) + " lines, so the watch stops");
+	}
+}
+
 size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most)
 {
 	if (!out || !AlienWays_On() || !ReadyMap())
@@ -713,6 +832,8 @@ void AlienWays_LevelEnd()
 	std::vector<AlienWaysLevelDoor>().swap(theDoors);
 	told = true;
 	toldTurnedAway = false;
+	watchLines = 0;
+	watchNotes.clear();
 
 	// Nothing of this level's aliens is kept for the next one
 	for (Watched &w : watched)

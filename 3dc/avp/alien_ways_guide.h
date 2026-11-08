@@ -157,6 +157,19 @@ public:
 	// the game's own code steers it this frame; it may have asked for a search, which takes a frame or a few.
 	bool Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards);
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: keeps an alien going along its way on a frame its state didn't ask (#109).
+	// An alien's state can skip asking for a frame: a hunting alien that finds no next module by the marine scent goes to Wander for a frame
+	// and back, every other frame. Steer isn't asked then, the game stands it still and lets go of its grip, and a step from one surface
+	// onto another, which needs it to cling for a few frames running, never gets made. So on such a frame the game asks Drive instead, and
+	// gets the point to head for along the way it already has, worked out as Steer works it out.
+	// It gives back false, and the game does as it always did, unless Steer wasn't asked for it this frame and it has a way it has taken up
+	// (one resting after being stuck has none). It never counts as asking, so Frame still lets it go at the half second since it was last
+	// asked, just as without Drive. A way it has used up or left is for the next Steer to drop: Drive only says false.
+	bool Drive(const AlienWaysMap *map, const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ down, AlienWaysXYZ *towards);
+
+	// The guide's place for an alien, from 0 to kAlienWaysMostFollowers - 1, or -1 if it has none. For the log's watch on one alien.
+	int PlaceOf(const AlienWaysWho &who) const { return Find(who); }
+
 	// Reports from Steer, of aliens found stuck since the last Frame, come out with the next Frame's reports.
 
 	// Whether the last Steer for this alien gave back true

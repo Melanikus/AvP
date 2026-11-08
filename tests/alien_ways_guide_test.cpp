@@ -606,6 +606,67 @@ static void KeptThroughAGap()
 	Check(Frame(forget, map, kAlienWaysForgetAfter, lapsed) == 0, "an alien forgotten isn't let go again later");
 }
 
+// Modified 2026-11-08 by Melanikus for the AvP port: an alien driven along its way through frames nothing asked (Drive, #109).
+// A hunting alien's state skips asking every other frame. In those frames Drive gives the point Steer would have, but only then, only while
+// the guide keeps the alien, and never so that it counts as asking: so it can't keep an alien a moment longer than the half second.
+static void DrivenThroughAGap()
+{
+	printf("Driven through frames nothing asked\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards, driven;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+
+	Check(!guide.Drive(&map, Alien(1), kStart, kUpright65536, &driven), "an alien the guide has never heard of isn't driven");
+	GuidedAlien(guide, Alien(1));
+	Check(!guide.Drive(&map, Alien(1), kStart, kUpright65536, &driven), "nor one whose way has come but isn't taken up yet: the next Steer takes it up where the alien is");
+	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "asked, it heads for the wall's foot");
+	Check(!guide.Drive(&map, Alien(1), kStart, kUpright65536, &driven), "in a frame Steer was asked, Drive leaves it to Steer");
+	Frame(guide, map, 16);
+	Check(guide.Drive(&map, Alien(1), kStart, kUpright65536, &driven) && Same(driven, kOntoTheWall), "in the next frame, nothing asked, it's driven to the point Steer gave");
+	Check(!guide.GuidedThisFrame(Alien(1)), "and being driven isn't being asked");
+
+	// Once it's on the wall, the step onto the wall is made, and Drive heads it on up, as Steer would
+	Check(guide.Drive(&map, Alien(1), Beside(300, -500, 500), IntoTheWall(), &driven) && Same(driven, kUpTheWall), "on the wall, it's driven on to the next point, 1.5 m up");
+
+	// Frames with only Drive, for as long as the guide keeps it: 16 ms, then 20 frames of 20 ms, is 416 ms since Steer was last asked
+	bool drivenAll = true;
+
+	for (int f = 0; f < 20; f++)
+	{
+		Frame(guide, map, 20);
+		drivenAll = guide.Drive(&map, Alien(1), Beside(300, -500, 500), IntoTheWall(), &driven) && drivenAll;
+	}
+
+	Check(drivenAll, "it's driven in every frame of the half second the guide keeps it through");
+	Check(Frame(guide, map, 100) == 1 && !guide.Guided(Alien(1)), "then the guide lets it go just as it would have with no Drive: Drive never kept it longer");
+	Check(!guide.Drive(&map, Alien(1), Beside(300, -500, 500), IntoTheWall(), &driven), "and once it's let go, it isn't driven");
+
+	// Off its way, it's left to the game, and the next Steer drops the way
+	const std::unique_ptr<AlienWaysGuide> offRoom(new AlienWaysGuide);
+	AlienWaysGuide &off = *offRoom;
+	GuidedAlien(off, Alien(2));
+	off.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
+	Frame(off, map, 16);
+	Check(!off.Drive(&map, Alien(2), AlienWaysXYZ{ 1000, 0, 5000 }, kUpright65536, &driven), "an alien 4.5 m off its way isn't driven along it");
+	Check(off.Guided(Alien(2)), "and Drive doesn't drop the way: that's for the next Steer");
+
+	// Resting after it was stuck, it isn't driven
+	const std::unique_ptr<AlienWaysGuide> stuckRoom(new AlienWaysGuide);
+	AlienWaysGuide &stuck = *stuckRoom;
+	GuidedAlien(stuck, Alien(3));
+
+	for (int ms = 0; ms < 1700; ms += 100)
+	{
+		stuck.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards);
+		Frame(stuck, map, 100);
+	}
+
+	Check(!stuck.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards), "an alien that made no headway for 1.5 s is resting");
+	Frame(stuck, map, 16);
+	Check(!stuck.Drive(&map, Alien(3), kStart, kUpright65536, &driven), "and while it rests it isn't driven");
+}
+
 // Whether the way steers an alien in this frame: only in a frame Steer was asked and gave back a way (Hunt and Wander hold back the game's
 // avoidance by this, so it must never be true for an alien with no way)
 static void GuidedThisFrame()
@@ -1086,6 +1147,7 @@ int main()
 	LetGo();
 	GuidedThisFrame();
 	KeptThroughAGap();
+	DrivenThroughAGap();
 	DifferentWays();
 	AimAhead();
 	WhoIsWho();
