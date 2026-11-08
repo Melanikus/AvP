@@ -7,6 +7,7 @@
 //   the level's still polygons are built and sent to the graphics card once a level has loaded
 //   -keptsnap and -keptsnapfar
 //   -shadowshoot
+//   with -dev -hudson, a run starts a level with nobody at the keyboard: see hudson.cpp
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
@@ -35,6 +36,7 @@
 #include "3dc.h"
 #include "build_identity.h"
 #include "mark_key.h"
+#include "hudson.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
@@ -154,7 +156,7 @@ extern texID_t AAFontImageNumber;
 void exit_break_point_function()
 {
 	#if debug
-	if (WindowMode == WindowModeSubWindow)
+	if (WindowMode == WindowModeSubWindow && !HudsonRunIsOn)
 	{
 		__debugbreak();
 	}
@@ -199,10 +201,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 {
 	StopGameIfNewFails();
 
+	// before anything that uses the save folder, which the log does: a run keeps its files somewhere else
+	Hudson_ReadCommandLine(lpCmdLine);
+
 	SetWindowTitle();
 	ClearLog();
 	LogString(GetWindowTitle());
 	LogString(BuildIdentity_Lines());
+
+	{
+		int const hudsonStop = Hudson_CheckBeforeStarting();
+
+		if (hudsonStop)
+		{
+			return hudsonStop;
+		}
+	}
 
 	char *command_line = lpCmdLine;
 
@@ -213,7 +227,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	skOff = startupStickyKeys;
 
-	if ((skOff.dwFlags & SKF_STICKYKEYSON) == 0)
+	// a run isn't anyone playing, so it has no business changing how the keyboard works for whoever's machine this is
+	if ((skOff.dwFlags & SKF_STICKYKEYSON) == 0 && !HudsonRunIsOn)
 	{
 		// Disable the hotkey and the confirmation
 		skOff.dwFlags &= ~SKF_HOTKEYACTIVE;
@@ -230,8 +245,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	Config_Load();
 	ViewSettings_Load();
 
-	Music_Init(); //load list of music tracks assigned to levels , from a text file
-	LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
+	if (HudsonRunIsOn)
+	{
+		Hudson_SetVideoSettings();
+	}
+	else
+	{
+		Music_Init(); //load list of music tracks assigned to levels , from a text file. A run makes no sound, and without this the music never starts
+		LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
+	}
 
 	SetFastRandom();
 
@@ -322,6 +344,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			return devSwitch(name) ? CommandLineFindSwitch(command_line, name) : 0;
 		};
+
+		// A run is decided at the very start of the game, by Hudson_ReadCommandLine. This only adds the line in the log that says why -hudson did nothing without -dev.
+		devSwitch("-hudson");
 
 		extern int ToyShadowsMode;
 		// -shadowsoff, not -noshadows, because the level name switch -n used to take any word starting with -n. It reads only the
@@ -602,6 +627,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		UseMouseCentreing = FALSE;
 	}
 
+	// a run is always in a window, and always leaves the mouse where it is: it's someone else's
+	if (HudsonRunIsOn)
+	{
+		WindowMode = WindowModeSubWindow;
+		UseMouseCentreing = FALSE;
+	}
+
 	if (UseMouseCentreing)
 	{
 		InitCentreMouseThread();
@@ -697,6 +729,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 
 		std::string error = "Failed to initialise Direct3D backend.\n" + GetLastErrorMessage();
+		Hudson_StopIfTheGameWantsToAsk(error.c_str());
 		MessageBox(hWndMain, error.c_str(), "Couldn't create render device!", MB_OK | MB_ICONSTOP);
 		CloseDebugConsole();
 		exit(-1);
@@ -734,6 +767,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	----------------------------------------------------------*/
 	SoundSys_Start();
 	Music_Start();
+
+	// A run makes no sound. This is the same as the sound being switched off: nothing gets played, and nothing else changes.
+	if (HudsonRunIsOn)
+	{
+		SoundSys_SwitchOff();
+	}
 
 	// get rid of the mouse cursor
 	SetCursor(NULL);
@@ -820,7 +859,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// (Not if the next level was called for while this one was still loading. Without this, he'd stay here alone.)
 		AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;
 
-		ScanImagesForFMVs();
+		// a video on a wall in a level could make a sound, and it plays in real time
+		if (!HudsonRunIsOn)
+		{
+			ScanImagesForFMVs();
+		}
 
 		ResetFrameCounter();
 		Game_Has_Loaded();
@@ -947,6 +990,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 					FlipBuffers();
 					FrameCounterHandler();
+
+					if (HudsonRunIsOn)
+					{
+						Hudson_EndOfFrame();
+					}
 					
 					PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
 
@@ -1089,5 +1137,5 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	CloseDebugConsole();
 
-	return 0;
+	return Hudson_LastThingBeforeExit();   // 0 in a normal game
 }
