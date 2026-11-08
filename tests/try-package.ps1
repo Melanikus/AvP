@@ -217,6 +217,19 @@ New-Copy
 Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
 Expect-Refused (Run-Imports) 'AvP_Classic.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
 
+# Microsoft's runtime DLLs are left out of this, but only once proven Microsoft's own, byte for byte Visual Studio's copy (card STATIC-UNDO-1).
+# So a library of ours naming a folder is still refused, Microsoft's build machine's kind of folder included, and a runtime DLL with one put on
+# its end is refused by the proof before it's read at all.
+New-Copy
+Add-ToTheEnd 'ogg.dll' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\_work\1\s\binaries\x86ret\bin\i386\ogg.i386.pdb`0"))
+Expect-Refused (Run-Imports) 'ogg.dll, as plain text, names a folder: D:\a\_work' "a library of ours naming a folder is refused, even one like Microsoft's build machine's"
+
+New-Copy
+Add-ToTheEnd 'vcruntime140.dll' ([System.Text.Encoding]::ASCII.GetBytes("$folder`0"))
+$result = Run-Imports
+$caughtByTheProof = $result.Text.Contains("vcruntime140.dll doesn't carry Microsoft's signature") -or $result.Text.Contains("vcruntime140.dll isn't the copy in Visual Studio's redistributable folder")
+Check ($result.Code -ne 0 -and $caughtByTheProof -and -not $result.Text.Contains('names a folder')) "a runtime DLL with a folder put on its end is refused as not Microsoft's own copy, before the folders are read" $result.Text
+
 New-Copy
 Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and ogg.pdb`0"))
 Expect-Passes (Run-Imports) 'none names a folder on the machine that built it' "a web address, and a .pdb's name with no folder, aren't refused"

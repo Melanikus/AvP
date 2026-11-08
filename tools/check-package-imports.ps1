@@ -171,6 +171,8 @@ foreach ($name in 'D3DCompiler_43.dll', 'd3dx9_43.dll') {
 # "Windows Software Compatibility Publisher", comes from a part of Microsoft that signs other companies' files as well. So each one also has to
 # be, byte for byte, the copy in the redistributable folder of the Visual Studio here, the one that built the game: a file signed by Microsoft
 # for anyone else, under a runtime DLL's name, is refused.
+$provenMicrosofts = @()
+
 foreach ($name in @($inPackage | Where-Object { $runtimeThePackageMayCarry -contains $_ })) {
     $path = Join-Path $Package $name
     Assert-MicrosoftSignature $path $name
@@ -180,6 +182,9 @@ foreach ($name in @($inPackage | Where-Object { $runtimeThePackageMayCarry -cont
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -cne (Get-FileHash -Algorithm SHA256 -LiteralPath $visualStudiosCopy).Hash) {
         throw "$name isn't the copy in Visual Studio's redistributable folder, $runtimeFolder"
     }
+
+    # Proven Microsoft's own, as it came from Visual Studio: the next check leaves it out (see there)
+    $provenMicrosofts += $name
 }
 
 # --- No folder of the machine that built it. A program can keep the folders it was built in: an error message given __FILE__ does, and so does a library
@@ -194,6 +199,12 @@ $utf16 = [System.Text.Encoding]::Unicode
 $folderNamed = @()
 
 foreach ($file in $files) {
+    # Microsoft's runtime DLLs are left out of this, and only those proven above to be Microsoft's, byte for byte Visual Studio's own copy. They
+    # name the folders of Microsoft's own build machine, such as D:\a\_work\1\s\binaries\x86ret\bin\i386\ for where their symbols are, which
+    # GitHub's Visual Studio has in them (its build of #133 found three). Those are Microsoft's folders, not ours, and the files can't be changed
+    # without failing the proof. Every other program and library is read, a file only named like a runtime DLL included, since it never gets here.
+    if ($provenMicrosofts -contains $file.Name.ToLowerInvariant()) { continue }
+
     $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
     $evenLength = $bytes.Length - ($bytes.Length % 2)
     $oddLength = if ($bytes.Length -gt 1) { ($bytes.Length - 1) - (($bytes.Length - 1) % 2) } else { 0 }
@@ -223,4 +234,4 @@ if ($folderNamed.Count -gt 0) {
     throw "$($folderNamed.Count) places in the package name a folder on the machine that built it. Name the file by hand rather than with __FILE__, and link with /PDBALTPATH:%_PDB% so that only a .pdb's name is kept."
 }
 
-"Every library the package links to is accounted for: $($files.Count) files, $namesRead names read, Microsoft's runtime is only the $($runtimeNeeded.Count) DLLs it needs, each Visual Studio's own $redistVersion copy with Microsoft's signature, and none names a folder on the machine that built it"
+"Every library the package links to is accounted for: $($files.Count) files, $namesRead names read, Microsoft's runtime is only the $($runtimeNeeded.Count) DLLs it needs, each Visual Studio's own $redistVersion copy with Microsoft's signature, and none names a folder on the machine that built it (those $($provenMicrosofts.Count) runtime DLLs aside, whose folders are Microsoft's)"
