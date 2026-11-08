@@ -1734,7 +1734,8 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 					continue;
 				}
 
-				double const step = (di != 0 && dj != 0 ? 1.4142 : 1.0) * kNpcGridCell * price;
+				// A diagonal step is sqrt(2) cells: exactly, so the guess (the straight line between the middles) is never more than it costs
+				double const step = (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price;
 				TryMove(goal, b, c, n, cost + step);
 			}
 		}
@@ -1746,7 +1747,8 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 		{
 			uint32_t const n = list[k];
 
-			if (!(flags[n] & bit))
+			// Every link was made by Build between two of its cells, but a number past the cells is turned away all the same
+			if (n >= flags.size() || !(flags[n] & bit))
 			{
 				continue;
 			}
@@ -1779,7 +1781,11 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 			for (size_t k = 0; k < count; k++)
 			{
 				double b[3];
-				Middle(list[k], b);
+
+				if (!Middle(list[k], b))
+				{
+					continue;   // no cell: the same care as for a link
+				}
 				double const far = sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
 				TryMove(goal, b, c, list[k], cost + far);
 			}
