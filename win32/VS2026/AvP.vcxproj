@@ -464,6 +464,7 @@
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\view_keys.cpp" />
+    <ClCompile Include="..\..\3dc\hud_scale.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />

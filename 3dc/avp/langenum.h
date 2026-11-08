@@ -12,6 +12,7 @@
 //   the words a player sees during a co-op game
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the sound pages' Room echo row
+//   the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1497,6 +1498,8 @@ enum TEXTSTRING_ID
 	TEXTSTRING_RENDERING_LAMPBEAMS,
 	TEXTSTRING_RENDERING_LAMPBEAMS_HELP,
 	TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING,
+	TEXTSTRING_RENDERING_HUDSIZE,
+	TEXTSTRING_RENDERING_HUDSIZE_HELP,
 	MAX_NO_OF_TEXTSTRINGS
 };
 
