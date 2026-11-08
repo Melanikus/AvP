@@ -41,6 +41,16 @@ all, by hand: Actions, Take-outs, Run workflow.
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
 
+A test that loads one of the game's libraries while it runs, instead of linking it, names the files under `"libraries"`, because its settings go to the compiler and can't. shader_test
+loads Microsoft's D3DX that way:
+
+    "libraries": ["vcpkg_installed/x86-windows/bin/D3DX9_43.dll", "vcpkg_installed/x86-windows/bin/D3DCompiler_43.dll"]
+
+A list can come from anyone's pull request, so `run.ps1` checks every folder in `"copy"` and every file in `"libraries"` before it copies anything. A folder has to be inside the
+repository, and a library inside `vcpkg_installed` and a file. Neither may climb out with `..`, have a `:` in it, or have a part Windows reads differently from how it looks (only dots,
+or ending in a dot or a space), and it has to be there. `tests/takeouts/run.ps1 -CheckRefusals` shows each of those is refused for its own reason, on a made-up folder of its own,
+and the Take-outs check runs it before any list.
+
 Rows whose name starts `SOURCE:` check a line that only a real game can run, such as what's asked of a graphics card. The test reads the source for it, so it only shows the line is there. What
 that line does on a card needs a run of the game.
 
