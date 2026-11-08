@@ -65,6 +65,7 @@ static void MakeUnit(double a[3])
 struct GridPolygon
 {
 	int given;             // its place in the list handed to Build
+	int number;            // its number in the alien ways map
 	double n[3];           // which way it faces, out of the surface, a unit long
 	double d;              // its plane, along n
 	double middle[3];      // the middle of its corners
@@ -171,9 +172,13 @@ struct Pair
 };
 
 NpcGrid::NpcGrid()
-	: surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
+	: searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0), searchMostLooks(0),
+	  searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchShut(nullptr), cutShort(false),
+	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
 	  ready(false), stopAsked(false), looksAtStop(0), stopAtLook(0)
 {
+	searchStart.x = searchStart.y = searchStart.z = 0;
+	searchGoal = searchStart;
 }
 
 void NpcGrid::Clear()
@@ -182,6 +187,16 @@ void NpcGrid::Clear()
 	GiveBack(&sheets);
 	GiveBack(&flags);
 	GiveBack(&room);
+	GiveBack(&polygonOf);
+	std::unordered_map<uint32_t, Seen>().swap(seen);
+	GiveBack(&open);
+	GiveBack(&wayCells);
+	GiveBack(&way);
+	searchState = kNpcGridNoWay;
+	searchLooks = 0;
+	searchClaims = nullptr;
+	searchShut = nullptr;
+	cutShort = false;
 	GiveBack(&linkFrom);
 	GiveBack(&linkTo);
 	GiveBack(&fallFrom);
@@ -445,6 +460,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		}
 
 		g.given = static_cast<int>(given);
+		g.number = number;
 		g.area = sqrt(Dot(newell, newell)) / 2.0;
 		memcpy(g.n, newell, sizeof(g.n));
 		MakeUnit(g.n);
@@ -673,8 +689,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		cells += static_cast<size_t>(s.w) * static_cast<size_t>(s.h);
 	}
 
-	// What's kept: two bytes a cell, and the sheets. Links and falls are counted when they're known.
-	bytesKept = cells * 2 + sheets.size() * sizeof(Sheet);
+	// What's kept: six bytes a cell (its flags, its room and its polygon), and the sheets. Links and falls are counted when they're known.
+	bytesKept = cells * (2 + sizeof(int32_t)) + sheets.size() * sizeof(Sheet);
 
 	if (bytesKept > limits.mostBytesKept)
 	{
@@ -683,6 +699,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 
 	flags.assign(cells, 0);
 	room.assign(cells, 0);
+	polygonOf.assign(cells, -1);
 
 	// 4. WHICH CELLS ARE ON THE SURFACE
 	for (size_t number = 0; number < members.size(); number++)
@@ -723,6 +740,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 					if (Inside(f, corners, 2, 0, 1, (i + 0.5) * kNpcGridCell, (j + 0.5) * kNpcGridCell))
 					{
 						flags[at] = static_cast<uint8_t>((flags[at] & ~kNpcGridCoveredOnly) | kNpcGridMiddleOn);
+						polygonOf[at] = grid[g].number;
 						continue;
 					}
 
@@ -747,6 +765,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 					if (fabs(twice) / 2.0 >= kNpcGridLeastCover)
 					{
 						flags[at] |= kNpcGridCoveredOnly;
+						polygonOf[at] = grid[g].number;
 					}
 				}
 			}
@@ -1473,53 +1492,134 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 	return nullptr;
 }
 
-NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int floorPrice, size_t mostLooks, std::vector<uint32_t> *way, size_t *looks)
+NpcGridSearch NpcGrid::BeginCells(uint32_t from, uint32_t to, NpcGridBody body, int floorPrice, size_t mostLooks)
 {
-	way->clear();
-
-	if (looks)
-	{
-		*looks = 0;
-	}
-
+	seen.clear();
+	open.clear();
+	wayCells.clear();
+	way.clear();
+	cutShort = false;
+	searchLooks = 0;
+	searchFrom = from;
+	searchTo = to;
+	searchBody = body;
+	searchPrice = std::max(1, std::min(floorPrice, kAlienWaysMostFloorPrice));
+	searchMostLooks = mostLooks;
 	uint8_t const bit = body == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
 
 	if (!ready || from >= flags.size() || to >= flags.size() || !(flags[from] & bit) || !(flags[to] & bit))
 	{
-		return kNpcGridNoWay;
+		searchState = kNpcGridNoWay;
+		return searchState;
 	}
 
-	floorPrice = std::max(1, std::min(floorPrice, kAlienWaysMostFloorPrice));
-	double goal[3];
-	Middle(to, goal);
-
-	struct Seen
-	{
-		double cost;
-		uint32_t cameFrom;
-		bool done;
-	};
-
-	std::unordered_map<uint32_t, Seen> seen;
-	typedef std::pair<double, uint32_t> Open;
-	std::priority_queue<Open, std::vector<Open>, std::greater<Open> > open;
 	Seen const start = { 0.0, kNpcGridNoCell, false };
 	seen[from] = start;
-	open.push(Open(0.0, from));
-	size_t looked = 0;
+	open.push_back(std::make_pair(0.0, from));
+	searchState = kNpcGridSearching;
+	return searchState;
+}
 
-	struct Price
+const char *NpcGrid::StartSearch(AlienWaysXYZ start, AlienWaysXYZ goal, NpcGridBody body, int floorPrice, size_t mostLooks,
+	const AlienWaysClaims *claims, int searcher, const std::vector<uint8_t> *shut)
+{
+	searchClaims = claims;
+	searchSearcher = searcher;
+	searchShut = shut;
+	searchStart = start;
+	searchGoal = goal;
+	uint32_t const from = NearestCell(start.x, start.y, start.z, body, kNpcGridReach);
+	uint32_t const to = NearestCell(goal.x, goal.y, goal.z, body, kNpcGridReach);
+
+	if (from == kNpcGridNoCell || to == kNpcGridNoCell)
 	{
-		static double Of(const NpcGrid &grid, NpcGridBody body, int floorPrice, uint32_t cell)
-		{
-			return body == kNpcGridAlien && grid.KindOf(cell) == kAlienWaysFloor ? floorPrice : 1.0;
-		}
-	};
+		BeginCells(kNpcGridNoCell, kNpcGridNoCell, body, floorPrice, mostLooks);
+		return from == kNpcGridNoCell ? "no cell near the start" : "no cell near the goal";
+	}
+
+	BeginCells(from, to, body, floorPrice, mostLooks);
+	return nullptr;
+}
+
+NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int floorPrice, size_t mostLooks, std::vector<uint32_t> *found, size_t *looks)
+{
+	searchClaims = nullptr;
+	searchSearcher = -1;
+	searchShut = nullptr;
+	BeginCells(from, to, body, floorPrice, mostLooks);
+	NpcGridSearch const result = Work(static_cast<size_t>(-1));
+	*found = result == kNpcGridFound ? wayCells : std::vector<uint32_t>();
+
+	if (looks)
+	{
+		*looks = searchLooks;
+	}
+
+	return result;
+}
+
+// What a cell costs to cross: for an alien, a floor's is floorPrice times a wall's; and with claims, more where other aliens' ways are,
+// by the claimed polygon under the cell. Never under 1, so the search's guess never says more than a cell really costs.
+double NpcGrid::PriceOf(uint32_t cell) const
+{
+	double price = searchBody == kNpcGridAlien && KindOf(cell) == kAlienWaysFloor ? searchPrice : 1.0;
+	int const polygon = PolygonOf(cell);
+
+	if (searchClaims && polygon >= 0)
+	{
+		price *= searchClaims->PriceFactor(polygon, searchSearcher);
+	}
+
+	return price;
+}
+
+// Whether a cell is on a shut door's polygon. The start and the goal never are, so an alien on a door can leave it.
+bool NpcGrid::ShutOff(uint32_t cell) const
+{
+	int const polygon = PolygonOf(cell);
+	return searchShut && cell != searchFrom && cell != searchTo && polygon >= 0 && static_cast<size_t>(polygon) < searchShut->size() &&
+		(*searchShut)[polygon] != 0;
+}
+
+// Tries one move of the search, to cell n at a new cost
+void NpcGrid::TryMove(const double goalAt[3], const double at[3], uint32_t c, uint32_t n, double newCost)
+{
+	std::unordered_map<uint32_t, Seen>::iterator const found = seen.find(n);
+
+	if ((found != seen.end() && (found->second.done || found->second.cost <= newCost)) || ShutOff(n))
+	{
+		return;
+	}
+
+	Seen const s = { newCost, c, false };
+	seen[n] = s;
+	double const guess = sqrt((at[0] - goalAt[0]) * (at[0] - goalAt[0]) + (at[1] - goalAt[1]) * (at[1] - goalAt[1]) + (at[2] - goalAt[2]) * (at[2] - goalAt[2]));
+	open.push_back(std::make_pair(newCost + guess, n));
+	std::push_heap(open.begin(), open.end(), std::greater<std::pair<double, uint32_t> >());
+}
+
+NpcGridSearch NpcGrid::Work(size_t looksAllowed)
+{
+	if (searchState != kNpcGridSearching)
+	{
+		return searchState;
+	}
+
+	uint8_t const bit = searchBody == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
+	double goal[3];
+	Middle(searchTo, goal);
+	size_t looksNow = 0;
 
 	while (!open.empty())
 	{
-		uint32_t const c = open.top().second;
-		open.pop();
+		if (looksNow >= looksAllowed)
+		{
+			return searchState;
+		}
+
+		std::pop_heap(open.begin(), open.end(), std::greater<std::pair<double, uint32_t> >());
+		uint32_t const c = open.back().second;
+		open.pop_back();
 		Seen &here = seen[c];
 
 		// A cell finished already was put in the list again before it was, and this is the older copy: the guess never says more than a
@@ -1530,56 +1630,35 @@ NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int 
 		}
 
 		here.done = true;
-		looked++;
+		searchLooks++;
+		looksNow++;
 
-		if (looks)
+		if (c == searchTo)
 		{
-			*looks = looked;
-		}
-
-		if (c == to)
-		{
-			for (uint32_t at = to; at != kNpcGridNoCell; at = seen[at].cameFrom)
+			for (uint32_t at = searchTo; at != kNpcGridNoCell; at = seen[at].cameFrom)
 			{
-				way->push_back(at);
+				wayCells.push_back(at);
 			}
 
-			std::reverse(way->begin(), way->end());
-			return kNpcGridFound;
+			std::reverse(wayCells.begin(), wayCells.end());
+			MakeWay();
+			searchState = kNpcGridFound;
+			return searchState;
 		}
 
-		if (looked >= mostLooks)
+		if (searchLooks >= searchMostLooks)
 		{
-			return kNpcGridTooFar;
+			searchState = kNpcGridTooFar;
+			return searchState;
 		}
 
+		// here can move if the list grows, so what's needed of it is copied first
 		double const cost = here.cost;
 		double a[3];
 		Middle(c, a);
-		int const sheet = SheetOf(c);
-		Sheet const &s = sheets[sheet];
+		Sheet const &s = sheets[SheetOf(c)];
 		int const i = static_cast<int>((c - s.first) % s.w), j = static_cast<int>((c - s.first) / s.w);
-		double const price = Price::Of(*this, body, floorPrice, c);
-
-		// Tries one move, to cell n at cost moveCost
-		struct Try
-		{
-			static void Move(std::unordered_map<uint32_t, Seen> &seen, std::priority_queue<Open, std::vector<Open>, std::greater<Open> > &open,
-				const double goal[3], const double at[3], uint32_t c, uint32_t n, double newCost)
-			{
-				std::unordered_map<uint32_t, Seen>::iterator const found = seen.find(n);
-
-				if (found != seen.end() && (found->second.done || found->second.cost <= newCost))
-				{
-					return;
-				}
-
-				Seen const s = { newCost, c, false };
-				seen[n] = s;
-				double const guess = sqrt((at[0] - goal[0]) * (at[0] - goal[0]) + (at[1] - goal[1]) * (at[1] - goal[1]) + (at[2] - goal[2]) * (at[2] - goal[2]));
-				open.push(Open(newCost + guess, n));
-			}
-		};
+		double const price = PriceOf(c);
 
 		for (int dj = -1; dj <= 1; dj++)
 		{
@@ -1610,13 +1689,13 @@ NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int 
 				Middle(n, b);
 
 				// A marine doesn't climb a steep floor. y goes down, so up is a smaller y.
-				if (body == kNpcGridMarine && ((flags[n] | flags[c]) & kNpcGridSteep) && b[1] < a[1])
+				if (searchBody == kNpcGridMarine && ((flags[n] | flags[c]) & kNpcGridSteep) && b[1] < a[1])
 				{
 					continue;
 				}
 
 				double const step = (di != 0 && dj != 0 ? 1.4142 : 1.0) * kNpcGridCell * price;
-				Try::Move(seen, open, goal, b, c, n, cost + step);
+				TryMove(goal, b, c, n, cost + step);
 			}
 		}
 
@@ -1635,7 +1714,7 @@ NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int 
 			double b[3];
 			Middle(n, b);
 
-			if (body == kNpcGridMarine)
+			if (searchBody == kNpcGridMarine)
 			{
 				if (KindOf(n) != kAlienWaysFloor || fabs(a[1] - b[1]) > kNpcGridStep)
 				{
@@ -1650,10 +1729,10 @@ NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int 
 			}
 
 			double const far = sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
-			Try::Move(seen, open, goal, b, c, n, cost + far * Price::Of(*this, body, floorPrice, n));
+			TryMove(goal, b, c, n, cost + far * PriceOf(n));
 		}
 
-		if (body == kNpcGridMarine)
+		if (searchBody == kNpcGridMarine)
 		{
 			list = FallsOf(c, &count);
 
@@ -1662,10 +1741,74 @@ NpcGridSearch NpcGrid::Search(uint32_t from, uint32_t to, NpcGridBody body, int 
 				double b[3];
 				Middle(list[k], b);
 				double const far = sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
-				Try::Move(seen, open, goal, b, c, list[k], cost + far);
+				TryMove(goal, b, c, list[k], cost + far);
 			}
 		}
 	}
 
-	return kNpcGridNoWay;
+	searchState = kNpcGridNoWay;
+	return searchState;
+}
+
+// One point of a way: a place, and the kind and facing of its cell's sheet, the facing out of the surface in 32767ths as the level stores one
+AlienWaysPoint NpcGrid::PointAt(uint32_t cell, double x, double y, double z) const
+{
+	AlienWaysPoint p;
+	p.x = static_cast<int>(floor(x + 0.5));
+	p.y = static_cast<int>(floor(y + 0.5));
+	p.z = static_cast<int>(floor(z + 0.5));
+	int const sheet = SheetOf(cell);
+	p.kind = KindOf(cell);
+
+	for (int k = 0; k < 3; k++)
+	{
+		p.facing[k] = sheet < 0 ? static_cast<int16_t>(0) : static_cast<int16_t>(floor(sheets[sheet].n[k] * 32767.0 + 0.5));
+	}
+
+	return p;
+}
+
+// The cells of the way found, as points: the start, then a cell's middle wherever the way turns or goes onto another sheet, then the goal.
+// Each point's kind and facing are those of its cell's sheet: the surface the way is on from that point to the next.
+void NpcGrid::MakeWay()
+{
+	way.clear();
+	cutShort = false;
+
+	if (wayCells.empty())
+	{
+		return;
+	}
+
+	way.push_back(PointAt(wayCells.front(), searchStart.x, searchStart.y, searchStart.z));
+
+	for (size_t k = 1; k + 1 < wayCells.size(); k++)
+	{
+		double a[3], b[3], c[3];
+		Middle(wayCells[k - 1], a);
+		Middle(wayCells[k], b);
+		Middle(wayCells[k + 1], c);
+		bool const sameSheet = SheetOf(wayCells[k - 1]) == SheetOf(wayCells[k]) && SheetOf(wayCells[k]) == SheetOf(wayCells[k + 1]);
+
+		// The same direction in and out: the two steps point the same way, so their cross is nothing
+		double const in[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, out[3] = { c[0] - b[0], c[1] - b[1], c[2] - b[2] };
+		double turn[3];
+		Cross(in, out, turn);
+
+		if (sameSheet && Dot(turn, turn) < 1.0 && Dot(in, out) > 0.0)
+		{
+			continue;
+		}
+
+		way.push_back(PointAt(wayCells[k], b[0], b[1], b[2]));
+
+		// Room is kept for the goal: a longer way is cut short there, and says so
+		if (way.size() + 1 >= kAlienWaysMostWayPoints)
+		{
+			cutShort = true;
+			return;
+		}
+	}
+
+	way.push_back(PointAt(wayCells.back(), searchGoal.x, searchGoal.y, searchGoal.z));
 }

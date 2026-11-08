@@ -56,6 +56,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <atomic>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "alien_ways_map.h"
@@ -82,6 +84,7 @@ uint8_t const kNpcGridMiddleOn = 8;           // the cell's middle is on one of 
 uint8_t const kNpcGridCoveredOnly = 16;       // its middle isn't, but a floor polygon covers at least kNpcGridLeastCover of it
 
 uint32_t const kNpcGridNoCell = 0xFFFFFFFFu;
+int const kNpcGridReach = 1500;              // how far from a cell a search's start or goal can be: an alien's middle is up to a metre off its surface
 
 // THE LIMITS. What the stock levels need is in brackets: the most on any of the 63, measured by the node copy (npc-grid.js), whose steps are
 // this code's. A level made to take more is refused, and the game moves its NPCs as before.
@@ -113,7 +116,8 @@ enum NpcGridSearch
 {
 	kNpcGridFound,      // the way is in the list handed in, from the start cell to the goal cell
 	kNpcGridNoWay,      // the cells don't join up between the two, for this body
-	kNpcGridTooFar      // it looked at as many cells as it was allowed to and didn't get there
+	kNpcGridTooFar,     // it looked at as many cells as it was allowed to and didn't get there
+	kNpcGridSearching   // not finished: call Work again
 };
 
 class NpcGrid
@@ -165,6 +169,10 @@ public:
 	// grid. Whether it's on the surface is in its flags.
 	uint32_t CellOver(int sheet, double x, double y, double z) const;
 
+	// The alien ways map's number for the polygon a cell is on: the one its middle is on, or for a cell only covered, the floor that covers
+	// it. -1 for a cell on no polygon, or a number that isn't a cell. A way's cells give a way's polygons, for the claims and the doors.
+	int PolygonOf(uint32_t cell) const { return cell < polygonOf.size() ? polygonOf[cell] : -1; }
+
 	// The cell nearest to a point, among those a body fits on, no further than within millimetres, or kNpcGridNoCell
 	uint32_t NearestCell(double x, double y, double z, NpcGridBody body, int within) const;
 
@@ -180,7 +188,43 @@ public:
 	NpcGridSearch Search(uint32_t from, uint32_t to, NpcGridBody body, int floorPrice, size_t mostLooks, std::vector<uint32_t> *way,
 		size_t *looks);
 
+	// THE SAME SEARCH SPREAD OVER FRAMES, as the alien ways map's is, for the guide (alien_ways_guide.h): one at a time.
+	//
+	// StartSearch takes positions, and starts from the cell the body fits on nearest start, within kNpcGridReach, to the one nearest goal.
+	// It gives back nothing if it started, or why not, in words. A search that's running is dropped. It looks at no more than mostLooks cells
+	// in all.
+	// claims, if given, makes a cell dearer where other aliens' ways are, by the map polygon under it (PolygonOf), as the map's own search
+	// does; searcher is the guide's place for the alien searching, whose own claims don't count. shut, if given, has a byte for each map
+	// polygon, not 0 for a polygon of a door that's shut now: the search keeps off its cells, but for the start's and the goal's. Both have
+	// to stay as they are until the search ends.
+	const char *StartSearch(AlienWaysXYZ start, AlienWaysXYZ goal, NpcGridBody body, int floorPrice, size_t mostLooks,
+		const AlienWaysClaims *claims = nullptr, int searcher = -1, const std::vector<uint8_t> *shut = nullptr);
+
+	// Carries on, looking at up to looksAllowed more cells, and says how it stands: kNpcGridSearching until it's done. Asked again after it's
+	// ended, it gives the same answer.
+	NpcGridSearch Work(size_t looksAllowed);
+
+	// The way the last search found, as the alien ways map gives one: the start, a point wherever the way turns or changes surface, and the
+	// goal. Each point's kind and facing are those of the surface the way is on from it to the next. At most kAlienWaysMostWayPoints points:
+	// WayCutShort says whether it was cut there. Empty if there was no way.
+	const std::vector<AlienWaysPoint> &Way() const { return way; }
+	bool WayCutShort() const { return cutShort; }
+	size_t LastSearchLooks() const { return searchLooks; }
+
 private:
+	struct Seen
+	{
+		double cost;
+		uint32_t cameFrom;
+		bool done;
+	};
+
+	NpcGridSearch BeginCells(uint32_t from, uint32_t to, NpcGridBody body, int floorPrice, size_t mostLooks);
+	double PriceOf(uint32_t cell) const;
+	bool ShutOff(uint32_t cell) const;
+	void TryMove(const double goalAt[3], const double at[3], uint32_t c, uint32_t n, double newCost);
+	AlienWaysPoint PointAt(uint32_t cell, double x, double y, double z) const;
+	void MakeWay();
 	struct Sheet
 	{
 		double n[3];      // which way it faces, out of the surface: a unit length, in the game's numbers (y down)
@@ -200,10 +244,27 @@ private:
 	std::vector<Sheet> sheets;
 	std::vector<uint8_t> flags;          // a cell's flags
 	std::vector<uint8_t> room;           // a cell's room, in kNpcGridRoomStep steps
+	std::vector<int32_t> polygonOf;      // a cell's map polygon, or -1
 	std::vector<uint32_t> linkFrom;      // each link, sorted by the cell it's from
 	std::vector<uint32_t> linkTo;
 	std::vector<uint32_t> fallFrom;      // each fall, the same
 	std::vector<uint32_t> fallTo;
+
+	// The search that's running, or the last one. What it remembers grows with the cells it looks at, up to its mostLooks.
+	std::unordered_map<uint32_t, Seen> seen;
+	std::vector<std::pair<double, uint32_t> > open;   // a heap, the cheapest guess on top
+	uint32_t searchFrom, searchTo;
+	NpcGridBody searchBody;
+	int searchPrice;
+	size_t searchLooks, searchMostLooks;
+	NpcGridSearch searchState;
+	std::vector<uint32_t> wayCells;
+	std::vector<AlienWaysPoint> way;
+	AlienWaysXYZ searchStart, searchGoal;
+	const AlienWaysClaims *searchClaims;
+	int searchSearcher;
+	const std::vector<uint8_t> *searchShut;
+	bool cutShort;
 
 	size_t surfaceCells, steps, rayTests, squareTests, boxEntries;
 	size_t bytesKept, bytesBuilding, bytesBuildingUsed;
