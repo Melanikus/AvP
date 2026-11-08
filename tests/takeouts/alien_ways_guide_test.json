@@ -140,7 +140,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\tif (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)\n",
+					"from": "\tif (!searchToTheTarget && line.wallMm <= 0.0 && line.ceilingMm <= 0.0)\n",
 					"to": "\tif (false)\n"
 				}
 			]
@@ -1302,6 +1302,16 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "\tline.cost = map->LastSearchCost();\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way all on the floor to the target itself is handed back to the game's own code",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "if (!searchToTheTarget && line.wallMm <= 0.0 && line.ceilingMm <= 0.0)",
+					"to": "if (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)"
 				}
 			]
 		}

@@ -624,7 +624,9 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	// A way that never leaves the floor is no better than the game's own steering, which curves at its target and climbs any wall it touches.
 	// That's where the alien and its target are on one big floor polygon, which the map can't leave and come back to (one way onto each polygon).
 	// The alien is on the floor then, so dropping the way it had lets nothing fall.
-	if (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)
+	// But not a way to the target itself: the game's own hunting can flip between Hunt and Wander every frame and never close in, as one alien
+	// did a metre from the marine at Third's 5-alien spot (2026-11-08). That way is followed, all floor as it is, for the last metres.
+	if (!searchToTheTarget && line.wallMm <= 0.0 && line.ceilingMm <= 0.0)
 	{
 		line.outcome = kAlienWaysOutcomeAllFloor;
 		AddReport(line);

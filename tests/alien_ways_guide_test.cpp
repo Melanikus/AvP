@@ -872,6 +872,17 @@ static void NoBetterThanToday()
 	Frame(flat, floorOnly, 16);
 	Check(ReportsOf(flat, &reports) == 0, "and it doesn't ask again for 2 s");
 
+	// But a way all on the floor to the target itself is followed: the game's own hunting may never close in (Third's 5-alien spot)
+	const std::unique_ptr<AlienWaysGuide> closeRoom(new AlienWaysGuide);
+	AlienWaysGuide &close = *closeRoom;
+	AlienWaysAsk toTheTarget = Ask(Alien(2), kStart, kGoal, 10);
+	toTheTarget.goalIsTheTarget = true;
+	close.Steer(&floorOnly, toTheTarget, &towards);
+	Frame(close, floorOnly, 16);
+	Check(ReportsOf(close, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeFound && Near(reports[0].floorMm, 9000.0, 0.5),
+		"a way all on the floor to the target itself is taken as a way");
+	Check(close.Steer(&floorOnly, toTheTarget, &towards) && close.Guided(Alien(2)), "and followed, for the last metres");
+
 	// Two squares 5 m apart: no way joins them
 	AlienWaysMap apart;
 	apart.Build({ Polygon({ { 0, 0, 0 }, { 1000, 0, 0 }, { 1000, 0, 1000 }, { 0, 0, 1000 } }, kUp),
