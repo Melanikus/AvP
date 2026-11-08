@@ -161,11 +161,11 @@ public:
 	size_t BytesWhileBuilding() const { return bytesBuildingUsed; }   // the most the last build that worked held, at its top
 	size_t RayTests() const { return rayTests; }
 	size_t SquareTests() const { return squareTests; }
-	size_t BoxEntries() const { return boxEntries; }
+	size_t BoxEntries() const { return boxEntries; }         // polygons listed in metre boxes, while it was building
 	// The pieces an alien's cells make (npc_grid_pieces.h): how many got a number, and why it gave up, if it did (then nothing is refused)
 	size_t Pieces() const { return pieces.Pieces(); }
 	const char *PiecesGaveUp() const { return piecesSkipped; }
-	size_t PieceBytes() const { return pieces.BytesKept(); }      // part of BytesKept()         // polygons listed in metre boxes, while it was building
+	size_t PieceBytes() const { return pieces.BytesKept(); }      // part of BytesKept()
 
 	// One cell's sheet, which kind of surface it's on, its middle in the game's numbers, its flags and its room. A number that isn't a
 	// cell gives -1, a wall, false (with out untouched), 0 and 0.
@@ -207,8 +207,8 @@ public:
 	//
 	// StartSearch takes positions, and starts from the cell the body fits on nearest start, within kNpcGridReach, to the one nearest goal.
 	// It gives back nothing if it started, or why not, in words. An alien's search whose start and goal are in pieces that certainly don't
-	// join (npc_grid_pieces.h) is refused at once, as there's no way to find, instead of looking at every cell it can reach first. A search that's running is dropped. It looks at no more than mostLooks cells
-	// in all.
+	// join (npc_grid_pieces.h) is refused at once, as there's no way to find, instead of looking at every cell it can reach first. A search
+	// that's running is dropped. It looks at no more than mostLooks cells in all.
 	// claims, if given, makes a cell dearer where other aliens' ways are, by the map polygon under it (PolygonOf), as the map's own search
 	// does; searcher is the guide's place for the alien searching, whose own claims don't count, and claimStep and claimMost are what each
 	// claim adds and the most a cell can cost, as the map's search takes them (a flanker's are bigger). shut, if given, has a byte for each

@@ -173,8 +173,8 @@ struct Pair
 };
 
 NpcGrid::NpcGrid()
-	: searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0), searchMostLooks(0),
-	piecesSkipped(nullptr), searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
+	: piecesSkipped(nullptr), searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0),
+	  searchMostLooks(0), searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
 	  searchClaimMost(kAlienWaysClaimMostPriceFactor), searchShut(nullptr), cutShort(false),
 	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
 	  ready(false), stopAsked(false), looksAtStop(0), stopAtLook(0)
