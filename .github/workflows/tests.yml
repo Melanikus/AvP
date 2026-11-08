@@ -110,6 +110,8 @@ jobs:
           # Which part this is, counted from 0, and how many parts there are, both from GitHub, so they always agree with the list above
           PART: ${{ strategy.job-index }}
           PARTS: ${{ strategy.job-total }}
+          # PROBE ONLY (sanitize-probe-3, never merged): every test with all of the sanitizer's stronger settings on, to see what breaks
+          ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1:strict_init_order=1:alloc_dealloc_mismatch=1:detect_container_overflow=1:detect_invalid_pointer_pairs=2
         run: |
           # In name order, compared letter by letter, so all four machines share them out the same way
           $names = [string[]]@(Get-ChildItem -LiteralPath tests -Filter '*.args' -File | ForEach-Object { $_.BaseName })
@@ -153,7 +155,7 @@ jobs:
   # with its reason, and show what each said.
   sanitizer-refusals:
     name: The sanitizer script's own refusals
-    timeout-minutes: 15
+    timeout-minutes: 45   # PROBE ONLY: 15 on the real branch; the probe step below adds about 20 builds
     runs-on: windows-2025-vs2026   # pinned: the same machine as the jobs above
     steps:
       - name: Check out the repository
@@ -314,6 +316,126 @@ jobs:
 
           if ($failed.Count -gt 0) { throw "$($failed.Count) of the sanitizer script's own checks failed: $($failed -join '; ')" }
           "Each of the sanitizer script's refusals happens, with its reason, a window set up once stays as it was, and the gate fails a broken test"
+
+      # SANITIZE-MORE-1's probe (#104), on a scratch branch that is never merged: which of the sanitizer's stronger settings this compiler
+      # and library really do. Each small broken program below is something only one setting should catch. Each is run through
+      # sanitize.ps1 with ASAN_OPTIONS empty, then with its setting, and what the sanitizer said is printed from the test's said.txt. It
+      # also shows whether a setting is an unknown word here, and whether leaks are looked for at all. It never fails the job.
+      - name: "Probe: the sanitizer's stronger settings, one broken program each"
+        timeout-minutes: 25
+        shell: pwsh
+        run: |
+          # Visual Studio set up once in this window, so each run below skips it
+          & ./tests/takeouts/sanitize.ps1 relief_map_file_test | Out-Null
+          "===== set up: sanitize.ps1 relief_map_file_test gave back $LASTEXITCODE"
+          $settings = '/std:c++17 /EHsc /MT /W3 /sdl /FC'
+
+          function Write-Canary([string]$name, [object[]]$files) {
+            $paths = @()
+            for ($i = 0; $i -lt $files.Count; $i++) {
+              $path = "tests/more_${name}_$i.cpp"
+              Set-Content -LiteralPath $path -Value $files[$i]
+              $paths += $path
+            }
+            Set-Content -LiteralPath "tests/more_${name}_test.args" -Value (@($settings) + $paths)
+          }
+
+          function Try-Canary([string]$name, [string]$options) {
+            $env:ASAN_OPTIONS = $options
+            $text = & ./tests/takeouts/sanitize.ps1 "more_${name}_test" *>&1 | Out-String
+            $code = $LASTEXITCODE
+            $env:ASAN_OPTIONS = $null
+            "===== $name, ASAN_OPTIONS='$options': sanitize.ps1 gave back $code"
+            $said = Join-Path $env:RUNNER_TEMP "avp-sanitize/more_${name}_test/said.txt"
+            if (Test-Path -LiteralPath $said) {
+              Get-Content -LiteralPath $said | Where-Object { $_ -match 'ERROR: AddressSanitizer|WARNING|SUMMARY|unrecognized|not supported|leak' } | Select-Object -First 8 | ForEach-Object { "    $_" }
+            }
+            else {
+              "    no said.txt. The end of what sanitize.ps1 said:"
+              ($text -split "`n") | Select-Object -Last 12 | ForEach-Object { "    $_" }
+            }
+          }
+
+          Write-Canary 'use_after_return' @(, @(
+            '#include <cstdio>'
+            'volatile int *escaped = nullptr;'
+            '__declspec(noinline) void Keep() { volatile int local[4] = { 1, 2, 3, 4 }; escaped = local; }'
+            'int main() { Keep(); std::printf("%d\n", escaped[1]); return 0; }'
+          ))
+          Write-Canary 'strict_string' @(, @(
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            '#include <cstring>'
+            'int main()'
+            '{'
+            '    char *block = static_cast<char *>(std::malloc(4));'
+            '    if (!block) return 2;'
+            '    std::memcpy(block, "12x4", 4);   // four characters, and no 0 after them'
+            '    std::printf("%ld\n", std::strtol(block, nullptr, 10));'
+            '    std::free(block);'
+            '    return 0;'
+            '}'
+          ))
+          Write-Canary 'init_order' @(
+            @(
+              '#include <cstdio>'
+              'extern int later;'
+              'int earlier = later + 1;   // made before later is, because this file is linked first'
+              'int main() { std::printf("%d\n", earlier); return 0; }'
+            ),
+            @(
+              'static volatile int five = 5;'
+              'static int Five() { return five; }'
+              'int later = Five();'
+            )
+          )
+          Write-Canary 'alloc_dealloc' @(, @(
+            '#include <cstdlib>'
+            'int main() { int *number = static_cast<int *>(std::malloc(sizeof(int))); delete number; return 0; }'
+          ))
+          Write-Canary 'container' @(, @(
+            '#include <cstdio>'
+            '#include <vector>'
+            'int main() { std::vector<int> numbers; numbers.reserve(8); numbers.push_back(1); volatile int *inside = numbers.data(); std::printf("%d\n", inside[4]); return 0; }'
+          ))
+          Write-Canary 'heapalloc' @(, @(
+            '#include <cstdio>'
+            '#include <windows.h>'
+            'int main() { char *block = static_cast<char *>(HeapAlloc(GetProcessHeap(), 0, 16)); if (!block) return 2; volatile int past = 16; std::printf("%d\n", block[past]); HeapFree(GetProcessHeap(), 0, block); return 0; }'
+          ))
+          Write-Canary 'pointer_pairs' @(, @(
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            'int main() { char *first = static_cast<char *>(std::malloc(8)); char *second = static_cast<char *>(std::malloc(8)); std::printf("%d\n", first < second ? 1 : 0); std::free(first); std::free(second); return 0; }'
+          ))
+          Write-Canary 'leak' @(, @(
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            'int main() { void *lost = std::malloc(64); std::printf("%p\n", lost); return 0; }'
+          ))
+          Write-Canary 'fine' @(, @('int main() { return 0; }'))
+
+          Try-Canary 'use_after_return' ''
+          Try-Canary 'use_after_return' 'detect_stack_use_after_return=1'
+          Try-Canary 'strict_string' ''
+          Try-Canary 'strict_string' 'strict_string_checks=1'
+          Try-Canary 'init_order' ''
+          Try-Canary 'init_order' 'check_initialization_order=1'
+          Try-Canary 'init_order' 'check_initialization_order=1:strict_init_order=1'
+          Try-Canary 'alloc_dealloc' ''
+          Try-Canary 'alloc_dealloc' 'alloc_dealloc_mismatch=1'
+          Try-Canary 'container' 'detect_container_overflow=0'
+          Try-Canary 'container' ''
+          Try-Canary 'container' 'detect_container_overflow=1'
+          Try-Canary 'heapalloc' ''
+          Try-Canary 'heapalloc' 'windows_hook_rtl_allocators=1'
+          Try-Canary 'pointer_pairs' ''
+          Try-Canary 'pointer_pairs' 'detect_invalid_pointer_pairs=2'
+          Try-Canary 'leak' ''
+          Try-Canary 'leak' 'detect_leaks=1'
+          Try-Canary 'fine' 'not_an_option=1'
+          Try-Canary 'fine' 'detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1:strict_init_order=1:alloc_dealloc_mismatch=1:detect_container_overflow=1:detect_invalid_pointer_pairs=2'
+          exit 0
 
   # One job with one name, to make a required check of. It passes only if every part passed, and the script's own refusals happened.
   sanitizer-result:
