@@ -8,6 +8,8 @@
 //   the new guns' words
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the words a player sees during a co-op game
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the sound pages' Room echo row
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1484,6 +1486,8 @@ enum TEXTSTRING_ID
 	TEXTSTRING_COOP_HOST_QUITS,
 	TEXTSTRING_COOP_CAMPAIGN_COMPLETE,
 	TEXTSTRING_COOP_MAP_COMPLETE,
+	TEXTSTRING_AVOPTIONS_ROOMECHO,      // the sound pages' Room echo row, and its help line (REVERB-TOGGLE-1)
+	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP,
 
 	MAX_NO_OF_TEXTSTRINGS
 };

@@ -1,0 +1,158 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "turning the echo off leaves it on",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "if (!reverbOn)\n\t{\n\t\treturn 0.0f;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the room's amount is never used, so every room has its full echo again",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "if (levelAmount >= 0.0f && levelAmount <= 1.0f)\n\t{\n\t\treturn levelAmount;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an amount over 1 makes the echo louder than all of it",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "levelAmount >= 0.0f && levelAmount <= 1.0f",
+					"to": "levelAmount >= 0.0f"
+				}
+			]
+		},
+		{
+			"name": "a negative amount is used as a gain",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "levelAmount >= 0.0f && levelAmount <= 1.0f",
+					"to": "levelAmount <= 1.0f"
+				}
+			]
+		},
+		{
+			"name": "a room that leaves it to distance gets no echo",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "\treturn 1.0f;\n}",
+					"to": "\treturn 0.0f;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the setting is never read from the settings file",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "ReverbIsOn = reverbSaved = Config_GetBool(kReverbHeading, kReverbName, true) ? 1 : 0;",
+					"to": "ReverbIsOn = reverbSaved = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say whether the echo is on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "LogString(std::string(\"sound: the room echo (reverb) is \")",
+					"to": "(void)(std::string(\"sound: the room echo (reverb) is \")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the effect slot's gain is never set",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "alAuxiliaryEffectSlotf(effectSlot, AL_EFFECTSLOT_GAIN, gain);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the gain pays no heed to the setting",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "Reverb_SlotGain(ReverbIsOn != 0, SoundConfig.reverb_mix)",
+					"to": "Reverb_SlotGain(true, SoundConfig.reverb_mix)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame of play never sets the gain",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\tReverb_ApplyGain();\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room with the same amount stops before the gain is set",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\t// The room's amount of echo: from 0 to 1, or -1, which leaves it to distance (EAX_REVERBMIX_USEDISTANCE)\n",
+					"to": "\tif (reverb_mix == SoundConfig.reverb_mix) {\n\t\treturn;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change on the page isn't saved",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "Config_SetBool(kReverbHeading, kReverbName, now != 0);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the main menus never notice the row change",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tViewSettings_MenuFrame();\n\t\tReverb_MenuFrame();\n\n\t\tCheckForLoadGame();",
+					"to": "\t\tViewSettings_MenuFrame();\n\n\t\tCheckForLoadGame();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sound page in the game has no Room echo row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{&musicVolume}},\n\t{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_AVOPTIONS_ROOMECHO}, {1}, {&ReverbIsOn},\t{TEXTSTRING_NO},\tTEXTSTRING_AVOPTIONS_ROOMECHO_HELP},\n",
+					"to": "{&musicVolume}},\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the row's words come in the wrong order",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\t\"Room echo\",\n\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n",
+					"to": "\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n\t\"Room echo\",\n"
+				}
+			]
+		}
+	]
+}

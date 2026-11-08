@@ -34,6 +34,8 @@
 //   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the Room echo row on the sound pages is saved when it changes, the same way the rendering page's rows are (REVERB-TOGGLE-1)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -83,6 +85,7 @@
 
 // extern functions
 void ChangeWindowsSize(uint32_t width, uint32_t height);
+extern void Reverb_MenuFrame();   // openal_audio.cpp: saves the Room echo row when it has changed
 extern bool IDemandSelect();
 extern void MakeSelectSessionMenu(void);
 extern void MakeInGameMenu(void);
@@ -472,6 +475,7 @@ int AvP_MainMenus(void)
 		SoundSys_Management();
 		UpdateGammaSettings();
 		ViewSettings_MenuFrame();
+		Reverb_MenuFrame();
 
 		CheckForLoadGame();
 
@@ -641,6 +645,7 @@ extern int AvP_InGameMenus(void)
 		AvP_UpdateMenus();
 		UpdateGammaSettings();
 		ViewSettings_MenuFrame();
+		Reverb_MenuFrame();
 
 		return 1;
 	}
