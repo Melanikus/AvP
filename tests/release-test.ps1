@@ -348,9 +348,12 @@ Make-GoodRepository
 Remove-Item -LiteralPath (Join-Path $work 'PLAYTEST.md')
 Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'PLAYTEST.md is missing' 'taking the tester notes away stops it'
 
-# The real assert list: once every save and network fix is in, nothing in it is marked not yet safe
+# The real assert list: how many rows it marks NOT SAFE YET, said, not failed. Such a row is an honest record of an assert that's in the
+# code whether we write it down or not. Failing every pull request that records one would push people to leave it out, which is the
+# opposite of writing things down for whoever comes later, and it would gain no security: check-release.ps1 refuses any release while
+# one is listed. So a pull request can record one with a card, and nothing ships with one.
 $realUnsafe = @(Get-Content (Join-Path $repository 'tests/assert_limits_allowed.txt') | Where-Object { -not $_.StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
-Check ($realUnsafe.Count -eq 0) "the real assert list marks nothing as not yet safe: $($realUnsafe.Count) row(s)"
+Write-Host "  The real assert list marks $($realUnsafe.Count) row(s) NOT SAFE YET. A release is refused until that's 0."
 
 $realBlockers = Get-Content (Join-Path $repository 'RELEASE-BLOCKERS.md')
 Check ($realBlockers -contains "## What's in the way") "the real file has the heading the script looks for"
