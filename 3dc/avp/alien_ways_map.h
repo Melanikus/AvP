@@ -258,6 +258,12 @@ public:
 	// For each point of the way, the map polygon the way is on from that point to the next (the goal's: its own polygon). As long as Way().
 	const std::vector<int> &WayPolygons() const { return wayPolygons; }
 
+	// What touches what, for the claims an alien's way puts on the polygons near it (lanes, #138). Polygon p's joins go to the polygons
+	// JoinOthers()[k], for k from FirstJoins()[p] up to FirstJoins()[p + 1]. FirstJoins() has Polygons() + 2 entries, because a search's goal
+	// is one more node, numbered Polygons(), with no joins. Every polygon in JoinOthers() is below Polygons(). Both are empty with no map.
+	const std::vector<int> &FirstJoins() const { return firstJoin; }
+	const std::vector<int> &JoinOthers() const { return joinOther; }
+
 	// Whether the way was longer than kAlienWaysMostWayPoints points and was cut short. Then it doesn't reach the goal, and needs asking again.
 	bool WayCutShort() const { return cutShort; }
 

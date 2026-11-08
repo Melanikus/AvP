@@ -321,6 +321,9 @@ static void Joins()
 	Check(!map.Joined(10, 11, &a, &b), "the two walls don't touch");
 	Check(!map.Joined(0, 0, &a, &b), "a polygon isn't joined to itself");
 	Check(!map.Joined(0, 13, &a, &b) && !map.Joined(-1, 0, &a, &b), "asking about a polygon that isn't there says no");
+	Check(map.FirstJoins().size() == map.Polygons() + 2 && map.JoinOthers().size() == 2 * map.Joins()
+		&& map.FirstJoins()[map.Polygons()] == map.FirstJoins()[map.Polygons() + 1],
+		"the lists of what touches what: a start for each polygon and the goal, one more to end on, each join both ways, and none for the goal");
 
 	// Two squares with a gap between them. A corner within 10 mm of the other's edge touches it, and one 11 mm away doesn't.
 	AlienWaysMap gap;
