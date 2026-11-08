@@ -1084,6 +1084,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a polygon drawn from both sides gives its facing too",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\tif (!(polygon->PolyFlags & iflag_no_bfc))\n\t\t\t\t{\n\t\t\t\t\tAlienWays_TurnedFacing(",
+					"to": "\t\t\t\tif (true)\n\t\t\t\t{\n\t\t\t\t\tAlienWays_TurnedFacing("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a polygon's facing never reaches the map",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\tlisting->polygons->back().facing[0] = facing[0];\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

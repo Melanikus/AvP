@@ -115,8 +115,11 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 			continue;
 		}
 
-		// Which way it faces: the normal stored with the shape, turned with the object, where there's one
+		// Which way it faces: the normal stored with the shape, turned with the object, where there's one. The whole facing goes with the
+		// polygon too, for standing a way off an outside corner (kAlienWaysStandOff), except for a polygon drawn from both sides, which could
+		// face either way: that one is left as not known.
 		float up = 0.0f;
+		float facing[3] = { 0.0f, 0.0f, 0.0f };
 		bool haveFacing = false;
 		int const normalPlace = polygon->PolyNormalIndex;
 
@@ -133,6 +136,11 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 				if ((polygon->PolyFlags & iflag_no_bfc) && up < 0.0f)
 				{
 					up = -up;
+				}
+
+				if (!(polygon->PolyFlags & iflag_no_bfc))
+				{
+					AlienWays_TurnedFacing(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning, facing);
 				}
 
 				haveFacing = true;
@@ -164,6 +172,9 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 		switch (AlienWays_AddPolygon(x, y, z, count, up, listing->polygons))
 		{
 			case kAlienWaysAddedAsItIs:
+				listing->polygons->back().facing[0] = facing[0];
+				listing->polygons->back().facing[1] = facing[1];
+				listing->polygons->back().facing[2] = facing[2];
 				break;
 			case kAlienWaysLeftOutTooFewCorners:
 				listing->counts->tooFewCorners++;

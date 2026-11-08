@@ -735,6 +735,77 @@ static void Adding()
 // Claims (lanes, #138; alien_ways_claims.h): with another alien's way on one wall of the corridor, a search goes up the other. Unclaimed, the
 // two walls cost the same, 32.7; with the first alien's way claimed, its wall costs 1.25 times, 40.85, and the other wall, beside only the
 // way's two floor tiles, 1.125 times, 39.4. The searcher's own claims change nothing.
+// Round an outside corner (kAlienWaysStandOff). Seen from above: a block fills x < 0 and z < 0. Wall A is its face at x = 0, facing +x, and
+// wall B its face at z = 0, facing +z, both 3 m tall; they meet at the corner's edge. A floor in front of A, and a floor patch at B's far end:
+//
+//                      floor 2 (x -5000 to -4000) | goal         z
+//      wall B (z = 0) =============================+  corner       ^
+//                      block                       | wall A        |
+//                                                  | (x = 0)  floor 1, start         --> x
+//
+// At a floor price of 10 the way goes up A, along it at 1.5 m to the corner, across onto B there, along B and down onto floor 2: 32.7, against
+// 63.6 or more by any floor. Round the corner it gets the stand-off point, 800 mm out along both facings: (800, -1500, 800).
+static std::vector<AlienWaysPolygon> Pillar(bool facingsKnown, bool outside)
+{
+	float const out = outside ? 1.0f : -1.0f;
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Polygon({ { 0, 0, -5000 }, { 2000, 0, -5000 }, { 2000, 0, 0 }, { 0, 0, 0 } }, kUp));                 // 0: floor 1
+	world.push_back(Polygon({ { -5000, 0, 0 }, { -4000, 0, 0 }, { -4000, 0, 2000 }, { -5000, 0, 2000 } }, kUp));         // 1: floor 2
+	world.push_back(Polygon({ { 0, 0, -5000 }, { 0, -3000, -5000 }, { 0, -3000, 0 }, { 0, 0, 0 } }, kUpright));          // 2: wall A
+	world.push_back(Polygon({ { -5000, 0, 0 }, { -5000, -3000, 0 }, { 0, -3000, 0 }, { 0, 0, 0 } }, kUpright));          // 3: wall B
+
+	if (facingsKnown)
+	{
+		world[0].facing[1] = world[1].facing[1] = -1.0f;   // the floors face up, and y goes down
+		world[2].facing[0] = out;                          // A faces +x outside the block, -x if it were the inside of a room's corner
+		world[3].facing[2] = out;                          // B faces +z, or -z
+	}
+
+	return world;
+}
+
+static bool HasStandOff(std::vector<AlienWaysPoint> const &way)
+{
+	for (size_t k = 1; k < way.size(); k++)
+	{
+		if (At(way[k - 1], { 0, -1500, 0 }) && At(way[k], { 800, -1500, 800 }))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void RoundTheCorner()
+{
+	printf("Round an outside corner\n");
+	AlienWaysXYZ const start = { 1000, 0, -4500 }, goal = { -4500, 0, 1000 };
+	AlienWaysMap map;
+	Check(map.Build(Pillar(true, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound, "a way is found round the block");
+	Check(HasStandOff(map.Way()), "round the corner, the crossing onto the second wall is followed by the stand-off point, 800 mm out along both facings");
+	Check(Near(MetresOf(map.Way()).floor, 2.118, 0.01), "and it's still the way by the walls, with no more floor");
+
+	Check(map.Build(Pillar(true, false)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way()),
+		"walls that face into a room's corner, not out of a block's, get no stand-off: nothing is in the way there");
+	Check(map.Build(Pillar(false, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way()),
+		"nor walls whose facings the level doesn't store");
+
+	// What's refused, and turning a facing
+	std::vector<AlienWaysPolygon> world = Pillar(true, true);
+	world[2].facing[0] = 2.0f;
+	Check(Says(map.Build(world), "a polygon's facing isn't a number from -1 to 1"), "a facing past 1 is refused");
+	world[2].facing[0] = std::numeric_limits<float>::quiet_NaN();
+	Check(Says(map.Build(world), "a polygon's facing isn't a number from -1 to 1"), "and one that isn't a number");
+
+	float turned[3] = { 9.0f, 9.0f, 9.0f };
+	AlienWays_TurnedFacing({ 65536, 0, 0 }, nullptr, turned);
+	Check(Near(turned[0], 1.0, 1e-6) && turned[1] == 0.0f && turned[2] == 0.0f, "a facing not turned is the stored one, in 65536ths");
+	AlienWaysTurn const quarter = { 0, 0, 65536, 0, 65536, 0, -65536, 0, 0 };   // a quarter turn about the up and down: +x to +z
+	AlienWays_TurnedFacing({ 65536, 0, 0 }, &quarter, turned);
+	Check(Near(turned[0], 0.0, 1e-6) && Near(turned[2], 1.0, 1e-6), "turned a quarter, +x faces +z, the way the game turns a shape's points");
+}
+
 static void Claims()
 {
 	printf("Claims of other aliens' ways\n");
@@ -923,6 +994,7 @@ int main()
 	BuiltAgain();
 	Doors();
 	Claims();
+	RoundTheCorner();
 
 	if (checksFailed)
 	{

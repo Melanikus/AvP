@@ -663,6 +663,76 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a way round an outside corner gets no stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (from < 0 || to < 0 || kind[from] != kAlienWaysWall || kind[to] != kAlienWaysWall)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the inside of a room's corner gets a stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (!(toBehindFrom < -kAlienWaysTouch && fromBehindTo < -kAlienWaysTouch))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "walls whose facings aren't known get a stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (ax * ax + ay * ay + az * az < 0.5 || bx * bx + by * by + bz * bz < 0.5)\n\t{\n\t\treturn false;",
+					"to": "\tif (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the stand-off isn't counted among the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\treturn count + (standOff ? 1 : 0);",
+					"to": "\treturn count;"
+				}
+			]
+		},
+		{
+			"name": "a facing that isn't a number from -1 to 1 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tif (!(p.facing[c] >= -1.0f && p.facing[c] <= 1.0f))\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a polygon's facing isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "facing.push_back(Facing{ static_cast<int16_t>(lround(p.facing[0] * 32767.0f))",
+					"to": "facing.push_back(Facing{ static_cast<int16_t>(0 * lround(p.facing[0] * 32767.0f))"
+				}
+			]
+		},
+		{
+			"name": "a facing is turned the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tparts[2] = TimesFixed(turn->m13, facing.x) + TimesFixed(turn->m23, facing.y) + TimesFixed(turn->m33, facing.z);",
+					"to": "\t\tparts[2] = TimesFixed(turn->m31, facing.x) + TimesFixed(turn->m32, facing.y) + TimesFixed(turn->m33, facing.z);"
+				}
+			]
 		}
 	]
 }

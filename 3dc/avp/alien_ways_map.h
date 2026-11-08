@@ -70,6 +70,19 @@ int const kAlienWaysClimbHeight = 1500;
 // and climb back, to stay along the walls' foot. A real step down, at the end of a way, is longer than this anyway.
 int const kAlienWaysLeastFloorStep = 500;
 
+// ROUND AN OUTSIDE CORNER. Where a way crosses from one wall to another round an outside corner, the edge of a pillar say, the alien is on
+// the first wall's face and the way's next point is on the other's, behind the face it clings to. Heading straight for it, the alien pushes
+// into its own wall and makes no headway (Ops01, polygon 451 to 565: three aliens stuck there in two films, 2026-11-08). So the way gets one
+// more point there, stood off the corner by this many millimetres along each wall's facing: round the edge, clear of both walls. It's more
+// than the 600 mm the guide counts as reached (kAlienWaysReached), so the alien has to come round the edge before it heads along the new
+// wall. Only at a sharp corner, a turn of 60 to 120 degrees, and only between walls whose facings the level stores.
+//
+//      seen from above:      wall 2's face  ======+  corner        the way comes along wall 1, rounds the corner by the stand-off
+//                                                 |                point S, and goes on along wall 2
+//                            S .                  | wall 1's face
+//                                                 |
+int const kAlienWaysStandOff = 800;
+
 // What counts as a floor or a ceiling: how much a polygon faces up or down, out of 1. This is the game's FLOOR_THRESHOLD.
 float const kAlienWaysFloorFacing = 30000.0f / 65536.0f;
 
@@ -111,6 +124,8 @@ struct AlienWaysPolygon
 	int y[kAlienWaysMostCorners];
 	int z[kAlienWaysMostCorners];
 	float up;                              // how much it faces up (towards smaller y), from 1 (flat, facing up) to -1 (facing down)
+	float facing[3];                       // the way it faces out, x, y and z, each from -1 to 1 (y goes down), as the level stores it, or
+	                                       // all 0 if that isn't known. Only for standing a way off an outside corner (kAlienWaysStandOff).
 	int door;                              // 0 if it's part of no door. Otherwise which door it's part of, numbered from 1 up to
 	                                       // kAlienWaysMostDoors. They're numbered from 1 so that a polygon filled with zeros is part of no door.
 };
@@ -162,6 +177,9 @@ bool AlienWays_PlaceCorner(AlienWaysXYZ point, const AlienWaysTurn *turn, AlienW
 // How much a turned object's stored facing points up, as AlienWays_PlaceCorner turns a point: from the facing's own numbers, in 65536ths,
 // worked out in 64 bits and kept from -1 to 1. With no turn, it's the facing's own.
 float AlienWays_TurnedUp(AlienWaysXYZ facing, const AlienWaysTurn *turn);
+
+// The whole of a stored facing, turned the same way, each part kept from -1 to 1, into out
+void AlienWays_TurnedFacing(AlienWaysXYZ facing, const AlienWaysTurn *turn, float out[3]);
 
 // One point of a way. kind is what the way is on from this point to the next.
 struct AlienWaysPoint
@@ -288,6 +306,8 @@ private:
 	double CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) const;
 	AlienWaysXYZ LiftOnWall(int node, AlienWaysXYZ p) const;
 	size_t PointsAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to, AlienWaysXYZ *out) const;
+	bool StandOff(int from, int to, AlienWaysXYZ crossing, AlienWaysXYZ *out) const;
+	size_t PointsOn(int node, AlienWaysXYZ from, AlienWaysXYZ to, AlienWaysXYZ *out) const;
 	void Relax(int node, double costHere, AlienWaysXYZ at, int from);
 	void HeapUp(int place);
 	void HeapDown(int place);
@@ -314,6 +334,14 @@ private:
 	// Doors: which door each polygon is part of (0 for none), and for each door, from 0 up to Doors(), whether it's shut now and whether it was
 	// shut when the search that's running started. Place 0 is no door, and is never shut, so a search can read any polygon's door straight off.
 	std::vector<int> doorOf;
+
+	// Each polygon's facing, as AlienWaysPolygon::facing, in 32767ths, all 0 if not known (for StandOff)
+	struct Facing
+	{
+		int16_t x, y, z;
+	};
+
+	std::vector<Facing> facing;
 	std::vector<uint8_t> doorShut, doorShutInSearch;
 
 	// Only while building: every corner of every polygon kept, and where each polygon's start in that list, and what touches what.

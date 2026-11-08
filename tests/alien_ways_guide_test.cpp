@@ -992,6 +992,12 @@ static void SourceOfTheGame()
 	Check(Has(Between(ways, "void AlienWays_LevelStart()", "if (!AlienWays_On())"), "\ttheGuide.SetAimAhead(AlienWaysAimAheadMm);\n"),
 		"SOURCE: and the guide is told it at each level's start");
 
+	// A polygon's stored facing goes to the map, for standing a way off an outside corner (kAlienWaysStandOff), unless it's drawn from both sides
+	Check(Has(level, "\t\t\t\tif (!(polygon->PolyFlags & iflag_no_bfc))\n\t\t\t\t{\n\t\t\t\t\tAlienWays_TurnedFacing(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning, facing);"),
+		"SOURCE: a polygon's stored facing, turned with its object, goes with it, unless it's drawn from both sides and could face either way");
+	Check(Has(level, "\t\t\t\tlisting->polygons->back().facing[0] = facing[0];\n\t\t\t\tlisting->polygons->back().facing[1] = facing[1];\n\t\t\t\tlisting->polygons->back().facing[2] = facing[2];"),
+		"SOURCE: and is put on the polygon the map gets");
+
 	// Kept through a gap (KeptThroughAGap): each kept alien is found by LiveAlien; one in a state that never asks is let go at once, with its
 	// gravity back; one in a state that asks is counted for the once-a-second line
 	Check(Has(frame, "\t\tSTRATEGYBLOCK *const alien = LiveAlien(missed[i]);"), "SOURCE: an alien kept through a gap is only read once it's found alive and the same");

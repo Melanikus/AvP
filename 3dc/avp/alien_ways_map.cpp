@@ -225,6 +225,25 @@ float AlienWays_TurnedUp(AlienWaysXYZ facing, const AlienWaysTurn *turn)
 	return static_cast<float>(up > 1.0 ? 1.0 : (up < -1.0 ? -1.0 : up));
 }
 
+void AlienWays_TurnedFacing(AlienWaysXYZ facing, const AlienWaysTurn *turn, float out[3])
+{
+	// Turned the way AlienWays_PlaceCorner turns a point, with nothing added to move it, in 64 bits
+	long long parts[3] = { facing.x, facing.y, facing.z };
+
+	if (turn)
+	{
+		parts[0] = TimesFixed(turn->m11, facing.x) + TimesFixed(turn->m21, facing.y) + TimesFixed(turn->m31, facing.z);
+		parts[1] = TimesFixed(turn->m12, facing.x) + TimesFixed(turn->m22, facing.y) + TimesFixed(turn->m32, facing.z);
+		parts[2] = TimesFixed(turn->m13, facing.x) + TimesFixed(turn->m23, facing.y) + TimesFixed(turn->m33, facing.z);
+	}
+
+	for (int c = 0; c < 3; c++)
+	{
+		double const part = static_cast<double>(parts[c]) / 65536.0;
+		out[c] = static_cast<float>(part > 1.0 ? 1.0 : (part < -1.0 ? -1.0 : part));
+	}
+}
+
 AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, int corners, float up, std::vector<AlienWaysPolygon> *list)
 {
 	if (corners < 3)
@@ -248,6 +267,7 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 	}
 
 	p.up = up;
+	p.facing[0] = p.facing[1] = p.facing[2] = 0.0f;
 	p.door = 0;
 	list->push_back(p);
 	return kAlienWaysAddedAsItIs;
@@ -281,6 +301,7 @@ void AlienWaysMap::LetGo()
 	GiveBack(&joinOther); GiveBack(&joinStretch);
 	GiveBack(&stretchA); GiveBack(&stretchB);
 	GiveBack(&doorOf); GiveBack(&doorShut); GiveBack(&doorShutInSearch);
+	GiveBack(&facing);
 	GiveBack(&cornerX); GiveBack(&cornerY); GiveBack(&cornerZ);
 	GiveBack(&firstCorner);
 	GiveBack(&buckets);
@@ -492,6 +513,14 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 			return kWhyFacing;
 		}
 
+		for (int c = 0; c < 3; c++)
+		{
+			if (!(p.facing[c] >= -1.0f && p.facing[c] <= 1.0f))
+			{
+				return kWhyFacing;
+			}
+		}
+
 		// A door's number picks a place in the doors' lists below, so one that's out of range is refused, whatever else the polygon is. Every
 		// polygon counts towards how many doors there are, even one left out as scenery, so the doors keep the numbers they were given.
 		if (p.door < 0 || p.door > kAlienWaysMostDoors)
@@ -535,7 +564,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	// number each given polygon became, each polygon's middle, kind, box and door, and two lists of the doors. Only while building: the corners,
 	// and the boxes they're sorted into.
 	size_t const doors = static_cast<size_t>(highestDoor) + 1;
-	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t) + 2 * sizeof(AlienWaysXYZ) + sizeof(int))
+	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t) + 2 * sizeof(AlienWaysXYZ) + sizeof(int) + sizeof(Facing))
 		+ doors * 2 * sizeof(uint8_t);
 	size_t const buildBytes = corners * 3 * sizeof(int) + (kept + 1) * sizeof(int) + corners * sizeof(Corner);
 
@@ -553,6 +582,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	middleX.reserve(kept); middleY.reserve(kept); middleZ.reserve(kept);
 	kind.reserve(kept);
 	doorOf.reserve(kept);
+	facing.reserve(kept);
 	doorShut.assign(doors, 0);
 	doorShutInSearch.assign(doors, 0);
 	boxLow.reserve(kept); boxHigh.reserve(kept);
@@ -573,6 +603,8 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 		firstCorner.push_back(static_cast<int>(cornerX.size()));
 		kind.push_back(static_cast<uint8_t>(AlienWays_KindOf(p.up)));
 		doorOf.push_back(p.door);
+		facing.push_back(Facing{ static_cast<int16_t>(lround(p.facing[0] * 32767.0f)), static_cast<int16_t>(lround(p.facing[1] * 32767.0f)),
+			static_cast<int16_t>(lround(p.facing[2] * 32767.0f)) });
 
 		// The middle is the average of the corners. The sums can't overflow: each corner is at most 64 km out, and there are at most 8.
 		long long sx = 0, sy = 0, sz = 0;
@@ -963,6 +995,79 @@ size_t AlienWaysMap::PointsAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to, 
 	return count;
 }
 
+// Whether a way crossing from wall from to wall to at crossing goes round an outside corner (kAlienWaysStandOff), and if so the point to stand
+// it off by, into out. Both facings have to be known, and turned 60 to 120 degrees from each other, and each wall's middle has to be behind
+// the other's face: then a block fills the corner, and the alien goes round its edge.
+bool AlienWaysMap::StandOff(int from, int to, AlienWaysXYZ crossing, AlienWaysXYZ *out) const
+{
+	if (from < 0 || to < 0 || kind[from] != kAlienWaysWall || kind[to] != kAlienWaysWall)
+	{
+		return false;
+	}
+
+	double const ax = facing[from].x / 32767.0, ay = facing[from].y / 32767.0, az = facing[from].z / 32767.0;
+	double const bx = facing[to].x / 32767.0, by = facing[to].y / 32767.0, bz = facing[to].z / 32767.0;
+
+	// Not known (all 0), or not a facing at all
+	if (ax * ax + ay * ay + az * az < 0.5 || bx * bx + by * by + bz * bz < 0.5)
+	{
+		return false;
+	}
+
+	// A turn of 60 to 120 degrees
+	double const turn = ax * bx + ay * by + az * bz;
+
+	if (turn > 0.5 || turn < -0.5)
+	{
+		return false;
+	}
+
+	// Each wall's middle behind the other's face, by more than the two could touch by
+	double const toBehindFrom = (middleX[to] - static_cast<double>(crossing.x)) * ax + (middleY[to] - static_cast<double>(crossing.y)) * ay
+		+ (middleZ[to] - static_cast<double>(crossing.z)) * az;
+	double const fromBehindTo = (middleX[from] - static_cast<double>(crossing.x)) * bx + (middleY[from] - static_cast<double>(crossing.y)) * by
+		+ (middleZ[from] - static_cast<double>(crossing.z)) * bz;
+
+	if (!(toBehindFrom < -kAlienWaysTouch && fromBehindTo < -kAlienWaysTouch))
+	{
+		return false;
+	}
+
+	// The crossing is inside the world (64 km), and this moves it less than 2 m, so it can't overflow
+	out->x = crossing.x + static_cast<int>(lround(kAlienWaysStandOff * (ax + bx)));
+	out->y = crossing.y + static_cast<int>(lround(kAlienWaysStandOff * (ay + by)));
+	out->z = crossing.z + static_cast<int>(lround(kAlienWaysStandOff * (az + bz)));
+	return true;
+}
+
+// The points a way has on polygon node, as PointsAcross gives them, and if the way came onto it from another wall round an outside corner,
+// the point standing it off that corner, straight after where it came on. Up to 4, written into out if it's given. Only for writing a way
+// down: what a crossing costs doesn't count the stand-off, which is a step aside, not a way of its own.
+size_t AlienWaysMap::PointsOn(int node, AlienWaysXYZ from, AlienWaysXYZ to, AlienWaysXYZ *out) const
+{
+	AlienWaysXYZ across[3];
+	size_t const count = PointsAcross(node, from, to, across);
+	AlienWaysXYZ aside;
+	bool const standOff = StandOff(cameFrom[node], node, from, &aside);
+
+	if (out)
+	{
+		size_t place = 0;
+
+		for (size_t i = 0; i < count; i++)
+		{
+			out[place++] = across[i];
+
+			if (i == 0 && standOff)
+			{
+				out[place++] = aside;
+			}
+		}
+	}
+
+	return count + (standOff ? 1 : 0);
+}
+
 // What crossing polygon node from one point to another costs: the length of the way across it, up and down a wall included, at the polygon's
 // price. A floor stepped onto from a wall or a ceiling costs at least kAlienWaysLeastFloorStep of it.
 double AlienWaysMap::CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) const
@@ -1159,7 +1264,8 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 }
 
 // The way, from the start to the goal: point 0 is the start, then for each polygon it crosses, where it came onto it, and on a wall, where it
-// has climbed to and where it starts down (PointsAcross); the last point is the goal. The points are counted first, then written from the
+// has climbed to and where it starts down (PointsAcross), and round an outside corner the point standing it off (PointsOn); the last point
+// is the goal. The points are counted first, then written from the
 // goal back. It's written straight into the list made when the map was built, so this asks for no memory.
 void AlienWaysMap::MakeTheWay()
 {
@@ -1169,7 +1275,7 @@ void AlienWaysMap::MakeTheWay()
 
 	for (int node = cameFrom[goalNode]; node >= 0 && crossed <= Polygons(); node = cameFrom[node], crossed++)
 	{
-		points += PointsAcross(node, entry[node], leaving, nullptr);
+		points += PointsOn(node, entry[node], leaving, nullptr);
 		leaving = entry[node];
 	}
 
@@ -1191,8 +1297,8 @@ void AlienWaysMap::MakeTheWay()
 
 	for (int node = cameFrom[goalNode]; node >= 0 && crossed <= Polygons(); node = cameFrom[node], crossed++)
 	{
-		AlienWaysXYZ across[3];
-		size_t const count = PointsAcross(node, entry[node], leaving, across);
+		AlienWaysXYZ across[4];
+		size_t const count = PointsOn(node, entry[node], leaving, across);
 
 		for (size_t i = count; i > 0 && place > 0; i--)
 		{
