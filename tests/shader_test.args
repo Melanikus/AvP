@@ -1,4 +1,4 @@
-/std:c++17 /EHsc /MD /J /W3
+/std:c++17 /EHsc /MT /J /W3
 /DWIN32_LEAN_AND_MEAN /DNDEBUG
 /Iwin32
 tests/shader_test.cpp
