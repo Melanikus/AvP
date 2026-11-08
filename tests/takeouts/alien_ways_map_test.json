@@ -189,7 +189,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "\t\tif (node == toNode)\n\t\t{\n\t\t\tRelax(goalNode, here + Distance(at, goalAt) * PriceOf(node), goalAt, node);\n\t\t}\n",
+					"from": "\t\tif (node == toNode)\n\t\t{\n\t\t\tRelax(goalNode, here + CostAcross(node, at, goalAt), goalAt, node);\n\t\t}\n",
 					"to": ""
 				}
 			]
@@ -450,6 +450,66 @@
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
 					"from": "\t\t\t\t\tbytesBuildingTop = std::max(bytesBuildingTop, bytesBuilding + old);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way along walls runs along their foot: crossings from wall to wall aren't lifted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\tcross = LiftedOn(stretchA[joinStretch[k]], stretchB[joinStretch[k]], cross);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a crossing is lifted above the top of a short wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "long long const wanted = std::max(highest, lowest - kAlienWaysClimbHeight);",
+					"to": "long long const wanted = lowest - kAlienWaysClimbHeight;"
+				}
+			]
+		},
+		{
+			"name": "a way drops to the floor for no length at a corner, to dodge a climb",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tlength = std::max(length, static_cast<double>(kAlienWaysLeastFloorStep));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way on a wall runs along its foot: no point on a wall is lifted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (p.y > wanted)\n\t{\n\t\tp.y = static_cast<int>(wanted);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the climb up a wall is left out of the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tif (upIsNew)\n\t\t{\n\t\t\tpoints[count++] = up;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the way down a wall is left out of the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tif (downIsNew)\n\t\t{\n\t\t\tpoints[count++] = down;\n\t\t}\n",
 					"to": ""
 				}
 			]

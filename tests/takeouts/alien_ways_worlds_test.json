@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon\n",
-					"to": "\t\t\tif (Distance(stretchA[joinStretch[k]], stretchB[joinStretch[k]]) == 0.0)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon\n"
+					"from": "\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon. From one wall onto the next, it\n",
+					"to": "\t\t\tif (Distance(stretchA[joinStretch[k]], stretchB[joinStretch[k]]) == 0.0)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon. From one wall onto the next, it\n"
 				}
 			]
 		},

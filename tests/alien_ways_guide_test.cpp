@@ -10,9 +10,10 @@
 //        |  tile 0  |  tile 1  | ... |  tile 9  |         floor tiles 0 to 9, each 2 m across (x) and 1 m long (z)
 //        z = 0                         z = 10000
 //
-// From (1000, 0, 500) on tile 0 to (1000, 0, 9500) on tile 9, with the floor at 10 times the price, the way is 4 points: the start, then
-// 1 m of floor to the left wall's foot at (0, 0, 500), then 8.5 m along the wall to (0, 0, 9000), where tile 9 meets it, then 1.118 m of
-// floor to the goal. The map's own test works that sum out. Coordinates are the game's: millimetres, and y goes down.
+// From (1000, 0, 500) on tile 0 to (1000, 0, 9500) on tile 9, with the floor at 10 times the price, the way is 6 points: the start, then
+// 1 m of floor to a wall's foot at z = 500, 1.5 m straight up it, 8.5 m along it at that height to z = 9000, where tile 9 meets it, 1.5 m
+// down to its foot, then 1.118 m of floor to the goal. The two walls cost the same, so it's the one the search meets first; which one is
+// worked out below, from the way itself. The map's own test works the sums out. Coordinates are the game's: millimetres, and y goes down.
 
 #include <math.h>
 #include <stdio.h>
@@ -87,7 +88,22 @@ static std::vector<AlienWaysPolygon> Corridor(bool walls)
 }
 
 AlienWaysXYZ const kStart = { 1000, 0, 500 }, kGoal = { 1000, 0, 9500 };
-AlienWaysXYZ const kOntoTheWall = { 0, 0, 500 }, kOffTheWall = { 0, 0, 9000 };
+// The way's points on the wall, filled in by CorridorMap from the way, as the wall it takes is either one
+AlienWaysXYZ kOntoTheWall = { 0, 0, 500 }, kUpTheWall = { 0, -1500, 500 }, kAlongTheWall = { 0, -1500, 9000 }, kOffTheWall = { 0, 0, 9000 };
+int kWallX = 0;          // the wall's x: 0 or 2000
+int kAwayFromWall = 1;   // which way is away from that wall, into the corridor: +1 for x = 0, -1 for x = 2000
+
+// A point beside the wall the way takes: so far into the corridor from it (along x), so high, and so far along it
+static AlienWaysXYZ Beside(int out, int y, int z)
+{
+	return AlienWaysXYZ{ kWallX + kAwayFromWall * out, y, z };
+}
+
+// The down of an alien clinging to that wall: into it
+static AlienWaysXYZ IntoTheWall()
+{
+	return AlienWaysXYZ{ -kAwayFromWall * 65536, 0, 0 };
+}
 AlienWaysXYZ const kUpright65536 = { 0, 65536, 0 };   // an alien standing on the floor: down is +y
 
 // An alien, by a made-up place and name
@@ -133,6 +149,19 @@ static AlienWaysMap &CorridorMap()
 	if (!map.Ready())
 	{
 		map.Build(Corridor(true));
+
+		// Which wall the way takes, from the way itself
+		AlienWaysXYZ const start = { 1000, 0, 500 }, goal = { 1000, 0, 9500 };
+
+		if (map.StartSearch(0, start, 9, goal, kAlienWaysFloorPrice) == nullptr && map.Work(1000000) == kAlienWaysFound && map.Way().size() == 6)
+		{
+			kWallX = map.Way()[1].x;
+			kAwayFromWall = kWallX == 0 ? 1 : -1;
+			kOntoTheWall = AlienWaysXYZ{ kWallX, 0, 500 };
+			kUpTheWall = AlienWaysXYZ{ kWallX, -1500, 500 };
+			kAlongTheWall = AlienWaysXYZ{ kWallX, -1500, 9000 };
+			kOffTheWall = AlienWaysXYZ{ kWallX, 0, 9000 };
+		}
 	}
 
 	return map;
@@ -167,8 +196,9 @@ static void FirstWay()
 	Check(Frame(guide, map, 16) == 0, "the next frame lets nothing go");
 	const AlienWaysReport *reports = nullptr;
 	Check(ReportsOf(guide, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeFound, "and its search ends in that frame with a way, in one report");
-	Check(reports[0].points == 4 && Near(reports[0].floorMm, 2118.0, 1.0) && Near(reports[0].wallMm, 8500.0, 0.5) && reports[0].ceilingMm == 0.0,
-		"the report says 4 points: 2.118 m of floor, 8.5 m of wall and no ceiling");
+	Check(reports[0].points == 6 && Near(reports[0].floorMm, 2118.0, 1.0) && Near(reports[0].wallMm, 11500.0, 0.5) && reports[0].ceilingMm == 0.0,
+		"the report says 6 points: 2.118 m of floor, 11.5 m of wall up, along and down, and no ceiling");
+	Check(kWallX == 0 || kWallX == 2000, "the way takes one of the corridor's two walls");
 	Check(reports[0].frames == 1 && reports[0].looks > 0 && reports[0].waitedMs == 16 && Same(reports[0].from, kStart) && Same(reports[0].to, kGoal),
 		"one frame, some polygons looked at, 16 ms after it asked, from its place to its goal");
 	Check(!reports[0].cutShort && reports[0].follower == 0, "not cut short, and the first of the guide's places");
@@ -178,7 +208,7 @@ static void FirstWay()
 
 	const AlienWaysPoint *points[4];
 	int counts[4], headings[4];
-	Check(guide.Shown(points, counts, headings, 4) == 1 && counts[0] == 4 && headings[0] == 1, "the view is shown its way: 4 points, heading for the second");
+	Check(guide.Shown(points, counts, headings, 4) == 1 && counts[0] == 6 && headings[0] == 1, "the view is shown its way: 6 points, heading for the second");
 	Check(guide.Shown(points, counts, headings, 0) == 0, "with no room, the view is shown nothing");
 }
 
@@ -188,40 +218,56 @@ static void Reaching()
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
 
-	// The wall's foot is (0, 0, 500). The alien's down is +y. 300 mm across the floor from it, and 500 mm up, is reached.
+	// The wall's foot, (0, 0, 500), is where the way steps up onto the wall. Near it, an alien still on the floor hasn't made that step: it
+	// keeps heading for the foot, so it runs into the wall and climbs. Once it's on the wall (its down is -x), the step is made.
 	AlienWaysGuide guide;
 	GuidedAlien(guide, Alien(1));
-	Check(guide.Steer(&map, Ask(Alien(1), { 300, -500, 500 }, kGoal, 13), &towards) && Same(towards, kOffTheWall),
-		"300 mm across and 500 mm up from a point is reaching it: the next point is where the way comes off the wall");
+	Check(guide.Steer(&map, Ask(Alien(1), Beside(300, -500, 500), kGoal, 13), &towards) && Same(towards, kOntoTheWall),
+		"near the foot of the wall but still on the floor, the step onto the wall isn't made: it heads for the foot");
+	AlienWaysAsk upTheWall = Ask(Alien(1), Beside(300, -500, 500), kGoal, 13);
+	upTheWall.down = IntoTheWall();
+	Check(guide.Steer(&map, upTheWall, &towards) && Same(towards, kUpTheWall), "on the wall, 300 mm off it and 500 mm up, it is: the next point is 1.5 m up the wall");
 
-	// 650 mm across isn't
+	// Coming off the wall needs nothing of the kind. Along the wall's foot, 650 mm from where the way comes off it isn't reached, and 550 mm is.
 	AlienWaysGuide across;
 	GuidedAlien(across, Alien(1));
-	Check(across.Steer(&map, Ask(Alien(1), { 650, -500, 500 }, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "650 mm across isn't reached yet");
+	AlienWaysAsk alongTheWall = Ask(Alien(1), Beside(0, 0, 8350), kGoal, 13);
+	alongTheWall.down = IntoTheWall();
+	Check(across.Steer(&map, alongTheWall, &towards) && Same(towards, kOffTheWall), "650 mm across isn't reached yet");
+	alongTheWall.at = Beside(0, 0, 8450);
+	Check(across.Steer(&map, alongTheWall, &towards) && Same(towards, kGoal), "550 mm across is");
 
-	// Up from the surface, the alien's own middle may be as far as 1.5 m from a point on it
+	// Up from the surface it's on, an alien may be as far as 1.5 m from a point on it. The goal is on the floor of tile 9: first the alien is
+	// put on the way's last stretch, near the goal.
 	AlienWaysGuide high;
 	GuidedAlien(high, Alien(1));
-	Check(high.Steer(&map, Ask(Alien(1), { 100, -1600, 500 }, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "1.6 m above it isn't reached");
-	Check(high.Steer(&map, Ask(Alien(1), { 100, -1400, 500 }, kGoal, 13), &towards) && Same(towards, kOffTheWall), "1.4 m above it is");
+	Check(high.Steer(&map, Ask(Alien(1), Beside(300, 0, 9150), kGoal, 13), &towards) && Same(towards, kGoal), "on the last stretch, it heads for the goal");
+	Check(high.Steer(&map, Ask(Alien(1), { 1000, -1600, 9500 }, kGoal, 13), &towards) && Same(towards, kGoal), "1.6 m above the goal isn't reaching it");
+	Check(!high.Steer(&map, Ask(Alien(1), { 1000, -1400, 9500 }, kGoal, 13), &towards), "1.4 m above it is, and the way is used up");
 
 	// An alien clinging to the left wall has the wall as its down (-x). 900 mm out from the wall is then its height off the surface, which is
 	// allowed, not 900 mm across it, which wouldn't be.
 	AlienWaysGuide onTheWall;
 	GuidedAlien(onTheWall, Alien(1));
-	AlienWaysAsk climbing = Ask(Alien(1), { 900, 0, 500 }, kGoal, 13);
-	climbing.down = AlienWaysXYZ{ -65536, 0, 0 };
-	Check(onTheWall.Steer(&map, climbing, &towards) && Same(towards, kOffTheWall), "with the wall as its down, 900 mm out from the wall's foot is reaching it");
+	AlienWaysAsk climbing = Ask(Alien(1), Beside(900, 0, 500), kGoal, 13);
+	climbing.down = IntoTheWall();
+	Check(onTheWall.Steer(&map, climbing, &towards) && Same(towards, kUpTheWall), "with the wall as its down, 900 mm out from the wall's foot is reaching it");
 	AlienWaysGuide onTheFloor;
 	GuidedAlien(onTheFloor, Alien(1));
-	Check(onTheFloor.Steer(&map, Ask(Alien(1), { 900, 0, 500 }, kGoal, 13), &towards) && Same(towards, kOntoTheWall),
+	Check(onTheFloor.Steer(&map, Ask(Alien(1), Beside(900, 0, 500), kGoal, 13), &towards) && Same(towards, kOntoTheWall),
 		"with the floor as its down, the same spot is 900 mm across, and isn't");
 
 	// The last point reached means the way is used up, and it asks again
+	// Along the way, up the wall and back down: at the goal, it's used up
 	AlienWaysGuide end;
 	GuidedAlien(end, Alien(1));
-	end.Steer(&map, Ask(Alien(1), { 0, 0, 600 }, kGoal, 13), &towards);
-	end.Steer(&map, Ask(Alien(1), { 0, 0, 8900 }, kGoal, 13), &towards);
+	AlienWaysAsk alongHigh = Ask(Alien(1), Beside(0, -1500, 600), kGoal, 13);
+	alongHigh.down = IntoTheWall();
+	bool const went = end.Steer(&map, alongHigh, &towards) && Same(towards, kAlongTheWall);
+	alongHigh.at = Beside(0, -1500, 8900);
+	bool const cameDown = end.Steer(&map, alongHigh, &towards) && Same(towards, kOffTheWall);
+	bool const toTheGoal = end.Steer(&map, Ask(Alien(1), Beside(0, -100, 9000), kGoal, 13), &towards) && Same(towards, kGoal);
+	Check(went && cameDown && toTheGoal, "it goes along the wall at head height, comes down where it leaves, and heads for the goal");
 	Check(!end.Steer(&map, Ask(Alien(1), { 1000, 0, 9400 }, kGoal, 13), &towards) && !end.Guided(Alien(1)), "at the goal, its way is used up, and it's no longer guided");
 }
 
@@ -231,11 +277,13 @@ static void TakenUpWhereItIs()
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
 
-	// The way was searched from the start, but by the time it comes the alien is halfway along the wall's foot. It's 4.5 m from the way's first
-	// stretch, which would be "off the way", but on its second, so it takes the way up there.
+	// The way was searched from the start, but by the time it comes the alien is halfway along the wall, at head height, clinging to it. It's
+	// more than 4.5 m from the way's first stretch, which would be "off the way", but on the stretch along the wall, so it takes the way up there.
 	AlienWaysGuide guide;
 	GuidedAlien(guide, Alien(1));
-	Check(guide.Steer(&map, Ask(Alien(1), { 0, 0, 5000 }, kGoal, 13), &towards) && Same(towards, kOffTheWall),
+	AlienWaysAsk halfway = Ask(Alien(1), Beside(0, -1500, 5000), kGoal, 13);
+	halfway.down = IntoTheWall();
+	Check(guide.Steer(&map, halfway, &towards) && Same(towards, kAlongTheWall),
 		"an alien that's gone on while its way was searched takes it up at the stretch it's on, and isn't off the way");
 }
 
@@ -265,7 +313,7 @@ static void Stuck()
 	AlienWaysGuide guide;
 	GuidedAlien(guide, Alien(1));
 
-	// It stays where it is, 1 m from the wall's foot, frame after frame: 100 ms a frame
+	// It stays where it is, 1 m from the wall's foot, frame after frame: 100 ms a frame. Being found stuck is a report of its own.
 	bool steered = true;
 	int ms = 0;
 
@@ -280,18 +328,35 @@ static void Stuck()
 	Frame(guide, map, 100);
 	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "at 1.5 s with no headway it's stuck: the game's own code has it");
 
-	// For 3 s it isn't guided and asks for nothing
+	// For 3 s it isn't guided and asks for nothing. The one report in that time says it was found stuck, and where it was heading.
 	bool asked = false, guided = false;
+	int stuckReports = 0;
+	bool stuckSaysWhere = false;
 
 	for (ms = 0; ms < 2900; ms += 100)
 	{
 		Frame(guide, map, 100);
 		const AlienWaysReport *reports = nullptr;
-		asked = asked || ReportsOf(guide, &reports) > 0;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeStuck)
+			{
+				stuckReports++;
+				stuckSaysWhere = Same(reports[r].from, kStart) && Same(reports[r].to, kOntoTheWall) && reports[r].who.place == Alien(1).place && reports[r].who.name == Alien(1).name;
+			}
+			else
+			{
+				asked = true;
+			}
+		}
+
 		guided = guided || guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	}
 
 	Check(!asked && !guided, "for the next 3 s it's left to the game's own code, and asks for no way");
+	Check(stuckReports == 1 && stuckSaysWhere, "being stuck is reported once, with who it is, where it was and where it was heading");
 	Frame(guide, map, 100);
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(guide, map, 16);
@@ -326,8 +391,10 @@ static void AskingAgain()
 
 	for (int ms = 100; ms <= 2500; ms += 100)
 	{
-		AlienWaysXYZ const at = { 0, 0, 500 + ms * 3 };
-		old.Steer(&map, Ask(Alien(1), at, kGoal, 13), &towards);
+		// Clinging to the wall at head height, going along it
+		AlienWaysAsk at = Ask(Alien(1), Beside(0, -1500, 500 + ms * 3), kGoal, 13);
+		at.down = IntoTheWall();
+		old.Steer(&map, at, &towards);
 		Frame(old, map, 100);
 		size_t const now = ReportsOf(old, &reports);
 
@@ -386,7 +453,7 @@ static void LetGo()
 	// Nor one whose last steer gave back no: the game's own code has set its gravity already
 	AlienWaysGuide stopped;
 	GuidedAlien(stopped, Alien(3));
-	stopped.Steer(&map, Ask(Alien(3), { 2000, -3000, -1000 }, kGoal, 13), &towards);
+	stopped.Steer(&map, Ask(Alien(3), { 1000, -3000, -2500 }, kGoal, 13), &towards);
 	Frame(stopped, map, 16, lapsed);
 	Check(Frame(stopped, map, 16, lapsed) == 0, "nor one whose last steer said no");
 
@@ -459,7 +526,7 @@ static void Allowance()
 
 	Check(ended == 1 && reports[0].frames > 1 && reports[0].frames == frames && reports[0].looks == frames,
 		"with 1 polygon a frame, the search takes a frame for each polygon it looks at");
-	Check(ended == 1 && reports[0].points == 4 && Near(reports[0].wallMm, 8500.0, 0.5), "and ends with the same way as one done at once");
+	Check(ended == 1 && reports[0].points == 6 && Near(reports[0].wallMm, 11500.0, 0.5), "and ends with the same way as one done at once");
 
 	// A search for an alien that's let go part way is dropped, so another alien in its place never gets its way
 	AlienWaysGuide dropped;
@@ -651,6 +718,10 @@ static void SourceOfTheGame()
 		"\t\task.goal = AlienWaysXYZ{ target->DynPtr->Position.vx, target->DynPtr->Position.vy, target->DynPtr->Position.vz };\n\t\task.goalIsTheTarget = true;"),
 		"SOURCE: when the target can be seen from the alien's module, the way goes all the way to the target");
 	Check(Has(ways, "(line.toTheTarget ? \" (its target)\" : \" (on the way to its target)\")"), "SOURCE: and the log says which goal a search took");
+	Check(Has(steer, "\t\task.goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));"),
+		"SOURCE: otherwise the goal's polygons are looked for in the module the goal is in, found from where it is");
+	Check(Has(ways, "case kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u stuck at %s, heading for %s"),
+		"SOURCE: an alien found stuck is a line in the log");
 
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "told = true;");
 	Check(ComesBefore(end, "theGuide.Clear();", "theBuild.Stop();"), "SOURCE: at a level's end the ways go, before the map they're on");

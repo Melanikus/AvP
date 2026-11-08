@@ -95,6 +95,24 @@ namespace
 		return out;
 	}
 
+	// A point on the stretch from a to b, moved up it to at least kAlienWaysClimbHeight above the stretch's lowest point, or to its highest
+	// point if that's lower. y goes down, so up is a smaller y. A stretch that's level all along can't take a point any higher, so it's left.
+	AlienWaysXYZ LiftedOn(AlienWaysXYZ a, AlienWaysXYZ b, AlienWaysXYZ p)
+	{
+		long long const lowest = std::max(a.y, b.y), highest = std::min(a.y, b.y);
+		long long const wanted = std::max(highest, lowest - kAlienWaysClimbHeight);
+
+		if (p.y <= wanted || a.y == b.y)
+		{
+			return p;
+		}
+
+		double const t = std::max(0.0, std::min(1.0, (static_cast<double>(wanted) - a.y) / (static_cast<double>(b.y) - a.y)));
+		AlienWaysXYZ out = { static_cast<int>(lround(a.x + (static_cast<double>(b.x) - a.x) * t)), static_cast<int>(lround(a.y + (static_cast<double>(b.y) - a.y) * t)),
+			static_cast<int>(lround(a.z + (static_cast<double>(b.z) - a.z) * t)) };
+		return out;
+	}
+
 	// How far p is from the edge a-b, in millimetres
 	double DistanceToEdge(AlienWaysXYZ a, AlienWaysXYZ b, AlienWaysXYZ p)
 	{
@@ -852,6 +870,84 @@ const char *AlienWaysMap::JoinEdge(int polygon, AlienWaysXYZ a, AlienWaysXYZ b)
 }
 
 // What a metre on a node costs: a floor's at the search's price, and anything else 1. The goal node is never left, so its price never counts.
+// A point on a wall polygon, moved straight up to kAlienWaysClimbHeight above the wall's lowest point, or to the wall's top if that's lower.
+// A point that's already that high, or on a polygon that isn't a wall, is left as it is. y goes down, so up is a smaller y.
+AlienWaysXYZ AlienWaysMap::LiftOnWall(int node, AlienWaysXYZ p) const
+{
+	if (kind[node] != kAlienWaysWall)
+	{
+		return p;
+	}
+
+	long long const wanted = std::max(static_cast<long long>(boxLow[node].y), static_cast<long long>(boxHigh[node].y) - kAlienWaysClimbHeight);
+
+	if (p.y > wanted)
+	{
+		p.y = static_cast<int>(wanted);
+	}
+
+	return p;
+}
+
+// The points a way has on polygon node, crossing it from one point to another: where it came on, and on a wall, where it has climbed to
+// and where it starts down towards where it leaves, each only if it's somewhere new. Up to 3, written into out if it's given.
+size_t AlienWaysMap::PointsAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to, AlienWaysXYZ *out) const
+{
+	AlienWaysXYZ points[3];
+	size_t count = 0;
+	points[count++] = from;
+
+	if (kind[node] == kAlienWaysWall)
+	{
+		AlienWaysXYZ const up = LiftOnWall(node, from), down = LiftOnWall(node, to);
+		bool const upIsNew = up.x != from.x || up.y != from.y || up.z != from.z;
+		bool const downIsNew = (down.x != up.x || down.y != up.y || down.z != up.z) && (down.x != to.x || down.y != to.y || down.z != to.z);
+
+		if (upIsNew)
+		{
+			points[count++] = up;
+		}
+
+		if (downIsNew)
+		{
+			points[count++] = down;
+		}
+	}
+
+	if (out)
+	{
+		for (size_t i = 0; i < count; i++)
+		{
+			out[i] = points[i];
+		}
+	}
+
+	return count;
+}
+
+// What crossing polygon node from one point to another costs: the length of the way across it, up and down a wall included, at the polygon's
+// price. A floor stepped onto from a wall or a ceiling costs at least kAlienWaysLeastFloorStep of it.
+double AlienWaysMap::CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) const
+{
+	AlienWaysXYZ points[3];
+	size_t const count = PointsAcross(node, from, to, points);
+	double length = 0.0;
+
+	for (size_t i = 0; i < count; i++)
+	{
+		length += Distance(points[i], i + 1 < count ? points[i + 1] : to);
+	}
+
+	int const before = cameFrom[node];
+
+	if (kind[node] == kAlienWaysFloor && before >= 0 && kind[before] != kAlienWaysFloor)
+	{
+		length = std::max(length, static_cast<double>(kAlienWaysLeastFloorStep));
+	}
+
+	return length * PriceOf(node);
+}
+
 double AlienWaysMap::PriceOf(int node) const
 {
 	if (node < static_cast<int>(Polygons()) && kind[node] == kAlienWaysFloor)
@@ -971,7 +1067,7 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 		// On the goal's own polygon, the last stretch is to the goal itself
 		if (node == toNode)
 		{
-			Relax(goalNode, here + Distance(at, goalAt) * PriceOf(node), goalAt, node);
+			Relax(goalNode, here + CostAcross(node, at, goalAt), goalAt, node);
 		}
 
 		for (int k = firstJoin[node]; k < firstJoin[node + 1]; k++)
@@ -983,9 +1079,16 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 				continue;
 			}
 
-			// It crosses where the stretch the two share is nearest to where it came onto this polygon
-			AlienWaysXYZ const cross = NearestOn(stretchA[joinStretch[k]], stretchB[joinStretch[k]], at);
-			Relax(other, here + Distance(at, cross) * PriceOf(node), cross, node);
+			// It crosses where the stretch the two share is nearest to where it came onto this polygon. From one wall onto the next, it
+			// crosses no lower than kAlienWaysClimbHeight up that stretch, so a way along walls goes up them, not along their foot.
+			AlienWaysXYZ cross = NearestOn(stretchA[joinStretch[k]], stretchB[joinStretch[k]], at);
+
+			if (kind[node] == kAlienWaysWall && kind[other] == kAlienWaysWall)
+			{
+				cross = LiftedOn(stretchA[joinStretch[k]], stretchB[joinStretch[k]], cross);
+			}
+
+			Relax(other, here + CostAcross(node, at, cross), cross, node);
 		}
 	}
 
@@ -997,39 +1100,52 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 	return state;
 }
 
-// The way, from the goal back to the start: point 0 is the start, point k is where the way came onto the kth polygon it crosses, and the last
-// point is the goal. It's written straight into the list made when the map was built, so this asks for no memory.
+// The way, from the start to the goal: point 0 is the start, then for each polygon it crosses, where it came onto it, and on a wall, where it
+// has climbed to and where it starts down (PointsAcross); the last point is the goal. The points are counted first, then written from the
+// goal back. It's written straight into the list made when the map was built, so this asks for no memory.
 void AlienWaysMap::MakeTheWay()
 {
 	int const goalNode = static_cast<int>(Polygons());
-	size_t crossed = 0;
+	size_t points = 1, crossed = 0;
+	AlienWaysXYZ leaving = goalAt;
 
-	for (int node = cameFrom[goalNode]; node >= 0 && crossed <= Polygons(); node = cameFrom[node])
+	for (int node = cameFrom[goalNode]; node >= 0 && crossed <= Polygons(); node = cameFrom[node], crossed++)
 	{
-		crossed++;
+		points += PointsAcross(node, entry[node], leaving, nullptr);
+		leaving = entry[node];
 	}
 
-	size_t const points = crossed + 1;
 	size_t const keep = std::min(points, kAlienWaysMostWayPoints);
 	cutShort = points > kAlienWaysMostWayPoints;
 	way.resize(keep);
 
-	if (crossed < keep)
+	size_t place = points - 1;
+
+	if (place < keep)
 	{
-		way[crossed] = AlienWaysPoint{ goalAt.x, goalAt.y, goalAt.z, KindOf(toNode) };
+		way[place] = AlienWaysPoint{ goalAt.x, goalAt.y, goalAt.z, KindOf(toNode) };
 	}
 
-	size_t place = crossed;
+	leaving = goalAt;
+	crossed = 0;
 
-	for (int node = cameFrom[goalNode]; node >= 0 && place > 0; node = cameFrom[node])
+	for (int node = cameFrom[goalNode]; node >= 0 && crossed <= Polygons(); node = cameFrom[node], crossed++)
 	{
-		place--;
+		AlienWaysXYZ across[3];
+		size_t const count = PointsAcross(node, entry[node], leaving, across);
 
-		if (place < keep)
+		for (size_t i = count; i > 0 && place > 0; i--)
 		{
-			AlienWaysXYZ const at = entry[node];
-			way[place] = AlienWaysPoint{ at.x, at.y, at.z, KindOf(node) };
+			place--;
+
+			if (place < keep)
+			{
+				AlienWaysXYZ const at = across[i - 1];
+				way[place] = AlienWaysPoint{ at.x, at.y, at.z, KindOf(node) };
+			}
 		}
+
+		leaving = entry[node];
 	}
 }
 

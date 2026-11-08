@@ -55,6 +55,18 @@ int const kAlienWaysMostCorners = 8;
 // Two polygons touch if a corner of one is within this many millimetres of the other's corner or edge.
 int const kAlienWaysTouch = 10;
 
+// How high up a wall a way goes: this many millimetres above the wall's lowest point, or the wall's top if that's lower. On every wall it
+// crosses, a way climbs to this height straight after coming on, goes along at it, and comes down only where it leaves, and a way from one
+// wall onto the next crosses this high up the stretch they share. Without it, a way along a wall runs along its very foot, where the alien
+// is as good as on the floor: the first film showed one crawling 12 m sideways along the bottom of a wall, and offline, 7 ways in 10 never
+// rose more than half a metre. It's head height, the user's look; film tunes it.
+int const kAlienWaysClimbHeight = 1500;
+
+// A floor that a way steps down onto from a wall or a ceiling costs at least this many millimetres of floor, however little of it the way
+// crosses. Otherwise, where a floor's corner touches two walls at their seam, a way could drop to the floor for no length at all, at no cost,
+// and climb back, to stay along the walls' foot. A real step down, at the end of a way, is longer than this anyway.
+int const kAlienWaysLeastFloorStep = 500;
+
 // What counts as a floor or a ceiling: how much a polygon faces up or down, out of 1. This is the game's FLOOR_THRESHOLD.
 float const kAlienWaysFloorFacing = 30000.0f / 65536.0f;
 
@@ -231,6 +243,9 @@ private:
 	bool Count(size_t bytes, size_t *total, size_t most);
 	const char *JoinEdge(int polygon, AlienWaysXYZ a, AlienWaysXYZ b);
 	double PriceOf(int node) const;
+	double CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) const;
+	AlienWaysXYZ LiftOnWall(int node, AlienWaysXYZ p) const;
+	size_t PointsAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to, AlienWaysXYZ *out) const;
 	void Relax(int node, double costHere, AlienWaysXYZ at, int from);
 	void HeapUp(int place);
 	void HeapDown(int place);

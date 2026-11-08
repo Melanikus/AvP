@@ -80,7 +80,8 @@ enum AlienWaysOutcome
 	kAlienWaysOutcomeNoWay,
 	kAlienWaysOutcomeAllFloor,      // a way, but all of it on the floor: the game's own code does that as well, and climbs when it can
 	kAlienWaysOutcomeNoPolygon,     // the alien, or its goal, wasn't near enough to any polygon to start on
-	kAlienWaysOutcomeRefused        // the map wouldn't start the search: why says why
+	kAlienWaysOutcomeRefused,       // the map wouldn't start the search: why says why
+	kAlienWaysOutcomeStuck          // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
 };
 
 struct AlienWaysReport
@@ -88,6 +89,7 @@ struct AlienWaysReport
 	AlienWaysOutcome outcome;
 	const char *why;                // for kAlienWaysOutcomeRefused
 	size_t follower;                // which of the guide's places the alien has, so lines about one alien can be told apart
+	AlienWaysWho who;               // the alien itself, so the game can say more about it
 	AlienWaysXYZ from, to;
 	int frames;                     // how many frames the search was worked on
 	long long waitedMs;             // from the ask to the answer, in the game's time
@@ -116,6 +118,8 @@ public:
 	// An alien asks how to go. It gives back true, and the point to head for in towards, when the alien has a way to follow now. False means
 	// the game's own code steers it this frame; it may have asked for a search, which takes a frame or a few.
 	bool Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards);
+
+	// Reports from Steer, of aliens found stuck since the last Frame, come out with the next Frame's reports.
 
 	// Whether the last Steer for this alien gave back true
 	bool Guided(const AlienWaysWho &who) const;
@@ -172,6 +176,7 @@ private:
 
 	AlienWaysReport report[kAlienWaysMostFollowers];
 	size_t reportCount;
+	bool reportsRead;                   // the reports have been read by a Frame, so the next report starts a new list
 };
 
 #endif

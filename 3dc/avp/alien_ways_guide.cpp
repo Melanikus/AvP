@@ -88,6 +88,23 @@ namespace
 	}
 }
 
+// Whether the alien is on the kind of surface a point needs. Where a way steps up, from the floor onto a wall or from a wall onto the ceiling,
+// the step counts as made only once the alien is on the new surface, by its down. Until then it keeps heading for the foot of the wall,
+// runs into it, and the game's own climbing takes it up. Without this, an alien on the floor heads straight for a point up the wall, the
+// game steers it only along the floor, and it walks beside the wall without ever touching it. Stepping down needs nothing: the game
+// lets an alien down off a wall by itself.
+static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWaysXYZ down)
+{
+	if (heading < 1)
+	{
+		return true;
+	}
+
+	AlienWaysKind const before = points[heading - 1].kind, after = points[heading].kind;
+	bool const steppingUp = (before == kAlienWaysFloor && after == kAlienWaysWall) || (before == kAlienWaysWall && after == kAlienWaysCeiling);
+	return !steppingUp || KindUnder(down) == static_cast<int>(after);
+}
+
 AlienWaysGuide::AlienWaysGuide()
 {
 	Clear();
@@ -98,6 +115,7 @@ void AlienWaysGuide::Clear()
 	now = 0;
 	turnedAway = 0;
 	searching = -1;
+	reportsRead = true;
 	searchFrom = searchGoal = AlienWaysXYZ{ 0, 0, 0 };
 	searchToTheTarget = false;
 	searchFromKind = -1;
@@ -197,7 +215,13 @@ void AlienWaysGuide::AddReport(const AlienWaysReport &line)
 
 size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, AlienWaysWho *lapsed, size_t mostLapsed)
 {
-	reportCount = 0;
+	// The reports of the last frame have been read. Those Steer added since, of aliens found stuck, stay, and this frame's searches go after.
+	if (reportsRead)
+	{
+		reportCount = 0;
+	}
+
+	reportsRead = true;
 	now += std::max(0, stepMs);
 
 	// Every alien nothing asked about since the last frame is let go. If it was being guided, the game is told, to give it its gravity back.
@@ -304,6 +328,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 
 		AlienWaysReport line = {};
 		line.follower = static_cast<size_t>(next);
+		line.who = follower.who;
 		line.from = follower.last.at;
 		line.to = follower.last.goal;
 		line.toTheTarget = follower.last.goalIsTheTarget;
@@ -357,6 +382,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	Follower &follower = followers[searching];
 	AlienWaysReport line = {};
 	line.follower = static_cast<size_t>(searching);
+	line.who = follower.who;
 	line.from = searchFrom;
 	line.to = searchGoal;
 	line.toTheTarget = searchToTheTarget;
@@ -483,12 +509,19 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 				follower.heading = k;
 			}
 		}
+
+		// Unless that stretch starts with a step up the alien hasn't made, onto a wall from the floor, say: then it heads for that step first,
+		// so it runs into the wall's foot and climbs, rather than heading on the floor for a point up the wall
+		if (follower.heading > 1 && !OnTheKindNeeded(follower.points, follower.heading - 1, ask.down))
+		{
+			follower.heading--;
+		}
 	}
 
 	if (follower.count > 0)
 	{
 		// Past every point it's reached. The last one reached means the way's used up.
-		while (follower.heading < follower.count && Reached(ask.at, ask.down, follower.points[follower.heading]))
+		while (follower.heading < follower.count && Reached(ask.at, ask.down, follower.points[follower.heading]) && OnTheKindNeeded(follower.points, follower.heading, ask.down))
 		{
 			follower.heading++;
 			follower.nearest = DBL_MAX;
@@ -517,7 +550,22 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 		}
 		else if (now - follower.headwayAt >= kAlienWaysNoHeadwayFor)
 		{
-			// Stuck: the game's own code has it for a while, and nothing is asked till then
+			// Stuck: the game's own code has it for a while, and nothing is asked till then. The log hears of it, with where it was heading.
+			if (reportsRead)
+			{
+				reportCount = 0;
+				reportsRead = false;
+			}
+
+			AlienWaysReport line = {};
+			line.outcome = kAlienWaysOutcomeStuck;
+			line.follower = static_cast<size_t>(f);
+			line.who = follower.who;
+			line.from = ask.at;
+			line.to = AlienWaysXYZ{ follower.points[follower.heading].x, follower.points[follower.heading].y, follower.points[follower.heading].z };
+			line.fromKind = KindUnder(ask.down);
+			line.toTheTarget = ask.goalIsTheTarget;
+			AddReport(line);
 			DropTheWay(&follower);
 			follower.queued = false;
 			follower.restUntil = now + kAlienWaysRestAfterStuck;

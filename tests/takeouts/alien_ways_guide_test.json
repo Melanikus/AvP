@@ -454,6 +454,56 @@
 					"to": "std::string()"
 				}
 			]
+		},
+		{
+			"name": "a step up onto a wall counts as made while the alien is still on the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " && OnTheKindNeeded(follower.points, follower.heading, ask.down))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a new way is taken up on the wall while the alien is still on the floor below",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (follower.heading > 1 && !OnTheKindNeeded(follower.points, follower.heading - 1, ask.down))\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien found stuck isn't reported",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tline.toTheTarget = ask.goalIsTheTarget;\n\t\t\tAddReport(line);\n",
+					"to": "\t\t\tline.toTheTarget = ask.goalIsTheTarget;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the goal's own module isn't looked in",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\task.goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien found stuck isn't a line in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tcase kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u stuck at %s, heading for %s",
+					"to": "\t\tcase 99:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u was at %s, going to %s"
+				}
+			]
 		}
 	]
 }

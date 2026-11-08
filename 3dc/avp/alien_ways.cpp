@@ -6,6 +6,7 @@
 #include "bh_types.h"
 #include "dynblock.h"
 #include "logString.h"
+#include "pvisible.h"
 
 #include "alien_ways.h"
 #include "alien_ways_build.h"
@@ -160,6 +161,13 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 				static_cast<unsigned>(line.follower), where.c_str(), kAlienWaysNearEnough / 1000.0);
 			break;
 
+		case kAlienWaysOutcomeStuck:
+			snprintf(text, sizeof(text), "alien ways: alien %u stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s: the game's own code has it for %.1f s",
+				static_cast<unsigned>(line.follower), Metres(line.from).c_str(), Metres(line.to).c_str(),
+				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
+				kAlienWaysNoHeadwayFor / 1000.0, kAlienWaysRestAfterStuck / 1000.0);
+			break;
+
 		case kAlienWaysOutcomeRefused:
 		default:
 			snprintf(text, sizeof(text), "alien ways: alien %u %s: the search was refused: %s", static_cast<unsigned>(line.follower), where.c_str(),
@@ -287,6 +295,14 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	ask.goalPolygons[0] = ask.atPolygons;
 	ask.goalPolygons[1] = PolygonsOf(target ? target->containingModule : 0);
 	ask.goalIsTheTarget = false;
+
+	// A point on the way to the target is the way into a neighbouring module, as a rule: its polygons are looked for in the module it's in,
+	// found from where it is by the game's own search (ModuleFromPosition, pvisible.cpp), starting from the alien's
+	if (!target || !InView(alien->containingModule, target->containingModule))
+	{
+		VECTORCH where = *goal;
+		ask.goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));
+	}
 
 	// When the target can be seen from where the alien is, the way goes all the way to it. The game's own code heads for the way into the
 	// next module instead whenever the player is in another one, and a way that short is mostly floor: the user's first play showed that.

@@ -182,6 +182,56 @@ static AlienWaysSearch SearchAll(AlienWaysMap &map, int from, AlienWaysXYZ start
 	return SearchAll(map, from, start, to, goal, price, 1000000, &why);
 }
 
+// A way along two walls side by side climbs to cross from one to the other (kAlienWaysClimbHeight). The corridor's left wall here is two
+// polygons, meeting at z = 5000, and both are 3 m tall. A wall 1 m tall only lifts the way to its own top.
+static void UpTheWalls()
+{
+	printf("Up the walls\n");
+	std::vector<AlienWaysPolygon> world;
+
+	for (int k = 0; k < 10; k++)
+	{
+		world.push_back(Polygon({ { 0, 0, k * 1000 }, { 2000, 0, k * 1000 }, { 2000, 0, (k + 1) * 1000 }, { 0, 0, (k + 1) * 1000 } }, kUp));
+	}
+
+	world.push_back(Polygon({ { 0, 0, 0 }, { 0, -3000, 0 }, { 0, -3000, 5000 }, { 0, 0, 5000 } }, kUpright));
+	world.push_back(Polygon({ { 0, 0, 5000 }, { 0, -3000, 5000 }, { 0, -3000, 10000 }, { 0, 0, 10000 } }, kUpright));
+	AlienWaysMap map;
+	Check(map.Build(world) == nullptr, "a corridor with its left wall in two halves builds");
+	Check(SearchAll(map, 0, { 1000, 0, 500 }, 9, { 1000, 0, 9500 }, 10) == kAlienWaysFound, "a way is found along it, with the floor at 10");
+
+	bool lifted = false, atTheFoot = false;
+
+	for (AlienWaysPoint const &p : map.Way())
+	{
+		lifted = lifted || (p.x == 0 && p.y == -1500 && p.z == 5000);
+		atTheFoot = atTheFoot || (p.x == 0 && p.y == 0 && p.z == 5000);
+	}
+
+	Check(lifted && !atTheFoot, "it crosses from one half of the wall to the other 1.5 m up, not at their foot, and doesn't drop to the floor at their seam");
+	Metres const m = MetresOf(map.Way());
+
+	// 1.5 m up, 4.5 m along the first half, 4 m along the second, 1.5 m down: 11.5 m of wall, and the floor as before
+	Check(Near(m.wall, 11.5, 0.01) && Near(m.floor, 2.118, 0.01), "11.5 m of wall, at head height, and no more floor than before");
+
+	// Two walls 1 m tall: the way climbs only to their top, 1 m up, and crosses there
+	std::vector<AlienWaysPolygon> low;
+	low.push_back(Square(0, 0, 0, 1000));
+	low.push_back(Square(0, 0, 9000, 1000));
+	low.push_back(Polygon({ { 0, 0, 0 }, { 0, -1000, 0 }, { 0, -1000, 5000 }, { 0, 0, 5000 } }, kUpright));
+	low.push_back(Polygon({ { 0, 0, 5000 }, { 0, -1000, 5000 }, { 0, -1000, 10000 }, { 0, 0, 10000 } }, kUpright));
+	AlienWaysMap skirting;
+	Check(skirting.Build(low) == nullptr && SearchAll(skirting, 0, { 500, 0, 500 }, 1, { 500, 0, 9500 }, 10) == kAlienWaysFound, "a way is found along two walls 1 m tall");
+	bool atTheTop = false;
+
+	for (AlienWaysPoint const &p : skirting.Way())
+	{
+		atTheTop = atTheTop || (p.x == 0 && p.y == -1000 && p.z == 5000);
+	}
+
+	Check(atTheTop, "it crosses from one to the other at their top, 1 m up");
+}
+
 static void Kinds()
 {
 	printf("Which kind a polygon is\n");
@@ -261,19 +311,24 @@ static void CorridorWays()
 	Check(Near(m.floor, 9.0, 0.01) && m.wall == 0.0 && m.ceiling == 0.0, "it's 9 m, all on the floor");
 	Check(!map.Way().empty() && At(map.Way().front(), start) && At(map.Way().back(), goal), "it starts at the start and ends at the goal");
 
-	// Floor is lava, at 10. Up the nearest wall: 1 m of floor from the start to the wall at z = 500, 8.5 m of wall to z = 9000 where the last tile
-	// meets it, and sqrt(1000 x 1000 + 500 x 500) = 1.118 m of floor to the goal. That costs 10 x 2.118 + 8.5 = 29.7, against 90 along the floor.
+	// Floor is lava, at 10. Up the nearest wall: 1 m of floor from the start to the wall's foot at z = 500, 1.5 m straight up it
+	// (kAlienWaysClimbHeight), 8.5 m along it to z = 9000 where the last tile meets it, 1.5 m down, and sqrt(1000 x 1000 + 500 x 500) = 1.118 m
+	// of floor to the goal. That costs 10 x 2.118 + 11.5 = 32.7, against 90 along the floor.
 	Check(SearchAll(map, 0, start, 9, goal, 10) == kAlienWaysFound, "with floor is lava, a way is found");
 	std::vector<AlienWaysPoint> const way = map.Way();
 	m = MetresOf(way);
-	Check(Near(m.floor, 2.118, 0.01) && Near(m.wall, 8.5, 0.01) && m.ceiling == 0.0, "it goes 1 m to the nearest wall, 8.5 m along it, and 1.1 m back to the goal");
-	Check(way.size() == 4 && (way[1].x == 0 || way[1].x == 2000) && way[1].y == 0 && way[1].z == 500 && way[1].kind == kAlienWaysWall,
+	Check(Near(m.floor, 2.118, 0.01) && Near(m.wall, 11.5, 0.01) && m.ceiling == 0.0, "it goes 1 m to the nearest wall, 1.5 m up it, 8.5 m along it, 1.5 m down, and 1.1 m to the goal");
+	Check(way.size() == 6 && (way[1].x == 0 || way[1].x == 2000) && way[1].y == 0 && way[1].z == 500 && way[1].kind == kAlienWaysWall,
 		"it leaves the floor at the point of a wall nearest the start, not at a corner");
-	Check(way.size() == 4 && way[2].x == way[1].x && way[2].y == 0 && way[2].z == 9000 && way[2].kind == kAlienWaysFloor,
-		"and comes back onto the floor where that wall meets the goal's tile");
+	Check(way.size() == 6 && way[2].x == way[1].x && way[2].y == -1500 && way[2].z == 500 && way[2].kind == kAlienWaysWall,
+		"climbs straight up the wall to 1.5 m");
+	Check(way.size() == 6 && way[3].x == way[1].x && way[3].y == -1500 && way[3].z == 9000 && way[3].kind == kAlienWaysWall,
+		"goes along it at that height");
+	Check(way.size() == 6 && way[4].x == way[1].x && way[4].y == 0 && way[4].z == 9000 && way[4].kind == kAlienWaysFloor,
+		"and comes back down onto the floor where that wall meets the goal's tile");
 
-	// Already at 2 the wall wins: 2 x 2.118 + 8.5 = 12.7, against 18 along the floor
-	Check(SearchAll(map, 0, start, 9, goal, 2) == kAlienWaysFound && Near(MetresOf(map.Way()).wall, 8.5, 0.01), "at a price of 2 it goes up the wall too");
+	// Already at 2 the wall wins: 2 x 2.118 + 11.5 = 15.7, against 18 along the floor
+	Check(SearchAll(map, 0, start, 9, goal, 2) == kAlienWaysFound && Near(MetresOf(map.Way()).wall, 11.5, 0.01), "at a price of 2 it goes up the wall too");
 
 	// The other way along the corridor gives the same lengths
 	Check(SearchAll(map, 9, goal, 0, start, 10) == kAlienWaysFound && Near(MetresOf(map.Way()).floor, 2.118, 0.01), "and the same the other way round");
@@ -327,7 +382,7 @@ static void CutShort()
 	printf("A way that crosses too many polygons\n");
 
 	// 300 tiles of 100 mm. With the floor cheap, the way goes along every one of them, which is 301 points, more than a way keeps. Going via the
-	// wall would be 1 + 29.85 + 1 = 31.9 m, against 29.9 m along the floor, so the floor it is.
+	// wall would be 1 + 1.5 + 29.85 + 1.5 + 1 = 34.85 m, up and down it included, against 29.9 m along the floor, so the floor it is.
 	AlienWaysMap map;
 	Check(map.Build(Corridor(300, 100)) == nullptr, "a corridor of 300 short tiles builds");
 	AlienWaysXYZ const start = { 1000, 0, 50 }, goal = { 1000, 0, 29950 };
@@ -391,8 +446,8 @@ static void AtTheEdgeOfTheWorld()
 	printf("A way at the edge of the world\n");
 
 	// A wall 128 km long, from x = -63,999 m to +63,999 m, with a 1 m tile at each end touching its bottom edge. The way at a price of 1000 is
-	// 0.5 m of floor to the wall, 127,996.5 m of wall, and 0.707 m of floor to the goal: a cost of about 128 million, far from anything that
-	// could overflow, and every number on it is at the very edge of what the map takes.
+	// 0.5 m of floor to the wall, 1.5 m up it, 127,996.5 m along it and 1.5 m down, and 0.707 m of floor to the goal: a cost of about 128
+	// million, far from anything that could overflow, and every number on it is at the very edge of what the map takes.
 	int const end = 63999000;
 	std::vector<AlienWaysPolygon> world;
 	world.push_back(Polygon({ { -end, 0, 0 }, { -end, -3000, 0 }, { end, -3000, 0 }, { end, 0, 0 } }, kUpright));
@@ -404,7 +459,7 @@ static void AtTheEdgeOfTheWorld()
 	AlienWaysXYZ const start = { -end + 500, 0, 500 }, goal = { end - 500, 0, 500 };
 	Check(SearchAll(map, 1, start, 2, goal, 1000) == kAlienWaysFound, "a way is found from one end to the other at the dearest price");
 	Metres const m = MetresOf(map.Way());
-	Check(Near(m.wall, 127996.5, 0.01) && Near(m.floor, 1.207, 0.01), "it's 128 km along the wall, and a metre and a bit of floor");
+	Check(Near(m.wall, 127999.5, 0.01) && Near(m.floor, 1.207, 0.01), "it's 128 km along the wall, up and down it, and a metre and a bit of floor");
 }
 
 // A still object's corners, placed in the world (alien_ways_map.h, AlienWays_PlaceCorner), and its facing turned with it. The numbers come from
@@ -657,6 +712,7 @@ int main()
 	AtTheEdgeOfTheWorld();
 	CornersPlaced();
 	Nearest();
+	UpTheWalls();
 	Limits();
 	Stopping();
 	Adding();
