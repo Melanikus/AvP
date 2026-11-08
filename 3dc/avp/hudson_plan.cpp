@@ -210,7 +210,7 @@ const char *const kHudsonRefusedWalkNeedsBoth = "walkfrom= and walkto= go togeth
 const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks once he has walked, so it needs walkfrom= and walkto=";
 const char *const kHudsonRefusedTogetherNotANumber = "together= is how many aliens at once, from 2 to 8";
 const char *const kHudsonRefusedEveryNotASecond = "every= is seconds from 0.1 to 10, with at most one figure after the dot, like 0.5";
-const char *const kHudsonRefusedEveryWithoutTogether = "every= is how long between the aliens of together=, so it needs together=";
+const char *const kHudsonRefusedEveryWithoutTogether = "every= is how long between the aliens of together=, so it needs together= or several places in alienat=";
 const char *const kHudsonRefusedTooManyPlaces = "alienat= has at most 8 places, with / between them";
 const char *const kHudsonRefusedPlacesWithoutWatch = "alienat= with more than one place is for the aliens of a watched fight, so it needs watch=alien";
 const char *const kHudsonRefusedTogetherNotThePlaces = "together= and the number of places in alienat= say different numbers of aliens";
@@ -2456,7 +2456,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedHoldFireWithoutWatch;
 	}
 
-	if (seenEvery && !seenTogether)
+	// every= needs several aliens: from together=, or from several places in alienat=
+	if (seenEvery && !seenTogether && plan->alienAtPlaces <= 1)
 	{
 		return kHudsonRefusedEveryWithoutTogether;
 	}

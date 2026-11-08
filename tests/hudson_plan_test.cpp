@@ -824,6 +824,8 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=x.5", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien every=0.5", kHudsonRefusedEveryWithoutTogether);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien every=0.5 alienat=1,2,3", kHudsonRefusedEveryWithoutTogether);
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien every=0.5 alienat=1,2,3/4,5,6/7,8,9", &plan) == 0 && plan.watchTogether == 3 && plan.watchEveryMs == 500, "every= goes with several places in alienat= too");
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=1 every=1", kHudsonRefusedAskedTwice);
 	// The user's alien films have the lamp on at the biggest spot it has: lampsize=
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.35", &plan) == 0 && plan.lampOn && plan.lampSizeHundredths == 35, "lampsize=0.35 is the most the spot goes to");

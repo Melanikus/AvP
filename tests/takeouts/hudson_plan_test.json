@@ -8401,7 +8401,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (seenEvery && !seenTogether)",
+					"from": "if (seenEvery && !seenTogether && plan->alienAtPlaces <= 1)",
 					"to": "if (false)"
 				}
 			]
@@ -8523,6 +8523,16 @@
 					"file": "3dc/avp/hudson.cpp",
 					"from": "\t\t\tspot.vy = plan.alienAtMore[i][1] - kAlienStartsAboveTheFloor;",
 					"to": "\t\t\tspot.vy = plan.alienAtMore[i][1];"
+				}
+			]
+		},
+		{
+			"name": "every= needs together= even with alienat='s places",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && !seenTogether && plan->alienAtPlaces <= 1)",
+					"to": " && !seenTogether)"
 				}
 			]
 		}
