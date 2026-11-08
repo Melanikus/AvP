@@ -7,7 +7,8 @@
 # being built.
 #
 # The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release: release.yml makes those. To install
-# one of these, see PLAYTEST.md.
+# one of these, see PLAYTEST.md. The libraries it was built with are kept too, for a week, with their hashes and a record of how they were
+# built, for a machine that can't build them (RELEASING.md, "Building on a machine without vcpkg").
 name: Build
 
 on:
@@ -21,6 +22,12 @@ jobs:
   build:
     name: Make a test build
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    # A job's own list replaces the one above, so the first two are said again
+    permissions:
+      contents: read
+      checks: read          # to read the scan results of the commit being built
+      id-token: write       # to prove to the attestation service which workflow this is
+      attestations: write   # to record how the libraries were built (see "Record how the libraries were built")
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,3 +74,38 @@ jobs:
           path: ${{ runner.temp }}/package
           retention-days: 30
           if-no-files-found: error
+
+      # The libraries this build was made with, for a developer's machine that can't build them itself (RELEASING.md, "Building on a
+      # machine without vcpkg"). Only from here: this workflow builds only scanned code on avpx_main, and anyone can download what a
+      # public repository keeps. The log has a SHA-256 for every file and for the list, and the list's provenance is recorded, so a copy
+      # downloaded later can be checked with gh attestation verify. Libraries only, kept for a week.
+      - name: List the libraries' hashes
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x86-windows-static'
+          $list = Join-Path $root 'SHA256SUMS.txt'
+          Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object { $_.FullName -ne $list } | Sort-Object FullName | ForEach-Object {
+            '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower(), $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+          } | Out-File -Encoding ascii -LiteralPath $list
+          Get-Content -LiteralPath $list
+          'The list itself: ' + (Get-FileHash -Algorithm SHA256 -LiteralPath $list).Hash.ToLower()
+
+      - name: Record how the libraries were built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: vcpkg_installed/x86-windows-static/SHA256SUMS.txt
+
+      - name: Keep the libraries
+        id: libraries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: static-libraries
+          path: vcpkg_installed/x86-windows-static
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Say the libraries' artifact hash
+        shell: pwsh
+        env:
+          DIGEST: ${{ steps.libraries.outputs.artifact-digest }}
+        run: "\"The artifact's own SHA-256, of the zip GitHub keeps: $env:DIGEST\""

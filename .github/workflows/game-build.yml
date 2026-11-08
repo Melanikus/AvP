@@ -4,9 +4,8 @@
 # every check and still not build, and nobody would find out until after it had merged (AvP Tao #2: the gate proves the game builds on a
 # clean machine).
 #
-# The game isn't kept: the build isn't uploaded, because anyone can download what a public repository builds, and nothing is released until
-# it's safe. A test build is a separate step that only the owner starts: see build.yml, which uses the same script as this. When the owner
-# starts this one by hand, it keeps the libraries it built, with their hashes, for a machine that can't build them (see the step below).
+# Nothing is kept: the build isn't uploaded, because anyone can download what a public repository builds, and nothing is released until
+# it's safe. A test build is a separate step that only the owner starts: see build.yml, which uses the same script as this.
 name: Game build
 
 on:
@@ -55,40 +54,6 @@ jobs:
             win32/VS2026/Win32/Release/*.pdb
             win32/VS2026/Win32/Release/*.map
           if-no-files-found: error
-
-      # Only when the owner starts this by hand: the libraries this run built, for a developer's machine that can't build them itself
-      # (RELEASING.md, "Building on a machine without vcpkg"). They're what the game was just built against, from our pinned ports. The
-      # log prints a SHA-256 for every file and for the list, so a copy downloaded later can be checked against this run. They're libraries
-      # only, never the game, and they're kept for a week. They're kept even if the game itself then fails to build, so that the libraries
-      # can be proven, and used, on their own.
-      - name: List the libraries' hashes
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
-        shell: pwsh
-        run: |
-          $root = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x86-windows-static'
-          $list = Join-Path $root 'SHA256SUMS.txt'
-          Get-ChildItem $root -Recurse -File | Where-Object { $_.FullName -ne $list } | Sort-Object FullName | ForEach-Object {
-            '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower(), $_.FullName.Substring($root.Length + 1).Replace('\', '/')
-          } | Out-File -Encoding ascii $list
-          Get-Content $list
-          'The list itself: ' + (Get-FileHash -Algorithm SHA256 $list).Hash.ToLower()
-
-      - name: Keep the libraries
-        id: libraries
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: static-libraries
-          path: vcpkg_installed/x86-windows-static
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Say the libraries' artifact hash
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
-        shell: pwsh
-        env:
-          DIGEST: ${{ steps.libraries.outputs.artifact-digest }}
-        run: "\"The artifact's own SHA-256, of the zip GitHub keeps: $env:DIGEST\""
 
       # It works whether or not this machine has its own copies, because the test tells Windows not to look at them: see tests/package_test.cpp.
       - name: Try the package, and show its checks refuse a package with something wrong
