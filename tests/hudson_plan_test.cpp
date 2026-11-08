@@ -1208,6 +1208,9 @@ static void TestTheRealGame()
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "\t\tHudson_FaceThePlace(status, to);\n\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;"), "SOURCE: facing walkto=, with the forward key, as a person walks");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "bool const there = away <= kWalkCloseEnough;"), "SOURCE: until he's close to it");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt"), "SOURCE: only once it may start");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "me->SBDamageBlock.Health <= 0 || !status->IsAlive)"), "SOURCE: and he's alive, which a co-op restart makes him later than single player does");
+		Check(Has(Between(watchCode, "bool Hudson_PressesAKeyAfterHeDied()", "\n}\n"), "if (pressedThisTime || now - sawHimOutAt < 3000)"), "SOURCE: one key press each time he goes out");
+		Check(Has(Between(watchCode, "bool Hudson_PressesAKeyAfterHeDied()", "\n}\n"), "if (lastAsked == 0 || now - lastAsked > 1000)\n\t{\n\t\tsawHimOutAt = now;\n\t\tpressedThisTime = false;"), "SOURCE: and a gap in the asking is a new time out");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "if (walkMayStartAt == 0 && plan.dieAtSeconds == 0)"), "SOURCE: which is soon after the start without dieat=");
 		Check(Has(watchCode, "if (plan.walkSaid && plan.dieAtSeconds != 0)\n\t{\n\t\twalkMayStartAt = GetTickCount() + 3000;"), "SOURCE: and after the restart with it");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"2s\");"), "SOURCE: a picture 2 seconds after he gets there");

@@ -5235,9 +5235,14 @@ int Hudson_Difficulty()
 	return plan.difficulty;
 }
 
+// Asked every frame he's out, from single player's path (pmove.cpp) and from a co-op host's (Coop_WhileOut). One press each time he goes out: a
+// restart takes a few frames to arrive, and on 2026-11-08 a second press while the first was on its way started a skirmish level twice. A gap of
+// more than a second between two asks means he was back in between, so that's a new time out.
 bool Hudson_PressesAKeyAfterHeDied()
 {
 	static DWORD sawHimOutAt = 0;
+	static DWORD lastAsked = 0;
+	static bool pressedThisTime = false;
 
 	if (!HudsonRunIsOn || plan.dieAtSeconds == 0)
 	{
@@ -5246,17 +5251,20 @@ bool Hudson_PressesAKeyAfterHeDied()
 
 	DWORD const now = GetTickCount();
 
-	if (sawHimOutAt == 0)
+	if (lastAsked == 0 || now - lastAsked > 1000)
 	{
 		sawHimOutAt = now;
+		pressedThisTime = false;
 	}
 
-	if (now - sawHimOutAt < 3000)
+	lastAsked = now;
+
+	if (pressedThisTime || now - sawHimOutAt < 3000)
 	{
 		return false;
 	}
 
-	sawHimOutAt = 0;
+	pressedThisTime = true;
 	LogString("hudson: three seconds since he went out, so a key is pressed");
 	return true;
 }
@@ -9821,7 +9829,7 @@ static void Hudson_RateTestFlame(PLAYER_STATUS *status, STRATEGYBLOCK *me)
 
 // A WALK (walkfrom=, walkto=, lookat=). #126: a walk-in switch only fires when a player walks into it, so this is the player walking, with the forward
 // key, as a person would. He's put at walkfrom=, turns to face walkto= every frame, and walks until he's within half a metre of it, through whatever
-// the level has on the way. With dieat=, the walk waits for the level to start again after he dies, because what's tested is what a restart leaves
+// the level has on the way. It waits for him to be alive. With dieat=, it waits for the level to start again after he dies, because what's tested is what a restart leaves
 // behind; without it, the walk starts 3 seconds into the level. Once he's there he looks at lookat=, and with record=pictures a picture is taken
 // from his eyes 2 and 5 seconds later. The run ends a second after that. If he isn't there in 30 seconds, the log says where he stuck, and the
 // pictures are taken from there.
@@ -9852,7 +9860,7 @@ static void WalkHim(PLAYER_STATUS *status)
 		walkMayStartAt = now + kWalkWaitAfterAStart;
 	}
 
-	if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt || !me || !me->DynPtr || me->SBDamageBlock.Health <= 0)
+	if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt || !me || !me->DynPtr || me->SBDamageBlock.Health <= 0 || !status->IsAlive)
 	{
 		return;
 	}
@@ -9910,7 +9918,8 @@ static void WalkHim(PLAYER_STATUS *status)
 		if ((now - walkStageSince) / 1000 > walkSecondsLogged)
 		{
 			walkSecondsLogged = (now - walkStageSince) / 1000;
-			_snprintf(line, sizeof(line) - 1, "walk: %lu s: he's at %d %d %d, in room %s, %d mm from walkto=", (unsigned long)walkSecondsLogged, at.vx, at.vy, at.vz, roomName, away);
+			_snprintf(line, sizeof(line) - 1, "walk: %lu s: he's at %d %d %d, in room %s, %d mm from walkto=, alive %d, moving at %d mm a second", (unsigned long)walkSecondsLogged, at.vx, at.vy, at.vz, roomName, away,
+				(int)status->IsAlive, Approximate3dMagnitude(&me->DynPtr->LinVelocity));
 			LogString(line);
 		}
 

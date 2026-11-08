@@ -8305,6 +8305,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the walk starts while he is still out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " || me->SBDamageBlock.Health <= 0 || !status->IsAlive)",
+					"to": " || me->SBDamageBlock.Health <= 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the key is pressed again and again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (pressedThisTime || now - sawHimOutAt < 3000)",
+					"to": "if (now - sawHimOutAt < 3000)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new time out keeps the old clock",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tif (lastAsked == 0 || now - lastAsked > 1000)\n\t{\n\t\tsawHimOutAt = now;\n\t\tpressedThisTime = false;\n\t}",
+					"to": "\tif (lastAsked == 0)\n\t{\n\t\tsawHimOutAt = now;\n\t\tpressedThisTime = false;\n\t}"
+				}
+			]
 		}
 	]
 }
