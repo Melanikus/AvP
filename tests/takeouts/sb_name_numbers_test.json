@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the count never goes back to 1",
+			"changes": [
+				{
+					"file": "3dc/avp/sb_name_numbers.h",
+					"from": "number = (number >= kSBNameMostNumber) ? 1 : number + 1;",
+					"to": "number = number + 1;"
+				}
+			]
+		},
+		{
+			"name": "a number out of range isn't started again from 1",
+			"changes": [
+				{
+					"file": "3dc/avp/sb_name_numbers.h",
+					"from": "number = (number >= kSBNameMostNumber) ? 1 : number + 1;",
+					"to": "number = (number == kSBNameMostNumber) ? 1 : number + 1;"
+				}
+			]
+		},
+		{
+			"name": "a number something alive has is used again",
+			"changes": [
+				{
+					"file": "3dc/avp/sb_name_numbers.h",
+					"from": "if (!inUse(number))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the search tries one number fewer than it must",
+			"changes": [
+				{
+					"file": "3dc/avp/sb_name_numbers.h",
+					"from": "tries <= mostAlive",
+					"to": "tries < mostAlive"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new name's number is counted as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "IncrementalSBname = SBNameNumber_Next(IncrementalSBname, [sbPtr, tag](unsigned int number) { return NameNumberIsInUse(sbPtr, number, tag); }, maxstblocks);",
+					"to": "IncrementalSBname++; if (IncrementalSBname > kSBNameMostNumber) IncrementalSBname = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the check counts the thing being named as alive",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "if (other && other != self && memcmp(",
+					"to": "if (other && memcmp("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the number is written over the tag, as one int",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\tsbPtr->SBname[4] = (char)(IncrementalSBname & 0xff);\n\tsbPtr->SBname[5] = (char)((IncrementalSBname >> 8) & 0xff);\n\tsbPtr->SBname[6] = (char)((IncrementalSBname >> 16) & 0xff);\n",
+					"to": "\t*((int *)&sbPtr->SBname[4])=IncrementalSBname;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the check is given its tag before the name has it",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\tchar const tag = sbPtr->SBname[SB_NAME_LENGTH-1];\n",
+					"to": "\tchar const tag = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the check leaves out the tag",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "memcmp(&other->SBname[4], id, sizeof(id)) == 0",
+					"to": "memcmp(&other->SBname[4], id, 3) == 0"
+				}
+			]
+		}
+	]
+}
