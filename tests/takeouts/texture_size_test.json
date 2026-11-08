@@ -1,0 +1,129 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "no limit on the size the game keeps",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "if ((gotWidth > kTextureSize_LargestSide) || (gotHeight > kTextureSize_LargestSide))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the width has a limit",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "if ((gotWidth > kTextureSize_LargestSide) || (gotHeight > kTextureSize_LargestSide))",
+					"to": "if ((gotWidth > kTextureSize_LargestSide))"
+				}
+			]
+		},
+		{
+			"name": "the limit is one too low",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "static uint32_t const kTextureSize_LargestSide = 65535;",
+					"to": "static uint32_t const kTextureSize_LargestSide = 65534;"
+				}
+			]
+		},
+		{
+			"name": "a texture too narrow is enough",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "return (gotWidth >= askedWidth) && (gotHeight >= askedHeight)",
+					"to": "return (gotHeight >= askedHeight)"
+				}
+			]
+		},
+		{
+			"name": "a texture too short is enough",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "return (gotWidth >= askedWidth) && (gotHeight >= askedHeight)",
+					"to": "return (gotWidth >= askedWidth)"
+				}
+			]
+		},
+		{
+			"name": "smaller pixels are enough",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": " && (gotBitsPerPixel >= askedBitsPerPixel);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the 16-bit formats count as 32",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "case D3DFMT_A8L8:\n\t\t\treturn 16;",
+					"to": "case D3DFMT_A8L8:\n\t\t\treturn 32;"
+				}
+			]
+		},
+		{
+			"name": "a format not on the list counts as big enough",
+			"changes": [
+				{
+					"file": "3dc/texture_size_check.h",
+					"from": "default:\n\t\t\treturn 0;",
+					"to": "default:\n\t\t\treturn 32;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: R_CreateTexture makes the texture without checking the size it got",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "if (!TextureSize_IsEnough(width, height, bitsPerPixel, realWidth, realHeight, TextureSize_BitsPerPixel(textureFormat)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture writes into a texture it couldn't get at",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "if (!R_LockTexture(newTexture, &dest, &pitch, TextureLock_Normal))\n\t{\n\t\t// log error\n\t\tR_ReleaseTexture(newTexture);\n\t\treturn MISSING_TEXTURE;\n\t}",
+					"to": "R_LockTexture(newTexture, &dest, &pitch, TextureLock_Normal);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Bink film carries on with no texture",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t\t\tCon_PrintError(\"Unable to create texture(s) for FMV playback\");\n\t\t\treturn FMV_ERROR;",
+					"to": "\t\t\tCon_PrintError(\"Unable to create texture(s) for FMV playback\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Theora film carries on with no texture",
+			"changes": [
+				{
+					"file": "3dc/video/TheoraPlayback.cpp",
+					"from": "\t\t\tCon_PrintError(\"Unable to create texture(s) for FMV playback\");\n\t\t\treturn FMV_ERROR;",
+					"to": "\t\t\tCon_PrintError(\"Unable to create texture(s) for FMV playback\");"
+				}
+			]
+		}
+	]
+}
