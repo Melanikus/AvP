@@ -241,8 +241,10 @@ static void TestTheGameUsesIt()
 	Check(ComesBefore(steer, "Watched *const w = WatchedFor(ask.who, true);", "if (!theGuide.Steer(map, ask, &towards))") && Has(steer, "\tw->goal = *goal;\n"),
 		"an alien that asks for a way is watched, with the game's own goal for it");
 
+	// The cut stops just before the function's closing "\n}", so its last line has no line end in it: the lines looked for here don't end in one,
+	// and the check holds wherever in the function they are
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "\n}\n");
-	Check(Has(end, "\t\tw = Watched();\n") && Has(end, "\tletGoLines = 0;\n"), "and the list is emptied at a level's end");
+	Check(Has(end, "\t\tw = Watched();") && Has(end, "\tletGoLines = 0;"), "and the list is emptied at a level's end");
 }
 
 int main()
