@@ -74,11 +74,12 @@ $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild 
 if (-not $msbuild) { throw 'MSBuild was not found' }
 
 # --- Which build this is, for the top of the game's log (3dc/build_identity.cpp). The release workflow gives a version in VERSION; every
-# other build is a test build. Only three numbers with dots between are written, the same as tools/check-release.ps1 lets through, so
-# nothing in it can break the C++ it goes into. Never four: the log leaves out anything that looks like a network address (log_files.h).
+# other build is a test build. Only what tools/check-release.ps1 lets through is written: three numbers with dots between, or a beta's
+# name, betarelease and the day as eight digits, such as betarelease20261107. So nothing in it can break the C++ it goes into. Never four
+# numbers: the log leaves out anything that looks like a network address (log_files.h).
 $commit = (git rev-parse HEAD).Trim()
 if ($commit -cnotmatch '^[0-9a-f]{40}$') { throw "The commit doesn't look like one: $commit" }
-$version = if ($env:VERSION -and $env:VERSION -cmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z') { $env:VERSION } else { 'a test build, not a release' }
+$version = if ($env:VERSION -and ($env:VERSION -cmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z' -or $env:VERSION -cmatch '^betarelease[0-9]{8}\z')) { $env:VERSION } else { 'a test build, not a release' }
 @(
     '// Written by tools/build-and-package.ps1 for this build. Not in the repository.'
     "#define AVP_RELEASE_VERSION `"$version`""

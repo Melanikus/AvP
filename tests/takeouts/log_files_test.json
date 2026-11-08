@@ -123,6 +123,8 @@
     { "name": "the fingerprint misses half of each piece",
       "changes": [{ "file": "3dc/build_identity.cpp", "from": "MD5Update(&md5, piece, read);", "to": "MD5Update(&md5, piece, read / 2);" }] },
     { "name": "the first line doesn't say it's the version",
-      "changes": [{ "file": "3dc/build_identity.cpp", "from": "std::string(\"build: version \")", "to": "std::string(\"build: \")" }] }
+      "changes": [{ "file": "3dc/build_identity.cpp", "from": "std::string(\"build: version \")", "to": "std::string(\"build: \")" }] },
+    { "name": "SOURCE: a beta's name isn't written as the version",
+      "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'", "to": "" }] }
   ]
 }
