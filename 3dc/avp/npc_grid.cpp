@@ -192,6 +192,7 @@ void NpcGrid::Clear()
 	GiveBack(&open);
 	GiveBack(&wayCells);
 	GiveBack(&way);
+	GiveBack(&wayPointCells);
 	searchState = kNpcGridNoWay;
 	searchLooks = 0;
 	searchClaims = nullptr;
@@ -297,6 +298,39 @@ bool NpcGrid::Middle(uint32_t cell, double out[3]) const
 	}
 
 	return true;
+}
+
+bool NpcGrid::CellPlace(uint32_t cell, int *sheet, int *i, int *j) const
+{
+	int const number = SheetOf(cell);
+
+	if (number < 0)
+	{
+		return false;
+	}
+
+	Sheet const &s = sheets[number];
+	*sheet = number;
+	*i = static_cast<int>((cell - s.first) % static_cast<uint32_t>(s.w));
+	*j = static_cast<int>((cell - s.first) / static_cast<uint32_t>(s.w));
+	return true;
+}
+
+uint32_t NpcGrid::CellAt(int sheet, int i, int j) const
+{
+	if (sheet < 0 || sheet >= static_cast<int>(sheets.size()))
+	{
+		return kNpcGridNoCell;
+	}
+
+	Sheet const &s = sheets[sheet];
+
+	if (i < 0 || j < 0 || i >= s.w || j >= s.h)
+	{
+		return kNpcGridNoCell;
+	}
+
+	return s.first + static_cast<uint32_t>(j) * static_cast<uint32_t>(s.w) + static_cast<uint32_t>(i);
 }
 
 uint32_t NpcGrid::CellOver(int sheet, double x, double y, double z) const
@@ -1498,6 +1532,7 @@ NpcGridSearch NpcGrid::BeginCells(uint32_t from, uint32_t to, NpcGridBody body, 
 	open.clear();
 	wayCells.clear();
 	way.clear();
+	wayPointCells.clear();
 	cutShort = false;
 	searchLooks = 0;
 	searchFrom = from;
@@ -1773,6 +1808,7 @@ AlienWaysPoint NpcGrid::PointAt(uint32_t cell, double x, double y, double z) con
 void NpcGrid::MakeWay()
 {
 	way.clear();
+	wayPointCells.clear();
 	cutShort = false;
 
 	if (wayCells.empty())
@@ -1781,6 +1817,7 @@ void NpcGrid::MakeWay()
 	}
 
 	way.push_back(PointAt(wayCells.front(), searchStart.x, searchStart.y, searchStart.z));
+	wayPointCells.push_back(wayCells.front());
 
 	for (size_t k = 1; k + 1 < wayCells.size(); k++)
 	{
@@ -1801,6 +1838,7 @@ void NpcGrid::MakeWay()
 		}
 
 		way.push_back(PointAt(wayCells[k], b[0], b[1], b[2]));
+		wayPointCells.push_back(wayCells[k]);
 
 		// Room is kept for the goal: a longer way is cut short there, and says so
 		if (way.size() + 1 >= kAlienWaysMostWayPoints)
@@ -1811,4 +1849,5 @@ void NpcGrid::MakeWay()
 	}
 
 	way.push_back(PointAt(wayCells.back(), searchGoal.x, searchGoal.y, searchGoal.z));
+	wayPointCells.push_back(wayCells.back());
 }
