@@ -136,6 +136,25 @@ int main()
 	Check(log.whileOpen.packets == 4 && log.whileOpen.questions == 3 && log.whileOpen.answered == 1 && log.whileOpen.tooMany == 1 && log.whileOpen.notSent == 1,
 		"every packet is counted, and every question by what happened to it");
 
+	// Each outcome goes in its own count. With one of each above, two counts swapped would still read 1 and 1, so here they differ: 2
+	// turned away for asking too often, 1 not sent, 3 answered (Take-outs found the first form couldn't tell them apart).
+	{
+		NetSearchLog apart = {};
+		NetSearchLog_Opened(&apart, 0, line, sizeof(line));
+		NetSearchLog_Question(&apart, kNetSearchTooMany, 1, line, sizeof(line));
+		NetSearchLog_Question(&apart, kNetSearchTooMany, 2, line, sizeof(line));
+		NetSearchLog_Question(&apart, kNetSearchNotSent, 3, line, sizeof(line));
+
+		for (int i = 0; i < 3; i++)
+		{
+			NetSearchLog_Question(&apart, kNetSearchAnswered, 4, line, sizeof(line));
+		}
+
+		Check(apart.whileOpen.tooMany == 2 && apart.whileOpen.notSent == 1 && apart.whileOpen.answered == 3 && apart.whileOpen.questions == 6 &&
+			apart.sinceLastLine.tooMany == 2 && apart.sinceLastLine.notSent == 1 && apart.sinceLastLine.answered == 3,
+			"each outcome is counted in its own count, in the minute's and the game's: 2 too many, 1 not sent, 3 answered");
+	}
+
 	// The minute line
 	Check(!NetSearchLog_Minute(&log, 5000 + kNetSearchEveryMilliseconds - 1, line, sizeof(line)), "no minute line before a minute has gone");
 	Check(NetSearchLog_Minute(&log, 5000 + kNetSearchEveryMilliseconds, line, sizeof(line)) &&
