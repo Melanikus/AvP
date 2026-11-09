@@ -10,6 +10,8 @@ WHY IT WATCHES THE SOCKETS: the game's network code isn't safe yet to have open 
 
 -RemoteRelay nyc3.relay.avpx.test (server #14 through a relay on another machine): both games go through that one relay, and its list, at port 443, and through nothing else. The name is looked up once, before anything starts, and has to give exactly one IPv4 address; pair.txt records it, with this machine's address towards it. The watch then lets through exactly the games' UDP sockets on that address of this machine's and their HTTPS connections to that relay; anything else beyond this machine still ends both games. The games themselves use that relay alone, at that address, and drop whatever reaches their sockets from anywhere else (networking.cpp, Hudson's remoterelay= word).
 
+-RemoteRelay <one IPv4 address> -RelayListPin <64 hex digits> [-RelayServerName "New York (Mel's server)"]: the same, with the relay's address itself, so no name is looked up and nothing on this machine (its hosts file) has to change. An address needs -RelayListPin, the SHA-256 of the relay's list's certificate (openssl x509 -fingerprint -sha256, without the colons): the games check the list's certificate against it before they send it a byte, since an address has no name a certificate could be checked against. A name may have a pin too. -RelayServerName is the server's name as the games show it. tools\hudson\relay-words.ps1 checks all three, as run-hudson.ps1 does, and says why it refuses.
+
 WHY SOMEONE SHOULD WATCH THE FIRST ONE: Windows can stop and ask whether to let a program on the network, and nothing here can see that question. Nothing should cause one, because of the above. This compares Windows' firewall rules for these two programs before and after, which shows a question that was answered, but only someone at the screen would see one that wasn't. A question appearing means stop and find out why.
 
 It won't start without a claude process, so that nothing is left starting games with nobody here.
@@ -65,6 +67,8 @@ param(
     [switch]$Relay,              # server #14: the host hosts through the relay on this machine, and the joiner joins through it
     [int]$RelayListPort = 8443,  # the relays' list's HTTPS port on this machine
     [string]$RemoteRelay = '',   # server #14 beyond this machine: the one relay both games may use, by its server's name. It means -Relay too
+    [string]$RelayListPin = '',  # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name
+    [string]$RelayServerName = '', # -RemoteRelay's server as the games show it, such as "New York (Mel's server)"
 
     [ValidateRange(0, 600)][int]$HostSpareSeconds = 30,  # the host plays this much longer than the joiner, so the joiner ends first (0: the same)
     [switch]$NoFilm,
@@ -101,6 +105,10 @@ function Stop-Here([string]$why)
 #  - With -RemoteRelay (server #14 through a relay on another machine), exactly two things more are fine: a UDP socket on this machine's address towards that relay (route), where the games put their own
 #    (never 0.0.0.0), and a TCP connection, not a listener, to the relay's own address at port 443: its list, over HTTPS. Anything else beyond this machine is still a finding. The games drop whatever reaches
 #    their sockets from anywhere but that relay (networking.cpp), which nothing out here can see; this checks what they have open.
+
+# -RemoteRelay, -RelayListPin and -RelayServerName's own rule, the same in run-hudson.ps1: Test-HudsonRelayAddress and Get-HudsonRelayWordsRefusal
+. (Join-Path $PSScriptRoot 'relay-words.ps1')
+
 function Test-SocketIsOffThisMachine([string]$protocol, [string]$state, [string]$localAddress, [string]$remoteAddress, [string]$remotePort = '', [string]$allowedRelay = '', [string]$allowedRoute = '')
 {
     $thisMachine = '^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
@@ -175,12 +183,44 @@ if ($CheckTheWatch)
     # And with no -RemoteRelay, the address towards a relay is just another address
     if (-not (Test-SocketIsOffThisMachine 'udp' '' $exampleRoute '')) { $wrong += "with no -RemoteRelay, udp $exampleRoute should be a finding" }
     if (-not (Test-SocketIsOffThisMachine 'tcp' 'Established' $exampleRoute $exampleRelay '443')) { $wrong += "with no -RemoteRelay, tcp to $($exampleRelay):443 should be a finding" }
+
+    # -RemoteRelay, -RelayListPin and -RelayServerName (relay-words.ps1): each is taken as it should be, or refused with its own reason
+    $pin = '7f1096882c32876dbc4606b871b2c06bfdc504f9af483e4314a439403ece6767'
+    $needsPin = "-RemoteRelay is an address, so its list can only be trusted by its certificate: it needs -RelayListPin"
+    $notOnAnother = "-RemoteRelay's address isn't one a relay on another machine can have"
+    $looksLike = "-RemoteRelay looks like an address, but isn't one plain IPv4 address"
+    $notAName = "-RemoteRelay is a server's name, in small letters, or one IPv4 address"
+    $badPin = "-RelayListPin is the SHA-256 of the list's certificate: 64 hex digits, and nothing else"
+    $badName = "-RelayServerName is 1 to 32 letters, digits, spaces and ' ( ) - . , only"
+    $wordCases = @(
+        @('', '', '', ''), @($exampleRelay, $pin, '', ''), @($exampleRelay, $pin.ToUpperInvariant(), '', ''), @('nyc3.relay.avpx.test', '', '', ''),
+        @('nyc3.relay.avpx.test', $pin, "New York (Mel's server)", ''), @($exampleRelay, $pin, "New York (Mel's server)", ''), @($exampleRelay, $pin, 'a', ''),
+        @($exampleRelay, $pin, ('x' * 32), ''),
+        @($exampleRelay, '', '', $needsPin), @('', $pin, '', "-RelayListPin says how to check -RemoteRelay's list, so it needs -RemoteRelay"),
+        @('', '', 'x', "-RelayServerName names -RemoteRelay's server, so it needs -RemoteRelay"),
+        @($exampleRelay, $pin.Substring(1), '', $badPin), @($exampleRelay, ($pin + '0'), '', $badPin), @($exampleRelay, ($pin.Substring(1) + 'g'), '', $badPin),
+        @($exampleRelay, ($pin.Substring(0, 2) + ':' + $pin.Substring(3)), '', $badPin), @($exampleRelay, ($pin + "`n"), '', $badPin), @($exampleRelay, (' ' + $pin.Substring(1)), '', $badPin),
+        @($exampleRelay, $pin, ('x' * 33), $badName), @($exampleRelay, $pin, 'New "York"', $badName), @($exampleRelay, $pin, 'a;b', $badName), @($exampleRelay, $pin, "a`nb", $badName),
+        @($exampleRelay, $pin, 'São Paulo', $badName),
+        @('127.0.0.1', $pin, '', $notOnAnother), @('0.1.2.3', $pin, '', $notOnAnother), @('224.0.0.1', $pin, '', $notOnAnother), @('255.255.255.255', $pin, '', $notOnAnother),
+        @('169.254.1.1', $pin, '', $notOnAnother),
+        @('203.0.113.050', $pin, '', $looksLike), @('203.0.113.256', $pin, '', $looksLike), @('203.0.113', $pin, '', $looksLike), @('203.0.113.50.1', $pin, '', $looksLike),
+        @('203.0.113.50.', $pin, '', $looksLike), @('1111111111', $pin, '', $looksLike),
+        @("203.0.113.50`n", $pin, '', $notAName), @(' 203.0.113.50', $pin, '', $notAName), @('203.0.113.50:443', $pin, '', $notAName), @('Nyc3.relay.avpx.test', '', '', $notAName),
+        @('nyc3', '', '', $notAName), @('::1', $pin, '', $notAName)
+    )
+    foreach ($case in $wordCases)
+    {
+        $said = Get-HudsonRelayWordsRefusal $case[0] $case[1] $case[2]
+        if ($said -cne $case[3]) { $wrong += "the words [$($case[0])] [$($case[1])] [$($case[2])]: refused with [$said], and it should be [$($case[3])]" }
+    }
+
     if ($wrong.Count -gt 0)
     {
         $wrong | ForEach-Object { Write-Host "run-net-pair: the watch is wrong: $_" }
         exit 1
     }
-    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count + $remoteCases.Count + 2) kinds of socket"
+    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count + $remoteCases.Count + 2) kinds of socket, and the relay's words on all $($wordCases.Count) cases"
     exit 0
 }
 
@@ -229,18 +269,32 @@ if ($running.Count -gt 0) { Stop-Here "the game is already running: $($running[0
 $remoteRelayAddress = ''
 $remoteRelayRoute = ''
 
+# -RemoteRelay, -RelayListPin and -RelayServerName are checked together, by the rule run-hudson.ps1 uses too (relay-words.ps1)
+$relayWordsRefusal = Get-HudsonRelayWordsRefusal $RemoteRelay $RelayListPin $RelayServerName
+if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
+
+# A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
+# ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
+if ($RemoteRelay -and ($Hostile -or $Drain -or $ThirdFolder)) { Stop-Here "-Hostile, -Drain and -ThirdFolder send bad messages on purpose, so they never go through -RemoteRelay, beyond this machine" }
+
 if ($RemoteRelay)
 {
-    if ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\z') { Stop-Here "-RemoteRelay is a server's name, in small letters" }
-
     $Relay = [switch]::Present
     $found = @()
 
-    try { $found = @([System.Net.Dns]::GetHostAddresses($RemoteRelay)) } catch { Stop-Here "-RemoteRelay's name doesn't look up to an address" }
+    if (Test-HudsonRelayAddress $RemoteRelay)
+    {
+        # An address is the relay's own: there's no name to look up, and the games check its list by -RelayListPin instead
+        $remoteRelayAddress = $RemoteRelay
+    }
+    else
+    {
+        try { $found = @([System.Net.Dns]::GetHostAddresses($RemoteRelay)) } catch { Stop-Here "-RemoteRelay's name doesn't look up to an address" }
 
-    if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { Stop-Here "-RemoteRelay's name has to look up to exactly one IPv4 address, and it looks up to $($found.Count)" }
+        if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { Stop-Here "-RemoteRelay's name has to look up to exactly one IPv4 address, and it looks up to $($found.Count)" }
 
-    $remoteRelayAddress = $found[0].IPAddressToString
+        $remoteRelayAddress = $found[0].IPAddressToString
+    }
 
     # Not this machine (that's -Relay alone), nor "any address", nor one that's everyone's at once
     if ($remoteRelayAddress -match '^(0|127|22[4-9]|2[3-5]\d)\.' -or $remoteRelayAddress -match '^169\.254\.') { Stop-Here "-RemoteRelay's address isn't one a relay on another machine can have" }
@@ -267,6 +321,8 @@ $lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames",
 
 # Which relay beyond this machine the watch let through, and at which address: the user's own server's, never a player's
 if ($RemoteRelay) { $lines += @("remote_relay=$RemoteRelay", "remote_relay_address=$remoteRelayAddress", "remote_relay_route=$remoteRelayRoute") }
+if ($RelayListPin) { $lines += "remote_relay_list_pin=$RelayListPin" }
+if ($RelayServerName) { $lines += "remote_relay_server_name=$RelayServerName" }
 
 function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]$outputName, [string]$kind = '')
 {
@@ -322,6 +378,9 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($Typed) { $words += '-Typed' }
     if ($Relay) { $words += @('-Relay', '-RelayListPort', $RelayListPort) }
     if ($RemoteRelay) { $words += @('-RemoteRelay', $RemoteRelay) }
+    if ($RelayListPin) { $words += @('-RelayListPin', $RelayListPin) }
+    # The name can hold spaces, and Start-Process joins its words with nothing but spaces, so it goes in quotes (its rule has no quote in it)
+    if ($RelayServerName) { $words += @('-RelayServerName', "`"$RelayServerName`"") }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 

@@ -151,6 +151,7 @@ const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no server's
 const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= has a name longer than a server's can be";
 const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character a server's name can't have here: small letters, digits, - and . only";
 const char *const kHudsonRefusedRemoteRelayWithoutNet = "remoterelay= says which relay a network run may use, so it needs net=";
+const char *const kHudsonRefusedRemoteRelayHostile = "remoterelay= takes a run beyond this machine, where the other end could be anybody's game, so it can't be a hostile= run";
 const char *const kHudsonRefusedSiegeTooLong = "siege= has a room name that's too long";
 const char *const kHudsonRefusedSiegeCharacter = "siege= has a character a room name can't have here";
 const char *const kHudsonRefusedSiegeNeedsAPair = "siege= is for a pair of games with coop=yes, and it's a fight of its own, so it has no other fight, kill, walk or hostile test";
@@ -2661,6 +2662,13 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenRemoteRelay && plan->netMode == kHudsonNetNone)
 	{
 		return kHudsonRefusedRemoteRelayWithoutNet;
+	}
+
+	// A hostile run sends the other game bad messages on purpose, of every kind (yes, drain, watch, hold, flood). Through a relay beyond this
+	// machine, the other end could be anybody's game, so none of them ever goes there (Primary's read of this line, 2026-11-09).
+	if (seenRemoteRelay && plan->hostile)
+	{
+		return kHudsonRefusedRemoteRelayHostile;
 	}
 
 	if (seenSiegeFar && !seenSiege)

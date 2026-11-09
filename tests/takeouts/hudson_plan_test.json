@@ -9635,6 +9635,16 @@
 					"to": ")"
 				}
 			]
+		},
+		{
+			"name": "REFUSAL: a hostile run can go through a relay beyond this machine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRemoteRelay && plan->hostile)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }
