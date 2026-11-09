@@ -1,5 +1,6 @@
 // The post-quantum half of the relay's protocol version 2 cryptography: what the game asks for, and nothing more. Written 2026-11-09 by
 // Melanikus for the AvP port.
+// Modified 2026-11-09 by Melanikus for the AvP port: net_pq_native.cpp is the real one now, and a key pair's randomness is said truly.
 //
 // WHAT THIS IS. Version 2 (CRYPTO.md, in the AVPx-Dedicated-Server repository) puts a post-quantum secret beside every classical one
 // (net_crypto.h), so that a session holds even against a future quantum computer, unless both halves are broken. The game needs:
@@ -13,7 +14,8 @@
 //
 // UNTIL THAT'S DONE, the game is built with net_pq_none.cpp, which refuses every call, and NetPq_Available() is false. Version 2 needs
 // both halves, so with it nothing runs at all: there's no classical-only fallback, which would be a way to attack it (CRYPTO.md section 3).
-// The real one, net_pq_native.cpp, takes its place once the libraries have been read, with nothing else changing.
+// The real one, net_pq_native.cpp, takes its place once the libraries have been read, with nothing else changing. It's written (over
+// Secondary's wrapper, pq_key_exchange.h and pq_signature_check.h); the stand-in stays for the tests that need version 2 refused.
 //
 // HOW IT ANSWERS: as net_crypto.h does. True or false, and on false every output has been wiped to 0. A key given that isn't one (the
 // wrong size of anything is impossible here, since every size is fixed) is refused: encapsulate checks the public key as FIPS 203 section
@@ -40,7 +42,8 @@ bool NetPq_Available();
 // Which post-quantum half this game was built with, in fixed words for the log
 const char *NetPq_Name();
 
-// A new ML-KEM-1024 key pair, from the operating system's randomness (NetCrypto_Random). A failure of the randomness is a refusal.
+// A new ML-KEM-1024 key pair, from the operating system's randomness (drawn inside the library, from BCryptGenRandom, the same source as
+// NetCrypto_Random). A failure of the randomness is a refusal.
 bool NetPq_KemKeypair(uint8_t publicOut[kNetPqKemPublicBytes], uint8_t privateOut[kNetPqKemPrivateBytes]);
 
 // A fresh secret for publicKey, and the ciphertext that carries it. False for a public key FIPS 203 section 7.2 refuses.
