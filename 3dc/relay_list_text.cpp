@@ -651,6 +651,7 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 
 RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
 {
+	// No games until the whole list has been read: ReadAll gives the count only when it accepts the list
 	*count = 0;
 
 	if (!body && bytes > 0)
@@ -658,14 +659,7 @@ RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVers
 		return kRelayListEndsTooSoon;
 	}
 
-	RelayListRefusal const why = ReadAll(body ? body : "", body ? bytes : 0, ourVersion, games, count);
-
-	if (why != kRelayListAccepted)
-	{
-		*count = 0;
-	}
-
-	return why;
+	return ReadAll(body ? body : "", body ? bytes : 0, ourVersion, games, count);
 }
 
 bool RelayList_ListingBody(const uint8_t token[kRelayTokenBytes], const char *name, const char *level, const char *mode, int players,

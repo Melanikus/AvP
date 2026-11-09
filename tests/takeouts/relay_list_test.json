@@ -1,0 +1,268 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a list over 32 KB is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > kRelayListMostAnswerBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a 0 byte in a list is not looked for",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any escape is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (c != '\"' && c != '\\\\')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the character 0x7F is taken in a text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (byte < 0x20 || byte > 0x7E)\n\t\t\t\t{\n\t\t\t\t\treturn kRelayListBadText;",
+					"to": "if (byte < 0x20)\n\t\t\t\t{\n\t\t\t\t\treturn kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "an empty text is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListAccepted && length == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a number with a 0 in front is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(digits > 1 && *start == '0') || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a number with a point is not a bad number",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "after == '.' || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a number over its range is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (v < least || v > most)",
+					"to": "if (v < least)"
+				}
+			]
+		},
+		{
+			"name": "a number under its range is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (v < least || v > most)",
+					"to": "if (v > most)"
+				}
+			]
+		},
+		{
+			"name": "a field given twice is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (seen[field])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game missing a field is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!seen[f])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "more players than room is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (game.players > game.maxPlayers)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game for another version is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (game.version != ourVersion)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any 8 printable characters are a code",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(game.code, length)))",
+					"to": "if (why == kRelayListBadText)"
+				}
+			]
+		},
+		{
+			"name": "two games with one code are taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (strcmp(games[g].code, games[n].code) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "anything after the end is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (Next(r) != 0)\n\t\t{\n\t\t\treturn kRelayListMoreAfterTheEnd;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn kRelayListMoreAfterTheEnd;"
+				}
+			]
+		},
+		{
+			"name": "a field after \"games\" is not called a second field",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (close == ',')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any first field is taken for \"games\"",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListBadText || (why == kRelayListAccepted && strcmp(name, \"games\") != 0))",
+					"to": "if (why == kRelayListBadText)"
+				}
+			]
+		},
+		{
+			"name": "a refused list leaves its count as it was",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t*count = 0;\n\n\tif (!body && bytes > 0)",
+					"to": "\n\tif (!body && bytes > 0)"
+				}
+			]
+		},
+		{
+			"name": "the token's hex digits are written the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "AddChar(w, kHex[token[i] >> 4]);\n\t\t\tAddChar(w, kHex[token[i] & 15]);",
+					"to": "AddChar(w, kHex[token[i] & 15]);\n\t\t\tAddChar(w, kHex[token[i] >> 4]);"
+				}
+			]
+		},
+		{
+			"name": "a \\ in a name is not escaped",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (text[i] == '\"' || text[i] == '\\\\')",
+					"to": "if (text[i] == '\"')"
+				}
+			]
+		},
+		{
+			"name": "a listing with more players than room is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "players < 1 || players > maxPlayers || ",
+					"to": "players < 1 || "
+				}
+			]
+		},
+		{
+			"name": "a listing with an empty name is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "!IsListText(name) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a body that ran out of room is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!w.fits || w.used > kRelayListMostBodyBytes)",
+					"to": "if (w.used > kRelayListMostBodyBytes)"
+				}
+			]
+		},
+		{
+			"name": "the game's own words keep what isn't printable ASCII",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "to[n] = (byte < 0x20 || byte > 0x7E) ? '?' : from[n];",
+					"to": "to[n] = from[n];"
+				}
+			]
+		},
+		{
+			"name": "empty words never become the fallback",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (FitInto(from, to) == 0 && FitInto(fallback, to) == 0)",
+					"to": "if (FitInto(from, to) == 0)"
+				}
+			]
+		}
+	]
+}
