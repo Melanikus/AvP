@@ -113,11 +113,6 @@ static bool LoadTheDlls()
 	return dllsAreLoaded;
 }
 
-bool HudsonVideoWriter_CanRecordHere()
-{
-	return LoadTheDlls();
-}
-
 void HudsonVideoWriter_StopBecause(const char *word, const char *why)
 {
 	if (lockIsMade)

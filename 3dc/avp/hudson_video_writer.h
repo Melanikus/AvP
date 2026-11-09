@@ -27,9 +27,6 @@ struct HudsonVideoFacts
 	char why[256];         // the same, in words, for the log
 };
 
-// Are Media Foundation's DLLs on this machine? Some versions of Windows come without them, and some Windows Server machines do.
-bool HudsonVideoWriter_CanRecordHere();
-
 // Starts a film, and waits a limited time for the writer to be ready. It gives back false if it didn't start, and the facts say why. breakAtPicture makes that picture fail in the encoder for real, to prove a run survives it: 0 means never. It can't be called while a film is being written.
 bool HudsonVideoWriter_Start(const char *path, int width, int height, int breakAtPicture, long long mostBytes);
 

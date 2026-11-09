@@ -20,6 +20,7 @@
 #include <string>
 
 #include "hudson_plan.h"
+#include "join_films_reads.h"
 
 static int checksFailed = 0;
 
@@ -459,7 +460,7 @@ static void TestBadPlans()
 
 				memset(picture, 77, sizeof(picture));
 				HudsonPlan_StampNumber(picture, pitch, kWide, kTall, 1762043219UL);
-				Check(HudsonPlan_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack) && readBack == 1762043219UL, "a stamped clock reads back as it was written");
+				Check(JoinFilms_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack) && readBack == 1762043219UL, "a stamped clock reads back as it was written");
 
 				// A film blurs it: every lit pixel a little darker and every dark one a little lighter still reads
 				for (size_t i = 0; i < sizeof(picture); i++)
@@ -467,12 +468,12 @@ static void TestBadPlans()
 					picture[i] = picture[i] > 127 ? (unsigned char)200 : (unsigned char)60;
 				}
 
-				Check(HudsonPlan_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack) && readBack == 1762043219UL, "and still does after a film has blurred it");
+				Check(JoinFilms_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack) && readBack == 1762043219UL, "and still does after a film has blurred it");
 				memset(picture, 0, sizeof(picture));
-				Check(!HudsonPlan_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack), "a picture with no clock in its corner doesn't read as one");
+				Check(!JoinFilms_ReadStampedNumber(picture, pitch, kWide, kTall, &readBack), "a picture with no clock in its corner doesn't read as one");
 				// A clock really there, but the picture is said to be smaller than it is: reading it would go past the picture's edge
 				HudsonPlan_StampNumber(picture, pitch, kWide, kTall, 1762043219UL);
-				Check(!HudsonPlan_ReadStampedNumber(picture, pitch, 50, 10, &readBack), "nor does one too small to hold it");
+				Check(!JoinFilms_ReadStampedNumber(picture, pitch, 50, 10, &readBack), "nor does one too small to hold it");
 			}
 			memset(picture, 77, sizeof(picture));
 			HudsonPlan_StampNumber(picture, 39, 10, 10, 0);
@@ -2256,7 +2257,7 @@ static void SecondsAre(const char *text, long expected)
 
 	_snprintf(words, sizeof(words) - 1, "[%s] is read as %ld ms", text, expected);
 	words[sizeof(words) - 1] = 0;
-	Check(HudsonPlan_ReadFilmSeconds(text, &got) == 0 && got == expected, words);
+	Check(JoinFilms_ReadSeconds(text, &got) == 0 && got == expected, words);
 }
 
 static void SecondsRefused(const char *text, const char *reason)
@@ -2266,7 +2267,7 @@ static void SecondsRefused(const char *text, const char *reason)
 
 	_snprintf(words, sizeof(words) - 1, "[%s] is refused: %s", text ? text : "nothing", reason);
 	words[sizeof(words) - 1] = 0;
-	const char *const why = HudsonPlan_ReadFilmSeconds(text, &got);
+	const char *const why = JoinFilms_ReadSeconds(text, &got);
 	Check(why != 0 && strcmp(why, reason) == 0 && got == -1, words);
 }
 
@@ -2280,41 +2281,41 @@ static void TestFilmJoining()
 	SecondsAre("0", 0);
 	SecondsAre("12", 12000);
 	SecondsAre("3600", 3600000);
-	SecondsRefused("", kHudsonSecondsMissing);
-	SecondsRefused(0, kHudsonSecondsMissing);
-	SecondsRefused("7,4", kHudsonSecondsHaveAComma);
-	SecondsRefused("00001", kHudsonSecondsTooManyFigures);
-	SecondsRefused("7.4567", kHudsonSecondsTooManyFigures);
-	SecondsRefused(".5", kHudsonSecondsNotANumber);
-	SecondsRefused("-7", kHudsonSecondsNotANumber);
-	SecondsRefused("7.", kHudsonSecondsNotANumber);
-	SecondsRefused("7.4x", kHudsonSecondsNotANumber);
-	SecondsRefused("7.4.1", kHudsonSecondsNotANumber);
-	SecondsRefused(" 7", kHudsonSecondsNotANumber);
-	SecondsRefused("3600.001", kHudsonSecondsTooMany);
+	SecondsRefused("", kJoinFilmsSecondsMissing);
+	SecondsRefused(0, kJoinFilmsSecondsMissing);
+	SecondsRefused("7,4", kJoinFilmsSecondsHaveAComma);
+	SecondsRefused("00001", kJoinFilmsSecondsTooManyFigures);
+	SecondsRefused("7.4567", kJoinFilmsSecondsTooManyFigures);
+	SecondsRefused(".5", kJoinFilmsSecondsNotANumber);
+	SecondsRefused("-7", kJoinFilmsSecondsNotANumber);
+	SecondsRefused("7.", kJoinFilmsSecondsNotANumber);
+	SecondsRefused("7.4x", kJoinFilmsSecondsNotANumber);
+	SecondsRefused("7.4.1", kJoinFilmsSecondsNotANumber);
+	SecondsRefused(" 7", kJoinFilmsSecondsNotANumber);
+	SecondsRefused("3600.001", kJoinFilmsSecondsTooMany);
 
 	// A picture of ten rows of 40 bytes, in a buffer of 400 that starts at 1000
-	Check(HudsonPlan_RowsFit(1000, 40, 10, 40, 1000, 400), "rows stored top down that fill their buffer exactly fit");
-	Check(!HudsonPlan_RowsFit(1000, 40, 10, 40, 1000, 399), "but not with one byte fewer");
-	Check(!HudsonPlan_RowsFit(999, 40, 10, 40, 1000, 400), "nor starting one byte before the buffer");
-	Check(HudsonPlan_RowsFit(1360, -40, 10, 40, 1000, 400), "rows stored bottom up fit, counted down from the last row in the buffer");
-	Check(!HudsonPlan_RowsFit(1359, -40, 10, 40, 1000, 400), "but not if the last one starts a byte before the buffer");
-	Check(!HudsonPlan_RowsFit(1361, -40, 10, 40, 1000, 400), "nor if the first goes a byte past its end");
-	Check(!HudsonPlan_RowsFit(1000, 39, 10, 40, 1000, 400), "rows longer than the step between them don't fit");
-	Check(!HudsonPlan_RowsFit(1000, 40, 0, 40, 1000, 400), "and a picture of no rows isn't one");
+	Check(JoinFilms_RowsFit(1000, 40, 10, 40, 1000, 400), "rows stored top down that fill their buffer exactly fit");
+	Check(!JoinFilms_RowsFit(1000, 40, 10, 40, 1000, 399), "but not with one byte fewer");
+	Check(!JoinFilms_RowsFit(999, 40, 10, 40, 1000, 400), "nor starting one byte before the buffer");
+	Check(JoinFilms_RowsFit(1360, -40, 10, 40, 1000, 400), "rows stored bottom up fit, counted down from the last row in the buffer");
+	Check(!JoinFilms_RowsFit(1359, -40, 10, 40, 1000, 400), "but not if the last one starts a byte before the buffer");
+	Check(!JoinFilms_RowsFit(1361, -40, 10, 40, 1000, 400), "nor if the first goes a byte past its end");
+	Check(!JoinFilms_RowsFit(1000, 39, 10, 40, 1000, 400), "rows longer than the step between them don't fit");
+	Check(!JoinFilms_RowsFit(1000, 40, 0, 40, 1000, 400), "and a picture of no rows isn't one");
 
-	Check(HudsonPlan_ApertureFits(0, 0, 1920, 1080, 1920, 1088), "a film's shown part can be smaller than its picture");
-	Check(HudsonPlan_ApertureFits(0, 8, 1920, 1080, 1920, 1088), "and lower down in it");
-	Check(!HudsonPlan_ApertureFits(0, 9, 1920, 1080, 1920, 1088), "but not going past its bottom");
-	Check(!HudsonPlan_ApertureFits(1, 0, 1920, 1080, 1920, 1088), "nor past its right side");
-	Check(!HudsonPlan_ApertureFits(-1, 0, 1920, 1080, 1920, 1088), "nor starting left of it");
-	Check(!HudsonPlan_ApertureFits(0, -1, 1920, 1080, 1920, 1088), "nor above it");
-	Check(!HudsonPlan_ApertureFits(0, 0, 0, 1080, 1920, 1088), "and a shown part of no size isn't one");
+	Check(JoinFilms_ApertureFits(0, 0, 1920, 1080, 1920, 1088), "a film's shown part can be smaller than its picture");
+	Check(JoinFilms_ApertureFits(0, 8, 1920, 1080, 1920, 1088), "and lower down in it");
+	Check(!JoinFilms_ApertureFits(0, 9, 1920, 1080, 1920, 1088), "but not going past its bottom");
+	Check(!JoinFilms_ApertureFits(1, 0, 1920, 1080, 1920, 1088), "nor past its right side");
+	Check(!JoinFilms_ApertureFits(-1, 0, 1920, 1080, 1920, 1088), "nor starting left of it");
+	Check(!JoinFilms_ApertureFits(0, -1, 1920, 1080, 1920, 1088), "nor above it");
+	Check(!JoinFilms_ApertureFits(0, 0, 0, 1080, 1920, 1088), "and a shown part of no size isn't one");
 
 	std::string const join = ReadSourceFile("tools/hudson/join-films.cpp");
 
-	Check(Has(join, "HudsonPlan_ReadFilmSeconds(picture ? argv[3] : argv[2], &milliseconds)") && !Has(join, "atof("), "join-films reads its seconds with that, and with nothing else");
-	Check(Has(join, "bool const fits = HudsonPlan_RowsFit(") && Has(join, "if (fits)") && ComesBefore(join, "bool const fits = HudsonPlan_RowsFit(", "memcpy("), "it reads no picture until its rows are known to fit");
+	Check(Has(join, "JoinFilms_ReadSeconds(picture ? argv[3] : argv[2], &milliseconds)") && !Has(join, "atof("), "join-films reads its seconds with that, and with nothing else");
+	Check(Has(join, "bool const fits = JoinFilms_RowsFit(") && Has(join, "if (fits)") && ComesBefore(join, "bool const fits = JoinFilms_RowsFit(", "memcpy("), "it reads no picture until its rows are known to fit");
 	Check(Has(join, "!= INVALID_FILE_ATTRIBUTES") && CountOf(join, "if (AlreadyThere(outPath))") == 2, "and it writes over no file that's already there, a source film included");
 }
 

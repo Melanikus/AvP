@@ -175,6 +175,17 @@ static bool LoadTheReader()
 	return TheStartup && TheShutdown && MakeAttributes && MakeMediaType && MakeReader;
 }
 
+// The writer needs these three as well as what the reader needs (see LoadTheDlls in hudson_video_writer.cpp, which loads the same two
+// files from the same place). A machine with only part of Media Foundation counts as having none, because the writer won't start a film there.
+static bool TheWriterCanWorkHere()
+{
+	HMODULE const platform = LoadLibraryExA("mfplat.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+	HMODULE const readWrite = LoadLibraryExA("mfreadwrite.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+	return platform && readWrite && GetProcAddress(platform, "MFCreateMemoryBuffer") && GetProcAddress(platform, "MFCreateSample") &&
+		GetProcAddress(readWrite, "MFCreateSinkWriterFromURL");
+}
+
 struct WhatWasRead
 {
 	bool opened;
@@ -713,7 +724,7 @@ int main(int count, char **words)
 	TestTheQueue();
 	TestCopying();
 
-	if (HudsonVideoWriter_CanRecordHere() && LoadTheReader())
+	if (TheWriterCanWorkHere() && LoadTheReader())
 	{
 		HRESULT const com = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 

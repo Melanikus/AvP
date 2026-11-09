@@ -573,23 +573,17 @@ bool HudsonPlan_PlayersCannotDie(const HudsonPlan &plan);
 // Writes a ten figure number in the top left of a picture of four bytes to the pixel, white on a black box, for finding the same moment in two films. What doesn't fit in the picture is left out.
 void HudsonPlan_StampNumber(unsigned char *pixels, int pitch, int width, int height, unsigned long number);
 
-// Reads back the number HudsonPlan_StampNumber wrote, from a film's picture, which its squeezing has blurred a little. False if what's there isn't ten of its figures.
-bool HudsonPlan_ReadStampedNumber(const unsigned char *pixels, int pitch, int width, int height, unsigned long *number);
-
-// Reads a number of seconds, such as 7.4 or 85.967, as milliseconds. Zero if it's good, or else why it isn't, which is one of these. Used by tools/hudson/join-films.
-const char *HudsonPlan_ReadFilmSeconds(const char *text, long *milliseconds);
-extern const char *const kHudsonSecondsMissing;
-extern const char *const kHudsonSecondsHaveAComma;
-extern const char *const kHudsonSecondsTooManyFigures;
-extern const char *const kHudsonSecondsNotANumber;
-extern const char *const kHudsonSecondsTooMany;
-
-// Whether every row of a picture lies inside the buffer holding it. A film says where its rows are, and a damaged one could say they go past the end, so join-films reads nothing until this says yes.
-// pitch is the step from one row to the next, negative when the rows are stored bottom up. Places are addresses, and everything is counted in bytes.
-bool HudsonPlan_RowsFit(long long firstRow, long long pitch, int rows, long long rowBytes, long long bufferStart, long long bufferLength);
-
-// Whether the part of a picture a film says is shown lies inside the whole picture
-bool HudsonPlan_ApertureFits(int left, int top, int width, int height, int frameWidth, int frameHeight);
+// How the clock looks, which HudsonPlan_StampNumber writes and tools/hudson/join_films_reads.cpp reads back. Each figure is 3 squares
+// across and 5 down, one row of bits for each line, with the left-hand square as the highest bit. A fourth, dark square after each
+// figure is the gap before the next. Changing any of this changes every film's clock, so the reader has to agree.
+const unsigned char kHudsonStampFigures[10][5] =
+{
+	{ 7, 5, 5, 5, 7 }, { 2, 2, 2, 2, 2 }, { 7, 1, 7, 4, 7 }, { 7, 1, 7, 1, 7 }, { 5, 5, 7, 1, 1 },
+	{ 7, 4, 7, 1, 7 }, { 7, 4, 7, 5, 7 }, { 7, 1, 1, 1, 1 }, { 7, 5, 7, 5, 7 }, { 7, 5, 7, 1, 7 }
+};
+int const kHudsonStampFiguresInANumber = 10;
+int const kHudsonStampSquare = 4;       // pixels to a square
+int const kHudsonStampFromTheEdge = 8;  // pixels from the picture's top and left edges
 
 // The smoke test: what this machine can tell about the other player of a pair, and how long it has been trying.
 struct HudsonSmokeFacts

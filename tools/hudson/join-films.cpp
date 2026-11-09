@@ -1,5 +1,7 @@
 // Joins the two films of a pair run into one wide film, the host on the left and the joiner on the right, each half 1920x1080, lined up to the same moment. And takes a picture from any moment of a film.
 // Written 2026-11-07 by Melanikus for the AvP port. A test tool, like the rest of Hudson: it never goes in the game.
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   its checks are in join_films_reads.cpp, moved out of the game's hudson_plan.cpp. Built from both, with 3dc/avp as a folder to search
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   it reads a picture whatever kind of buffer it comes in, checks its rows fit in that buffer first, and says which step failed and why
 //   --skip-left lines up two films that have no clock, and the last line says how many pictures of each were used
@@ -35,7 +37,7 @@
 #include <string>
 #include <vector>
 
-#include "hudson_plan.h"
+#include "join_films_reads.h"
 
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfreadwrite.lib")
@@ -189,7 +191,7 @@ struct Film
 
 		if ((SUCCEEDED(given.it->GetBlob(MF_MT_MINIMUM_DISPLAY_APERTURE, (UINT8 *)&area, sizeof(area), &areaSize)) || SUCCEEDED(given.it->GetBlob(MF_MT_GEOMETRIC_APERTURE, (UINT8 *)&area, sizeof(area), &areaSize))))
 		{
-			if (areaSize == sizeof(area) && HudsonPlan_ApertureFits(area.OffsetX.value, area.OffsetY.value, (int)area.Area.cx, (int)area.Area.cy, frameWidth, frameHeight))
+			if (areaSize == sizeof(area) && JoinFilms_ApertureFits(area.OffsetX.value, area.OffsetY.value, (int)area.Area.cx, (int)area.Area.cy, frameWidth, frameHeight))
 			{
 				shownLeft = area.OffsetX.value;
 				shownTop = area.OffsetY.value;
@@ -274,7 +276,7 @@ struct Film
 				firstRow = (long long)(uintptr_t)start + (stride < 0 ? (long long)(frameHeight - 1) * -(long long)stride : 0);
 			}
 
-			bool const fits = HudsonPlan_RowsFit(firstRow, pitch, frameHeight, (long long)frameWidth * 4, (long long)(uintptr_t)start, (long long)length);
+			bool const fits = JoinFilms_RowsFit(firstRow, pitch, frameHeight, (long long)frameWidth * 4, (long long)(uintptr_t)start, (long long)length);
 
 			if (fits)
 			{
@@ -383,7 +385,7 @@ static Clock ReadTheClock(const Film &film, const char *name)
 	Clock clock;
 
 	clock.firstTime = film.time;
-	clock.known = HudsonPlan_ReadStampedNumber(film.picture.data(), film.width * 4, film.width, film.height, &clock.first);
+	clock.known = JoinFilms_ReadStampedNumber(film.picture.data(), film.width * 4, film.width, film.height, &clock.first);
 
 	if (clock.known)
 	{
@@ -691,7 +693,7 @@ static int TakeAPicture(const char *filmPath, long milliseconds, const char *out
 	}
 
 	unsigned long clock = 0;
-	bool const clockKnown = HudsonPlan_ReadStampedNumber(film.picture.data(), film.width * 4, film.width, film.height, &clock);
+	bool const clockKnown = JoinFilms_ReadStampedNumber(film.picture.data(), film.width * 4, film.width, film.height, &clock);
 
 	printf("join-films: wrote the film's picture %ld, at %.4f seconds, %dx%d, to %s%s", film.number, (double)film.time / kTicksPerSecond, film.width, film.height, outPath, clockKnown ? "" : "\n");
 
@@ -720,7 +722,7 @@ int main(int argc, char **argv)
 
 	if (picture || skip)
 	{
-		const char *const why = HudsonPlan_ReadFilmSeconds(picture ? argv[3] : argv[2], &milliseconds);
+		const char *const why = JoinFilms_ReadSeconds(picture ? argv[3] : argv[2], &milliseconds);
 
 		if (why)
 		{

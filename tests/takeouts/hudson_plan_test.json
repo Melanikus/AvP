@@ -7080,7 +7080,7 @@
 			"name": "a figure that matches none still reads",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (figure < 0)\n\t\t{\n\t\t\treturn false;\n\t\t}",
 					"to": ""
 				}
@@ -7090,8 +7090,8 @@
 			"name": "a picture too small to hold a clock is read anyway",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "width < kStampFromTheEdge + across || height < kStampFromTheEdge + down || ",
+					"file": "tools/hudson/join_films_reads.cpp",
+					"from": "width < kHudsonStampFromTheEdge + across || height < kHudsonStampFromTheEdge + down || ",
 					"to": ""
 				}
 			]
@@ -7100,7 +7100,7 @@
 			"name": "the clock is read from the dark side",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "(brightness > 127 ? 1 : 0)",
 					"to": "(brightness > 127 ? 0 : 1)"
 				}
@@ -7110,7 +7110,7 @@
 			"name": "empty seconds are not refused as missing",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (!text || !milliseconds || !text[0])",
 					"to": "if (!text || !milliseconds)"
 				}
@@ -7120,7 +7120,7 @@
 			"name": "a comma in seconds is not named as the trouble",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (strchr(text, ','))",
 					"to": "if (false)"
 				}
@@ -7130,7 +7130,7 @@
 			"name": "seconds may have any number of figures before the point",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (++figuresBefore > kMostFiguresBeforeThePoint)",
 					"to": "if (false)"
 				}
@@ -7140,7 +7140,7 @@
 			"name": "seconds may start with the point",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (figuresBefore == 0)",
 					"to": "if (false)"
 				}
@@ -7150,7 +7150,7 @@
 			"name": "seconds may have any number of figures after the point",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (++figuresAfter > kMostFiguresAfterThePoint)",
 					"to": "if (false)"
 				}
@@ -7160,7 +7160,7 @@
 			"name": "seconds may end with the point",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (figuresAfter == 0)",
 					"to": "if (false)"
 				}
@@ -7170,7 +7170,7 @@
 			"name": "seconds may have anything after them",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "\t// Anything else left, a sign, a space, a letter or a second point, means it isn't a number of seconds\n\tif (*at != 0)",
 					"to": "\tif (false)"
 				}
@@ -7180,7 +7180,7 @@
 			"name": "seconds may be more than an hour",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (total > kMostMilliseconds)",
 					"to": "if (false)"
 				}
@@ -7190,7 +7190,7 @@
 			"name": "the figures after the point are worth ten times too much",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "long worth = 100;",
 					"to": "long worth = 1000;"
 				}
@@ -7200,7 +7200,7 @@
 			"name": "a picture of no rows fits anywhere",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (rows <= 0 || rowBytes <= 0 || bufferLength <= 0)",
 					"to": "if (rowBytes <= 0 || bufferLength <= 0)"
 				}
@@ -7210,7 +7210,7 @@
 			"name": "rows may be longer than the step between them",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "if (step < rowBytes)",
 					"to": "if (false)"
 				}
@@ -7220,7 +7220,7 @@
 			"name": "rows stored bottom up are checked as if top down",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "long long const lowest = pitch < 0 ? lastRow : firstRow;",
 					"to": "long long const lowest = firstRow;"
 				}
@@ -7230,7 +7230,7 @@
 			"name": "rows may start before their buffer",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "return lowest >= bufferStart && highest <= bufferStart + bufferLength;",
 					"to": "return highest <= bufferStart + bufferLength;"
 				}
@@ -7240,7 +7240,7 @@
 			"name": "rows may go past the end of their buffer",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "return lowest >= bufferStart && highest <= bufferStart + bufferLength;",
 					"to": "return lowest >= bufferStart;"
 				}
@@ -7250,7 +7250,7 @@
 			"name": "a shown part may start left of the picture",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "return left >= 0 && top >= 0 && width > 0",
 					"to": "return top >= 0 && width > 0"
 				}
@@ -7260,7 +7260,7 @@
 			"name": "a shown part may start above the picture",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "return left >= 0 && top >= 0 && width > 0",
 					"to": "return left >= 0 && width > 0"
 				}
@@ -7270,7 +7270,7 @@
 			"name": "a shown part may be of no size",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": "width > 0 && height > 0 && width <= frameWidth - left",
 					"to": "width <= frameWidth - left"
 				}
@@ -7280,7 +7280,7 @@
 			"name": "a shown part may go past the right side",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": " && width <= frameWidth - left && height <= frameHeight - top;",
 					"to": " && height <= frameHeight - top;"
 				}
@@ -7290,7 +7290,7 @@
 			"name": "a shown part may go past the bottom",
 			"changes": [
 				{
-					"file": "3dc/avp/hudson_plan.cpp",
+					"file": "tools/hudson/join_films_reads.cpp",
 					"from": " && height <= frameHeight - top;",
 					"to": ";"
 				}
@@ -7301,7 +7301,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/join-films.cpp",
-					"from": "const char *const why = HudsonPlan_ReadFilmSeconds(picture ? argv[3] : argv[2], &milliseconds);",
+					"from": "const char *const why = JoinFilms_ReadSeconds(picture ? argv[3] : argv[2], &milliseconds);",
 					"to": "milliseconds = (long)(atof(picture ? argv[3] : argv[2]) * 1000); const char *const why = 0;"
 				}
 			]

@@ -678,22 +678,20 @@ static void TestHostile()
 
 		struct LimitCase
 		{
-			size_t polygons, bits, places, moves;
+			HudsonGridLimits limits;
 			const char *reason;
 		};
 
 		LimitCase const cases[] = {
-			{ 1, 8000000, 2000000, 20000000, "the level has more polygons than the grid takes" },
-			{ 2000000, 100, 2000000, 20000000, "the level's polygons cross more columns than the grid takes" },
-			{ 2000000, 8000000, 100, 20000000, "the level has more places to stand than the grid takes" },
-			{ 2000000, 8000000, 2000000, 100, "the level has more moves than the grid takes" },
+			{ { 1, 8000000, 2000000, 20000000 }, "the level has more polygons than the grid takes" },
+			{ { 2000000, 100, 2000000, 20000000 }, "the level's polygons cross more columns than the grid takes" },
+			{ { 2000000, 8000000, 100, 20000000 }, "the level has more places to stand than the grid takes" },
+			{ { 2000000, 8000000, 2000000, 100 }, "the level has more moves than the grid takes" },
 		};
 
 		for (LimitCase const &limit : cases)
 		{
-			HudsonGrid limited;
-
-			limited.LowerLimitsForATest(limit.polygons, limit.bits, limit.places, limit.moves);
+			HudsonGrid limited(limit.limits);
 
 			char const *const answer = limited.Build(world);
 
@@ -701,9 +699,9 @@ static void TestHostile()
 			Check(!limited.Ready() && limited.Places() == 0 && limited.Moves() == 0, "and leaves nothing of a map");
 		}
 
-		HudsonGrid roomy;
+		HudsonGridLimits const twoPolygons = { 2, 8000000, 2000000, 20000000 };
+		HudsonGrid roomy(twoPolygons);
 
-		roomy.LowerLimitsForATest(2, 8000000, 2000000, 20000000);
 		Check(roomy.Build(world) == 0, "exactly as many polygons as the limit is fine");
 	}
 

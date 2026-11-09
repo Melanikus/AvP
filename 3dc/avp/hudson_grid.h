@@ -49,6 +49,15 @@ int const kHudsonGridMostSide = 32768;                // columns along one side,
 size_t const kHudsonGridMostBits = 8000000;           // polygons crossing columns, before they're joined up. 16 bytes each, while it's building
 size_t const kHudsonGridMostPlaces = 2000000;         // (about 800 000) about 60 bytes each, so about 120 MB at the very most
 size_t const kHudsonGridMostMoves = 20000000;         // 4 bytes each
+
+// The four limits a grid is made with. The game makes its grid with these. A test can make one with lower limits, to try each
+// limit without millions of polygons.
+struct HudsonGridLimits
+{
+	size_t polygons, bits, places, moves;
+};
+
+HudsonGridLimits const kHudsonGridLimits = { kHudsonGridMostPolygons, kHudsonGridMostBits, kHudsonGridMostPlaces, kHudsonGridMostMoves };
 int const kHudsonGridSpotReach = 3000;                // how far sideways a spot can be from the floor that's taken for it
 int const kHudsonGridSpotAbove = 30000;               // how far a spot can be above its floor: a join between rooms can be well up in the air
 int const kHudsonGridSpotBelow = 3000;                // and how far below it
@@ -102,7 +111,7 @@ struct HudsonGridCell
 class HudsonGrid
 {
 public:
-	HudsonGrid();
+	explicit HudsonGrid(HudsonGridLimits const &limits = kHudsonGridLimits);
 
 	void Clear();
 
@@ -110,9 +119,6 @@ public:
 	const char *Build(const std::vector<HudsonGridPolygon> &polygons);
 
 	bool Ready() const { return ready; }
-
-	// Lowers the limits, so that a test can try each one without millions of polygons. Nothing else calls this.
-	void LowerLimitsForATest(size_t mostPolygons, size_t mostBits, size_t mostPlaces, size_t mostMoves);
 
 	// Starts looking for a way between two places. They don't have to be exactly on a floor: the nearest suitable floor is taken for each. toY can be in mid-air.
 	void StartSearch(int fromX, int fromY, int fromZ, int toX, int toY, int toZ);
