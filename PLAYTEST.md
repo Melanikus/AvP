@@ -106,7 +106,8 @@ pieces. If a game stalls only over a VPN, try without it.
   at most once a second, and keeps the newest 20 pictures. Tell us the mark's number when you describe what you saw.
   If you've given F2 to one of your controls, F2 does that instead and marks nothing.
 - **The M5 guns:**
-  - **As a marine:** open the console (the key under Esc, left of 1) and type `GIVEALLWEAPONS`, in capitals. It gives every marine
+  - **As a marine:** open the console and type `GIVEALLWEAPONS`, in capitals. (On a UK keyboard the console is the key under Esc;
+    on others it may be another key, or none, so tell us which key works for you.) It gives every marine
     gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest. In single player and the co-op campaign it's the only
     way to get the sniper rifle for now, since no level places one yet. Other multiplayer games leave the sniper rifle out.
   - **In other multiplayer games,** a marine can also pick the shotgun, revolver or M79 class.
