@@ -267,6 +267,7 @@ int GetLocalMultiplayerLevelIndex(int, char *, int)
 // ENet, counting
 static int socketsCreated = 0, socketsDestroyed = 0, socketsOpen = 0;
 static int waitsOnASocket = 0, waitsOnNoSocket = 0, datagramsSent = 0;
+static int datagramsTried = 0;   // sent or not: a check of a refused send needs to know one was tried
 static bool socketCreateFails = false, socketBindFails = false, datagramSendFails = false, hostCreateFails = false, packetCreateFails = false;
 static std::vector<ENetAddress> socketsBoundTo, datagramsSentTo;
 
@@ -821,6 +822,8 @@ int enet_socket_receive(ENetSocket, ENetAddress *address, ENetBuffer *buffers, s
 
 int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *buffers, size_t)
 {
+	datagramsTried++;
+
 	if (datagramSendFails)
 	{
 		return -1;
@@ -1471,6 +1474,143 @@ static void TestTheRelayOnTheScreen()
 
 	thePeer.lastReceiveTime = 0;
 	thePeer.roundTripTime = 0;
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: THE LINE IN PLAY'S COUNTS (Net_RelayCountsNow, net_traffic.h). Everything through the
+// game's socket since its host was made: what ENet counts, and the relay's own messages, which go past ENet, so the game counts them where
+// it sends and reads them. A new host starts again from 0, the counts come in each time the network is served, and the last second's
+// figures once a second has gone. The stand-in ENet's totals are only ever raised here, so the log's numbers in later tests aren't upset.
+static void TestTheRelayCountsOnTheScreen()
+{
+	printf("The line in play's counts\n");
+	NetRelayCounts counts;
+	memset(&counts, 0xA5, sizeof(counts));
+	Net_RelayCountsNow(&counts);
+	Check(!counts.throughRelay && counts.packetsIn == 0 && counts.packetsOut == 0 && counts.bytesIn == 0 && counts.bytesOut == 0
+		&& counts.packetsInLastSecond == 0 && counts.bytesOutLastSecond == 0, "with no game, every count is 0");
+	Net_RelayCountsNow(NULL);
+	Check(true, "and asking with nowhere to put them does nothing");
+
+	// Whatever ENet had counted before the host was made isn't this game's
+	theHost.totalReceivedPackets += 1000;
+	theHost.totalSentPackets += 2000;
+	theHost.totalReceivedData += 100000;
+	theHost.totalSentData += 200000;
+	relayNamed = true;
+	int const sentAtFirst = datagramsSent;
+	Check(HostAGame() == NET_OK, "a game hosts through the relay");
+	Net_RelayCountsNow(&counts);
+	Check(!counts.throughRelay && counts.packetsIn == 0 && counts.bytesIn == 0 && counts.packetsOut >= 1
+		&& counts.packetsOut == static_cast<unsigned long long>(datagramsSent - sentAtFirst) && counts.bytesOut == counts.packetsOut * kNetRelayMessageBytes,
+		"a new host starts from 0, whatever ENet had counted, and its first echo to the relay, which goes past ENet, is counted at its size");
+
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	Net_RelayCountsNow(&counts);
+	Check(counts.throughRelay && counts.packetsOut == static_cast<unsigned long long>(datagramsSent - sentAtFirst)
+		&& counts.bytesOut == counts.packetsOut * kNetRelayMessageBytes, "its room open, it goes through the relay, and every message to the relay is counted");
+
+	// What ENet counts comes in when the network is served, not when the screen asks
+	unsigned long long const outBefore = counts.packetsOut;
+	unsigned long long const bytesOutBefore = counts.bytesOut;
+	theHost.totalReceivedPackets += 30;
+	theHost.totalReceivedData += 3000;
+	theHost.totalSentPackets += 20;
+	theHost.totalSentData += 2000;
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsIn == 0 && counts.packetsOut == outBefore, "asking changes nothing");
+	int const sentBeforeServing = datagramsSent;
+	Net_ServiceNetwork();
+	unsigned long long const sentWhileServing = static_cast<unsigned long long>(datagramsSent - sentBeforeServing);
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsIn == 30 && counts.bytesIn == 3000 && counts.packetsOut == outBefore + 20 + sentWhileServing
+		&& counts.bytesOut == bytesOutBefore + 2000 + sentWhileServing * kNetRelayMessageBytes,
+		"served, ENet's packets and bytes each way are added to the relay's own messages");
+
+	// While a level loads, the network is answered from the loading, and the counts come in there too
+	Net_SayLongestGapWhileLoading();
+	theHost.totalReceivedPackets += 5;
+	theHost.totalReceivedData += 500;
+	Net_KeepAnsweringWhileLoading();
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsIn == 35 && counts.bytesIn == 3500, "and while a level loads, they come in each time it answers the network");
+
+	// The last second: a window closes once it has run a second, and its figures stay until the next has
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	NetRelayCounts closed;
+	Net_RelayCountsNow(&closed);
+	theHost.totalReceivedPackets += 50;
+	theHost.totalReceivedData += 5000;
+	enetClock += 999;
+	Net_ServiceNetwork();
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsIn == 85 && counts.packetsInLastSecond == closed.packetsInLastSecond && counts.bytesInLastSecond == closed.bytesInLastSecond,
+		"999 ms into a window, the totals are up to date, and the last second's figures are still the last window's");
+	enetClock += 1;
+	Net_ServiceNetwork();
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsInLastSecond == 50 && counts.bytesInLastSecond == 5000, "a second in, they're that second's: 50 packets and 5,000 bytes in");
+
+	// A message the socket refused went nowhere, so it isn't counted: the keep, 15 s on
+	int const triedBefore = datagramsTried;
+	unsigned long long const outBeforeRefused = counts.packetsOut;
+	datagramSendFails = true;
+	enetClock += kNetRelayKeepEveryMs;
+	Net_ServiceNetwork();
+	datagramSendFails = false;
+	Net_RelayCountsNow(&counts);
+	Check(datagramsTried > triedBefore && counts.packetsOut == outBeforeRefused, "a message to the relay that the socket refused isn't counted");
+
+	EndTheGame();
+	Net_RelayCountsNow(&counts);
+	Check(!counts.throughRelay && counts.packetsIn == 0 && counts.packetsOut == 0 && counts.bytesIn == 0 && counts.packetsInLastSecond == 0,
+		"leaving the game: every count is 0 again");
+
+	// A joiner through a relay: its handshake with the relay goes past ENet both ways, before ENet connects, and is counted from the start
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	int const joinerSentBefore = datagramsSent;
+	Check(Net_ConnectToSession(0, playerName) == NET_OK, "a game joined through a relay");
+	Net_RelayCountsNow(&counts);
+	Check(counts.throughRelay && counts.packetsIn == 2 && counts.bytesIn == 2 * kNetRelayMessageBytes && counts.packetsOut >= 1
+		&& counts.packetsOut == static_cast<unsigned long long>(datagramsSent - joinerSentBefore) && counts.bytesOut == counts.packetsOut * kNetRelayMessageBytes,
+		"the joiner's counts start with the relay's handshake: the 2 messages it read and every one it sent");
+	theHost.totalReceivedPackets += 7;
+	theHost.totalReceivedData += 700;
+	Net_ServiceNetwork();
+	Net_RelayCountsNow(&counts);
+	Check(counts.packetsIn == 9 && counts.bytesIn == 2 * kNetRelayMessageBytes + 700, "then what ENet counts is added to them");
+	EndTheGame();
+
+	// A game joined on this network is counted too, for any screen that wants it, with no relay
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	Check(JoinAGame() == NET_OK, "a game joined on this network");
+	theHost.totalSentPackets += 4;
+	theHost.totalSentData += 400;
+	Net_ServiceNetwork();
+	Net_RelayCountsNow(&counts);
+	Check(!counts.throughRelay && counts.packetsIn == 0 && counts.packetsOut == 4 && counts.bytesOut == 400, "is counted from 0 too, and isn't through a relay");
+	EndTheGame();
+
 	relayNamed = false;
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
@@ -3632,6 +3772,7 @@ int main()
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
 	TestTheRelayOnTheScreen();
+	TestTheRelayCountsOnTheScreen();
 	TestARunsOneRelayBeyondThisMachine();
 	TestTimingTheRelaysForJoining();
 	TestTheRequestToJoin();

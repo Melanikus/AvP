@@ -2744,6 +2744,126 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a message to the relay isn't counted in the line in play's counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tNetTraffic_Sent(&netTraffic, kNetRelayMessageBytes);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a message to the relay that the socket refused is counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (enet_socket_send(from->socket, &to, &buffer, 1) > 0)",
+					"to": "if (enet_socket_send(from->socket, &to, &buffer, 1) != 0)"
+				}
+			]
+		},
+		{
+			"name": "what a joiner reads from the relay before ENet connects isn't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tNetTraffic_Received(&netTraffic, static_cast<size_t>(got));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new host's counts don't start again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t// Modified 2026-11-09 by Melanikus for the AvP port: the line in play's counts start again (Net_RelayCountsNow)\n\t\t\tStartTheTrafficCounts();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner's counts don't start again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t// count too (Net_RelayCountsNow)\n\tStartTheTrafficCounts();\n",
+					"to": "\t// count too (Net_RelayCountsNow)\n"
+				}
+			]
+		},
+		{
+			"name": "ENet's counts don't come in when the network is served",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogConnectionNumbers();\n\t\tLookAtTheTraffic();",
+					"to": "\t\tLogConnectionNumbers();\n\t\t;"
+				}
+			]
+		},
+		{
+			"name": "ENet's counts don't come in while a level loads",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_host_service(host, NULL, 0);\n\tLookAtTheTraffic();",
+					"to": "enet_host_service(host, NULL, 0);\n\t;"
+				}
+			]
+		},
+		{
+			"name": "the counts don't say the game goes through a relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tcounts->throughRelay = play.throughRelay;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the counts are given with no game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!host || !netTraffic.started)\n",
+					"to": "\tif (!netTraffic.started)\n"
+				}
+			]
+		},
+		{
+			"name": "the packets out are the packets in",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tcounts->packetsOut = netTraffic.packetsOut;\n",
+					"to": "\tcounts->packetsOut = netTraffic.packetsIn;\n"
+				}
+			]
+		},
+		{
+			"name": "the last second's bytes in aren't given",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tcounts->bytesInLastSecond = netTraffic.bytesInLastSecond;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the counts' look is at ENet's sent bytes for its received ones",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetTraffic_FromENet(&netTraffic, host->totalReceivedPackets, host->totalSentPackets, host->totalReceivedData, host->totalSentData);",
+					"to": "NetTraffic_FromENet(&netTraffic, host->totalReceivedPackets, host->totalSentPackets, host->totalSentData, host->totalSentData);"
+				}
+			]
 		}
 	]
 }

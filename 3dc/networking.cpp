@@ -87,11 +87,31 @@
 #include "relay_shared.h"
 #include "relay_list.h"
 #include "net_watch.h"
+#include "net_traffic.h"
 #include <assert.h>
 #include <random>
 #include "MemoryStream.h"
 
 static ENetHost *host = NULL;
+
+// Added 2026-11-09 by Melanikus for the AvP port: how much has gone through that host's socket since it was made, for the relay's line in
+// play (Net_RelayCountsNow, net_traffic.h). It starts again with each new host. The search port and the joiner's relay timing have sockets
+// of their own, and aren't counted: this is the game's traffic.
+static NetTraffic netTraffic;
+
+// A new host: its counts start at 0, from what its ENet has counted so far
+static void StartTheTrafficCounts()
+{
+	NetTraffic_Start(&netTraffic, host->totalReceivedPackets, host->totalSentPackets, host->totalReceivedData, host->totalSentData, enet_time_get());
+}
+
+// Each time the network is served: what ENet has counted since the last look goes in, and the last second's figures are made once a second
+// has passed (net_traffic.h)
+static void LookAtTheTraffic()
+{
+	NetTraffic_FromENet(&netTraffic, host->totalReceivedPackets, host->totalSentPackets, host->totalReceivedData, host->totalSentData);
+	NetTraffic_Tick(&netTraffic, enet_time_get());
+}
 
 static ENetAddress  ServerAddress;
 static ENetAddress  ClientAddress;
@@ -470,7 +490,13 @@ static void RelaySendAll(ENetHost *from, End &end, const ENetAddress *addresses,
 		ENetBuffer buffer;
 		buffer.data = sends[i].bytes;
 		buffer.dataLength = kNetRelayMessageBytes;
-		enet_socket_send(from->socket, &to, &buffer, 1);
+
+		// Modified 2026-11-09 by Melanikus for the AvP port: this goes past ENet, so ENet doesn't count it, and the line in play's counts
+		// do it here (net_traffic.h). Only what went: a send the socket refused sent nothing.
+		if (enet_socket_send(from->socket, &to, &buffer, 1) > 0)
+		{
+			NetTraffic_Sent(&netTraffic, kNetRelayMessageBytes);
+		}
 	}
 }
 
@@ -811,6 +837,9 @@ static uint16_t RelayHandshake(const char *code)
 				break;
 			}
 
+			// Modified 2026-11-09 by Melanikus for the AvP port: read past ENet, so counted here (net_traffic.h), whoever it's from
+			NetTraffic_Received(&netTraffic, static_cast<size_t>(got));
+
 			if (from.host == relayAddress.host)
 			{
 				relayJoiner.Hear(from.port, packet, static_cast<size_t>(got), enet_time_get());
@@ -891,6 +920,36 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 			state->ms = ServerPeer->roundTripTime > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(ServerPeer->roundTripTime);
 		}
 	}
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: how much the game has sent and got, for the same line (networking.h; the owner asked for
+// packet counts there). Read only too: the counts are brought up to date each time the network is served (LookAtTheTraffic), not here.
+// Whether the game goes through a relay is the line in play's own answer, so the two can never disagree.
+void Net_RelayCountsNow(NetRelayCounts *counts)
+{
+	if (!counts)
+	{
+		return;
+	}
+
+	memset(counts, 0, sizeof(*counts));
+
+	if (!host || !netTraffic.started)
+	{
+		return;
+	}
+
+	NetRelayPlayState play;
+	Net_RelayPlayStateNow(&play);
+	counts->throughRelay = play.throughRelay;
+	counts->packetsIn = netTraffic.packetsIn;
+	counts->packetsOut = netTraffic.packetsOut;
+	counts->bytesIn = netTraffic.bytesIn;
+	counts->bytesOut = netTraffic.bytesOut;
+	counts->packetsInLastSecond = netTraffic.packetsInLastSecond;
+	counts->packetsOutLastSecond = netTraffic.packetsOutLastSecond;
+	counts->bytesInLastSecond = netTraffic.bytesInLastSecond;
+	counts->bytesOutLastSecond = netTraffic.bytesOutLastSecond;
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column (Fourth's online
@@ -1776,6 +1835,9 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
+			// Modified 2026-11-09 by Melanikus for the AvP port: the line in play's counts start again (Net_RelayCountsNow)
+			StartTheTrafficCounts();
+
 			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
 			if (OnTheRemoteRoute(ServerAddress))
 			{
@@ -2299,6 +2361,7 @@ void Net_KeepAnsweringWhileLoading()
 
 	// With nowhere to put an event, ENet acknowledges what's arrived and keeps it for later
 	enet_host_service(host, NULL, 0);
+	LookAtTheTraffic();   // Modified 2026-11-09 by Melanikus for the AvP port: the line in play's counts (Net_RelayCountsNow)
 
 	// A long level load mustn't lose the room on the relay
 	RelayHostFrame();
@@ -2330,6 +2393,7 @@ void Net_ServiceNetwork()
 		enet_host_service(host, NULL, 0);
 
 		LogConnectionNumbers();
+		LookAtTheTraffic();   // Modified 2026-11-09 by Melanikus for the AvP port: the line in play's counts (Net_RelayCountsNow)
 
 		// The relay's part of hosting, after ENet has handed over what came: the echoes, the room, the keep and the hellos. It does
 		// nothing unless this game is hosted through a relay.
@@ -3092,6 +3156,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		Con_PrintError("Net_ConnectToSession - Failed to create Enet client");
 		return NET_FAIL;
 	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: the line in play's counts start again, before the relay's handshake, which they
+	// count too (Net_RelayCountsNow)
+	StartTheTrafficCounts();
 
 	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
 	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))

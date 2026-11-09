@@ -1,0 +1,188 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a send before the start is counted",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "inline void NetTraffic_Sent(NetTraffic *t, size_t bytes)\n{\n\tif (t->started)",
+					"to": "inline void NetTraffic_Sent(NetTraffic *t, size_t bytes)\n{\n\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "a read before the start is counted",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "inline void NetTraffic_Received(NetTraffic *t, size_t bytes)\n{\n\tif (t->started)",
+					"to": "inline void NetTraffic_Received(NetTraffic *t, size_t bytes)\n{\n\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "ENet's totals before the start are counted",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tif (!t->started)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new host's counts don't start at 0",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tmemset(t, 0, sizeof(*t));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new host takes ENet's totals as its own",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tmemset(t, 0, sizeof(*t));\n\tt->enetPacketsIn = enetPacketsIn;\n",
+					"to": "\tmemset(t, 0, sizeof(*t));\n"
+				}
+			]
+		},
+		{
+			"name": "ENet's totals wrapping round add a wrapped-round amount",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "t->packetsIn += static_cast<uint32_t>(enetPacketsIn - t->enetPacketsIn);",
+					"to": "t->packetsIn += static_cast<uint64_t>(enetPacketsIn) - t->enetPacketsIn;"
+				}
+			]
+		},
+		{
+			"name": "a look doesn't remember ENet's totals, so the next adds them again",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tt->enetPacketsIn = enetPacketsIn;\n\tt->enetPacketsOut = enetPacketsOut;\n\tt->enetBytesIn = enetBytesIn;\n\tt->enetBytesOut = enetBytesOut;\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "a send past ENet isn't a packet",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\t\tt->packetsOut++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a read past ENet adds no bytes",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\t\tt->bytesIn += bytes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a window closes before it has run a second",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tif (ran < kNetTrafficWindowMs)",
+					"to": "\tif (ran < kNetTrafficWindowMs - 1)"
+				}
+			]
+		},
+		{
+			"name": "a window that ran long gives the whole burst, not a second of it",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "NetTraffic_PerSecond(t->packetsIn - t->windowPacketsIn, ran)",
+					"to": "NetTraffic_PerSecond(t->packetsIn - t->windowPacketsIn, kNetTrafficWindowMs)"
+				}
+			]
+		},
+		{
+			"name": "the next window counts from the host's start, not its own",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tt->windowPacketsIn = t->packetsIn;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the next window doesn't open when the last closes",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tt->windowOpenedAt = now;\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "the clock wrapping round stops the windows",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "uint32_t const ran = now - t->windowOpenedAt;",
+					"to": "uint32_t const ran = now > t->windowOpenedAt ? now - t->windowOpenedAt : 0;"
+				}
+			]
+		},
+		{
+			"name": "the bytes out a second are the bytes in",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "t->bytesOutLastSecond = NetTraffic_PerSecond(t->bytesOut - t->windowBytesOut, ran);",
+					"to": "t->bytesOutLastSecond = NetTraffic_PerSecond(t->bytesIn - t->windowBytesIn, ran);"
+				}
+			]
+		},
+		{
+			"name": "a figure for a second past 32 bits wraps round",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "return perSecond > 0xFFFFFFFFu ? 0xFFFFFFFFu : static_cast<uint32_t>(perSecond);",
+					"to": "return static_cast<uint32_t>(perSecond);"
+				}
+			]
+		},
+		{
+			"name": "a count too big for 64 bits wraps round",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tif (count > UINT64_MAX / kNetTrafficWindowMs)",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "a window of no time divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/net_traffic.h",
+					"from": "\tif (milliseconds == 0)",
+					"to": "\tif (false)"
+				}
+			]
+		}
+	]
+}

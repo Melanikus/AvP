@@ -316,4 +316,18 @@ struct NetRelayPlayState
 };
 void Net_RelayPlayStateNow(NetRelayPlayState *state);
 
+// Added 2026-11-09 by Melanikus for the AvP port: how much the game has sent and got, for the same line (the owner asked for packet counts
+// there). Read only too, so a screen can ask every frame. Everything through the game's own socket since this game's network was started:
+// ENet's packets and the relay's own small messages, which go past ENet (net_traffic.h). Playing through a relay, that's all of it, since
+// everything goes to and from the relay. The counts are there for any network game, so the screen chooses where to show them, and they're
+// all 0 with no network game. A packet is one datagram, so a byte count includes ENet's own headers: it's what the network carries.
+struct NetRelayCounts
+{
+	bool throughRelay;   // the line in play's own answer (Net_RelayPlayStateNow): whether this game goes through a relay
+	unsigned long long packetsIn, packetsOut, bytesIn, bytesOut;   // since the game's network was started
+	unsigned int packetsInLastSecond, packetsOutLastSecond;   // over the last second; 0 until a second has gone
+	unsigned int bytesInLastSecond, bytesOutLastSecond;
+};
+void Net_RelayCountsNow(NetRelayCounts *counts);
+
 #endif // #ifndef _NETWORKING_

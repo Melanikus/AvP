@@ -77,6 +77,8 @@ struct ENetHost
 	size_t peerCount;
 	enet_uint32 totalSentData;            // these two, for the network's numbers in the log (net_stats.h)
 	enet_uint32 totalReceivedData;
+	enet_uint32 totalSentPackets;         // and these two with them, for the line in play's counts (net_traffic.h)
+	enet_uint32 totalReceivedPackets;
 	ENetSocket socket;                    // these five, for the relay (net_relay.h): the relay's messages go from the host's own socket,
 	ENetAddress receivedAddress;          // and the intercept is shown each packet before ENet reads it
 	uint8_t *receivedData;
