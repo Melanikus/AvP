@@ -2974,6 +2974,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a draft's host doesn't hand the list its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();\n\t\tRelayList_HostIdentity(runIdentity.fingerprint);",
+					"to": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
+		},
+		{
+			"name": "a host without the draft hands the list a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();",
+					"to": "\tif (true)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
 		}
 	]
 }

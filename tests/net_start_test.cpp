@@ -132,6 +132,15 @@ void RelayList_HostRoomClosed(void)
 	roomsUnlisted++;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): the fingerprint a host hands the list for its listing, which
+// only a v2 draft's host does (TestTheV2Draft)
+static int identitiesListed = 0;
+
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	identitiesListed += fingerprint ? 1 : 0;
+}
+
 void Con_PrintDebugMessage(const std::string &)
 {
 }
@@ -3742,6 +3751,13 @@ static void TestTheV2Draft()
 
 	// When it's on, and what the log says
 	Check(Net_V2DraftOn() && Net_OurVersion() == kNetV2DraftVersion, "with -dev, -netv2 and a build that knows its commit, the draft is on, at version 115");
+
+	// On: a host through the relay hands the list its identity's fingerprint, for its listing
+	relayNamed = true;
+	int const identitiesBeforeOn = identitiesListed;
+	Check(HostAGame() == NET_OK && identitiesListed == identitiesBeforeOn + 1, "with the draft on, a game hosted through the relay hands the list its fingerprint");
+	EndTheGame();
+	relayNamed = false;
 	RestartTheNetworkForTheDraft();
 	Check(LogHas("net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit"),
 		"and the log says so when the network starts");
@@ -3814,7 +3830,9 @@ static void TestTheV2Draft()
 	NetV2DraftAsked = false;
 	relayNamed = true;
 	size_t const sentBeforeHosting = datagramsSentBytes.size();
+	int const identitiesBeforeOff = identitiesListed;
 	Check(HostAGame() == NET_OK && theHost.sendHook == NULL, "with the draft off, a game hosted through the relay sends ENet's datagrams itself, unsealed, as version 1 does");
+	Check(identitiesListed == identitiesBeforeOff, "and hands the list no fingerprint: version 1's listing has none");
 	HostThroughTheRelayUntilItsRoomIsOpen();
 	uint8_t game[48];
 	memset(game, 0x47, sizeof(game));
