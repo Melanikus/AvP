@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SIGNATURE: a missing signature is read",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "if (signature == NULL || signatureLength",
+					"to": "if (signatureLength"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a signature of the wrong size goes to the library",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "signatureLength != kPqSignatureBytes || publicKey == NULL",
+					"to": "publicKey == NULL"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a missing key is read",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "|| publicKey == NULL || publicKeyLength",
+					"to": "|| publicKeyLength"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a key of the wrong size goes to the library",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "publicKey == NULL || publicKeyLength != kPqSignaturePublicKeyBytes)",
+					"to": "publicKey == NULL)"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a missing message that claims to have bytes is read",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "if ((message == NULL && messageLength != 0) || (context == NULL",
+					"to": "if ((context == NULL"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a missing context that claims to have bytes is read",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": " || (context == NULL && contextLength != 0))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SIGNATURE: a signature the library refuses is taken",
+			"changes": [
+				{
+					"file": "3dc/pq_signature_check.cpp",
+					"from": "publicKey) == 0;",
+					"to": "publicKey) <= 0;"
+				}
+			]
+		}
+	]
+}

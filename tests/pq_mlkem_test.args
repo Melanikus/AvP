@@ -1,0 +1,7 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /we4834 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602
+/I3dc /Ivcpkg_installed/x86-windows/include
+tests/pq_mlkem_test.cpp
+3dc/pq_key_exchange.cpp
+vcpkg_installed/x86-windows/lib/mlkem_native.lib
+bcrypt.lib

@@ -38,12 +38,13 @@ jobs:
         run: ./tests/compile-shaders.ps1
 
       # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
-      # library the game does, and the network tests link the game's ENet, so both come before the tests are built. The action says how
-      # they're made, the same way as a real build, and the Take-outs check uses it too.
-      - name: Fetch the game's shader compiler and ENet
+      # library the game does, the network tests link the game's ENet, and the post-quantum tests (pq_mlkem_test, pq_mldsa_test) link
+      # mlkem-native and mldsa-native, so all of them come before the tests are built. The action says how they're made, the same way as
+      # a real build, and the Take-outs check uses it too.
+      - name: Fetch the game's shader compiler, ENet and the post-quantum libraries
         uses: ./.github/actions/fetch-test-libraries
         with:
-          ports: dxsdk-d3dx enet
+          ports: dxsdk-d3dx enet mldsa-native mlkem-native
 
       - name: Build the tests
         shell: pwsh
@@ -150,15 +151,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # The same libraries as the Unit tests job, for the tests that use them, but ENet is built with the sanitizer here, so its code is
-      # watched too: it's the code that reads what comes in from the network. sanitize.ps1 links the network tests against that copy, and
+      # The same libraries as the Unit tests job, for the tests that use them, but ENet and the two post-quantum libraries are built
+      # with the sanitizer here, so their code is watched too: it's the code that reads what comes in from the network. sanitize.ps1 links the network tests against that copy, and
       # refuses any test that links an object or a library compiled without the sanitizer. Microsoft's D3DX comes as Microsoft makes it:
       # it's their program, with no source to build, and the shader test only loads it.
-      - name: Fetch the game's shader compiler, and ENet built with the sanitizer
+      - name: Fetch the game's shader compiler, and ENet and the post-quantum libraries built with the sanitizer
         uses: ./.github/actions/fetch-test-libraries
         with:
           ports: dxsdk-d3dx
-          sanitized-ports: enet
+          sanitized-ports: enet mldsa-native mlkem-native
 
       # Each test is built and run by sanitize.ps1 in a PowerShell of its own, so nothing one test's run leaves behind reaches the next.
       # Every test of the part is run, even after one fails, and then the step fails, naming each one that didn't pass. sanitize.ps1 gives
