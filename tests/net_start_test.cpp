@@ -1073,17 +1073,25 @@ static void TestHostingThroughTheRelay()
 	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "+ relayRegion"), "SOURCE: no line the game writes holds the list's region: the words are the game's own (Fourth's cold read, finding 3)");
 }
 
+// Words into one of a listing's fields, cut to its room, and always ended with a 0, whatever is handed in
+template <size_t N> static void PutWords(char (&field)[N], const char *words)
+{
+	_snprintf(field, N - 1, "%s", words ? words : "");
+	field[N - 1] = '\0';
+}
+
 // Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list goes on the list of sessions (Net_AddRelaySession), as
 // one found on this network does, with the same checks; and never past the end of the list
+// Modified 2026-11-09 by Melanikus for the AvP port: each field is filled cut to its own room (PutWords), never by strcpy
 static RelayListGame AGameOnTheList(const char *code)
 {
 	RelayListGame game;
 	memset(&game, 0, sizeof(game));
-	strcpy(game.region, "virginia");
-	strcpy(game.code, code);
-	strcpy(game.name, "Hunt");
-	strcpy(game.level, "Genshd1");
-	strcpy(game.mode, "Cooperative");
+	PutWords(game.region, "virginia");
+	PutWords(game.code, code);
+	PutWords(game.name, "Hunt");
+	PutWords(game.level, "Genshd1");
+	PutWords(game.mode, "Cooperative");
 	game.players = 1;
 	game.maxPlayers = 4;
 	game.version = kMultiplayerVersion;

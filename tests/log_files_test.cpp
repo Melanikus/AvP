@@ -324,13 +324,32 @@ static void TestBuildLines()
 
 	Check(lines.compare(0, 15, "build: version ") == 0 && Has(lines, ", commit "), "the first line says the version and the commit, or that they're not known");
 
-	char path[MAX_PATH];
-	::GetModuleFileNameA(NULL, path, MAX_PATH);
-	std::string const program = ReadWholeFile(path);
+	char path[MAX_PATH] = { 0 };
+	DWORD const pathLength = ::GetModuleFileNameA(NULL, path, MAX_PATH);
+	bool const pathIsWhole = pathLength > 0 && pathLength < MAX_PATH;
+	Check(pathIsWhole, "this program's own path can be read whole");
 
+	// The program read in pieces of a fixed size, as build_identity.cpp reads it, so no more than one piece is ever handed on at once
 	struct MD5Context md5;
 	MD5Init(&md5);
-	MD5Update(&md5, (md5byte const *)program.data(), (unsigned)program.size());
+	unsigned long long programSize = 0;
+	FILE *const program = pathIsWhole ? fopen(path, "rb") : NULL;
+	Check(program != NULL, "and the program can be opened");
+
+	if (program)
+	{
+		static unsigned char piece[65536];
+		size_t got = 0;
+
+		while ((got = fread(piece, 1, sizeof(piece), program)) > 0)
+		{
+			MD5Update(&md5, (md5byte const *)piece, (unsigned)got);
+			programSize += got;
+		}
+
+		fclose(program);
+	}
+
 	unsigned char digest[16];
 	MD5Final(digest, &md5);
 	char expected[100];
@@ -342,7 +361,7 @@ static void TestBuildLines()
 	}
 
 	hex[32] = '\0';
-	_snprintf(expected, sizeof(expected) - 1, "\nbuild: this program is %u bytes, MD5 %s (worked out in ", (unsigned)program.size(), hex);
+	_snprintf(expected, sizeof(expected) - 1, "\nbuild: this program is %u bytes, MD5 %s (worked out in ", (unsigned)programSize, hex);
 	expected[sizeof(expected) - 1] = '\0';
 	Check(Has(lines, expected), "the second line has this program's size and fingerprint, and they're right");
 	Check(!Has(lines, path), "and not the program's folder");
