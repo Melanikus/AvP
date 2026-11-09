@@ -274,7 +274,18 @@ static void TestFailingHook()
 	}
 
 	bool const connected = made && Connect(&pair, 1500);
-	HookCheck(made && !connected && seen.calls >= 2 && seen.cookies >= 1, "a hook that gives -1 for a connection's datagrams: no connection is made");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: one check for each thing, with its numbers, so a failure says which (GitHub's run on
+	// a410ef23 failed the four together, and this test only runs there). The third is the one that matters most: nothing the hook refused
+	// may reach the client.
+	char said[220];
+	snprintf(said, sizeof(said), "a hook that gives -1 for a connection's datagrams: no connection is made (made %d, connected %d)", made ? 1 : 0, connected ? 1 : 0);
+	HookCheck(made && !connected, said);
+	snprintf(said, sizeof(said), "the hook was given the token answer and at least one of the connection's datagrams (%d in all, %d token answer(s))", seen.calls, seen.cookies);
+	HookCheck(seen.calls >= 2 && seen.cookies >= 1, said);
+	snprintf(said, sizeof(said), "nothing but the token answers reached the client (it received %u, and %d token answer(s) were passed on)",
+		made ? static_cast<unsigned>(pair.client->totalReceivedPackets) : 0u, seen.cookies);
+	HookCheck(made && pair.client->totalReceivedPackets == static_cast<enet_uint32>(seen.cookies), said);
 	HookCheck(pair.hostFailed, "and ENet reports the -1 from enet_host_service, as it would the socket's own error");
 	EndHosts(&pair);
 }

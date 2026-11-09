@@ -1569,6 +1569,11 @@ static void TestTimingTheRelaysForJoining()
 
 	Net_ForgetRelayTimes();
 	datagramsWaiting.clear();
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: the list names no relay again, as every relay test leaves it. This one didn't, so every
+	// test after it hosted through the relay without saying so, and the one that checks a host's own limits (TestLettingPeopleIn) saw the
+	// relay's.
+	relayNamed = false;
 }
 
 static void TestStartingTheGame()
