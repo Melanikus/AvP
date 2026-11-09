@@ -60,6 +60,19 @@ ConnectionVerdict ConnectionCheck_Verdict(const ConnectionFacts &f)
 	return kConnFine;
 }
 
+const char *ConnectionCheck_HostWords(ConnectionVerdict verdict)
+{
+	switch (verdict)
+	{
+		case kConnBlocks:
+			return "Something on this PC stops AVPx going online: Multiplayer, Connection check says what";
+		case kConnMayBlock:
+			return "Something on this PC may stop others reaching you: Multiplayer, Connection check says what";
+		default:
+			return "";
+	}
+}
+
 // The kinds as words, in the order a player most often has them: "Public", "Public and Private", "Public, Private and Domain"
 static void KindsWords(unsigned kinds, char *words, size_t size)
 {

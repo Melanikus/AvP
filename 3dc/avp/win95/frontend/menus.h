@@ -7,6 +7,7 @@
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
 //   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
 //   (AVPMENU_ELEMENT_FINDAGAIN)
+//   the Connection check page and its rows (beta.2's "nobody blocked silently", connection_page.h)
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
@@ -138,7 +139,8 @@ enum AVPMENU_ID
 	AVPMENU_COOP_OUT,          // one plain sentence, for a player the co-op game has ended for, and why
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
-	AVPMENU_COOP_HOSTQUITS     // a host is asked if they mean to end the game for everyone
+	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
+	AVPMENU_CONNECTION_CHECK   // what on this PC could stop AVPx playing online, and Windows' own pages: see connection_page.h
 };
 
 enum AVPMENU_FONT_ID
@@ -227,6 +229,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
+	AVPMENU_ELEMENT_CONNECTION_CHECK, // a row of the Connection check page (connection_page.h). Its MaxValue is which (kConnRow...)
 };
 
 

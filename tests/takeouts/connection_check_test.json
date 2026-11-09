@@ -213,6 +213,96 @@
 					"to": "\t\tif (false) Line(made[n++], \"If one asks whether AvP_Classic.exe"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page has no Connection check row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_CONNCHECK_ROW},",
+					"to": "{AVPMENU_ELEMENT_ENDOFMENU,\t{TEXTSTRING_CONNCHECK_ROW},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page has no Check again row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{AVPMENU_ELEMENT_CONNECTION_CHECK,\t{TEXTSTRING_CONNCHECK_AGAIN},\t{kConnRowAgain},",
+					"to": "{AVPMENU_ELEMENT_CONNECTION_CHECK,\t{TEXTSTRING_CONNCHECK_AGAIN},\t{kConnRowNetwork},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: opening the page asks Windows nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tConnectionPage_Opened();\n",
+					"to": "\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Check again asks Windows nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/connection_page.cpp",
+					"from": "case kConnRowAgain:\n\t\t\tConnectionCheck_Start();",
+					"to": "case kConnRowAgain:\n\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the network row opens the firewall page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/connection_page.cpp",
+					"from": "case kConnRowNetwork:\n\t\t\tConnectionCheck_OpenNetworkSettings();",
+					"to": "case kConnRowNetwork:\n\t\t\tConnectionCheck_OpenFirewallSettings();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a row pressed does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tConnectionPage_Pressed(elementPtr->MaxValue);\n",
+					"to": "\t\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page's lines aren't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tConnectionPage_DrawLines(y, y + AvPMenus.MenuHeight);\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host page's line is drawn over the check code while a request is answered",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "AVPMENU_COOP_HOST && !(answerRowsShown && AvPMenus.MenuElements == answerRows) &&\n\t\tConnectionPage_HostLine",
+					"to": "AVPMENU_COOP_HOST &&\n\t\tConnectionPage_HostLine"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host page asks Windows every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/connection_page.cpp",
+					"from": "if (!hostAsked || (DWORD)(now - hostAskedAt) >= kHostCheckEveryMs)",
+					"to": "if (true)"
+				}
+			]
 		}
 	]
 }

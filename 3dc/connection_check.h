@@ -76,6 +76,9 @@ enum ConnectionVerdict
 
 ConnectionVerdict ConnectionCheck_Verdict(const ConnectionFacts &facts);
 
+// The host page's one line for a verdict, fixed words: "" for nothing found, so the line is drawn only when there's something to say
+const char *ConnectionCheck_HostWords(ConnectionVerdict verdict);
+
 // The check's lines, in order: the network, going out, coming in (only when something stops it), other firewalls, and, when there are
 // any, what to do if one asks about AVPx going out (a firewall set to ask about every program does: the owner's own, 2026-11-09, asked
 // whether AVP_Classic.exe may send UDP; Windows Firewall as it comes never asks about going out, and another firewall's mode can't be

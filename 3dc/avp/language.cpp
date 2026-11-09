@@ -28,6 +28,7 @@
 //   does: it looks on this network. Only with -dev does it ask the online list of games too, and a release game reaches no server, so the
 //   help never promises the list to a player (the owner's ruling)
 //   the page of games found's Search box and Refresh row, and their help
+//   the words of the Connection check page (beta.2's "nobody blocked silently", connection_page.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -177,6 +178,15 @@ static char OurTextStrings[][200] =
 	"Type part of a game's name to show only the games with it. What you type stays on this PC.",
 	"Refresh",
 	"Press ENTER to fetch the open sessions again.",
+	"Connection check",
+	"What on this PC could stop AVPx playing online, in plain words. Nothing is sent anywhere: it only asks Windows.",
+	"Check again",
+	"Asks Windows again, after you've changed something.",
+	"Windows network settings",
+	"Opens Windows' own network settings, where a network can be made Public or Private.",
+	"Windows Firewall",
+	"Opens Windows Security's firewall page, with its settings and the programs it lets through.",
+	"Asking Windows how this PC is set up...",
 	"HUD size",
 	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };

@@ -55,6 +55,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
 //   Bobblen's avp-forever (ec6446f), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the Connection check page (beta.2's "nobody blocked silently", connection_page.h), and its one line on the co-op host page
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -100,6 +102,7 @@
 #include "relay_auto.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
+#include "connection_page.h"
 #include "credits_roll.h"
 
 #if defined(_MSC_VER)
@@ -1710,6 +1713,13 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
+		case AVPMENU_CONNECTION_CHECK:
+		{
+			// Windows is asked as the page opens, on a thread of its own (connection_page.h)
+			ConnectionPage_Opened();
+			break;
+		}
+
 		case AVPMENU_COOP_HOST:
 		{
 			// This page opens the game. If that can't be done, there's no page.
@@ -2161,6 +2171,12 @@ static void RenderMenu(void)
 		OnlinePage_DrawTop();
 	}
 
+	// The Connection check page: what Windows said, around its rows (connection_page.h)
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_CONNECTION_CHECK)
+	{
+		ConnectionPage_DrawLines(y, y + AvPMenus.MenuHeight);
+	}
+
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
 	// instead of the page's own row
 	bool const askingPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING && OnlinePage_DrawAsking();
@@ -2177,6 +2193,16 @@ static void RenderMenu(void)
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews)))
 	{
 		RenderSmallMenuText(relayNews, MENU_CENTREX, (answerRowsShown && AvPMenus.MenuElements == answerRows) ? 56 : 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
+	// The Connection check's line on the co-op host page (connection_page.h): only when the last check found something that stops AVPx
+	// going online, or may, and never while a join request's rows are up, when the check code is drawn there. Under the news line.
+	char connectionLine[160];
+
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && !(answerRowsShown && AvPMenus.MenuElements == answerRows) &&
+		ConnectionPage_HostLine(connectionLine, sizeof(connectionLine)))
+	{
+		RenderSmallMenuText(connectionLine, MENU_CENTREX, 52, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
@@ -3490,6 +3516,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_CONNECTION_CHECK:
+		{
+			// A Connection check row: Check again, or one of Windows' own pages (connection_page.h)
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				ConnectionPage_Pressed(elementPtr->MaxValue);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_GOTOMENU:
 		case AVPMENU_ELEMENT_GOTOMENU_GFX:
 		{
@@ -4422,6 +4457,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		default:
 		GLOBALASSERT("UNKNOWN MENU ELEMENT"==0);
 		case AVPMENU_ELEMENT_FINDAGAIN:
+		case AVPMENU_ELEMENT_CONNECTION_CHECK:
 		case AVPMENU_ELEMENT_GOTOMENU:
 		case AVPMENU_ELEMENT_QUITGAME:
 		case AVPMENU_ELEMENT_STARTMPGAME:

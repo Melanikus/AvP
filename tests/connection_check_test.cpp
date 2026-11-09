@@ -109,6 +109,12 @@ static void TestTheVerdict()
 	// Nothing read at all
 	f = ConnectionFacts();
 	Check(ConnectionCheck_Verdict(f) == kConnFine, "what wasn't read is never taken as a problem");
+
+	// The host page's line, for each verdict: none when nothing was found
+	Check(strcmp(ConnectionCheck_HostWords(kConnBlocks), "Something on this PC stops AVPx going online: Multiplayer, Connection check says what") == 0 &&
+		strcmp(ConnectionCheck_HostWords(kConnMayBlock), "Something on this PC may stop others reaching you: Multiplayer, Connection check says what") == 0 &&
+		ConnectionCheck_HostWords(kConnFine)[0] == '\0' && ConnectionCheck_HostWords((ConnectionVerdict)99)[0] == '\0',
+		"the host page's line says where to look, and is empty when there's nothing to say");
 }
 
 // The lines for the facts, as one text, a line end after each
@@ -418,6 +424,52 @@ static void TestTheWindowsHalfOnlyReads()
 		Count(code, "get_ProductName(") == 1, "a product's name is made safe as it's read, and read nowhere else");
 }
 
+// The text from the first start up to the end after it, or "" if either isn't there
+static std::string Between(const std::string &text, const char *start, const char *end)
+{
+	size_t const from = text.find(start);
+	size_t const to = from == std::string::npos ? std::string::npos : text.find(end, from + strlen(start));
+	return to == std::string::npos ? std::string() : text.substr(from, to - from);
+}
+
+static void TestThePage()
+{
+	puts("The page, and the host page's line (by reading their source: they need the whole game)");
+
+	std::string const data = CodeOnly(ReadSource("3dc/avp/win95/frontend/menu_data.cpp"));
+	std::string const menus = CodeOnly(ReadSource("3dc/avp/win95/frontend/menus.cpp"));
+	std::string const page = CodeOnly(ReadSource("3dc/avp/win95/frontend/connection_page.cpp"));
+	Check(data.size() > 20000 && menus.size() > 100000 && page.size() > 2000, "the menus' sources and the page's were found and read");
+
+	// A row on the Multiplayer page, always there, and the page's three rows
+	std::string const multiplayer = Between(data, "static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=", "\n};");
+	size_t const rowAt = multiplayer.find("{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_CONNCHECK_ROW},\t{AVPMENU_CONNECTION_CHECK},");
+	Check(rowAt != std::string::npos && rowAt < multiplayer.find("{AVPMENU_ELEMENT_ENDOFMENU}"),
+		"the Multiplayer page has a Connection check row, before its end, so every player has it");
+	std::string const rows = Between(data, "static AVPMENU_ELEMENT AvPMenu_ConnectionCheck[]=", "\n};");
+	Check(Count(rows, "{AVPMENU_ELEMENT_CONNECTION_CHECK,\t{TEXTSTRING_CONNCHECK_AGAIN},\t{kConnRowAgain},") == 1 &&
+		Count(rows, "{AVPMENU_ELEMENT_CONNECTION_CHECK,\t{TEXTSTRING_CONNCHECK_NETWORK},\t{kConnRowNetwork},") == 1 &&
+		Count(rows, "{AVPMENU_ELEMENT_CONNECTION_CHECK,\t{TEXTSTRING_CONNCHECK_FIREWALL},\t{kConnRowFirewall},") == 1,
+		"the page's rows: Check again, Windows network settings, Windows Firewall");
+
+	// The page asks Windows as it opens and on Check again; its rows do what they say
+	Check(Count(menus, "case AVPMENU_CONNECTION_CHECK:") == 1 && Count(Between(menus, "case AVPMENU_CONNECTION_CHECK:", "break;"), "ConnectionPage_Opened();") == 1 &&
+		Count(page, "void ConnectionPage_Opened(void)\n{\n\tConnectionCheck_Start();\n}") == 1, "opening the page asks Windows");
+	Check(Count(menus, "ConnectionPage_Pressed(elementPtr->MaxValue);") == 1 &&
+		Count(page, "case kConnRowAgain:\n\t\t\tConnectionCheck_Start();") == 1 &&
+		Count(page, "case kConnRowNetwork:\n\t\t\tConnectionCheck_OpenNetworkSettings();") == 1 &&
+		Count(page, "case kConnRowFirewall:\n\t\t\tConnectionCheck_OpenFirewallSettings();") == 1, "and each row does what it says");
+	Check(Count(menus, "ConnectionPage_DrawLines(y, y + AvPMenus.MenuHeight);") == 1, "the lines are drawn around the page's rows");
+
+	// The host page's line: never while a join request's rows are up, when the check code is drawn there; and the host page asks
+	// Windows at most once a minute
+	Check(Count(menus, "if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && !(answerRowsShown && AvPMenus.MenuElements == answerRows) &&\n\t\t"
+		"ConnectionPage_HostLine(connectionLine, sizeof(connectionLine)))") == 1,
+		"the host page's line is never drawn while a join request's rows are up, over the check code");
+	Check(Count(page, "if (!hostAsked || (DWORD)(now - hostAskedAt) >= kHostCheckEveryMs)") == 1 && Count(page, "kHostCheckEveryMs = 60000;") == 1,
+		"and the host page asks Windows at most once a minute");
+}
+
 int main()
 {
 	TestTheVerdict();
@@ -425,6 +477,7 @@ int main()
 	TestTheLogLine();
 	TestSafeNames();
 	TestTheWindowsHalfOnlyReads();
+	TestThePage();
 
 	if (checksFailed > 0)
 	{

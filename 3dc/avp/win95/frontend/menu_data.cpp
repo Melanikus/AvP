@@ -19,6 +19,7 @@
 //   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
 //   the Join page's first row is "Find Games": its search looks on this network, and with -dev asks the online list of games too
 //   (language.cpp's words, which promise a player only this network)
+//   the Connection check page (beta.2's "nobody blocked silently", connection_page.h), and the Multiplayer page's row to it
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -41,6 +42,7 @@
 #include "detaillevels.h"
 #include "MusicPlayer.h"
 #include "online_screens_page.h"
+#include "connection_page.h"
 
 #define MPLAYER_SUPPORT 0
 
@@ -458,6 +460,18 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP},
 
+	// What on this PC could stop AVPx playing online (beta.2's "nobody blocked silently"), always there: it only asks Windows
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_CONNCHECK_ROW},	{AVPMENU_CONNECTION_CHECK},	{0},	{0},	TEXTSTRING_CONNCHECK_ROW_HELP},
+
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// The Connection check page (connection_page.h): its words are drawn around these rows
+static AVPMENU_ELEMENT AvPMenu_ConnectionCheck[]=
+{
+	{AVPMENU_ELEMENT_CONNECTION_CHECK,	{TEXTSTRING_CONNCHECK_AGAIN},	{kConnRowAgain},	{0},	{0},	TEXTSTRING_CONNCHECK_AGAIN_HELP},
+	{AVPMENU_ELEMENT_CONNECTION_CHECK,	{TEXTSTRING_CONNCHECK_NETWORK},	{kConnRowNetwork},	{0},	{0},	TEXTSTRING_CONNCHECK_NETWORK_HELP},
+	{AVPMENU_ELEMENT_CONNECTION_CHECK,	{TEXTSTRING_CONNCHECK_FIREWALL},	{kConnRowFirewall},	{0},	{0},	TEXTSTRING_CONNCHECK_FIREWALL_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -1145,10 +1159,13 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_COOP_HOSTQUITS
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_CoopHostQuits,					AVPMENU_INGAME, 0},
+
+	// AVPMENU_CONNECTION_CHECK
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_CONNCHECK_ROW,			AvPMenu_ConnectionCheck,					AVPMENU_MULTIPLAYER, 0},
 };
 
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
-static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_COOP_HOSTQUITS + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_CONNECTION_CHECK + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
 // The page of games found (online_screens_page.h). On the list: the Search box (the menus' own text field, typing into the page's own
 // buffer of 20 letters), the Refresh row, and a row for each game the search lets through, even none. While the open sessions are fetched
