@@ -149,6 +149,28 @@ static const unsigned int kMostMillisecondsSilentInTheLobby = 30000;
 static CoopRemovedList removedPlayers;
 static bool removedByTheHost = false;
 
+// Further down, beside LetClientIn: the host's side of the request to join (version 114)
+static void ForgetTheJoinRequest();
+static ENetPeer *JoinRequestPeer();
+static void LookAfterTheJoinRequest(unsigned int now);
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's side of the request to join (network version 114). Waiting from when its
+// "let me in" goes, until the host gives it its player ID (yes), or closes the connection with a reason (no, busy, no answer). If neither
+// comes, it counts as no answer a little after the host's own limit.
+static int joinAnswer = kNetJoinAnswerNone;
+static enet_uint32 joinAskedAt = 0;
+static const enet_uint32 kJoinAnswerSpareMs = 5000;   // past the host's kNetJoinAnswerWithinMs, for the time the answer takes to come
+
+int Net_JoinAnswerNow()
+{
+	if (joinAnswer == kNetJoinAnswerWaiting && enet_time_get() - joinAskedAt >= kNetJoinAnswerWithinMs + kJoinAnswerSpareMs)
+	{
+		joinAnswer = kNetJoinAnswerNoAnswer;
+	}
+
+	return joinAnswer;
+}
+
 static unsigned int lastHeardFrom[kMostClients + 1];
 
 // How many bytes one client may send in a second, on top of how many messages. A real game sends a tenth of this. A host keeps what it's passing on until the other machines say they have it, for as long as the patience, so this also limits how much one client can make it keep.
@@ -199,6 +221,12 @@ static uint32_t relayListedAt = 0;             // when the list was last given t
 static uint32_t relayStrangersDropped = 0;     // packets to a host going through a relay, from anywhere but the relays
 static int relayJoinFailedWhy = kNetRelayFine; // why the last join through a relay failed
 static NetRelayJoinWaitHook relayJoinWaitHook = NULL;   // asked each slice of the join's wait (Net_SetRelayJoinWaitHook)
+static int relayJoinStep = kNetRelayJoinStepNone;       // where that join has got to (Net_RelayJoinStep)
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the relay on the screen (Net_RelayHostStateNow, Net_RelayPlayStateNow)
+static NetRelayHostState relayHostNews = {};             // what the host is doing with its relay, as its screen is told it
+static bool relayJoinedThrough = false;                  // this joiner's game is one it joined through a relay
+static char relayJoinedRegion[kRelayListRegionLetters + 1];   // and that relay's region
 
 uint32_t const kRelayListEveryMs = 1000;
 size_t const kRelayMostPacketBytes = 1500;     // the most a relay passes on (PROTOCOL.md, section 2)
@@ -210,6 +238,9 @@ int const kRelayMostHostMs = 9999;             // the most round trip the list t
 
 // A pass time the relay's message can bring is one the list's writer can send on: both are the most a JSON number holds exactly
 static_assert(kNetRelayMostPassTime == kRelayListMostPassTime, "net_relay.h reads pass times up to the most relay_list_text.h can list");
+
+// A region the screen is given is the list's, so it fits in networking.h's room for one
+static_assert(kNetRelayRegionLetters == static_cast<size_t>(kRelayListRegionLetters), "networking.h's region is as long as relay_list_text.h's");
 
 // One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
 // own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
@@ -310,8 +341,34 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 		return relayHost.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
 	}
 
-	// A joiner through a relay: a READY sent again after its game has connected is the relay's, not the game's
-	return fromRelay && relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+	// A joiner through a relay hears from the relay alone, as a host does: the game's packets come from its port there, and anything from
+	// anywhere else is dropped before ENet reads a byte of it. Modified 2026-11-09 by Melanikus for the AvP port: before, a packet from
+	// elsewhere went on to ENet, which a joiner never needs.
+	if (!fromRelay)
+	{
+		relayStrangersDropped++;
+		return 1;
+	}
+
+	// And a READY sent again after its game has connected is the relay's, not the game's
+	return relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the host's news about its relay has changed, for its screen to say once
+// (Net_RelayHostStateNow). Only Listed has a region and a round trip, and only RoomGone a why: the game's own fixed words.
+static void RelayHostNews(int what, const char *why)
+{
+	relayHostNews.changes++;
+	relayHostNews.what = what;
+	relayHostNews.region[0] = 0;
+	relayHostNews.ms = 0;
+	relayHostNews.why = what == kNetRelayHostRoomGone ? why : NULL;
+
+	if (what == kNetRelayHostListed)
+	{
+		memcpy(relayHostNews.region, relayRegion, sizeof(relayHostNews.region));
+		relayHostNews.ms = relayHostMs;
+	}
 }
 
 // A host starts going through a relay, when the list has named some: it times each, and asks the nearest for a room (RelayHostFrame). False
@@ -349,6 +406,7 @@ static bool RelayHostStart()
 	if (relayCandidateCount == 0)
 	{
 		Con_PrintError("net: no relay the list named could be looked up, so this game is open on this network only");
+		RelayHostNews(kNetRelayHostNoRelay, NULL);
 		return false;
 	}
 
@@ -373,6 +431,7 @@ static bool RelayHostStart()
 	host->intercept = RelayIntercept;
 	RelaySendAll(host, relayPicker, relayCandidates, relayCandidateCount);
 	Con_PrintMessage("net: this game is finding the nearest relay");
+	RelayHostNews(kNetRelayHostFinding, NULL);
 	return true;
 }
 
@@ -418,6 +477,7 @@ static void RelayHostFrame()
 		if (best < 0)
 		{
 			RelayHostGiveUp("net: no relay answered, so this game is open on this network only");
+			RelayHostNews(kNetRelayHostNoRelay, NULL);
 			return;
 		}
 
@@ -447,6 +507,7 @@ static void RelayHostFrame()
 		relayListedAt = now;
 		RelayList_HostRoomOpened(relayRegion, code, pass, passTime, relayHostMs, netSession);
 		Con_PrintMessage("net: the relay has opened this game's room, and it's going on the list");
+		RelayHostNews(kNetRelayHostListed, NULL);
 	}
 	else if (relayRoomListed && relayHost.PassesHeard() != relayPassesListed && relayHost.RoomForTheList(code, pass, &passTime))
 	{
@@ -472,12 +533,19 @@ static void RelayHostFrame()
 		}
 
 		RelayHostGiveUp("net: this game is open on this network instead");
+		RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));
 	}
 }
 
 // The host leaves: HOST_CLOSE, so the relay ends the room at once, and the list is told
 static void RelayHostLeave()
 {
+	// The host's game is over, so whatever its screen was last told about the relay is over too
+	if (relayHostNews.what != kNetRelayHostNone)
+	{
+		RelayHostNews(kNetRelayHostNone, NULL);
+	}
+
 	if (!relayHosting)
 	{
 		return;
@@ -527,9 +595,13 @@ static uint16_t RelayHandshake(const char *code)
 
 	for (size_t turn = 0; turn < kRelayJoinMostTurns && !relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs; turn++)
 	{
+		// Where it's got to, for the menu's hook to say (Net_RelayJoinStep)
+		relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;
+
 		// The window keeps answering, and the player can give up (the menu's hook)
 		if (relayJoinWaitHook && !relayJoinWaitHook())
 		{
+			relayJoinStep = kNetRelayJoinStepNone;
 			relayJoinFailedWhy = kNetRelayGivenUp;
 			return 0;
 		}
@@ -564,6 +636,8 @@ static uint16_t RelayHandshake(const char *code)
 		relayJoiner.Tick(enet_time_get());
 	}
 
+	relayJoinStep = kNetRelayJoinStepNone;
+
 	if (!relayJoiner.Ready())
 	{
 		relayJoinFailedWhy = relayJoiner.Failed() ? relayJoiner.FailedWhy() : kNetRelayNoAnswer;
@@ -584,6 +658,223 @@ const char *Net_RelayJoinFailedWhy()
 void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook)
 {
 	relayJoinWaitHook = hook;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: where a join through a relay has got to, for the menu's wait (Fourth's online screens)
+int Net_RelayJoinStep()
+{
+	return relayJoinStep;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the relay on the screen (networking.h). Both only read.
+void Net_RelayHostStateNow(NetRelayHostState *state)
+{
+	if (state)
+	{
+		*state = relayHostNews;
+	}
+}
+
+void Net_RelayPlayStateNow(NetRelayPlayState *state)
+{
+	if (!state)
+	{
+		return;
+	}
+
+	memset(state, 0, sizeof(*state));
+	state->ms = -1;
+
+	// A host whose room on the relay is open: its last keep's round trip, or its echoes' until the first keep has been answered
+	if (relayHosting && !relayPicking && relayHost.Open())
+	{
+		int const keepMs = relayHost.KeepMs();
+		state->throughRelay = true;
+		state->isHost = true;
+		memcpy(state->region, relayRegion, sizeof(state->region));
+		state->ms = keepMs >= 0 ? keepMs : (relayHostMs > 0 ? relayHostMs : -1);
+		return;
+	}
+
+	// A joiner connected through a relay: ENet's round trip to the host, once ENet has timed one (lastReceiveTime is set by the first)
+	if (AvP.Network == I_Peer && relayJoinedThrough && ServerPeer && ServerPeer->state == ENET_PEER_STATE_CONNECTED)
+	{
+		state->throughRelay = true;
+		memcpy(state->region, relayJoinedRegion, sizeof(state->region));
+
+		if (ServerPeer->lastReceiveTime > 0)
+		{
+			state->ms = ServerPeer->roundTripTime > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(ServerPeer->roundTripTime);
+		}
+	}
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column (Fourth's online
+// screens). PROTOCOL.md, "How the game uses it": 3 echoes to each relay the list names, once for each relay, not for each game, and the
+// lowest kept. A game's estimate is this and its hostMs. The echoes go from a socket of their own, open only while they're timed, and only
+// an answer from a timed relay's own address and control port is heard (NetRelayPicker checks its bytes and count).
+static ENetSocket joinerTimingSocket = ENET_SOCKET_NULL;
+static NetRelayPicker joinerPicker;
+static ENetAddress joinerTimed[kNetRelayMostRelays];
+static char joinerTimedRegions[kNetRelayMostRelays][kRelayListRegionLetters + 1];
+static size_t joinerTimedCount = 0;
+static bool joinerTimingStarted = false;   // since the last Net_ForgetRelayTimes
+static bool joinerTimingDone = false;
+
+static void CloseJoinerTimingSocket()
+{
+	if (joinerTimingSocket != ENET_SOCKET_NULL)
+	{
+		enet_socket_destroy(joinerTimingSocket);
+		joinerTimingSocket = ENET_SOCKET_NULL;
+	}
+}
+
+void Net_ForgetRelayTimes()
+{
+	CloseJoinerTimingSocket();
+	joinerPicker.Reset();
+	joinerTimedCount = 0;
+	joinerTimingStarted = false;
+	joinerTimingDone = false;
+}
+
+void Net_TimeRelaysForJoining()
+{
+	if (joinerTimingDone)
+	{
+		return;
+	}
+
+	uint32_t const now = enet_time_get();
+
+	// The first time the list has relays: each one looked up as a host does (RelayLookUp), and the first echo to each sent
+	if (!joinerTimingStarted)
+	{
+		RelayListRelay relays[kRelayListMostRelays];
+		int named = 0;
+
+		if (!RelayList_Relays(relays, &named) || named <= 0)
+		{
+			return;
+		}
+
+		joinerTimingStarted = true;
+		joinerTimedCount = 0;
+
+		for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays) && joinerTimedCount < kNetRelayMostRelays; i++)
+		{
+			if (RelayLookUp(relays[i], &joinerTimed[joinerTimedCount]))
+			{
+				strncpy(joinerTimedRegions[joinerTimedCount], relays[i].region, kRelayListRegionLetters);
+				joinerTimedRegions[joinerTimedCount][kRelayListRegionLetters] = 0;
+				joinerTimedCount++;
+			}
+		}
+
+		uint16_t ports[kNetRelayMostRelays];
+		uint8_t random[kNetRelayMostRelays * kNetRelayEchoes * kNetRelaySecretBytes];
+
+		for (size_t i = 0; i < joinerTimedCount; i++)
+		{
+			ports[i] = joinerTimed[i].port;
+		}
+
+		RelayRandomBytes(random, joinerTimedCount * kNetRelayEchoes * kNetRelaySecretBytes);
+		joinerTimingSocket = joinerTimedCount > 0 ? enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM) : ENET_SOCKET_NULL;
+
+		ENetAddress any;
+		any.host = ENET_HOST_ANY;
+		any.port = 0;
+
+		if (joinerTimingSocket == ENET_SOCKET_NULL || enet_socket_set_option(joinerTimingSocket, ENET_SOCKOPT_NONBLOCK, 1) < 0
+			|| enet_socket_bind(joinerTimingSocket, &any) < 0 || !joinerPicker.Start(joinerTimedCount, ports, random, now))
+		{
+			CloseJoinerTimingSocket();
+			joinerTimingDone = true;
+			return;
+		}
+
+		LogString("net: the relays are being timed for the games page");
+	}
+
+	// What has come: from a timed relay only, by its address and control port. Anything else is dropped.
+	static uint8_t packet[kRelayMostPacketBytes];
+
+	for (size_t n = 0; n < kRelayMostPacketsAWait; n++)
+	{
+		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+
+		if (enet_socket_wait(joinerTimingSocket, &condition, 0) < 0 || !(condition & ENET_SOCKET_WAIT_RECEIVE))
+		{
+			break;
+		}
+
+		ENetAddress from;
+		ENetBuffer buffer;
+		buffer.data = packet;
+		buffer.dataLength = sizeof(packet);
+		int const got = enet_socket_receive(joinerTimingSocket, &from, &buffer, 1);
+
+		if (got <= 0)
+		{
+			break;
+		}
+
+		for (size_t i = 0; i < joinerTimedCount; i++)
+		{
+			if (from.host == joinerTimed[i].host && from.port == joinerTimed[i].port)
+			{
+				joinerPicker.Hear(i, from.port, packet, static_cast<size_t>(got), now);
+				break;
+			}
+		}
+	}
+
+	joinerPicker.Tick(now);
+
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t const sendCount = joinerPicker.TakeSends(sends, kNetRelayMostSends);
+
+	for (size_t i = 0; i < sendCount; i++)
+	{
+		if (sends[i].relay < joinerTimedCount)
+		{
+			ENetAddress to = joinerTimed[sends[i].relay];
+			to.port = sends[i].port;
+			ENetBuffer buffer;
+			buffer.data = sends[i].bytes;
+			buffer.dataLength = kNetRelayMessageBytes;
+			enet_socket_send(joinerTimingSocket, &to, &buffer, 1);
+		}
+	}
+
+	if (joinerPicker.Done(now))
+	{
+		CloseJoinerTimingSocket();
+		joinerTimingDone = true;
+		LogString("net: the relays are timed for the games page");
+	}
+}
+
+int Net_JoinerMsToRelay(const char *region)
+{
+	if (!region || !joinerTimingDone)
+	{
+		return -1;
+	}
+
+	for (size_t i = 0; i < joinerTimedCount; i++)
+	{
+		uint32_t ms = 0;
+
+		if (strncmp(region, joinerTimedRegions[i], sizeof(joinerTimedRegions[i])) == 0)
+		{
+			return joinerPicker.RelayMs(i, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs) ? static_cast<int>(ms) : -1;
+		}
+	}
+
+	return -1;
 }
 
 // A join through a relay: the relay of the game's region, from the relays the list names, looked up, then its handshake (RelayHandshake).
@@ -679,6 +970,14 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.Name[sizeof(entry.Name) - 1] = 0;
 	entry.AllowedToJoin = shownPlayers < shownMost;
 
+	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns, as for a LAN game (Net_AddSession): the level's name cut to
+	// fit and ended, the style, and the counts as the name shows them
+	strncpy(entry.levelName, levelName, sizeof(entry.levelName) - 1);
+	entry.levelName[sizeof(entry.levelName) - 1] = 0;
+	entry.gameStyle = gameStyle;
+	entry.players = static_cast<uint8_t>(shownPlayers);
+	entry.maxPlayers = static_cast<uint8_t>(shownMost);
+
 	if (version != kMultiplayerVersion)
 	{
 		float const shownVersion = 1.0f + version / 100.0f;
@@ -718,6 +1017,27 @@ bool Net_AddRelaySession(const RelayListGame &game)
 
 	return AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
 		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby));
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
+// AddRelaySession tells two apart; -1 if it isn't there (relay_auto.cpp)
+int Net_FindRelaySession(const char *region, const char *code)
+{
+	if (!region || !code)
+	{
+		return -1;
+	}
+
+	for (uint32_t i = 0; i < NumberOfSessionsFound && i < MAX_NO_OF_SESSIONS; i++)
+	{
+		if (SessionData[i].throughRelay && memcmp(SessionData[i].relayCode, code, kRelayCodeLetters) == 0
+			&& strncmp(SessionData[i].relayRegion, region, sizeof(SessionData[i].relayRegion)) == 0)
+		{
+			return static_cast<int>(i);
+		}
+	}
+
+	return -1;
 }
 
 extern void MinimalNetCollectMessages(void);
@@ -879,6 +1199,15 @@ static void Net_AddSession(SessionDescription &session)
 	// bounded: a long session name used to overflow Name (40 bytes) into host/port
 	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
 	name[nameSize - 1] = '\0';
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns (Fourth's online screens): the level's name, the game's
+	// style and its players, as the host said them. The name ends already (above); the page makes it safe and checks the numbers before it
+	// uses them (menus.h).
+	static_assert(sizeof(SessionData[0].levelName) == kLevelNameSize, "a LAN game's level name fits the games page's column exactly");
+	memcpy(SessionData[NumberOfSessionsFound].levelName, session.levelName, kLevelNameSize);
+	SessionData[NumberOfSessionsFound].gameStyle = session.gameStyle;
+	SessionData[NumberOfSessionsFound].players = session.nPlayers;
+	SessionData[NumberOfSessionsFound].maxPlayers = session.maxPlayers;
 
 	SessionData[NumberOfSessionsFound].Guid	= session.guidInstance;
 
@@ -1309,6 +1638,18 @@ void Net_Disconnect()
 {
 	OutputDebugString("Net_Disconnect\n");
 
+	// A host's held request to join goes with its game. A joiner's answer stays, for its screen to say why it's back (Net_JoinAnswerNow):
+	// the next join starts it again.
+	ForgetTheJoinRequest();
+
+	// What a joiner through a relay dropped from elsewhere (a host says its own as it leaves its room, in RelayHostLeave)
+	if (relayJoinedThrough && relayStrangersDropped > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayStrangersDropped) + " packet(s) from elsewhere were dropped");
+	}
+
+	relayJoinedThrough = false;   // the line in play saying which relay the game went through goes with the game too
+
 	// This also runs from the console's disconnect command, in a game that isn't on any network
 	if (host)
 	{
@@ -1629,6 +1970,7 @@ static void LogOlderVersionsToldNo()
 static void ForgetConnectionsNotLetIn()
 {
 	unsigned int const now = enet_time_get();
+	LookAfterTheJoinRequest(now);
 
 	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
 	{
@@ -1662,7 +2004,9 @@ static void ForgetConnectionsNotLetIn()
 			continue;
 		}
 
-		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn)
+		// One whose request to join the host is answering isn't dropped for that: its own limit is LookAfterTheJoinRequest's
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn
+			&& peer != JoinRequestPeer())
 		{
 			LogDroppedMessage("a connection didn't say who it is in time");
 			enet_peer_disconnect_now(peer, 0);
@@ -1715,6 +2059,14 @@ void Net_SayLongestGapWhileLoading()
 
 	hasAnsweredWhileLoading = false;
 	longestGapWhileLoading = 0;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: whether a network game is going (hosting, joined, or joining), which goes on while its
+// window isn't the one in front (win_func.cpp, CheckForWindowsMessages). Everything that keeps it in the game runs on the game's own thread.
+// A single player game, and a skirmish, which has no network, still wait.
+bool Net_GameGoesOnWhileInactive(void)
+{
+	return host != NULL;
 }
 
 void Net_ServiceNetwork()
@@ -1861,6 +2213,146 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 	netSession.nPlayers++;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: THE REQUEST TO JOIN (network version 114). Every joiner asks the host first, however
+// it came (a search on this network, a typed address, or the relay), and a person at the host answers, from the in-game menu (Fourth's
+// online screens). The joiner's request is its "let me in" with its name (NET_CREATEPLAYERORGROUP), as before; now the host holds it.
+//   - What needs no question is answered at once, as LetClientIn always did: another version, somebody the host took out, or a full game.
+//   - One request is held at a time: a joiner who asks meanwhile is told the host is busy.
+//   - Until the answer, nothing is made for the joiner and nothing is sent to it, and the limit on saying who it is (kMostMillisecondsToBeLetIn)
+//     doesn't drop it.
+//   - Yes lets it in, through LetClientIn, which checks it all again. No, busy and no answer close its connection with a reason of their
+//     own (networking.h), so the joiner's screen can say which. Unanswered for kNetJoinAnswerWithinMs counts as no answer.
+//   - A test's host lets every joiner in without asking (Net_LetEveryJoinerIn: -dev -relayhost, and Hudson's runs).
+// The request is kept by its connection's place and ENet's own number for that connection (connectID), so an answer can never reach
+// somebody else who gets the same place later.
+static bool letEveryJoinerIn = false;
+static bool joinRequestHeld = false;
+static size_t joinRequestConnection = 0;
+static enet_uint32 joinRequestConnectID = 0;
+static enet_uint32 joinRequestSince = 0;
+static PlayerDetails joinRequestDetails;
+
+static void ForgetTheJoinRequest()
+{
+	joinRequestHeld = false;
+	memset(&joinRequestDetails, 0, sizeof(joinRequestDetails));
+}
+
+// The connection whose request is held, while it's still that joiner's and still not let in; NULL otherwise
+static ENetPeer *JoinRequestPeer()
+{
+	if (!joinRequestHeld || !host || joinRequestConnection >= host->peerCount)
+	{
+		return NULL;
+	}
+
+	ENetPeer *const peer = &host->peers[joinRequestConnection];
+	return peer->state == ENET_PEER_STATE_CONNECTED && peer->connectID == joinRequestConnectID && IDOfConnection(peer) == 0 ? peer : NULL;
+}
+
+// A joiner's "let me in", with its details: held for the host to answer, or answered at once when no question is needed
+static void HoldOrLetIn(ENetPeer *peer, const uint8_t *details)
+{
+	PlayerDetails player;
+	memcpy(&player, details, sizeof(player));
+	player.name[kPlayerNameSize - 1] = '\0';
+
+	bool const noQuestion = letEveryJoinerIn || player.version != kMultiplayerVersion || netSession.nPlayers >= netSession.maxPlayers
+		|| (!PeerIsThroughRelay(peer) && CoopRemoved_Has(removedPlayers, peer->address.host));
+
+	if (noQuestion)
+	{
+		LetClientIn(peer, details);
+		return;
+	}
+
+	if (JoinRequestPeer() == peer)
+	{
+		LogDroppedMessage("a joiner asked to be let in again while the host was still answering");
+		return;
+	}
+
+	if (JoinRequestPeer() != NULL)
+	{
+		LogDroppedMessage("a joiner asked while the host was answering another, and was told the host is busy");
+		enet_peer_disconnect(peer, kNetJoinRefusedBusy);
+		return;
+	}
+
+	joinRequestHeld = true;
+	joinRequestConnection = (size_t)(peer - host->peers);
+	joinRequestConnectID = peer->connectID;
+	joinRequestSince = enet_time_get();
+	joinRequestDetails = player;
+	LogString("net: a joiner asks to be let in (connection " + std::to_string(joinRequestConnection + 1) + "), and the host is asked");
+}
+
+// Each time the network is served, on a host: a request whose joiner has gone goes too, and one unanswered too long is told so
+static void LookAfterTheJoinRequest(unsigned int now)
+{
+	if (!joinRequestHeld)
+	{
+		return;
+	}
+
+	ENetPeer *const asking = JoinRequestPeer();
+
+	if (!asking)
+	{
+		ForgetTheJoinRequest();
+	}
+	else if (now - joinRequestSince >= kNetJoinAnswerWithinMs)
+	{
+		LogString("net: nobody answered a joiner's request in time, so it was told no answer came");
+		enet_peer_disconnect(asking, kNetJoinRefusedNoAnswer);
+		ForgetTheJoinRequest();
+	}
+}
+
+bool Net_JoinRequestWaiting(char *nameOut, size_t nameRoom, NetJoinWho *who)
+{
+	if (!JoinRequestPeer() || !nameOut || nameRoom == 0 || !who)
+	{
+		return false;
+	}
+
+	strncpy(nameOut, joinRequestDetails.name, nameRoom - 1);
+	nameOut[nameRoom - 1] = '\0';
+	who->connection = (int)joinRequestConnection;
+	who->connectID = joinRequestConnectID;
+	return true;
+}
+
+void Net_AnswerJoinRequest(NetJoinWho who, bool yes)
+{
+	ENetPeer *const asking = JoinRequestPeer();
+
+	// An answer to a request that's gone, or to somebody else's, does nothing
+	if (!asking || who.connection != (int)joinRequestConnection || who.connectID != joinRequestConnectID)
+	{
+		return;
+	}
+
+	PlayerDetails const details = joinRequestDetails;
+	ForgetTheJoinRequest();
+
+	if (yes)
+	{
+		LogString("net: the host let the joiner in");
+		LetClientIn(asking, (const uint8_t *)&details);
+	}
+	else
+	{
+		LogString("net: the host said no to the joiner");
+		enet_peer_disconnect(asking, kNetJoinRefusedNo);
+	}
+}
+
+void Net_LetEveryJoinerIn(bool yes)
+{
+	letEveryJoinerIn = yes;
+}
+
 // To every client that's been let in, but not to one that has only connected, nor to the one given here. ENet frees a packet once everyone it was sent to has had it, so one that went to nobody has to be freed here.
 static void SendToClients(ENetPacket *packet, const ENetPeer *except)
 {
@@ -1907,7 +2399,7 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 		}
 		else
 		{
-			LetClientIn(from, data + sizeof(MessageHeader));
+			HoldOrLetIn(from, data + sizeof(MessageHeader));
 		}
 
 		return false;
@@ -2026,6 +2518,7 @@ static bool ClientHearsFromHost(const uint8_t *data, size_t size)
 		AvPNetID = id;
 		thisClientPlayer.ID = id;
 		hostPlayerID = header.fromID;
+		joinAnswer = kNetJoinAnswerYes;
 	}
 
 	return false;
@@ -2146,6 +2639,12 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					{
 						ServerPeer = NULL;
 						removedByTheHost = eEvent.data == kCoopRemovedByTheHost;
+
+						// A request to join that was never answered yes: the host's reason says which answer it was (version 114)
+						if (joinAnswer == kNetJoinAnswerWaiting)
+						{
+							joinAnswer = eEvent.data == kNetJoinRefusedNo ? kNetJoinAnswerNo : eEvent.data == kNetJoinRefusedBusy ? kNetJoinAnswerBusy : kNetJoinAnswerNoAnswer;
+						}
 					}
 
 					break;
@@ -2268,6 +2767,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	AvPNetID = 0;
 	hostPlayerID = 0;
 	removedByTheHost = false;
+	joinAnswer = kNetJoinAnswerNone;
+	relayJoinedThrough = false;
+	relayJoinedRegion[0] = 0;
+	relayStrangersDropped = 0;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -2298,6 +2801,11 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 		ServerAddress = relayAddress;
 		ServerAddress.port = relayPort;
+
+		// For the line in play saying which relay this game goes through (Net_RelayPlayStateNow)
+		relayJoinedThrough = true;
+		strncpy(relayJoinedRegion, SessionData[sessionNumber].relayRegion, kRelayListRegionLetters);
+		relayJoinedRegion[kRelayListRegionLetters] = 0;
 	}
 
 	ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);
@@ -2375,6 +2883,10 @@ static bool Net_CreatePlayer(char *playerName)
 		}
 		else {
 			Con_PrintMessage("Net_CreatePlayer - sent create player system message!");
+
+			// The request to join has gone: now the host's answer is waited for (version 114)
+			joinAnswer = kNetJoinAnswerWaiting;
+			joinAskedAt = enet_time_get();
 		}
 	}
 	return true;

@@ -625,9 +625,13 @@ void enet_peer_reset(ENetPeer *peer)
 	peer->state = ENET_PEER_STATE_DISCONNECTED;
 }
 
-void enet_peer_disconnect(ENetPeer *, enet_uint32)
+// The reason the game last gave when it closed a connection gently (the request to join's, networking.h)
+static enet_uint32 lastDisconnectData = 0;
+
+void enet_peer_disconnect(ENetPeer *, enet_uint32 data)
 {
 	closedGently++;
+	lastDisconnectData = data;
 }
 
 void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32)
@@ -1062,6 +1066,8 @@ static void TestRelayGamesOnTheList()
 	Check(Net_AddRelaySession(game) && NumberOfSessionsFound == 1 && SessionData[0].throughRelay && memcmp(SessionData[0].relayCode, "ABCD2345", 8) == 0
 		&& strcmp(SessionData[0].relayRegion, "virginia") == 0 && SessionData[0].host == 0 && SessionData[0].AllowedToJoin
 		&& strcmp(SessionData[0].Name, "Hunt (1/4)") == 0, "a game from the relays' list goes on the list of sessions, marked as a relay one, with no address");
+	Check(strcmp(SessionData[0].levelName, "Genshd1") == 0 && SessionData[0].gameStyle == game.gameStyle && SessionData[0].players == 1 && SessionData[0].maxPlayers == 4,
+		"with its level's name, its style and its players for the games page's columns");
 	Check(!Net_AddRelaySession(game) && NumberOfSessionsFound == 1, "the same game twice is one game");
 
 	RelayListGame badCode = AGameOnTheList("ABCD234O");
@@ -1125,6 +1131,22 @@ static bool KeepWaiting(void)
 	return true;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: a hook that notes the join's step each time it's asked (Net_RelayJoinStep), as the
+// menu's does to say where the join has got to
+static int stepsSeen[3] = {};
+
+static bool NoteTheStep(void)
+{
+	int const step = Net_RelayJoinStep();
+
+	if (step >= 0 && step < 3)
+	{
+		stepsSeen[step]++;
+	}
+
+	return true;
+}
+
 static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
 {
 	WaitingDatagram waiting;
@@ -1163,6 +1185,14 @@ static void TestJoiningThroughTheRelay()
 		"first it asks the relay's control port to join that game, with its code");
 	Check(lastConnectTo.host == kRelayHost && lastConnectTo.port == 27501, "then the game connects to the port the relay gave it, as if that were the host");
 	Check(theHost.intercept != NULL, "and a READY sent again later is the relay's: it's taken off ENet's hands");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: a joiner through a relay hears from the relay alone, as a host does
+	uint8_t notTheRelays[40];
+	memset(notTheRelays, 0x11, sizeof(notTheRelays));
+	TellTheHost(0x0200007F, 27501, notTheRelays, sizeof(notTheRelays));
+	Check(theHost.intercept(&theHost, NULL) == 1, "a packet from anywhere but the relay is dropped before ENet reads it");
+	TellTheHost(kRelayHost, 27501, notTheRelays, sizeof(notTheRelays));
+	Check(theHost.intercept(&theHost, NULL) == 0, "while the game's own, from its port on the relay, are ENet's to read");
 	EndTheGame();
 
 	// The relay says no
@@ -1205,6 +1235,21 @@ static void TestJoiningThroughTheRelay()
 	Net_SetRelayJoinWaitHook(NULL);
 	EndTheGame();
 
+	// The join's step, as the menu's hook sees it: reaching the relay, then, once JOIN_PORT has come, the relay introducing the two ends;
+	// and none once the join is over. The host's hellos never come here, so READY never does.
+	memset(stepsSeen, 0, sizeof(stepsSeen));
+	Net_SetRelayJoinWaitHook(NoteTheStep);
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && stepsSeen[kNetRelayJoinStepReaching] >= 1 && stepsSeen[kNetRelayJoinStepIntroducing] >= 1
+		&& stepsSeen[kNetRelayJoinStepNone] == 0 && Net_RelayJoinStep() == kNetRelayJoinStepNone,
+		"the menu's hook sees the join reaching the relay, then the relay introducing the two ends, and no step once it's over");
+	Net_SetRelayJoinWaitHook(NULL);
+	EndTheGame();
+	datagramsWaiting.clear();
+
 	// No relay for its region
 	relayNamed = false;
 	NumberOfSessionsFound = 0;
@@ -1215,6 +1260,252 @@ static void TestJoiningThroughTheRelay()
 
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: THE RELAY ON THE SCREEN (Fourth's online screens). The host's news about its relay,
+// once each time it changes, and the line in play saying which relay the game goes through and how far away it is, for a host and for a
+// joiner. Asking changes nothing.
+// A host that has just started hosting through the relay: the relay answers its first echo, the echoes end, and the relay opens its room
+static void HostThroughTheRelayUntilItsRoomIsOpen()
+{
+	uint8_t back[kNetRelayMessageBytes];
+	memcpy(back, lastDatagramSent.data(), sizeof(back));
+	back[5] = kNetRelayEchoBack;
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, back, sizeof(back));
+	theHost.intercept(&theHost, NULL);
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+
+	NetRelayMessage opened = NetRelay_Message(kNetRelayHostOpened);
+	memset(opened.secret, 0x5A, sizeof(opened.secret));
+	memcpy(opened.code, "ABCD2345", 8);
+	memset(opened.pass, 0x33, sizeof(opened.pass));
+	opened.passTime = 1700000000u;
+	uint8_t bytes[kNetRelayMessageBytes];
+	NetRelay_Write(opened, bytes);
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, bytes, sizeof(bytes));
+	theHost.intercept(&theHost, NULL);
+	Net_ServiceNetwork();
+}
+
+static void TestTheRelayOnTheScreen()
+{
+	printf("The relay on the screen\n");
+	relayNamed = true;
+	NetRelayHostState news;
+	NetRelayHostState again;
+	NetRelayPlayState play;
+
+	Net_RelayHostStateNow(&news);
+	unsigned int const changesAtFirst = news.changes;
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostNone && !play.throughRelay && play.ms == -1, "with no game, the host has no news, and there's no line in play");
+
+	Check(HostAGame() == NET_OK, "a game hosts with a relay named");
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostFinding && news.changes == changesAtFirst + 1 && news.why == NULL && news.region[0] == 0,
+		"the host's news: it's finding the nearest relay");
+	Check(!play.throughRelay, "and there's no line in play until its room is open");
+
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostListed && news.changes == changesAtFirst + 2 && strcmp(news.region, "virginia") == 0 && news.ms == hostMsListed
+		&& news.ms >= 1 && news.why == NULL, "then its room is open and it's going on the list, through the relay's region, at the round trip the list was given");
+	Net_RelayHostStateNow(&again);
+	Check(again.changes == news.changes && again.what == news.what, "asking again changes nothing");
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.isHost && strcmp(play.region, "virginia") == 0 && play.ms == hostMsListed,
+		"the line in play: hosting through that region, at the echoes' round trip until a keep has been answered");
+
+	// A keep, answered 37 ms later: the line's round trip is the keep's
+	enetClock += kNetRelayKeepEveryMs;
+	Net_ServiceNetwork();
+	Check(lastDatagramSent.size() == kNetRelayMessageBytes && lastDatagramSent[5] == kNetRelayHostKeep, "15 s on, the host keeps its room");
+	enetClock += 37;
+	NetRelayMessage kept = NetRelay_Message(kNetRelayHostKept);
+	memset(kept.secret, 0x5A, sizeof(kept.secret));
+	memset(kept.pass, 0x44, sizeof(kept.pass));
+	kept.passTime = 1700000015u;
+	uint8_t bytes[kNetRelayMessageBytes];
+	NetRelay_Write(kept, bytes);
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, bytes, sizeof(bytes));
+	theHost.intercept(&theHost, NULL);
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.isHost && play.ms == 37, "and once the relay answers the keep, 37 ms later, the line's round trip is 37 ms");
+	Net_RelayHostStateNow(&again);
+	Check(again.changes == news.changes, "which isn't news: the news is only what the host is doing");
+
+	EndTheGame();
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostNone && news.changes == changesAtFirst + 3 && !play.throughRelay, "leaving the game: no news, and no line");
+
+	// The room lost, with no HOST_KEPT for 45 s: why is in the game's own words
+	Check(HostAGame() == NET_OK, "a game hosts through the relay again");
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	enetClock += kNetRelayKeptWithinMs;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostRoomGone && news.why != NULL && strcmp(news.why, NetRelay_WhyText(kNetRelayNoKeep)) == 0 && news.region[0] == 0 && !play.throughRelay,
+		"its room lost: the news is that the room has gone, and why, in the game's own words; and there's no line in play");
+	EndTheGame();
+
+	// No relay answering, or none the list named that can be used: open on this network only
+	Check(HostAGame() == NET_OK, "a game hosts with the relay silent");
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNoRelay && news.why == NULL && news.region[0] == 0, "no relay answered: the news is that the game is open on this network only");
+	EndTheGame();
+	relayAddressNamed = ENET_HOST_ANY;
+	Check(HostAGame() == NET_OK, "a game hosts with the only relay named at an address that's never sent to");
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNoRelay, "and the news is the same");
+	EndTheGame();
+	relayAddressNamed = kRelayHost;
+
+	relayNamed = false;
+	Net_RelayHostStateNow(&again);
+	Check(HostAGame() == NET_OK, "a game hosts with no relay named");
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNone && news.changes == again.changes, "and has no relay news at all");
+	EndTheGame();
+
+	// A joiner through a relay: ENet's round trip to the host, once ENet has timed one
+	relayNamed = true;
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	thePeer.lastReceiveTime = 0;
+	thePeer.roundTripTime = 500;
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_OK, "a game joined through a relay");
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && !play.isHost && strcmp(play.region, "virginia") == 0 && play.ms == -1,
+		"the joiner's line: through its game's relay, with no round trip until ENet has timed one, so never ENet's starting guess of 500 ms");
+	thePeer.lastReceiveTime = 1;
+	thePeer.roundTripTime = 63;
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.ms == 63, "then ENet's round trip to the host, through the relay");
+	thePeer.roundTripTime = 20000;
+	Net_RelayPlayStateNow(&play);
+	Check(play.ms == 9999, "never more than 9,999 ms");
+	thePeer.state = ENET_PEER_STATE_CONNECTION_PENDING;
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "and no line while the connection isn't made");
+	thePeer.state = ENET_PEER_STATE_CONNECTED;
+	EndTheGame();
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "nor once the game is over");
+
+	// A game joined on this network has no relay line
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	Check(JoinAGame() == NET_OK, "a game joined on this network");
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "has no relay line in play");
+	EndTheGame();
+
+	thePeer.lastReceiveTime = 0;
+	thePeer.roundTripTime = 0;
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
+// scripted relay. Nothing is timed until the list names relays; the echoes go to the relay's control port from a socket of their own; an
+// answer from anywhere else is dropped, though it holds the same bytes; and the socket is closed once the timing is done.
+static void TestTimingTheRelaysForJoining()
+{
+	printf("Timing the relays for the games page\n");
+	datagramsWaiting.clear();
+	relayNamed = false;
+	Net_ForgetRelayTimes();
+	int const openBefore = socketsOpen;
+	int const sentNothing = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && socketsOpen == openBefore && datagramsSent == sentNothing,
+		"with no relays from the list yet, nothing is timed, opened or sent");
+
+	relayNamed = true;
+	int const sentBefore = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(datagramsSent == sentBefore + 1 && datagramsSentTo.back().host == kRelayHost && datagramsSentTo.back().port == kNetRelayDefaultControlPort
+		&& lastDatagramSent.size() == kNetRelayMessageBytes && lastDatagramSent[5] == kNetRelayEcho && socketsOpen == openBefore + 1,
+		"once the list has its relays: the first echo goes to the relay's control port, from a socket of its own");
+
+	NetRelayMessage echo;
+	Check(NetRelay_Read(lastDatagramSent.data(), lastDatagramSent.size(), &echo) == kNetRelayIsAMessage, "(the echo reads back as one)");
+	NetRelayMessage back = echo;
+	back.type = kNetRelayEchoBack;
+
+	// 10 ms on, a stranger answers with the very same bytes; 40 ms on, the relay does
+	WaitingDatagram stranger;
+	stranger.bytes.resize(kNetRelayMessageBytes);
+	NetRelay_Write(back, stranger.bytes.data());
+	stranger.from.host = 0x0E0E0E0E;
+	stranger.from.port = kNetRelayDefaultControlPort;
+	enetClock += 10;
+	datagramsWaiting.push_back(stranger);
+	Net_TimeRelaysForJoining();
+	enetClock += 30;
+	ArrivesFromTheRelay(back, kNetRelayDefaultControlPort);
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1, "no time is given before the timing is done");
+
+	// The other two echoes, unanswered, then a second for any late answer
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += kNetRelayEchoAnswerWithinMs;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == 40, "then the relay's time is its answer's, 40 ms: the stranger's earlier one wasn't heard");
+	Check(Net_JoinerMsToRelay("paris") == -1 && Net_JoinerMsToRelay(NULL) == -1, "a region with no timed relay, or none at all: no time");
+	Check(socketsOpen == openBefore, "and the socket is closed once the timing is done");
+
+	int const sentAfter = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(datagramsSent == sentAfter && Net_JoinerMsToRelay("virginia") == 40, "after that, each frame's call does nothing, and the time stays");
+
+	// Timed again, when the page opens again, and this time the relay never answers
+	Net_ForgetRelayTimes();
+	Check(Net_JoinerMsToRelay("virginia") == -1, "forgotten when the page opens again");
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += kNetRelayEchoAnswerWithinMs;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && socketsOpen == openBefore, "a relay that never answers has no time, and the socket is still closed");
+
+	Net_ForgetRelayTimes();
 	datagramsWaiting.clear();
 }
 
@@ -1409,6 +1700,9 @@ static void TestASearchAndItsAnswers()
 	Arrives(noEnds, 0x0500007F);
 	Net_UpdateSessionList(selection);
 	Check(NumberOfSessionsFound == 1 && strnlen(SessionData[0].Name, sizeof(SessionData[0].Name)) < sizeof(SessionData[0].Name), "names with no end still make a name that ends");
+	Check(strnlen(SessionData[0].levelName, sizeof(SessionData[0].levelName)) < sizeof(SessionData[0].levelName) && SessionData[0].levelName[0] == 'B'
+		&& SessionData[0].gameStyle == described->gameStyle && SessionData[0].players == described->nPlayers && SessionData[0].maxPlayers == described->maxPlayers,
+		"and the games page's columns: the level's name, ended, the style and the players, as the host said them");
 	// A name with no end reads the same as one with its end, once it has been cut to fit the list, so the answer can't show this. The line has to be seen.
 	Check(Has(ReadSourceFile("3dc/networking.cpp"), "session.sessionName[kSessionNameSize - 1] = '\\0';"), "a game's name always gets an end before it's read");
 
@@ -1661,6 +1955,32 @@ static void TestJoining()
 	AvP.Network = I_No_Network;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: a network game goes on while its window isn't the one in front. A host whose window
+// wasn't lost its room on the relay (no HOST_KEEP for 45 s): the game waited in Windows' messages for as long as another window was in
+// front, and everything that keeps it in the game runs on its own thread. The waiting itself is win_func.cpp's, read here, not run.
+static void TestAGameGoesOnBehindAnotherWindow()
+{
+	printf("A network game behind another window\n");
+	Check(!Net_GameGoesOnWhileInactive(), "with no network game, the game waits while its window isn't in front, as it always has");
+	Check(HostAGame() == NET_OK && Net_GameGoesOnWhileInactive(), "a host goes on");
+	EndTheGame();
+	Check(!Net_GameGoesOnWhileInactive(), "and once its game is over, it waits again");
+	Check(JoinAGame() == NET_OK && Net_GameGoesOnWhileInactive(), "a joiner goes on too");
+	EndTheGame();
+	Check(!Net_GameGoesOnWhileInactive(), "until its game is over");
+
+	std::string const messages = ReadSourceFile("3dc/win95/win_func.cpp");
+	Check(Has(messages, "if (!bActive && !Net_GameGoesOnWhileInactive())") && Has(messages, "while (!bActive && bRunning && !Net_GameGoesOnWhileInactive());"),
+		"SOURCE: Windows' messages hold the game while its window isn't in front only when there's no network game");
+	std::string const window = ReadSourceFile("3dc/avp/win95/win_proj.cpp");
+	Check(Has(window, "if (raw->header.dwType == RIM_TYPEMOUSE && bActive)"), "SOURCE: the mouse, which Windows gives the game even then, doesn't move the player");
+	Check(Has(window, "if (dwSize > sizeof(lpb) || ::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) == (UINT)-1)"),
+		"SOURCE: and the mouse's report is read only when it fits its room");
+	std::string const input = ReadSourceFile("win32/di_func.cpp");
+	Check(Has(input, "\tif (bActive)\n\t{\n\t\tReadJoysticks();\n\t}"), "SOURCE: nor does a gamepad, which is read whatever window is in front");
+	Check(Has(window, "\t\t\tIngameKeyboardInput_ClearBuffer();\n\t\t\treturn 0;"), "SOURCE: and every key and button held is let go as the window stops being in front");
+}
+
 static void TestJoiningAgainWhenItCantBeDone()
 {
 	Check(JoinAGame() == NET_OK, "joining again");
@@ -1909,6 +2229,148 @@ static void HostWithClients(int clients)
 
 	EverythingArrives();
 	sentMessages.clear();
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the request to join (network version 114). A host that asks holds a joiner's "let me
+// in" until it's answered. Yes lets it in; no, a second joiner meanwhile, and no answer in time each close the connection with their own
+// reason; a joiner that leaves takes its request with it; and what needs no question, another version, isn't asked about. Then the
+// joiner's side: waiting, then yes, the host's no, or no answer at all.
+static void TestTheRequestToJoin()
+{
+	printf("The request to join\n");
+	Net_LetEveryJoinerIn(false);
+	char name[kPlayerNameSize];
+	NetJoinWho who = {};
+
+	HostWithClients(0);
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "with nobody asking, there's no request");
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Ripley"));
+	Check(playersInGame.empty() && IDOf(1) == 0 && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0 && who.connection == 1,
+		"a joiner asks: it isn't let in yet, and the host has its request, with its name");
+
+	int const gentleBefore = closedGently;
+	Connects(2);
+	TakeEverything();
+	Hears(2, AskingToJoin("Hicks"));
+	Check(closedGently == gentleBefore + 1 && lastDisconnectData == kNetJoinRefusedBusy && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0,
+		"a second joiner meanwhile is told the host is busy, and the first is still the one waiting");
+
+	enetClock += 20000;
+	Net_ServiceNetwork();
+	Check(peers[1].state == ENET_PEER_STATE_CONNECTED && Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"20 s on, past the limit on saying who it is, a joiner the host is answering is still waiting");
+
+	NetJoinWho const somebodyElse = { who.connection, who.connectID + 1 };
+	Net_AnswerJoinRequest(somebodyElse, true);
+	Check(playersInGame.empty() && Net_JoinRequestWaiting(name, sizeof(name), &who), "an answer for somebody else does nothing");
+
+	Net_AnswerJoinRequest(who, true);
+	Check(playersInGame.size() == 1 && IDOf(1) != 0 && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"the host says yes: the joiner is let in, as before, and the request has gone");
+	EndTheGame();
+
+	// A name that never ends: the host's screen still gets one that does
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	{
+		std::vector<uint8_t> noEnd = AskingToJoin("Drake");
+
+		if (noEnd.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+		{
+			memset(((PlayerDetails *)(noEnd.data() + sizeof(MessageHeader)))->name, 'D', kPlayerNameSize);
+		}
+
+		Hears(1, noEnd);
+	}
+	{
+		char wide[kPlayerNameSize * 4];
+		memset(wide, 'X', sizeof(wide));
+		Check(Net_JoinRequestWaiting(wide, sizeof(wide), &who) && strlen(wide) == kPlayerNameSize - 1 && wide[0] == 'D',
+			"a request whose name never ends still hands over a name that ends, however much room it's given");
+	}
+	EndTheGame();
+
+	// No
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Bishop"));
+	Net_JoinRequestWaiting(name, sizeof(name), &who);
+	Net_AnswerJoinRequest(who, false);
+	Check(playersInGame.empty() && IDOf(1) == 0 && lastDisconnectData == kNetJoinRefusedNo && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"the host says no: nothing is made for the joiner, its connection is closed with the host's no, and the request has gone");
+	Net_AnswerJoinRequest(who, true);
+	Check(playersInGame.empty(), "a second answer to a request that's gone does nothing");
+	EndTheGame();
+
+	// No answer in time
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Vasquez"));
+	enetClock += kNetJoinAnswerWithinMs;
+	Net_ServiceNetwork();
+	Check(playersInGame.empty() && lastDisconnectData == kNetJoinRefusedNoAnswer && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"unanswered for 30 s, the joiner is told no answer came, and the request has gone");
+	EndTheGame();
+
+	// The joiner who asked leaves, and somebody new comes to the same place
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Gorman"));
+	Closes(1);
+	TakeEverything();
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "a joiner who leaves while waiting takes its request with it");
+	peers[1].connectID = 7;
+	Connects(1);
+	TakeEverything();
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "and the next one in that place, who hasn't asked, has no request of the first one's");
+	peers[1].connectID = 0;
+	EndTheGame();
+
+	// What needs no question isn't asked: another version
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	std::vector<uint8_t> older = AskingToJoin("Apone");
+
+	if (older.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+	{
+		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+	}
+
+	Hears(1, older);
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who) && playersInGame.empty(), "a joiner of another version isn't asked about: it's told no at once, as before");
+	EndTheGame();
+
+	// The joiner's side
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a joiner, once its request has gone, waits for the host's answer");
+	NetID const given = 9;
+	Hears(0, AMessage(1, NET_SETPLAYERID, 1, &given, sizeof(given)));
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerYes, "and the host giving it its player ID is the yes");
+	EndTheGame();
+
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "(joining again)");
+	{
+		ENetEvent const closed = { ENET_EVENT_TYPE_DISCONNECT, &peers[0], NULL, kNetJoinRefusedNo };
+		peers[0].state = ENET_PEER_STATE_DISCONNECTED;
+		eventsWaiting.push_back(closed);
+		TakeEverything();
+	}
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNo, "the host closing the connection with its no is the no");
+	EndTheGame();
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNo, "and the answer stays once the game is left, for the screen to say why");
+
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a new join starts waiting again");
+	enetClock += kNetJoinAnswerWithinMs + 5000;
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNoAnswer, "and with no answer at all, past the host's own limit, it's no answer");
+	EndTheGame();
+
+	Net_LetEveryJoinerIn(true);
 }
 
 static void TestConnectionsThatHoldAPlace()
@@ -2931,7 +3393,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 113;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 114;"), "and an older game can tell this one isn't what it speaks");
 
 	// The log lines a tester's log needs from pldnet.cpp. A message left out for want of room says so from every place it can be left out.
 	Check(Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tNoteSendBufferFull(numBytesReqd);") && !Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tLOCALASSERT(1 == 0);"), "SOURCE: a message left out of a full frame is in the log, from every room check");
@@ -2988,6 +3450,10 @@ static void TestNoHeaderLeftAnything()
 
 int main()
 {
+	// The tests written before the request to join (version 114) let their joiners in at once, as a test's host does. TestTheRequestToJoin
+	// is the one that asks.
+	Net_LetEveryJoinerIn(true);
+
 	TestStartingTheGame();
 	TestNobodyToSendTo();
 	TestSendingWithNoGame();
@@ -3001,11 +3467,15 @@ int main()
 	TestHostingThroughTheRelay();
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
+	TestTheRelayOnTheScreen();
+	TestTimingTheRelaysForJoining();
+	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
 	TestSkirmish();
 	DirtyTheStack();
 	TestJoining();
+	TestAGameGoesOnBehindAnotherWindow();
 	TestJoiningAgainWhenItCantBeDone();
 	TestJoinThatGetsNoAnswerThenHosting();
 	TestHostingWhileStillInAGame();

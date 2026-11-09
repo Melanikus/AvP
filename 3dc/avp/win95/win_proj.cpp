@@ -2,6 +2,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   with -dev -windowed, a test copy's window goes in its own half of the screen (window_slot.h), not the top left corner
 
 #ifdef _WIN32
 /****
@@ -22,6 +24,7 @@ extern unsigned char KeyboardInput[256];
 #include "inline.h"
 #include "psndplat.h"
 #include "onscreenKeyboard.h"
+#include "window_slot.h"
 
 #include "reentrant_queue.h"
 	// Added 21/11/97 by DHM: support for a queue of Windows
@@ -127,11 +130,18 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 			assert(dwSize == 40);
 
 			static BYTE lpb[40];
-			::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
+
+			// Modified 2026-11-09 by Melanikus for the AvP port: the read is only done when what Windows has fits the room for it
+			if (dwSize > sizeof(lpb) || ::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) == (UINT)-1)
+			{
+				return 0;
+			}
 
 			RAWINPUT *raw = (RAWINPUT*)lpb;
 
-			if (raw->header.dwType == RIM_TYPEMOUSE)
+			// Modified 2026-11-09 by Melanikus for the AvP port: the mouse is read even while another window is in front (RIDEV_INPUTSINK,
+			// below), and a network game goes on then (win_func.cpp). A mouse moved in that other window must not turn the player here.
+			if (raw->header.dwType == RIM_TYPEMOUSE && bActive)
 			{
 				mouseMoved = true;
 				xPosRelative += raw->data.mouse.lLastX;
@@ -567,6 +577,15 @@ void ChangeWindowsSize(uint32_t width, uint32_t height)
 	int top = 0;
 	int wide = newWindowSize.right - newWindowSize.left;
 	int tall = newWindowSize.bottom - newWindowSize.top;
+
+	// -dev -windowed: a test copy's window goes in its own half of the screen, so two copies side by side never overlap (window_slot.h)
+	WindowSlot slot;
+
+	if (WindowMode == WindowModeSubWindow && WindowSlot_Last(&slot))
+	{
+		left = slot.left;
+		top = slot.top;
+	}
 
 	if (::SetWindowPos(hWndMain, 0, left, top, wide, tall, SWP_SHOWWINDOW) == 0)
 	{

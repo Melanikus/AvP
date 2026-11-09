@@ -39,6 +39,10 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the multiplayer page asks the relay server's list where its relays are, and the page of games found asks it for its games as well
 //   as the LAN (relay_list.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the page of games found is the online-play screens' (online_screens_page.h): a table of each game's name, level, players, region and
+//   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
+//   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -80,6 +84,9 @@
 #include "profile_checks.h"
 #include "address_box.h"
 #include "relay_list.h"
+#include "relay_auto.h"
+#include "online_screens.h"
+#include "online_screens_page.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -181,17 +188,24 @@ static bool TheRelayGamesHaveCome(void)
 		LogString(std::string("Relay list: no games from the list, because ") + why);
 	}
 
+	// The page's ping column needs each game's hostMs, and it says why the list failed
+	OnlinePage_RelayGamesCame(relayGamesFound, relayGamesKept, why);
+
 	return relayGamesKept > 0;
 }
 
 // A join through a relay waits up to about 26 seconds for the relay's handshake, and the networking code asks this each 50 ms of it
 // (Net_SetRelayJoinWaitHook). It keeps the window answering Windows, so the game isn't marked "Not responding", and lets the player give up
-// with Esc, or by closing the game. False gives the join up.
+// with Esc, or by closing the game. False gives the join up. Each time, it draws the joining screen (J3), so the tail turns and the screen
+// says which step the join is at, and the game's region.
+static char joiningRegion[kRelayListRegionLetters + 1];
+
 static bool KeepTheWindowAliveWhileJoining(void)
 {
 	extern bool bRunning;
 	extern unsigned char KeyboardInput[];
 
+	OnlinePage_DrawJoining(joiningRegion);
 	CheckForWindowsMessages();
 	DirectReadKeyboard();
 	return bRunning && !KeyboardInput[KEY_ESCAPE];
@@ -411,6 +425,54 @@ static void StartTheCoopCampaign(void)
 	}
 }
 
+// -dev -relayhost and -dev -askjoiners (relay_auto.h): the copy hosts by itself as the menus start, once, so the online screens can be
+// filmed with nobody at the game. Added 2026-11-09 by Melanikus for the AvP port. It does what the host page's Start row does
+// (AVPMENU_ELEMENT_STARTMPGAME), with the multiplayer pages' answers fixed: the first profile, a deathmatch on the first level of the
+// multiplayer list, a marine, and fixed names. Nothing but the word comes from the command line. Unlike the Start row it doesn't save the
+// settings as the "previous game", so nobody's own choices are changed. False if it didn't host: then the menus go on as they always do.
+static bool HostByItselfThroughTheRelay(void)
+{
+	if (!RelayAuto_HostsByItselfNow())
+	{
+		return false;
+	}
+
+	// Nobody is here to choose a profile, so it's the first, as a new player's would be
+	if (UserProfileNumber == -1)
+	{
+		ExamineSavedUserProfiles();
+		UserProfileNumber = 0;
+		UserProfilePtr = GetFirstUserProfile();
+		GetSettingsFromUserProfile();
+	}
+
+	SetDefaultMultiplayerConfig();
+	netGameData.skirmishMode = FALSE;   // the game's "skirmish" is against the computer, with no network at all
+	netGameData.gameType = NGT_Individual;
+	netGameData.levelNumber = 0;        // the first level of the multiplayer list
+	netGameData.coopCampaign = kCampaignNone;
+	netGameData.coopCampaignLevel = 0;
+	MP_Species = 0;                     // a marine
+	strcpy(MP_PlayerName, "Host");
+	strcpy(MP_SessionName, "Relay test");
+
+	// The list's relays first, as the multiplayer page asks for them, so the game opens through the nearest
+	LogString(RelayAuto_WaitForRelays() ? "relay auto: the list's relays have come, so this copy hosts through the nearest"
+		: "relay auto: no relay came from the list in time, so this copy hosts on this network only");
+
+	if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) == NET_FAIL)
+	{
+		LogString("relay auto: this copy couldn't host, so it waits at the menus");
+		return false;
+	}
+
+	LogString("relay auto: this copy hosts a deathmatch on the first level of the multiplayer list, and it's loading");
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+	SetLevelToLoadForThisNetworkGame();
+	SetBriefingTextForMultiplayer();
+	return true;
+}
+
 int AvP_MainMenus(void)
 {
 	if (Coop_LevelChangeIsDue())
@@ -455,6 +517,10 @@ int AvP_MainMenus(void)
 		DisplayVideoModeUnavailableScreen();
 	}
 	VideoModeNotAvailable = 0;
+
+	// -dev -onlinescreens: every online-play screen, once, with made-up games and no network, for pictures (online_screens_page.h). Without
+	// the word, this does nothing.
+	OnlineDemo_Run();
 
 	if (CoopMenu_HasALastWord())
 	{
@@ -502,6 +568,10 @@ int AvP_MainMenus(void)
 
 	// Whatever was played has ended and been dealt with above, so nothing is being played now
 	CustomMaps_SetPlaying(false);
+
+	// -dev -relayhost or -dev -askjoiners: host by itself, once, instead of waiting for someone at the menus. Then the menus' loop below
+	// doesn't run, and the game starts as if the host page's Start row had been chosen (HostByItselfThroughTheRelay).
+	HostByItselfThroughTheRelay();
 
 	TimeStampedMessage("starting general menus");
 
@@ -712,8 +782,96 @@ extern int InGameMenusAreRunning(void)
 	return (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS);
 }
 
+// THE HOST'S ANSWER TO A PLAYER ASKING TO JOIN (online_screens_page.h's H1). While a player waits to be let in, the page the host is on (the
+// in-game menus, or the co-op lobby) shows two rows in front of its own, "Let NAME in" and "Say no to NAME", with a line at the top saying who
+// asks. The rows are a copy of the page's own with the two in front, made again each frame, so a page that changes its own rows (the lobby's,
+// as players come and go) stays right. The selection stays on the row it was on, so a key pressed by chance can't let anyone in.
+static AVPMENU_ELEMENT answerRows[2 + 31 + 1];
+static bool answerRowsShown = false;
+static char letInRow[96], sayNoRow[96], askingLine[96];
+
+static bool ThePageAnswersRequests(enum AVPMENU_ID page)
+{
+	return page == AVPMENU_INNETGAME || page == AVPMENU_INCOOPGAME || page == AVPMENU_COOP_HOST;
+}
+
+static void UpdateTheAnswerRows(void)
+{
+	char name[kOnlineRowLetters];
+	int seconds = 0;
+	AVPMENU_ELEMENT *const own = AvPMenusData[AvPMenus.CurrentMenu].MenuElements;
+	bool const ours = answerRowsShown && AvPMenus.MenuElements == answerRows;
+	bool const waiting = ThePageAnswersRequests(AvPMenus.CurrentMenu) && OnlineHost_AskWaiting(name, sizeof(name), &seconds);
+
+	if (!waiting)
+	{
+		// Answered, or gone: the page's own rows again, with the same row selected
+		if (ours)
+		{
+			int const selected = AvPMenus.CurrentlySelectedElement - 2;
+			AvPMenus.MenuElements = own;
+			CountTheRowsOnThisPage();
+			AvPMenus.CurrentlySelectedElement = selected < 0 ? 0 : selected;
+		}
+
+		answerRowsShown = false;
+		return;
+	}
+
+	OnlineScreens_LetInWords(name, letInRow, sizeof(letInRow));
+	OnlineScreens_SayNoWords(name, sayNoRow, sizeof(sayNoRow));
+	OnlineScreens_AskingWords(name, seconds, askingLine, sizeof(askingLine));
+
+	// Each row keeps how bright it was last frame, so the copy made again doesn't flicker
+	int const room = (int)(sizeof(answerRows) / sizeof(answerRows[0]));
+	int brightness[sizeof(answerRows) / sizeof(answerRows[0])];
+
+	for (int row = 0; row < room; row++)
+	{
+		brightness[row] = ours ? answerRows[row].Brightness : BRIGHTNESS_OF_DARKENED_ELEMENT;
+	}
+
+	memset(answerRows, 0, sizeof(answerRows));
+
+	for (int answer = 0; answer < 2; answer++)
+	{
+		answerRows[answer].ElementID = AVPMENU_ELEMENT_JOINANSWER;
+		answerRows[answer].TextPtr = answer == 0 ? letInRow : sayNoRow;
+		answerRows[answer].MaxValue = answer == 0 ? 1 : 0;
+		answerRows[answer].HelpString = TEXTSTRING_BLANK;
+	}
+
+	int rows = 2;
+
+	for (AVPMENU_ELEMENT const *element = own; element->ElementID != AVPMENU_ELEMENT_ENDOFMENU && rows < room - 1; element++)
+	{
+		answerRows[rows++] = *element;
+	}
+
+	answerRows[rows].ElementID = AVPMENU_ELEMENT_ENDOFMENU;
+
+	int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);
+
+	AvPMenus.MenuElements = answerRows;
+	CountTheRowsOnThisPage();
+	AvPMenus.CurrentlySelectedElement = selected < AvPMenus.NumberOfElementsInMenu ? selected : AvPMenus.NumberOfElementsInMenu - 1;
+
+	if (ours)
+	{
+		for (int row = 0; row < AvPMenus.NumberOfElementsInMenu && row < room; row++)
+		{
+			answerRows[row].Brightness = brightness[row];
+		}
+	}
+
+	answerRowsShown = true;
+}
+
 extern void AvP_UpdateMenus(void)
 {
+	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
+	UpdateTheAnswerRows();
+
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
 	{
 		switch (CoopMenu_EveryFrame(AvPMenus.CurrentMenu == AVPMENU_COOP_HOST))
@@ -834,6 +992,14 @@ extern void AvP_UpdateMenus(void)
 			retval = Net_ConnectingToSession();
 			if (retval == NET_FAIL)
 			{
+				// The request to join's own end: the host said no, was answering someone else or didn't answer, or Esc while it waited.
+				// Back to the games page, which says which, with that game selected again.
+				if (!Net_WasRemovedByTheHost() && OnlinePage_JoinEnded())
+				{
+					SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
+					return;
+				}
+
 				// player has aborted, go back a menu. Someone the host removed is told so.
 				SetupNewMenu(Net_WasRemovedByTheHost() ? AVPMENU_COOP_OUT : AVPMENU_MULTIPLAYER);
 				return;
@@ -849,14 +1015,40 @@ extern void AvP_UpdateMenus(void)
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION)
 	{
 		int selection = AvPMenus.CurrentlySelectedElement;
+		bool listChanged = false;
 
-		// The LAN's answers, or the relay server's: either way the page is set up again, and that puts the relay's games on it
+		// The LAN's answers, or the relay server's
 		if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())
 		{
-			// session list has changed, so we need to set the menu again
-			SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
-			// adjust the selected menu item
-			AvPMenus.CurrentlySelectedElement = selection;
+			listChanged = true;
+		}
+
+		// Every 5 s while the page is open, it asks again (online_screens.h's search, 12 times at most while it finds nothing): a new search
+		// of the LAN, which empties the list of games found, and the list of games
+		if (OnlinePage_TimeToAskAgain())
+		{
+			Net_StopSearchingForSessions();
+			Net_FindAvPSessions();
+			RelayList_FindGames();
+			listChanged = true;
+		}
+
+		// After a search, which may have emptied the list, the relay's games go back on it
+		if (listChanged)
+		{
+			PutTheRelayGamesOnThePage();
+		}
+
+		// The rows shown, kept steady (online_screens_page.h). When they change, the page's rows are made again, with the selection on the
+		// same game, still lit. The page isn't set up again, as that would start another search of the LAN.
+		selection = AvPMenus.CurrentlySelectedElement;
+
+		if (OnlinePage_Frame(listChanged, &selection))
+		{
+			MakeSelectSessionMenu();
+			CountTheRowsOnThisPage();
+			AvPMenus.CurrentlySelectedElement = selection < AvPMenus.NumberOfElementsInMenu ? selection : AvPMenus.NumberOfElementsInMenu - 1;
+			AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].Brightness = BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT;
 		}
 	}
 
@@ -1229,8 +1421,9 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				SaveIPAddress(IP_Address_Name, IPAddressString);
 				Net_JoinGame();
 
-				// The relay server's games as well, once for each time the page is opened: the page is set up again each time its list
-				// changes, and asking then would ask again for every answer. A joiner needs the relays too, to reach a game's region.
+				// The relay server's games as well, when the page is opened, and then every 5 s from its frame (OnlinePage_TimeToAskAgain),
+				// never on each answer. A joiner needs the relays too, to reach a game's region, and to time them for the ping column.
+				OnlinePage_Opened();
 				relayGamesKept = 0;
 				RelayList_FindRelays();
 				RelayList_FindGames();
@@ -1562,6 +1755,33 @@ static void RenderMenu(void)
 		y = (480 - AvPMenus.MenuHeight) / 2;
 	}
 
+	// The page of games found is drawn by the online-play screens (online_screens_page.h): its column headings, or the tail and the search's
+	// words while it has no games, then each game as a row of the table
+	bool const gamesPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION;
+
+	if (gamesPage)
+	{
+		OnlinePage_DrawTop();
+	}
+
+	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
+	// instead of the page's own row
+	bool const askingPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING && OnlinePage_DrawAsking();
+
+	// A player asking to join this host: who, and how long is left, above the two answer rows (UpdateTheAnswerRows)
+	if (answerRowsShown && AvPMenus.MenuElements == answerRows)
+	{
+		RenderSmallMenuText(askingLine, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
+	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes
+	char relayNews[128];
+
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews)))
+	{
+		RenderSmallMenuText(relayNews, MENU_CENTREX, (answerRowsShown && AvPMenus.MenuElements == answerRows) ? 56 : 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
 		int targetBrightness;
@@ -1592,7 +1812,15 @@ static void RenderMenu(void)
 			}
 		}
 
-		RenderMenuElement(elementPtr,e,y);
+		if (gamesPage)
+		{
+			OnlinePage_DrawRow(e, elementPtr->Brightness);
+		}
+		else if (!askingPage)
+		{
+			RenderMenuElement(elementPtr,e,y);
+		}
+
 		y += HeightOfMenuElement(elementPtr);
 	}
 
@@ -2850,6 +3078,14 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		case AVPMENU_ELEMENT_GOTOMENU:
 		case AVPMENU_ELEMENT_GOTOMENU_GFX:
 		{
+			// The page of games found, with no games: its one row is the search's, and Enter looks again once the search has given up.
+			// Esc still goes back.
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION &&
+				OnlinePage_RowCount() == 0 && OnlinePage_EnterWithNoGames())
+			{
+				break;
+			}
+
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
 				// Check to see if we are on one of the menus for entering multiplayer name
@@ -3406,13 +3642,28 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_JOINANSWER:
+		{
+			// The host's answer to the player waiting to join: let in, or no. The two rows go once it's answered (UpdateTheAnswerRows).
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				OnlineHost_Answer(elementPtr->MaxValue == 1);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
-				int s = AvPMenus.CurrentlySelectedElement;
+				// The row's game, where it is in the list of games found right now: found by its relay code or its address, never by the
+				// row's number, as each search empties that list and fills it again. A game that's gone isn't joined.
+				int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);
 
-				if (SessionData[s].AllowedToJoin)
+				if (s < 0)
+				{
+					OnlinePage_JoinFailed(OnlineScreens_Words(kOnlineWordsGameHasGone));
+				}
+				else if (SessionData[s].AllowedToJoin)
 				{
 					// copy the session name, leaving of the player count information
 					char *bracket_pos;
@@ -3427,6 +3678,13 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 						*bracket_pos = 0;
 					}
 
+					// The joining screen names the game's region. The region came from the list, and is made safe again where it's drawn.
+					memcpy(joiningRegion, SessionData[s].relayRegion, sizeof(joiningRegion));
+					joiningRegion[sizeof(joiningRegion) - 1] = '\0';
+
+					// The page remembers this game, to select it again if the join ends and the menus come back to the page
+					OnlinePage_Joining(AvPMenus.CurrentlySelectedElement);
+
 					// Only while this join waits: the hook is taken off again straight after, whatever happened
 					Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);
 					NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);
@@ -3438,6 +3696,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					else if (SessionData[s].throughRelay) {
 						// The networking code's own fixed words, such as "that game is full": nothing from the network
 						LogString(std::string("Relay: couldn't join the game, because ") + Net_RelayJoinFailedWhy());
+
+						// And on the page: Esc in the wait is the player's own choice, said in the page's words; anything else in the
+						// networking code's
+						if (strcmp(Net_RelayJoinFailedWhy(), NetRelay_WhyText(kNetRelayGivenUp)) == 0) {
+							OnlinePage_JoinGivenUp();
+						}
+						else {
+							OnlinePage_JoinFailed(Net_RelayJoinFailedWhy());
+						}
 					}
 				}
 			}
@@ -4097,6 +4364,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		}
 		case AVPMENU_ELEMENT_COOP_PLAYER:
 		case AVPMENU_ELEMENT_COOP_REMOVE:
+		case AVPMENU_ELEMENT_JOINANSWER:
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);

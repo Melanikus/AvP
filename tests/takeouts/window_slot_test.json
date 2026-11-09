@@ -1,0 +1,149 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the second copy goes on the left too",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "slot->left = areaLeft + (secondCopy ? half : 0);",
+					"to": "slot->left = areaLeft;"
+				}
+			]
+		},
+		{
+			"name": "the frame's width is left out of the room",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "int const roomWidth = half - frameWidth;",
+					"to": "int const roomWidth = half;"
+				}
+			]
+		},
+		{
+			"name": "the frame's height is left out of the room",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "int const roomHeight = areaHeight - frameHeight;",
+					"to": "int const roomHeight = areaHeight;"
+				}
+			]
+		},
+		{
+			"name": "a mode too big for the half is chosen",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "if (w <= roomWidth && h <= roomHeight && area > bestArea)",
+					"to": "if (area > bestArea)"
+				}
+			]
+		},
+		{
+			"name": "where nothing fits, no mode is used",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "slot->pictureWidth = bestArea >= 0 ? bestWidth : smallestWidth;",
+					"to": "slot->pictureWidth = bestWidth;"
+				}
+			]
+		},
+		{
+			"name": "where nothing fits, the largest mode is used",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "if (smallestArea < 0 || area < smallestArea)",
+					"to": "if (smallestArea < 0 || area > smallestArea)"
+				}
+			]
+		},
+		{
+			"name": "modes that can't be a screen's are taken",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "if (w <= 0 || h <= 0 || w > kMostScreen || h > kMostScreen)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a frame as wide as the half is taken",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "if (frameWidth >= half || frameHeight >= areaHeight)",
+					"to": "if (frameHeight >= areaHeight)"
+				}
+			]
+		},
+		{
+			"name": "a work area wider than any screen is taken",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "!IsAScreenNumber(areaWidth) ||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a work area further off than any screen is taken",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "!IsAScreenNumber(areaLeft) ||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a frame below 0 is taken",
+			"changes": [
+				{
+					"file": "3dc/window_slot.cpp",
+					"from": "frameWidth < 0 || frameHeight < 0",
+					"to": "frameHeight < 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -windowed works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (CommandLineHasWord(command_line, \"-dev\"))\n\t\t{\n\t\t\tWindowMode = WindowModeSubWindow;",
+					"to": "if (true)\n\t\t{\n\t\t\tWindowMode = WindowModeSubWindow;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the test window's picture size is never used",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\tif (windowed)\n\t{\n\t\tint modeWidths",
+					"to": "\tif (false)\n\t{\n\t\tint modeWidths"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the test window stays at the top left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (WindowMode == WindowModeSubWindow && WindowSlot_Last(&slot))",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}

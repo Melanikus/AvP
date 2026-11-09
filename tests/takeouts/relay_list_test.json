@@ -655,6 +655,16 @@
 			]
 		},
 		{
+			"name": "SOURCE: the page of games found never asks the list again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRelayList_FindGames();\n\t\t\tlistChanged = true;",
+					"to": "\t\t\tlistChanged = true;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the multiplayer page does not ask where the relays are",
 			"changes": [
 				{
@@ -669,8 +679,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tPutTheRelayGamesOnThePage();\n",
-					"to": ""
+					"from": "\t\t\tPutTheRelayGamesOnThePage();\n\t\t\tMakeSelectSessionMenu();",
+					"to": "\t\t\tMakeSelectSessionMenu();"
 				}
 			]
 		},
@@ -691,6 +701,36 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "\tCheckForWindowsMessages();\n\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];",
 					"to": "\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's answer rows take the selection when they come",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);",
+					"to": "int const selected = ours ? AvPMenus.CurrentlySelectedElement : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both answer rows let the player in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;",
+					"to": "answerRows[answer].MaxValue = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a join goes to the row number, not its game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);",
+					"to": "int const s = AvPMenus.CurrentlySelectedElement;"
 				}
 			]
 		},
@@ -751,6 +791,61 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\t\tTell(\"the game is off the list\");",
 					"to": "\t\t\tLogString(\"the game is off the list\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game quits without taking its game off the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tRelayList_BeforeQuitting(2000);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game asks the list's name as it quits",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tRelayList_BeforeQuitting(2000);\n",
+					"to": "\tRelayList_BeforeQuitting(2000);\n\tRelay_ServerName();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait at quit starts the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t// A game still on the list comes off it, even if the networking code never said the room had ended. If it did, this does nothing.\n\tRelayList_HostRoomClosed();\n",
+					"to": "\tStart();\n\tRelayList_HostRoomClosed();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait at quit has no limit",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (waited >= mostMs)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's thread says it has caught up before the DELETE",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n",
+					"to": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n\n\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n"
 				}
 			]
 		}

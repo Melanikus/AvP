@@ -100,6 +100,7 @@ extern FakeNetGameData netGameData;
 extern int LobbiedGame;
 
 // menus.h. Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list, as menus.h has it (relay_list_text.h's sizes)
+// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns, as menus.h has them (Fourth's 357ba55a)
 #include "relay_list_text.h"
 
 typedef struct
@@ -114,6 +115,10 @@ typedef struct
 	bool throughRelay;
 	char relayCode[kRelayCodeLetters];
 	char relayRegion[kRelayListRegionLetters + 1];
+	char levelName[kRelayListLevelLetters + 1];
+	uint16_t gameStyle;
+	uint8_t players;
+	uint8_t maxPlayers;
 } SESSION_DESC;
 
 #define MAX_NO_OF_SESSIONS 10

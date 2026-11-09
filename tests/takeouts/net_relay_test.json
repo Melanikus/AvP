@@ -463,6 +463,41 @@
 					"to": "\t\t\tnotMessages[why]++;"
 				}
 			]
+		},
+		{
+			"name": "a keep's answer isn't timed",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\t\t\tkeepMs = took < 1 ? 1 : (took > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(took));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a keep going doesn't wait for its answer",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\tkeepAt = now;\n\t\t\tkeepWaiting = true;\n",
+					"to": "\t\t\tkeepAt = now;\n"
+				}
+			]
+		},
+		{
+			"name": "a refused HOST_KEPT is timed",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\t\t// The keep's round trip, from the HOST_KEEP this answers (KeepMs)\n\t\t\t\tif (keepWaiting)\n\t\t\t\t{\n\t\t\t\t\tuint32_t const took = now - keepAt;\n\t\t\t\t\tkeepMs = took < 1 ? 1 : (took > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(took));\n\t\t\t\t\tkeepWaiting = false;\n\t\t\t\t}\n\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\tcase kNetRelayHostKept:\n\t\t\t\tif (state != kOpen)\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayNotForNow);\n\t\t\t\t}\n",
+					"to": "\t\t\tcase kNetRelayHostKept:\n\t\t\t\tif (state != kOpen)\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayNotForNow);\n\t\t\t\t}\n\n\t\t\t\tif (keepWaiting)\n\t\t\t\t{\n\t\t\t\t\tkeepMs = static_cast<int>(now - keepAt);\n\t\t\t\t\tkeepWaiting = false;\n\t\t\t\t}\n"
+				}
+			]
 		}
 	]
 }

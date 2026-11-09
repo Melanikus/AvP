@@ -797,10 +797,33 @@ static void TestTheCalls()
 	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
 		"and the list's port is the settings' only with -dev");
 
-	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks
+	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks.
+	// Modified 2026-11-09 by Melanikus for the AvP port: its one call of the list's is RelayList_BeforeQuitting, after the menus have ended
+	// and before the game shuts down, and that never starts the list (below).
 	std::string const winmain = ReadSource("3dc/avp/win95/winmain.cpp");
-	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && !Has(winmain, "RelayList_"),
-		"nothing asks for the list's name or port before -dev has been read");
+	size_t const firstListCall = winmain.find("RelayList_");
+	// The call itself, not the tab before it, so it's where winmain's first "RelayList_" is (Fourth's fix of 2026-11-09: with the tab the
+	// two were a letter apart, and the check below could never pass)
+	size_t const quitting = winmain.find("RelayList_BeforeQuitting(2000);");
+	size_t const afterMenus = winmain.find("TimeStampedMessage(\"After Menus\");");
+	size_t const exitSystem = winmain.find("\tExitSystem();\n");
+	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && firstListCall == quitting
+		&& winmain.find("RelayList_", quitting + 1) == std::string::npos,
+		"nothing asks for the list's name or port before -dev has been read: winmain's only call of the list's is the one as the game quits");
+	Check(quitting != std::string::npos && afterMenus != std::string::npos && exitSystem != std::string::npos && afterMenus < quitting && quitting < exitSystem,
+		"and that comes after the menus have ended, before the game shuts down");
+
+	// As the game quits, a game still on the list comes off it, waiting at most that long for the list's thread to send the DELETE (server
+	// #14's run: the game had gone before the DELETE did). The wait starts nothing, and the thread says it has caught up only after the DELETE.
+	std::string const beforeQuitting = SourceSlice(source, "void RelayList_BeforeQuitting(unsigned int mostMs)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(beforeQuitting, "if (!shared)\n\t{\n\t\treturn;\n\t}") && !Has(beforeQuitting, "Start()") && Has(beforeQuitting, "RelayList_HostRoomClosed();"),
+		"as the game quits, a game still on the list is asked off it, and a list never used isn't started for that");
+	Check(Has(beforeQuitting, "if (waited >= mostMs)") && Has(beforeQuitting, "WaitForSingleObject(shared->endDone, mostMs - waited);"),
+		"and the game waits for the list's thread no longer than it was told to");
+	size_t const takenOff = thread.find("TakeOffTheList();\n");
+	size_t const caughtUp = thread.find("shared->endsDone = endsAsked;");
+	Check(takenOff != std::string::npos && caughtUp != std::string::npos && takenOff < caughtUp && Has(thread, "SetEvent(shared->endDone);"),
+		"the list's thread says it has caught up only once the DELETE has been sent");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)
@@ -822,12 +845,14 @@ static void TestTheMenus()
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	Check(menus.size() > 100000, "menus.cpp was found and read, from the top of the repository");
 
-	// The page of games found is set up again each time its list changes. Asking the list there would ask again for every answer, for
-	// as long as the page is open, so it has to be in the part that runs only when the page is first opened.
+	// The page of games found asks the list when it's first opened, and then only when its search says it's time (every 5 s, and 12 times
+	// at most while nothing is found: online_screens.h, checked by online_screens_test). Never on each answer, or one answer would bring the
+	// next, for as long as the page is open.
 	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(firstOpen, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 1,
-		"the page of games found asks the list once each time it's opened, and nowhere else");
+	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 2,
+		"the page of games found asks the list when it's opened and when its search says it's time, and nowhere else");
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
@@ -852,6 +877,17 @@ static void TestTheMenus()
 	size_t const unset = menus.find("Net_SetRelayJoinWaitHook(NULL);");
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
+
+	// A join goes to the game on its row, found by its relay code or its address (online_screens_page.h). Never by the row's number: each
+	// search empties the list of games found and fills it again, so by the time Enter is pressed, a row's number can be another game's.
+	Check(Has(menus, "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);") && !Has(menus, "int s = AvPMenus.CurrentlySelectedElement;"),
+		"a join goes to the game on its row, found by its code or its address, never by the row's number");
+
+	// A player asking to join: the host's two answer rows come in front of the page's own, and the selection moves down with the row it
+	// was on, so it's never on "Let NAME in" by itself: Enter pressed by chance can't let anyone in
+	std::string const answers = SourceSlice(menus, "static void UpdateTheAnswerRows(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(answers, "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);") && Has(answers, "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;"),
+		"the host's answer rows never take the selection when they come, and only the first lets the player in");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it
