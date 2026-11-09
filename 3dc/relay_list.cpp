@@ -752,6 +752,13 @@ namespace
 	bool noListAnswerWaiting = false;
 }
 
+// The list's name built into the game: the relay server's own, once its domain is bought. It's empty until then, and then there's no relay.
+static const char kRelayBuiltInServer[] = "";
+
+// AliensVsPredator.cfg is a text file people share, and anyone can edit it, so it mustn't be able to point the game at another computer
+// (tests/settings_file_test.cpp). A shared file naming another list would send every player who used it through that list's relays. So the
+// settings' RelayServer and RelayListPort are read only with -dev, for a test with the list on this machine. Without -dev, the game uses the
+// name built into it, at port 443, and a RelayServer in the settings is ignored, with a line in the log to say so.
 const char *Relay_ServerName(void)
 {
 	static char name[254];
@@ -762,7 +769,16 @@ const char *Relay_ServerName(void)
 		read = true;
 		std::string const setting = Config_GetString("[Network]", "RelayServer", "");
 
-		if (setting.size() < sizeof(name) && Relay_IsServerName(setting.c_str()))
+		if (!DevMode)
+		{
+			memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+			if (!setting.empty())
+			{
+				LogString("Relay list: the settings' RelayServer is for tests only, with -dev, so the game's own is used");
+			}
+		}
+		else if (setting.size() < sizeof(name) && Relay_IsServerName(setting.c_str()))
 		{
 			memcpy(name, setting.c_str(), setting.size() + 1);
 		}
@@ -782,15 +798,20 @@ int Relay_ListPort(void)
 	if (port == 0)
 	{
 		port = kRelayListPort;
-		int const setting = Config_GetInt("[Network]", "RelayListPort", kRelayListPort);
 
-		if (setting >= 1 && setting <= 65535)
+		// Like RelayServer, only with -dev (see above)
+		if (DevMode)
 		{
-			port = setting;
-		}
-		else
-		{
-			LogString("Relay list: the settings' RelayListPort isn't a port from 1 to 65535, so 443 is used");
+			int const setting = Config_GetInt("[Network]", "RelayListPort", kRelayListPort);
+
+			if (setting >= 1 && setting <= 65535)
+			{
+				port = setting;
+			}
+			else
+			{
+				LogString("Relay list: the settings' RelayListPort isn't a port from 1 to 65535, so 443 is used");
+			}
 		}
 	}
 

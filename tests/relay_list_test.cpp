@@ -788,6 +788,14 @@ static void TestTheCalls()
 	std::string const news = SourceSlice(source, "void WriteTheNews(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + piece);"),
 		"the main thread writes every piece of the list's news, each starting \"Relay list: \"");
+
+	// The settings file is shared, so it mustn't point anyone's game at another list (settings_file_test): both settings are read only with -dev
+	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(serverName, "if (!DevMode)") && Has(serverName, "memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));"),
+		"without -dev, the list's name is the game's own, whatever the settings say");
+	std::string const listPort = SourceSlice(source, "int Relay_ListPort(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
+		"and the list's port is the settings' only with -dev");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)
