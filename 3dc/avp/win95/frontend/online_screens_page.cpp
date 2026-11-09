@@ -1119,12 +1119,20 @@ static bool NewsHasCome(void)
 	return true;
 }
 
-bool OnlineHost_NewsLine(char *line, size_t size)
+bool OnlineHost_NewsLine(char *line, size_t size, bool held)
 {
 	NewsHasCome();
 
 	if (!newsCame || HasCome(Now(), newsAt + kFailedLineMs))
 	{
+		return false;
+	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: while a join request's rows are up, the news waits, its 8 s starting again each
+	// frame, so it never covers the check code (online_screens_page.h)
+	if (held)
+	{
+		newsAt = Now();
 		return false;
 	}
 
