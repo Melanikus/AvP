@@ -1,3 +1,6 @@
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   in a Hudson run, a marine's landing is told to Hudson, by the game's own rule for whether it would kill, instead of being skipped;
+//   outside a run, a fall is exactly as it was
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine can hear the gun of a player on another machine;
 //   an NPC's voice is heard on other machines in a game that plays as single player;
@@ -17979,11 +17982,6 @@ static void	Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
 
-	// A drop shouldn't end a run, or splash blood across what's being looked at
-	if (HudsonMarineIsOn) {
-		return;
-	}
-
 	LOCALASSERT(sbPtr);
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
 	LOCALASSERT(marineStatusPointer);
@@ -17991,7 +17989,13 @@ static void	Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {
 	if (sbPtr->DynPtr->IsInContactWithFloor) {
 		if (marineStatusPointer->lastframe_fallingspeed>0) {
 
-			if (marineStatusPointer->lastframe_fallingspeed>Marine_Terminal_Velocity) {
+			bool const wouldKillHim = marineStatusPointer->lastframe_fallingspeed>Marine_Terminal_Velocity;
+
+			// In a run a fall hurts nobody, so that it can't splash blood across what's being looked at. Hudson's told instead, by this same
+			// rule, so that a fall he couldn't have survived can't go unnoticed. Outside a run, it's the game's own fall, exactly as it was.
+			if (HudsonMarineIsOn) {
+				Hudson_MarineLanded(sbPtr, marineStatusPointer->lastframe_fallingspeed, wouldKillHim);
+			} else if (wouldKillHim) {
 				VECTORCH point,point2;
 				enum PARTICLE_ID blood_type;
 

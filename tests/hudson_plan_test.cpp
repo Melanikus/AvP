@@ -1588,6 +1588,12 @@ static void TestTourAndSharedMachine()
 	Check(ComesBefore(fallCode, "IsInContactWithFloor", "if (HudsonMarineIsOn)"), "a run looks at a fall the way everyone else does, when he lands");
 	Check(ComesBefore(fallCode, "Hudson_MarineLanded(sbPtr, marineStatusPointer->lastframe_fallingspeed, wouldKillHim);", "else if (wouldKillHim)"), "a run is told of it, and isn't hurt by it");
 	Check(Has(fallCode, "wouldKillHim = marineStatusPointer->lastframe_fallingspeed>Marine_Terminal_Velocity;"), "and it's the game's own rule that says whether it kills");
+	// Outside a run the fall is the game's own, exactly as it was: the same damage and the same blood, only when it would kill. And a run
+	// tracks the fall as everyone else's (no early way out), or a fatal one couldn't be told
+	std::string const stockFall = Between(marineCode, "} else if (wouldKillHim) {", "/* Crunching sound optional. */");
+	Check(Has(stockFall, "CauseDamageToObject(sbPtr,&FallingDamage, (50*ONE_FIXED), NULL);") && Has(stockFall, "MakeBloodExplosion(&point2,127,&point,50,blood_type);"),
+		"outside a run, a fall that would kill does the game's own damage and blood, exactly as before");
+	Check(!Has(Between(marineCode, "Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {", "IsInContactWithFloor"), "return;"), "and nothing leaves before the fall is looked at, in a run or out of one");
 
 	std::string const walkCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
 	std::string const frameCode = Between(walkCode, "bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame)", "int HudsonNav_ModulesWalkedInto()");

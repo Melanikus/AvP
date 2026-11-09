@@ -707,7 +707,7 @@ static void TestJoiningTheGame()
 	// The user's ruling: only the spot lights anything, or looking through the cone is night vision
 	Check(Has(painted, "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)"), "only the spot brightens or shows a wall's colour, and the cone only adds its haze");
 	Check(Has(painted, "float3 haze = kHaze * cone;"), "and the haze is a colour of its own, with nothing of the wall in it");
-	Check(Has(render, "if (isARealLight)\n\t{\n\t\treturn;"), "and nothing painted goes over the real light");
+	Check(Has(render, "if (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t\treturn;"), "and nothing painted goes over the real light");
 
 	// The pictures it reads, in Gouraud
 	std::string const forTheLamp = Between(render, "static void DrawSurfacePicturesForTheLamp()\n{", "// The stencil now marks the pixels");
