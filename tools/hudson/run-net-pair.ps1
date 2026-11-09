@@ -61,6 +61,7 @@ param(
     [switch]$Typed,
     [switch]$Relay,              # server #14: the host hosts through the relay on this machine, and the joiner joins through it
     [int]$RelayListPort = 8443,  # the relays' list's HTTPS port on this machine
+    [ValidateRange(0, 600)][int]$HostSpareSeconds = 30,  # the host plays this much longer than the joiner, so the joiner ends first (0: the same)
     [switch]$NoFilm,
     [int]$CoopEnd = 0,
     [int]$HostDieAt = 0,
@@ -192,11 +193,20 @@ function Get-FirewallRulesForThese
 }
 
 $rulesBefore = @(Get-FirewallRulesForThese)
-$lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames", "seconds=$Seconds", "firewall_rules_before=$($rulesBefore.Count)")
+$lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames", "seconds=$Seconds", "host_spare_seconds=$HostSpareSeconds", "firewall_rules_before=$($rulesBefore.Count)")
 
 function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]$outputName, [string]$kind = '')
 {
-    $words = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$runHudson`"", '-GameFolder', "`"$folder`"", '-Level', $Level, '-Frames', $Frames, '-Seconds', $Seconds, '-Exe', $Exe, '-TimingsDontMatter', '-WhileInUse', '-Net', $word, '-NetPartner', "`"$partner`"")
+    # The host plays a little longer than the joiner, which starts later. Then the joiner ends its own run, rather than being ended by the host leaving: server #14's first run through the relay, 2026-11-09,
+    # had the joiner 670 frames behind when the host ended, and the joiner's game ended with the host's (exit 37). With no cap on the frames each second, 300 a second is allowed for.
+    $thisFrames = $Frames
+    $thisSeconds = $Seconds
+    if ($word -eq 'host' -and $HostSpareSeconds -gt 0)
+    {
+        $thisFrames = $Frames + $HostSpareSeconds * $(if ($Uncapped) { 300 } else { $Fps })
+        $thisSeconds = $Seconds + $HostSpareSeconds
+    }
+    $words = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$runHudson`"", '-GameFolder', "`"$folder`"", '-Level', $Level, '-Frames', $thisFrames, '-Seconds', $thisSeconds, '-Exe', $Exe, '-TimingsDontMatter', '-WhileInUse', '-Net', $word, '-NetPartner', "`"$partner`"")
     # Each machine can draw at its own size, and otherwise both draw at -Size
     $thisSize = if ($word -eq 'host' -and $HostSize) { $HostSize } elseif ($word -eq 'join' -and $JoinSize) { $JoinSize } else { $Size }
     if ($thisSize) { $words += @('-Size', $thisSize) }
@@ -293,7 +303,7 @@ $hostRun = Start-OneRun $hostFull 'host' $joinFull 'host-output' $hostKind
 $joinRun = $null
 $thirdRun = $null
 $joinStartedAt = $null
-$limit = (Get-Date).AddSeconds($SecondsForTheHostToBeReady + 2 * $Seconds + 180)
+$limit = (Get-Date).AddSeconds($SecondsForTheHostToBeReady + 2 * $Seconds + $HostSpareSeconds + 180)
 $hostWasReady = (Get-Date).AddSeconds($SecondsForTheHostToBeReady)
 $offTheMachine = @()
 

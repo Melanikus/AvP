@@ -8805,6 +8805,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the pair's host plays no longer than its joiner",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($word -eq 'host' -and $HostSpareSeconds -gt 0)",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's host gets its spare time but not its spare frames",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "'-Frames', $thisFrames,",
+					"to": "'-Frames', $Frames,"
+				}
+			]
 		}
 	]
 }

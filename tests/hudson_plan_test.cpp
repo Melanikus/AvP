@@ -1779,6 +1779,9 @@ static void TestTourAndSharedMachine()
 		Check(Has(pairScript, "@('tcp', 'SynSent', '::', '::1', $false)") && Has(pairScript, "@('tcp', 'Bound', '::', '::', $false)") && Has(pairScript, "@('udp', '', '0.0.0.0', '', $true)") && Has(pairScript, "@('tcp', 'Listen', '::', '::', $true)")
 			&& Has(pairScript, "@('tcp', 'SynSent', '0.0.0.0', '203.0.113.7', $true)") && Has(pairScript, "@('tcp', 'Bound', '::', '203.0.113.7', $true)"),
 			"and -CheckTheWatch tries the rule on both sides: a connection to this machine and a socket only bound are fine, and a UDP or TCP socket open to every network, or a connection to another machine, is a finding");
+		Check(Has(pairScript, "if ($word -eq 'host' -and $HostSpareSeconds -gt 0)\n    {\n        $thisFrames = $Frames + $HostSpareSeconds * $(if ($Uncapped) { 300 } else { $Fps })\n        $thisSeconds = $Seconds + $HostSpareSeconds")
+			&& Has(pairScript, "'-Frames', $thisFrames, '-Seconds', $thisSeconds"),
+			"the pair's host plays longer than its joiner, so the joiner ends its own run and isn't ended by the host leaving (server #14: exit 37)");
 		Check(Has(pairScript, "exit 110") && Has(pairScript, "Stop-TheGames\n    $lines += @($offTheMachine"), "and ends both if anything is off this machine");
 		Check(Has(pairScript, "Get-Process -Name 'claude'"), "and won't start with nobody here");
 		Check(ComesBefore(pairScript, "$rulesBefore = @(Get-FirewallRulesForThese)", "$hostRun = Start-OneRun") && Has(pairScript, "$rulesAfter = @(Get-FirewallRulesForThese)"), "and compares the firewall's rules before and after");
