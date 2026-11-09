@@ -204,11 +204,15 @@ param(
     [int]$CoopEnd = 0,
     [switch]$Relay,             # server #14: host or join through the relay on this machine (-relayhost or -relayjoin, by -Net)
     [int]$RelayListPort = 8443, # and the relays' list's HTTPS port on this machine
-    [string]$RemoteRelay = ''   # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name. Needs -Relay
+    [string]$RemoteRelay = '',  # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name or one IPv4 address. Needs -Relay
+    [string]$RelayListPin = '', # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name (relay-words.ps1)
+    [string]$RelayServerName = '' # -RemoteRelay's server as the game shows it, such as "New York (Mel's server)"
 )
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'clear-run-folder.ps1')
+# -RemoteRelay, -RelayListPin and -RelayServerName's own rule, the same in run-net-pair.ps1
+. (Join-Path $PSScriptRoot 'relay-words.ps1')
 
 function Stop-Here([string]$why)
 {
@@ -232,7 +236,10 @@ if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for
 if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
 # A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
 if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
-if ($RemoteRelay -and ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\z')) { Stop-Here "-RemoteRelay is a server's name, in small letters" }
+$relayWordsRefusal = Get-HudsonRelayWordsRefusal $RemoteRelay $RelayListPin $RelayServerName
+if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
+# No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
+if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 
 $partner = ''
@@ -411,8 +418,13 @@ Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredato
 if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', 'RelayServer = localhost', "RelayListPort = $RelayListPort") }
 
 # -RemoteRelay: the one relay beyond this machine, whose list has the same name, at HTTPS's own port. The game is told the name with
-# remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay).
-if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') }
+# remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay). With an address
+# instead of a name, -RelayListPin goes in too, and the game checks the list's certificate against it before it sends a byte; with
+# -RelayServerName, the name the game shows for that server. Both were checked to their shapes above (relay-words.ps1).
+$relayListWords = @()
+if ($RelayListPin) { $relayListWords += "RelayListPin = $RelayListPin" }
+if ($RelayServerName) { $relayListWords += "RelayServerName = $RelayServerName" }
+if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') + $relayListWords) }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru

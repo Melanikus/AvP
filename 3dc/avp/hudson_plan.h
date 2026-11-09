@@ -436,6 +436,7 @@ extern const char *const kHudsonRefusedRemoteRelayEmpty;
 extern const char *const kHudsonRefusedRemoteRelayTooLong;
 extern const char *const kHudsonRefusedRemoteRelayCharacter;
 extern const char *const kHudsonRefusedRemoteRelayWithoutNet;
+extern const char *const kHudsonRefusedRemoteRelayHostile;
 extern const char *const kHudsonRefusedSiegeFarEmpty;
 extern const char *const kHudsonRefusedSiegeFarTooLong;
 extern const char *const kHudsonRefusedSiegeFarCharacter;

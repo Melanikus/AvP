@@ -260,6 +260,13 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a_b.test", kHudsonRefusedRemoteRelayCharacter);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test remoterelay=a.test", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 remoterelay=a.test", kHudsonRefusedRemoteRelayWithoutNet);
+	// No hostile kind of run ever goes through a relay beyond this machine
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=yes", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=drain", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=watch", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=hold", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=flood", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostile=yes remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayHostile);
 	{
 		HudsonPlan plan;
 
