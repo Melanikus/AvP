@@ -796,6 +796,11 @@ static void TestTheCalls()
 	std::string const listPort = SourceSlice(source, "int Relay_ListPort(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
 		"and the list's port is the settings' only with -dev");
+
+	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks
+	std::string const winmain = ReadSource("3dc/avp/win95/winmain.cpp");
+	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && !Has(winmain, "RelayList_"),
+		"nothing asks for the list's name or port before -dev has been read");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)

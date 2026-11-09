@@ -19,13 +19,16 @@
 
 struct SessionDescription;
 
-// The list's name, from the settings: [Network] RelayServer in the game's settings file. Read once, and checked as a host name
-// (Relay_IsServerName). Empty when it isn't set, or isn't a host name, and then there's no relay: hosting and joining are as they are
-// without one.
+// The list's name: the one built into the game, or, only with -dev, [Network] RelayServer from the settings, checked as a host name
+// (Relay_IsServerName). Empty when there's none, and then there's no relay: hosting and joining are as they are without one.
+//
+// Both of these read their answer the first time they're asked, and keep it for the whole run. So they must never be asked before
+// winmain.cpp has read -dev from the command line, or -dev would be missed for the run. Only the menus and hosting ask, long after;
+// relay_list_test checks that winmain.cpp itself never does.
 const char *Relay_ServerName(void);
 
-// The list's HTTPS port: [Network] RelayListPort, 443 unless the settings say otherwise, as a test on one machine does. A setting that
-// isn't a whole number from 1 to 65535 is written in the log, and 443 is used.
+// The list's HTTPS port: 443, or, only with -dev, [Network] RelayListPort, as a test on one machine needs. A setting that isn't a whole
+// number from 1 to 65535 is written in the log, and 443 is used.
 int Relay_ListPort(void);
 
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
