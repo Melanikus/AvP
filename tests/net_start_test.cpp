@@ -4143,10 +4143,13 @@ static void TestTheRelayChannel()
 	throughTheRelay.address.host = kRelayHost;
 	throughTheRelay.address.port = 27501;
 	throughTheRelay.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4242));
+	// Each is a player (data is their id): a connection with none is closed by the game's own sweep once its time to say who it is has
+	// gone (ForgetConnectionsNotLetIn), which this test's clock has long passed, and that would hide what's tried here
 	ENetPeer &fromElsewhere = peers[5];
 	fromElsewhere.state = ENET_PEER_STATE_CONNECTED;
 	fromElsewhere.address.host = 0x0200007F;
 	fromElsewhere.address.port = 27502;
+	fromElsewhere.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4343));
 	FakePlayer hicks;
 	hicks.id = 4242;
 	hicks.name = "Hicks";
@@ -4170,8 +4173,10 @@ static void TestTheRelayChannel()
 		"and every connection through the relay ends with it, at once: nothing from the relay's address reaches ENet unsealed after it");
 	Check(playersGone.size() == goneThen + 1 && playersGone.back() == 4242 && netSession.nPlayers == playersThen - 1,
 		"the player who came through it has left the game, as when a connection closes, and their seat is free");
-	Check(fromElsewhere.state == ENET_PEER_STATE_CONNECTED, "a connection from anywhere else isn't touched");
+	Check(fromElsewhere.data == reinterpret_cast<void *>(static_cast<uintptr_t>(4343)),
+		"a connection from anywhere else isn't touched: it keeps its player, and the counts above are the relay's one alone");
 	fromElsewhere.state = ENET_PEER_STATE_DISCONNECTED;
+	fromElsewhere.data = NULL;
 	EndTheGame();
 
 	// Version 1's host, without the draft, gives the relay up as it always did, its connections left to ENet: ending them is the draft's
@@ -4199,6 +4204,7 @@ static void TestTheRelayChannel()
 	throughTheRelay.state = ENET_PEER_STATE_CONNECTED;
 	throughTheRelay.address.host = kRelayHost;
 	throughTheRelay.address.port = 27501;
+	throughTheRelay.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4242));   // a player, so the game's sweep leaves it (above)
 	int const versionOneResets = peersReset;
 	enetClock += kNetRelayKeptWithinMs;
 	Net_ServiceNetwork();
@@ -4206,6 +4212,7 @@ static void TestTheRelayChannel()
 	Check(news.what == kNetRelayHostRoomGone && throughTheRelay.state == ENET_PEER_STATE_CONNECTED && peersReset == versionOneResets,
 		"its room lost, it gives the relay up and leaves the connection through it to ENet, as version 1 always did");
 	throughTheRelay.state = ENET_PEER_STATE_DISCONNECTED;
+	throughTheRelay.data = NULL;
 	EndTheGame();
 	NetV2DraftAsked = true;
 
