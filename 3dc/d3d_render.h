@@ -101,6 +101,10 @@ extern void D3D_RenderHUDString(char *stringPtr, int x, int y, int colour);
 extern void D3D_DecalSystem_Setup();
 extern void D3D_DecalSystem_End();
 
+// Added 2026-11-09 by Melanikus for the AvP port (#177): see-through polygons between these two don't write depth (d3d_render.cpp)
+extern void D3D_SeeThroughWithoutDepth_Begin();
+extern void D3D_SeeThroughWithoutDepth_End();
+
 extern void D3D_FadeDownScreen(int brightness, int colour);
 extern void D3D_PlayerOnFireOverlay();
 

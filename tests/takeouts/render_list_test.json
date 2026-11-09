@@ -1,0 +1,129 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "SEE-THROUGH: glass in the stretch writes depth",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t\t\tif (seeThroughWithoutDepth && !depthWritesOff && wantDepthOff != stretchTurnedDepthOff)\n",
+					"to": "\t\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SEE-THROUGH: a solid polygon in the stretch loses its depth too",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t\t\tbool const wantDepthOff = !solid;\n",
+					"to": "\t\t\t\tbool const wantDepthOff = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SEE-THROUGH: the stretch's start is ignored",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t\t\tcase kCommandSeeThroughWithoutDepth:\n\t\t\t\t\tseeThroughWithoutDepth = true;\n\t\t\t\t\tbreak;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SEE-THROUGH: the stretch's end leaves depth writes off",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t\t\t\tif (stretchTurnedDepthOff)\n\t\t\t\t\t{\n\t\t\t\t\t\tChangeZWriteEnable(ZWRITE_ENABLED);\n\t\t\t\t\t\tstretchTurnedDepthOff = false;\n\t\t\t\t\t}\n\n\t\t\t\t\tbreak;",
+					"to": "\t\t\t\t\tbreak;"
+				}
+			]
+		},
+		{
+			"name": "SEE-THROUGH: a list drawn with its stretch open leaves depth writes off",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tif (stretchTurnedDepthOff)\n\t{\n\t\tChangeZWriteEnable(ZWRITE_ENABLED);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SEE-THROUGH: every list turns depth writes on at its end, the decals' too",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tif (stretchTurnedDepthOff)\n\t{\n\t\tChangeZWriteEnable(ZWRITE_ENABLED);\n\t}\n",
+					"to": "\tChangeZWriteEnable(ZWRITE_ENABLED);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the particles' frame doesn't open the stretch before the glass",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "\tD3D_SeeThroughWithoutDepth_Begin();\n\tOutputTranslucentPolyList();\n",
+					"to": "\tD3D_DecalSystem_Setup();\n\tOutputTranslucentPolyList();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the particles' frame doesn't close the stretch",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "\tD3D_SeeThroughWithoutDepth_End();\n}\n",
+					"to": "\tD3D_DecalSystem_End();\n}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: opening the stretch puts nothing on the main list",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tseeThroughWithoutDepth = true;\n\tmainList->AddCommand(kCommandSeeThroughWithoutDepth);\n",
+					"to": "\tseeThroughWithoutDepth = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flush in the stretch loses its start",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (seeThroughWithoutDepth)\n\t{\n\t\tmainList->AddCommand(kCommandSeeThroughWithoutDepth);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame can start inside the stretch",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)\n\tseeThroughWithoutDepth = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mirror's dirt still writes depth",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tD3D_SeeThroughWithoutDepth_Begin();\n\t\t\tRenderParticlesInMirror();\n",
+					"to": "\t\t\tRenderParticlesInMirror();\n"
+				}
+			]
+		}
+	]
+}

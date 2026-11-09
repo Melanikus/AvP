@@ -509,6 +509,10 @@ static void DrawSolidsWithHeights();
 // Did the last main draw go through the heights? The tag says so, because Relief map being chosen doesn't mean it could be drawn.
 static bool mainDrawUsedHeights = false;
 
+// Added 2026-11-09 by Melanikus for the AvP port (#177): true while the frame is in its stretch of see-through polygons without depth
+// (D3D_SeeThroughWithoutDepth_Begin and _End, below), so a list drawn and started again in the middle of the stretch gets its start again
+static bool seeThroughWithoutDepth = false;
+
 // Draws everything waiting in the lists and starts them again, for when a list is full in the middle of a frame. If the frame couldn't start, there's nothing to draw.
 static void FlushLists()
 {
@@ -520,6 +524,12 @@ static void FlushLists()
 	UnlockExecuteBufferAndPrepareForUse();
 	ExecuteBuffer();
 	LockExecuteBuffer();
+
+	// The lists start empty again, and the glass still to come in the stretch has to go without depth too (#177)
+	if (seeThroughWithoutDepth)
+	{
+		mainList->AddCommand(kCommandSeeThroughWithoutDepth);
+	}
 }
 
 float cot(float in)
@@ -2164,6 +2174,10 @@ void D3D_DrawParticle_Rain(PARTICLE *particlePtr, VECTORCH *prevPositionPtr)
 	}
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port (#177): these two stay empty. In the 1999 game they drew what was waiting, turned depth
+// writes off (Setup) and on again (End), and End drew the particles. Here the particles are drawn once, after everything else, and the
+// calls come in another order (HandleDecalSystem after HandleParticleSystem), so bodies here would leave depth writes off into the next
+// frame. The one stretch that mattered, see-through polygons and particles, is D3D_SeeThroughWithoutDepth_Begin and _End below.
 void D3D_DecalSystem_Setup()
 {
 /*
@@ -2182,6 +2196,25 @@ void D3D_DecalSystem_End()
 	ExecuteBuffer();
 	LockExecuteBuffer();
 */
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (#177): the stretch of see-through polygons and particles. The 1999 game drew it with depth
+// writes off (D3D_DecalSystem_Setup and _End above, around OutputTranslucentPolyList and the particles), so particles behind glass still
+// showed. Here the particles are drawn after the whole main list, so glass that wrote depth hid them: Bobblen147's marines firing behind
+// a window, with no muzzle flash. Between Begin and End, see-through polygons don't write depth; solid ones still do, because this game
+// draws the walls of the fixed buffer and the shadows after the solid polygons, and a solid one without depth would be painted over.
+// The one difference from 1999 left: a particle behind glass is drawn over the pane rather than under it. A glowing particle looks the
+// same either way; smoke isn't dimmed by the pane.
+void D3D_SeeThroughWithoutDepth_Begin()
+{
+	seeThroughWithoutDepth = true;
+	mainList->AddCommand(kCommandSeeThroughWithoutDepth);
+}
+
+void D3D_SeeThroughWithoutDepth_End()
+{
+	seeThroughWithoutDepth = false;
+	mainList->AddCommand(kCommandSeeThroughWithDepth);
 }
 
 void D3D_Decal_Output(DECAL *decalPtr, RENDERVERTEX *renderVerticesPtr)
@@ -2605,9 +2638,13 @@ void PostLandscapeRendering()
 		if (drawMirrorSurfaces)
 		{
 			// dirt on mirror in marines room
+			// Modified 2026-11-09 by Melanikus for the AvP port (#177): the mirror's dirt is see-through, and drawn before the particles,
+			// so with depth it hid the smoke and flashes in the mirror. The 1999 game drew those particles before the dirt went on.
+			D3D_SeeThroughWithoutDepth_Begin();
 			RenderParticlesInMirror();
 			RenderMirrorSurface();
 			RenderMirrorSurface2();
+			D3D_SeeThroughWithoutDepth_End();
 		}
 		if (drawWater)
 		{
@@ -3037,6 +3074,9 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 
 void ThisFramesRenderingHasBegun()
 {
+	// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)
+	seeThroughWithoutDepth = false;
+
 	surfacePicturesAreFromThisFrame = false;
 	surfaceNormalsWereWrittenThisFrame = false;
 
