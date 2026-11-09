@@ -1617,6 +1617,11 @@ static void TestTourAndSharedMachine()
 	Check(Has(chainReader, "if (line.size() > kChainLongestLine)\n\t\t{\n\t\t\twalkSteps.clear();"), "and a line too long refuses the whole file, rather than being cut into another step");
 	Check(CountOf(chainReader, "fclose(file);") == 1, "and the file is closed once");
 
+	// ghostlog=yes keeps an entry for every NPC the other machine names, so it has a limit: a hostile host could name new ones for ever
+	std::string const ghostLog = Between(ReadSourceFile("3dc/avp/hudson.cpp"), "static GhostLogEntry *GhostLogEntryFor(int guid)", "// The number the messages use for this block");
+	Check(ComesBefore(ghostLog, "if (ghostLogEntries.size() >= kGhostLogMostNpcs)", "return &ghostLogEntries.insert("), "the ghost log adds no NPC past its limit");
+	Check(CountOf(ghostLog, "if (!entry)\n\t{\n\t\treturn;\n\t}") == 1 && Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (!kept)\n\t\t{\n\t\t\tcontinue;\n\t\t}"), "and both of its writers skip one it didn't keep");
+
 	std::string const walkCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
 	std::string const frameCode = Between(walkCode, "bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame)", "int HudsonNav_ModulesWalkedInto()");
 

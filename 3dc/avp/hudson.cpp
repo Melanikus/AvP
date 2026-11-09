@@ -3119,7 +3119,7 @@ static void WatchEveryStrategy(DWORD watched, bool saying)
 		}
 
 		std::string const state = HudsonStrategies_State(block);
-		std::map<const STRATEGYBLOCK *, std::string>::iterator const known = strategyStatesNow.find(block);
+		const auto known = strategyStatesNow.find(block);
 
 		if (known == strategyStatesNow.end())
 		{
@@ -5616,20 +5616,39 @@ struct GhostLogEntry
 
 static std::map<int, GhostLogEntry> ghostLogEntries;
 
-static GhostLogEntry &GhostLogEntryFor(int guid)
+// The most NPCs the ghost log keeps over a whole run. Every NPC the host names gets one, and the host is another machine, so a hostile
+// one could keep naming new ones for ever. Once this many are kept, a new one isn't, and the log says so once. A whole level has a few
+// hundred at the very most.
+static const size_t kGhostLogMostNpcs = 4096;
+
+// The ghost log's entry for this NPC, made if it's new. Null if it's new and the log already holds kGhostLogMostNpcs.
+static GhostLogEntry *GhostLogEntryFor(int guid)
 {
-	std::map<int, GhostLogEntry>::iterator const found = ghostLogEntries.find(guid);
+	const auto found = ghostLogEntries.find(guid);
 
 	if (found != ghostLogEntries.end())
 	{
-		return found->second;
+		return &found->second;
+	}
+
+	if (ghostLogEntries.size() >= kGhostLogMostNpcs)
+	{
+		static bool saidItsFull = false;
+
+		if (!saidItsFull)
+		{
+			saidItsFull = true;
+			LogString("ghostlog: full, with " + std::to_string(kGhostLogMostNpcs) + " NPCs, so no more are logged");
+		}
+
+		return NULL;
 	}
 
 	GhostLogEntry fresh;
 
 	memset(&fresh, 0, sizeof(fresh));
 	fresh.lastSequence = -1;
-	return ghostLogEntries.insert(std::make_pair(guid, fresh)).first->second;
+	return &ghostLogEntries.insert(std::make_pair(guid, fresh)).first->second;
 }
 
 // Called for each message: sent on the host, and arrived on the joiner
@@ -5660,11 +5679,17 @@ void Hudson_GhostLogMessage(NETMESSAGE_NPCSTATE const *message)
 		return;
 	}
 
-	GhostLogEntry &entry = GhostLogEntryFor(message->Guid);
+	GhostLogEntry *const entry = GhostLogEntryFor(message->Guid);
 
-	entry.message = *message;
-	entry.messages++;
-	entry.messageAt = timeGetTime();
+	// The log is full (kGhostLogMostNpcs), and this is a new one
+	if (!entry)
+	{
+		return;
+	}
+
+	entry->message = *message;
+	entry->messages++;
+	entry->messageAt = timeGetTime();
 }
 
 void Hudson_GhostLogDeath(int guid, int deathCode, int deathTime, int gibbFactor)
@@ -5778,7 +5803,15 @@ static void Hudson_GhostLogEachFrame()
 			continue;
 		}
 
-		GhostLogEntry &entry = GhostLogEntryFor(guid);
+		GhostLogEntry *const kept = GhostLogEntryFor(guid);
+
+		// The log is full (kGhostLogMostNpcs), and this is a new one. It isn't put in seenAt either, so that stays as small.
+		if (!kept)
+		{
+			continue;
+		}
+
+		GhostLogEntry &entry = *kept;
 		int const sequence = model ? model->Sequence_Type : -1;
 		int const subSequence = model ? model->Sub_Sequence : -1;
 		int const beams = NpcGhosts_XenoBeamsOf(block);
@@ -5822,7 +5855,10 @@ static void Hudson_GhostLogEachFrame()
 	// One that was here and isn't now
 	for (std::map<int, GhostLogEntry>::iterator it = ghostLogEntries.begin(); it != ghostLogEntries.end(); ++it)
 	{
-		if (it->second.here && seenAt[it->first] != now)
+		// find, not [], which would add every one asked about
+		const auto seen = seenAt.find(it->first);
+
+		if (it->second.here && (seen == seenAt.end() || seen->second != now))
 		{
 			char line[80];
 

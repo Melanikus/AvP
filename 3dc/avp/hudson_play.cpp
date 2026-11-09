@@ -1443,7 +1443,7 @@ static bool OverACarThatIsntLevelWith(VECTORCH const &place, int feetY)
 static std::vector<uint8_t> const &ReachedFromTheLanding(int liftNumber, int end)
 {
 	int const key = liftNumber * 2 + end;
-	std::map<int, std::vector<uint8_t> >::iterator const known = reachedFromALanding.find(key);
+	const auto known = reachedFromALanding.find(key);
 
 	if (known != reachedFromALanding.end())
 	{
@@ -1882,7 +1882,7 @@ static void SayEachLiftsState(DWORD now)
 		}
 
 		PLATFORMLIFT_BEHAVIOUR_BLOCK const *const car = (PLATFORMLIFT_BEHAVIOUR_BLOCK const *)block->SBdataptr;
-		std::map<STRATEGYBLOCK const *, int>::iterator const known = stateSaid.find(block);
+		const auto known = stateSaid.find(block);
 		bool const moving = car->state == PLBS_GoingUp || car->state == PLBS_GoingDown;
 		bool const changed = known == stateSaid.end() || known->second != (int)car->state;
 
@@ -2540,7 +2540,7 @@ static void StepOffALift(PLAYER_STATUS *status)
 // Says what something is now, if that isn't what it was last time. "more" goes on the end of the line, but isn't part of what's compared: a moving car's height would be new every time.
 static void SayWhenOneChanges(std::string const &what, std::string const &state, std::string const &more)
 {
-	std::map<std::string, std::string>::iterator const known = watchedStates.find(what);
+	const auto known = watchedStates.find(what);
 
 	if (known != watchedStates.end() && known->second == state)
 	{

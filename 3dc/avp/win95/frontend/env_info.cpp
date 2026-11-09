@@ -5177,7 +5177,7 @@ int MarineEpisodeNamed(const char *name)
 // so nothing from a Hudson run's command line ever gets near a path. A level that's been commented out of its list isn't one of them.
 int BuiltInEnvironmentNamed(const char *name)
 {
-	enum AVP_ENVIRONMENT_ID const *const lists[] = { MarineEpisodes, PredatorEpisodes, AlienEpisodes, MultiplayerEpisodes, CooperativeEpisodes };
+	const AVP_ENVIRONMENT_ID *const lists[] = { MarineEpisodes, PredatorEpisodes, AlienEpisodes, MultiplayerEpisodes, CooperativeEpisodes };
 
 	for (size_t list = 0; list < sizeof(lists) / sizeof(lists[0]); list++)
 	{

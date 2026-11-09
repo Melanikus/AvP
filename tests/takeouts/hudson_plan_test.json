@@ -9725,6 +9725,26 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the ghost log keeps every NPC the other machine names, with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tif (ghostLogEntries.size() >= kGhostLogMostNpcs)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ghost log writes a message into an entry it didn't keep",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t// The log is full (kGhostLogMostNpcs), and this is a new one\n\tif (!entry)\n\t{\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
