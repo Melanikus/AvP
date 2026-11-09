@@ -441,9 +441,17 @@ void enet_host_destroy(ENetHost *)
 	eventsWaiting.clear();
 }
 
-ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *, size_t channelCount, enet_uint32)
+static ENetAddress lastConnectTo;   // where the game last connected to (the relay's tests)
+
+ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *address, size_t channelCount, enet_uint32)
 {
 	channelsAsked = channelCount;
+
+	if (address)
+	{
+		lastConnectTo = *address;
+	}
+
 
 	if (connectCantStart)
 	{
@@ -737,6 +745,9 @@ void enet_socket_destroy(ENetSocket socket)
 	}
 }
 
+// Every datagram the game sent, byte for byte, in order (the relay's tests)
+static std::vector<std::vector<uint8_t> > datagramsSentBytes;
+
 // What's arrived at the socket for finding games, for the game to read
 struct WaitingDatagram
 {
@@ -800,6 +811,7 @@ int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *b
 
 	datagramsSent++;
 	datagramsSentTo.push_back(*address);
+	datagramsSentBytes.push_back(lastDatagramSent);
 	return 1;
 }
 
@@ -1040,6 +1052,83 @@ static void TestRelayGamesOnTheList()
 	Check(!Net_AddRelaySession(AGameOnTheList("ABCD2362")) && NumberOfSessionsFound == MAX_NO_OF_SESSIONS, "and nothing more goes on it");
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+}
+
+// Modified 2026-11-08 by Melanikus for the AvP port: joining a game from the relays' list, through a scripted relay. The relay's answers
+// wait at the new host's socket before the join starts: JOIN_PORT from its control port, then READY from the joiner's port. Then each way it
+// fails: the relay saying no, the relay silent, and no relay for the game's region.
+static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
+{
+	WaitingDatagram waiting;
+	waiting.bytes.resize(kNetRelayMessageBytes);
+	NetRelay_Write(m, waiting.bytes.data());
+	waiting.from.host = kRelayHost;
+	waiting.from.port = fromPort;
+	datagramsWaiting.push_back(waiting);
+}
+
+static void TestJoiningThroughTheRelay()
+{
+	printf("Joining through a relay\n");
+	relayNamed = true;
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Check(Net_AddRelaySession(AGameOnTheList("ABCD2345")) && SessionData[0].throughRelay, "a game from the relays' list, to join");
+
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+
+	size_t const sentBefore = datagramsSentBytes.size();
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_OK, "joining it works");
+	Check(datagramsSentBytes.size() > sentBefore && datagramsSentBytes[sentBefore].size() == kNetRelayMessageBytes && datagramsSentBytes[sentBefore][5] == kNetRelayJoin
+		&& memcmp(datagramsSentBytes[sentBefore].data() + 24, "ABCD2345", 8) == 0 && datagramsSentTo[datagramsSentTo.size() - (datagramsSentBytes.size() - sentBefore)].port == kNetRelayDefaultControlPort,
+		"first it asks the relay's control port to join that game, with its code");
+	Check(lastConnectTo.host == kRelayHost && lastConnectTo.port == 27501, "then the game connects to the port the relay gave it, as if that were the host");
+	Check(theHost.intercept != NULL, "and a READY sent again later is the relay's: it's taken off ENet's hands");
+	EndTheGame();
+
+	// The relay says no
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	NetRelayMessage refused = NetRelay_Message(kNetRelayRefused);
+	refused.number = kNetRelayRefusedNoGame;
+	ArrivesFromTheRelay(refused, kNetRelayDefaultControlPort);
+	AvP.Network = I_Peer;
+	int const destroyedBefore = hostsDestroyed;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "the relay knows no game with that code") == 0 && datagramsWaiting.empty(),
+		"the relay saying there's no such game: the join fails, and says so in the game's own words");
+	Check(hostsDestroyed == destroyedBefore + 1, "and the host it made for the join is let go: nothing is left open");
+	EndTheGame();
+
+	// The relay silent: the handshake ends by its own turns, though this test's clock doesn't move
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "the relay didn't answer") == 0,
+		"a silent relay: the join gives up, even with the clock standing still, and says the relay didn't answer");
+	EndTheGame();
+
+	// No relay for its region
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "no relay could be reached") == 0, "no relay named for its region: no join");
+	EndTheGame();
+
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
 }
 
 static void TestStartingTheGame()
@@ -2824,6 +2913,7 @@ int main()
 	TestHosting();
 	TestHostingThroughTheRelay();
 	TestRelayGamesOnTheList();
+	TestJoiningThroughTheRelay();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
 	TestSkirmish();

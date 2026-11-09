@@ -199,6 +199,7 @@ size_t const kRelayMostPacketBytes = 1500;     // the most a relay passes on (PR
 size_t const kRelayMostPacketsAWait = 16;      // the join's handshake reads at most this many packets each time it waits
 uint32_t const kRelayWaitMs = 50;              // and waits this long each time for one
 uint32_t const kRelayJoinMostMs = kNetRelayGiveUpAskingMs + kNetRelayWaitForReadyMs + 1000;   // the most a join's handshake can take
+size_t const kRelayJoinMostTurns = kRelayJoinMostMs / kRelayWaitMs + 100;   // and the most times it waits, so it ends even if the clock stood still
 int const kRelayMostHostMs = 9999;             // the most round trip the list takes (PROTOCOL.md, section 4)
 
 // One relay from the list, looked up: its address, from its name, at its control port. False for a name that gives no address, or a port
@@ -515,7 +516,7 @@ static uint16_t RelayHandshake(const char *code)
 
 	static uint8_t packet[kRelayMostPacketBytes];
 
-	while (!relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs)
+	for (size_t turn = 0; turn < kRelayJoinMostTurns && !relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs; turn++)
 	{
 		RelaySendAll(host, relayJoiner, &relayAddress, 1);
 		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
