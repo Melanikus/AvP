@@ -64,6 +64,25 @@ if(AVPX_BUILT_BEFORE_COUNT EQUAL 0 OR NOT AVPX_BUILT_BEFORE_COUNT EQUAL AVPX_BUI
     message(FATAL_ERROR "mlkem-native: the deletion took a file the build needs (mlkem/ had ${AVPX_BUILT_BEFORE_COUNT} files, has ${AVPX_BUILT_AFTER_COUNT})")
 endif()
 
+# The native back ends go too: mlkem/src/native/ (the arithmetic, in code for AArch64, POWER, RISC-V and x86-64 processors) and
+# mlkem/src/fips202/native/ (the same for SHA-3, for AArch64, Armv8.1-M and x86-64). They're the project's fast versions for
+# particular processors, and a build uses one only when its settings turn it on, with MLK_CONFIG_USE_NATIVE_BACKEND_ARITH or
+# MLK_CONFIG_USE_NATIVE_BACKEND_FIPS202. Ours turn on neither (avpx/avpx_mlkem_config.h). Every #include of these folders is inside
+# one of those two settings' #if, in mlkem/mlkem_native.c and in mlkem/src/common.h (checked against the release, 2026-11-09). So the
+# game never builds them, and the owner's word above covers them too (PO, 2026-11-09). Snyk Code can't read most of them (#174),
+# and what's scanned should be what's built. If a setting ever did turn one on, the build would stop at once on the missing file;
+# it could never build something else in its place. The rest of mlkem/ is counted before and after, so nothing else goes with them.
+file(GLOB_RECURSE AVPX_PORTABLE_BEFORE LIST_DIRECTORIES false "${SOURCE_PATH}/mlkem/*")
+list(FILTER AVPX_PORTABLE_BEFORE EXCLUDE REGEX "/mlkem/src/(fips202/)?native/")
+file(REMOVE_RECURSE "${SOURCE_PATH}/mlkem/src/native" "${SOURCE_PATH}/mlkem/src/fips202/native")
+file(GLOB_RECURSE AVPX_PORTABLE_AFTER LIST_DIRECTORIES false "${SOURCE_PATH}/mlkem/*")
+list(LENGTH AVPX_PORTABLE_BEFORE AVPX_PORTABLE_BEFORE_COUNT)
+list(LENGTH AVPX_PORTABLE_AFTER AVPX_PORTABLE_AFTER_COUNT)
+if(AVPX_PORTABLE_BEFORE_COUNT EQUAL 0 OR NOT AVPX_PORTABLE_BEFORE_COUNT EQUAL AVPX_PORTABLE_AFTER_COUNT
+    OR EXISTS "${SOURCE_PATH}/mlkem/src/native" OR EXISTS "${SOURCE_PATH}/mlkem/src/fips202/native")
+    message(FATAL_ERROR "mlkem-native: taking out the native back ends went wrong (mlkem/ without them had ${AVPX_PORTABLE_BEFORE_COUNT} files, has ${AVPX_PORTABLE_AFTER_COUNT})")
+endif()
+
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt" DESTINATION "${SOURCE_PATH}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/avpx" DESTINATION "${SOURCE_PATH}")
 

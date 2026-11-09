@@ -139,6 +139,16 @@ that too.
 |---|---|---|
 | `tests/` and `signal.c` | Remove them from the list in the portfile, and remove the two `vcpkg_replace_string` lines under it, which take `tests/` out of the Makefile's `clean` targets | Nothing. Other systems have threads built in, so a port drops this library altogether |
 
+### mlkem-native (the post-quantum key exchange) and mldsa-native (the post-quantum signature check)
+
+The two come from the same project and are cut the same way. Each row names mlkem-native's folders; mldsa-native's are the same
+with `mldsa/` in place of `mlkem/`. The game builds each from its one file, `mlkem/mlkem_native.c` or `mldsa/mldsa_native.c`.
+
+| What was removed | To bring it back | What a port would need it for |
+|---|---|---|
+| `.github/`, `dev/`, `examples/`, `integration/`, `nix/`, `scripts/` and `proofs/`, and all of `test/` except `test/test_vectors/expected_test_vectors.h` (which our tests read) | Remove them from the first `file(REMOVE_RECURSE ...)` list. Our `CMakeLists.txt` builds none of them: the project's own Makefile builds its tests | Nothing: the project's own workflows, its working copies of the assembly, example programs, other projects' build files, its tools and proofs, and its own tests |
+| The native back ends: `mlkem/src/native/` (AArch64, POWER, RISC-V and x86-64) and `mlkem/src/fips202/native/` (AArch64, Armv8.1-M and x86-64). mldsa-native has no POWER or RISC-V ones | Remove the second `file(REMOVE_RECURSE ...)` in the portfile, turn on `MLK_CONFIG_USE_NATIVE_BACKEND_ARITH` and `MLK_CONFIG_USE_NATIVE_BACKEND_FIPS202` in `avpx/avpx_mlkem_config.h`, and take out `MLK_CONFIG_NO_ASM`. Our `CMakeLists.txt` builds no assembly, so it would need the project's `BUILDING.md` too. Snyk Code can't read most of these files (#174), so the library scan fails until that's fixed | Speed only, on a 64-bit or ARM build. They give the same answers as the portable C the game builds |
+
 ## Do not bring back
 
 | What it was | Where it was | Why not |
