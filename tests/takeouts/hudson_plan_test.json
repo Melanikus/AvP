@@ -8725,6 +8725,56 @@
 					"to": "$false"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the watch judges a TCP connection by its own end",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "return $remoteAddress -notmatch $thisMachine",
+					"to": "return $localAddress -notmatch $thisMachine"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watch's TCP sockets don't go through the rule",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "Off = (Test-SocketIsOffThisMachine 'tcp' \"$($_.State)\" \"$($_.LocalAddress)\" \"$($_.RemoteAddress)\")",
+					"to": "Off = $false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watch's UDP sockets don't go through the rule",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "Off = (Test-SocketIsOffThisMachine 'udp' '' \"$($_.LocalAddress)\" '')",
+					"to": "Off = $false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: this machine is any IPv6 address",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "|::1|::ffff:127",
+					"to": "|::.*|::ffff:127"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -CheckTheWatch leaves out server #14's connecting socket",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "@('tcp', 'SynSent', '::', '::1', $false), ",
+					"to": ""
+				}
+			]
 		}
 	]
 }
