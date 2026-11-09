@@ -243,6 +243,18 @@ if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 
+# Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
+# nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
+# (kHudsonVideoMostBytes), so a run that may film needs both; one with -NoFilm needs the 1 GB only. A disk that won't say how much room it
+# has is refused too: not knowing isn't room.
+$mostFilmBytes = 2000000000
+$leaveBytes = 1000000000
+$freeBytes = -1
+try { $freeBytes = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($folder)).AvailableFreeSpace } catch { $freeBytes = -1 }
+$needBytes = $leaveBytes + $(if ($NoFilm) { 0 } else { $mostFilmBytes })
+if ($freeBytes -lt 0) { Stop-Here "the run's disk won't say how much room it has, so the run doesn't start" }
+if ($freeBytes -lt $needBytes) { Stop-Here "the run's disk has $([math]::Floor($freeBytes / 1MB)) MB free, and a run needs $([math]::Floor($needBytes / 1MB)) MB, so it doesn't start" }
+
 $partner = ''
 
 if ($NetPartner)
@@ -513,8 +525,9 @@ foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
     }
 }
 
-# Where the window went, for a run that had it moved
-$windowNotes = Join-Path $saves 'window-place.txt'
+# Where the window went, for a run that had it moved: the game writes it as hudson-window.txt (hudson.cpp, kWindowFileName). This once named
+# window-place.txt, which nothing writes, so it was never kept (Primary's read, 2026-11-09)
+$windowNotes = Join-Path $saves 'hudson-window.txt'
 if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -Destination $kept }
 
 $result = Join-Path $kept 'hudson-result.txt'

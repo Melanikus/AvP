@@ -86,11 +86,12 @@ static void TestTheSums()
 	Check(HudsonVideo_ShouldStop(999, most, kHudsonVideoDiskToLeave) == kHudsonVideoGoOn, "a film under its limit goes on");
 	Check(HudsonVideo_ShouldStop(1000, most, kHudsonVideoDiskToLeave) == kHudsonVideoFileIsFull, "and stops at it");
 	Check(HudsonVideo_ShouldStop(0, most, kHudsonVideoDiskToLeave - 1) == kHudsonVideoDiskIsFull, "a disk with less than it has to keep stops it");
-	Check(HudsonVideo_ShouldStop(0, most, -1) == kHudsonVideoGoOn, "a disk that won't say doesn't");
+	Check(HudsonVideo_ShouldStop(0, most, -1) == kHudsonVideoDiskWontSay, "a disk that won't say how much room is left stops it too, with its own reason");
+	Check(HudsonVideo_ShouldStop(0, most, 0) == kHudsonVideoDiskIsFull, "and a disk with nothing left is full, not one that won't say");
 
 	Check(HudsonVideo_DiskHasRoom(kHudsonVideoDiskToLeave + most, most), "there's room to start if the whole film fits and leaves what it has to");
 	Check(!HudsonVideo_DiskHasRoom(kHudsonVideoDiskToLeave + most - 1, most), "and not if it doesn't");
-	Check(HudsonVideo_DiskHasRoom(-1, most), "a disk that won't say doesn't stop a film starting");
+	Check(!HudsonVideo_DiskHasRoom(-1, most), "a disk that won't say how much room is left has no room for a film: not knowing isn't room");
 }
 
 static void TestTheQueue()
