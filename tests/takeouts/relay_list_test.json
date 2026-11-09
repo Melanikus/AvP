@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (bytes > 0 && memchr(body, 0, bytes) != NULL)",
-					"to": "if (false)"
+					"from": "\t\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "\t\tif (false)"
 				}
 			]
 		},
@@ -1056,6 +1056,86 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "made->v2Draft = Net_V2DraftOn();",
 					"to": "made->v2Draft = true;"
+				}
+			]
+		},
+		{
+			"name": "keys about another region are taken for the one asked about",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListAccepted && strcmp(answered, region) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a key a digit or a byte short is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(length != rule.mostLetters || !HexInto(hex, length, rule.bytes))",
+					"to": "!HexInto(hex, length, rule.bytes)"
+				}
+			]
+		},
+		{
+			"name": "a key in capitals is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))",
+					"to": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))"
+				}
+			]
+		},
+		{
+			"name": "each key byte is made from its digits the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "bytes[i / 2] = static_cast<uint8_t>((h << 4) | l);",
+					"to": "bytes[i / 2] = static_cast<uint8_t>((l << 4) | h);"
+				}
+			]
+		},
+		{
+			"name": "a refused answer about keys leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tmemset(p384, 0, kNetCryptoP384PublicBytes);\n\tmemset(kem, 0, kNetPqKemPublicBytes);\n\n\tif (!region || !RelayList_IsRegion(region))",
+					"to": "\tif (!region || !RelayList_IsRegion(region))"
+				}
+			]
+		},
+		{
+			"name": "something after the keys' answer is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListAccepted && Next(r) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a keys' answer bigger than 8 KB is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > kRelayKeysMostAnswerBytes)\n\t{\n\t\treturn kRelayListTooBig;",
+					"to": "if (false)\n\t{\n\t\treturn kRelayListTooBig;"
+				}
+			]
+		},
+		{
+			"name": "a keys' answer with a 0 byte is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\n\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)\n\t{\n\t\treturn kRelayListHasAZero;",
+					"to": "\n\tif (false)\n\t{\n\t\treturn kRelayListHasAZero;"
 				}
 			]
 		}

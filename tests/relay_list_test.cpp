@@ -1117,6 +1117,125 @@ static void TestVersionOne()
 		&& strcmp(withoutAny, without) == 0, "a listing with no fingerprint isn't sent by a draft, and is sent, the same, without one");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: A RELAY'S KEYS (protocol version 2's draft, CRYPTO.md 12.1), the answer to
+// GET /v1/relay-keys, read as hostile. Only the keys' form is the reader's to check; whether they're the relay's is the fingerprint's.
+static std::string HexOf(size_t bytes, uint8_t start)
+{
+	static const char kDigits[] = "0123456789abcdef";
+	std::string text;
+
+	for (size_t i = 0; i < bytes; i++)
+	{
+		uint8_t const b = static_cast<uint8_t>(start + i * 7);
+		text += kDigits[b >> 4];
+		text += kDigits[b & 15];
+	}
+
+	return text;
+}
+
+static std::string InCapitals(std::string text)
+{
+	for (char &c : text)
+	{
+		c = (c >= 'a' && c <= 'f') ? static_cast<char>(c - 'a' + 'A') : c;
+	}
+
+	return text;
+}
+
+static std::string KeysAnswer(const std::string &region, const std::string &p384, const std::string &mlkem, const std::string &extra = "")
+{
+	return "{\"region\":\"" + region + "\",\"p384\":\"" + p384 + "\",\"mlkem\":\"" + mlkem + "\"" + extra + "}";
+}
+
+static bool KeysAreZero(const uint8_t *p384, const uint8_t *kem)
+{
+	bool zero = true;
+
+	for (size_t i = 0; i < kNetCryptoP384PublicBytes; i++)
+	{
+		zero = zero && p384[i] == 0;
+	}
+
+	for (size_t i = 0; i < kNetPqKemPublicBytes; i++)
+	{
+		zero = zero && kem[i] == 0;
+	}
+
+	return zero;
+}
+
+static RelayListRefusal ReadKeys(const std::string &answer, const char *region, uint8_t *p384, uint8_t *kem)
+{
+	memset(p384, 0xA5, kNetCryptoP384PublicBytes);
+	memset(kem, 0xA5, kNetPqKemPublicBytes);
+	return RelayList_ReadRelayKeys(answer.data(), answer.size(), region, p384, kem);
+}
+
+static void TestRelayKeys()
+{
+	puts("21. a relay's keys (protocol version 2's draft)");
+	uint8_t p384[kNetCryptoP384PublicBytes];
+	uint8_t kem[kNetPqKemPublicBytes];
+	std::string const goodP384 = HexOf(kNetCryptoP384PublicBytes, 4);
+	std::string const goodKem = HexOf(kNetPqKemPublicBytes, 9);
+	std::string const good = KeysAnswer("newyork", goodP384, goodKem);
+	Check(ReadKeys(good, "newyork", p384, kem) == kRelayListAccepted, "a relay's keys are read: its region, its P-384 key's 97 bytes and its ML-KEM key's 1,568, as hex");
+	bool same = true;
+
+	for (size_t i = 0; i < kNetCryptoP384PublicBytes; i++)
+	{
+		same = same && p384[i] == static_cast<uint8_t>(4 + i * 7);
+	}
+
+	for (size_t i = 0; i < kNetPqKemPublicBytes; i++)
+	{
+		same = same && kem[i] == static_cast<uint8_t>(9 + i * 7);
+	}
+
+	Check(same, "and each byte is the one its two digits say");
+	std::string const shuffled = "{ \"mlkem\" : \"" + goodKem + "\" , \"region\" : \"newyork\" , \"p384\" : \"" + goodP384 + "\" }\n";
+	Check(ReadKeys(shuffled, "newyork", p384, kem) == kRelayListAccepted, "in any order, with room between");
+
+	struct Bad
+	{
+		std::string answer;
+		RelayListRefusal why;
+		const char *what;
+	};
+
+	Bad const bad[] =
+	{
+		{ KeysAnswer("virginia", goodP384, goodKem), kRelayListBadRegion, "keys about another region than the one asked about are refused" },
+		{ KeysAnswer("newyork", goodP384.substr(2), goodKem), kRelayListBadText, "a P-384 key a byte short is refused" },
+		{ KeysAnswer("newyork", goodP384.substr(1), goodKem), kRelayListBadText, "and one a digit short" },
+		{ KeysAnswer("newyork", goodP384 + "0", goodKem), kRelayListBadText, "and one a digit long" },
+		{ KeysAnswer("newyork", goodP384, goodKem.substr(2)), kRelayListBadText, "an ML-KEM key a byte short is refused" },
+		{ KeysAnswer("newyork", goodP384, goodKem + "00"), kRelayListBadText, "and one a byte long" },
+		{ KeysAnswer("newyork", InCapitals(goodP384), goodKem), kRelayListBadText, "a key in capitals is refused: the server writes small letters" },
+		{ KeysAnswer("newyork", "g" + goodP384.substr(1), goodKem), kRelayListBadText, "a key with a letter that isn't a hex digit is refused" },
+		{ KeysAnswer("newyork", goodP384, goodKem, ",\"extra\":1"), kRelayListUnknownField, "a field the answer doesn't have is refused" },
+		{ "{\"region\":\"newyork\",\"p384\":\"" + goodP384 + "\"}", kRelayListFieldMissing, "an answer without its ML-KEM key is refused" },
+		{ good + "{}", kRelayListMoreAfterTheEnd, "anything after the answer is refused" },
+		{ "[" + good + "]", kRelayListNotAnEntry, "an answer that isn't one entry is refused" },
+	};
+
+	for (Bad const &b : bad)
+	{
+		Check(ReadKeys(b.answer, "newyork", p384, kem) == b.why && KeysAreZero(p384, kem), b.what);
+	}
+
+	std::string const big = good + std::string(kRelayKeysMostAnswerBytes, ' ');
+	Check(ReadKeys(big, "newyork", p384, kem) == kRelayListTooBig && KeysAreZero(p384, kem), "an answer bigger than 8 KB isn't read at all");
+	std::string zeroed = good;
+	zeroed[5] = '\0';
+	Check(ReadKeys(zeroed, "newyork", p384, kem) == kRelayListHasAZero && KeysAreZero(p384, kem), "nor one with a 0 byte in it");
+	Check(RelayList_ReadRelayKeys(NULL, 0, "newyork", p384, kem) == kRelayListEndsTooSoon && KeysAreZero(p384, kem), "no answer at all is refused");
+	Check(ReadKeys(good, "New York", p384, kem) == kRelayListBadRegion && KeysAreZero(p384, kem),
+		"and a region asked about that can't be one is refused before anything is read");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -1135,6 +1254,7 @@ int main()
 	TestTheMenus();
 	TestAddresses();
 	TestVersionOne();
+	TestRelayKeys();
 
 	if (checksFailed)
 	{
