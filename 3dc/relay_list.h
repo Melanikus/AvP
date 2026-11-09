@@ -24,6 +24,10 @@ struct SessionDescription;
 // without one.
 const char *Relay_ServerName(void);
 
+// The list's HTTPS port: [Network] RelayListPort, 443 unless the settings say otherwise, as a test on one machine does. A setting that
+// isn't a whole number from 1 to 65535 is written in the log, and 443 is used.
+int Relay_ListPort(void);
+
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
 // The relay has given the host its room: the game goes on the list. region is the relay's (from RelayList_Relays), pass and passTime

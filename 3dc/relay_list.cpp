@@ -99,7 +99,8 @@ namespace
 		CRITICAL_SECTION lock;
 		HANDLE wake;                     // set when the main thread wants something done
 
-		wchar_t server[256];             // the list's name, set before the thread starts, and never changed
+		wchar_t server[256];             // the list's name and port, set before the thread starts, and never changed
+		INTERNET_PORT port;
 
 		// The host's game. listingNumber goes up each time the listing changes, a newer pass included.
 		bool hostWanted;
@@ -215,7 +216,7 @@ namespace
 			}
 		}
 
-		HINTERNET connection = WinHttpConnect(session, shared->server, kRelayListPort, 0);
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 		HINTERNET request = connection ? WinHttpOpenRequest(connection, method, path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
 			WINHTTP_FLAG_SECURE) : NULL;
 
@@ -603,6 +604,8 @@ namespace
 			made->server[i] = static_cast<wchar_t>(name[i]);
 		}
 
+		made->port = static_cast<INTERNET_PORT>(Relay_ListPort());
+
 		if (!made->wake)
 		{
 			LogString("Relay list: couldn't start, so hosts aren't listed and the list can't be read");
@@ -674,6 +677,28 @@ const char *Relay_ServerName(void)
 	}
 
 	return name;
+}
+
+int Relay_ListPort(void)
+{
+	static int port = 0;
+
+	if (port == 0)
+	{
+		port = kRelayListPort;
+		int const setting = Config_GetInt("[Network]", "RelayListPort", kRelayListPort);
+
+		if (setting >= 1 && setting <= 65535)
+		{
+			port = setting;
+		}
+		else
+		{
+			LogString("Relay list: the settings' RelayListPort isn't a port from 1 to 65535, so 443 is used");
+		}
+	}
+
+	return port;
 }
 
 void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,

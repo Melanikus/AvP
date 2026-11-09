@@ -4,9 +4,12 @@
 // through a relay instead, which carries its packets between the host and each joiner. There are two parts:
 // - the list, over HTTPS, where a host puts its game and a player picks one, and which says where each region's relay is. The menus do
 //   that (relay_list.h).
-// - a relay in each region, over UDP, which carries the game. The networking code does that.
+// - a relay in each region, over UDP, which carries the game. The networking code does that (net_relay.h).
 // PROTOCOL.md, in the server's own repository (github.com/Melanikus/AVPx-Dedicated-Server), is the whole of what the two say. The numbers
 // here are its numbers.
+//
+// A code's letters and length are net_relay.h's: there is one copy of them, so the list and the relay can never disagree about what a code
+// is. The names here are only the list side's names for them.
 
 #ifndef RELAY_SHARED_H
 #define RELAY_SHARED_H
@@ -14,46 +17,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "net_relay.h"
+
 enum
 {
-	kRelayCodeLetters = 8,  // a game's code, which a joiner picks from the list or types: 8 code letters
+	kRelayCodeLetters = static_cast<int>(kNetRelayCodeLetters),  // a game's code, which a joiner picks from the list: 8 code letters
 	kRelayMostPlayers = 8,  // the most players in one game the relay carries, the host included
 	kRelayListPort = 443    // the list's HTTPS. Each relay's own port comes from the list.
 };
 
 // The letters a code is made of: 32 of them, with no 0, 1, I or O, so that a code can be read aloud without being mistaken
-static const char kRelayCodeAlphabet[] = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-
-inline bool Relay_IsCodeLetter(char c)
-{
-	for (size_t i = 0; kRelayCodeAlphabet[i]; i++)
-	{
-		if (kRelayCodeAlphabet[i] == c)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
+static const char *const kRelayCodeAlphabet = kNetRelayCodeAlphabet;
 
 // Whether these are exactly the 8 letters of a code. A code is never anything else, wherever it comes from.
 inline bool Relay_IsCode(const char *code, size_t length)
 {
-	if (!code || length != kRelayCodeLetters)
-	{
-		return false;
-	}
-
-	for (size_t i = 0; i < length; i++)
-	{
-		if (!Relay_IsCodeLetter(code[i]))
-		{
-			return false;
-		}
-	}
-
-	return true;
+	return code && length == kNetRelayCodeLetters && NetRelay_CodeIsGood(code);
 }
 
 #endif

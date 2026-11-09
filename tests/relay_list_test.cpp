@@ -812,6 +812,16 @@ static void TestTheMenus()
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
+
+	// A new search of the LAN empties the page's list of games, so the relay's games go back on it each time the page is set up: after
+	// that search, and before the page's rows are made from the list
+	std::string const setup = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYERSELECTSESSION:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
+	size_t const search = setup.find("Net_FindAvPSessions();");
+	size_t const put = setup.find("PutTheRelayGamesOnThePage();");
+	size_t const rows = setup.find("MakeSelectSessionMenu();");
+	Check(search != std::string::npos && put != std::string::npos && rows != std::string::npos && search < put && put < rows,
+		"the relay's games go back on the page each time it's set up, after the LAN's search and before its rows are made");
+	Check(Has(menus, "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())"), "and an answer from the list sets the page up again");
 }
 
 int main()

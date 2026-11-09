@@ -146,6 +146,44 @@ void HandlePostGameFMVs(void);
 void HandlePreGameFMVs(void);
 
 static void SetupNewMenu(enum AVPMENU_ID menuID);
+
+// The relay server's games, for the page of games found: the last good answer, kept here so that they can be put back each time the page
+// is set up again. The page's list is emptied whenever a new search of the LAN starts, and these would go with it.
+static RelayListGame relayGamesFound[kRelayListMostGames];
+static int relayGamesKept = 0;
+
+// Puts the kept relay games on the page's list, after whatever the LAN found. Net_AddRelaySession leaves out a game that's there already,
+// one this machine can't play, and any once the list is full, so this can be called each time the page is set up.
+static void PutTheRelayGamesOnThePage(void)
+{
+	for (int i = 0; i < relayGamesKept; i++)
+	{
+		(void)Net_AddRelaySession(relayGamesFound[i]);
+	}
+}
+
+// Each frame of the page of games found: whether an answer has come from the relay server's list with games to show. An answer that
+// failed is written in the log, in the game's own words, never the server's.
+static bool TheRelayGamesHaveCome(void)
+{
+	int count = 0;
+	const char *why = NULL;
+
+	if (!RelayList_FoundGames(relayGamesFound, &count, &why))
+	{
+		return false;
+	}
+
+	relayGamesKept = why ? 0 : count;
+
+	if (why)
+	{
+		LogString(std::string("Relay list: no games from the list, because ") + why);
+	}
+
+	return relayGamesKept > 0;
+}
+
 static void CountTheRowsOnThisPage(void);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
@@ -799,7 +837,8 @@ extern void AvP_UpdateMenus(void)
 	{
 		int selection = AvPMenus.CurrentlySelectedElement;
 
-		if (Net_UpdateSessionList(selection))
+		// The LAN's answers, or the relay server's: either way the page is set up again, and that puts the relay's games on it
+		if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())
 		{
 			// session list has changed, so we need to set the menu again
 			SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
@@ -1179,9 +1218,13 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 				// The relay server's games as well, once for each time the page is opened: the page is set up again each time its list
 				// changes, and asking then would ask again for every answer. A joiner needs the relays too, to reach a game's region.
+				relayGamesKept = 0;
 				RelayList_FindRelays();
 				RelayList_FindGames();
 			}
+
+			// After the LAN's search, which may have emptied the list, and before the page's rows are made from it
+			PutTheRelayGamesOnThePage();
 			MakeSelectSessionMenu();
 			break;
 		}
@@ -3373,6 +3416,10 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 					if (Net_ConnectToSession(s, MP_PlayerName) != NET_FAIL) {
 						SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
+					}
+					else if (SessionData[s].throughRelay) {
+						// The networking code's own fixed words, such as "that game is full": nothing from the network
+						LogString(std::string("Relay: couldn't join the game, because ") + Net_RelayJoinFailedWhy());
 					}
 				}
 			}

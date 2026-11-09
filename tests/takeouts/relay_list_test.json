@@ -525,6 +525,26 @@
 			]
 		},
 		{
+			"name": "SOURCE: the relay's games aren't put back on the page when it's set up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tPutTheRelayGamesOnThePage();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer from the list doesn't set the page up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())",
+					"to": "if (Net_UpdateSessionList(selection))"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the list's thread writes to the game's log",
 			"changes": [
 				{
