@@ -1745,6 +1745,11 @@ uint32_t Net_RemoteRelayAddress();
 static void TestARunsOneRelayBeyondThisMachine()
 {
 	printf("A Hudson run with net=, and its one relay beyond this machine\n");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: this is version 1's relay (server #14's run), so it's tried without the v2 draft,
+	// which the tests otherwise run with. With the draft, a joiner's plain packet through the relay is never ENet's: only a sealed one that
+	// opens is (TestTheV2Draft shows both).
+	NetV2DraftAsked = false;
 	enet_uint32 const kThisMachine = 0x0100007F;   // 127.0.0.1, as ENet keeps it
 	enet_uint32 const kRoute = 0x0A01A8C0;         // 192.168.1.10: this machine's address towards the relay
 	enet_uint32 const kElsewhere = 0x0B0C0B0A;     // a machine that isn't the relay
@@ -1852,6 +1857,7 @@ static void TestARunsOneRelayBeyondThisMachine()
 	relayNamed = false;
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	NetV2DraftAsked = true;   // as the tests after this expect
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
