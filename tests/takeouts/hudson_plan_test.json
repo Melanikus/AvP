@@ -8537,6 +8537,136 @@
 			]
 		},
 		{
+			"name": "SOURCE: a net= run's host listens on every address",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (NetLoopbackOnly)\n\t\t\t{\n\t\t\t\tenet_address_set_host_ip(&ServerAddress, \"127.0.0.1\");\n\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's client has every address",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host = Net_MakeENetHost(NetLoopbackOnly ? &ourAddress : NULL, 1,",
+					"to": "host = Net_MakeENetHost(NULL, 1,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run joins a game on another machine",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run uses a relay elsewhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run opens the socket for finding games",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL",
+					"to": "if (ENET_SOCKET_NULL"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's search listens on every address",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's search asks the whole network",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))",
+					"to": "if (!AskAboutGames(ENET_HOST_BROADCAST))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's search asks a typed address on another machine",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "(!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any address counts as this machine's",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\treturn (address & 0xFF) == 127;",
+					"to": "\treturn (address & 0xFF) != 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an ordinary game is kept to this machine",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool NetLoopbackOnly = false;",
+					"to": "bool NetLoopbackOnly = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's log doesn't say who joins",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\tLogString(\"net: \" + sstream.str());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's log doesn't say what arrives",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "arrived << \"net: message \" << messagesArrived << \" arrived, \" << dataSize << \" bytes\";",
+					"to": "arrived << \"net: message\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a net= run's log doesn't say who leaves",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "LogString(\"net: the other player has left\");",
+					"to": "LogString(\"net:\");"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the script cannot ask for -alienwaysaim",
 			"changes": [
 				{

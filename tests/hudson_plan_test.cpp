@@ -1748,8 +1748,20 @@ static void TestTourAndSharedMachine()
 
 		Check(ComesBefore(hudsonFile, "NetLoopbackOnly = true;", "void Hudson_EndOfFrame") && ComesBefore(winmainFile, "Hudson_CheckBeforeStarting();", "Net_Initialise();"), "a run with net= says it's loopback only before the game's networking starts");
 		Check(Has(networking, "if (NetLoopbackOnly)\n\t\t\t{\n\t\t\t\tenet_address_set_host_ip(&ServerAddress, \"127.0.0.1\");"), "the host then has this machine's own address");
-		Check(Has(networking, "enet_address_set_host_ip(&ourAddress, \"127.0.0.1\");\n\tourAddress.port = 0;\n\n\thost = enet_host_create(NetLoopbackOnly ? &ourAddress : NULL,"), "and the client too, on any free port, because the host has the game's port");
+		Check(Has(networking, "enet_address_set_host_ip(&ourAddress, \"127.0.0.1\");\n\tourAddress.port = 0;") && Has(networking, "host = Net_MakeENetHost(NetLoopbackOnly ? &ourAddress : NULL, 1,"),
+			"and the client too, on any free port, because the host has the game's port");
+		Check(Has(networking, "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))\n\t{\n\t\tCon_PrintError(\"Net_ConnectToSession - a Hudson run with net= joins only a game on this machine\");\n\t\treturn NET_FAIL;"),
+			"and it joins no game but one on this machine");
+		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
+			"and, through the relay (hosting or joining), it uses only a relay on this machine, checked before anything is sent to one");
 		Check(Has(networking, "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL != broadcastSocket)"), "and there's no socket for finding games");
+		Check(Has(networking, "\tif (NetLoopbackOnly)\n\t{\n\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n\n\t\tif (enet_socket_bind(broadcastSocket, &thisHost) == 0)"),
+			"unless it's trying the search, and then that socket is on this machine's own address too");
+		Check(Has(networking, "if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))") && Has(networking, "(!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host)"),
+			"and a search asks neither the whole network nor a typed address that isn't this machine's");
+		Check(Has(networking, "\treturn (address & 0xFF) == 127;"), "this machine's own addresses are the 127 ones");
+		Check(Has(networking, "LogString(\"net: \" + sstream.str());") && Has(networking, "arrived << \"net: message \" << messagesArrived << \" arrived, \" << dataSize << \" bytes\";") && Has(networking, "LogString(\"net: the other player has left\");"),
+			"a run's log says who joins, by connection number and never an address, what arrives, and who leaves");
 		Check(Has(networking, "bool NetLoopbackOnly = false;"), "and an ordinary game doesn't get any of that");
 		Check(hudsonFile.find("NetLoopbackOnly = true;") == hudsonFile.rfind("NetLoopbackOnly = true;") && !Has(networking, "NetLoopbackOnly = true;") && !Has(menusFile, "NetLoopbackOnly ="), "and only a run with net= can change that");
 		Check(Has(hudsonFile, "if (plan.netMode != kHudsonNetNone)\n\t{\n\t\tNetLoopbackOnly = true;\n\t\tNetLoopbackSearch = plan.typed;\n\n\t\tif (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)"), "and a level that isn't on the multiplayer list is refused");

@@ -1,7 +1,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the co-op lobby: a game's description says if it has one, and in the lobby nothing is passed on and a silent joiner goes sooner. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
-//   the switches and the two helpers a Hudson run with net= needs. Until the network step, hudson.cpp refuses net=, so nothing here is used yet
+//   the switches and the two helpers a Hudson run with net= needs (the lines that use them came with the network step, 2026-11-08, below)
 // Copyright (C) 2011 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -61,6 +61,11 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a host's log says when it starts answering searches, or that it can't, when the first search question comes, and every minute how
 //   many came and were answered, never from which address (net_search_log.h)
+// Modified 2026-11-08 by Melanikus for the AvP port (Hudson's branch, never pushed):
+//   a Hudson run with net= only uses this machine's own address, opens no socket for finding games unless it's trying the search, never
+//   asks the whole network or an address that isn't this machine's, and logs who joins, what arrives and who leaves
+// Modified 2026-11-09 by Melanikus for the AvP port (Hudson's branch, never pushed):
+//   a net= run's "this machine only" also holds through the relay: it uses only a relay on this machine, hosting or joining
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -92,10 +97,20 @@ static bool net_IsInitialised = false;
 
 static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
 
-// A Hudson run with net= would set these, to keep its two games on this machine's own address and open no socket for finding games. The lines in this file
-// that keep it there aren't written into this network code yet, so hudson.cpp refuses net= before anything opens, and nothing sets these. They come with the network step.
+// A Hudson run with net= is two games on this machine, and it must open nothing on any network the machine is on: the host and the client use 127.0.0.1 only,
+// and there's no socket for finding games, because the client knows where to go. Only hudson.cpp sets this, before the game's networking starts. See
+// tools/hudson/run-net-pair.ps1, which checks what really happened, and ends both games if either has anything open on another address.
 bool NetLoopbackOnly = false;
+
+// A test run can search for a game the way a player does, by a typed address, as long as that stays on this machine's own address
 bool NetLoopbackSearch = false;
+
+// Whether an address is this machine's own, 127.x.x.x, the only kind a Hudson run with net= may ask. ENet keeps an address's four numbers in the
+// order they're sent on the network, and the game only runs on x86, which keeps the first byte lowest, so the 127 is the lowest byte.
+static bool IsThisMachinesOwnAddress(enet_uint32 address)
+{
+	return (address & 0xFF) == 127;
+}
 
 
 // How long a machine that's stopped answering may go before ENet drops it. Nothing answers ENet while a level loads, and one machine can take much longer than another. ENet's own number was about 5 seconds, which a joiner on a big level can't meet. A machine that never comes back is still dropped when this runs out.
@@ -226,6 +241,14 @@ static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 {
 	if (relay.port < 1 || relay.port > 65535 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
 	{
+		return false;
+	}
+
+	// Hudson's branch: a run with net= opens nothing beyond this machine, so it uses only a relay on this machine (127.x), hosting or
+	// joining. A relay anywhere else is left out here, before anything is sent to it.
+	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address))
+	{
+		LogString("net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out");
 		return false;
 	}
 
@@ -947,6 +970,13 @@ static void Net_AddSession(SessionDescription &session)
 // others can find this game. A game doing neither has nothing open on any network. Gives back whether it's open.
 static bool OpenDiscoverySocket()
 {
+	// A Hudson run with net= opens nothing beyond this machine, and this socket would listen on every address it has. The client goes straight
+	// to the host, so nothing needs it, unless the run is trying the search by a typed address (NetLoopbackSearch), when it's kept to 127.0.0.1 below.
+	if (NetLoopbackOnly && !NetLoopbackSearch)
+	{
+		return false;
+	}
+
 	if (ENET_SOCKET_NULL != broadcastSocket)
 	{
 		return true;
@@ -966,6 +996,20 @@ static bool OpenDiscoverySocket()
 	ENetAddress thisHost;
 	thisHost.host = ENET_HOST_ANY;
 	thisHost.port = broadcastPort;
+
+	// A Hudson run's search stays on this machine's own address. Two copies on one machine can't share a port: the host opens this first and gets
+	// the known one, and the joiner, finding it taken, asks from any free one, which is all a search needs.
+	if (NetLoopbackOnly)
+	{
+		enet_address_set_host_ip(&thisHost, "127.0.0.1");
+
+		if (enet_socket_bind(broadcastSocket, &thisHost) == 0)
+		{
+			return true;
+		}
+
+		thisHost.port = 0;
+	}
 
 	if (enet_socket_bind(broadcastSocket, &thisHost) < 0)
 	{
@@ -1248,6 +1292,11 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		if (!LobbiedGame)
 		{
 			ServerAddress.host = ENET_HOST_ANY;
+
+			if (NetLoopbackOnly)
+			{
+				enet_address_set_host_ip(&ServerAddress, "127.0.0.1");
+			}
 
 			ServerAddress.port = netPortNumber;
 
@@ -2108,6 +2157,12 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					sstream << "A player is joining (connection " << (eEvent.peer - host->peers) + 1 << ")";
 					NewOnScreenMessage((char*)sstream.str().c_str());
 
+					// A Hudson run's log says so too, in the same words, with no address either
+					if (NetLoopbackOnly)
+					{
+						LogString("net: " + sstream.str());
+					}
+
 					// A connection that has only just been made hasn't been let in yet, whoever had this place in ENet's list before
 					eEvent.peer->data = NULL;
 					break;
@@ -2147,6 +2202,19 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					if (AvP.Network == I_Host ? HostHearsFromClient(eEvent.peer, messageData, eEvent.packet->dataLength) : ClientHearsFromHost(messageData, eEvent.packet->dataLength))
 					{
 						dataSize = eEvent.packet->dataLength;
+
+						// A Hudson run's log says what arrives, thinned out as the drops are (LogThisDrop), so a long run doesn't fill it
+						if (NetLoopbackOnly)
+						{
+							static unsigned long long messagesArrived = 0;
+
+							if (LogThisDrop(messagesArrived))
+							{
+								std::stringstream arrived;
+								arrived << "net: message " << messagesArrived << " arrived, " << dataSize << " bytes";
+								LogString(arrived.str());
+							}
+						}
 					}
 
 					enet_packet_destroy(eEvent.packet);
@@ -2174,6 +2242,11 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						{
 							netSession.nPlayers--;
 							Net_PlayerHasGone(id);
+
+							if (NetLoopbackOnly)
+							{
+								LogString("net: the other player has left");
+							}
 						}
 					}
 					else if (eEvent.peer == ServerPeer)
@@ -2285,7 +2358,7 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 	return NET_OK;
 }
 
-// For a Hudson run with net=: join the game on this machine, without looking for one. Nothing calls it until the network step: see NetLoopbackOnly.
+// For a Hudson run with net=: join the game on this machine, without looking for one (menus.cpp, a joiner's run). See NetLoopbackOnly.
 NetResult Net_ConnectToThisMachine(int level, char *playerName)
 {
 	ENetAddress address;
@@ -2323,8 +2396,21 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	ServerAddress.port = SessionData[sessionNumber].port;
 
 	// create ENet client. It has no address of its own, because nobody needs to find it: it talks to its host, and gets whatever port is free. That also means two games on one machine don't fight over a port.
+	// A Hudson run with net= is the exception: it asks for this machine's own address, on any free port, so that nothing is open on any network the machine is on.
+	ENetAddress ourAddress;
+
+	enet_address_set_host_ip(&ourAddress, "127.0.0.1");
+	ourAddress.port = 0;
+
+	// A Hudson run joins only a game on this machine. A session from anywhere else, which a search kept to this machine's own address can't find, is refused.
+	if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))
+	{
+		Con_PrintError("Net_ConnectToSession - a Hudson run with net= joins only a game on this machine");
+		return NET_FAIL;
+	}
+
 	// One connection, to the host, with the game's limits: see net_host.h
-	host = Net_MakeENetHost(NULL, 1, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);
+	host = Net_MakeENetHost(NetLoopbackOnly ? &ourAddress : NULL, 1, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);
 
 	if (host == NULL)
 	{
@@ -2475,7 +2561,8 @@ static bool AskEveryoneAboutGames()
 {
 	extern char IPAddressString[];
 
-	if (!AskAboutGames(ENET_HOST_BROADCAST))
+	// Nothing goes out to the whole network in a Hudson run on this machine's own address
+	if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))
 	{
 		Con_PrintError("Couldn't send broadcast packet");
 		return false;
@@ -2485,7 +2572,8 @@ static bool AskEveryoneAboutGames()
 	{
 		ENetAddress typed;
 
-		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !AskAboutGames(typed.host))
+		// And a Hudson run asks a typed address only if it's this machine's own
+		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && (!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host))
 		{
 			Con_PrintError("Couldn't ask the address that was typed");
 		}

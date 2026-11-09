@@ -850,15 +850,6 @@ int Hudson_CheckBeforeStarting()
 		}
 	}
 
-	// NOT ON THIS BRANCH YET. On hudson-revive, Hudson sits on a newer main, and the lines that keep a network run on this machine's own address aren't written
-	// into its network code yet. A network run without them would open the game's ports on every network the machine is on, so it's refused here, before
-	// anything is opened. The network step writes them in and takes this out.
-	if (plan.netMode != kHudsonNetNone)
-	{
-		WriteResult("net= runs aren't back on this branch yet: the lines that keep one on this machine's own address come with the network step", kHudsonExitBadArguments);
-		return kHudsonExitBadArguments;
-	}
-
 	// Only this machine's own address, and before anything has been opened on any other. See NetLoopbackOnly in networking.cpp.
 	if (plan.netMode != kHudsonNetNone)
 	{
