@@ -1742,7 +1742,8 @@ static void CheckTheRealWriters()
 	Check(closedAfterClear != std::string::npos && stoppedAfterClear != std::string::npos && closedAfterClear < stoppedAfterClear, "and a frame stopped by a failed clear closes the scene it opened, or no frame could ever start again");
 
 	std::string const windows = JustTheCode(ReadSourceFile("3dc/win95/win_func.cpp"));
-	Check(windows.find("while (!bActive && bRunning)") != std::string::npos, "and being closed also ends the wait for the game to become active");
+	// Modified 2026-11-09 by Melanikus for the AvP port: the loop's end also lets a network game go on behind another window, after bRunning
+	Check(windows.find("while (!bActive && bRunning") != std::string::npos, "and being closed also ends the wait for the game to become active");
 
 	// Nothing else adds to these lists. kshape.cpp has the only other mention, in code that's switched off.
 	std::string const shapes = JustTheCode(ReadSourceFile("3dc/kshape.cpp"));
