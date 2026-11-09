@@ -2945,11 +2945,11 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 
 void ThisFramesRenderingHasBegun()
 {
-	// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)
-	seeThroughWithoutDepth = false;
-
 	surfacePicturesAreFromThisFrame = false;
 	surfaceNormalsWereWrittenThisFrame = false;
+
+	// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)
+	seeThroughWithoutDepth = false;
 
 	// calls a function to perform d3d_device->Begin();
 	if (R_BeginScene())
