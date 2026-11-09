@@ -1254,8 +1254,22 @@ static void TestJoiningThroughTheRelay()
 			"handshake B ran with the host the list named, and a game datagram it sealed opens here, for ENet to read as it was");
 		TellTheHost(kRelayHost, 27501, sealed, sealedSize);
 		Check(theHost.intercept(&theHost, NULL) == 1, "the same sealed datagram again is dropped: none is taken twice");
+
+		// The check code (CRYPTO.md section 8): the joiner has the same 6 digits as the host behind the relay, for the players to compare
+		char code[kNetRelayCheckCodeBytes];
+		bool const shown = Net_RelayCheckCodeNow(code);
+		bool allDigits = strlen(code) == 6;
+
+		for (size_t i = 0; i < 6 && allDigits; i++)
+		{
+			allDigits = isdigit(static_cast<unsigned char>(code[i])) != 0;
+		}
+
+		Check(shown && allDigits && strcmp(code, scriptedHostSide.CheckCode()) == 0,
+			"the joiner has the check code to show: 6 digits, the same the host behind the relay worked out");
+		EndTheGame();
+		Check(!Net_RelayCheckCodeNow(code) && code[0] == 0, "and once the game is left, it has none");
 	}
-	EndTheGame();
 
 	// The relay says no
 	NumberOfSessionsFound = 0;
@@ -2339,6 +2353,16 @@ static void TestTheRequestToJoin()
 	Hears(1, AskingToJoin("Ripley"));
 	Check(playersInGame.empty() && IDOf(1) == 0 && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0 && who.connection == 1,
 		"a joiner asks: it isn't let in yet, and the host has its request, with its name");
+	{
+		// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner on this network had no handshake, so no check code
+		char code[kNetRelayCheckCodeBytes];
+		memset(code, 'X', sizeof(code));
+		Check(!Net_JoinRequestCheckCode(who, code) && code[0] == 0, "a joiner on this network has no check code to show: it had no handshake");
+		std::string const source = ReadSourceFile("3dc/networking.cpp");
+		Check(Has(source, "|| !PeerIsThroughRelay(asking))\n\t{\n\t\treturn false;") &&
+			Has(source, "NetPeerHostSide *const side = RelayEndToEndSide(asking->address.port, false, enet_time_get());\n\treturn side && side->Ready() && CopyCheckCode(side->CheckCode(), out);"),
+			"SOURCE: the host shows a code only for the waiting joiner through the relay, from its own handshake, once that's done");
+	}
 
 	int const gentleBefore = closedGently;
 	Connects(2);

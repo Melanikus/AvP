@@ -264,6 +264,7 @@ static NetPeerHostSide relayEndToEndHosts[kNetRelayMostJoiners];   // a host's h
 static bool relaySealing = false;                                  // this game's ENet sends through RelaySealedSend (set by the relay's use)
 static uint8_t relayOpened[kRelayMostPacketBytes];                 // a game datagram just opened, for ENet to read in its place
 static uint32_t relayEndToEndDropped = 0;                          // ENet's datagrams dropped on their way out because nothing could seal them
+static_assert(kNetRelayCheckCodeBytes == kNetHandshakeBCheckCodeBytes, "networking.h's check code is as long as net_handshake_b.h's");
 static NetPeerStartLimit relayEndToEndStarts;                      // how many handshakes a host starts, per named port and per second (Primary's finding 1)
 
 // This run's identity, made once, from the operating system's randomness (net_identity.h). False if it couldn't be made.
@@ -2773,6 +2774,50 @@ bool Net_JoinRequestWaiting(char *nameOut, size_t nameRoom, NetJoinWho *who)
 	who->connection = (int)joinRequestConnection;
 	who->connectID = joinRequestConnectID;
 	return true;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the check codes for the screens (networking.h). Each copies the six
+// digits a handshake made, and only once they're whole.
+static bool CopyCheckCode(const char *code, char out[kNetRelayCheckCodeBytes])
+{
+	if (!code || strnlen(code, kNetRelayCheckCodeBytes) != kNetRelayCheckCodeBytes - 1)
+	{
+		return false;
+	}
+
+	memcpy(out, code, kNetRelayCheckCodeBytes - 1);
+	out[kNetRelayCheckCodeBytes - 1] = 0;
+	return true;
+}
+
+bool Net_RelayCheckCodeNow(char out[kNetRelayCheckCodeBytes])
+{
+	if (!out)
+	{
+		return false;
+	}
+
+	out[0] = 0;
+	return relayEndToEndPort != 0 && relayEndToEndJoiner.Ready() && CopyCheckCode(relayEndToEndJoiner.CheckCode(), out);
+}
+
+bool Net_JoinRequestCheckCode(NetJoinWho who, char out[kNetRelayCheckCodeBytes])
+{
+	if (!out)
+	{
+		return false;
+	}
+
+	out[0] = 0;
+	ENetPeer *const asking = JoinRequestPeer();
+
+	if (!asking || who.connection != (int)joinRequestConnection || who.connectID != joinRequestConnectID || !PeerIsThroughRelay(asking))
+	{
+		return false;
+	}
+
+	NetPeerHostSide *const side = RelayEndToEndSide(asking->address.port, false, enet_time_get());
+	return side && side->Ready() && CopyCheckCode(side->CheckCode(), out);
 }
 
 void Net_AnswerJoinRequest(NetJoinWho who, bool yes)

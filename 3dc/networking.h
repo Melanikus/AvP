@@ -276,6 +276,18 @@ int const kNetJoinAnswerBusy = 4;
 int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
 int Net_JoinAnswerNow();
 
+// THE CHECK CODE. Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, CRYPTO.md section 8: "always shown on the join
+// screen"). Through a relay, the joiner and its host each work out the same 6 digits from their handshake. The two players read them to
+// each other: if they match, nobody sat in the middle. Both calls only read, so a screen can ask every frame.
+//   - Net_RelayCheckCodeNow: a joiner's own code, once its handshake with the host is done. False, with "" written, before, after, or
+//     in a game that didn't come through a relay.
+//   - Net_JoinRequestCheckCode: the host's code for the joiner whose request to join waits (who, as Net_JoinRequestWaiting gave it).
+//     False, with "" written, for a joiner on this network (it has no handshake), or a request that's gone or somebody else's.
+// out has room for the 6 digits and the 0 that ends them.
+size_t const kNetRelayCheckCodeBytes = 7;
+bool Net_RelayCheckCodeNow(char out[kNetRelayCheckCodeBytes]);
+bool Net_JoinRequestCheckCode(NetJoinWho who, char out[kNetRelayCheckCodeBytes]);
+
 // THE RELAY ON THE SCREEN. Added 2026-11-09 by Melanikus for the AvP port, for Fourth's online screens: the host's news about its relay,
 // and the line in play saying which relay the game goes through and how far away it is. Both are read only: asking changes nothing, so a
 // screen can ask every frame. A region is the list's text, so the screen makes it safe (OnlineScreens_SafeName) before drawing it.

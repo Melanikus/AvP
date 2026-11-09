@@ -2425,8 +2425,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": " || who.connectID != joinRequestConnectID",
-					"to": ""
+					"from": " || who.connectID != joinRequestConnectID)\n\t{\n\t\treturn;",
+					"to": ")\n\t{\n\t\treturn;"
 				}
 			]
 		},
@@ -2712,6 +2712,46 @@
 					"file": "3dc/networking.cpp",
 					"from": "\n\trelayEndToEndStarts.Reset();\n}\n",
 					"to": "\n}\n"
+				}
+			]
+		},
+		{
+			"name": "a joiner's check code is never shown",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return relayEndToEndPort != 0 && relayEndToEndJoiner.Ready() && CopyCheckCode(relayEndToEndJoiner.CheckCode(), out);",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "a joiner's check code call leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tout[0] = 0;\n\treturn relayEndToEndPort != 0",
+					"to": "\treturn relayEndToEndPort != 0"
+				}
+			]
+		},
+		{
+			"name": "the host's check code call leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tout[0] = 0;\n\tENetPeer *const asking = JoinRequestPeer();",
+					"to": "\tENetPeer *const asking = JoinRequestPeer();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host shows a check code before the handshake is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return side && side->Ready() && CopyCheckCode(side->CheckCode(), out);",
+					"to": "return side && CopyCheckCode(side->CheckCode(), out);"
 				}
 			]
 		}

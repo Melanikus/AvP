@@ -923,6 +923,8 @@ private:
 //     names it again (Forget, once it isn't named any more): an honest joiner needs one, and a second if a datagram went astray;
 //   - the host starts at most kNetPeerMostStartsPerSecond handshakes in any one second, from all ports together.
 // It's game-free, as the rest of this file: the caller gives the time, and asks Allow before each start. Its test is net_v2b_test's section 9.
+// What's left (Primary's read, 2026-11-09): 8 named ports at 3 starts each could use the host's 4 a second for about 6 seconds, and an
+// honest joiner starting then has its B1 refused; it sends B1 again (0.5, 1.5 and 3.5 s), so it only waits.
 uint32_t const kNetPeerMostStartsPerNaming = 3;
 uint32_t const kNetPeerMostStartsPerSecond = 4;
 size_t const kNetPeerStartLimitPorts = 8;   // a room's joiners (net_relay.h's kNetRelayMostJoiners), so every named port has a place
