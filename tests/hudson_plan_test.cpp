@@ -83,6 +83,9 @@ static void TestGoodPlans()
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes playgun=10", &plan) == 0 && plan.playGunSlot == 10 && plan.gunSlot == 0, "playgun= gives a playing Hudson the gun in that slot, and isn't a gun run");
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes", &plan) == 0 && plan.playGunSlot == 0, "and without it he has what the level gives him");
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes playgun=14", &plan) == 0 && plan.playGunSlot == 14, "and the highest slot is 14");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes", &plan) == 0 && plan.playStepSeconds == 0, "without stepseconds=, a step has the usual time");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes stepseconds=10", &plan) == 0 && plan.playStepSeconds == 10, "stepseconds= can be as short as 10 s");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes stepseconds=600", &plan) == 0 && plan.playStepSeconds == 600, "and as long as 600 s");
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1000000 seconds=14400 idle=3600", &plan) == 0, "the highest each can be");
 	Check(HudsonPlan_Read("-hudson   level=a\t frames=1  ", &plan) == 0, "extra spaces and tabs are nothing");
@@ -191,6 +194,14 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 gun=16", kHudsonRefusedGunNotASlot);
 	Refused("-hudson level=a frames=1 play=yes playgun=0", kHudsonRefusedGunNotASlot);
 	Refused("-hudson level=a frames=1 play=yes playgun=15", kHudsonRefusedGunNotASlot);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=9", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=601", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=0", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=-30", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=thirty", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=", kHudsonRefusedStepSeconds);
+	Refused("-hudson level=a frames=1 play=yes stepseconds=30 stepseconds=30", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 stepseconds=30", kHudsonRefusedStepSecondsWithoutPlay);
 	Refused("-hudson level=a frames=1 play=yes playgun=ten", kHudsonRefusedGunNotASlot);
 	Refused("-hudson level=a frames=1 play=yes playgun=10 playgun=10", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 gun=x", kHudsonRefusedGunNotASlot);
@@ -1594,6 +1605,10 @@ static void TestTourAndSharedMachine()
 	Check(Has(stockFall, "CauseDamageToObject(sbPtr,&FallingDamage, (50*ONE_FIXED), NULL);") && Has(stockFall, "MakeBloodExplosion(&point2,127,&point,50,blood_type);"),
 		"outside a run, a fall that would kill does the game's own damage and blood, exactly as before");
 	Check(!Has(Between(marineCode, "Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {", "IsInContactWithFloor"), "return;"), "and nothing leaves before the fall is looked at, in a run or out of one");
+
+	// stepseconds=: the play code uses it, and only when it's given
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (plan.playStepSeconds > 0)\n\t\t{\n\t\t\tHudsonPlay_SetStepSeconds(plan.playStepSeconds);"), "a step's time is only changed when stepseconds= asks");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!movedToThisStep && now - stepStartedAt >= aStepHasTakenTooLong)"), "and the step's time limit is the one it set");
 
 	std::string const walkCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
 	std::string const frameCode = Between(walkCode, "bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame)", "int HudsonNav_ModulesWalkedInto()");

@@ -6097,6 +6097,11 @@ void Hudson_PlayInput(void *playerStatus)
 	{
 		started = true;
 
+		if (plan.playStepSeconds > 0)
+		{
+			HudsonPlay_SetStepSeconds(plan.playStepSeconds);
+		}
+
 		if (plan.netMode == kHudsonNetJoin)
 		{
 			HudsonPlay_StartFollowing(LevelName);
