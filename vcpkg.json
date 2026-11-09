@@ -7,6 +7,8 @@
     "enet",
     "libogg",
     "libvorbis",
+    "mldsa-native",
+    "mlkem-native",
     "openal-soft",
     "pthreads"
   ],

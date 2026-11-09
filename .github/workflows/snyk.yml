@@ -301,7 +301,7 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       # Every library that was collected is scanned, even if an earlier one fails, so one run shows everything; the job
-      # fails at the end if any scan found anything. The six we know of must be present by name, so a broken hand-over
+      # fails at the end if any scan found anything. The eight we know of must be present by name, so a broken hand-over
       # can't pass as clean, and a new library is scanned without anyone adding it here. No library may carry a comment or
       # a settings file that tells a scanner to look away.
       - name: SAST and SCA on each library's source
@@ -324,7 +324,7 @@ jobs:
             done
             return "$rc"
           }
-          for lib in enet fmt libogg libvorbis openal-soft pthreads; do
+          for lib in enet fmt libogg libvorbis mldsa-native mlkem-native openal-soft pthreads; do
             if [ ! -d "libsrc/$lib" ]; then
               echo "::error::No source collected for $lib"
               failed=1

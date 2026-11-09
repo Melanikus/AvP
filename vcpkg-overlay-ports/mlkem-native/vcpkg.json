@@ -1,0 +1,13 @@
+{
+  "name": "mlkem-native",
+  "version": "2.0.0",
+  "description": "ML-KEM (FIPS 203), built as ML-KEM-1024 only, from the library's own single C file, with the settings in avpx/avpx_mlkem_config.h",
+  "homepage": "https://github.com/pq-code-package/mlkem-native",
+  "license": "Apache-2.0 OR ISC OR MIT",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    }
+  ]
+}

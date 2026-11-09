@@ -1,0 +1,158 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "KEY EXCHANGE: a missing buffer is used",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "return bytes != NULL && length == wanted;",
+					"to": "return length == wanted;"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a key pair is made into buffers of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(publicKey, publicKeyLength, kPqPublicKeyBytes) && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes))",
+					"to": "if (publicKey != NULL && secretKey != NULL)"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a public key of the wrong size goes to the library",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(publicKey, publicKeyLength, kPqPublicKeyBytes) && IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&",
+					"to": "if (publicKey != NULL && IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a ciphertext is encapsulated into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&\n\t    IsExactly(sharedSecret",
+					"to": "ciphertext != NULL &&\n\t    IsExactly(sharedSecret"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: an encapsulated secret goes into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(sharedSecret, sharedSecretLength, kPqSharedSecretBytes))\n\t{\n\t\tif (avpx_mlkem1024_enc",
+					"to": "sharedSecret != NULL)\n\t{\n\t\tif (avpx_mlkem1024_enc"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: the library refusing a public key is taken as done",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (avpx_mlkem1024_enc(ciphertext, sharedSecret, publicKey) == 0)",
+					"to": "if (avpx_mlkem1024_enc(ciphertext, sharedSecret, publicKey) <= 0)"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused encapsulation leaves its ciphertext as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(ciphertext, ciphertextLength);",
+					"to": "Wipe(ciphertext, 0);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused encapsulation leaves its secret as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(ciphertext, ciphertextLength);\n\tWipe(sharedSecret, sharedSecretLength);",
+					"to": "Wipe(ciphertext, ciphertextLength);\n\tWipe(sharedSecret, 0);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a ciphertext of the wrong size is decapsulated",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&",
+					"to": "if (ciphertext != NULL && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a secret key of the wrong size is used",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&\n\t    IsExactly(sharedSecret",
+					"to": "secretKey != NULL &&\n\t    IsExactly(sharedSecret"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a decapsulated secret goes into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(sharedSecret, sharedSecretLength, kPqSharedSecretBytes))\n\t{\n\t\tif (avpx_mlkem1024_dec",
+					"to": "sharedSecret != NULL)\n\t{\n\t\tif (avpx_mlkem1024_dec"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: the library refusing a secret key is taken as done",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (avpx_mlkem1024_dec(sharedSecret, ciphertext, secretKey) == 0)",
+					"to": "if (avpx_mlkem1024_dec(sharedSecret, ciphertext, secretKey) <= 0)"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused decapsulation leaves its secret as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "\t}\n\n\tWipe(sharedSecret, sharedSecretLength);",
+					"to": "\t}\n\n\tWipe(sharedSecret, 0);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused key pair leaves its public key as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(publicKey, publicKeyLength);",
+					"to": "Wipe(publicKey, 0);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused key pair leaves its secret key as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(secretKey, secretKeyLength);",
+					"to": "Wipe(secretKey, 0);"
+				}
+			]
+		}
+	]
+}
