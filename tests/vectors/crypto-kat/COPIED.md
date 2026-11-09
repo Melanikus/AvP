@@ -16,7 +16,7 @@ That folder's README.md and each PROVENANCE.md, copied with the files, say where
 **What was copied:**
 - aes-256-gcm: nist-cavp-encrypt.json, nist-cavp-decrypt.json, wycheproof.json
 - ecdh-p384: nist-cavp.json, nist-cavp-pkv.json, wycheproof-ecpoint.json
-- ecdsa-p384-sha384: nist-cavp-sigver.json, nist-cavp-siggen.json, wycheproof-p1363.json. The game only checks signatures; siggen's signatures are checked as valid ones.
+- ecdsa-p384-sha384: nist-cavp-sigver.json, nist-cavp-siggen.json, wycheproof-p1363.json. The game only checks signatures; siggen's signatures are checked as valid ones. Since 2026-11-09 no test of the game's reads these: the game has no signature check until the signed relays directory (CRYPTO.md section 12), so its NetCrypto_EcdsaVerify and the test over these files were taken out, and come back with it. The files stay, as the relay's own copy, held to SHA256SUMS like the rest (the relay's Java still checks its ECDSA against them).
 - hkdf-sha384: nist-acvp-kda.json, wycheproof.json
 - hmac-sha384: wycheproof.json
 

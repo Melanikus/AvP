@@ -51,8 +51,8 @@ Java's.
 relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
 (`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
 
-**Where it comes from.** AVPx-Dedicated-Server, branch v2, the commit after `5071bc6` that makes handshake A pqIK (its hash is added
-here once it's pushed; the sha256 below is the pin either way), file `test-vectors/crypto-v2.json`: handshake A made pqIK
+**Where it comes from.** AVPx-Dedicated-Server, branch v2, commit `244235f` (the same file at `0328327`, which merges only docs),
+file `test-vectors/crypto-v2.json`: handshake A made pqIK
 (2026-11-09, server #24), for CRYPTO.md section 6 as Third wrote it (`1ee8aa9`). From `d0d268b`'s copy (compared section by section):
 handshake A and its datagrams are new (A1 4,930 bytes in 5, A2 3,257 in 3, a `player` and a `skemToPlayer`), and so is everything made
 from A's keys or datagrams: the sealed control messages, the nonces, the epoch keys, and the refusals cut from them (one of which now
