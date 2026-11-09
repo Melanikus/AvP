@@ -705,12 +705,22 @@
 			]
 		},
 		{
+			"name": "SOURCE: the list's news goes in the log without its name in front",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "LogString(std::string(\"Relay list: \") + piece);",
+					"to": "LogString(piece);"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the list's thread writes to the game's log",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tTell(\"Relay list: the game is off the list\");",
-					"to": "\t\t\tLogString(\"Relay list: the game is off the list\");"
+					"from": "\t\t\tTell(\"the game is off the list\");",
+					"to": "\t\t\tLogString(\"the game is off the list\");"
 				}
 			]
 		}

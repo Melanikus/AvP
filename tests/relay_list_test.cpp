@@ -782,6 +782,12 @@ static void TestTheCalls()
 	std::string const thread = SourceSlice(source, "// ---- The list's thread", "// Makes the store and starts the thread", kSliceEndAfterTheStart, FailedSlice);
 	Check(thread.size() > 1000 && !Has(thread, "LogString(") && !Has(thread, "LogErrorString("), "the list's own thread never writes to the game's log");
 	Check(!Has(source, " printf(") && !Has(source, "\tprintf(") && !Has(source, "OutputDebugString"), "and nothing prints what a call sent or got");
+
+	// The thread's news: every piece since the main thread last looked, kept in a ring, each written with "Relay list: " in front, so one
+	// search of the log finds them all
+	std::string const news = SourceSlice(source, "void WriteTheNews(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + piece);"),
+		"the main thread writes every piece of the list's news, each starting \"Relay list: \"");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)
