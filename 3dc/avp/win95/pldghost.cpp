@@ -10,6 +10,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   each frame, a ghost that waited more than 100 ms for news tells the 10-second report how long, and how far the news moved it
 //   (net_watch.h)
+//   a player's figure's guess between messages is worked out by ghost_guess.h, the same sums moved there so a test can run them
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -33,6 +34,7 @@ d  ----------------------------------------------------------------------*/
 #include "pldnet.h"
 #include "pldghost.h"
 #include "networking.h"
+#include "ghost_guess.h"
 #include "lighting.h"
 #include "psnd.h"
 #include "load_shape.h"
@@ -879,7 +881,6 @@ void PlayerGhostExtrapolation()
 			   ghostData->type==I_BehaviourPredatorPlayer ||
 			   NpcGhosts_TypeIsAnNpc(ghostData->type))
 			{
-				int time;
 				DYNAMICSBLOCK* dynPtr= sbPtr->DynPtr;
 				if(ghostData->onlyValidFar) continue;
 
@@ -903,21 +904,13 @@ void PlayerGhostExtrapolation()
 
 				if(UseExtrapolation)
 				{
-
-					dynPtr->LinVelocity.vx=0;
-					dynPtr->LinVelocity.vy=0;
-					dynPtr->LinVelocity.vz=0;
-
 					dynPtr->IsNetGhost=0;
 
-					ghostData->extrapTimer+=NormalFrameTime;
-					if(ghostData->extrapTimer<0) ghostData->extrapTimer=0;
-					if(ghostData->extrapTimer>ONE_FIXED/2) ghostData->extrapTimer=ONE_FIXED/2;
+					// The guess for this frame: the speed to move it at, or none (ghost_guess.h does the sums, and its test runs them)
+					bool stopped = false;
+					dynPtr->LinVelocity = GhostGuess_FrameSpeed(&ghostData->extrapTimer, &ghostData->extrapTimerLast, ghostData->velocity, NormalFrameTime, &stopped);
 
-					time=ghostData->extrapTimer-ghostData->extrapTimerLast;
-					ghostData->extrapTimerLast=ghostData->extrapTimer;
-
-					if(ghostData->velocity.vx==0 && ghostData->velocity.vy==0 && ghostData->velocity.vz==0)
+					if(stopped)
 					{
 						/*
 						Not moving , so alter the dynamics block settings to match those of a non-extrapolated
@@ -927,22 +920,9 @@ void PlayerGhostExtrapolation()
 						dynPtr->LinImpulse.vy=0;
 						dynPtr->LinImpulse.vz=0;
 
-						ghostData->extrapTimerLast=ghostData->extrapTimer=0;
 						dynPtr->IsNetGhost=1;
 						dynPtr->UseStandardGravity=1;
 						sbPtr->DynPtr->ToppleForce=TOPPLE_FORCE_NONE;
-					}
-					else if(time>0)
-					{
-						dynPtr->LinVelocity=ghostData->velocity;
-						if(time!=NormalFrameTime)
-						{
-							//only doing interpolation for a fraction of a frame
-							//so we need to scale the velocity accordingly
-							dynPtr->LinVelocity.vx=WideMulNarrowDiv(dynPtr->LinVelocity.vx,time,NormalFrameTime);
-							dynPtr->LinVelocity.vy=WideMulNarrowDiv(dynPtr->LinVelocity.vy,time,NormalFrameTime);
-							dynPtr->LinVelocity.vz=WideMulNarrowDiv(dynPtr->LinVelocity.vz,time,NormalFrameTime);
-						}
 					}
 
 
