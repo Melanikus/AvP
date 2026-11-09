@@ -485,23 +485,35 @@ jobs:
   # pins and checks (java/tools/get-jdk.sh: Adoptium's signature, its sha256 and its version, before anything in it runs). It runs on this
   # machine only, on 127.0.0.1, as a relay alone (no list, so no certificate), with settings made for this run and a pass key made at
   # random now, thrown away with the machine.
+  #
+  # Modified 2026-11-09 by Melanikus for the AvP port: it runs against two builds of the relay, each pinned. The v1 relay with the review's
+  # V1 fixes (its java branch's 0adff6d: a joiner's port is claimed by its first hello, and the host hears NEW_JOINER only then), and the
+  # v2 branch's 83ac68d, speaking v1 as its settings say by default, to show the v2 work left v1 as it was. The sealed v2 isn't probed:
+  # this program speaks v1 only. Move a pin only to a commit whose own java.yml has run green.
   relay-probe:
-    name: Relay probe
+    name: Relay probe (${{ matrix.relay.name }})
     timeout-minutes: 15
     runs-on: ubuntu-24.04   # pinned: the relay's own workflow builds and runs it on this machine (java.yml)
+    strategy:
+      fail-fast: false
+      matrix:
+        relay:
+          - name: v1, java 0adff6d
+            ref: '0adff6d40bcbc2878158e14ce78992ea1d1ff7d1'
+          - name: v2 build speaking v1, 83ac68d
+            ref: '83ac68d62df4767c1d39d1ba1adb908a152223af'
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # The relay's repository is public, so no token is needed or given. The commit is its java branch's 2e3eb82, which writes the
-      # relay's counts as it stops. Move the pin only to a commit whose own java.yml has run green.
+      # The relay's repository is public, so no token is needed or given. The commit is one of the two above.
       - name: Check out the relay, at a pinned commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Melanikus/AVPx-Dedicated-Server
-          ref: '2e3eb82262cca82af9ed302b267c20d546f5d810'
+          ref: ${{ matrix.relay.ref }}
           path: avpx-server
           persist-credentials: false
 
