@@ -36,7 +36,7 @@ Added 2026-11-09 by Melanikus for the AvP port.
 **What this is.** Protocol version 2's whole handshakes and sealed messages as exact bytes (CRYPTO.md section 15, in the
 AVPx-Dedicated-Server repository):
 - handshake A, pqIK: every input (the player's static keys among them), A1, A2 and A3, h and ck after each of the 21 steps, Split's
-  keys, the transcript;
+  two 48-byte secrets and two IVs, the transcript;
 - A's datagrams: the cookie round and the fragments;
 - four sealed control messages;
 - handshake B, with its refusals 10 and 21 as bytes;
@@ -51,16 +51,17 @@ Java's.
 relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
 (`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
 
-**Where it comes from.** AVPx-Dedicated-Server, branch v2, commit `244235f` (the same file at `0328327`, which merges only docs),
-file `test-vectors/crypto-v2.json`: handshake A made pqIK
-(2026-11-09, server #24), for CRYPTO.md section 6 as Third wrote it (`1ee8aa9`). From `d0d268b`'s copy (compared section by section):
-handshake A and its datagrams are new (A1 4,930 bytes in 5, A2 3,257 in 3, a `player` and a `skemToPlayer`), and so is everything made
-from A's keys or datagrams: the sealed control messages, the nonces, the epoch keys, and the refusals cut from them (one of which now
-says "a count of 4, for a length that takes 5"). The relay's static keys (`relayStatic`) are the same, so its fingerprint is too.
-Handshake B, AES-GCM, ML-KEM, the signatures and the sealed game datagrams are the same bytes.
+**Where it comes from.** AVPx-Dedicated-Server, branch v2, commit `2b8dcd6`, file `test-vectors/crypto-v2.json`: Split's 120 bytes
+(2026-11-09, CRYPTO.md 5.1 point 3 and section 9 as Third wrote them in `a7a369f`, for Secondary's reads, finding 2.1 of each). Split
+now gives two 48-byte secrets, then the two IVs, and every epoch's key, epoch 0's too, is HKDF-Expand(the direction's secret, "AVPX
+epoch v2" || e, 32). From `244235f`'s copy (compared section by section): every byte of the handshakes is the same (A1 to A3, B1 to
+B5, each step's h and ck, the transcripts). New: both splits, whose fields are now `secretGameToRelay` and `secretRelayToGame`
+(handshake A), `secretJoinerToHost` and `secretHostToJoiner` (handshake B); the nonces (the IVs moved within Split's output); the epoch
+keys, now from `secret`, with epoch 0 among them; the sealed control messages, the sealed game datagrams, and the refusals built on
+them. The signatures section is gone: nothing in the game or the relay checks a signature until the signed relays directory.
 
-- 237,729 bytes, with plain line ends (LF);
-- sha256 `5f49ab8cb8977c4e57db40039e3d7e03b3672757c19ffbda449f96c92852595a`.
+- 207,719 bytes, with plain line ends (LF);
+- sha256 `08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17`.
 
 The gate checks that sha256 ("Check protocol version 2's test vectors are the relay's own"). A newer one is taken the same way as
 `relay-v1.json`'s, above.
