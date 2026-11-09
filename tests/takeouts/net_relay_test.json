@@ -1,0 +1,278 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a packet of any size is read as a message",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!data || size != kNetRelayMessageBytes)",
+					"to": "if (!data)"
+				}
+			]
+		},
+		{
+			"name": "only the first letter of AVPR is looked at",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (data[0] != 'A' || data[1] != 'V' || data[2] != 'P' || data[3] != 'R')",
+					"to": "if (data[0] != 'A')"
+				}
+			]
+		},
+		{
+			"name": "another version of the messages is read as this one",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (data[4] != kNetRelayVersion)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a kind past the last one is read as a message",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (data[5] < 1 || data[5] > kNetRelayMostType)",
+					"to": "if (data[5] < 1)"
+				}
+			]
+		},
+		{
+			"name": "the reserved bytes needn't be 0",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (data[6] != 0 || data[7] != 0 || !NetRelay_AllZero",
+					"to": "if (!NetRelay_AllZero"
+				}
+			]
+		},
+		{
+			"name": "the padding needn't be 0",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": " || !NetRelay_AllZero(data + 36, kNetRelayMessageBytes - 36))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a code isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!NetRelay_AllZero(data + 24, kNetRelayCodeLetters) && !NetRelay_CodeIsGood(code))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the port is read high byte first",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "out->port = static_cast<uint16_t>(data[32] | (data[33] << 8));",
+					"to": "out->port = static_cast<uint16_t>(data[33] | (data[32] << 8));"
+				}
+			]
+		},
+		{
+			"name": "the port is written high byte first",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "out[32] = static_cast<uint8_t>(m.port & 0xFF);\n\tout[33] = static_cast<uint8_t>(m.port >> 8);",
+					"to": "out[32] = static_cast<uint8_t>(m.port >> 8);\n\tout[33] = static_cast<uint8_t>(m.port & 0xFF);"
+				}
+			]
+		},
+		{
+			"name": "two secrets are compared without their last byte",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "for (size_t i = 0; i < kNetRelaySecretBytes; i++)\n\t{\n\t\tdiffer",
+					"to": "for (size_t i = 0; i + 1 < kNetRelaySecretBytes; i++)\n\t{\n\t\tdiffer"
+				}
+			]
+		},
+		{
+			"name": "a typed code in small letters isn't made capital",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "c = static_cast<char>(c - 'a' + 'A');",
+					"to": "c = static_cast<char>(c);"
+				}
+			]
+		},
+		{
+			"name": "REFUSED's reason is kept whatever it is",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "return number >= kNetRelayRefusedNoGame && number <= kNetRelayRefusedTooMany ? number : kNetRelayRefusedOther;",
+					"to": "return number;"
+				}
+			]
+		},
+		{
+			"name": "the host listens to any port of the relay",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (state == kIdle || fromPort != controlPort)",
+					"to": "if (state == kIdle)"
+				}
+			]
+		},
+		{
+			"name": "the host opens a room with a token of all 0",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (NetRelay_AllZero(m.secret, kNetRelaySecretBytes) || !NetRelay_CodeIsGood(m.code))",
+					"to": "if (!NetRelay_CodeIsGood(m.code))"
+				}
+			]
+		},
+		{
+			"name": "HOST_KEPT is believed with any token",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!NetRelay_SameSecret(m.secret, token))\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayWrongSecret);\n\t\t\t\t}\n\n\t\t\t\tkeptAt = now;",
+					"to": "keptAt = now;"
+				}
+			]
+		},
+		{
+			"name": "NEW_JOINER is believed with any token",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!NetRelay_SameSecret(m.secret, token))\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayWrongSecret);\n\t\t\t\t}\n\n\t\t\t\tif (m.port == 0 || m.port == controlPort)\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayBadPort);\n\t\t\t\t}\n\n\t\t\t\treturn HelloTo",
+					"to": "if (m.port == 0 || m.port == controlPort)\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayBadPort);\n\t\t\t\t}\n\n\t\t\t\treturn HelloTo"
+				}
+			]
+		},
+		{
+			"name": "the host says hello to port 0, or to the control port",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\t\tif (m.port == 0 || m.port == controlPort)\n\t\t\t\t{\n\t\t\t\t\treturn Unused(kNetRelayBadPort);\n\t\t\t\t}\n\n\t\t\t\treturn HelloTo",
+					"to": "\t\t\t\treturn HelloTo"
+				}
+			]
+		},
+		{
+			"name": "HOST_KEEP comes later than every 15 s",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (now - keepAt >= kNetRelayKeepEveryMs)",
+					"to": "if (now - keepAt > kNetRelayKeepEveryMs)"
+				}
+			]
+		},
+		{
+			"name": "a room unkept for 45 s is never given up",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (now - keptAt >= kNetRelayKeptWithinMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the host says hello to a joiner for ever",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (now - h.since >= kNetRelayWaitForReadyMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the host never gives up asking for a room",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (now - startedAt >= kNetRelayGiveUpAskingMs)\n\t\t\t{\n\t\t\t\tLose(kNetRelayNoAnswer);",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\tLose(kNetRelayNoAnswer);"
+				}
+			]
+		},
+		{
+			"name": "a joiner takes a port for another game's code",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (memcmp(m.code, code, sizeof(code)) != 0 || NetRelay_AllZero(m.secret, kNetRelaySecretBytes))",
+					"to": "if (NetRelay_AllZero(m.secret, kNetRelaySecretBytes))"
+				}
+			]
+		},
+		{
+			"name": "a joiner believes READY with any ticket",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!NetRelay_SameSecret(m.secret, ticket) || m.port != port)",
+					"to": "if (m.port != port)"
+				}
+			]
+		},
+		{
+			"name": "a joiner believes READY naming any port",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (!NetRelay_SameSecret(m.secret, ticket) || m.port != port)",
+					"to": "if (!NetRelay_SameSecret(m.secret, ticket))"
+				}
+			]
+		},
+		{
+			"name": "a joiner waits for READY for ever",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (now - portAt >= kNetRelayWaitForReadyMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a joiner says hello only once",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "else if (now - helloAt >= kNetRelayJoinerHelloEveryMs)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a joiner takes the game's own packets from its port",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\t\tif (fromItsPort)\n\t\t\t{\n\t\t\t\treturn false;\n\t\t\t}\n\n\t\t\tnotMessages[why]++;",
+					"to": "\t\t\tnotMessages[why]++;"
+				}
+			]
+		}
+	]
+}
