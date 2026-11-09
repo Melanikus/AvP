@@ -588,6 +588,9 @@ jobs:
           want "too big" 0
           want "over a limit" 0
           want "not a message" 0
+          # The one packet relay-probe sends after HOST_CLOSE: the room's ports are free at once, so the relay drops it as from a stranger.
+          # Nothing else is: no game packet goes before READY, and the joiner says no hello after it.
+          want "from strangers" 1
 
           if [ "$probed" != 0 ]; then echo "::error::relay-probe failed (exit code $probed): its lines above say which step, and why"; exit 1; fi
           if [ "$wrong" != 0 ]; then exit 1; fi
