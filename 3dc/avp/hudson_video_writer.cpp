@@ -154,6 +154,16 @@ static long long BytesInTheFile()
 	return ((long long)facts.nFileSizeHigh << 32) | facts.nFileSizeLow;
 }
 
+// Whether the film's folder is there (the folder the game is in, if the path names none). It's asked before the disk's free space,
+// because Windows can't say that for a folder that isn't there, and a film whose folder is missing should say so, not that the disk
+// won't say how much room it has.
+static bool TheFolderIsThere()
+{
+	DWORD const what = GetFileAttributesW(video.folder[0] ? video.folder : L".");
+
+	return what != INVALID_FILE_ATTRIBUTES && (what & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
 // -1 if the disk won't say
 static long long BytesFreeOnTheDisk()
 {
@@ -358,6 +368,10 @@ static unsigned __stdcall WriterThread(void *)
 	if (FAILED(startup))
 	{
 		StopBecauseOf("start", "couldn't start Windows' video writer", startup);
+	}
+	else if (!TheFolderIsThere())
+	{
+		HudsonVideoWriter_StopBecause("start", "couldn't make the file, because its folder isn't there, so there's no film, and the run goes on");
 	}
 	else if (BytesFreeOnTheDisk() < 0)
 	{
