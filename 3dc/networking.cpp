@@ -377,6 +377,9 @@ static void RelayEndToEndJoinerLeft(uint16_t port)
 }
 
 static void RelayV2Forget();   // further down: the channel to the relay (step 7)
+static void RelayV2Hear(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now);
+static void RelayV2JoinerFrame();
+static bool HasMagic(const uint8_t *data, size_t size, const char magic[5]);
 
 // Every handshake is ended, its keys wiped: when a game through a relay ends, or the relay is given up. Modified 2026-11-09 by Melanikus
 // for the AvP port: the channel to the relay too (step 7), so whatever ends a game through the relay ends that as well.
@@ -550,6 +553,7 @@ static const char *RelayEndToEndJoin(const char *region, uint16_t port, const ui
 		}
 
 		RelayEndToEndSendAll(host, relayEndToEndJoiner, port);
+		RelayV2JoinerFrame();   // the channel to the relay keeps its turn meanwhile (step 7, added 2026-11-09 by Melanikus for the AvP port)
 		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
 
 		if (enet_socket_wait(host->socket, &condition, kRelayWaitMs) < 0)
@@ -579,8 +583,11 @@ static const char *RelayEndToEndJoin(const char *region, uint16_t port, const ui
 				continue;
 			}
 
-			if (RelayControlDatagram(from.port, packet, static_cast<size_t>(got), now))
+			// Modified 2026-11-09 by Melanikus for the AvP port (step 7): the relay's own messages come through the channel to it, opened
+			// ('AVPR'); a plain version 1 message is never read here, and goes on to B, which drops what isn't its own
+			if (HasMagic(packet, static_cast<size_t>(got), "AVPR"))
 			{
+				RelayV2Hear(from.port, packet, static_cast<size_t>(got), now);
 				continue;
 			}
 
