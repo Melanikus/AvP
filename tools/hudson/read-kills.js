@@ -1,17 +1,22 @@
 // Reads the two logs of a pair run with killkind=, and says what each machine really saw: was the level's own NPC there on the host, did the joiner see it, did the killer kill it, and did its death move the level on for each machine. Written 2026-11-06 by Melanikus for the AvP port.
 // It only reads. A line in the code only shows the code is there. This shows it did its job in a running game, and the two machines are compared rather than either one believed.
 //   node read-kills.js <the host's run folder> <the joiner's run folder> <host or join> [the doors its death opens, with commas]
+// from the folder that holds the game copies, each run folder being <copy>\runs\<date and time> (run-folders.js says why).
 // It prints one line of tab-separated results, then what went wrong, if anything. It gives back 0 only if everything was seen.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { runFolder } = require('./run-folders.js');
 
-const [hostFolder, joinFolder, killer, opens] = process.argv.slice(2);
+const [hostGiven, joinGiven, killer, opens] = process.argv.slice(2);
 
-if (!hostFolder || !joinFolder || (killer !== 'host' && killer !== 'join')) {
+if (!hostGiven || !joinGiven || (killer !== 'host' && killer !== 'join')) {
     console.log('usage: node read-kills.js <host run> <joiner run> <host or join> [doors]');
     process.exit(2);
 }
+
+const hostFolder = runFolder(hostGiven, 'The host\'s run folder');
+const joinFolder = runFolder(joinGiven, 'The joiner\'s run folder');
 
 function linesOf(folder, name) {
     try {

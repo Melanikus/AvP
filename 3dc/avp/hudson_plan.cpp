@@ -315,14 +315,28 @@ static const char *FindHudsonWord(const char *commandLine)
 	static const char kWord[] = "-hudson";
 	size_t const length = sizeof(kWord) - 1;
 
-	for (const char *found = strstr(commandLine, kWord); found; found = strstr(found + 1, kWord))
+	if (!commandLine)
 	{
-		bool const startsClean = found == commandLine || IsSpace(found[-1]);
-		bool const endsClean = found[length] == 0 || IsSpace(found[length]);
+		return 0;
+	}
+
+	// Looked for by place, not by a pointer strstr hands back, so every character read is a place inside the line: the one before the
+	// word only when there is one, and the one after it only up to the line's end
+	size_t const total = strlen(commandLine);
+
+	for (size_t at = 0; at + length <= total; at++)
+	{
+		if (memcmp(commandLine + at, kWord, length) != 0)
+		{
+			continue;
+		}
+
+		bool const startsClean = at == 0 || IsSpace(commandLine[at - 1]);
+		bool const endsClean = at + length == total || IsSpace(commandLine[at + length]);
 
 		if (startsClean && endsClean)
 		{
-			return found + length;
+			return commandLine + at + length;
 		}
 	}
 

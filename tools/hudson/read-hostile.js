@@ -2,19 +2,24 @@
 // A source check only shows that a line is in the code. This shows that the line stopped a message in a running game.
 // It only reads. Run it with node:
 //   node read-hostile.js <the host's run folder> <the joiner's run folder>
+// from the folder that holds the game copies, each run folder being <copy>\runs\<date and time> (run-folders.js says why).
 // A row passes only if the sender's log says it was sent, and the other machine's log names exactly that row's reason, in the order the rows went out.
 // The whole run passes only if every row that counts passed, and both games ended by themselves with no crash.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { runFolder } = require('./run-folders.js');
 
 const here = __dirname;
-const [hostDir, joinDir] = process.argv.slice(2);
+const [hostGiven, joinGiven] = process.argv.slice(2);
 
-if (!hostDir || !joinDir) {
+if (!hostGiven || !joinGiven) {
   console.log('Give it two folders: the host\'s run and the joiner\'s run.');
   process.exit(2);
 }
+
+const hostDir = runFolder(hostGiven, 'The host\'s run folder');
+const joinDir = runFolder(joinGiven, 'The joiner\'s run folder');
 
 function logLines(dir) {
   return fs.readFileSync(path.join(dir, 'avp_log.txt'), 'latin1').split(/\r?\n/);

@@ -1,6 +1,7 @@
 // Reads the two logs of a pair of Hudsons playing a level on foot (run-net-pair.ps1 -Play), and says what each did, side by side, plainly enough to read without knowing the code. It only reads.
 // Written 2026-11-07 by Melanikus for the AvP port. Run it with node:
 //   node read-play-pair.js <the host's run folder> <the joiner's run folder>
+// from the folder that holds the game copies, each run folder being <copy>\runs\<date and time> (run-folders.js says why).
 //
 // What it says, for each machine:
 // - how the run ended, and the play_ numbers from hudson-result.txt
@@ -13,13 +14,17 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { runFolder } = require('./run-folders.js');
 
-const [hostFolder, joinFolder] = process.argv.slice(2);
+const [hostGiven, joinGiven] = process.argv.slice(2);
 
-if (!hostFolder || !joinFolder) {
+if (!hostGiven || !joinGiven) {
   console.log('Give it two folders: the host\'s run and the joiner\'s run.');
   process.exit(2);
 }
+
+const hostFolder = runFolder(hostGiven, 'The host\'s run folder');
+const joinFolder = runFolder(joinGiven, 'The joiner\'s run folder');
 
 function readRun(folder, who) {
   const text = fs.readFileSync(path.join(folder, 'avp_log.txt'), 'latin1');

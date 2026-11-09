@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -375,7 +377,12 @@ static void TestAFilm()
 	Check(facts.stopped[0] == 0, std::string("nothing stopped it: ") + facts.why);
 	Check(facts.written == pictures, "and it wrote every picture, and not twice for one moment");
 	Check(facts.dropped == 0 && facts.noPicture == 0, "and says none were dropped or missed");
-	Check(facts.bytes > 0, "and how big the file is");
+	// The size the film finished at, which is bigger than any it had while being written: the end of an mp4 is written last
+	WIN32_FILE_ATTRIBUTE_DATA onTheDisk;
+	bool const sized = GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &onTheDisk) != 0;
+	long long const finishedAt = sized ? (((long long)onTheDisk.nFileSizeHigh << 32) | onTheDisk.nFileSizeLow) : -1;
+
+	Check(facts.bytes > 0 && facts.bytes == finishedAt, "and how big the file came out, as it is on the disk: " + std::to_string(facts.bytes) + " of " + std::to_string(finishedAt));
 	Check(!HudsonVideoWriter_WantsPictureFor(MomentOf(pictures + 1)), "a finished film wants no more pictures");
 
 	HudsonVideoWriter_Finish(30000);
@@ -447,17 +454,48 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 		}
 	}
 
+	// Then a slow frame, as the game has now and then: the encoder catches up, and the next picture goes in. The loop above is far faster
+	// than the encoder, so its drops all come at its end; only a picture after them shows that each moment missed while the queue was full
+	// is counted once, as dropped, and not a second time as a moment nobody had a picture for.
+	int moments = pictures;
+
+	if (asksFirst)
+	{
+		bool tookOneMore = false;
+
+		for (int tries = 0; tries < 400 && !tookOneMore; tries++)
+		{
+			Sleep(50);
+
+			if (HudsonVideoWriter_WantsPictureFor(MomentOf(moments)))
+			{
+				HudsonVideoWriter_Add(&picture[0], pitch, MomentOf(moments));
+				tookOneMore = true;
+			}
+
+			moments++;
+		}
+
+		Check(tookOneMore, "once the queue has room again, the next picture goes in");
+	}
+
 	HudsonVideoWriter_Finish(60000);
 
 	HudsonVideoFacts const facts = Facts();
 
 	Check(everSaidNo == asksFirst && facts.dropped > 0, "a full queue drops pictures rather than making the game wait, and counts them: " + std::to_string(facts.dropped));
-	Check(facts.written + facts.dropped + facts.noPicture == pictures, "every moment is written, dropped or missed, and nothing goes uncounted");
+	Check(facts.written + facts.dropped + facts.noPicture == moments, "every moment is written, dropped or missed, each once, and nothing goes uncounted: "
+		+ std::to_string(facts.written) + " + " + std::to_string(facts.dropped) + " + " + std::to_string(facts.noPicture) + " of " + std::to_string(moments));
 	Check(facts.stopped[0] == 0, std::string("and it isn't an error that stops the film: ") + facts.why);
 
 	WhatWasRead const read = ReadFilm(path.c_str());
 
-	Check(read.pictures == facts.written, "the film holds what it says it wrote: " + std::to_string(read.pictures));
+	// The film holds a picture for every moment from its first to its last: a moment missed between them holds the picture before, as the
+	// game's film does when a frame comes late. Without the picture after the drops, they all come at the end, and the film ends with the
+	// last picture written.
+	int const filmPictures = asksFirst ? moments : facts.written;
+
+	Check(read.pictures == filmPictures, "the film holds a picture for each moment up to its last: " + std::to_string(read.pictures) + " of " + std::to_string(filmPictures));
 
 	DeleteFileA(path.c_str());
 }
@@ -708,6 +746,33 @@ static int ReadARealFilm(const char *path, const char *wordForPictures)
 	return 0;
 }
 
+// The test's own source and the writer's, read from where this file was compiled (/FC gives the whole path)
+static std::string ReadSourceFile(char const *name)
+{
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	return all.str();
+}
+
+// The writer takes Media Foundation only if every one of the seven functions it calls is there. A machine with Media Foundation has
+// all seven, so leaving one out can't be seen by making a film: the writer's own text is read for it.
+static void TestTheWriterNeedsAllItsFunctions()
+{
+	std::string const writer = ReadSourceFile("3dc/avp/hudson_video_writer.cpp");
+
+	Check(writer.find("dllsAreLoaded = dll.Startup && dll.Shutdown && dll.CreateAttributes && dll.CreateMediaType && dll.CreateMemoryBuffer && dll.CreateSample && dll.CreateSinkWriter;")
+		!= std::string::npos, "SOURCE: the writer uses Media Foundation only with all seven of the functions it calls");
+}
+
 int main(int count, char **words)
 {
 	if (count == 4 && strcmp(words[1], "read") == 0)
@@ -723,6 +788,7 @@ int main(int count, char **words)
 	TestTheSums();
 	TestTheQueue();
 	TestCopying();
+	TestTheWriterNeedsAllItsFunctions();
 
 	if (TheWriterCanWorkHere() && LoadTheReader())
 	{
