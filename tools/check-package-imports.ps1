@@ -26,10 +26,12 @@ $ErrorActionPreference = 'Stop'
 
 # Part of Windows itself, on Windows 10 and 11, which is what PLAYTEST.md asks for. bcrypt.dll is Windows' own cryptography library, there
 # since Windows Vista: the game links it because ENet's host_secret.c (vcpkg-overlay-ports/enet, for patch 006) asks it for random
-# numbers with BCryptGenRandom.
+# numbers with BCryptGenRandom. winhttp.dll is Windows' own HTTPS, there since Windows XP, in Windows' own folder (System32, and SysWOW64
+# for a 32-bit program like the game) and signed by Microsoft: the game links it because relay_list.cpp reads the relay server's list of
+# games and relays over HTTPS with it (added 2026-11-09).
 $partOfWindows = @(
     'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll',
-    'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
+    'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
 # Microsoft's Visual C++ runtime. The game and every library built for it take it from DLLs (the /MD switch). It was built into them (/MT)
@@ -100,6 +102,7 @@ $inPackage = $files | ForEach-Object { $_.Name.ToLowerInvariant() }
 $missing = @()
 $runtimeRefused = @()
 $runtimeNeeded = @{}
+$fromWindows = @{}
 $namesRead = 0
 
 foreach ($file in $files) {
@@ -132,6 +135,11 @@ foreach ($file in $files) {
         }
         elseif (($inPackage -notcontains $lower) -and -not (Test-SuppliedElsewhere $name)) {
             $missing += "$($file.Name) needs $name"
+        }
+
+        # Which of Windows' own libraries on the list above the package really uses, said at the end, so tests/try-package.ps1 can see one
+        if (($inPackage -notcontains $lower) -and ($partOfWindows -contains $lower)) {
+            $fromWindows[$lower] = $true
         }
     }
 }
@@ -234,4 +242,5 @@ if ($folderNamed.Count -gt 0) {
     throw "$($folderNamed.Count) places in the package name a folder on the machine that built it. Name the file by hand rather than with __FILE__, and link with /PDBALTPATH:%_PDB% so that only a .pdb's name is kept."
 }
 
-"Every library the package links to is accounted for: $($files.Count) files, $namesRead names read, Microsoft's runtime is only the $($runtimeNeeded.Count) DLLs it needs, each Visual Studio's own $redistVersion copy with Microsoft's signature, and none names a folder on the machine that built it (those $($provenMicrosofts.Count) runtime DLLs aside, whose folders are Microsoft's)"
+"Taken from Windows itself: $(($fromWindows.Keys | Sort-Object) -join ', ')"
+"Every library the package links to is accounted for:$($files.Count) files, $namesRead names read, Microsoft's runtime is only the $($runtimeNeeded.Count) DLLs it needs, each Visual Studio's own $redistVersion copy with Microsoft's signature, and none names a folder on the machine that built it (those $($provenMicrosofts.Count) runtime DLLs aside, whose folders are Microsoft's)"
