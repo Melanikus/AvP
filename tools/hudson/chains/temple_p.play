@@ -1,0 +1,3 @@
+# What Hudson does to play temple_p on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: the chains, and what opens the doors on the way there. The rooms are joined by what they can see or not at all, so this level has not been walked from the file
+walk 1879 -503 -283 | volumeswitchforendmission

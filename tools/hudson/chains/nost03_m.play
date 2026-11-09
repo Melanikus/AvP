@@ -1,0 +1,4 @@
+# What Hudson does to play nost03_m on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: the chains, and what opens the doors on the way there. The rooms are joined by what they can see or not at all, so this level has not been walked from the file
+pickup 125172 21585 1202 | secpass01
+walk 193850 21585 -26797 | end

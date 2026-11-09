@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc/avp
+tests/hudson_play_steps_test.cpp
