@@ -303,6 +303,66 @@
 					"to": "if (false)\n\t\t{\n\t\t\tFail(kNetPeerNoAnswer);"
 				}
 			]
+		},
+		{
+			"name": "the start limit lets a port start any number",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "startsSoFar >= kNetPeerMostStartsPerNaming || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the start limit lets the host start any number a second",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": " || startsThisSecond >= kNetPeerMostStartsPerSecond)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the start limit's second never starts again",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "if (!secondRunning || static_cast<uint32_t>(now - secondStartedAt) >= 1000)",
+					"to": "if (!secondRunning)"
+				}
+			]
+		},
+		{
+			"name": "forgetting a port does nothing",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "\t\t\t\tentries[i].port = 0;\n\t\t\t\tentries[i].starts = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "port 0 starts a handshake",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "\t\tif (relayPort == 0)\n\t\t{\n\t\t\trefused++;\n\t\t\treturn false;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a 9th port pushes a counted one out",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "(!entry && !unused) || ",
+					"to": ""
+				}
+			]
 		}
 	]
 }

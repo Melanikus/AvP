@@ -1736,6 +1736,69 @@ static void TestPeers()
 	NetIdentity_Free(&joinerI);
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (Primary's read of the wiring, finding 1): how often a host starts a handshake. Each start
+// costs the host a B2, and a failed one frees its place, so a port the relay names starts at most 3, and the host at most 4 a second.
+static void TestStartLimit()
+{
+	printf("\n9. How often a host starts a handshake\n");
+	NetPeerStartLimit limit;
+	uint32_t now = 1000;
+
+	BCheck(!limit.Allow(0, now) && limit.Refused() == 1, "port 0 starts nothing");
+
+	// One port: three starts, a second apart so the host's own limit never comes into it, then no more until it's named again
+	bool three = true;
+
+	for (int i = 0; i < 3; i++)
+	{
+		three = three && limit.Allow(40001, now);
+		now += 1000;
+	}
+
+	BCheck(three, "a named port starts a handshake, and again, up to 3 times");
+	BCheck(!limit.Allow(40001, now) && limit.Refused() == 2, "the 4th is refused, however long it waits");
+	now += 60000;
+	BCheck(!limit.Allow(40001, now), "even a minute later, while it's still the same naming");
+	limit.Forget(40001);
+	BCheck(limit.Allow(40001, now), "once the relay names it again, it starts afresh");
+	limit.Forget(40001);
+	now += 1000;
+
+	// The host: 4 a second from all ports together, then the next second 4 more
+	bool four = true;
+
+	for (uint16_t port = 41001; port <= 41004; port++)
+	{
+		four = four && limit.Allow(port, now);
+	}
+
+	BCheck(four, "4 ports start one each in the same second");
+	BCheck(!limit.Allow(41005, now + 999), "a 5th in that second is refused");
+	BCheck(limit.Allow(41005, now + 1000), "and allowed a second later");
+
+	// Room for 8 ports at once, a room's joiners: a 9th it can't count is refused, and nothing it counts is pushed out
+	for (uint16_t port = 41001; port <= 41005; port++)
+	{
+		limit.Forget(port);
+	}
+
+	bool eight = true;
+	now += 10000;
+
+	for (uint16_t port = 42001; port <= 42008; port++)
+	{
+		now += 1000;
+		eight = eight && limit.Allow(port, now);
+	}
+
+	now += 1000;
+	BCheck(eight && !limit.Allow(42009, now), "8 ports are counted at once, and a 9th is refused rather than pushing one out");
+	BCheck(limit.PortAt(0) == 42001 && limit.PortAt(7) == 42008 && limit.PortAt(8) == 0, "each counted port can be asked about, for the caller to forget");
+
+	limit.Reset();
+	BCheck(limit.Refused() == 0 && limit.Allow(42001, now) && limit.PortAt(1) == 0, "Reset forgets everything");
+}
+
 int main()
 {
 	printf("Handshake B of protocol version 2, the game's side (net_handshake_b.h, net_identity.h)\n");
@@ -1763,6 +1826,7 @@ int main()
 
 		TestFresh();
 		TestPeers();
+		TestStartLimit();
 		NetIdentity_Free(&hostId);
 		NetIdentity_Free(&joinerId);
 	}

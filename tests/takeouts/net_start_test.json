@@ -2684,6 +2684,36 @@
 					"to": "\tReadJoysticks();"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a host starts handshakes without asking the start limit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!relayEndToEndStarts.Allow(port, now))\n\t{\n\t\treturn NULL;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a port the relay doesn't name any more keeps its count",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\trelayEndToEndStarts.Forget(counted);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game through the relay that ends keeps the start counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\trelayEndToEndStarts.Reset();\n}\n",
+					"to": "\n}\n"
+				}
+			]
 		}
 	]
 }

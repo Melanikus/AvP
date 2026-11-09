@@ -914,4 +914,123 @@ private:
 	uint32_t answeredAt;
 };
 
+// ----- How often a host starts a handshake. Added 2026-11-09 by Melanikus for the AvP port (Primary's read of the wiring, finding 1).
+//
+// Each handshake a host starts costs it one B2 to work out (an ML-KEM encapsulation and two P-384 agreements), and a handshake that fails
+// frees its place for another. So without a limit one joiner could send a good B1, then a bad B3, and again, as fast as the relay passes
+// datagrams, and the host's game would stutter. With this:
+//   - a port the relay has named (NEW_JOINER) starts at most kNetPeerMostStartsPerNaming handshakes, and then nothing more until the relay
+//     names it again (Forget, once it isn't named any more): an honest joiner needs one, and a second if a datagram went astray;
+//   - the host starts at most kNetPeerMostStartsPerSecond handshakes in any one second, from all ports together.
+// It's game-free, as the rest of this file: the caller gives the time, and asks Allow before each start. Its test is net_v2b_test's section 9.
+uint32_t const kNetPeerMostStartsPerNaming = 3;
+uint32_t const kNetPeerMostStartsPerSecond = 4;
+size_t const kNetPeerStartLimitPorts = 8;   // a room's joiners (net_relay.h's kNetRelayMostJoiners), so every named port has a place
+
+class NetPeerStartLimit
+{
+public:
+	NetPeerStartLimit()
+	{
+		Reset();
+	}
+
+	// May a handshake start now for this port? True counts it as started. False leaves everything as it was, and counts the refusal.
+	bool Allow(uint16_t relayPort, uint32_t now)
+	{
+		if (relayPort == 0)
+		{
+			refused++;
+			return false;
+		}
+
+		if (!secondRunning || static_cast<uint32_t>(now - secondStartedAt) >= 1000)
+		{
+			secondRunning = true;
+			secondStartedAt = now;
+			startsThisSecond = 0;
+		}
+
+		Entry *entry = NULL;
+		Entry *unused = NULL;
+
+		for (size_t i = 0; i < kNetPeerStartLimitPorts; i++)
+		{
+			if (entries[i].port == relayPort)
+			{
+				entry = &entries[i];
+			}
+			else if (!unused && entries[i].port == 0)
+			{
+				unused = &entries[i];
+			}
+		}
+
+		uint32_t const startsSoFar = entry ? entry->starts : 0;
+
+		if ((!entry && !unused) || startsSoFar >= kNetPeerMostStartsPerNaming || startsThisSecond >= kNetPeerMostStartsPerSecond)
+		{
+			refused++;
+			return false;
+		}
+
+		if (!entry)
+		{
+			entry = unused;
+			entry->port = relayPort;
+			entry->starts = 0;
+		}
+
+		entry->starts++;
+		startsThisSecond++;
+		return true;
+	}
+
+	// The relay doesn't name this port any more: its count goes, so the next time it's named it starts afresh
+	void Forget(uint16_t relayPort)
+	{
+		for (size_t i = 0; i < kNetPeerStartLimitPorts; i++)
+		{
+			if (relayPort != 0 && entries[i].port == relayPort)
+			{
+				entries[i].port = 0;
+				entries[i].starts = 0;
+			}
+		}
+	}
+
+	// Each port it still counts, for the caller to ask whether the relay still names it
+	uint16_t PortAt(size_t i) const
+	{
+		return i < kNetPeerStartLimitPorts ? entries[i].port : 0;
+	}
+
+	uint32_t Refused() const
+	{
+		return refused;
+	}
+
+	void Reset()
+	{
+		memset(entries, 0, sizeof(entries));
+		secondRunning = false;
+		secondStartedAt = 0;
+		startsThisSecond = 0;
+		refused = 0;
+	}
+
+private:
+	struct Entry
+	{
+		uint16_t port;     // 0 for none
+		uint32_t starts;   // handshakes started for it since the relay named it
+	};
+
+	Entry entries[kNetPeerStartLimitPorts];
+	bool secondRunning;
+	uint32_t secondStartedAt;
+	uint32_t startsThisSecond;
+	uint32_t refused;
+};
+
 #endif

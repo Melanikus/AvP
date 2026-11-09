@@ -264,6 +264,7 @@ static NetPeerHostSide relayEndToEndHosts[kNetRelayMostJoiners];   // a host's h
 static bool relaySealing = false;                                  // this game's ENet sends through RelaySealedSend (set by the relay's use)
 static uint8_t relayOpened[kRelayMostPacketBytes];                 // a game datagram just opened, for ENet to read in its place
 static uint32_t relayEndToEndDropped = 0;                          // ENet's datagrams dropped on their way out because nothing could seal them
+static NetPeerStartLimit relayEndToEndStarts;                      // how many handshakes a host starts, per named port and per second (Primary's finding 1)
 
 // This run's identity, made once, from the operating system's randomness (net_identity.h). False if it couldn't be made.
 static bool RelayIdentityReady()
@@ -300,6 +301,13 @@ static NetPeerHostSide *RelayEndToEndSide(uint16_t port, bool mayStart, uint32_t
 	}
 
 	if (!mayStart || !unused || !relayHost.NamedJoinerPort(port) || !RelayIdentityReady())
+	{
+		return NULL;
+	}
+
+	// Each start costs the host a B2, and a failed side frees its place: so a port starts only a few, and the host only a few a second
+	// (net_peer_v2.h, NetPeerStartLimit). One that's refused is dropped as a stranger's.
+	if (!relayEndToEndStarts.Allow(port, now))
 	{
 		return NULL;
 	}
@@ -347,6 +355,8 @@ static void RelayEndToEndForget()
 	{
 		relayEndToEndHosts[i].Reset();
 	}
+
+	relayEndToEndStarts.Reset();
 }
 
 // A datagram from a joiner's port on the relay, that wasn't the relay's own: a handshake datagram, or a sealed game datagram. 0 with an
@@ -579,6 +589,17 @@ static void RelayEndToEndFrame()
 	{
 		relayEndToEndJoiner.Tick(now);
 		RelayEndToEndSendAll(host, relayEndToEndJoiner, relayEndToEndPort);
+	}
+
+	// A port the relay doesn't name any more (its joiner connected, or the relay gave it up) starts afresh the next time it's named
+	for (size_t i = 0; i < kNetPeerStartLimitPorts && relayHosting; i++)
+	{
+		uint16_t const counted = relayEndToEndStarts.PortAt(i);
+
+		if (counted != 0 && !relayHost.NamedJoinerPort(counted))
+		{
+			relayEndToEndStarts.Forget(counted);
+		}
 	}
 
 	for (size_t i = 0; i < kNetRelayMostJoiners; i++)
@@ -960,6 +981,11 @@ static void RelayHostLeave()
 	if (relayEndToEndDropped > 0)
 	{
 		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
+	}
+
+	if (relayEndToEndStarts.Refused() > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayEndToEndStarts.Refused()) + " handshake(s) weren't started, because a joiner's port, or the host, had started as many as it may");
 	}
 
 	relayEndToEndDropped = 0;

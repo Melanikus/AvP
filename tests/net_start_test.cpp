@@ -1502,6 +1502,29 @@ static void TestTheRelayOnTheScreen()
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
 // scripted relay. Nothing is timed until the list names relays; the echoes go to the relay's control port from a socket of their own; an
 // answer from anywhere else is dropped, though it holds the same bytes; and the socket is closed once the timing is done.
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, Primary's read of the wiring, finding 1): a host asks the start limit
+// (net_peer_v2.h, NetPeerStartLimit) before it starts each handshake, forgets a port the relay doesn't name any more, and forgets
+// everything when its game through the relay ends. The limit itself is net_v2b_test's; this reads where networking.cpp uses it.
+static void TestTheStartLimitIsAsked()
+{
+	printf("A host asks before it starts a handshake (protocol version 2)\n");
+	std::string const source = ReadSourceFile("3dc/networking.cpp");
+	size_t const sideAt = source.find("static NetPeerHostSide *RelayEndToEndSide(");
+	size_t const sideEnd = sideAt == std::string::npos ? std::string::npos : source.find("\n}\n", sideAt);
+	std::string const side = sideEnd == std::string::npos ? std::string() : source.substr(sideAt, sideEnd - sideAt);
+	size_t const named = side.find("relayHost.NamedJoinerPort(port)");
+	size_t const asked = side.find("if (!relayEndToEndStarts.Allow(port, now))\n\t{\n\t\treturn NULL;\n\t}");
+	size_t const started = side.find("return unused->Start(");
+	Check(named != std::string::npos && asked != std::string::npos && started != std::string::npos && named < asked && asked < started,
+		"SOURCE: a host starts a handshake only for a named port, and only if the start limit allows it");
+	Check(Has(source, "if (counted != 0 && !relayHost.NamedJoinerPort(counted))\n\t\t{\n\t\t\trelayEndToEndStarts.Forget(counted);"),
+		"SOURCE: and each frame forgets a port the relay doesn't name any more, so it starts afresh when it's named again");
+	size_t const forgetAt = source.find("static void RelayEndToEndForget()");
+	size_t const forgetEnd = forgetAt == std::string::npos ? std::string::npos : source.find("\n}\n", forgetAt);
+	Check(forgetEnd != std::string::npos && Has(source.substr(forgetAt, forgetEnd - forgetAt), "relayEndToEndStarts.Reset();"),
+		"SOURCE: and a game through the relay that ends forgets every count");
+}
+
 static void TestTimingTheRelaysForJoining()
 {
 	printf("Timing the relays for the games page\n");
@@ -3539,6 +3562,7 @@ int main()
 	TestJoiningThroughTheRelay();
 	TestTheRelayOnTheScreen();
 	TestTimingTheRelaysForJoining();
+	TestTheStartLimitIsAsked();
 	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
