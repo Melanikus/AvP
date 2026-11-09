@@ -92,6 +92,58 @@ bool HudsonNav_IsStuck(HudsonNavProgress *progress, int x, int y, int z, int fra
 	return progress->timeHere >= kHudsonNavStuckAfter;
 }
 
+// As doubles for the same reason as above
+static double HowFar(int dx, int dy, int dz)
+{
+	double const x = dx;
+	double const y = dy;
+	double const z = dz;
+
+	return sqrt(x * x + y * y + z * z);
+}
+
+void HudsonNav_StartTowards(HudsonNavTowards *towards, int dx, int dy, int dz)
+{
+	towards->nearest = HowFar(dx, dy, dz);
+	towards->timeSinceThen = 0;
+}
+
+bool HudsonNav_NotGettingNearer(HudsonNavTowards *towards, int dx, int dy, int dz, int frameTime)
+{
+	double const now = HowFar(dx, dy, dz);
+
+	if (now <= towards->nearest - kHudsonNavNearerIsAtLeast)
+	{
+		HudsonNav_StartTowards(towards, dx, dy, dz);
+		return false;
+	}
+
+	if (frameTime > 0 && towards->timeSinceThen < kHudsonNavNoNearerAfter)
+	{
+		towards->timeSinceThen += (frameTime < kHudsonNavNoNearerAfter) ? frameTime : kHudsonNavNoNearerAfter;
+	}
+
+	return towards->timeSinceThen >= kHudsonNavNoNearerAfter;
+}
+
+bool HudsonNav_ThatWasARealFall(int distanceFallen, int timeInTheAir)
+{
+	if (distanceFallen <= 0 || timeInTheAir <= 0)
+	{
+		return false;
+	}
+
+	double const seconds = (double)timeInTheAir / kHudsonNavOneWhole;
+	double const furthestItCouldBe = 0.5 * kHudsonNavGravity * seconds * seconds * kHudsonNavFallCanBeOverBy;
+
+	return distanceFallen <= furthestItCouldBe;
+}
+
+bool HudsonNav_BoxIsCaughtOnALip(int normalY, int againstHisWay, int floorAhead)
+{
+	return abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin;
+}
+
 bool HudsonNav_IsAtSpot(int dx, int dy, int dz, int within)
 {
 	double const x = dx;
@@ -198,6 +250,57 @@ static bool NameIsGood(const char *name, const char *end)
 	return true;
 }
 
+const char *const kHudsonNavEndedCrossedTheMap = "he crossed the map";
+const char *const kHudsonNavEndedLevelDidntEnd = "he came to the end of the route, and the level didn't end";
+const char *const kHudsonNavEndedLevelEndedEarly = "the level ended before he got there";
+const char *const kHudsonNavEndedRouteStoppedShort = "the route stopped before its end";
+const char *const kHudsonNavEndedFatalFall = "he fell further than a marine can survive";
+const char *const kHudsonNavEndedPlayerDied = "the player died";
+
+HudsonNavEnding HudsonNav_WhichEnding(bool fellTooFar, bool playerDied, bool levelComplete, bool onTheLastStep, bool cameToTheEnd, bool routeStoppedShort)
+{
+	if (fellTooFar)
+	{
+		return kHudsonNavEndingFatalFall;
+	}
+
+	if (playerDied)
+	{
+		return kHudsonNavEndingPlayerDied;
+	}
+
+	if (levelComplete)
+	{
+		return onTheLastStep ? kHudsonNavEndingCrossedTheMap : kHudsonNavEndingLevelEndedEarly;
+	}
+
+	if (cameToTheEnd)
+	{
+		return kHudsonNavEndingLevelDidntEnd;
+	}
+
+	if (routeStoppedShort)
+	{
+		return kHudsonNavEndingRouteStoppedShort;
+	}
+
+	return kHudsonNavEndingNothingSpecial;
+}
+
+const char *HudsonNav_EndingInWords(HudsonNavEnding ending)
+{
+	switch (ending)
+	{
+		case kHudsonNavEndingCrossedTheMap: return kHudsonNavEndedCrossedTheMap;
+		case kHudsonNavEndingLevelDidntEnd: return kHudsonNavEndedLevelDidntEnd;
+		case kHudsonNavEndingLevelEndedEarly: return kHudsonNavEndedLevelEndedEarly;
+		case kHudsonNavEndingRouteStoppedShort: return kHudsonNavEndedRouteStoppedShort;
+		case kHudsonNavEndingFatalFall: return kHudsonNavEndedFatalFall;
+		case kHudsonNavEndingPlayerDied: return kHudsonNavEndedPlayerDied;
+		default: return "";
+	}
+}
+
 const char *HudsonNav_ReadRoute(const char *text, size_t size, std::vector<HudsonNavStep> *steps)
 {
 	steps->clear();
@@ -266,6 +369,10 @@ const char *HudsonNav_ReadRoute(const char *text, size_t size, std::vector<Hudso
 		{
 			step.kind = kHudsonNavStepOther;
 		}
+		else if (word == "killtheplayer")
+		{
+			step.kind = kHudsonNavStepKillThePlayer;
+		}
 		else
 		{
 			if (word == "walk")
@@ -279,6 +386,14 @@ const char *HudsonNav_ReadRoute(const char *text, size_t size, std::vector<Hudso
 			else if (word == "walkinto")
 			{
 				step.kind = kHudsonNavStepWalkInto;
+			}
+			else if (word == "putat")
+			{
+				step.kind = kHudsonNavStepPutAt;
+			}
+			else if (word == "walkoff")
+			{
+				step.kind = kHudsonNavStepWalkOff;
 			}
 			else
 			{

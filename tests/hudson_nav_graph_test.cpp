@@ -4,6 +4,7 @@
 
 #include "hudson_nav_graph.h"
 #include "hudson_nav_plan.h"
+#include "hudson_nav_test_world.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -24,154 +25,6 @@ static void Check(bool good, std::string const &what)
 		printf("FAILED: %s\n", what.c_str());
 	}
 }
-
-struct Box
-{
-	int minX, minY, minZ;
-	int maxX, maxY, maxZ;
-	bool door;
-	int topFaces;     // which way its top faces, if it isn't straight up: how a slope is pretended here
-};
-
-class World : public HudsonNavRays
-{
-public:
-	World() : asked(0) {}
-
-	void Add(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, bool door = false, int topFaces = -65536)
-	{
-		Box const box = { minX, minY, minZ, maxX, maxY, maxZ, door, topFaces };
-
-		boxes.push_back(box);
-	}
-
-	void Floor(int minX, int minZ, int maxX, int maxZ, int height)
-	{
-		Add(minX, height, minZ, maxX, height + 100, maxZ);
-	}
-
-	void Wall(int minX, int minZ, int maxX, int maxZ)
-	{
-		Add(minX, -10000, minZ, maxX, 10000, maxZ);
-	}
-
-	HudsonNavRayAnswer Cast(int x, int y, int z, int directionX, int directionY, int directionZ, int longest)
-	{
-		asked++;
-
-		double const dx = directionX / 65536.0, dy = directionY / 65536.0, dz = directionZ / 65536.0;
-		HudsonNavRayAnswer answer = { false, false, longest, 0 };
-		double nearest = longest;
-
-		for (size_t i = 0; i < boxes.size(); i++)
-		{
-			Box const &box = boxes[i];
-			double enter = 0.0, leave = nearest;
-			int faceAxis = -1;
-			bool fromTheLow = false;
-
-			double const from[3] = { (double)x, (double)y, (double)z };
-			double const way[3] = { dx, dy, dz };
-			double const low[3] = { (double)box.minX, (double)box.minY, (double)box.minZ };
-			double const high[3] = { (double)box.maxX, (double)box.maxY, (double)box.maxZ };
-			bool missed = false;
-
-			for (int axis = 0; axis < 3 && !missed; axis++)
-			{
-				if (way[axis] == 0.0)
-				{
-					missed = from[axis] < low[axis] || from[axis] > high[axis];
-					continue;
-				}
-
-				double a = (low[axis] - from[axis]) / way[axis];
-				double b = (high[axis] - from[axis]) / way[axis];
-				bool lowFirst = true;
-
-				if (a > b)
-				{
-					double const swap = a;
-					a = b;
-					b = swap;
-					lowFirst = false;
-				}
-
-				if (a > enter)
-				{
-					enter = a;
-					faceAxis = axis;
-					fromTheLow = lowFirst;
-				}
-
-				if (b < leave)
-				{
-					leave = b;
-				}
-
-				missed = enter > leave;
-			}
-
-			// A ray that starts inside a box goes straight out of it, as a ray from inside a polygon's room does
-			if (missed || faceAxis < 0)
-			{
-				continue;
-			}
-
-			if (enter <= nearest)
-			{
-				nearest = enter;
-				answer.hit = true;
-				answer.distance = (int)enter;
-				answer.door = box.door;
-
-				// Boxes can't slope, so one pretending to be a slope says so from whichever side a ray comes, as a real sloping polygon would
-				if (box.topFaces != -65536)
-				{
-					answer.normalY = box.topFaces;
-				}
-				else
-				{
-					answer.normalY = (faceAxis == 1) ? (fromTheLow ? box.topFaces : 65536) : 0;
-				}
-			}
-		}
-
-		return answer;
-	}
-
-	void RemoveLast()
-	{
-		boxes.pop_back();
-	}
-
-	int asked;
-
-private:
-	std::vector<Box> boxes;
-};
-
-// A world that says odd things when a ray hits nothing. Nothing should go by them.
-class WorldThatMisleads : public HudsonNavRays
-{
-public:
-	explicit WorldThatMisleads(World &real) : world(real) {}
-
-	HudsonNavRayAnswer Cast(int x, int y, int z, int directionX, int directionY, int directionZ, int longest)
-	{
-		HudsonNavRayAnswer answer = world.Cast(x, y, z, directionX, directionY, directionZ, longest);
-
-		if (!answer.hit)
-		{
-			answer.distance = 0;
-			answer.normalY = -65536;
-		}
-
-		return answer;
-	}
-
-private:
-	World &world;
-};
 
 static HudsonNavSearch RunIt(HudsonNavGraph &map, World &world, int raysEachTime = 1000000)
 {
@@ -286,6 +139,28 @@ static void CheckGoingRoundACorner()
 		Check(!wide.WayIsWideEnough(corner, 2000, 0, 6100, 9000, 6300), "but it's too close for his shoulders");
 		Check(wide.WayIsWideEnough(corner, 2000, 0, 7000, 9000, 7000), "and one further off is wide enough");
 
+		// So what he's said to be able to see is what his shoulders can get past as well
+		wide.StartSearch(2000, 0, 6100, 9000, 0, 6300);
+		Check(RunIt(wide, corner) == kHudsonNavFound, "there's a way past the corner");
+		Check(wide.FurthestInSight(corner, 2000, 0, 6100, 50) != (int)wide.Way().size() - 1, "and the far end doesn't count as seen, because his shoulder would hit the corner on the way");
+
+		// What's in the way of his middle counts too, though his shoulders would miss it: a post at his knees, and a beam at his head
+		World post;
+
+		post.Floor(0, 0, 20000, 20000, 0);
+		post.Add(5400, -3000, 7000, 5600, 0, 7200);
+
+		HudsonNavGraph narrow;
+
+		Check(!narrow.WayIsWideEnough(post, 2000, 0, 7100, 9000, 7100), "a thin post right ahead is in the way, though it's between his shoulders");
+
+		World beam;
+
+		beam.Floor(0, 0, 20000, 20000, 0);
+		beam.Add(5000, -kHudsonNavHeadHeight - 100, 0, 5200, -kHudsonNavHeadHeight + 100, 20000);
+
+		Check(!narrow.WayIsWideEnough(beam, 2000, 0, 7100, 9000, 7100), "and so is a beam at his head, which the rays at his knees go under");
+
 		if (nearBend >= 0)
 		{
 			Check(map.LineIsClear(world, 19000, 0, 2500, map.Way()[nearBend].x, map.Way()[nearBend].z, false), "and what he can see, he really can");
@@ -385,12 +260,27 @@ static void CheckFloorsAboveEachOther()
 
 	Check(sameSpotTwoFloors, "the same place at two different heights is two different spots, on one map");
 
-	// Coming down, he takes the stairs, though stepping off the edge would be about as short
+	// Coming down, he takes the stairs, though stepping off the edge would be a little shorter. These stairs have walls, so that there's no stepping off them halfway.
 	{
+		World walled;
+
+		walled.Floor(0, 0, 30000, 30000, 3000);
+		walled.Floor(0, 15000, 30000, 30000, 0);
+
+		for (int step = 0; step < 8; step++)
+		{
+			int const top = 3000 - (step + 1) * 375;
+
+			walled.Add(5000, top, 7000 + step * 1000, 10000, 3000, 8000 + step * 1000);
+		}
+
+		walled.Wall(4900, 7000, 5000, 15000);
+		walled.Wall(10000, 7000, 10100, 15000);
+
 		HudsonNavGraph down;
 
-		down.StartSearch(7500, 0, 25000, 7500, 3000, 2500);
-		Check(RunIt(down, world) == kHudsonNavFound, "there's a way down from the upper floor");
+		down.StartSearch(7500, 0, 16500, 11500, 3000, 8000);
+		Check(RunIt(down, walled) == kHudsonNavFound, "there's a way down from the upper floor");
 
 		bool neverDropped = true;
 
@@ -400,6 +290,497 @@ static void CheckFloorsAboveEachOther()
 		}
 
 		Check(neverDropped, "and he takes the stairs, because a drop counts as a long way round");
+	}
+
+	// Stairs with the real numbers, from Derelict's COMM-ENT: 390 up and 780 along. The first map didn't know these for stairs, and he went back and forth at the bottom until he was picked up.
+	{
+		World flight;
+
+		flight.Floor(0, 0, 4000, 30000, 0);
+
+		for (int stair = 0; stair < 10; stair++)
+		{
+			flight.Add(0, -(stair + 1) * 390, 5000 + stair * 780, 4000, 0, 30000);
+		}
+
+		flight.Wall(-100, 0, 0, 30000);
+		flight.Wall(4000, 0, 4100, 30000);
+
+		int const top = -10 * 390;
+
+		HudsonNavGraph up;
+
+		up.StartSearch(2000, 0, 2500, 2000, top, 16500);
+		Check(RunIt(up, flight) == kHudsonNavFound, "real stairs are a way up");
+
+		std::vector<HudsonNavPoint> const &climb = up.Way();
+		bool neverBackDown = true, neverBackAlong = true;
+		double walked = 0.0;
+
+		for (size_t i = 0; i + 1 < climb.size(); i++)
+		{
+			neverBackDown = neverBackDown && climb[i + 1].y <= climb[i].y;
+			neverBackAlong = neverBackAlong && climb[i + 1].z >= climb[i].z;
+			walked += sqrt(pow((double)climb[i + 1].x - climb[i].x, 2) + pow((double)climb[i + 1].y - climb[i].y, 2) + pow((double)climb[i + 1].z - climb[i].z, 2));
+		}
+
+		double const straight = sqrt(pow(0.0 - top, 2) + pow(16500.0 - 2500.0, 2));
+
+		Check(neverBackDown, "and the way never goes back down");
+		Check(neverBackAlong, "or back along");
+		Check(walked < straight * 1.1, "and it's no longer than it has to be");
+		Check(up.Way().back().y == top, "and it gets to the top");
+		Check(up.SlopeSpots() == 0 && up.Spots() > 10, "and it's stairs that got him there, all flat");
+
+		HudsonNavGraph down;
+
+		down.StartSearch(2000, top, 16500, 2000, 0, 2500);
+		Check(RunIt(down, flight) == kHudsonNavFound, "and they're a way down, too");
+
+		double walkedDown = 0.0;
+
+		for (size_t i = 0; i + 1 < down.Way().size(); i++)
+		{
+			walkedDown += abs(down.Way()[i + 1].z - down.Way()[i].z) + abs(down.Way()[i + 1].x - down.Way()[i].x);
+		}
+
+		Check(walkedDown < 14000.0 * 1.1, "and going down them doesn't count as a drop, so he doesn't go looking for another way");
+
+		// Part way up, which is where he'd be if he were asked again
+		HudsonNavGraph halfway;
+
+		halfway.StartSearch(2000, -4 * 390, 8500, 2000, top, 16500);
+		Check(RunIt(halfway, flight) == kHudsonNavFound, "and he can set off from any stair");
+
+		// Square on, the map's already at the far end of a stride before the second stair: one that's further on, on the slant, has to be right too
+		HudsonNavGraph slanting;
+
+		slanting.StartSearch(500, 0, 2500, 3500, top, 16500);
+		Check(RunIt(slanting, flight) == kHudsonNavFound, "and from one side of them to the other");
+
+		// Stairs too high for his step, however easy they look, aren't a way up
+		World tooHigh;
+
+		tooHigh.Floor(0, 0, 4000, 30000, 0);
+
+		for (int stair = 0; stair < 10; stair++)
+		{
+			tooHigh.Add(0, -(stair + 1) * (kHudsonNavStepUp + 50), 5000 + stair * 780, 4000, 0, 30000);
+		}
+
+		tooHigh.Wall(-100, 0, 0, 30000);
+		tooHigh.Wall(4000, 0, 4100, 30000);
+
+		HudsonNavGraph refused;
+
+		refused.StartSearch(2000, 0, 2500, 2000, -10 * (kHudsonNavStepUp + 50), 16500);
+		Check(RunIt(refused, tooHigh) == kHudsonNavNoWay, "stairs higher than his step aren't a way up");
+
+		// A rail too low for the ray at his head, and between where the rays down land: only the ray at his knee can see it
+		World rail;
+
+		rail.Floor(0, 0, 20000, 4000, 0);
+		rail.Add(10100, -800, 0, 10110, -400, 4000);
+
+		HudsonNavGraph stopped;
+
+		stopped.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(RunIt(stopped, rail) == kHudsonNavNoWay, "a rail across the way stops him");
+
+		// The same rail, above stairs he's gone up: only a ray from his new knee height can see it, because one from the bottom goes underneath it, at the height of the stairs he's climbed
+		World railAtTheTop;
+
+		railAtTheTop.Floor(0, 0, 20000, 4000, 0);
+
+		for (int stair = 0; stair < 4; stair++)
+		{
+			railAtTheTop.Add(5000 + stair * 780, -(stair + 1) * 390, 0, 20000, 0, 4000);
+		}
+
+		railAtTheTop.Add(10100, -1560 - 800, 0, 10110, -1560 - 400, 4000);
+
+		HudsonNavGraph stoppedAtTheTop;
+
+		stoppedAtTheTop.StartSearch(2500, 0, 1500, 15500, -1560, 1500);
+		Check(RunIt(stoppedAtTheTop, railAtTheTop) == kHudsonNavNoWay, "and so does one at the top of some stairs");
+	}
+
+	// Other things only one ray can see
+	{
+		// A beam at his head, which the rays at his knee go under, and the rays down start beside
+		World beam;
+
+		beam.Floor(0, 0, 20000, 4000, 0);
+		beam.Add(10100, -1800, 0, 10110, -1600, 4000);
+
+		HudsonNavGraph underTheBeam;
+
+		underTheBeam.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(RunIt(underTheBeam, beam) == kHudsonNavNoWay, "a beam at his head stops him");
+
+		// Two drops in one stride, each of which he'd survive, and which together he wouldn't
+		World twoDrops;
+
+		twoDrops.Floor(0, 0, 10000, 4000, 0);
+		twoDrops.Floor(10000, 0, 10400, 4000, kHudsonNavMostDrop * 5 / 8);
+		twoDrops.Floor(10400, 0, 20000, 4000, kHudsonNavMostDrop * 10 / 8);
+
+		HudsonNavGraph overTheEdge;
+
+		overTheEdge.StartSearch(5500, 0, 1500, 15500, kHudsonNavMostDrop * 10 / 8, 1500);
+		Check(RunIt(overTheEdge, twoDrops) == kHudsonNavNoWay, "two drops in a stride add up");
+
+		// A door low enough that the top of it is under where the rays down start. He isn't climbing onto that, because doors open.
+		World lowDoor;
+
+		lowDoor.Floor(0, 0, 20000, 4000, 0);
+		lowDoor.Add(10000, -1000, 0, 10300, 0, 4000, true);
+
+		HudsonNavGraph throughIt;
+
+		throughIt.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(RunIt(throughIt, lowDoor) == kHudsonNavFound, "a low door is a way through, and not a wall or a floor");
+
+		// A thin low door, between where the rays down land, right in the way, and an open gap a little further round. Only the ray at his knee sees this door, and he'd rather not wait for one.
+		World choice;
+
+		choice.Floor(0, 0, 20000, 8000, 0);
+		choice.Wall(10100, 0, 10110, 1000);
+		choice.Add(10100, -1000, 1000, 10110, 0, 3000, true);
+		choice.Wall(10100, 5000, 10110, 8000);
+
+		HudsonNavGraph byTheGap;
+
+		byTheGap.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(RunIt(byTheGap, choice) == kHudsonNavFound, "there's a way past the wall");
+
+		bool wentByTheGap = false;
+
+		for (size_t i = 0; i + 1 < byTheGap.Way().size(); i++)
+		{
+			// Where this piece of the way crosses the wall. It can cross on the slant, from just below the edge of the gap.
+			wentByTheGap = wentByTheGap || (byTheGap.Way()[i].x < 10000 && byTheGap.Way()[i + 1].x > 10100 && (byTheGap.Way()[i].z + byTheGap.Way()[i + 1].z) / 2 >= 3000);
+		}
+
+		Check(wentByTheGap, "and it's by the gap, because a door at his knee costs what a door does");
+
+		// A stride that was a drop, and then isn't, because of what's there now. The map keeps its spots, and it mustn't keep this.
+		World edge;
+
+		edge.Floor(0, 0, 10000, 8000, 0);
+		edge.Floor(10000, 0, 20000, 8000, 900);
+		edge.Add(10000, 450, 4000, 10400, 900, 8000);
+
+		HudsonNavGraph map;
+
+		map.StartSearch(5500, 0, 1500, 15500, 900, 1500);
+		Check(RunIt(map, edge) == kHudsonNavFound, "there's a way down");
+
+		bool wentRound = false;
+
+		for (size_t i = 0; i < map.Way().size(); i++)
+		{
+			wentRound = wentRound || map.Way()[i].z >= 4000;
+		}
+
+		Check(wentRound, "and it's round by the stairs, rather than a drop");
+
+		edge.Add(10000, 450, 0, 10400, 900, 4000);
+
+		map.StartSearch(5500, 0, 1500, 15500, 900, 1500);
+		Check(RunIt(map, edge) == kHudsonNavFound, "and there's one with a stair right in front of him");
+
+		bool wentRoundAgain = false;
+
+		for (size_t i = 0; i < map.Way().size(); i++)
+		{
+			wentRoundAgain = wentRoundAgain || map.Way()[i].z >= 4000;
+		}
+
+		Check(!wentRoundAgain, "and it isn't a drop any more, so he goes straight");
+	}
+
+	// A wall exactly where a foot lands, on the slant, where a foot's a fraction of a millimetre long. The ray from the last foot has to reach it, and the ray from this one starts on it.
+	{
+		World thin;
+
+		thin.Floor(0, 0, 20000, 8000, 0);
+		thin.Add(10000, -5000, 0, 10000, 5000, 8000);
+
+		HudsonNavGraph map;
+
+		map.StartSearch(5500, 0, 1500, 15500, 0, 2500);
+		Check(RunIt(map, thin) == kHudsonNavNoWay, "a wall exactly at a foot still stops him, on the slant as well as straight on");
+
+		// That goes for a door as well: he has to know it's there, or he'd go through it for nothing rather than round by the gap. This one's low, so that only the ray at his knee can see it.
+		World doorAtAFoot;
+
+		doorAtAFoot.Floor(0, 0, 20000, 8000, 0);
+		doorAtAFoot.Wall(10000, 0, 10000, 1000);
+		doorAtAFoot.Add(10000, -1000, 1000, 10000, 0, 3000, true);
+		doorAtAFoot.Wall(10000, 5000, 10000, 8000);
+
+		HudsonNavGraph byTheGap;
+
+		byTheGap.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(RunIt(byTheGap, doorAtAFoot) == kHudsonNavFound, "there's a way past a door exactly at a foot");
+
+		bool wentByTheGap = false;
+
+		for (size_t i = 0; i + 1 < byTheGap.Way().size(); i++)
+		{
+			wentByTheGap = wentByTheGap || (byTheGap.Way()[i].x < 10000 && byTheGap.Way()[i + 1].x > 10000 && (byTheGap.Way()[i].z + byTheGap.Way()[i + 1].z) / 2 >= 3000);
+		}
+
+		Check(wentByTheGap, "and it knows the door's there, so it goes by the gap");
+	}
+
+	// Two flights side by side, going down. The real ones have strides that go down 780, which is more than a step, and that's still only stairs. The other flight is gentler, and a little further to walk.
+	{
+		World flights;
+
+		flights.Floor(0, 0, 10000, 5000, 0);
+
+		for (int stair = 0; stair < 10; stair++)
+		{
+			flights.Add(0, -(stair + 1) * 390, 5000 + stair * 780, 4000, 0, 30000);
+		}
+
+		for (int stair = 0; stair < 20; stair++)
+		{
+			flights.Add(4100, -(stair + 1) * 195, 5000 + stair * 500, 8100, 0, 30000);
+		}
+
+		flights.Wall(4000, 5000, 4100, 15000);
+		flights.Add(4000, -3900, 15000, 4100, 0, 30000);
+
+		HudsonNavGraph down;
+
+		down.StartSearch(2000, -3900, 17500, 2000, 0, 2500);
+		Check(RunIt(down, flights) == kHudsonNavFound, "there's a way down either flight");
+
+		bool stayedOnTheNearOne = true;
+
+		for (size_t i = 0; i < down.Way().size(); i++)
+		{
+			stayedOnTheNearOne = stayedOnTheNearOne && down.Way()[i].x < 4000;
+		}
+
+		Check(stayedOnTheNearOne, "and he takes the nearer one: a long stride down stairs isn't a drop, to be gone a long way round to miss");
+	}
+
+	// How the last search ended
+	{
+		World floor;
+
+		floor.Floor(0, 0, 20000, 4000, 0);
+
+		HudsonNavGraph map;
+
+		Check(map.LastSearch() == kHudsonNavNoWay, "before any search, there's no way");
+
+		map.StartSearch(5500, 0, 1500, 15500, 0, 1500);
+		Check(map.LastSearch() == kHudsonNavSearching, "while it's looking, it says so");
+		Check(map.Way().empty(), "and there's no way to look at yet");
+		Check(RunIt(map, floor) == kHudsonNavFound && map.LastSearch() == kHudsonNavFound, "when it finds one, it says so");
+		Check(map.Work(floor, 1000) == kHudsonNavFound, "and asking again says the same");
+
+		map.StartSearch(5500, 0, 1500, 15500, 0, 90000);
+		Check(RunIt(map, floor) == kHudsonNavNoWay && map.LastSearch() == kHudsonNavNoWay, "when it can't, it says so");
+		Check(!map.Way().empty(), "though there's a way as near as it got");
+		Check(map.Work(floor, 1000) == kHudsonNavNoWay, "and asking again says the same, and not that it found one");
+
+		map.Clear();
+		Check(map.LastSearch() == kHudsonNavNoWay, "and a new level starts again");
+	}
+
+	// The list of spots, as something drawing them would see it
+	{
+		World floorAndDrop;
+
+		floorAndDrop.Floor(0, 0, 10000, 4000, 0);
+		floorAndDrop.Floor(10000, 0, 20000, 4000, 3000);
+		floorAndDrop.Add(0, -100, 1900, 3000, 0, 2100, true);
+
+		HudsonNavGraph map;
+
+		Check(map.Spots() == 0, "a new map has no spots");
+
+		HudsonNavSpot const nothing = map.SpotAt(0);
+
+		Check(nothing.x == 0 && nothing.y == 0 && nothing.z == 0 && nothing.next[0] == -1 && nothing.next[7] == -1 && nothing.doors == 0 && nothing.drops == 0 && !nothing.sloping, "and a number that isn't a spot gives nothing, and no ways out");
+
+		map.StartSearch(9500, 0, 1500, 15500, 3000, 1500);
+		Check(RunIt(map, floorAndDrop) == kHudsonNavFound, "there's a way down the drop");
+		Check(map.Spots() > 0, "and that made spots");
+		Check(map.SpotAt(map.Spots()).next[0] == -1 && map.SpotAt(map.Spots() + 1000).x == 0, "one past the end is still nothing");
+
+		HudsonNavSpot const first = map.SpotAt(0);
+
+		Check(first.x == 9500 && first.y == 0 && first.z == 1500, "the first spot is where he started, on the floor");
+
+		bool goesSomewhere = false, reallyGoes = true, hasADrop = false, dropIsOneWay = true;
+
+		for (size_t i = 0; i < map.Spots(); i++)
+		{
+			HudsonNavSpot const spot = map.SpotAt(i);
+
+			for (int way = 0; way < 8; way++)
+			{
+				if (spot.next[way] >= 0)
+				{
+					goesSomewhere = true;
+					reallyGoes = reallyGoes && (size_t)spot.next[way] < map.Spots();
+
+					if (spot.drops & (1u << way))
+					{
+						hasADrop = true;
+						dropIsOneWay = dropIsOneWay && map.SpotAt(spot.next[way]).y > spot.y;
+					}
+				}
+			}
+		}
+
+		Check(goesSomewhere, "its ways out lead somewhere");
+		Check(reallyGoes, "and only to spots that are on the list");
+		Check(hasADrop, "and it says which of them has a drop in it");
+		Check(dropIsOneWay, "and that goes downwards");
+
+		// A slope says so, and a door way says so
+		World sloping;
+
+		sloping.Floor(0, 0, 10000, 4000, 0);
+		sloping.Add(10000, -200, 0, 20000, 0, 4000, false, -kHudsonNavWalkable);
+
+		HudsonNavGraph slopeMap;
+
+		slopeMap.StartSearch(9500, 0, 1500, 15500, -200, 1500);
+		RunIt(slopeMap, sloping);
+
+		bool sawASlope = false, sawFlat = false;
+
+		for (size_t i = 0; i < slopeMap.Spots(); i++)
+		{
+			sawASlope = sawASlope || slopeMap.SpotAt(i).sloping;
+			sawFlat = sawFlat || !slopeMap.SpotAt(i).sloping;
+		}
+
+		Check(sawASlope && sawFlat, "and it says which are on a slope");
+
+		World withADoor;
+
+		withADoor.Floor(0, 0, 20000, 4000, 0);
+		withADoor.Add(10100, -3000, 0, 10110, 0, 4000, true);
+
+		HudsonNavGraph doorMap;
+
+		doorMap.StartSearch(9500, 0, 1500, 15500, 0, 1500);
+		RunIt(doorMap, withADoor);
+
+		bool sawADoor = false;
+
+		for (size_t i = 0; i < doorMap.Spots(); i++)
+		{
+			sawADoor = sawADoor || doorMap.SpotAt(i).doors != 0;
+		}
+
+		Check(sawADoor, "and which of its ways goes through a door");
+	}
+
+	// The end of a way, which is where he stops rather than going past it and back
+	{
+		World room;
+
+		room.Floor(0, 0, 20000, 20000, 0);
+
+		HudsonNavGraph map;
+
+		Check(!map.HasComeToTheEnd(0, 0), "with no way there's no end of it");
+
+		map.StartSearch(2500, 0, 2500, 12500, 0, 2500);
+		Check(RunIt(map, room) == kHudsonNavFound, "there's a way across the room");
+
+		HudsonNavPoint const last = map.Way().back();
+
+		Check(map.HasComeToTheEnd(last.x, last.z), "on its last point he's at the end of it");
+		Check(map.HasComeToTheEnd(last.x - kHudsonNavEndOfTheWayIsWithin, last.z), "and this close to it");
+		Check(map.HasComeToTheEnd(last.x, last.z + kHudsonNavEndOfTheWayIsWithin), "whichever side he's on");
+		Check(!map.HasComeToTheEnd(last.x - kHudsonNavEndOfTheWayIsWithin - 1, last.z), "but not any further off");
+		Check(!map.HasComeToTheEnd(last.x, last.z - kHudsonNavEndOfTheWayIsWithin - 1), "either way");
+		Check(!map.HasComeToTheEnd(map.Way().front().x, map.Way().front().z), "and at the start he isn't");
+	}
+
+	// A line along the floor, and one off the edge of it
+	{
+		World ledge;
+
+		ledge.Floor(0, 0, 10000, 4000, 0);
+		ledge.Floor(10000, 0, 20000, 4000, 5000);
+
+		HudsonNavGraph map;
+
+		Check(map.LineIsClear(ledge, 5500, 0, 1500, 15500, 1500, false), "a line off a ledge has nothing in the way of it");
+		Check(!map.LineHasFloor(ledge, 5500, 0, 1500, 15500, 1500, 40), "but it has no floor all the way along");
+		Check(map.LineHasFloor(ledge, 2500, 0, 1500, 8500, 1500, 40), "and one that stays on the floor has");
+		Check(map.LineHasFloor(ledge, 5500, 0, 1500, 15500, 1500, 3), "and it's only looked for as far as it was asked");
+		Check(map.LineHasFloor(ledge, 5500, 0, 1500, 5500, 1500, 40), "and a line of no length needs none");
+
+		// A ray that found nothing has found nothing, whatever else its answer says
+		WorldThatMisleads misleadingLedge(ledge);
+
+		Check(!map.LineHasFloor(misleadingLedge, 5500, 0, 1500, 15500, 1500, 40), "a ray that hit nothing isn't a floor, though it says it's a level one at the right height");
+
+		World up;
+
+		up.Floor(0, 0, 20000, 4000, 0);
+
+		for (int stair = 0; stair < 10; stair++)
+		{
+			up.Add(5000 + stair * 1000, -(stair + 1) * 300, 0, 20000, 0, 4000);
+		}
+
+		Check(map.LineHasFloor(up, 2500, 0, 1500, 12500, 1500, 40), "and a line going up stairs has floor, however far up it goes, so long as he goes up with it");
+
+		// Up the stairs and off the far end, back to the height he started at. It's only a drop from where he's got to.
+		World upAndOff;
+
+		upAndOff.Floor(0, 0, 20000, 4000, 0);
+
+		for (int stair = 0; stair < 8; stair++)
+		{
+			upAndOff.Add(5000 + stair * 1000, -(stair + 1) * 300, 0, 13000, 0, 4000);
+		}
+
+		Check(!map.LineHasFloor(upAndOff, 2500, 0, 1500, 16500, 1500, 40), "and the floor past the top of some stairs is a drop, though it's as high as where he started");
+
+		World lower;
+
+		lower.Floor(0, 0, 10000, 4000, 0);
+		lower.Floor(10000, 0, 20000, 4000, kHudsonNavStepUp);
+
+		Check(map.LineHasFloor(lower, 5500, 0, 1500, 15500, 1500, 40), "a step down as far as he can step is still floor");
+
+		World steep;
+
+		steep.Floor(0, 0, 10000, 4000, 0);
+		steep.Add(10000, 0, 0, 20000, 100, 4000, false, -kHudsonNavWalkable + 1);
+
+		Check(!map.LineHasFloor(steep, 5500, 0, 1500, 15500, 1500, 40), "something too steep to stand on isn't floor");
+
+		World door;
+
+		door.Floor(0, 0, 20000, 4000, 0);
+		door.Add(10000, -3000, 0, 10100, 0, 4000, true);
+
+		Check(map.LineHasFloor(door, 5500, 0, 1500, 15500, 1500, 40), "and a door on the way doesn't count against it");
+
+		// A door isn't something he climbs onto. If it were taken for a floor, the real floor past it would be too far below him.
+		World lowDoor;
+
+		lowDoor.Floor(0, 0, 20000, 4000, 0);
+		lowDoor.Add(10000, -1000, 0, 11000, 0, 4000, true);
+
+		Check(map.LineHasFloor(lowDoor, 5500, 0, 1500, 15500, 1500, 40), "and the top of a door isn't a floor he's gone up onto");
 	}
 
 	// And it doesn't get mixed up, going back the first way
@@ -476,6 +857,34 @@ static void CheckSteps()
 
 		stopped.StartSearch(5500, 0, 1500, 15500, -500, 1500);
 		Check(RunIt(stopped, wall) == kHudsonNavNoWay, "and a single step of 500 can't");
+	}
+
+	// Something halfway at the right height, but too steep to stand on, isn't a stair
+	{
+		World world;
+
+		world.Floor(0, 0, 20000, 4000, 0);
+		world.Add(9900, -250, 0, 10100, 0, 4000, false, -kHudsonNavWalkable + 1);
+		world.Add(10100, -500, 0, 20000, 0, 4000);
+
+		HudsonNavGraph map;
+
+		map.StartSearch(9500, 0, 1500, 15500, -500, 1500);
+		Check(RunIt(map, world) == kHudsonNavNoWay, "a stair halfway has to be one he can stand on");
+	}
+
+	// A low stair halfway, and then more than a step up from that, isn't two stairs
+	{
+		World world;
+
+		world.Floor(0, 0, 20000, 4000, 0);
+		world.Add(9900, -100, 0, 10100, 0, 4000);
+		world.Add(10100, -580, 0, 20000, 0, 4000);
+
+		HudsonNavGraph map;
+
+		map.StartSearch(9500, 0, 1500, 15500, -580, 1500);
+		Check(RunIt(map, world) == kHudsonNavNoWay, "and it has to be no more than a step below the next one, as well as above the last");
 	}
 
 	// A step that's too high halfway and then comes down again isn't a stair either
@@ -594,17 +1003,18 @@ static void CheckSlopes()
 {
 	printf("Slopes:\n");
 
-	// One stride up is 500, with the floor facing the way a slope does. Boxes can't slope, so each rises as a stair would, and says it's a slope.
+	// Boxes can't slope, so each rises as a stair would, a foot along from the last, and says it's a slope. The rise is at each foot.
 	struct Row { int faces; int rise; bool canGo; const char *what; };
 
 	Row const rows[] =
 	{
-		{ -kHudsonNavFlatFloor + 1, 800, true, "a slope can rise further than a stair in one stride" },
-		{ -kHudsonNavWalkable, 800, true, "the steepest he can walk on" },
+		{ -kHudsonNavFlatFloor + 1, kHudsonNavStepUp + 30, true, "a slope can rise further than a stair at one foot" },
+		{ -kHudsonNavWalkable, kHudsonNavStepUp + 30, true, "the steepest he can walk on" },
 		{ -kHudsonNavWalkable + 1, 100, false, "and any steeper can't be stood on, however little it rises" },
-		{ -kHudsonNavFlatFloor, 800, false, "a floor that's flat, as high as that, is a wall and not a slope" },
+		{ -kHudsonNavFlatFloor, kHudsonNavStepUp + 30, false, "a floor that's flat, as high as that, is a wall and not a slope" },
+		{ -kHudsonNavFlatFloor, kHudsonNavStepUp, true, "and as high as a step, it's a stair" },
 		{ 0, 100, false, "something upright isn't a floor" },
-		{ -kHudsonNavFlatFloor + 1, 2100, false, "and even a slope can only rise so far in one stride" },
+		{ -kHudsonNavFlatFloor + 1, 2 * kHudsonNavFootStep + 10, false, "and even a slope can only rise so far at one foot" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -612,14 +1022,16 @@ static void CheckSlopes()
 		World world;
 
 		world.Floor(0, 0, 10000, 4000, 0);
-		world.Add(10000, -rows[i].rise, 0, 12000, 0, 4000, false, rows[i].faces);
+
+		for (int foot = 0; foot < 8; foot++)
+		{
+			world.Add(10000 + foot * kHudsonNavFootStep, -(foot + 1) * rows[i].rise, 0, 12000, 0, 4000, false, rows[i].faces);
+		}
 
 		HudsonNavGraph map;
 
-		map.StartSearch(9500, 0, 1500, 11500, -rows[i].rise, 1500);
-
-		// The goal's within reach of where he starts, so ask from further back, where he has to take the step to get there
-		map.StartSearch(5500, 0, 1500, 11500, -rows[i].rise, 1500);
+		// From well back, where he has to go up it to get there
+		map.StartSearch(5500, 0, 1500, 11500, -8 * rows[i].rise, 1500);
 
 		HudsonNavSearch const search = RunIt(map, world);
 
@@ -959,7 +1371,8 @@ static void CheckTheLimits()
 		int const further = map.FurthestInSight(world, 15500, 0, 5500, 12);
 
 		Check(further >= first, "and further along it he sees further on");
-		Check(map.FurthestInSight(world, 15500, 0, 5500, 0) >= 0, "and asking for nothing ahead still gives where he is");
+		Check(map.FurthestInSight(world, 15500, 0, 5500, 0) == -1, "and asking for nothing ahead gives nothing, and not the point he's standing on, which would leave him standing there");
+		Check(map.NextAlong() >= 0, "and there's still a next point to go to");
 		Check(map.FurthestInSight(world, 15500, -5000, 5500, 12) == -1, "and from another floor none of it counts as seen");
 	}
 }

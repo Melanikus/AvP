@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"tools"
 	],
 	"rows": [
 		{
@@ -671,6 +672,366 @@
 					"file": "3dc/avp/hudson_nav_plan.cpp",
 					"from": "\tsteps->clear();\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ENDING: a fatal fall goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (fellTooFar)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "ENDING: the player dying goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (playerDied)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "ENDING: the level being over goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (levelComplete)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "ENDING: the end of the route goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (cameToTheEnd)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "ENDING: stopping early goes unnoticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (routeStoppedShort)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "ENDING: other words for a fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\"he fell further than a marine can survive\"",
+					"to": "\"he fell\""
+				}
+			]
+		},
+		{
+			"name": "ENDING: other words for the player",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\"the player died\"",
+					"to": "\"it finished\""
+				}
+			]
+		},
+		{
+			"name": "ENDING: other words for a crossing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\"he crossed the map\"",
+					"to": "\"it finished\""
+				}
+			]
+		},
+		{
+			"name": "ENDING: a fall has the words of a crossing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "case kHudsonNavEndingFatalFall: return kHudsonNavEndedFatalFall;",
+					"to": "case kHudsonNavEndingFatalFall: return kHudsonNavEndedCrossedTheMap;"
+				}
+			]
+		},
+		{
+			"name": "STEPS: the player dying is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "word == \"killtheplayer\"",
+					"to": "word == \"nothing\""
+				}
+			]
+		},
+		{
+			"name": "STEPS: the player dying wants a place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "step.kind = kHudsonNavStepKillThePlayer;",
+					"to": "step.kind = kHudsonNavStepOther;"
+				}
+			]
+		},
+		{
+			"name": "STEPS: being put somewhere is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "word == \"putat\"",
+					"to": "word == \"nothing\""
+				}
+			]
+		},
+		{
+			"name": "STEPS: walking off is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "word == \"walkoff\"",
+					"to": "word == \"nothing\""
+				}
+			]
+		},
+		{
+			"name": "STEPS: walking off is another kind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "step.kind = kHudsonNavStepWalkOff;",
+					"to": "step.kind = kHudsonNavStepWalkInto;"
+				}
+			]
+		},
+		{
+			"name": "NEARER: he is never not getting nearer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return towards->timeSinceThen >= kHudsonNavNoNearerAfter;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "NEARER: time is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "towards->timeSinceThen += (frameTime < kHudsonNavNoNearerAfter) ? frameTime : kHudsonNavNoNearerAfter;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "NEARER: the time can grow without end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (frameTime > 0 && towards->timeSinceThen < kHudsonNavNoNearerAfter)",
+					"to": "if (frameTime > 0)"
+				}
+			]
+		},
+		{
+			"name": "NEARER: a frame can take time away",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (frameTime > 0 && towards->timeSinceThen < kHudsonNavNoNearerAfter)",
+					"to": "if (towards->timeSinceThen < kHudsonNavNoNearerAfter)"
+				}
+			]
+		},
+		{
+			"name": "NEARER: going back and forth counts as nearer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (now <= towards->nearest - kHudsonNavNearerIsAtLeast)",
+					"to": "if (now != towards->nearest)"
+				}
+			]
+		},
+		{
+			"name": "NEARER: getting nearer starts nothing again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\t\tHudsonNav_StartTowards(towards, dx, dy, dz);\n\t\treturn false;",
+					"to": "\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "NEARER: a tiny bit nearer is enough",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (now <= towards->nearest - kHudsonNavNearerIsAtLeast)",
+					"to": "if (now < towards->nearest)"
+				}
+			]
+		},
+		{
+			"name": "NEARER: up and down do not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return sqrt(x * x + y * y + z * z);\n}\n\nvoid HudsonNav_StartTowards",
+					"to": "return sqrt(x * x + z * z);\n}\n\nvoid HudsonNav_StartTowards"
+				}
+			]
+		},
+		{
+			"name": "NEARER: the distance is worked out in whole numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\tdouble const x = dx;\n\tdouble const y = dy;\n\tdouble const z = dz;\n\n\treturn sqrt(x * x + y * y + z * z);",
+					"to": "\tint const x = dx;\n\tint const y = dy;\n\tint const z = dz;\n\n\treturn sqrt((double)(x * x + y * y + z * z));"
+				}
+			]
+		},
+		{
+			"name": "LIP: anything leaning counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin",
+					"to": "againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin"
+				}
+			]
+		},
+		{
+			"name": "LIP: anything beside him counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin",
+					"to": "abs(normalY) < kHudsonNavLipIsUpright && abs(floorAhead) <= kHudsonNavLipIsWithin"
+				}
+			]
+		},
+		{
+			"name": "LIP: any height of floor ahead counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin",
+					"to": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim"
+				}
+			]
+		},
+		{
+			"name": "LIP: a drop ahead counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin",
+					"to": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && floorAhead >= -kHudsonNavLipIsWithin"
+				}
+			]
+		},
+		{
+			"name": "LIP: a stair ahead counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && abs(floorAhead) <= kHudsonNavLipIsWithin",
+					"to": "abs(normalY) < kHudsonNavLipIsUpright && againstHisWay >= kHudsonNavLipFacesHim && floorAhead <= kHudsonNavLipIsWithin"
+				}
+			]
+		},
+		{
+			"name": "ENDING: a level ending anywhere is a crossing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return onTheLastStep ? kHudsonNavEndingCrossedTheMap : kHudsonNavEndingLevelEndedEarly;",
+					"to": "return kHudsonNavEndingCrossedTheMap;"
+				}
+			]
+		},
+		{
+			"name": "ENDING: other words for a level that ended without him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\"the level ended before he got there\"",
+					"to": "\"he crossed the map\""
+				}
+			]
+		},
+		{
+			"name": "FALLS: anything is a real fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return distanceFallen <= furthestItCouldBe;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "FALLS: nothing is a real fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return distanceFallen <= furthestItCouldBe;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "FALLS: going nowhere is a fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (distanceFallen <= 0 || timeInTheAir <= 0)",
+					"to": "if (timeInTheAir <= 0)"
+				}
+			]
+		},
+		{
+			"name": "FALLS: no room for rounding",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "0.5 * kHudsonNavGravity * seconds * seconds * kHudsonNavFallCanBeOverBy",
+					"to": "0.5 * kHudsonNavGravity * seconds * seconds"
+				}
+			]
+		},
+		{
+			"name": "FALLS: a whole number overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "(double)timeInTheAir / kHudsonNavOneWhole",
+					"to": "(double)(timeInTheAir / kHudsonNavOneWhole)"
+				}
+			]
+		},
+		{
+			"name": "FALLS: no time in the air is a fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (distanceFallen <= 0 || timeInTheAir <= 0)",
+					"to": "if (distanceFallen <= 0)"
 				}
 			]
 		}

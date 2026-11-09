@@ -8985,6 +8985,656 @@
 					"to": "'RelayServer = localhost', 'RelayListPort = 8443'"
 				}
 			]
+		},
+		{
+			"name": "killer=nobody is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\telse if (WordIs(value, valueLength, \"nobody\"))\n\t\t\t{\n\t\t\t\tplan->killerIsNobody = true;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "killer=nobody still has one machine fire",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const iAmTheKiller = !plan.killerIsNobody && isHost == plan.killerIsHost;",
+					"to": "bool const iAmTheKiller = isHost == plan.killerIsHost;"
+				}
+			]
+		},
+		{
+			"name": "DEATH: a walk does not look at the player first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\tWatchThePlayer(marine, frame);\n\n\tif (ItsOverWhateverHeWasDoing",
+					"to": "\tif (ItsOverWhateverHeWasDoing"
+				}
+			]
+		},
+		{
+			"name": "DEATH: nothing stops a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (ItsOverWhateverHeWasDoing(marine, frame))\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEATH: a walk is not told about the player",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "HudsonNav_WhichEnding(fellTooFar, !playerWasAlive, AvP.LevelCompleted != 0, onTheLastStep, false, false)",
+					"to": "HudsonNav_WhichEnding(fellTooFar, false, AvP.LevelCompleted != 0, onTheLastStep, false, false)"
+				}
+			]
+		},
+		{
+			"name": "DEATH: the player can be killed on a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "playerBlock->SBDamageBlock.SB_H_flags.Indestructable = 1;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "RESULT: a fatal fall reads as finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(kHudsonNavEndedFatalFall, kHudsonExitFatalFall);",
+					"to": "EndTheLevel(kHudsonNavEndedFatalFall, kHudsonExitFinished);"
+				}
+			]
+		},
+		{
+			"name": "RESULT: the player dying reads as finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(kHudsonNavEndedPlayerDied, kHudsonExitPlayerDied);",
+					"to": "EndTheLevel(kHudsonNavEndedPlayerDied, kHudsonExitFinished);"
+				}
+			]
+		},
+		{
+			"name": "RESULT: a level that did not end reads as finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(kHudsonNavEndedLevelDidntEnd, kHudsonExitLevelDidntEnd);",
+					"to": "EndTheLevel(kHudsonNavEndedLevelDidntEnd, kHudsonExitFinished);"
+				}
+			]
+		},
+		{
+			"name": "RESULT: a route stopped short reads as finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(kHudsonNavEndedRouteStoppedShort, kHudsonExitLevelDidntEnd);",
+					"to": "EndTheLevel(kHudsonNavEndedRouteStoppedShort, kHudsonExitFinished);"
+				}
+			]
+		},
+		{
+			"name": "RESULT: any marine falling ends a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "marineStage == kMarineWalking && marine == TheMarine()",
+					"to": "marineStage == kMarineWalking"
+				}
+			]
+		},
+		{
+			"name": "STAIRS: he is steered on past the end of a way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (theMap.HasComeToTheEnd(place.vx, place.vz))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "STAIRS: at the end of a way he is left walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\t\t\tMarine_GuardThisSpot(marine, &place, hisModule);\n\t\t}\n\n\t\tchar line[160] = { 0 };\n\n\t\t_snprintf(line, sizeof(line) - 1, \"nav: frame %ld, he's come to the end",
+					"to": "\t\t}\n\n\t\tchar line[160] = { 0 };\n\n\t\t_snprintf(line, sizeof(line) - 1, \"nav: frame %ld, he's come to the end"
+				}
+			]
+		},
+		{
+			"name": "STAIRS: it looks again for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "!lastSearchFoundAWay && howFar + kWorthAnotherLook <= howFarAtTheLastSearch",
+					"to": "!lastSearchFoundAWay"
+				}
+			]
+		},
+		{
+			"name": "STAIRS: going back and forth is never noticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "HudsonNav_NotGettingNearer(&towards, place.vx - target.vx, place.vy - target.vy, place.vz - target.vz, NormalFrameTime)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "RESCUE: a rescue is not looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "framesToCheckTheRescue = kFramesForARoomToLoad;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "RESCUE: it only looks a little way down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "HudsonNavRayAnswer const down = rays.Cast(place.vx, place.vy, place.vz, 0, kHudsonNavOneWhole, 0, kHudsonNavMostDrop);",
+					"to": "HudsonNavRayAnswer const down = rays.Cast(place.vx, place.vy, place.vz, 0, kHudsonNavOneWhole, 0, 500);"
+				}
+			]
+		},
+		{
+			"name": "RESCUE: being put back does not take it back",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\tmovedOn--;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "RESCUE: it is looked at after he has walked on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (framesToCheckTheRescue > 0 || PutHimBackIfHeCantStayThere(marine, frame))",
+					"to": "if (framesToCheckTheRescue > 0)"
+				}
+			]
+		},
+		{
+			"name": "GOAL: the spot itself, in the air, is the goal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "theMap.StartSearch(place.vx, place.vy, place.vz, target.vx, goalHeight, target.vz);",
+					"to": "theMap.StartSearch(place.vx, place.vy, place.vz, target.vx, target.vy, target.vz);"
+				}
+			]
+		},
+		{
+			"name": "GOAL: anything under the spot will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "underTheSpot.hit && !underTheSpot.door && underTheSpot.normalY <= -kHudsonNavWalkable",
+					"to": "underTheSpot.hit"
+				}
+			]
+		},
+		{
+			"name": "ARRIVE: only the room counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\n\t\t\t\t|| (HudsonNav_IsAtSpot(place.vx - target.vx, 0, place.vz - target.vz, kHudsonNavEndOfTheWayIsWithin) && abs(place.vy - floorOfTheSpot) <= kHudsonNavGoalHeight)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "MEASURE: going up counts as walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "double const metres = sqrt(x * x + z * z) / 1000.0;",
+					"to": "double const metres = sqrt(x * x + z * z + 1000.0) / 1000.0;"
+				}
+			]
+		},
+		{
+			"name": "RESCUE: his post stays behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "Marine_GuardThisSpot(marine, &target, room->m_aimodule);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SHUFFLE: anything he touches gets him shuffled",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (HudsonNav_BoxIsCaughtOnALip(report->ObstacleNormal.vy, againstHisWay, floorAhead))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SHUFFLE: something in the room counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\t\tif (report->ObstacleSBPtr)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n\n\t\tint const againstHisWay",
+					"to": "\t\tint const againstHisWay"
+				}
+			]
+		},
+		{
+			"name": "STUCK: not touching the floor is falling",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "!marine->DynPtr->IsInContactWithFloor && place.vy >= heightLastFrame + kFallingIsAtLeast",
+					"to": "!marine->DynPtr->IsInContactWithFloor"
+				}
+			]
+		},
+		{
+			"name": "RESULT: it does not say he was shuffled",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonNav_MetresWalked(), HudsonNav_TimesShuffled(), ",
+					"to": "HudsonNav_MetresWalked(), 0, "
+				}
+			]
+		},
+		{
+			"name": "FEEL: he follows the map without feeling",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "SteerFeelingHisWay(marine, theMap.Way()[point].x, theMap.Way()[point].z);",
+					"to": "SteerAt(marine, theMap.Way()[point].x, theMap.Way()[point].z);"
+				}
+			]
+		},
+		{
+			"name": "FEEL: the test feels its way and never falls",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (goingOverTheEdgeOnPurpose)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ASIDE: he never steps aside",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (stuck && here >= 0 && stepsAsideOnThisStep < (lastSearchFoundAWay ? kMostStepsAside : kMostStepsAsideWithNoWay) && StepHimAside(marine, frame))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ASIDE: he steps aside for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "stepsAsideOnThisStep < (lastSearchFoundAWay ? kMostStepsAside : kMostStepsAsideWithNoWay)",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "ASIDE: the count goes on from the last step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\tstepsAsideOnThisStep = 0;\n\tgoingOverTheEdgeOnPurpose = false;",
+					"to": "\tgoingOverTheEdgeOnPurpose = false;"
+				}
+			]
+		},
+		{
+			"name": "RESULT: a level ending early reads as finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(kHudsonNavEndedLevelEndedEarly, kHudsonExitLevelEndedEarly);",
+					"to": "EndTheLevel(kHudsonNavEndedLevelEndedEarly, kHudsonExitFinished);"
+				}
+			]
+		},
+		{
+			"name": "RESULT: it does not say which step he got to",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonNav_StepNow(), HudsonNav_StepsInTheRoute()",
+					"to": "0, 0"
+				}
+			]
+		},
+		{
+			"name": "FALLS: a jump in position counts as a fall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (wouldKillHim && (!HudsonNav_ThatWasARealFall(distanceFallen, timeInTheAir) || distanceFallen < kHudsonNavShortestFatalFall))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ENDING: any step counts as the last",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "bool const onTheLastStep = !route.empty() && routeStep + 1 >= route.size();",
+					"to": "bool const onTheLastStep = true;"
+				}
+			]
+		},
+		{
+			"name": "GOAL: the floor under the spot is only looked for a little way down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "rays.Cast(target.vx, target.vy, target.vz, 0, kHudsonNavOneWhole, 0, kFloorIsNoFurtherDownThan)",
+					"to": "rays.Cast(target.vx, target.vy, target.vz, 0, kHudsonNavOneWhole, 0, kHudsonNavMostDrop)"
+				}
+			]
+		},
+		{
+			"name": "RESCUE: being pushed out counts as staying",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "bool const pushedOut = movedX * movedX + movedZ * movedZ > (double)kPushedOutIsOver * kPushedOutIsOver;",
+					"to": "bool const pushedOut = false;"
+				}
+			]
+		},
+		{
+			"name": "FALLS: a slow frame on a short fall is fatal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": " || distanceFallen < kHudsonNavShortestFatalFall)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "FALLS: his time in the air never starts again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "\t\t\ttopOfHisFall = lastFloorHeight;\n\t\t\ttimeInTheAir = 0;\n",
+					"to": "\t\t\ttopOfHisFall = lastFloorHeight;\n"
+				}
+			]
+		},
+		{
+			"name": "map= can be asked for twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenMap)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}\n\n\t\t\tseenMap = true;",
+					"to": "seenMap = true;"
+				}
+			]
+		},
+		{
+			"name": "map= can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedMapUnknown;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "map=grid does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->mapGrid = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "map=rays asks for the grid",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"rays\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedMapUnknown;\n\t\t\t}",
+					"to": "else if (!WordIs(value, valueLength, \"rays\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedMapUnknown;\n\t\t\t}\n\t\t\telse\n\t\t\t{\n\t\t\t\tplan->mapGrid = true;\n\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "map= can go without walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenMap && !seenNav && !seenRoute)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the grid is built on the frame path",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "uintptr_t const thread = _beginthreadex(NULL, 0, GridThread, NULL, 0, NULL);",
+					"to": "uintptr_t const thread = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every walk builds a grid, asked for or not",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (navUsesTheGrid)\n\t{\n\t\tStartBuildingTheGrid();",
+					"to": "if (true)\n\t{\n\t\tStartBuildingTheGrid();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he walks off without waiting for the map",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (StillWaitingForTheGrid())\n\t{\n\t\treturn true;",
+					"to": "if (StillWaitingForTheGrid())\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of an old way counts as arriving",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "(navUsesTheGrid && mapHasHadItsTurn && lastSearchFoundAWay && theMap.HasComeToTheEnd(place.vx, place.vz))",
+					"to": "(navUsesTheGrid && lastSearchFoundAWay && theMap.HasComeToTheEnd(place.vx, place.vz))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "SaveThisWay(frame, search == kHudsonNavFound);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his trail isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "SaveHisTrail(marine, frame);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corner past the end of its shape's points is trusted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid_level.cpp",
+					"from": "if (count == kHudsonGridMostCorners || corners[count] >= shape->numpoints)",
+					"to": "if (count == kHudsonGridMostCorners)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a normal outside its list is trusted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid_level.cpp",
+					"from": "normalPlace >= 0 && (int64_t)normalPlace + 3 <= (int64_t)shape->numitems * 3",
+					"to": "normalPlace >= 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift's car counts as where it stands",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid_level.cpp",
+					"from": "type == I_BehaviourLift || type == I_BehaviourPlatform || type == I_BehaviourTrackObject",
+					"to": "type == I_BehaviourPlatform || type == I_BehaviourTrackObject"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: things to pick up block him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid_level.cpp",
+					"from": "status->typeId == IOT_Static || status->typeId == IOT_Furniture",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he doesn't crawl in a duct",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid_level.cpp",
+					"from": "(module->m_flags & MODULEFLAG_AIRDUCT) != 0",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "play: only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->play)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "play: only yes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedPlayNotYes;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "play: asked for or not, he plays",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->play = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "play: goes with rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->rooms > 0 || plan->gunSlot != 0 || plan->botFight != 0",
+					"to": "plan->gunSlot != 0 || plan->botFight != 0"
+				}
+			]
+		},
+		{
+			"name": "play: goes with gun=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->rooms > 0 || plan->gunSlot != 0 || plan->botFight != 0",
+					"to": "plan->rooms > 0 || plan->botFight != 0"
+				}
+			]
+		},
+		{
+			"name": "play: with net= it has to be the mode",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->play && plan->netMode != kHudsonNetNone && !plan->coop)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "play: goes with botfight=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->rooms > 0 || plan->gunSlot != 0 || plan->botFight != 0",
+					"to": "plan->rooms > 0 || plan->gunSlot != 0"
+				}
+			]
+		},
+		{
+			"name": "play: can only be a marine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && !plan->play)",
+					"to": ")"
+				}
+			]
 		}
 	]
 }

@@ -35,8 +35,24 @@ HudsonNavGraph::HudsonNavGraph()
 	Clear();
 }
 
+// How many of the grid's places to look at for each ray a frame would be allowed. Looking at a place costs far less than a ray.
+static int const kGridPlacesForARay = 64;
+
+bool HudsonNavGraph::GridGoalFloor(int *y) const
+{
+	if (!searchIsOnTheGrid || !gridToUse || !gridToUse->Ready() || !gridToUse->GoalWasFound())
+	{
+		return false;
+	}
+
+	*y = gridToUse->GoalFloorY();
+	return true;
+}
+
 void HudsonNavGraph::Clear()
 {
+	gridToUse = 0;
+	searchIsOnTheGrid = false;
 	nodes.clear();
 	columns.clear();
 	cost.clear();
@@ -51,6 +67,7 @@ void HudsonNavGraph::Clear()
 	nearestGuess = 0.0;
 	toX = toY = toZ = 0;
 	searching = false;
+	lastSearch = kHudsonNavNoWay;
 	alongTheWay = 0;
 	flatSpots = slopeSpots = 0;
 	raysUsed = 0;
@@ -104,6 +121,8 @@ int HudsonNavGraph::AddNode(int x, int y, int z, int gridX, int gridZ, int norma
 	node.gridX = gridX;
 	node.gridZ = gridZ;
 	node.doors = 0;
+	node.drops = 0;
+	node.sloping = normalY > -kHudsonNavFlatFloor;
 	node.lookedAtIn = 0;
 
 	for (int i = 0; i < 8; i++)
@@ -138,6 +157,7 @@ void HudsonNavGraph::TryStep(HudsonNavRays &rays, int number, int way)
 	// Until it's shown again that he can
 	nodes[number].next[way] = -1;
 	nodes[number].doors &= (uint8_t)~(1u << way);
+	nodes[number].drops &= (uint8_t)~(1u << way);
 
 	int const fromX = nodes[number].x;
 	int const fromY = nodes[number].y;
@@ -160,75 +180,87 @@ void HudsonNavGraph::TryStep(HudsonNavRays &rays, int number, int way)
 	int const reach = (int)length + kHudsonNavMarineRadius;
 	bool throughADoor = false;
 
-	int const heights[2] = { kHudsonNavKneeHeight, kHudsonNavHeadHeight };
+	// At head height there has to be room for all of him, as far as half a marine past the next spot. Stairs don't get this high in one stride.
+	HudsonNavRayAnswer const across = Ray(rays, fromX, fromY - kHudsonNavHeadHeight, fromZ, directionX, 0, directionZ, reach);
 
-	for (int i = 0; i < 2; i++)
+	if (across.hit && across.distance < reach)
 	{
-		HudsonNavRayAnswer const across = Ray(rays, fromX, fromY - heights[i], fromZ, directionX, 0, directionZ, reach);
-
-		if (across.hit && across.distance < reach)
+		if (across.door)
 		{
-			if (across.door)
-			{
-				throughADoor = true;
-			}
-			else if (across.normalY > -kHudsonNavWalkable)
-			{
-				return;    // a wall in the way. A surface he can walk on only means the floor's rising
-			}
+			throughADoor = true;
+		}
+		else if (across.normalY > -kHudsonNavWalkable)
+		{
+			return;    // a wall in the way. A surface he can walk on only means the floor's rising
 		}
 	}
 
-	// Down from head height at the next spot. A floor can be no higher than that, and the ray that found it has to have started above it.
-	int const startHeight = fromY - kHudsonNavHeadHeight;
-	HudsonNavRayAnswer const down = Ray(rays, toSpotX, startHeight, toSpotZ, 0, kHudsonNavOneWhole, 0, kHudsonNavHeadHeight + kHudsonNavMostDrop);
+	// Then along the floor, a foot at a time, as he'd walk it
+	int const feet = (std::min)(kHudsonNavMostFeet, (int)ceil(length / kHudsonNavFootStep));
+	int const kneeReach = (int)(length / feet) + kHudsonNavRayOverlap;
+	int lastX = fromX;
+	int lastZ = fromZ;
+	int floorHeight = fromY;
+	int normalY = -kHudsonNavOneWhole;
+	bool onADoor = false;
+	bool hasADrop = false;
 
-	if (!down.hit || down.distance > kHudsonNavHeadHeight + kHudsonNavMostDrop)
+	for (int foot = 1; foot <= feet; foot++)
 	{
-		return;    // nothing to stand on within reach
-	}
+		HudsonNavRayAnswer const atKnee = Ray(rays, lastX, floorHeight - kHudsonNavKneeHeight, lastZ, directionX, 0, directionZ, kneeReach);
 
-	// In a closed door, what's underneath can be the door itself. He'd be standing on the same floor he's on.
-	int const floorHeight = down.door ? fromY : startHeight + down.distance;
+		if (atKnee.hit && atKnee.distance < kneeReach)
+		{
+			if (!atKnee.door)
+			{
+				return;    // something he can't step over
+			}
 
-	if (!down.door && down.normalY > -kHudsonNavWalkable)
-	{
-		return;    // too steep to stand on
-	}
+			throughADoor = true;
+		}
 
-	int const rise = fromY - floorHeight;
+		int const x = fromX + (int)(acrossX * foot / feet);
+		int const z = fromZ + (int)(acrossZ * foot / feet);
+		int const startHeight = floorHeight - kHudsonNavHeadHeight;
 
-	if (rise > kHudsonNavStepUp)
-	{
-		// A slope can only go so far in one stride
-		if ((double)rise > length * 2.0)
+		// As far down as he could still survive, with what this stride's taken him down already
+		HudsonNavRayAnswer const down = Ray(rays, x, startHeight, z, 0, kHudsonNavOneWhole, 0, kHudsonNavHeadHeight + kHudsonNavMostDrop - (floorHeight - fromY));
+
+		lastX = x;
+		lastZ = z;
+
+		if (!down.hit)
+		{
+			return;    // nothing to stand on within reach
+		}
+
+		// In a closed door, what's underneath can be the door itself. He'd be standing on the same floor he's on.
+		onADoor = down.door;
+
+		if (onADoor)
+		{
+			continue;
+		}
+
+		if (down.normalY > -kHudsonNavWalkable)
+		{
+			return;    // too steep to stand on
+		}
+
+		int const nextFloor = startHeight + down.distance;
+
+		// Higher than a step is more than the game's collisions will lift him. Only a slope takes him higher than that, in as short a way, and even a slope can only rise so far
+		if (floorHeight - nextFloor > kHudsonNavStepUp && (down.normalY <= -kHudsonNavFlatFloor || floorHeight - nextFloor > length * 2.0 / feet))
 		{
 			return;
 		}
 
-		// Higher than one stair, on the flat: it can still be two stairs, with the second halfway there. So a ray there has to find a floor that's no more than a step above where he is, and no more than a step below the
-		// next spot. A wall that's only a little too high has nothing like that.
-		if (down.normalY <= -kHudsonNavFlatFloor)
-		{
-			int const halfX = (fromX + toSpotX) / 2;
-			int const halfZ = (fromZ + toSpotZ) / 2;
-			HudsonNavRayAnswer const halfway = Ray(rays, halfX, startHeight, halfZ, 0, kHudsonNavOneWhole, 0, kHudsonNavHeadHeight + kHudsonNavMostDrop);
-
-			if (!halfway.hit || halfway.normalY > -kHudsonNavWalkable)
-			{
-				return;
-			}
-
-			int const halfHeight = startHeight + halfway.distance;
-
-			if (abs(fromY - halfHeight) > kHudsonNavStepUp || abs(halfHeight - floorHeight) > kHudsonNavStepUp)
-			{
-				return;
-			}
-		}
+		hasADrop = hasADrop || nextFloor - floorHeight > kHudsonNavStepUp;
+		floorHeight = nextFloor;
+		normalY = down.normalY;
 	}
 
-	if (!down.door)
+	if (!onADoor)
 	{
 		HudsonNavRayAnswer const up = Ray(rays, toSpotX, floorHeight - kHudsonNavKneeHeight, toSpotZ, 0, -kHudsonNavOneWhole, 0, kHudsonNavMarineHeight - kHudsonNavKneeHeight);
 
@@ -243,7 +275,7 @@ void HudsonNavGraph::TryStep(HudsonNavRays &rays, int number, int way)
 
 	if (spot < 0)
 	{
-		spot = AddNode(toSpotX, floorHeight, toSpotZ, gridX, gridZ, down.door ? -kHudsonNavOneWhole : down.normalY);
+		spot = AddNode(toSpotX, floorHeight, toSpotZ, gridX, gridZ, normalY);
 
 		if (spot < 0)
 		{
@@ -254,6 +286,11 @@ void HudsonNavGraph::TryStep(HudsonNavRays &rays, int number, int way)
 	if (throughADoor)
 	{
 		nodes[number].doors |= (uint8_t)(1u << way);
+	}
+
+	if (hasADrop)
+	{
+		nodes[number].drops |= (uint8_t)(1u << way);
 	}
 
 	nodes[number].next[way] = spot;
@@ -279,6 +316,30 @@ double HudsonNavGraph::GuessFrom(int number) const
 	return sqrt(x * x + y * y + z * z);
 }
 
+HudsonNavSpot HudsonNavGraph::SpotAt(size_t number) const
+{
+	HudsonNavSpot spot = { 0, 0, 0, false, { -1, -1, -1, -1, -1, -1, -1, -1 }, 0, 0 };
+
+	if (number < nodes.size())
+	{
+		Node const &node = nodes[number];
+
+		spot.x = node.x;
+		spot.y = node.y;
+		spot.z = node.z;
+		spot.sloping = node.sloping;
+		spot.doors = node.doors;
+		spot.drops = node.drops;
+
+		for (int i = 0; i < 8; i++)
+		{
+			spot.next[i] = node.next[i];
+		}
+	}
+
+	return spot;
+}
+
 void HudsonNavGraph::StartSearch(int fromX, int fromY, int fromZ, int goalX, int goalY, int goalZ)
 {
 	waiting = std::priority_queue<Waiting>();
@@ -293,6 +354,15 @@ void HudsonNavGraph::StartSearch(int fromX, int fromY, int fromZ, int goalX, int
 	toY = goalY;
 	toZ = goalZ;
 	searching = true;
+	lastSearch = kHudsonNavSearching;
+
+	searchIsOnTheGrid = gridToUse && gridToUse->Ready();
+
+	if (searchIsOnTheGrid)
+	{
+		gridToUse->StartSearch(fromX, fromY, fromZ, goalX, goalY, goalZ);
+		return;
+	}
 
 	int const gridX = GridOf(fromX);
 	int const gridZ = GridOf(fromZ);
@@ -341,7 +411,34 @@ HudsonNavSearch HudsonNavGraph::Work(HudsonNavRays &rays, int raysAllowed)
 {
 	if (!searching)
 	{
-		return way.empty() ? kHudsonNavNoWay : kHudsonNavFound;
+		return lastSearch;
+	}
+
+	if (searchIsOnTheGrid)
+	{
+		HudsonGridSearch const state = gridToUse->Work(raysAllowed * kGridPlacesForARay);
+
+		looks = gridToUse->LastSearchLooks();
+
+		if (state == kHudsonGridSearching)
+		{
+			return kHudsonNavSearching;
+		}
+
+		way.clear();
+
+		std::vector<HudsonGridPoint> const &found = gridToUse->Way();
+
+		for (size_t i = 0; i < found.size(); i++)
+		{
+			HudsonNavPoint const point = { found[i].x, found[i].y, found[i].z };
+
+			way.push_back(point);
+		}
+
+		searching = false;
+		lastSearch = state == kHudsonGridFound ? kHudsonNavFound : kHudsonNavNoWay;
+		return lastSearch;
 	}
 
 	raysThisWork = 0;
@@ -380,6 +477,7 @@ HudsonNavSearch HudsonNavGraph::Work(HudsonNavRays &rays, int raysAllowed)
 
 			way.push_back(goal);
 			searching = false;
+			lastSearch = kHudsonNavFound;
 			return kHudsonNavFound;
 		}
 
@@ -402,7 +500,7 @@ HudsonNavSearch HudsonNavGraph::Work(HudsonNavRays &rays, int raysAllowed)
 			double const acrossX = (double)nodes[next].x - nodes[number].x;
 			double const acrossY = (double)nodes[next].y - nodes[number].y;
 			double const acrossZ = (double)nodes[next].z - nodes[number].z;
-			double const dropped = (acrossY > kHudsonNavStepUp) ? acrossY * kHudsonNavDropCost : 0.0;    // y goes down, so going down is a bigger number
+			double const dropped = (nodes[number].drops & (1u << i)) ? acrossY * kHudsonNavDropCost : 0.0;    // walking down stairs isn't dropping, however far a stride takes him
 			double const total = cost[number] + sqrt(acrossX * acrossX + acrossY * acrossY + acrossZ * acrossZ) + dropped + ((nodes[number].doors & (1u << i)) ? kHudsonNavDoorCost : 0);
 
 			if (stamp[next] != searchNumber || total < cost[next])
@@ -425,6 +523,7 @@ HudsonNavSearch HudsonNavGraph::Work(HudsonNavRays &rays, int raysAllowed)
 	}
 
 	searching = false;
+	lastSearch = kHudsonNavNoWay;
 	return kHudsonNavNoWay;
 }
 
@@ -457,6 +556,44 @@ bool HudsonNavGraph::LineIsClear(HudsonNavRays &rays, int fromX, int fromY, int 
 	return true;
 }
 
+bool HudsonNavGraph::LineHasFloor(HudsonNavRays &rays, int fromX, int fromY, int fromZ, int goalX, int goalZ, int mostStrides)
+{
+	(void)fromZ;
+
+	double const acrossX = (double)goalX - fromX;
+	double const acrossZ = (double)goalZ - fromZ;
+	double const length = sqrt(acrossX * acrossX + acrossZ * acrossZ);
+	int const strides = (int)(length / kHudsonNavGridStep);
+	int height = fromY;
+
+	for (int i = 1; i <= strides && i <= mostStrides; i++)
+	{
+		double const along = (double)i * kHudsonNavGridStep / length;
+		int const x = fromX + (int)(acrossX * along);
+		int const z = fromZ + (int)(acrossZ * along);
+		int const startHeight = height - kHudsonNavHeadHeight;
+		HudsonNavRayAnswer const down = Ray(rays, x, startHeight, z, 0, kHudsonNavOneWhole, 0, kHudsonNavHeadHeight + kHudsonNavStepUp);
+
+		// Nothing there, within a step below him, is an edge. A door over it counts as floor, because that's only a door in the way.
+		if (!down.hit)
+		{
+			return false;
+		}
+
+		if (!down.door)
+		{
+			if (down.normalY > -kHudsonNavWalkable)
+			{
+				return false;
+			}
+
+			height = startHeight + down.distance;
+		}
+	}
+
+	return true;
+}
+
 bool HudsonNavGraph::WayIsWideEnough(HudsonNavRays &rays, int fromX, int fromY, int fromZ, int goalX, int goalZ)
 {
 	if (!LineIsClear(rays, fromX, fromY, fromZ, goalX, goalZ, false))
@@ -473,9 +610,10 @@ bool HudsonNavGraph::WayIsWideEnough(HudsonNavRays &rays, int fromX, int fromY, 
 		return true;
 	}
 
-	// Square to the way he's going, as far as his side is from his middle
-	int const sideX = (int)(-acrossZ * kHudsonNavMarineRadius / length);
-	int const sideZ = (int)(acrossX * kHudsonNavMarineRadius / length);
+	// Square to the way he's going, as far as his side is from his middle. His box is a square that doesn't turn, so going on a slant that's further than going straight.
+	double const reach = kHudsonNavMarineRadius * (fabs(acrossX) + fabs(acrossZ)) / length;
+	int const sideX = (int)(-acrossZ * reach / length);
+	int const sideZ = (int)(acrossX * reach / length);
 	int const directionX = (int)floor(acrossX * kHudsonNavOneWhole / length + 0.5);
 	int const directionZ = (int)floor(acrossZ * kHudsonNavOneWhole / length + 0.5);
 
@@ -500,6 +638,19 @@ int HudsonNavGraph::NextAlong() const
 	}
 
 	return (int)(std::min)(way.size() - 1, alongTheWay + 1);
+}
+
+bool HudsonNavGraph::HasComeToTheEnd(int x, int z) const
+{
+	if (way.empty())
+	{
+		return false;
+	}
+
+	double const acrossX = (double)way.back().x - x;
+	double const acrossZ = (double)way.back().z - z;
+
+	return acrossX * acrossX + acrossZ * acrossZ <= (double)kHudsonNavEndOfTheWayIsWithin * kHudsonNavEndOfTheWayIsWithin;
 }
 
 int HudsonNavGraph::FurthestInSight(HudsonNavRays &rays, int x, int y, int z, int mostAhead)
@@ -532,7 +683,7 @@ int HudsonNavGraph::FurthestInSight(HudsonNavRays &rays, int x, int y, int z, in
 	size_t const last = (std::min)(way.size() - 1, alongTheWay + (size_t)(mostAhead > 0 ? mostAhead : 0));
 
 	// Furthest first: the first one he can see is the one. Points on another floor don't count as seen, or he'd try to walk through it.
-	for (size_t i = last + 1; i-- > alongTheWay;)
+	for (size_t i = last; i > alongTheWay; i--)
 	{
 		if (abs(way[i].y - y) <= kHudsonNavStepUp && WayIsWideEnough(rays, x, y, z, way[i].x, way[i].z))
 		{

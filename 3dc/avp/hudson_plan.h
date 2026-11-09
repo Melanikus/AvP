@@ -175,6 +175,7 @@ struct HudsonPlan
 	int navModules;    // how many new modules he walks to, instead of holding still. 0 means he doesn't walk. See hudson_nav.cpp
 	char route[kHudsonLongestRouteName + 1];   // the name of a route for him to follow. Nothing means he goes wherever's new
 	bool paceRun;      // he goes at the marine's combat speed, and not his walk
+	bool mapGrid;      // map=grid: he finds his way with the 3D grid (hudson_grid.h), and not by feeling about with rays
 	bool frameHoldOff; // a walk isn't held at 60 frames a second
 	int holdFrames;    // how many frames he holds still for each view. One of the game's reports covers 300 frames and isn't lined up with a hold, so 600 is sure to have a whole one inside it
 	int lighting;      // one of HudsonLightingWord
@@ -215,6 +216,7 @@ struct HudsonPlan
 	bool listPlaceAsked;  // listplace= was given
 	int listPlace;        // listplace=: a skirmish on this place of the co-op level list, started the way the level row does it
 	bool playAsPredator;  // species=predator: a gun= run plays as a Predator, for trying the staff. Nothing else can ask for it.
+	bool play;            // play=yes: he plays the level on foot, as a player would. See hudson_play.h
 	bool gunAlien;        // gunalien=yes: a gun= run makes an alien in front of him before the throws and shots that it times, for them to hit
 	bool noFriendlyFire;  // friendlyfire=off: the host of a net= run with coop=yes turns friendly fire off, as its menu row would
 	int framesPerSecond;  // fps=: a run goes no faster than this many frames a second. Unless it asks, that's kHudsonDefaultFramesPerSecond. 0, from fps=uncapped, is as fast as it can.
@@ -222,6 +224,7 @@ struct HudsonPlan
 	int killX, killY, killZ; // killat=x,y,z: where the level file places it
 	bool killAtSaid;
 	bool killerIsHost;    // killer=host or killer=join: which machine kills it
+	bool killerIsNobody;  // killer=nobody: the same, but nobody fires, to watch it fight
 	bool killerSaid;
 	bool noNetPictures;   // pictures=no: a pair run takes none of its own pictures. Each stalls a frame for most of a second, so this is how to see what's left without them
 	bool botSingle;       // botsingle=yes: the same fight in plain single player, as the thing to compare the network's with
@@ -236,6 +239,7 @@ struct HudsonPlan
 	int classSlider;      // class=: a gun= run starts as a skirmish, as this marine class, by its place on the menu's slider. 0 if not asked.
 	bool gunMarine;       // gunmarine=yes: a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
 	int gunSlot;          // gun=: the slot of a marine's gun to try, from 1 to 14, or 15 to try each in turn. 0 means no gun is tried. See hudson.cpp
+	int playGunSlot;      // playgun=: with play=yes, the slot of the gun he's given and holds, from 1 to 14. 0 leaves him what the level gives him
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool breakVideo;      // break=video: the encoder fails for real part way, to prove that a run survives it. It needs a run with a film
@@ -377,6 +381,8 @@ extern const char *const kHudsonRefusedRouteWithoutOneRoom;
 extern const char *const kHudsonRefusedRouteWithWall;
 extern const char *const kHudsonRefusedPaceUnknown;
 extern const char *const kHudsonRefusedPaceWithoutWalking;
+extern const char *const kHudsonRefusedMapUnknown;
+extern const char *const kHudsonRefusedMapWithoutWalking;
 extern const char *const kHudsonRefusedFrameHoldNotOff;
 extern const char *const kHudsonRefusedFrameHoldWithoutWalking;
 extern const char *const kHudsonRefusedHoldWithoutRooms;
@@ -402,6 +408,9 @@ extern const char *const kHudsonRefusedGunAlienNotYes;
 extern const char *const kHudsonRefusedGunMarineNotYes;
 extern const char *const kHudsonRefusedGunMarineWithoutGun;
 extern const char *const kHudsonRefusedGunAlienWithoutGun;
+extern const char *const kHudsonRefusedPlayNotYes;
+extern const char *const kHudsonRefusedPlayWithSomethingElse;
+extern const char *const kHudsonRefusedPlayNetWithoutCoop;
 extern const char *const kHudsonRefusedClassNotOne;
 extern const char *const kHudsonRefusedClassWithoutGun;
 extern const char *const kHudsonRefusedClassAsPredator;

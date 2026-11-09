@@ -39,7 +39,11 @@ foreach ($step in $list.steps) {
 
     switch ($step.do) {
         'press' { [void]$lines.Add("press $([int]$step.place.x) $([int]$step.place.y) $([int]$step.place.z) $(Name-Of $step.name)") }
-        'walk into' { [void]$lines.Add("walkinto $([int]$step.place.x) $([int]$step.place.y) $([int]$step.place.z) $(Name-Of $step.name)") }
+        'walk into' {
+            # What sets it off is a box of air. Its place is the middle of that, and he can only walk on the floor, so the height is the bottom of the box: y goes down.
+            $height = if ($step.volume) { [int]$step.volume.max.y } else { [int]$step.place.y }
+            [void]$lines.Add("walkinto $([int]$step.place.x) $height $([int]$step.place.z) $(Name-Of $step.name)")
+        }
         default { [void]$lines.Add("other $(Name-Of $step.do) $(Name-Of $step.name)") }
     }
 }

@@ -49,6 +49,24 @@ A line starting with `#` is a note. A name can have spaces in it, and it ends at
 
 A file with anything wrong in it is refused whole, and a run's log says which line and why.
 
+## The lists for playing a level on foot
+
+Each level also has a `<level>.play`. With `play=yes`, Hudson does what it says, in order, as the real player: he finds his way on the grid, walks there on his own feet, and does the step with the same keys anyone has. Nothing is ever moved or set off for him, so if he gets through a level, a player can. If he can't, that isn't proof a player couldn't.
+
+A line starting with `#` is a note, and blank lines don't count. Every other line is a word, three numbers for the place (across, up and down, along), a bar, and a name. The game refuses the whole file if any line is wrong, because a level played with a step missing would only look like a level that can't be finished.
+
+| Line | What he does |
+|---|---|
+| `press X Y Z \| name` | Walks up to the switch, looks at it and presses the use key, up to three times. It worked if the switch changes. |
+| `walk X Y Z \| name` | Walks towards the place until the walk-in switch goes off. The place is the middle of a box of air, and may be somewhere nobody can stand. |
+| `pickup X Y Z \| name` | Walks onto it until it's gone. |
+| `destroy X Y Z \| name` | Gets it in sight and in range, and fires until it's gone, or for 20 seconds. |
+| `kill X Y Z \| name` | The same for someone, for 90 seconds, going after them if they've moved. |
+
+A step that doesn't work doesn't stop him, because there may be another way, but the log says why and the count of steps that worked comes at the end. Anything hostile he can see comes first. The list has no line for the end of the level, because only the game says when that is.
+
+The places and the order come from the level files, the same as the rest of this folder, and nobody has walked them. These lists say what a player needs to do, not how: how he gets there is the grid's job, and the grid leaves out lift cars, so a route through a lift is likely to show up as him getting stuck.
+
 ## How far to trust them
 
 A file with a note saying the level couldn't be walked has its steps from the chains, and from what opens the doors on the way there. Their order is one the chains allow, and doesn't have to be one a player could walk. A note names any door that nothing in the file opens, or whose opener is behind it. That's a gap in how these were worked out, not something wrong with the level, and a person has to say how a player gets past those.

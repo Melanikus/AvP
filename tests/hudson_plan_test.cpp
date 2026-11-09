@@ -80,6 +80,9 @@ static void TestGoodPlans()
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 gun=12 class=revolver", &plan) == 0 && plan.classSlider == 12, "class=revolver is the revolver's");
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 gun=13 class=m79", &plan) == 0 && plan.classSlider == 13, "class=m79 is the M79's");
 	Check(HudsonPlan_Read("-hudson level=invasion frames=5 gun=7", &plan) == 0 && plan.classSlider == 0, "and a gun run has no class unless it says so");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes playgun=10", &plan) == 0 && plan.playGunSlot == 10 && plan.gunSlot == 0, "playgun= gives a playing Hudson the gun in that slot, and isn't a gun run");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes", &plan) == 0 && plan.playGunSlot == 0, "and without it he has what the level gives him");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes playgun=14", &plan) == 0 && plan.playGunSlot == 14, "and the highest slot is 14");
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1000000 seconds=14400 idle=3600", &plan) == 0, "the highest each can be");
 	Check(HudsonPlan_Read("-hudson   level=a\t frames=1  ", &plan) == 0, "extra spaces and tabs are nothing");
@@ -186,6 +189,10 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 record=pictures", kHudsonRefusedPicturesWithoutRooms);
 	Refused("-hudson level=a frames=1 gun=0", kHudsonRefusedGunNotASlot);
 	Refused("-hudson level=a frames=1 gun=16", kHudsonRefusedGunNotASlot);
+	Refused("-hudson level=a frames=1 play=yes playgun=0", kHudsonRefusedGunNotASlot);
+	Refused("-hudson level=a frames=1 play=yes playgun=15", kHudsonRefusedGunNotASlot);
+	Refused("-hudson level=a frames=1 play=yes playgun=ten", kHudsonRefusedGunNotASlot);
+	Refused("-hudson level=a frames=1 play=yes playgun=10 playgun=10", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 gun=x", kHudsonRefusedGunNotASlot);
 	Refused("-hudson level=a frames=1 gun=10 gun=10", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 gun=10", kHudsonRefusedGunWithAMarine);
@@ -469,6 +476,21 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 gun=7 gunalien=", kHudsonRefusedGunAlienNotYes);
 	Refused("-hudson level=a frames=1 gun=7 gunalien=yes gunalien=yes", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 gunalien=yes", kHudsonRefusedGunAlienWithoutGun);
+	HudsonPlan playPlan;
+
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5", &playPlan) == 0 && !playPlan.play, "unless it's asked for, he doesn't play the level himself");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 play=yes", &playPlan) == 0 && playPlan.play, "play=yes has him play the level himself");
+	Check(HudsonPlan_Read("-hudson level=fall frames=5 play=yes species=predator", &playPlan) == 0 && playPlan.play && playPlan.playAsPredator, "as a Predator");
+	Check(HudsonPlan_Read("-hudson level=temple frames=5 play=yes species=alien", &playPlan) == 0 && playPlan.play && playPlan.playAsAlien, "or as an Alien");
+	Refused("-hudson level=a frames=1 play=no", kHudsonRefusedPlayNotYes);
+	Refused("-hudson level=a frames=1 play=", kHudsonRefusedPlayNotYes);
+	Refused("-hudson level=a frames=1 play=yes play=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 play=yes rooms=3", kHudsonRefusedPlayWithSomethingElse);
+	Refused("-hudson level=a frames=1 play=yes gun=7", kHudsonRefusedPlayWithSomethingElse);
+	Refused("-hudson level=a frames=1 machine=shared net=host play=yes", kHudsonRefusedPlayNetWithoutCoop);
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host coop=yes play=yes", &playPlan) == 0 && playPlan.play && playPlan.netMode == kHudsonNetHost, "two Hudsons can play a level together, and the host is one");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join coop=yes play=yes", &playPlan) == 0 && playPlan.play && playPlan.netMode == kHudsonNetJoin, "and the other joins him");
+	Refused("-hudson level=a frames=1 botfight=queen botsingle=yes play=yes", kHudsonRefusedPlayWithSomethingElse);
 	Refused("-hudson level=a frames=1 gun=7 gunmarine=no", kHudsonRefusedGunMarineNotYes);
 	Refused("-hudson level=a frames=1 gun=7 gunmarine=", kHudsonRefusedGunMarineNotYes);
 	Refused("-hudson level=a frames=1 gun=7 gunmarine=yes gunmarine=yes", kHudsonRefusedAskedTwice);
@@ -566,6 +588,10 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 rooms=1 nav=1 pace=runs", kHudsonRefusedPaceUnknown);
 	Refused("-hudson level=a frames=1 rooms=1 nav=1 pace=run pace=walk", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 pace=run", kHudsonRefusedPaceWithoutWalking);
+	Refused("-hudson level=a frames=1 rooms=1 nav=1 map=", kHudsonRefusedMapUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 nav=1 map=grids", kHudsonRefusedMapUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 nav=1 map=grid map=grid", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 map=grid", kHudsonRefusedMapWithoutWalking);
 	Refused("-hudson level=a frames=1 rooms=1 nav=1 framehold=on", kHudsonRefusedFrameHoldNotOff);
 	Refused("-hudson level=a frames=1 rooms=1 nav=1 framehold=", kHudsonRefusedFrameHoldNotOff);
 	Refused("-hudson level=a frames=1 rooms=1 nav=1 framehold=off framehold=off", kHudsonRefusedAskedTwice);
@@ -582,6 +608,13 @@ static void TestBadPlans()
 		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 nav=1", &pacePlan) == 0 && !pacePlan.paceRun, "he walks unless he's told otherwise");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 nav=1 pace=walk", &pacePlan) == 0 && !pacePlan.paceRun, "and when he's told to walk");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 route=a pace=run", &pacePlan) == 0 && pacePlan.paceRun, "and he runs when he's told to");
+	}
+	{
+		HudsonPlan mapPlan;
+
+		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 nav=1", &mapPlan) == 0 && !mapPlan.mapGrid, "he finds his way by rays unless he's told otherwise");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 nav=1 map=rays", &mapPlan) == 0 && !mapPlan.mapGrid, "and when he's told to");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 route=a map=grid", &mapPlan) == 0 && mapPlan.mapGrid, "and by the grid when he's told to");
 	}
 	{
 		HudsonPlan routePlan;
@@ -1542,6 +1575,81 @@ static void TestTourAndSharedMachine()
 
 	Check(Has(guard, "marineStatus->my_spot = sbPtr->DynPtr->Position;"), "where he's told to guard from is where he stands");
 	Check(Has(guard, "marineStatus->missionmodule = sbPtr->containingModule"), "and in the room he's in");
+	// A fall hurts nobody in a run, but it doesn't go unnoticed: the game's own rule decides, and a walk that's told of a fatal one ends there, with its own reason
+	std::string const fallCode = Between(marineCode, "Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {", "CauseDamageToObject");
+
+	Check(ComesBefore(fallCode, "IsInContactWithFloor", "if (HudsonMarineIsOn)"), "a run looks at a fall the way everyone else does, when he lands");
+	Check(ComesBefore(fallCode, "Hudson_MarineLanded(sbPtr, marineStatusPointer->lastframe_fallingspeed, wouldKillHim);", "else if (wouldKillHim)"), "a run is told of it, and isn't hurt by it");
+	Check(Has(fallCode, "wouldKillHim = marineStatusPointer->lastframe_fallingspeed>Marine_Terminal_Velocity;"), "and it's the game's own rule that says whether it kills");
+
+	std::string const walkCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
+	std::string const frameCode = Between(walkCode, "bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame)", "int HudsonNav_ModulesWalkedInto()");
+
+	Check(ComesBefore(frameCode, "WatchThePlayer(marine, frame);", "ItsOverWhateverHeWasDoing(marine, frame)"), "a walk looks at the player before it decides whether it's over");
+	Check(ComesBefore(frameCode, "ItsOverWhateverHeWasDoing(marine, frame)", "LookAround(marine, frame);"), "and that comes before he does anything else, so that nothing walks a body around");
+	Check(Has(walkCode, "HudsonNav_WhichEnding(fellTooFar, !playerWasAlive, AvP.LevelCompleted != 0, onTheLastStep, false, false)"), "it's told about the fall, the player, the level, and whether he's got there");
+	Check(Has(walkCode, "bool const onTheLastStep = !route.empty() && routeStep + 1 >= route.size();"), "and being there means the last step of a route");
+	Check(ComesBefore(walkCode, "wouldKillHim && (!HudsonNav_ThatWasARealFall(distanceFallen, timeInTheAir) || distanceFallen < kHudsonNavShortestFatalFall)", "fellTooFar = true;"), "a jump in position doesn't count as a fall, and nor does a short fall that one slow frame made look fast");
+	Check(ComesBefore(walkCode, "topOfHisFall = lastFloorHeight;\n\t\t\ttimeInTheAir = 0;", "timeInTheAir += NormalFrameTime;"), "and his time in the air starts when he leaves the floor");
+	Check(Has(walkCode, "rays.Cast(target.vx, target.vy, target.vz, 0, kHudsonNavOneWhole, 0, kFloorIsNoFurtherDownThan)"), "and the floor under a route's spot can be further down than he could drop");
+	Check(Has(walkCode, "bool const pushedOut = movedX * movedX + movedZ * movedZ > (double)kPushedOutIsOver * kPushedOutIsOver;"), "a rescue that the game pushed him out of doesn't count");
+	Check(Has(walkCode, "playerBlock->SBDamageBlock.SB_H_flags.Indestructable = 1;"), "the player can't be killed on a walk, so that the fall rule is what notices it");
+
+	// At the end of a way he stands, because his spot is kept ahead of him and he'd go past it and back for ever. And going back and forth counts as stuck.
+	std::string const steerCode = Between(walkCode, "static void SteerAlongTheWay(STRATEGYBLOCK *marine)", "// Does the map's part of each frame.");
+
+	Check(ComesBefore(steerCode, "theMap.HasComeToTheEnd(place.vx, place.vz)", "SteerFeelingHisWay(marine, theMap.Way()"), "the end of the way is looked for before steering him along it");
+	Check(ComesBefore(steerCode, "Marine_GuardThisSpot(marine, &place, hisModule);", "wayState = kWayLeftAlone;"), "and there he stands, and nothing steers him");
+	Check(Has(steerCode, "!lastSearchFoundAWay && howFar + kWorthAnotherLook <= howFarAtTheLastSearch"), "it only looks again if the map found no way, and what it found got him nearer, so that it can't go on for ever");
+	Check(Has(frameCode, "HudsonNav_NotGettingNearer(&towards,"), "and a walk asks whether he's getting any nearer");
+	Check(Has(frameCode, "stuck = true;"), "and if he isn't, he's stuck");
+
+	// A rescue looks before it leaves him, because a route's spot can be in mid-air, and that once dropped him further than he could survive
+	std::string const rescueCode = Between(walkCode, "static bool PutHimDown(STRATEGYBLOCK *marine, long frame)", "static void CrossOff");
+
+	Check(Has(rescueCode, "framesToCheckTheRescue = kFramesForARoomToLoad;"), "every rescue gets looked at");
+	Check(Has(rescueCode, "rays.Cast(place.vx, place.vy, place.vz, 0, kHudsonNavOneWhole, 0, kHudsonNavMostDrop)"), "as far down as he could survive");
+	Check(ComesBefore(rescueCode, "if (down.hit && !pushedOut)", "movedOn--;"), "and it only takes the rescue back if he can't stay there");
+	Check(ComesBefore(frameCode, "ItsOverWhateverHeWasDoing(marine, frame)", "PutHimBackIfHeCantStayThere(marine, frame)"), "a death comes before looking at a rescue");
+	Check(ComesBefore(frameCode, "PutHimBackIfHeCantStayThere(marine, frame)", "LookAround(marine, frame);"), "and looking at a rescue comes before anything else he does");
+	Check(Has(frameCode, "if (framesToCheckTheRescue > 0 || PutHimBackIfHeCantStayThere(marine, frame))"), "and nothing else happens until the room has had time to load");
+	Check(Has(walkCode, "Marine_GuardThisSpot(marine, &target, room->m_aimodule);"), "and his post goes with him, or he'd walk back to it");
+
+	// At a route's spot is there, whichever room he's in, because a spot is just inside the next room. And how far he's walked is along the ground, because the game lifts him up each stair all at once.
+	Check(Has(walkCode, "abs(place.vy - floorOfTheSpot) <= kHudsonNavGoalHeight"), "he's arrived at a spot when he's at it");
+	Check(Has(walkCode, "double const metres = sqrt(x * x + z * z) / 1000.0;"), "and going up stairs or falling doesn't count as walking further");
+
+	// A stair's lip costs him a shuffle, counted, and not the whole leg. And the stuck rule goes by whether he's really falling.
+	Check(ComesBefore(walkCode, "HudsonNav_BoxIsCaughtOnALip(report->ObstacleNormal.vy, againstHisWay, floorAhead)", "shuffled++;"), "he's only shuffled if his box really is caught on a lip");
+	Check(ComesBefore(walkCode, "if (report->ObstacleSBPtr)", "HudsonNav_BoxIsCaughtOnALip(report->ObstacleNormal.vy, againstHisWay, floorAhead)"), "and only by the room itself, and not by something in the room");
+	Check(Has(frameCode, "!marine->DynPtr->IsInContactWithFloor && place.vy >= heightLastFrame + kFallingIsAtLeast"), "and only really falling stops the rule for being stuck");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonNav_TimesShuffled()"), "and the result says how many times he was shuffled");
+
+	// He feels his way wherever he's walking, except the one time he's meant to go over an edge. And he tries for himself before anyone moves him.
+	std::string const steerCode2 = Between(walkCode, "static void SteerAlongTheWay(STRATEGYBLOCK *marine)", "// Does the map's part of each frame.");
+
+	Check(Has(steerCode2, "SteerFeelingHisWay(marine, theMap.Way()[point].x, theMap.Way()[point].z);"), "following the map's way, he feels as he goes");
+	Check(Has(walkCode, "SteerFeelingHisWay(marine, target.vx, target.vz);\n\t\treturn;"), "and on a straight line");
+	Check(ComesBefore(walkCode, "if (goingOverTheEdgeOnPurpose)", "SteerFeelingHisWay(marine, target.vx, target.vz);\n\t\t\t}\n\t\t}\n\n\t\treturn;"), "and only the test that walks him off an edge doesn't");
+	Check(ComesBefore(walkCode, "StepHimAside(marine, frame))\n\t\t\t{\n\t\t\t\tstepsAsideOnThisStep++;", "if (PutHimDown(marine, frame))\n\t\t\t{\n\t\t\t\tHudsonNav_StartProgress"), "he tries a step aside before anyone moves him");
+	Check(Has(walkCode, "stepsAsideOnThisStep < (lastSearchFoundAWay ? kMostStepsAside : kMostStepsAsideWithNoWay)"), "and only so many times on one step, so that it can't go on for ever");
+	Check(Has(walkCode, "stepsAsideOnThisStep = 0;\n\tgoingOverTheEdgeOnPurpose = false;"), "and each step starts again, and the test's going over the edge ends with its step");
+
+	// The map's goal is the floor under a route's spot
+	Check(Has(Between(walkCode, "static void LookForAWay(STRATEGYBLOCK *marine, long frame)", "// In a straight line, up and down as well."), "theMap.StartSearch(place.vx, place.vy, place.vz, target.vx, goalHeight, target.vz);") || Has(walkCode, "theMap.StartSearch(place.vx, place.vy, place.vz, target.vx, goalHeight, target.vz);"), "the map goes to the floor under a route's spot");
+	Check(Has(walkCode, "underTheSpot.hit && !underTheSpot.door && underTheSpot.normalY <= -kHudsonNavWalkable"), "if there's one he could stand on");
+
+	std::string const runCode = ReadSourceFile("3dc/avp/hudson.cpp");
+
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedFatalFall, kHudsonExitFatalFall);"), "a fatal fall has its own reason and code");
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedPlayerDied, kHudsonExitPlayerDied);"), "so does the player dying");
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedLevelDidntEnd, kHudsonExitLevelDidntEnd);"), "so does a route that doesn't end the level");
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedRouteStoppedShort, kHudsonExitLevelDidntEnd);"), "and one that stops short of its end");
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedLevelEndedEarly, kHudsonExitLevelEndedEarly);"), "and a level that ended without him has its own too");
+	Check(Has(runCode, "HudsonNav_StepNow(), HudsonNav_StepsInTheRoute()"), "and the result says which step he'd got to");
+	Check(Has(runCode, "EndTheLevel(kHudsonNavEndedCrossedTheMap, kHudsonExitFinished);"), "and only a crossing finishes");
+	Check(Has(runCode, "marineStage == kMarineWalking && marine == TheMarine()"), "only the marine who's walking counts, so a tour's marine dropped into a room doesn't end it");
+	Check(ComesBefore(Between(runCode, "HudsonNavEnding const ending = HudsonNav_HowItEnded();\n\n\t\t\t// These have", "he didn't walk into a single new module"), "kHudsonExitFatalFall", "\"it finished\""), "the endings are looked at before anything can read as finished");
 
 	// A marine on guard turns to what the squad suspects, ahead of the way he was told. On Invasion that held him for a whole run. A game can only show what it does to him.
 	std::string const squadSuspicion = Between(marineCode, "/* Squad level suspicion? */", "/* Use squad suspicion. */");
@@ -1564,7 +1672,6 @@ static void TestTourAndSharedMachine()
 	Check(ComesBefore(startingView, "Marine_TakesNoNoticeOfTheSquad(marine)", "Marine_GuardAndFace(marine, &point)"), "and it does so before each view's telling, so nothing's left over from the last room");
 	Check(Has(startingView, "SayIfTheSquadSuspectsAnything(marine)"), "and the log says what he's not looking at");
 	Check(Has(Between(hudson, "static void SayWhySettlingIsTakingSoLong", "static void WatchTheMarine"), "Marine_WhatHeAndHisSquadSuspect(marine, &hisTime, &hisPoint, &squadTime, &squadPoint)"), "and a marine who won't turn has it in the log too");
-	Check(ComesBefore(Between(marineCode, "Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {", "CauseDamageToObject"), "if (HudsonMarineIsOn)", "IsInContactWithFloor"), "a fall doesn't hurt a marine in a run");
 
 	std::string const window = ReadSourceFile("3dc/avp/win95/win_proj.cpp");
 	std::string const hands = Between(window, "static bool IsSomeonesHand(UINT message)", "LRESULT CALLBACK WindowProc");
@@ -2054,6 +2161,8 @@ static void CheckBotFight()
 		Refused("-hudson level=hangar frames=5 machine=shared net=host killkind=queen killat=1,2,3 killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=alien killat=1,2,3 killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,2,3 killer=both", kHudsonRefusedKillWords);
+		Check(HudsonPlan_Read("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,2,3 killer=nobody", &plan) == 0 && plan.killerIsNobody && !plan.killerIsHost, "killer=nobody watches a level's own NPC with nobody firing");
+		Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "bool const iAmTheKiller = !plan.killerIsNobody && isHost == plan.killerIsHost;"), "and then neither machine is the killer");
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,2 killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,2,3,4 killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=a,b,c killer=host", kHudsonRefusedKillWords);
@@ -2175,10 +2284,30 @@ static void TestFilmJoining()
 	Check(Has(join, "!= INVALID_FILE_ATTRIBUTES") && CountOf(join, "if (AlreadyThere(outPath))") == 2, "and it writes over no file that's already there, a source film included");
 }
 
+static void TestTheGridInTheGame()
+{
+	// Only the game can show this works. These read the source for the lines it depends on.
+	std::string const navCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
+	std::string const gridLevel = ReadSourceFile("3dc/avp/hudson_grid_level.cpp");
+
+	Check(navCode.find("uintptr_t const thread = _beginthreadex(NULL, 0, GridThread, NULL, 0, NULL);") != std::string::npos, "the grid is built on a thread of its own, off the frame path");
+	Check(navCode.find("if (navUsesTheGrid)\n\t{\n\t\tStartBuildingTheGrid();") != std::string::npos, "and only if the run asked for it, so a normal game pays nothing");
+	Check(navCode.find("if (StillWaitingForTheGrid())\n\t{\n\t\treturn true;") != std::string::npos, "and he waits for it, not wandering off without a map");
+	Check(navCode.find("(navUsesTheGrid && mapHasHadItsTurn && lastSearchFoundAWay && theMap.HasComeToTheEnd(place.vx, place.vz))") != std::string::npos, "and the end of a way it found is arriving, but only for a way found on this leg");
+	Check(navCode.find("SaveThisWay(frame, search == kHudsonNavFound);") != std::string::npos, "every way it plans is kept");
+	Check(navCode.find("SaveHisTrail(marine, frame);") != std::string::npos, "and the trail he really walked");
+	Check(gridLevel.find("corners[count] >= shape->numpoints") != std::string::npos, "a polygon's corner that isn't one of its shape's points isn't trusted");
+	Check(gridLevel.find("normalPlace >= 0 && (int64_t)normalPlace + 3 <= (int64_t)shape->numitems * 3") != std::string::npos, "and nor is a normal outside its list");
+	Check(gridLevel.find("type == I_BehaviourLift || type == I_BehaviourPlatform || type == I_BehaviourTrackObject") != std::string::npos, "a lift's car or anything on a track doesn't count as where it stands");
+	Check(gridLevel.find("status->typeId == IOT_Static || status->typeId == IOT_Furniture") != std::string::npos, "and nor do things to pick up");
+	Check(gridLevel.find("(module->m_flags & MODULEFLAG_AIRDUCT) != 0") != std::string::npos, "and a room marked as an air duct is where he crawls");
+}
+
 int main()
 {
 	CheckBotFight();
 	CheckFriendlyFire();
+	TestTheGridInTheGame();
 	printf("What a Hudson run has been asked to do:\n");
 
 	TestWhoAsked();

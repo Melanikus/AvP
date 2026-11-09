@@ -431,6 +431,180 @@ static void CheckRefused(std::string const &text, const char *reason, std::strin
 	Check(routeSteps.size() <= kHudsonNavMostRouteSteps, what + ", and the list has a limit");
 }
 
+// The routes that the tests in the game use have to be ones the game will read. If not, those tests stop before they start, and say something about the route and not about him.
+static void CheckTheTestRoutes()
+{
+	printf("The routes the tests in the game use:\n");
+
+	const char *const names[] = { "fall-test", "player-dies-test", "rescue-test", "stairs-test", "stair-lip-test", "ramp-27-test", "ramp-29-test", "ramp-32-test", "ramp-35-test", "ramp-39-test", "ramp-50-test" };
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+	{
+		// From where this file is, so that it works from anywhere the test is run
+		std::string const here = __FILE__;
+		std::string const path = here.substr(0, here.rfind("tests")) + "tools/hudson/test-routes/" + names[i] + ".txt";
+		FILE *const file = fopen(path.c_str(), "rb");
+		std::string text;
+
+		if (file)
+		{
+			char buffer[4096];
+			size_t got = 0;
+
+			while ((got = fread(buffer, 1, sizeof(buffer), file)) > 0)
+			{
+				text.append(buffer, got);
+			}
+
+			fclose(file);
+		}
+
+		Check(!text.empty(), std::string(names[i]) + " is there");
+		Check(Route(text) == 0, std::string(names[i]) + " can be read");
+		Check(!routeSteps.empty(), std::string(names[i]) + " has steps in it");
+	}
+}
+
+static void CheckARealFall()
+{
+	printf("Whether it was a real fall:\n");
+
+	int const oneSecond = kHudsonNavOneWhole;
+
+	// A second in the air is 12.5 metres, and half as far again is what's allowed for rounding
+	Check(HudsonNav_ThatWasARealFall(12500, oneSecond), "12.5 metres in a second is what gravity does");
+	Check(HudsonNav_ThatWasARealFall(18750, oneSecond), "and half as far again is allowed for a frame's rounding");
+	Check(!HudsonNav_ThatWasARealFall(18751, oneSecond), "and no more than that");
+	Check(HudsonNav_ThatWasARealFall(1000, oneSecond), "less is fine: something can slow him down on the way");
+
+	// The real ones. These are from the logs: the fall that the game's sum called 149.9 metres a second is the one that shows why it can't be the test
+	Check(HudsonNav_ThatWasARealFall(23770, (int)(1.4 * oneSecond)), "24 metres in 1.4 seconds, in the shaft at VIEWC, was real");
+	Check(!HudsonNav_ThatWasARealFall(13600, oneSecond / 15), "13 metres in 4 frames, on Sulaco, wasn't a fall");
+
+	Check(!HudsonNav_ThatWasARealFall(0, oneSecond), "going nowhere isn't a fall");
+	Check(!HudsonNav_ThatWasARealFall(-5000, oneSecond), "and nor is going up");
+	Check(!HudsonNav_ThatWasARealFall(1000, 0), "and no time in the air isn't one");
+	Check(!HudsonNav_ThatWasARealFall(1000, -oneSecond), "nor is less than that");
+	Check(HudsonNav_ThatWasARealFall(2000000000, 2000000000), "and the sum doesn't overflow, however big the numbers are");
+}
+
+static void CheckALipOfAStair()
+{
+	printf("The lip of a stair:\n");
+
+	Check(HudsonNav_BoxIsCaughtOnALip(0, 65536, 0), "upright, square on, and the floor ahead level with him: that's it");
+	Check(HudsonNav_BoxIsCaughtOnALip(kHudsonNavLipIsUpright - 1, 65536, 0), "very nearly upright is upright");
+	Check(HudsonNav_BoxIsCaughtOnALip(1 - kHudsonNavLipIsUpright, 65536, 0), "whichever way it leans");
+	Check(!HudsonNav_BoxIsCaughtOnALip(kHudsonNavLipIsUpright, 65536, 0), "leaning more than that, it's a slope");
+	Check(!HudsonNav_BoxIsCaughtOnALip(-kHudsonNavLipIsUpright, 65536, 0), "the other way, too");
+	Check(!HudsonNav_BoxIsCaughtOnALip(-65536, 65536, 0), "and the floor he's standing on isn't one");
+	Check(HudsonNav_BoxIsCaughtOnALip(0, kHudsonNavLipFacesHim, 0), "only just facing him is enough");
+	Check(!HudsonNav_BoxIsCaughtOnALip(0, kHudsonNavLipFacesHim - 1, 0), "any less, it's beside him");
+	Check(HudsonNav_BoxIsCaughtOnALip(0, 65536, kHudsonNavLipIsWithin), "the floor ahead a little below his feet");
+	Check(HudsonNav_BoxIsCaughtOnALip(0, 65536, -kHudsonNavLipIsWithin), "or a little above them");
+	Check(!HudsonNav_BoxIsCaughtOnALip(0, 65536, kHudsonNavLipIsWithin + 1), "any further below, and it's a drop he'd be moved over");
+	Check(!HudsonNav_BoxIsCaughtOnALip(0, 65536, -kHudsonNavLipIsWithin - 1), "any further above, and it's a real stair or a wall in front of him");
+}
+
+static void CheckGettingNearer()
+{
+	printf("Getting nearer:\n");
+
+	HudsonNavTowards towards;
+	int const oneSecond = kHudsonNavOneWhole;
+
+	HudsonNav_StartTowards(&towards, 10000, 0, 0);
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000, 0, 0, kHudsonNavNoNearerAfter - 1), "not quite long enough, and he's only not got nearer");
+	Check(HudsonNav_NotGettingNearer(&towards, 10000, 0, 0, 1), "and exactly long enough");
+	Check(HudsonNav_NotGettingNearer(&towards, 10000, 0, 0, 1), "and it stays that way, until he does get nearer");
+	Check(towards.timeSinceThen == kHudsonNavNoNearerAfter, "and the time stops growing, so it can't overflow");
+
+	// Going back and forth, always well away from where he last was, which is what got past the rule for being stuck
+	HudsonNav_StartTowards(&towards, 10000, 0, 0);
+	bool saidSo = false;
+
+	for (int i = 0; i < 40 && !saidSo; i++)
+	{
+		saidSo = HudsonNav_NotGettingNearer(&towards, (i % 2) ? 10000 : 11300, 0, 0, oneSecond);
+	}
+
+	Check(saidSo, "going back and forth for long enough isn't getting nearer");
+
+	// Getting nearer starts the time again, and the nearest is what counts from then on
+	HudsonNav_StartTowards(&towards, 10000, 0, 0);
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000, 0, 0, kHudsonNavNoNearerAfter - 1), "he's been there nearly long enough");
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000 - kHudsonNavNearerIsAtLeast, 0, 0, oneSecond), "and then he gets nearer");
+	Check(towards.timeSinceThen == 0, "which starts the time again");
+	Check(towards.nearest == 10000.0 - kHudsonNavNearerIsAtLeast, "and that's the nearest now");
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000 - kHudsonNavNearerIsAtLeast + 1, 0, 0, oneSecond) && towards.timeSinceThen == oneSecond, "going back counts as not getting nearer");
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000 - 2 * kHudsonNavNearerIsAtLeast + 1, 0, 0, oneSecond) && towards.timeSinceThen == 2 * oneSecond, "and only a bit nearer than that isn't enough");
+
+	// Up and down counts as well, because that's most of the way up some stairs
+	HudsonNav_StartTowards(&towards, 0, 10000, 0);
+	Check(towards.nearest == 10000.0, "up and down counts as far away");
+	HudsonNav_StartTowards(&towards, 0, 0, 10000);
+	Check(towards.nearest == 10000.0, "and so does along");
+
+	// A very long way off, whose square wouldn't fit in a whole number
+	HudsonNav_StartTowards(&towards, 2000000000, 2000000000, 2000000000);
+	Check(towards.nearest > 3.0e9, "and the longest way there is doesn't overflow");
+
+	// A frame can't take away from the time
+	HudsonNav_StartTowards(&towards, 10000, 0, 0);
+	Check(!HudsonNav_NotGettingNearer(&towards, 10000, 0, 0, -oneSecond) && towards.timeSinceThen == 0, "a frame that says it took no time adds no time");
+}
+
+static void CheckTheStepsThatTestADeath()
+{
+	printf("The steps that make a death happen on purpose:\n");
+
+	Check(Route("putat 1 2 3 VIEWC-03\nwalkoff 4 5 6 VIEWC-01\nkilltheplayer on purpose\n") == 0, "a route can have them");
+	Check(routeSteps.size() == 3, "all three");
+
+	if (routeSteps.size() == 3)
+	{
+		Check(routeSteps[0].kind == kHudsonNavStepPutAt && routeSteps[0].x == 1 && routeSteps[0].y == 2 && routeSteps[0].z == 3 && routeSteps[0].name == "VIEWC-03", "being put somewhere, with its place");
+		Check(routeSteps[1].kind == kHudsonNavStepWalkOff && routeSteps[1].x == 4 && routeSteps[1].y == 5 && routeSteps[1].z == 6 && routeSteps[1].name == "VIEWC-01", "walking off, with its place");
+		Check(routeSteps[2].kind == kHudsonNavStepKillThePlayer && routeSteps[2].name == "on purpose" && routeSteps[2].x == 0, "the player dying, with no place");
+	}
+
+	CheckRefused("putat 1 2 VIEWC-03\n", kHudsonNavRouteBadNumber, "being put somewhere needs all of a place");
+	CheckRefused("walkoff 1 2 VIEWC-01\n", kHudsonNavRouteBadNumber, "and so does walking off");
+	CheckRefused("putat 1 2 3\n", kHudsonNavRouteBadName, "and a name");
+	CheckRefused("walkoff 1 2 3\n", kHudsonNavRouteBadName, "as does walking off");
+	CheckRefused("killtheplayer\n", kHudsonNavRouteBadName, "and so does the player dying");
+	CheckRefused("killtheplayer on purpose!\n", kHudsonNavRouteBadName, "with nothing odd in it");
+}
+
+static void CheckHowAWalkEnds()
+{
+	printf("How a walk ends:\n");
+
+	Check(HudsonNav_WhichEnding(false, false, false, false, false, false) == kHudsonNavEndingNothingSpecial, "with nothing to say, it says nothing");
+	Check(HudsonNav_WhichEnding(true, false, false, false, false, false) == kHudsonNavEndingFatalFall, "a fall he couldn't survive");
+	Check(HudsonNav_WhichEnding(false, true, false, false, false, false) == kHudsonNavEndingPlayerDied, "the player dying");
+	Check(HudsonNav_WhichEnding(false, false, true, true, false, false) == kHudsonNavEndingCrossedTheMap, "the game saying the level's over, with him on the last step");
+	Check(HudsonNav_WhichEnding(false, false, true, false, false, false) == kHudsonNavEndingLevelEndedEarly, "and with him anywhere else, it ended without him, and that's no crossing");
+	Check(HudsonNav_WhichEnding(false, false, false, true, false, false) == kHudsonNavEndingNothingSpecial, "being on the last step says nothing by itself");
+	Check(HudsonNav_WhichEnding(false, false, false, false, true, false) == kHudsonNavEndingLevelDidntEnd, "the end of the route, without the game saying so");
+	Check(HudsonNav_WhichEnding(false, false, false, false, false, true) == kHudsonNavEndingRouteStoppedShort, "a route that stopped early");
+
+	// What happened on the way can't be made up for by what came after
+	Check(HudsonNav_WhichEnding(true, true, true, true, true, true) == kHudsonNavEndingFatalFall, "a fall counts, whatever else happened");
+	Check(HudsonNav_WhichEnding(false, true, true, true, true, true) == kHudsonNavEndingPlayerDied, "and so does the player dying, even with the level over");
+	Check(HudsonNav_WhichEnding(false, false, true, true, true, true) == kHudsonNavEndingCrossedTheMap, "getting to the end is no less for the route being over");
+	Check(HudsonNav_WhichEnding(false, false, false, false, true, true) == kHudsonNavEndingLevelDidntEnd, "being at the end comes before stopping early");
+
+	// test-deaths.ps1 looks for these very words in what the game writes, so they can't change by themselves
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingFatalFall)) == "he fell further than a marine can survive", "the words for the fall");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingPlayerDied)) == "the player died", "the words for the player dying");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingCrossedTheMap)) == "he crossed the map", "the words for crossing the map");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingLevelDidntEnd)) == "he came to the end of the route, and the level didn't end", "the words for the level not ending");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingRouteStoppedShort)) == "the route stopped before its end", "the words for a route that stopped early");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingLevelEndedEarly)) == "the level ended before he got there", "the words for a level that ended without him");
+	Check(std::string(HudsonNav_EndingInWords(kHudsonNavEndingNothingSpecial)).empty(), "and there are none when there's nothing to say");
+}
+
 static void CheckReadingARoute()
 {
 	printf("Reading a route:\n");
@@ -544,6 +718,12 @@ int main()
 	CheckBeingAtASpot();
 	CheckTheUprightTurn();
 	CheckReadingARoute();
+	CheckTheTestRoutes();
+	CheckARealFall();
+	CheckALipOfAStair();
+	CheckGettingNearer();
+	CheckTheStepsThatTestADeath();
+	CheckHowAWalkEnds();
 
 	printf("%d checks, %d failed\n", checksDone, checksFailed);
 

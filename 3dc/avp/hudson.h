@@ -41,6 +41,9 @@ extern bool HudsonMarineHoldsFire;
 // Something has hit a marine, in a run with a fight. He's kept alive, so his health can't show whether anything reached him, and this says so in the log. kind is what hit him: the game's number for it, from AMMO_ID in equipment.h.
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind);
 
+// A marine has come down after falling, at this speed, and wouldKillHim is what the game's own rule says about that speed. Nothing's hurt in a run, so this is how a walk finds out.
+void Hudson_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim);
+
 // How a run ended, for a script to read. A level that doesn't load, and a failed assert, keep the game's own codes, 0x3421 and 0xffff. A crash is whatever Windows says.
 enum HudsonExitCode
 {
@@ -57,6 +60,14 @@ enum HudsonExitCode
 	kHudsonExitOutOfFrames = 30,       // frames= ran out before he'd finished
 	kHudsonExitModeNotThere = 31,      // lighting= or shadows= asked for something this machine can't draw
 	kHudsonExitNoSuchRoute = 40,       // route= asked for one that isn't there, or that has something wrong with it
+	kHudsonExitFatalFall = 41,         // walking, he fell further than the game lets a marine survive
+	kHudsonExitPlayerDied = 42,        // walking or playing, the player died
+	kHudsonExitLevelDidntEnd = 43,     // a route or a list of steps was over, and the game doesn't say the level is complete
+	kHudsonExitLevelEndedEarly = 44,   // the game says the level is complete, and he wasn't at the end of the route
+	kHudsonExitPlayFinished = 45,      // play=yes: the game ended the level, and he was playing it himself
+	kHudsonExitPlayStuck = 46,         // play=yes: there was no grid for him to find his way on
+	kHudsonExitPlayFinishedWithCheats = 47, // play=yes: the game ended the level, but only with cheats, so this doesn't show a player can
+	kHudsonExitPlayAlone = 48,         // play=yes in a pair: the other's body never came, or the two never saw each other, so neither played on alone
 	kHudsonExitNoSuchWall = 32,        // wall= asked for a wall this level hasn't
 	kHudsonExitNoSuchStrategy = 33,    // strategy= asked for one this level hasn't, or there's nowhere to stand to see it
 	kHudsonExitStrategyDidNothing = 34,// it was asked to go on, and its state never changed
@@ -194,6 +205,7 @@ void Hudson_NetSayARefusedGhost(int kind, int subtype);
 
 // Once in the level: says who it can see and how it's doing, and the joiner goes over to the host, shoots it, and leaves. Called each frame with the player's status.
 void Hudson_NetInput(void *playerStatus);
+void Hudson_PlayInput(void *playerStatus);
 
 // It can't get any further, so the run ends here, before a level has started.
 void Hudson_NetStopBecause(const char *why);

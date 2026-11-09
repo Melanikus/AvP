@@ -59,6 +59,8 @@ const char *const kHudsonRefusedRouteCharacter = "route= can only have letters, 
 const char *const kHudsonRefusedRouteWithoutOneRoom = "route= needs a marine who starts in one room: rooms=1";
 const char *const kHudsonRefusedRouteWithWall = "route= walks away, so it can't go with wall=";
 const char *const kHudsonRefusedPaceUnknown = "pace= can only be walk or run";
+const char *const kHudsonRefusedMapUnknown = "map= can only be grid or rays";
+const char *const kHudsonRefusedMapWithoutWalking = "map= is how he finds his way, so it needs nav= or route=";
 const char *const kHudsonRefusedPaceWithoutWalking = "pace= is how fast he walks, so it needs nav= or route=";
 const char *const kHudsonRefusedFrameHoldNotOff = "framehold= can only be off";
 const char *const kHudsonRefusedFrameHoldWithoutWalking = "framehold= is about a walk, so it needs nav= or route=";
@@ -121,6 +123,9 @@ const char *const kHudsonRefusedSpeciesWithoutGun = "species= is for trying a gu
 const char *const kHudsonRefusedGunAlienNotYes = "gunalien= can only be yes";
 const char *const kHudsonRefusedGunMarineNotYes = "gunmarine= can only be yes";
 const char *const kHudsonRefusedGunMarineWithoutGun = "gunmarine= shows the model for a gun, so it needs gun=";
+const char *const kHudsonRefusedPlayNotYes = "play= can only be yes";
+const char *const kHudsonRefusedPlayWithSomethingElse = "play= is him playing the level himself, so it can't go with rooms=, gun= or botfight=";
+const char *const kHudsonRefusedPlayNetWithoutCoop = "play= with net= is two Hudsons playing a level of a campaign together, so it needs coop=yes";
 const char *const kHudsonRefusedGunAlienWithoutGun = "gunalien= makes something for a gun to hit, so it needs gun=";
 const char *const kHudsonRefusedMeetsNotYes = "meets= can only be yes";
 const char *const kHudsonRefusedDieAtNotANumber = "dieat= isn't a number of seconds from 1 to 3600";
@@ -372,6 +377,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
+	bool seenPlayGun = false;
 	bool seenSpecies = false;
 	bool seenMeets = false;
 	bool seenLevelFilms = false;
@@ -391,6 +397,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenClass = false;
 	bool seenFilm = false, seenLamp = false, seenLampKind = false, seenLampAt = false, seenBright = false, seenFlare = false, seenBreak = false, seenVision = false, seenSize = false, seenShow = false, seenMachine = false, seenHoldSeconds = false, seenTourFrom = false, seenSteam = false;
 	bool seenNet = false;
+	bool seenMap = false;
 	bool seenStrategies = false, seenStrategy = false, seenStrategySeconds = false, seenStrategyLook = false;
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
@@ -586,6 +593,24 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->frameHoldOff = true;
+		}
+		else if (WordIs(place, nameLength, "map"))
+		{
+			if (seenMap)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenMap = true;
+
+			if (WordIs(value, valueLength, "grid"))
+			{
+				plan->mapGrid = true;
+			}
+			else if (!WordIs(value, valueLength, "rays"))
+			{
+				return kHudsonRefusedMapUnknown;
+			}
 		}
 		else if (WordIs(place, nameLength, "pace"))
 		{
@@ -1428,6 +1453,10 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			{
 				plan->killerIsHost = true;
 			}
+			else if (WordIs(value, valueLength, "nobody"))
+			{
+				plan->killerIsNobody = true;
+			}
 			else if (!WordIs(value, valueLength, "join"))
 			{
 				return kHudsonRefusedKillWords;
@@ -1637,6 +1666,21 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			seenGun = true;
 
 			if (!ReadNumber(value, valueLength, &plan->gunSlot) || plan->gunSlot < 1 || plan->gunSlot > 15)
+			{
+				return kHudsonRefusedGunNotASlot;
+			}
+		}
+		else if (WordIs(place, nameLength, "playgun"))
+		{
+			if (seenPlayGun)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenPlayGun = true;
+
+			// One gun, so not 15, which is gun='s "each in turn"
+			if (!ReadNumber(value, valueLength, &plan->playGunSlot) || plan->playGunSlot < 1 || plan->playGunSlot > 14)
 			{
 				return kHudsonRefusedGunNotASlot;
 			}
@@ -2060,6 +2104,20 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedClassNotOne;
 			}
 		}
+		else if (WordIs(place, nameLength, "play"))
+		{
+			if (plan->play)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedPlayNotYes;
+			}
+
+			plan->play = true;
+		}
 		else if (WordIs(place, nameLength, "flare"))
 		{
 			if (seenFlare)
@@ -2390,6 +2448,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedPaceWithoutWalking;
 	}
 
+	if (seenMap && !seenNav && !seenRoute)
+	{
+		return kHudsonRefusedMapWithoutWalking;
+	}
+
 	if (seenFrameHold && !seenNav && !seenRoute)
 	{
 		return kHudsonRefusedFrameHoldWithoutWalking;
@@ -2633,7 +2696,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedFilmSkipWithoutFilms;
 	}
 
-	if ((plan->playAsPredator || plan->playAsAlien) && plan->gunSlot == 0 && !plan->meets)
+	if (((plan->playAsPredator || plan->playAsAlien) && plan->gunSlot == 0 && !plan->meets) && !plan->play)
 	{
 		return kHudsonRefusedSpeciesWithoutGun;
 	}
@@ -2661,6 +2724,16 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->gunAlien && plan->gunSlot == 0)
 	{
 		return kHudsonRefusedGunAlienWithoutGun;
+	}
+
+	if (plan->play && (plan->rooms > 0 || plan->gunSlot != 0 || plan->botFight != 0))
+	{
+		return kHudsonRefusedPlayWithSomethingElse;
+	}
+
+	if (plan->play && plan->netMode != kHudsonNetNone && !plan->coop)
+	{
+		return kHudsonRefusedPlayNetWithoutCoop;
 	}
 
 	if (plan->classSlider && plan->gunSlot == 0)

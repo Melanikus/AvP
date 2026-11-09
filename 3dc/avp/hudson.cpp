@@ -7,6 +7,8 @@
 //   a fight's idle player looks at the fight
 //   a run's window goes on the second screen by the game's own doing, with a part of it for each game
 //   killkind=, killat= and killer= have one machine really kill a level's own named NPC, and each machine says what it saw
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   killer=nobody does all of that but the shooting, to watch a level's own NPC, such as a queen, fight a pair
 //   a run is held to 60 frames a second unless it asks otherwise, a frame that's late is made up by the next, and a run says what rate it really reached
 //   a run can play a level's own films, and say how the connection fared under one
 //   what is on the next level is said once it is there; a pair stays a while after a level starts again; a run says when a player's spare ammunition changes
@@ -154,6 +156,7 @@ extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.
 #include "bh_predator.h"
 #include "bh_corpse.h"
 #include "npc_ghosts.h"
+#include "bh_platform_lift.h"
 #include "bh_xeno.h"
 #include "bh_queen.h"
 #include "bh_facehugger.h"
@@ -200,6 +203,8 @@ static const float kHudsonLampWideUp = 200.0f;
 #include <utility>
 #include "pldnet.h"
 #include "pldghost.h"
+#include "hudson_nav_plan.h"
+#include "hudson_play.h"
 
 #include <math.h>
 #include <process.h>
@@ -299,6 +304,7 @@ static DWORD smokeWaitingSince = 0;
 static DWORD smokeSawThemAt = 0;
 static VECTORCH smokeCameFrom;
 static int smokeLevelsPassed = 0;
+static bool smokePassedThisLevel = false;
 static char smokeFailure[160] = "";
 
 static void Hudson_SmokeTestStartsAgain()
@@ -308,6 +314,7 @@ static void Hudson_SmokeTestStartsAgain()
 	smokeWentOver = false;
 	smokeWaitingSince = 0;
 	smokeSawThemAt = 0;
+	smokePassedThisLevel = false;
 }
 static double FramesEachSecondReached();
 static volatile LONG framesDone = 0;
@@ -597,6 +604,11 @@ static void WriteResult(const char *howItEnded, int code)
 		if (plan.navModules > 0)
 		{
 			fprintf(file, "nav_asked=%d nav_walked_into=%d nav_moved_on=%d nav_pressed=%d nav_pressed_by_asking=%d nav_presses_that_did_something=%d\n", plan.navModules, HudsonNav_ModulesWalkedInto(), HudsonNav_TimesMovedOn(), HudsonNav_ThingsPressed(), HudsonNav_ThingsPressedByAsking(), HudsonNav_PressesThatDidSomething());
+
+			// What a crossing is: the game says the level is over, and nobody died on the way. What it took goes next to it, so that one that needed a lot of help can't read as a clean one.
+			HudsonNavEnding const ending = HudsonNav_HowItEnded();
+
+			fprintf(file, "nav_crossed=%s nav_level_complete=%s nav_fatal_fall=%s nav_player_died=%s nav_put_into=%d nav_moved_on=%d nav_metres=%d nav_shuffled=%d nav_stepped_aside=%d nav_rescues_refused=%d nav_step=%d/%d\n", ending == kHudsonNavEndingCrossedTheMap ? "yes" : "no", AvP.LevelCompleted ? "yes" : "no", ending == kHudsonNavEndingFatalFall ? "yes" : "no", ending == kHudsonNavEndingPlayerDied ? "yes" : "no", HudsonNav_ModulesPutInto(), HudsonNav_TimesMovedOn(), HudsonNav_MetresWalked(), HudsonNav_TimesShuffled(), HudsonNav_TimesSteppedAside(), HudsonNav_RescuesRefused(), HudsonNav_StepNow(), HudsonNav_StepsInTheRoute());
 		}
 
 		if (plan.vision)
@@ -643,6 +655,14 @@ static void WriteResult(const char *howItEnded, int code)
 			{
 				fprintf(file, "smoke=failed: the run ended before it was done\n");
 			}
+		}
+
+		if (plan.play)
+		{
+			char playLine[200];
+
+			HudsonPlay_ForTheResult(playLine, (int)sizeof(playLine));
+			fprintf(file, "%s\n", playLine);
 		}
 
 		// Always, so that nobody has to guess whether a run has a film, or where. run-hudson.ps1 changes this to where it moves the film to.
@@ -2353,6 +2373,14 @@ static STRATEGYBLOCK *TheMarine()
 	}
 
 	return found;
+}
+
+void Hudson_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim)
+{
+	if (marineStage == kMarineWalking && marine == TheMarine())
+	{
+		HudsonNav_MarineLanded(marine, fallingSpeed, wouldKillHim);
+	}
 }
 
 // Two things in the same place would push each other apart, and he's standing where the player is. So neither counts as being there for the other: the game's collisions pass over anything that can't be seen.
@@ -4225,8 +4253,35 @@ static void WatchTheMarine(LONG frame)
 			SayWhereHeIs("he stops walking", frame, marine);
 			marineStage = kMarineFinished;
 
+			HudsonNavEnding const ending = HudsonNav_HowItEnded();
+
+			// These have their own reasons and codes, so that none of them can read as having finished
+			if (ending == kHudsonNavEndingFatalFall)
+			{
+				EndTheLevel(kHudsonNavEndedFatalFall, kHudsonExitFatalFall);
+			}
+			else if (ending == kHudsonNavEndingPlayerDied)
+			{
+				EndTheLevel(kHudsonNavEndedPlayerDied, kHudsonExitPlayerDied);
+			}
+			else if (ending == kHudsonNavEndingLevelDidntEnd)
+			{
+				EndTheLevel(kHudsonNavEndedLevelDidntEnd, kHudsonExitLevelDidntEnd);
+			}
+			else if (ending == kHudsonNavEndingLevelEndedEarly)
+			{
+				EndTheLevel(kHudsonNavEndedLevelEndedEarly, kHudsonExitLevelEndedEarly);
+			}
+			else if (ending == kHudsonNavEndingRouteStoppedShort)
+			{
+				EndTheLevel(kHudsonNavEndedRouteStoppedShort, kHudsonExitLevelDidntEnd);
+			}
+			else if (ending == kHudsonNavEndingCrossedTheMap)
+			{
+				EndTheLevel(kHudsonNavEndedCrossedTheMap, kHudsonExitFinished);
+			}
 			// A run where he never walked into anywhere hasn't shown he can walk, however far he was put.
-			if (HudsonNav_ModulesWalkedInto() > 0)
+			else if (HudsonNav_ModulesWalkedInto() > 0)
 			{
 				EndTheLevel("it finished", kHudsonExitFinished);
 			}
@@ -4265,6 +4320,11 @@ static void WatchTheMarine(LONG frame)
 		if (framesSettled >= kFramesToSettle && plan.navModules > 0)
 		{
 			SayWhereHeIs("he starts walking", frame, marine);
+
+			if (plan.mapGrid)
+			{
+				HudsonNav_UseTheGrid();
+			}
 
 			if (HudsonNav_Start(marine, plan.navModules, plan.route, plan.paceRun))
 			{
@@ -4768,13 +4828,14 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 
 		if (SUCCEEDED(hr))
 		{
-			// A siege's film has a clock on it, so that the same moment can be found in the film from the other machine. Both games are on one machine, so they share its clock.
-			hr = copy->LockRect(&locked, NULL, plan.siegeRoom[0] ? 0 : D3DLOCK_READONLY);
+			// A siege's film, and a playing Hudson's, has a clock in its corner, so that the same moment can be found in the film from the other machine. Both games are on one machine, so
+			// they share its clock. Writing it means the picture can't be locked for reading only.
+			hr = copy->LockRect(&locked, NULL, plan.siegeRoom[0] || plan.play ? 0 : D3DLOCK_READONLY);
 		}
 
 		if (SUCCEEDED(hr))
 		{
-			if (plan.siegeRoom[0] && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
+			if ((plan.siegeRoom[0] || plan.play) && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
 			{
 				HudsonPlan_StampNumber((unsigned char *)locked.pBits, locked.Pitch, (int)filmSize.Width, (int)filmSize.Height, GetTickCount());
 			}
@@ -5572,6 +5633,21 @@ static GhostLogEntry &GhostLogEntryFor(int guid)
 }
 
 // Called for each message: sent on the host, and arrived on the joiner
+// A thing a queen throws, on the host when it's sent and on the others when it arrives. The name has no end to it, so the log gives its number.
+void Hudson_GhostLogThrownObject(char const *name, int x, int y, int z)
+{
+	if (!HudsonRunIsOn || !plan.ghostLog)
+	{
+		return;
+	}
+
+	char line[120];
+
+	_snprintf(line, sizeof(line) - 1, "thrownlog: t=%lu id=%d x=%d y=%d z=%d", (unsigned long)timeGetTime(), *(int const *)&name[4], x, y, z);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+}
+
 void Hudson_GhostLogMessage(NETMESSAGE_NPCSTATE const *message)
 {
 	if (!HudsonRunIsOn || !plan.ghostLog)
@@ -5602,6 +5678,8 @@ void Hudson_GhostLogDeath(int guid, int deathCode, int deathTime, int gibbFactor
 
 // The number the messages use for this block, or false if this isn't one the log is about. A real NPC and its corpse
 // have it in their name, and a ghost holds it as the other machine's object number.
+extern int Hugger_IsDyingForTheNetwork(STRATEGYBLOCK *sbPtr);
+
 static bool GhostLogNumberOf(STRATEGYBLOCK const *block, int *guid, bool *alive, HMODELCONTROLLER **model, int *cloak)
 {
 	extern HMODELCONTROLLER *Npc_HModelController(STRATEGYBLOCK *sbPtr);
@@ -5648,9 +5726,26 @@ static bool GhostLogNumberOf(STRATEGYBLOCK const *block, int *guid, bool *alive,
 	}
 
 	*alive = true;
+
+	// A facehugger or sentry gun stays what it is while it dies, instead of turning into a corpse, so its kind doesn't say it's dead
+	if (block->I_SBtype == I_BehaviourFaceHugger && Hugger_IsDyingForTheNetwork(const_cast<STRATEGYBLOCK *>(block)))
+	{
+		*alive = false;
+	}
+	else if (block->I_SBtype == I_BehaviourAutoGun && ((AUTOGUN_STATUS_BLOCK const *)block->SBdataptr)->behaviourState == I_disabled)
+	{
+		*alive = false;
+	}
+
 	*model = Npc_HModelController(const_cast<STRATEGYBLOCK *>(block));
 	*cloak = block->I_SBtype == I_BehaviourPredator ? ((PREDATOR_STATUS_BLOCK const *)block->SBdataptr)->CloakingEffectiveness : 0;
 	return true;
+}
+
+// Whether this run writes the ghost log, and with it each lift's liftlog line (below). The walker's own lift line steps aside then.
+bool Hudson_GhostLogIsOn()
+{
+	return HudsonRunIsOn && plan.ghostLog;
 }
 
 static void Hudson_GhostLogEachFrame()
@@ -5731,6 +5826,47 @@ static void Hudson_GhostLogEachFrame()
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
 		}
+	}
+
+	// One line for each platform lift, when its state changes and once a second, in the form agreed with Third's walker so the reader
+	// has one source: its name as 16 hex characters (it's binary), the car's height, its state (0 at rest, 1 about to move, 2 going
+	// up, 3 going down), the end it's going to or resting at, and how many lift sync messages this machine has sent (the host) or
+	// had (a joiner). -1 is a game without the lift sync.
+	static std::map<std::string, std::pair<int, DWORD>> liftSaid;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const lift = ActiveStBlockList[i];
+
+		if (lift->I_SBtype != I_BehaviourPlatform || !lift->SBdataptr || !lift->DynPtr)
+		{
+			continue;
+		}
+
+		PLATFORMLIFT_BEHAVIOUR_BLOCK const *const data = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)lift->SBdataptr;
+		std::pair<int, DWORD> &said = liftSaid[std::string(lift->SBname, SB_NAME_LENGTH)];
+
+		if (said.second != 0 && said.first == (int)data->state && now - said.second < 1000)
+		{
+			continue;
+		}
+
+		said.first = (int)data->state;
+		said.second = now;
+
+		char name[2 * SB_NAME_LENGTH + 1];
+		char line[160];
+
+		for (int k = 0; k < SB_NAME_LENGTH; k++)
+		{
+			_snprintf(name + 2 * k, 3, "%02x", (unsigned char)lift->SBname[k]);
+		}
+
+		name[2 * SB_NAME_LENGTH] = 0;
+		_snprintf(line, sizeof(line) - 1, "liftlog: t=%lu name=%s y=%d state=%d end=%s sent=%d", (unsigned long)now, name, lift->DynPtr->Position.vy,
+			(int)data->state, PlatformLift_EndItsGoingTo(lift) == 0 ? "up" : "down", AvP.Network != I_No_Network && SameAsSinglePlayer() ? data->syncMessages : -1);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
 	}
 }
 
@@ -5858,7 +5994,19 @@ void Hudson_EndOfFrame()
 		return;
 	}
 
-	// Through the same call as the key. Every frame, in case anything turned it off, or on.
+	if (plan.play)
+	{
+		const char *howItEnded = "";
+		int const playEnded = HudsonPlay_EndOfFrame(&howItEnded);
+
+		if (playEnded != 0)
+		{
+			EndTheLevel(howItEnded, playEnded);
+			return;
+		}
+	}
+
+// Through the same call as the key. Every frame, in case anything turned it off, or on.
 	{
 		bool const wanted = plan.lampOn || (plan.lampBlink && (GetTickCount() / 1500) % 2 == 0);
 
@@ -5925,6 +6073,87 @@ void Hudson_EndOfFrame()
 	{
 		EndTheLevel("it finished", kHudsonExitFinished);
 	}
+}
+
+// play=yes: he plays the level himself. See hudson_play.h
+static STRATEGYBLOCK *Hudson_NetOtherPlayer();
+
+// Hudson on foot, when he has to cheat: moved the same way as any other run moves the player
+void Hudson_MoveHimOnFoot(const VECTORCH &place)
+{
+	MoveThePlayerTo(place);
+}
+
+void Hudson_PlayInput(void *playerStatus)
+{
+	if (!HudsonRunIsOn || !plan.play || levelHasEnded)
+	{
+		return;
+	}
+
+	static bool started = false;
+
+	if (!started)
+	{
+		started = true;
+
+		if (plan.netMode == kHudsonNetJoin)
+		{
+			HudsonPlay_StartFollowing(LevelName);
+		}
+		else if (!HudsonPlay_Start(LevelName))
+		{
+			EndTheLevel("there's no list of steps for this level", kHudsonExitNoSuchRoute);
+			return;
+		}
+	}
+
+	STRATEGYBLOCK *const other = plan.netMode != kHudsonNetNone ? Hudson_NetOtherPlayer() : NULL;
+
+	HudsonPlay_WatchTheLevel(other);
+
+	// The user's rule for a pair: "one Hudson must wait for the other to spawn". Neither takes a step, fires or uses anything until the other's body is in his game and the two have looked at
+	// each other, which is what the smoke test is. Each machine knows only its own look, so the other's can end a moment later. If the smoke test fails, or hasn't passed a minute after he could
+	// first have set off, the run ends there with its own exit code: he never goes on alone.
+	if (plan.netMode != kHudsonNetNone && !smokePassedThisLevel)
+	{
+		static const DWORD kMostWaitForTheOther = 60000;
+		static DWORD waitingSince = 0;
+		DWORD const now = GetTickCount();
+
+		if (waitingSince == 0)
+		{
+			waitingSince = now;
+			LogString("play: he waits for the other Hudson's body to come and for the two to look at each other, before he does anything");
+		}
+
+		if (smokeIsOver || now - waitingSince >= kMostWaitForTheOther)
+		{
+			char const *const why = smokeIsOver ? "the smoke test didn't pass, so he doesn't play on alone" : "a minute on, the other Hudson hasn't come and been seen, so he doesn't play on alone";
+
+			LogErrorString(std::string("play: ") + why);
+			EndTheLevel(why, kHudsonExitPlayAlone);
+			return;
+		}
+
+		HudsonPlay_KeepHimAliveWhileHeWaits(playerStatus);
+		return;
+	}
+
+	static bool saidTheyMet = false;
+
+	if (!saidTheyMet && plan.netMode != kHudsonNetNone)
+	{
+		saidTheyMet = true;
+		LogString("play: the other Hudson is here and the two have looked at each other, so he sets off");
+	}
+
+	if (plan.playGunSlot > 0)
+	{
+		HudsonPlay_HoldGun(plan.playGunSlot);
+	}
+
+	HudsonPlay_Input(playerStatus, other);
 }
 
 bool Hudson_NetIsOn()
@@ -7143,6 +7372,77 @@ static void Hudson_NetHostile(STRATEGYBLOCK *me, STRATEGYBLOCK *other, DWORD now
 				break;
 			}
 			case 20:
+			{
+				// Something real with a name, that a queen doesn't throw. Anything that can be picked up will do.
+				for (int i = 0; i < NumActiveStBlocks; i++)
+				{
+					STRATEGYBLOCK *const thing = ActiveStBlockList[i];
+
+					if (thing->I_SBtype == I_BehaviourInanimateObject && thing->DynPtr && !(thing->name && strstr(thing->name, "QueenAmmo")))
+					{
+						NETMESSAGE_NPCTHROWNOBJECT message;
+						memset(&message, 0, sizeof(message));
+						memcpy(message.name, thing->SBname, sizeof(message.name));
+						message.vx = at.vx;
+						message.vy = at.vy;
+						message.vz = at.vz;
+						HudsonTest_AddRawPart(NetMT_NpcThrownObject, &message, sizeof(message));
+						break;
+					}
+				}
+
+				said = "NPC something a queen doesn't throw, as if she'd thrown it";
+				break;
+			}
+			// A lift's sync message (NETMESSAGE_LIFTSTATE): first one that names something real that isn't a lift, then one of the level's
+			// own lifts with its state, its end and its height each wrong in turn. A level with nothing to name can't send them.
+			case 21:
+			case 22:
+			case 23:
+			case 24:
+			{
+				STRATEGYBLOCK *named = NULL;
+
+				for (int i = 0; i < NumActiveStBlocks && !named; i++)
+				{
+					STRATEGYBLOCK *const thing = ActiveStBlockList[i];
+					bool const isALift = thing->I_SBtype == I_BehaviourPlatform && thing->SBdataptr && thing->DynPtr;
+
+					if (row == 21 ? thing->I_SBtype == I_BehaviourInanimateObject && thing->DynPtr : isALift)
+					{
+						named = thing;
+					}
+				}
+
+				if (!named)
+				{
+					said = row == 21 ? "LIFT NOT SENT: nothing in this level to name" : "LIFT NOT SENT: this level has no platform lift";
+					break;
+				}
+
+				NETMESSAGE_LIFTSTATE message;
+				memset(&message, 0, sizeof(message));
+				memcpy(message.name, named->SBname, sizeof(message.name));
+				message.y = named->DynPtr->Position.vy;
+
+				if (row == 22)
+				{
+					message.state = 9;
+				}
+				else if (row == 23)
+				{
+					message.end = 7;
+				}
+				else if (row == 24)
+				{
+					message.y = 2147483647;
+				}
+
+				HudsonTest_AddRawPart(NetMT_LiftState, &message, sizeof(message));
+				said = row == 21 ? "LIFT something that isn't a lift, in a lift's sync message" : row == 22 ? "LIFT a lift with a state lifts don't have" : row == 23 ? "LIFT a lift with an end it doesn't have" : "LIFT a lift's car off its track";
+				break;
+			}
+			case 25:
 				said = "END the host has sent everything, and it's still here";
 				break;
 			default:
@@ -8209,7 +8509,8 @@ static void Hudson_KillNamed(PLAYER_STATUS *status, STRATEGYBLOCK *other)
 	static bool saidAfter = false, saidLongAfter = false;
 	DWORD const now = GetTickCount();
 	bool const isHost = plan.netMode == kHudsonNetHost;
-	bool const iAmTheKiller = isHost == plan.killerIsHost;
+	// killer=nobody: neither machine is the killer, so the NPC is brought to the joiner, both players face it, and nobody fires
+	bool const iAmTheKiller = !plan.killerIsNobody && isHost == plan.killerIsHost;
 	char line[160];
 
 	if (!other)
@@ -8221,6 +8522,11 @@ static void Hudson_KillNamed(PLAYER_STATUS *status, STRATEGYBLOCK *other)
 	{
 		sawThemAt = now;
 		HudsonStrategies_LoadRoomList((std::string("HudsonChains\\") + LevelName + ".rooms").c_str());
+
+		if (plan.killerIsNobody)
+		{
+			LogString("killnamed: killer=nobody, so nobody fires at it: this run watches it fight");
+		}
 	}
 
 	status->IsImmortal = 1;
@@ -8607,6 +8913,7 @@ static bool Hudson_SmokeTest(PLAYER_STATUS *status, STRATEGYBLOCK *me, STRATEGYB
 	if (verdict == kHudsonSmokePassed)
 	{
 		smokeLevelsPassed++;
+		smokePassedThisLevel = true;
 	}
 	else if (!smokeFailure[0])
 	{

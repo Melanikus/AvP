@@ -3,6 +3,9 @@
 #ifndef HUDSON_NAV_H
 #define HUDSON_NAV_H
 
+#include "hudson_nav_plan.h"
+#include "hudson_nav_graph.h"
+
 struct strategyblock;
 struct vectorch;
 typedef struct strategyblock STRATEGYBLOCK;
@@ -24,6 +27,46 @@ bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame);
 // How many new modules he reached on his own feet, and how many times he had to be moved. These are kept apart, so that being moved can never read as walking.
 int HudsonNav_ModulesWalkedInto();
 int HudsonNav_TimesMovedOn();
+int HudsonNav_ModulesPutInto();
+
+// How many times his box caught on the lip of a stair and he had to shuffle forward: see HudsonNav_BoxIsCaughtOnALip.
+int HudsonNav_TimesShuffled();
+
+// How many times he was stuck, and tried a step to one side before anyone moved him.
+int HudsonNav_TimesSteppedAside();
+
+// To look at, such as for drawing in the world. The map grows as he walks, so its spots have to be asked for each time. It only means anything on a walk.
+const HudsonNavGraph &HudsonNav_TheMap();
+
+// map=grid: the next walk finds its way with the 3D grid. Called before HudsonNav_Start.
+void HudsonNav_UseTheGrid();
+
+// The grid, for anything that wants to draw it. It's empty unless the run said map=grid.
+const HudsonGrid &HudsonNav_TheGrid();
+
+// For anything else that walks by the grid. Start builds it on its own thread, and it's ready when StillBuilding says no.
+void HudsonNav_StartTheGrid();
+bool HudsonNav_TheGridIsStillBuilding();
+HudsonGrid &HudsonNav_TheGridToSearch();
+
+// The point he's being sent to at this moment, after feeling his way. False if nothing's sending him anywhere.
+bool HudsonNav_WhereHesGoing(int *x, int *y, int *z);
+
+// How many times a rescue put him somewhere he couldn't stay, and he was put back: nothing to stand on, or the game pushed him out.
+int HudsonNav_RescuesRefused();
+
+// Which step of the route he's on, counting from 1, and how many there are. Both 0 with no route.
+int HudsonNav_StepNow();
+int HudsonNav_StepsInTheRoute();
+
+// How far he's walked on his own feet, in metres.
+int HudsonNav_MetresWalked();
+
+// A marine who's walking has come down after falling. See Hudson_MarineLanded.
+void HudsonNav_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim);
+
+// How the walk ended, once HudsonNav_EndOfFrame has said it's over. Until then, or if he's only been asked to walk so far, it's the ending that says nothing.
+HudsonNavEnding HudsonNav_HowItEnded();
 
 // How many things he's pressed with the game's own use key, how many had to be asked directly when that did nothing, and how many of all those changed.
 int HudsonNav_ThingsPressed();

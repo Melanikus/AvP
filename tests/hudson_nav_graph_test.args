@@ -3,3 +3,4 @@
 /I3dc /I3dc/avp
 tests/hudson_nav_graph_test.cpp
 3dc/avp/hudson_nav_graph.cpp
+3dc/avp/hudson_grid.cpp

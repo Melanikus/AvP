@@ -72,7 +72,15 @@ The exit code here is the game's own, so another script can read it:
   28       the marine couldn't be made, or he's gone
   29       the marine never settled, or he moved during a hold
   30       -Frames ran out before the marine had finished
-  40       -Route asked for a route that isn't there, or that has something wrong with it
+  40       -Route asked for a route that isn't there, or that has something wrong with it. Or -Play has no list of steps, or the log says why it was refused
+  41       walking, he fell further than the game lets a marine survive. The log's "HE FELL TOO FAR" line says where. test-deaths.ps1 proves this one
+  42       walking or -Play, the player died. test-deaths.ps1 proves this one too
+  43       a route or -Play's list of steps was over, and the game doesn't say the level is complete. A crossing only counts if hudson-result.txt says nav_crossed=yes
+  44       the game says the level is complete, and he wasn't at the end of the route. The log says what the route still had ahead of him
+  45       -Play: the game ended the level, and he was playing it himself. The log says how many steps worked
+  46       -Play: there was no grid for him to find his way on
+  47       -Play: the game ended the level, but only with cheats, so it does not show a player can. play_cheats= in the result counts them, and each is a "play: cheat" line in the log
+  48       -Play in a pair: the other one's body never came, or the two never looked at each other, so neither played on alone. The log's "play:" lines say which
   31       -Lighting or -Shadows asked for something this machine can't draw
   32       -Wall asked for a wall this level hasn't
   33       -Strategy asked for one this level hasn't, or there's nowhere to stand to see it
@@ -100,6 +108,7 @@ param(
     [int]$Nav = 0,
     [string]$Route = '',
     [string]$Pace = '',
+    [string]$Map = '',
     [string]$FrameHold = '',
     [string]$Lighting = '',
     [string]$Shadows = '',
@@ -164,6 +173,8 @@ param(
     [int]$ListPlace = -1,  # a skirmish on this place of the co-op level list, as the level row would start it
     [string]$Class = '',   # a gun= run starts as a skirmish, as this marine class: shotgun, revolver or m79
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
+    [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
+    [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [switch]$GunAlien,     # a gun= run makes an alien in front of him, for a throw or a shot to hit
     [switch]$NoFilm,
     [string]$Net = '',
@@ -250,7 +261,14 @@ if ($UserCopy)
 }
 
 $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(AvPx|debug_AvPx|AvP_Classic|AvP)$' -and -not ($partner -and $_.Path -like "$partner\*") -and -not ($NetSecondPartner -and $_.Path -like "$NetSecondPartner\*") -and -not ($userCopyFolder -and $_.Path -like "$userCopyFolder\*") })
-if ($running.Count -gt 0) { Stop-Here "the game is already running: $($running[0].ProcessName)" }
+# Which copy it is goes in the words, because a pair once found one that was neither of its own and nobody knew whose. Only a test folder is named: the user's own game could be anywhere,
+# their Steam folder among them, and no log or output of ours ever names that.
+if ($running.Count -gt 0)
+{
+    $where = $running[0].Path
+    $whose = if ($where -and $where -like "$(Split-Path -Parent $folder)\AvP-*") { "the test folder $(Split-Path -Leaf (Split-Path -Parent $where))" } else { "outside the test folders" }
+    Stop-Here "the game is already running: $($running[0].ProcessName), $whose, started $($running[0].StartTime)"
+}
 
 if (-not $TimingsDontMatter)
 {
@@ -293,6 +311,7 @@ if ($TourFrom) { $arguments += " tourfrom=$TourFrom" }
 if ($Nav -gt 0) { $arguments += " nav=$Nav" }
 if ($Route) { $arguments += " route=$Route" }
 if ($Pace) { $arguments += " pace=$Pace" }
+if ($Map) { $arguments += " map=$Map" }
 if ($FrameHold) { $arguments += " framehold=$FrameHold" }
 if ($Lighting) { $arguments += " lighting=$Lighting" }
 if ($Shadows) { $arguments += " shadows=$Shadows" }
@@ -336,6 +355,8 @@ if ($FilmSkip -gt 0) { $arguments += " filmskip=$FilmSkip" }
 if ($ListPlace -ge 0) { $arguments += " listplace=$ListPlace" }
 if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
+if ($Play) { $arguments += " play=yes" }
+if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 if ($Coop) { $arguments += " coop=yes" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
@@ -450,6 +471,17 @@ if (Test-Path -LiteralPath $resultHere) { $rateLines = @(Get-Content -LiteralPat
 
 Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "exit=$exitCode", "log_errors=$logErrors") + $rateLines + $pictureLines)
 
+# What a walk keeps of its map and paths. Only a walk has them, so it isn't news if they're not there.
+foreach ($name in @('hudson-map.txt', 'hudson-ways.txt', 'hudson-trail.txt'))
+{
+    $file = Join-Path $saves $name
+
+    if (Test-Path -LiteralPath $file)
+    {
+        Move-Item -LiteralPath $file -Destination $kept
+    }
+}
+
 foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
 {
     $file = Join-Path $saves $name
@@ -463,6 +495,10 @@ foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
         Write-Host "run-hudson: no $name"
     }
 }
+
+# Where the window went, for a run that had it moved
+$windowNotes = Join-Path $saves 'window-place.txt'
+if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -Destination $kept }
 
 $result = Join-Path $kept 'hudson-result.txt'
 

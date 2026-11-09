@@ -75,4 +75,9 @@ host	NPC a death with a time that can't be right	an NPC's death had a time that 
 host	NPC a sound in a voice that isn't on the list	an NPC's sound named a voice that isn't on the list	any
 host	NPC a sound at a pitch that can't be right	an NPC's sound had a pitch that can't be right	any
 host	NPC a xenoborg's beams with one he hasn't got	a xenoborg's message named a beam he hasn't got	any
+host	NPC something a queen doesn't throw, as if she'd thrown it	a thrown object's message named something a queen doesn't throw	any
+host	LIFT something that isn't a lift, in a lift's sync message	a lift's sync message named something that isn't a platform lift	ifsent
+host	LIFT a lift with a state lifts don't have	a lift's sync message named a state lifts don't have	ifsent
+host	LIFT a lift with an end it doesn't have	a lift's sync message named an end a lift doesn't have	ifsent
+host	LIFT a lift's car off its track	a lift's sync message put the car off its track	ifsent
 host	END the host	SHOWN	any
