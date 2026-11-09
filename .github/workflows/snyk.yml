@@ -40,6 +40,7 @@ env:
 jobs:
   snyk-code:
     name: Snyk Code (SAST)
+    if: ${{ false }}   # THROWAWAY PROBE BRANCH: switched off to save Snyk scans
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     permissions:
       contents: read
@@ -111,6 +112,7 @@ jobs:
 
   snyk-open-source:
     name: Snyk Open Source (SCA)
+    if: ${{ false }}   # THROWAWAY PROBE BRANCH: switched off to save Snyk scans
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     permissions:
       contents: read
@@ -321,7 +323,7 @@ jobs:
     needs: vcpkg-sources
     # GitHub counts a skipped job as a passing check, so without this a failed library build would skip this job and
     # let the pull request through unscanned. always() makes it run anyway: with no sources to download, it fails.
-    if: ${{ always() }}
+    if: ${{ false }}   # THROWAWAY PROBE BRANCH: switched off (#174's own run shows the gate), to spend no Snyk scans
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     steps:
       - name: Check out the accepted-reports list
@@ -454,5 +456,129 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vcpkg-scan-results
+          path: results
+          retention-days: 7
+
+  # THROWAWAY PROBE (#174), never to be merged: names the files Snyk Code couldn't read in the two post-quantum libraries as
+  # pq-native-out builds them, with the native back ends taken out. Each is scanned whole as the library scan sees it: mlkem/ or
+  # mldsa/, our avpx/, and test/ (only test/test_vectors/expected_test_vectors.h is left there; the top has no C files). It scans
+  # smaller and smaller groups of their files (.github/probe/name_unparsed.js says how). Snyk Code's allowance is an account limit,
+  # so the scans are counted against ONE total of 30 for the whole probe: the libraries run one after another, each gets what is
+  # left, and one the total doesn't reach is named as not reached. A failed try counts as a scan too. The three Snyk jobs are
+  # switched off on this branch, so the 30 is the whole spend. Written 2026-11-09 by Secondary; the second probe, after #174's run on
+  # d4fa9152 (the first, 4f055527, was never run).
+  probe-unparsed:
+    name: Probe, name the unread files
+    needs: vcpkg-sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: Check out the probe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          persist-credentials: false
+
+      - name: Download the collected sources
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vcpkg-library-sources
+          path: libsrc
+
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # In order of need: first the four that main's gate PR needs, the biggest of them last, then the two post-quantum ones.
+      # Each entry is the library, then the folders to look at (none means all of it).
+      # A step that runs out of time fails, rather than cancelling the job, so the reports below are still kept
+      - name: Name the files Snyk Code can't read
+        timeout-minutes: 320
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -o pipefail
+          total=30
+          left=$total
+          failed=0
+          mkdir -p results
+          # PO's word, 2026-11-09: only the two post-quantum libraries, and a small total, since the trees are now small
+          for entry in "mlkem-native:mlkem avpx test" "mldsa-native:mldsa avpx test"; do
+            lib=${entry%%:*}
+            parts=${entry#*:}
+            echo "================ $lib ($left scans left)"
+            if [ "$left" -lt 10 ]; then
+              echo "::warning::$lib NOT REACHED: only $left scans were left of the probe's total"
+              echo "$lib" >> results/not-reached.txt
+              continue
+            fi
+            src=$(find "libsrc/$lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
+            if [ "$(printf '%s\n' "$src" | grep -c . || true)" -ne 1 ]; then
+              echo "::error::$lib: expected one source folder, found: $src"
+              failed=1
+              continue
+            fi
+            missing=""
+            for p in $parts; do
+              if [ ! -d "$src/$p" ]; then missing="$missing $p"; fi
+            done
+            if [ -n "$missing" ]; then
+              echo "::error::$lib has no folder named$missing, so it isn't probed"
+              failed=1
+              continue
+            fi
+            top="$src"
+            if [ -n "$parts" ]; then
+              top="$RUNNER_TEMP/parts/$lib"
+              mkdir -p "$top"
+              for p in $parts; do
+                cp -r "$src/$p" "$top/$p"
+              done
+            fi
+            if ! node repo/.github/probe/name_unparsed.js "$top" "$RUNNER_TEMP/work-$lib" "results/$lib.unread.json" "$left"; then failed=1; fi
+            # The report always holds how many scans were used, even when it stopped. Without a report the count is unknown,
+            # so nothing more is scanned.
+            used=$(jq -r '.scans' "results/$lib.unread.json" 2>/dev/null || true)
+            if ! [[ "$used" =~ ^[0-9]+$ ]]; then
+              echo "::error::$lib left no report, so its scans can't be counted: stopping here"
+              exit 1
+            fi
+            left=$((left - used))
+            echo "$lib used $used scans"
+          done
+          echo "Scans used by the probe: $((total - left)) of $total"
+          exit $failed
+
+      # One more question, for fmt only: does Snyk's own debug output name a file it couldn't read? If it does, the gate could
+      # name them with one scan. One scan, outside the total above. The debug output stays on the runner (it isn't uploaded).
+      # Only lines naming a file found above, or saying "pars", are shown, cut to 300 letters, with anything shaped like a token
+      # blanked out.
+      - name: Does the debug output name them (fmt only)
+        if: ${{ false }}   # narrowed: not asked this time
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          src=$(find libsrc/fmt -mindepth 1 -maxdepth 1 -type d)
+          snyk code test -d "$src" > /dev/null 2> "$RUNNER_TEMP/debug.log" || true
+          echo "debug output: $(wc -l < "$RUNNER_TEMP/debug.log") lines"
+          blank() { sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<blanked>/g; s/(token|authorization|bearer)[^ ]*[ :=]+[^ ]+/\1 <blanked>/Ig' | cut -c1-300; }
+          echo "==== lines saying pars"
+          grep -iE 'pars' "$RUNNER_TEMP/debug.log" | blank | head -60 || true
+          for f in $(jq -r '(.kinds // {})[].named[].file, (.foundSoFar // [])[].file' results/fmt.unread.json 2>/dev/null | sort -u); do
+            echo "==== lines naming $f"
+            grep -F "$(basename "$f")" "$RUNNER_TEMP/debug.log" | blank | head -10 || true
+          done
+          rm -f "$RUNNER_TEMP/debug.log"
+
+      - name: Keep the probe's reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: probe-unread
           path: results
           retention-days: 7
