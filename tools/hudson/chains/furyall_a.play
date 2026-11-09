@@ -1,0 +1,4 @@
+# What Hudson does to play furyall_a on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 219321 35769 -8183 | endswch01
+kill -41130 2055 77770 | predator2

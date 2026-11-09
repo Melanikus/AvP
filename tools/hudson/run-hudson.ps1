@@ -221,7 +221,7 @@ if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for
 if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
 # A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
 if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
-if ($RemoteRelay -and ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$')) { Stop-Here "-RemoteRelay is a server's name, in small letters" }
+if ($RemoteRelay -and ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\z')) { Stop-Here "-RemoteRelay is a server's name, in small letters" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 
 $partner = ''

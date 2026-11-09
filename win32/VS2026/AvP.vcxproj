@@ -413,6 +413,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\progress_bar.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_play.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_video.cpp" />
@@ -420,6 +421,10 @@
     <ClCompile Include="..\..\3dc\avp\hudson_nav.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_nav_plan.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_nav_graph.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_grid.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_grid_level.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_save.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_feel.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\projload.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\screenshot.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\strategy_chunk.cpp" />

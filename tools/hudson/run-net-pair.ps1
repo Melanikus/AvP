@@ -231,7 +231,7 @@ $remoteRelayRoute = ''
 
 if ($RemoteRelay)
 {
-    if ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$') { Stop-Here "-RemoteRelay is a server's name, in small letters" }
+    if ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\z') { Stop-Here "-RemoteRelay is a server's name, in small letters" }
 
     $Relay = [switch]::Present
     $found = @()

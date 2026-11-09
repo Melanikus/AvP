@@ -1,0 +1,7 @@
+# What Hudson does to play sulaco_p on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk 18022 6867 107326 | END OF MISSION AREA SWITCH
+kill -289 2702 5672 | officer
+press -113301 -4910 84112 | switch06
+kill -100494 -3122 68795 | XENOBORG
+kill -90771 -3122 72009 | XENOBORG02

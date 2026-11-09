@@ -1,0 +1,3 @@
+# What Hudson does to play invasion_a on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk -3390 -62816 -35726 | endstrategy

@@ -1,0 +1,338 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SHAPE: his box is the same width on a slant",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "return kHudsonNavMarineRadius * (fabs(wayX) + fabs(wayZ));",
+					"to": "return kHudsonNavMarineRadius;"
+				}
+			]
+		},
+		{
+			"name": "SHAPE: the front of his box is at his middle",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "*placeX = sideX + wayX * forward;\n\t*placeZ = sideZ + wayZ * forward;",
+					"to": "*placeX = sideX;\n\t*placeZ = sideZ;"
+				}
+			]
+		},
+		{
+			"name": "SHAPE: only his middle counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "{ 0.0, -0.5, 0.5, -1.0, 1.0 }",
+					"to": "{ 0.0, 0.0, 0.0, 0.0, 0.0 }"
+				}
+			]
+		},
+		{
+			"name": "SHAPE: one edge of him does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "{ 0.0, -0.5, 0.5, -1.0, 1.0 }",
+					"to": "{ 0.0, 0.5, 0.5, 1.0, 1.0 }"
+				}
+			]
+		},
+		{
+			"name": "HEAD: a wall at his head stops nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (atHead.hit && atHead.distance - kHudsonNavRayOverlap < free && !atHead.door && atHead.normalY > -kHudsonNavWalkable)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "HEAD: a door at his head stops him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "atHead.distance - kHudsonNavRayOverlap < free && !atHead.door &&",
+					"to": "atHead.distance - kHudsonNavRayOverlap < free &&"
+				}
+			]
+		},
+		{
+			"name": "KNEE: nothing at his knee stops him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (atKnee.hit && atKnee.distance < footReach && !atKnee.door)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "KNEE: a door at his knee stops him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "atKnee.distance < footReach && !atKnee.door",
+					"to": "atKnee.distance < footReach"
+				}
+			]
+		},
+		{
+			"name": "KNEE: it stays at the height he started",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "floorHeight - kHudsonNavKneeHeight",
+					"to": "y - kHudsonNavKneeHeight"
+				}
+			]
+		},
+		{
+			"name": "KNEE: it looks further than one foot",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "int const footReach = kHudsonNavFootStep + 2 * kHudsonNavRayOverlap;",
+					"to": "int const footReach = kHudsonNavFeelAhead;"
+				}
+			]
+		},
+		{
+			"name": "KNEE: it says where he started, not how far he got",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "int const clear = walked + atKnee.distance - kHudsonNavRayOverlap;",
+					"to": "int const clear = atKnee.distance - kHudsonNavRayOverlap;"
+				}
+			]
+		},
+		{
+			"name": "FLOOR: no floor is fine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (!down.hit)\n\t\t{\n\t\t\treturn walked - kHudsonNavFootStep;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FLOOR: it looks as far down as a drop he would survive",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "kHudsonNavHeadHeight + kHudsonNavStepUp);",
+					"to": "kHudsonNavHeadHeight + kHudsonNavMostDrop);"
+				}
+			]
+		},
+		{
+			"name": "FLOOR: a door is a floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (down.door)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FLOOR: too steep is fine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (down.normalY > -kHudsonNavWalkable)\n\t\t{\n\t\t\treturn walked - kHudsonNavFootStep;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FLOOR: any rise will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (rise > kHudsonNavStepUp && (down.normalY <= -kHudsonNavFlatFloor || rise > 2 * kHudsonNavFootStep))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "FLOOR: it does not go up with the stairs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "\t\tfloorHeight = nextFloor;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FLOOR: it looks under his middle",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "x + (int)(wayX * (walked + reach)), startHeight, z + (int)(wayZ * (walked + reach))",
+					"to": "x + (int)(wayX * walked), startHeight, z + (int)(wayZ * walked)"
+				}
+			]
+		},
+		{
+			"name": "CHOOSE: he stops looking at the first way he tries",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (free >= kHudsonNavFeelAhead)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "CHOOSE: he goes on looking when he has a clear way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (free >= kHudsonNavFeelAhead)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "CHOOSE: the worst way wins",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (free > best.freeAhead)\n\t\t{\n\t\t\tbest.x = wayX;\n\t\t\tbest.z = wayZ;\n\t\t\tbest.freeAhead = free;\n\t\t\tbest.turned = turns[i];",
+					"to": "if (best.freeAhead < 0 || free < best.freeAhead)\n\t\t{\n\t\t\tbest.x = wayX;\n\t\t\tbest.z = wayZ;\n\t\t\tbest.freeAhead = free;\n\t\t\tbest.turned = turns[i];"
+				}
+			]
+		},
+		{
+			"name": "CHOOSE: a very short way will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (best.freeAhead < kHudsonNavFeelEnough)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "CHOOSE: it only tries one side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "{ 0, 20, -20, 40, -40, 60, -60, 90, -90 }",
+					"to": "{ 0, 20, 20, 40, 40, 60, 60, 90, 90 }"
+				}
+			]
+		},
+		{
+			"name": "MIDDLE: he never turns from a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (nearest < kHudsonNavNearAWall && towardsLeft != towardsRight)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MIDDLE: any wall, however far, is worth turning from",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (nearest < kHudsonNavNearAWall && towardsLeft != towardsRight)",
+					"to": "if (towardsLeft != towardsRight)"
+				}
+			]
+		},
+		{
+			"name": "MIDDLE: he turns towards the wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "(double)(towardsRight - towardsLeft) / (double)(towardsRight + towardsLeft)",
+					"to": "(double)(towardsLeft - towardsRight) / (double)(towardsRight + towardsLeft)"
+				}
+			]
+		},
+		{
+			"name": "MIDDLE: he turns as far as he likes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "(int)(lean * kHudsonNavMostTurnFromAWall)",
+					"to": "(int)(lean * 180)"
+				}
+			]
+		},
+		{
+			"name": "MIDDLE: a door counts as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "across.distance < kHudsonNavFeelSides && !across.door &&",
+					"to": "across.distance < kHudsonNavFeelSides &&"
+				}
+			]
+		},
+		{
+			"name": "ROOM: the least room wins",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "if (free > best.freeAhead || (free == best.freeAhead && along < bestAlong))",
+					"to": "if (best.freeAhead < 0 || free < best.freeAhead)"
+				}
+			]
+		},
+		{
+			"name": "ROOM: it does not mind if that is the way that failed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "(free == best.freeAhead && along < bestAlong)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "ROOM: there is always somewhere to go",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "best.canGo = best.freeAhead >= kHudsonNavFeelEnough;",
+					"to": "best.canGo = true;"
+				}
+			]
+		},
+		{
+			"name": "TURN: it turns the other way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "*turnedZ = x * s + z * c;",
+					"to": "*turnedZ = -x * s + z * c;"
+				}
+			]
+		},
+		{
+			"name": "SHAPE: a wall he is touching is behind where the rays start",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_feel.cpp",
+					"from": "\t\tfrontX[i] -= wayX * kHudsonNavRayOverlap;\n\t\tfrontZ[i] -= wayZ * kHudsonNavRayOverlap;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

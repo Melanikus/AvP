@@ -1,0 +1,4 @@
+# What Hudson does to play invasion on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk 49822 -29299 23871 | liftdoorswitch
+walk 52755 -29299 23871 | dropswitch

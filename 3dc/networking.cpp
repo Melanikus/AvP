@@ -343,7 +343,13 @@ static void LoopbackOnlyAddress(ENetAddress *address)
 		RelayListRelay relays[kRelayListMostRelays];
 		int named = 0;
 
-		for (int i = 0; RelayList_Relays(relays, &named) && i < named && i < static_cast<int>(kRelayListMostRelays); i++)
+		// The list's relays as they are now, asked once
+		if (!RelayList_Relays(relays, &named))
+		{
+			named = 0;
+		}
+
+		for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays); i++)
 		{
 			if (relays[i].port < 1 || relays[i].port > 65535 || !TheRemoteRelay(relays[i]))
 			{
