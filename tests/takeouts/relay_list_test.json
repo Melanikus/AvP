@@ -848,6 +848,106 @@
 					"to": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n\n\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n"
 				}
 			]
+		},
+		{
+			"name": "a game's fingerprint isn't one of its fields, so every game with one is refused",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"fingerprint\", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }",
+					"to": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a bad fingerprint is called a bad text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return kRelayListBadFingerprint;",
+					"to": "return kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "a listing whose fingerprint is all 0 is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (fingerprint[i] != 0)",
+					"to": "if (fingerprint[i] == fingerprint[i])"
+				}
+			]
+		},
+		{
+			"name": "the body leaves the host's fingerprint out",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tAddName(w, \"fingerprint\");\n\tAddFingerprint(w, l.fingerprint);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fingerprint given to the host counts even when it's all 0",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;",
+					"to": "hostIdentityGiven = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room that opens with no identity is listed anyway",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listing doesn't keep the fingerprint its room opened with",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tmemcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the session says later changes a listing's fingerprint, which the list refuses on a PUT",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tl.version = static_cast<int>(session.version);\n",
+					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.fingerprint, 0, sizeof(l.fingerprint));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a POST or PUT doesn't send the listing's fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tout.fingerprint = l.fingerprint;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

@@ -67,6 +67,7 @@ namespace
 		int players;
 		int maxPlayers;
 		int version;
+		uint8_t fingerprint[kNetIdentityFingerprintBytes];   // this run's identity, as it was when the room opened
 	};
 
 	// Whether what the list shows of the game is the same: the pass and the round trip aren't shown, so they don't count here
@@ -365,6 +366,7 @@ namespace
 		out.maxPlayers = l.maxPlayers;
 		out.version = l.version;
 		out.hostMs = l.hostMs;
+		out.fingerprint = l.fingerprint;
 		return out;
 	}
 
@@ -767,6 +769,10 @@ namespace
 
 	// The page asked with no list to ask: its answer, which needs no thread
 	bool noListAnswerWaiting = false;
+
+	// This run's identity's fingerprint, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
+	uint8_t hostIdentity[kNetIdentityFingerprintBytes];
+	bool hostIdentityGiven = false;
 }
 
 // The list's name built into the game: the relay server's own, once its domain is bought. It's empty until then, and then there's no relay.
@@ -835,11 +841,42 @@ int Relay_ListPort(void)
 	return port;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: see relay_list.h
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	hostIdentityGiven = false;
+
+	if (!fingerprint)
+	{
+		return;
+	}
+
+	memcpy(hostIdentity, fingerprint, sizeof(hostIdentity));
+
+	// All 0 is what an identity never made looks like, so it counts as none
+	for (size_t i = 0; i < sizeof(hostIdentity); i++)
+	{
+		hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;
+	}
+}
+
 void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,
 	int hostMs, const SessionDescription &session)
 {
 	// What networking.cpp hands over is checked here too: a room the list couldn't take isn't sent
-	if (!RelayList_IsRegion(region) || !code || !Relay_IsCode(code, kRelayCodeLetters) || !pass || !Start())
+	if (!RelayList_IsRegion(region) || !code || !Relay_IsCode(code, kRelayCodeLetters) || !pass)
+	{
+		return;
+	}
+
+	// A listing without the host's fingerprint would send its joiners to a host they can't check, so it isn't sent at all
+	if (!hostIdentityGiven)
+	{
+		LogString("Relay list: this run has no identity to show joiners yet, so the game isn't put on the list");
+		return;
+	}
+
+	if (!Start())
 	{
 		return;
 	}
@@ -851,6 +888,7 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 	memcpy(l.pass, pass, sizeof(l.pass));
 	l.passTime = passTime;
 	l.hostMs = hostMs;
+	memcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));
 	ShowSession(session, l);
 
 	EnterCriticalSection(&shared->lock);

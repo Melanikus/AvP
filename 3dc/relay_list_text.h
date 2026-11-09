@@ -11,6 +11,10 @@
 // else, anywhere in an answer, refuses the whole of it, with the reason, rather than keeping the part that looked right.
 //
 // tests/relay_list_test.cpp tries every refusal, and the bodies.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's fingerprint, the short name of the identity
+// that host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A
+// host sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
 
 #ifndef RELAY_LIST_TEXT_H
 #define RELAY_LIST_TEXT_H
@@ -19,6 +23,7 @@
 #include <stdint.h>
 
 #include "relay_shared.h"
+#include "net_identity.h"   // a fingerprint's size, and the one rule for its 32 hex digits, which the joining code uses too
 
 enum
 {
@@ -33,7 +38,7 @@ enum
 	kRelayListMostSeconds = 31536000,    // how long a game has been listed: a year at most
 	kRelayListMostHostMs = 9999,         // the host's round trip to its relay, in ms; 0 if it wasn't measured
 	kRelayListMostLevelNumber = 100,     // 0 to 99 for a stock level, 100 for a custom one, found by its name
-	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 41,111 bytes)
+	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 46,011 bytes)
 	kRelayListMostRelaysBytes = 4096,    // an answer to GET /v1/relays: 4 KB at most (its worst case is 1,868 bytes)
 	kRelayListMostOwnerBytes = 1024,     // an answer to POST: {"owner"}, far less than this
 	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
@@ -58,6 +63,7 @@ struct RelayListGame
 	int version;
 	int hostMs;
 	long seconds;
+	uint8_t fingerprint[kNetIdentityFingerprintBytes];   // the host's identity for this run, which handshake B must find it holds
 };
 
 // One region's relay: where a game of that region is joined. networking.cpp reads these (RelayList_Relays).
@@ -106,6 +112,7 @@ struct RelayListListing
 	int maxPlayers;
 	int version;
 	int hostMs;
+	const uint8_t *fingerprint;                // this run's identity's fingerprint (net_identity.h): there has to be one, and not all 0
 };
 
 // Why an answer was refused. Each has its own words, for the log and for the tests.
@@ -134,7 +141,8 @@ enum RelayListRefusal
 	kRelayListTwice,           // two games with one region and code, or two relays for one region
 	kRelayListEndsTooSoon,     // the text stops before its end
 	kRelayListNotWhatComesNext, // something else where a , : } or ] has to be
-	kRelayListMoreAfterTheEnd  // more after the closing }
+	kRelayListMoreAfterTheEnd, // more after the closing }
+	kRelayListBadFingerprint   // a game's fingerprint that isn't 32 hex digits, small letters
 };
 
 // The words for a refusal: "a game has a field the protocol doesn't have", and so on
@@ -152,6 +160,7 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
+// A listing with no fingerprint, or one that's all 0 (no identity was made for this run), is one of those.
 bool RelayList_ListingBody(const RelayListListing &listing, const uint8_t *owner, char *body, size_t room);
 
 // The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
