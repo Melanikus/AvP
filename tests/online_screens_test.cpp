@@ -590,6 +590,15 @@ static void TestWords()
 	Check(strcmp(line, "CLIENT, Relay: paris, 12 ms (round trip, client to host through server), 9999 ms round trip to server") == 0,
 		"and so is a joiner's time to the server");
 
+	// Added 2026-11-09 by Melanikus for the AvP port: a joiner's own round trip to the host is capped too, with its time to the server and
+	// without (take-out row 39 wasn't noticed: only the host's and the server's times were tried past 9999)
+	OnlineScreens_PlayLineWords(false, "paris", 2000000000, 146, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: paris, 9999 ms (round trip, client to host through server), 146 ms round trip to server") == 0,
+		"and a joiner's round trip to the host, beside its time to the server");
+	OnlineScreens_PlayLineWords(false, "paris", 2000000000, -1, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: paris, 9999 ms (round trip, client to host through server)") == 0,
+		"and without a time to the server");
+
 	OnlineScreens_PlayLineWords(true, "", 12, -1, line, sizeof(line));
 	Check(strcmp(line, "HOST, Relay: a relay, 12 ms (round trip, host to server)") == 0, "a region that isn't known is said as a relay");
 

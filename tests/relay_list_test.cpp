@@ -830,7 +830,7 @@ static void TestTheCalls()
 	// The thread's news: every piece since the main thread last looked, kept in a ring, each written with "Relay list: " in front, so one
 	// search of the log finds them all
 	std::string const news = SourceSlice(source, "void WriteTheNews(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + piece);"),
+	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + std::string(piece, strnlen(piece, kMostNewsLetters)));"),
 		"the main thread writes every piece of the list's news, each starting \"Relay list: \"");
 
 	// The settings file is shared, so it mustn't point anyone's game at another list (settings_file_test): both settings are read only with -dev
