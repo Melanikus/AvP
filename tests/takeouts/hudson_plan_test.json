@@ -9705,6 +9705,26 @@
 					"to": ";"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a chain file of any size is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (all.size() > kChainMostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chain line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (line.size() > kChainLongestLine)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }

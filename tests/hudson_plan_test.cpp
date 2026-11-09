@@ -1610,6 +1610,12 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (plan.playStepSeconds > 0)\n\t\t{\n\t\t\tHudsonPlay_SetStepSeconds(plan.playStepSeconds);"), "a step's time is only changed when stepseconds= asks");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!movedToThisStep && now - stepStartedAt >= aStepHasTakenTooLong)"), "and the step's time limit is the one it set");
 
+	// The chain files are read whole, with limits: a file too big, or a line too long, is refused, never cut into steps it doesn't have
+	std::string const chainReader = Between(ReadSourceFile("3dc/avp/hudson.cpp"), "static void Hudson_NetLoadWalk()", "static void Hudson_NetWalk()");
+	Check(Has(chainReader, "std::string all(kChainMostBytes + 1, '\\0');") && Has(chainReader, "if (all.size() > kChainMostBytes)"), "a chain file bigger than its limit is refused, read one byte past it to know");
+	Check(Has(chainReader, "if (line.size() > kChainLongestLine)\n\t\t{\n\t\t\twalkSteps.clear();"), "and a line too long refuses the whole file, rather than being cut into another step");
+	Check(CountOf(chainReader, "fclose(file);") == 1, "and the file is closed once");
+
 	std::string const walkCode = ReadSourceFile("3dc/avp/hudson_nav.cpp");
 	std::string const frameCode = Between(walkCode, "bool HudsonNav_EndOfFrame(STRATEGYBLOCK *marine, long frame)", "int HudsonNav_ModulesWalkedInto()");
 
