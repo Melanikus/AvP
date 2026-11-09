@@ -1,0 +1,98 @@
+Every datagram a host sends goes through one place, and the program can put a hook there.
+
+Our own patch (AvP), for protocol version 2 (CRYPTO.md section 9, in the AVPx-Dedicated-Server
+repository): through a relay, every datagram the game's ENet sends between a joiner and its host
+is sealed end to end, so the relay can't read or change it. ENet lets a program see every packet
+that comes in (ENetHost::intercept), but has nothing for the ones that go out: it calls the
+socket itself. Its compressor can't stand in, because it leaves ENet's header as it was, and is
+used only when its output is smaller.
+
+- A new ENetHost::sendHook (ENetSendCallback). When the program sets it, every datagram the host
+  sends goes to the hook instead of the socket, and the hook sends it (or doesn't). It answers as
+  enet_socket_send does; a datagram it drops on purpose it counts as sent, and ENet takes it as
+  one lost on the way, as it does any lost datagram.
+- The host's two places that send (its connections' commands, and patch 006's answers outside a
+  connection) now both call one function, enet_protocol_send_datagram, which is the only caller
+  of enet_socket_send left in ENet. So nothing can leave around the hook.
+- With no hook set, nothing changes: the same calls reach the socket as before.
+
+diff --git a/host.c b/host.c
+index df80331..5025858 100644
+--- a/host.c
++++ b/host.c
+@@ -108,6 +108,7 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
+     host -> compressor.destroy = NULL;
+ 
+     host -> intercept = NULL;
++    host -> sendHook = NULL;
+ 
+     enet_list_clear (& host -> dispatchQueue);
+ 
+diff --git a/include/enet/enet.h b/include/enet/enet.h
+index bb39cef..e985f25 100644
+--- a/include/enet/enet.h
++++ b/include/enet/enet.h
+@@ -346,7 +346,13 @@ typedef enet_uint32 (ENET_CALLBACK * ENetChecksumCallback) (const ENetBuffer * b
+ 
+ /** Callback for intercepting received raw UDP packets. Should return 1 to intercept, 0 to ignore, or -1 to propagate an error. */
+ typedef int (ENET_CALLBACK * ENetInterceptCallback) (struct _ENetHost * host, struct _ENetEvent * event);
+- 
++
++/** Our own (AvP): callback that sends one datagram for the host, in place of its socket: every datagram the host sends goes
++    through it once it's set. It sends buffers[0:bufferCount-1], one after another, to address, and gives back the bytes it
++    took, 0 if nothing could go now, or -1 for an error, as enet_socket_send does. It may decide not to send a datagram at
++    all: then it gives back the bytes as if they had gone, and ENet takes it as a datagram lost on the way. */
++typedef int (ENET_CALLBACK * ENetSendCallback) (struct _ENetHost * host, const ENetAddress * address, const ENetBuffer * buffers, size_t bufferCount);
++
+ /** An ENet host for communicating with peers.
+   *
+   * No fields should be modified unless otherwise stated.
+@@ -403,6 +409,7 @@ typedef struct _ENetHost
+    enet_uint32          totalReceivedData;           /**< total data received, user should reset to 0 as needed to prevent overflow */
+    enet_uint32          totalReceivedPackets;        /**< total UDP packets received, user should reset to 0 as needed to prevent overflow */
+    ENetInterceptCallback intercept;                  /**< callback the user can set to intercept received raw UDP packets */
++   ENetSendCallback     sendHook;                    /**< Our own (AvP): callback the user can set to send every datagram in place of the socket, or NULL */
+    size_t               connectedPeers;
+    size_t               bandwidthLimitedPeers;
+    size_t               duplicatePeers;              /**< optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
+diff --git a/protocol.c b/protocol.c
+index 17e78f9..76c8574 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -117,6 +117,18 @@ enet_protocol_cookie_is_good (ENetHost * host, const ENetProtocol * command)
+     return enet_protocol_cookies_match (expected, command -> connect.cookie);
+ }
+ 
++/* Our own (AvP): every datagram this host sends goes out here, and nowhere else: through the program's send hook if it set
++   one, or straight to the socket if it didn't. The game sets a hook to seal each datagram end to end (protocol version 2);
++   with every send going through this one place, no datagram can leave around the hook, unsealed. */
++static int
++enet_protocol_send_datagram (ENetHost * host, const ENetAddress * address, const ENetBuffer * buffers, size_t bufferCount)
++{
++    if (host -> sendHook != NULL)
++      return host -> sendHook (host, address, buffers, bufferCount);
++
++    return enet_socket_send (host -> socket, address, buffers, bufferCount);
++}
++
+ /* Our own (AvP): sends a command straight back to the address the packet came from, outside any connection, with the
+    checksum worked out the way the other end will check it: from seed, in the checksum's place */
+ static void
+@@ -149,7 +161,7 @@ enet_protocol_send_outside_a_connection (ENetHost * host, enet_uint16 peerID, en
+         memcpy (packet + checksumAt, & checksum, sizeof (checksum));
+     }
+ 
+-    enet_socket_send (host -> socket, & host -> receivedAddress, & buffer, 1);
++    enet_protocol_send_datagram (host, & host -> receivedAddress, & buffer, 1);
+ }
+ 
+ /* Our own (AvP): answers a CONNECT that brought no good token with a token, and keeps nothing. The answer is smaller than the
+@@ -1997,7 +2009,7 @@ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int ch
+ 
+         currentPeer -> lastSendTime = host -> serviceTime;
+ 
+-        sentLength = enet_socket_send (host -> socket, & currentPeer -> address, host -> buffers, host -> bufferCount);
++        sentLength = enet_protocol_send_datagram (host, & currentPeer -> address, host -> buffers, host -> bufferCount);
+ 
+         enet_protocol_remove_sent_unreliable_commands (currentPeer, sentUnreliableCommands);
+ 

@@ -15,6 +15,8 @@ vcpkg_from_github(OUT_SOURCE_PATH SOURCE_PATH
         005-limits-on-what-a-peer-can-make-enet-hold.patch
         # A host keeps no place for a CONNECT until the sender brings back a token, so made-up sender addresses take no place.
         006-a-token-before-a-place.patch
+        # Every datagram a host sends goes out through one function, where the program can set a hook: the game seals each one end to end there (protocol version 2).
+        007-a-seal-before-the-wire.patch
 )
 
 # The reference SipHash, for patch 006's tokens, copied in as it is. siphash/README.md says where it came from.
