@@ -192,7 +192,8 @@ param(
     [switch]$Typed,
     [int]$CoopEnd = 0,
     [switch]$Relay,             # server #14: host or join through the relay on this machine (-relayhost or -relayjoin, by -Net)
-    [int]$RelayListPort = 8443  # and the relays' list's HTTPS port on this machine
+    [int]$RelayListPort = 8443, # and the relays' list's HTTPS port on this machine
+    [string]$RemoteRelay = ''   # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name. Needs -Relay
 )
 $ErrorActionPreference = 'Stop'
 
@@ -218,6 +219,9 @@ if (-not (Test-Path -LiteralPath $exePath)) { Stop-Here "there's no $Exe in $fol
 if ($Net -and -not $WhileInUse) { Stop-Here "-Net is two games at once on one machine, so it needs -TimingsDontMatter and -WhileInUse" }
 if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for a network run's host or joiner, so it needs -Net host or -Net join" }
 if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
+# A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
+if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
+if ($RemoteRelay -and ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$')) { Stop-Here "-RemoteRelay is a server's name, in small letters" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 
 $partner = ''
@@ -335,6 +339,7 @@ if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Coop) { $arguments += " coop=yes" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
+if ($RemoteRelay) { $arguments += " remoterelay=$RemoteRelay" }
 if ($KillKind) { $arguments += " killkind=$KillKind killat=$($KillAt -replace 'm', '-') killer=$Killer" }
 if ($BotStay) { $arguments += " botstay=yes" }
 if ($BotOwn) { $arguments += " botown=yes" }
@@ -382,7 +387,11 @@ Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredato
 
 # -Relay: the relays' list on this machine, as the game reads it only with -dev, which a run always has. Added to this run's own copy, so
 # no other run has it.
-if ($Relay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', 'RelayServer = localhost', "RelayListPort = $RelayListPort") }
+if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', 'RelayServer = localhost', "RelayListPort = $RelayListPort") }
+
+# -RemoteRelay: the one relay beyond this machine, whose list has the same name, at HTTPS's own port. The game is told the name with
+# remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay).
+if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru

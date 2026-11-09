@@ -264,6 +264,127 @@ static_assert(kNetRelayMostPassTime == kRelayListMostPassTime, "net_relay.h read
 // A region the screen is given is the list's, so it fits in networking.h's room for one
 static_assert(kNetRelayRegionLetters == static_cast<size_t>(kRelayListRegionLetters), "networking.h's region is as long as relay_list_text.h's");
 
+// Hudson's branch, for server #14's run through a relay on another machine (2026-11-09). A run with net= opens nothing beyond this machine,
+// with one exception the run asks for by name: the one relay it was given (Net_AllowOneRemoteRelay, from Hudson's remoterelay= word).
+//  - That relay is used at the one address its name gave the first time the list named it, and at no other (TheRemoteRelay).
+//  - The run's sockets then go on this machine's address that Windows sends to that relay from, never on 0.0.0.0 (LoopbackOnlyAddress).
+//  - Every socket there drops whatever comes from anywhere but that relay, before ENet reads a byte of it (RelayIntercept).
+// tools/hudson/run-net-pair.ps1 -RemoteRelay checks from outside the game that nothing else is open.
+static char remoteRelayName[254];          // the relay's name; empty: no relay beyond this machine
+static uint32_t remoteRelayAddress = 0;    // the one address it may have, as ENetAddress.host keeps it; 0 until the list has named it
+static uint32_t remoteRelayRoute = 0;      // this machine's address towards it, where the run's sockets go; 0 until it's been found
+
+bool Net_AllowOneRemoteRelay(const char *name)
+{
+	remoteRelayName[0] = 0;
+	remoteRelayAddress = 0;
+	remoteRelayRoute = 0;
+
+	// An empty name takes back any given before: this machine only, as a run with net= always was (a test's way to start again)
+	if (name && !name[0])
+	{
+		return true;
+	}
+
+	if (!name || strlen(name) >= sizeof(remoteRelayName) || !Relay_IsServerName(name))
+	{
+		return false;
+	}
+
+	strcpy(remoteRelayName, name);
+	return true;
+}
+
+// The one address the run let through, for hudson.cpp to write in the run's result (this file never turns an address into text); 0 if none
+uint32_t Net_RemoteRelayAddress()
+{
+	return remoteRelayAddress;
+}
+
+// Whether a relay from the list is the one the run was given: its name, at the address that name gave the first time. The first time pins
+// the address, and a different one later is left out.
+static bool TheRemoteRelay(const RelayListRelay &relay)
+{
+	if (!remoteRelayName[0] || _stricmp(relay.host, remoteRelayName) != 0 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
+	{
+		return false;
+	}
+
+	if (remoteRelayAddress == 0)
+	{
+		remoteRelayAddress = relay.address;
+		LogString("net: a Hudson run with net= uses the one relay it was given, at the one address its name gave (the run's result says which)");
+		return true;
+	}
+
+	if (relay.address != remoteRelayAddress)
+	{
+		LogString("net: the relay this run was given now looks up to another address, so it's left out");
+		return false;
+	}
+
+	return true;
+}
+
+// Where a socket of a run with net= goes: this machine's own address, 127.0.0.1, unless the run was given a relay and the list has named
+// it. Then it's this machine's address that Windows sends to that relay from, found by connecting a UDP socket to the relay, which sends
+// nothing at all, and asking the socket where it is. If that can't be found, it stays 127.0.0.1, and the relay just can't be reached.
+static void LoopbackOnlyAddress(ENetAddress *address)
+{
+	enet_address_set_host_ip(address, "127.0.0.1");
+
+	if (!remoteRelayName[0])
+	{
+		return;
+	}
+
+	if (remoteRelayRoute == 0)
+	{
+		RelayListRelay relays[kRelayListMostRelays];
+		int named = 0;
+
+		for (int i = 0; RelayList_Relays(relays, &named) && i < named && i < static_cast<int>(kRelayListMostRelays); i++)
+		{
+			if (relays[i].port < 1 || relays[i].port > 65535 || !TheRemoteRelay(relays[i]))
+			{
+				continue;
+			}
+
+			ENetSocket const probe = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+			ENetAddress to;
+			to.host = remoteRelayAddress;
+			to.port = static_cast<uint16_t>(relays[i].port);
+			ENetAddress mine;
+			mine.host = ENET_HOST_ANY;
+			mine.port = 0;
+
+			if (probe != ENET_SOCKET_NULL && enet_socket_connect(probe, &to) == 0 && enet_socket_get_address(probe, &mine) == 0
+				&& mine.host != ENET_HOST_ANY && mine.host != ENET_HOST_BROADCAST)
+			{
+				remoteRelayRoute = mine.host;
+			}
+
+			if (probe != ENET_SOCKET_NULL)
+			{
+				enet_socket_destroy(probe);
+			}
+
+			break;
+		}
+	}
+
+	if (remoteRelayRoute != 0)
+	{
+		address->host = remoteRelayRoute;
+	}
+}
+
+// Whether a run's socket is on the way to the relay beyond this machine, and so must hear that relay alone
+static bool OnTheRemoteRoute(const ENetAddress &address)
+{
+	return remoteRelayRoute != 0 && address.host == remoteRelayRoute;
+}
+
 // One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
 // own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
 // service. This checks the two that must never be sent to again, in case the list's rule ever changes: "any address" (0.0.0.0) and
@@ -276,8 +397,9 @@ static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 	}
 
 	// Hudson's branch: a run with net= opens nothing beyond this machine, so it uses only a relay on this machine (127.x), hosting or
-	// joining. A relay anywhere else is left out here, before anything is sent to it.
-	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address))
+	// joining, or the one relay beyond it that the run was given by name, at its one address (TheRemoteRelay, above). A relay anywhere
+	// else is left out here, before anything is sent to it.
+	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))
 	{
 		LogString("net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out");
 		return false;
@@ -339,6 +461,13 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 {
 	(void)event;
 	uint32_t const now = enet_time_get();
+
+	// Hudson's branch: a run's socket on the way to the one relay beyond this machine hears that relay alone, whatever else is going on
+	if (OnTheRemoteRoute(on->address) && on->receivedAddress.host != remoteRelayAddress)
+	{
+		relayStrangersDropped++;
+		return 1;
+	}
 
 	if (relayHosting && relayPicking)
 	{
@@ -474,7 +603,8 @@ static void RelayHostGiveUp(const char *why)
 
 	if (host)
 	{
-		host->intercept = NULL;
+		// Hudson's branch: a host on the way to the one relay beyond this machine still hears that relay alone (RelayIntercept)
+		host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;
 		host->duplicatePeers = kMostConnectionsFromOneAddress;
 	}
 
@@ -816,6 +946,12 @@ void Net_TimeRelaysForJoining()
 		ENetAddress any;
 		any.host = ENET_HOST_ANY;
 		any.port = 0;
+
+		// Hudson's branch: a run with net= puts this socket on this machine's own address too, or on the way to its one relay beyond it
+		if (NetLoopbackOnly)
+		{
+			LoopbackOnlyAddress(&any);
+		}
 
 		if (joinerTimingSocket == ENET_SOCKET_NULL || enet_socket_set_option(joinerTimingSocket, ENET_SOCKOPT_NONBLOCK, 1) < 0
 			|| enet_socket_bind(joinerTimingSocket, &any) < 0 || !joinerPicker.Start(joinerTimedCount, ports, random, now))
@@ -1603,7 +1739,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 
 			if (NetLoopbackOnly)
 			{
-				enet_address_set_host_ip(&ServerAddress, "127.0.0.1");
+				LoopbackOnlyAddress(&ServerAddress);
 			}
 
 			ServerAddress.port = netPortNumber;
@@ -1614,6 +1750,12 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			{
 				Con_PrintError("Failed to create ENet server");
 				return NET_FAIL;
+			}
+
+			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
+			if (OnTheRemoteRoute(ServerAddress))
+			{
+				host->intercept = RelayIntercept;
 			}
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
@@ -2871,9 +3013,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 	// create ENet client. It has no address of its own, because nobody needs to find it: it talks to its host, and gets whatever port is free. That also means two games on one machine don't fight over a port.
 	// A Hudson run with net= is the exception: it asks for this machine's own address, on any free port, so that nothing is open on any network the machine is on.
+	// With one relay beyond this machine given to the run, its address towards that relay instead (LoopbackOnlyAddress).
 	ENetAddress ourAddress;
 
-	enet_address_set_host_ip(&ourAddress, "127.0.0.1");
+	LoopbackOnlyAddress(&ourAddress);
 	ourAddress.port = 0;
 
 	// A Hudson run joins only a game on this machine. A session from anywhere else, which a search kept to this machine's own address can't find, is refused.
@@ -2890,6 +3033,12 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	{
 		Con_PrintError("Net_ConnectToSession - Failed to create Enet client");
 		return NET_FAIL;
+	}
+
+	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
+	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))
+	{
+		host->intercept = RelayIntercept;
 	}
 
 	// Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list. The relay's handshake goes first, from this new

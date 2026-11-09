@@ -146,6 +146,8 @@ extern char LevelName[];
 extern void RemovePickedUpObject(STRATEGYBLOCK *objectPtr);
 extern bool NetLoopbackSearch;                                      // networking.cpp
 extern bool NetLoopbackOnly;                                        // networking.cpp
+extern bool Net_AllowOneRemoteRelay(const char *name);              // networking.cpp: the one relay beyond this machine a run with net= may use
+extern uint32_t Net_RemoteRelayAddress();                           // networking.cpp: the one address that let through, 0 if none
 extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.cpp
 #include "dynblock.h"
 #include "bh_marine.h"
@@ -620,6 +622,15 @@ static void WriteResult(const char *howItEnded, int code)
 		{
 			fprintf(file, "net=%s net_stage=%s\n", plan.netMode == kHudsonNetHost ? "host" : "join", netStage);
 
+			// The one relay beyond this machine the run let through, by the address its name gave: the user's own server's, never a player's.
+			// ENet keeps the first of its four numbers in the lowest byte (see IsThisMachinesOwnAddress in networking.cpp).
+			uint32_t const remoteRelay = Net_RemoteRelayAddress();
+
+			if (remoteRelay != 0)
+			{
+				fprintf(file, "remote_relay_address=%u.%u.%u.%u\n", remoteRelay & 0xFFu, (remoteRelay >> 8) & 0xFFu, (remoteRelay >> 16) & 0xFFu, (remoteRelay >> 24) & 0xFFu);
+			}
+
 			if (smokeFailure[0])
 			{
 				fprintf(file, "smoke=failed: %s\n", smokeFailure);
@@ -860,6 +871,16 @@ int Hudson_CheckBeforeStarting()
 		{
 			WriteResult("net= needs a level that's on the game's multiplayer list, and this one isn't", kHudsonExitNoSuchLevel);
 			return kHudsonExitNoSuchLevel;
+		}
+
+		// A run is a test with nobody at the host to answer, so the host lets every joiner in without asking (the request to join, version 114)
+		Net_LetEveryJoinerIn(true);
+
+		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its name (hudson_plan.h)
+		if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))
+		{
+			WriteResult("remoterelay= isn't a server's name the game takes", kHudsonExitBadArguments);
+			return kHudsonExitBadArguments;
 		}
 	}
 

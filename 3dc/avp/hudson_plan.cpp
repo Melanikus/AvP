@@ -142,6 +142,10 @@ const char *const kHudsonRefusedSiegeFarWithoutSiege = "siegefar= says where a s
 const char *const kHudsonRefusedSiegeFromTooLong = "siegefrom= has a room name that's too long";
 const char *const kHudsonRefusedSiegeFromCharacter = "siegefrom= has a character a room name can't have here: write a space as _";
 const char *const kHudsonRefusedSiegeFromWithoutSiege = "siegefrom= says where a siege's enemies come from, so it needs siege=";
+const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no server's name";
+const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= has a name longer than a server's can be";
+const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character a server's name can't have here: small letters, digits, - and . only";
+const char *const kHudsonRefusedRemoteRelayWithoutNet = "remoterelay= says which relay a network run may use, so it needs net=";
 const char *const kHudsonRefusedSiegeTooLong = "siege= has a room name that's too long";
 const char *const kHudsonRefusedSiegeCharacter = "siege= has a character a room name can't have here";
 const char *const kHudsonRefusedSiegeNeedsAPair = "siege= is for a pair of games with coop=yes, and it's a fight of its own, so it has no other fight, kill, walk or hostile test";
@@ -374,6 +378,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenLook = false;
 	bool seenSiege = false;
 	bool seenSiegeFrom = false;
+	bool seenRemoteRelay = false;
 	bool seenSiegeFar = false;
 	bool seenCustomMap = false;
 	bool seenScreen = false;
@@ -1827,6 +1832,39 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				plan->siegeFrom[i] = c;
 			}
 		}
+		else if (WordIs(place, nameLength, "remoterelay"))
+		{
+			// Added 2026-11-09 by Melanikus for the AvP port (server #14): see remoteRelay in hudson_plan.h
+			if (seenRemoteRelay)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenRemoteRelay = true;
+
+			if (valueLength == 0)
+			{
+				return kHudsonRefusedRemoteRelayEmpty;
+			}
+
+			if (valueLength > kHudsonLongestRelayName)
+			{
+				return kHudsonRefusedRemoteRelayTooLong;
+			}
+
+			// A server's name, in small letters. networking.cpp checks it again as one (Relay_IsServerName): nothing on the command line is believed.
+			for (size_t i = 0; i < valueLength; i++)
+			{
+				char const c = value[i];
+
+				if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))
+				{
+					return kHudsonRefusedRemoteRelayCharacter;
+				}
+
+				plan->remoteRelay[i] = c;
+			}
+		}
 		else if (WordIs(place, nameLength, "siege"))
 		{
 			if (seenSiege)
@@ -2555,6 +2593,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenSiegeFrom && !seenSiege)
 	{
 		return kHudsonRefusedSiegeFromWithoutSiege;
+	}
+
+	if (seenRemoteRelay && plan->netMode == kHudsonNetNone)
+	{
+		return kHudsonRefusedRemoteRelayWithoutNet;
 	}
 
 	if (seenSiegeFar && !seenSiege)

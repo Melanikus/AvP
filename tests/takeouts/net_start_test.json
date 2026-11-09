@@ -2623,6 +2623,56 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a run given a relay beyond this machine still puts its sockets on 127.0.0.1",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\taddress->host = remoteRelayRoute;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the relay's name may point anywhere later",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a relay by any name is let through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "_stricmp(relay.host, remoteRelayName) != 0 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lost room leaves the host on the way to the relay hearing anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
+					"to": "host->intercept = NULL;"
+				}
+			]
+		},
+		{
+			"name": "a run's host on the way to the relay hears anyone when no relay is used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

@@ -8541,7 +8541,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\t\tif (NetLoopbackOnly)\n\t\t\t{\n\t\t\t\tenet_address_set_host_ip(&ServerAddress, \"127.0.0.1\");\n\t\t\t}\n\n",
+					"from": "\t\t\tif (NetLoopbackOnly)\n\t\t\t{\n\t\t\t\tLoopbackOnlyAddress(&ServerAddress);\n\t\t\t}\n\n",
 					"to": ""
 				}
 			]
@@ -8571,7 +8571,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address))",
+					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))",
 					"to": "if (false)"
 				}
 			]
@@ -8741,7 +8741,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-net-pair.ps1",
-					"from": "Off = (Test-SocketIsOffThisMachine 'tcp' \"$($_.State)\" \"$($_.LocalAddress)\" \"$($_.RemoteAddress)\")",
+					"from": "Off = (Test-SocketIsOffThisMachine 'tcp' \"$($_.State)\" \"$($_.LocalAddress)\" \"$($_.RemoteAddress)\" \"$($_.RemotePort)\" $remoteRelayAddress $remoteRelayRoute)",
 					"to": "Off = $false"
 				}
 			]
@@ -8751,7 +8751,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-net-pair.ps1",
-					"from": "Off = (Test-SocketIsOffThisMachine 'udp' '' \"$($_.LocalAddress)\" '')",
+					"from": "Off = (Test-SocketIsOffThisMachine 'udp' '' \"$($_.LocalAddress)\" '' '' $remoteRelayAddress $remoteRelayRoute)",
 					"to": "Off = $false"
 				}
 			]
@@ -8823,6 +8823,166 @@
 					"file": "tools/hudson/run-net-pair.ps1",
 					"from": "'-Frames', $thisFrames,",
 					"to": "'-Frames', $Frames,"
+				}
+			]
+		},
+		{
+			"name": "remoterelay= isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->remoteRelay[i] = c;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "remoterelay= takes capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))",
+					"to": "if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))"
+				}
+			]
+		},
+		{
+			"name": "remoterelay= is taken without net=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (seenRemoteRelay && plan->netMode == kHudsonNetNone)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "remoterelay= has no limit on its length",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\tif (valueLength > kHudsonLongestRelayName)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run's host asks about each joiner, with nobody there to answer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tNet_LetEveryJoinerIn(true);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: remoterelay= never reaches the networking code",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the address towards the relay can be 0.0.0.0",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t&& mine.host != ENET_HOST_ANY && mine.host != ENET_HOST_BROADCAST)\n",
+					"to": "\t\t\t\t)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a socket on the way to the relay hears anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (OnTheRemoteRoute(on->address) && on->receivedAddress.host != remoteRelayAddress)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result doesn't say which address was let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\t\tfprintf(file, \"remote_relay_address=%u.%u.%u.%u\\n\"",
+					"to": "\t\t\t\tfprintf(file, \"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with -RemoteRelay the watch lets no UDP through",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($protocol -eq 'udp' -and $localAddress -eq $allowedRoute)",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with -RemoteRelay the watch lets HTTPS through on any port",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": " -and $remoteAddress -eq $allowedRelay -and $remotePort -eq '443')",
+					"to": " -and $remoteAddress -eq $allowedRelay)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -RemoteRelay's name may give many addresses",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork)",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the record leaves out which relay was let through",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($RemoteRelay) { $lines += @(\"remote_relay=$RemoteRelay\", \"remote_relay_address=$remoteRelayAddress\", \"remote_relay_route=$remoteRelayRoute\") }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -CheckTheWatch leaves out the remote relay's other port",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "@('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true), ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games aren't told the relay's name",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games' list is still the one on this machine with -RemoteRelay",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'",
+					"to": "'RelayServer = localhost', 'RelayListPort = 8443'"
 				}
 			]
 		}

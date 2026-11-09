@@ -8,6 +8,8 @@ Each copy needs its own folder, because a run keeps its log, its result and its 
 
 WHY IT WATCHES THE SOCKETS: the game's network code isn't safe yet to have open to other machines, so a run with net= only uses this machine's own address, 127.0.0.1. The game's code says so, and this checks what it really did. Once a second, it asks Windows what each game has open. If either has anything on another address, it ends both, and says so. That's exit code 110. A connection a game makes itself (the relays' list, with -Relay) counts by the machine at its far end, which has to be this one; the rule is Test-SocketIsOffThisMachine, below.
 
+-RemoteRelay virginia.relay.avpx.test (server #14 through a relay on another machine): both games go through that one relay, and its list, at port 443, and through nothing else. The name is looked up once, before anything starts, and has to give exactly one IPv4 address; pair.txt records it, with this machine's address towards it. The watch then lets through exactly the games' UDP sockets on that address of this machine's and their HTTPS connections to that relay; anything else beyond this machine still ends both games. The games themselves use that relay alone, at that address, and drop whatever reaches their sockets from anywhere else (networking.cpp, Hudson's remoterelay= word).
+
 WHY SOMEONE SHOULD WATCH THE FIRST ONE: Windows can stop and ask whether to let a program on the network, and nothing here can see that question. Nothing should cause one, because of the above. This compares Windows' firewall rules for these two programs before and after, which shows a question that was answered, but only someone at the screen would see one that wasn't. A question appearing means stop and find out why.
 
 It won't start without a claude process, so that nothing is left starting games with nobody here.
@@ -61,6 +63,8 @@ param(
     [switch]$Typed,
     [switch]$Relay,              # server #14: the host hosts through the relay on this machine, and the joiner joins through it
     [int]$RelayListPort = 8443,  # the relays' list's HTTPS port on this machine
+    [string]$RemoteRelay = '',   # server #14 beyond this machine: the one relay both games may use, by its server's name. It means -Relay too
+
     [ValidateRange(0, 600)][int]$HostSpareSeconds = 30,  # the host plays this much longer than the joiner, so the joiner ends first (0: the same)
     [switch]$NoFilm,
     [int]$CoopEnd = 0,
@@ -91,10 +95,27 @@ function Stop-Here([string]$why)
 #    been given an address yet. That isn't a listener and hears nothing, so what decides is the far end, the machine it's connecting to: it has to be this one.
 #  - TCP that is only "Bound", with no far end (0.0.0.0 or ::): fine. Windows gives the connection a port a moment before it starts connecting, and the watch can look in that moment (server #14's second run,
 #    2026-11-09: "tcp Bound :::64861 to :::0"). A bound socket can't take a connection: only a listening one can, and one that went on to listen would show as listening the next second.
-function Test-SocketIsOffThisMachine([string]$protocol, [string]$state, [string]$localAddress, [string]$remoteAddress)
+#  - With -RemoteRelay (server #14 through a relay on another machine), exactly two things more are fine: a UDP socket on this machine's address towards that relay (route), where the games put their own
+#    (never 0.0.0.0), and a TCP connection, not a listener, to the relay's own address at port 443: its list, over HTTPS. Anything else beyond this machine is still a finding. The games drop whatever reaches
+#    their sockets from anywhere but that relay (networking.cpp), which nothing out here can see; this checks what they have open.
+function Test-SocketIsOffThisMachine([string]$protocol, [string]$state, [string]$localAddress, [string]$remoteAddress, [string]$remotePort = '', [string]$allowedRelay = '', [string]$allowedRoute = '')
 {
     $thisMachine = '^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
     $noAddress = '^(0\.0\.0\.0|::)$'
+
+    # (PowerShell's names don't care about capitals, so nothing here is called relay or route: those would be -Relay's switch)
+    if ($allowedRelay -and $allowedRoute)
+    {
+        if ($protocol -eq 'udp' -and $localAddress -eq $allowedRoute)
+        {
+            return $false
+        }
+
+        if ($protocol -eq 'tcp' -and $state -ne 'Listen' -and $remoteAddress -eq $allowedRelay -and $remotePort -eq '443')
+        {
+            return $false
+        }
+    }
 
     if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)
     {
@@ -125,18 +146,38 @@ if ($CheckTheWatch)
         @('tcp', 'Established', '127.0.0.1', '::10', $true), @('tcp', 'Bound', '::', '203.0.113.7', $true), @('tcp', 'SynSent', '::', '::', $true), @('tcp', 'Established', '::', '::', $true),
         @('tcp', 'Bound', '::', '::10', $true)
     )
+    # -RemoteRelay's: the same rule with one relay beyond this machine, at 203.0.113.50, and this machine's address towards it, 192.168.1.10. Each: what the socket is, its far end's port, and whether the
+    # watch must call it a finding. (These addresses are made up: 203.0.113.x is one the internet keeps for examples.)
+    $exampleRelay = '203.0.113.50'
+    $exampleRoute = '192.168.1.10'
+    $remoteCases = @(
+        @('udp', '', $exampleRoute, '', '', $false), @('udp', '', '127.0.0.1', '', '', $false),
+        @('udp', '', '192.168.1.11', '', '', $true), @('udp', '', '0.0.0.0', '', '', $true), @('udp', '', '::', '', '', $true), @('udp', '', $exampleRelay, '', '', $true),
+        @('tcp', 'SynSent', $exampleRoute, $exampleRelay, '443', $false), @('tcp', 'Established', $exampleRoute, $exampleRelay, '443', $false), @('tcp', 'SynSent', '0.0.0.0', $exampleRelay, '443', $false),
+        @('tcp', 'TimeWait', $exampleRoute, $exampleRelay, '443', $false), @('tcp', 'Bound', $exampleRoute, '0.0.0.0', '0', $false), @('tcp', 'SynSent', '::', '::1', '8443', $false),
+        @('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true), @('tcp', 'Established', $exampleRoute, '203.0.113.51', '443', $true), @('tcp', 'Established', $exampleRoute, '192.168.1.1', '443', $true),
+        @('tcp', 'Listen', $exampleRoute, '0.0.0.0', '0', $true), @('tcp', 'Listen', '0.0.0.0', '0.0.0.0', '0', $true), @('tcp', 'Listen', $exampleRelay, '0.0.0.0', '0', $true)
+    )
     $wrong = @()
     foreach ($case in $cases)
     {
         $said = Test-SocketIsOffThisMachine $case[0] $case[1] $case[2] $case[3]
         if ($said -ne $case[4]) { $wrong += "$($case[0]) $($case[1]) $($case[2]) to $($case[3]): the watch said finding=$said, and it should be $($case[4])" }
     }
+    foreach ($case in $remoteCases)
+    {
+        $said = Test-SocketIsOffThisMachine $case[0] $case[1] $case[2] $case[3] $case[4] $exampleRelay $exampleRoute
+        if ($said -ne $case[5]) { $wrong += "-RemoteRelay: $($case[0]) $($case[1]) $($case[2]) to $($case[3]):$($case[4]): the watch said finding=$said, and it should be $($case[5])" }
+    }
+    # And with no -RemoteRelay, the address towards a relay is just another address
+    if (-not (Test-SocketIsOffThisMachine 'udp' '' $exampleRoute '')) { $wrong += "with no -RemoteRelay, udp $exampleRoute should be a finding" }
+    if (-not (Test-SocketIsOffThisMachine 'tcp' 'Established' $exampleRoute $exampleRelay '443')) { $wrong += "with no -RemoteRelay, tcp to $($exampleRelay):443 should be a finding" }
     if ($wrong.Count -gt 0)
     {
         $wrong | ForEach-Object { Write-Host "run-net-pair: the watch is wrong: $_" }
         exit 1
     }
-    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count) kinds of socket"
+    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count + $remoteCases.Count + 2) kinds of socket"
     exit 0
 }
 
@@ -180,6 +221,32 @@ if (@(Get-Process -Name 'claude' -ErrorAction SilentlyContinue).Count -eq 0) { S
 $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(AvPx|debug_AvPx|AvP_Classic|AvP)$' })
 if ($running.Count -gt 0) { Stop-Here "the game is already running: $($running[0].ProcessName)" }
 
+# -RemoteRelay (server #14 through a relay on another machine, 2026-11-09): the relay's one address, looked up here once as the games' list will look it up (this machine's hosts file first; without a
+# line there, the network's name service, which for a .test name answers that there's no such name), and this machine's address towards it. The watch lets through exactly those, and nothing else.
+$remoteRelayAddress = ''
+$remoteRelayRoute = ''
+
+if ($RemoteRelay)
+{
+    if ($RemoteRelay.Length -gt 253 -or $RemoteRelay -cnotmatch '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$') { Stop-Here "-RemoteRelay is a server's name, in small letters" }
+
+    $Relay = [switch]::Present
+    $found = @()
+
+    try { $found = @([System.Net.Dns]::GetHostAddresses($RemoteRelay)) } catch { Stop-Here "-RemoteRelay's name doesn't look up to an address" }
+
+    if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { Stop-Here "-RemoteRelay's name has to look up to exactly one IPv4 address, and it looks up to $($found.Count)" }
+
+    $remoteRelayAddress = $found[0].IPAddressToString
+
+    # Not this machine (that's -Relay alone), nor "any address", nor one that's everyone's at once
+    if ($remoteRelayAddress -match '^(0|127|22[4-9]|2[3-5]\d)\.' -or $remoteRelayAddress -match '^169\.254\.') { Stop-Here "-RemoteRelay's address isn't one a relay on another machine can have" }
+
+    $remoteRelayRoute = @(Find-NetRoute -RemoteIPAddress $remoteRelayAddress -ErrorAction SilentlyContinue | Where-Object { $_.PSObject.Properties['IPAddress'] -and $_.IPAddress } | ForEach-Object { "$($_.IPAddress)" }) | Select-Object -First 1
+
+    if (-not $remoteRelayRoute -or $remoteRelayRoute -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' -or $remoteRelayRoute -match '^(0|127)\.') { Stop-Here "no address of this machine's towards -RemoteRelay's was found" }
+}
+
 $runHudson = Join-Path $PSScriptRoot 'run-hudson.ps1'
 $powershell = Join-Path $PSHOME 'powershell.exe'
 $readyFile = Join-Path $hostFull 'HudsonRun\My Games\Aliens versus Predator\hudson-net-ready.txt'
@@ -194,6 +261,9 @@ function Get-FirewallRulesForThese
 
 $rulesBefore = @(Get-FirewallRulesForThese)
 $lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames", "seconds=$Seconds", "host_spare_seconds=$HostSpareSeconds", "firewall_rules_before=$($rulesBefore.Count)")
+
+# Which relay beyond this machine the watch let through, and at which address: the user's own server's, never a player's
+if ($RemoteRelay) { $lines += @("remote_relay=$RemoteRelay", "remote_relay_address=$remoteRelayAddress", "remote_relay_route=$remoteRelayRoute") }
 
 function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]$outputName, [string]$kind = '')
 {
@@ -244,6 +314,7 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($kind -eq 'flood') { $words += @('-NetSecondPartner', "`"$joinFull`"") }
     if ($Typed) { $words += '-Typed' }
     if ($Relay) { $words += @('-Relay', '-RelayListPort', $RelayListPort) }
+    if ($RemoteRelay) { $words += @('-RemoteRelay', $RemoteRelay) }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 
@@ -265,10 +336,10 @@ function Get-SocketsOffThisMachine
     {
         # Each socket as the record writes it, and whether the watch's rule (above) calls it a finding
         $sockets = @(Get-NetUDPEndpoint -OwningProcess $game.Id -ErrorAction SilentlyContinue | ForEach-Object {
-            [pscustomobject]@{ Text = "udp $($_.LocalAddress):$($_.LocalPort)"; Off = (Test-SocketIsOffThisMachine 'udp' '' "$($_.LocalAddress)" '') }
+            [pscustomobject]@{ Text = "udp $($_.LocalAddress):$($_.LocalPort)"; Off = (Test-SocketIsOffThisMachine 'udp' '' "$($_.LocalAddress)" '' '' $remoteRelayAddress $remoteRelayRoute) }
         })
         $sockets += @(Get-NetTCPConnection -OwningProcess $game.Id -ErrorAction SilentlyContinue | ForEach-Object {
-            [pscustomobject]@{ Text = "tcp $($_.State) $($_.LocalAddress):$($_.LocalPort) to $($_.RemoteAddress):$($_.RemotePort)"; Off = (Test-SocketIsOffThisMachine 'tcp' "$($_.State)" "$($_.LocalAddress)" "$($_.RemoteAddress)") }
+            [pscustomobject]@{ Text = "tcp $($_.State) $($_.LocalAddress):$($_.LocalPort) to $($_.RemoteAddress):$($_.RemotePort)"; Off = (Test-SocketIsOffThisMachine 'tcp' "$($_.State)" "$($_.LocalAddress)" "$($_.RemoteAddress)" "$($_.RemotePort)" $remoteRelayAddress $remoteRelayRoute) }
         })
 
         foreach ($socket in $sockets)
