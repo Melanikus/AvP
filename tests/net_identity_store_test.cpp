@@ -63,6 +63,11 @@ bool SaveFolder_IsTheSecondCopy()
 static const wchar_t *const kKept = L"net_identity_store_test.bin";
 static const wchar_t *const kMissing = L"net_identity_store_test_missing.bin";
 static const wchar_t *const kFolder = L"net_identity_store_test_folder";
+static const wchar_t *const kLink = L"net_identity_store_test_link.bin";
+
+// CreateSymbolicLinkW's flag for making a link without being an administrator, in developer mode. Named by Windows' own headers only for
+// Windows 10, newer than this test's settings ask for, so it's written out: its value is 2 there.
+static DWORD const kLinkUnprivileged = 0x2;
 
 // The words the store seals with, as CRYPTO.md section 4.1 gives them: written out here, not taken from the store, so a change there shows
 static const char kWords[] = "AVPX identity v2";
@@ -469,6 +474,12 @@ static void TestTheSource()
 	Check(reader.find("if (!OwnedByThisUser(file))") != std::string::npos && reader.find("OwnedByThisUser") < reader.find("ReadFile(file,") &&
 		store.find("GetSecurityInfo(file, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,") != std::string::npos,
 		"the file's owner is checked on the handle it's read through, before a byte of it is read");
+
+	// Primary's read of caddf2d1: a link is opened as itself, never followed, and refused as a link before its owner or a byte is looked at
+	size_t const linkCheck = reader.find("if ((about.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)");
+	Check(reader.find("FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);") != std::string::npos && linkCheck != std::string::npos &&
+		linkCheck < reader.find("if (!OwnedByThisUser(file))") && linkCheck < reader.find("ReadFile(file,"),
+		"a link is opened as itself and refused as a link, before anything else is looked at");
 }
 
 // This Windows user's SID, from the test's own token
@@ -555,6 +566,19 @@ static void TestWhoseFile()
 		SetNamedSecurityInfoW(const_cast<wchar_t *>(kKept), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, user.data(), NULL, NULL, NULL);
 	}
 
+	// A link at the file's place, pointing at a good file of this user's: refused as a link, never followed (Primary's read of caddf2d1).
+	// Making a link needs an administrator, or Windows' developer mode. GitHub's runner is an administrator, so it can.
+	DeleteFileW(kLink);
+	bool const linked = CreateSymbolicLinkW(kLink, kKept, kLinkUnprivileged) != FALSE;
+	Check(linked, "the test could make a link to the kept file (GitHub's runner is an administrator, so it can)");
+	Dirty(&read);
+	why = NULL;
+	Check(linked && NetIdentityStore_LoadFrom(kLink, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) && why &&
+		strstr(why, "is a link") != NULL, "a link at the file's place is refused as a link, even one to a good file of this user's");
+	Check(NetIdentityStore_LoadFrom(kKept, &read, NULL) == kNetIdentityStoreLoaded, "while the file it points at is read as before");
+	NetIdentity_Free(&read);
+	DeleteFileW(kLink);
+
 	NetIdentity_Free(&made);
 }
 
@@ -572,6 +596,7 @@ int main()
 	DeleteFileW(kMissing);
 	DeleteFileW((std::wstring(kFolder) + L".new").c_str());
 	RemoveDirectoryW(kFolder);
+	DeleteFileW(kLink);
 
 	if (checksFailed)
 	{

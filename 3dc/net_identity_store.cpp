@@ -1,6 +1,7 @@
 // A player's identity kept between runs: the sealing (DPAPI) and the file. net_identity_store.h says what it's for, where it's kept, and
 // why. Written 2026-11-09 by Melanikus for the AvP port (#21). Modified 2026-11-09 by Melanikus for the AvP port: Primary's three findings
-// (%LOCALAPPDATA% rather than Documents, the file's owner checked and set, and its data flushed to the disk before it's put in place).
+// (%LOCALAPPDATA% rather than Documents, the file's owner checked and set, and its data flushed to the disk before it's put in place), and
+// his fourth: a link at the file's place is refused as a link, never followed.
 
 #include <windows.h>
 #include <wincrypt.h>
@@ -34,6 +35,7 @@ namespace
 
 	// Fixed words for why a file was refused, beyond its layout (net_identity_file.h has those)
 	const char *const kNotThisUsers = "the identity file isn't owned by this Windows user, so it may not be theirs";
+	const char *const kIsALink = "the identity file is a link, and the game only ever writes a plain file";
 	const char *const kUnsealedWrongSize = "the identity file's sealed part opened to the wrong size";
 	const char *const kHalvesDontMatch = "the identity file's private halves don't belong to its public ones";
 
@@ -96,15 +98,17 @@ namespace
 
 	// Reads a file into bytes, which has room for room of them, and no more than that. A file bigger than room is read only as far as room,
 	// which is one byte more than any good file, so the layout's reader (NetIdentityFile_Read) refuses it as too big. False if it isn't
-	// there (gone set), isn't this user's (notTheirs set), or couldn't be read.
-	bool ReadWholeFile(const wchar_t *path, uint8_t *bytes, size_t room, size_t *size, bool *gone, bool *notTheirs)
+	// there (gone set), is refused (refused set to the words why: a link, or not this user's), or couldn't be read.
+	bool ReadWholeFile(const wchar_t *path, uint8_t *bytes, size_t room, size_t *size, bool *gone, const char **refused)
 	{
 		*size = 0;
 		*gone = false;
-		*notTheirs = false;
+		*refused = NULL;
 
-		// Others may read it while it's read here, but nobody may write it
-		HANDLE const file = CreateFileW(path, GENERIC_READ | READ_CONTROL, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		// Others may read it while it's read here, but nobody may write it. A link is opened as itself, never followed to what it points at
+		// (FILE_FLAG_OPEN_REPARSE_POINT), so that it can be seen to be one, just below.
+		HANDLE const file = CreateFileW(path, GENERIC_READ | READ_CONTROL, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
 
 		if (file == INVALID_HANDLE_VALUE)
 		{
@@ -115,10 +119,27 @@ namespace
 			return false;
 		}
 
+		// The game only ever writes a plain file here. A link of any kind (a symbolic link, or another "reparse point") was put there by
+		// something else, so it's refused as a link, whatever it points at (Primary's read of caddf2d1, Tao 3).
+		BY_HANDLE_FILE_INFORMATION about;
+
+		if (!GetFileInformationByHandle(file, &about))
+		{
+			CloseHandle(file);
+			return false;
+		}
+
+		if ((about.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+		{
+			CloseHandle(file);
+			*refused = kIsALink;
+			return false;
+		}
+
 		if (!OwnedByThisUser(file))
 		{
 			CloseHandle(file);
-			*notTheirs = true;
+			*refused = kNotThisUsers;
 			return false;
 		}
 
@@ -265,18 +286,18 @@ NetIdentityStoreResult NetIdentityStore_LoadFrom(const wchar_t *path, NetIdentit
 	static uint8_t bytes[kNetIdentityFileMostBytes + 1];
 	size_t size = 0;
 	bool gone = false;
-	bool notTheirs = false;
+	const char *refused = NULL;
 
-	if (!ReadWholeFile(path, bytes, sizeof(bytes), &size, &gone, &notTheirs))
+	if (!ReadWholeFile(path, bytes, sizeof(bytes), &size, &gone, &refused))
 	{
 		if (gone)
 		{
 			return kNetIdentityStoreNoFile;
 		}
 
-		if (notTheirs)
+		if (refused)
 		{
-			*said = kNotThisUsers;
+			*said = refused;
 			return kNetIdentityStoreRefused;
 		}
 

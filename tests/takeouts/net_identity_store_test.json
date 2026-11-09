@@ -273,6 +273,26 @@
 					"to": "kFileName"
 				}
 			]
+		},
+		{
+			"name": "a link at the file's place is followed to what it points at",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);",
+					"to": "FILE_ATTRIBUTE_NORMAL, NULL);"
+				}
+			]
+		},
+		{
+			"name": "a link at the file's place is read as if it were the file",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if ((about.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }
