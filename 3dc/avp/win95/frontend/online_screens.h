@@ -9,6 +9,8 @@
 //   H1 someone asks to join, H2 the relay's news: the host's.
 //
 // Everything that comes from the network (a game's name, a player's name) is hostile until it's been through OnlineScreens_SafeName.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port: the check code's words, and the words for a host that's another v2 test build.
 
 #ifndef ONLINE_SCREENS_H
 #define ONLINE_SCREENS_H
@@ -190,6 +192,9 @@ enum OnlineWords
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,
 	kOnlineWordsRelayGone,
+	kOnlineWordsOtherBuild,           // J5: the host is a v2 test build from another commit, so the two can't play (added 2026-11-09)
+	kOnlineWordsCheckCodeMeans,       // J4 and J5: what the check code is for, under it (CRYPTO.md section 8, added 2026-11-09)
+	kOnlineWordsCheckCodeMeansHost,   // H1: the same, on the host's screen
 	kOnlineWordsCount
 };
 
@@ -217,5 +222,12 @@ void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 // and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet) leaves the time out, and above 9999
 // is 9999. words always ends with a 0.
 void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size);
+
+// THE CHECK CODE (protocol version 2, CRYPTO.md section 8: "always shown on the join screen"). Added 2026-11-09 by Melanikus for the AvP
+// port. Through a relay, the joiner and its host each work out the same 6 digits from their handshake (networking.h's
+// Net_RelayCheckCodeNow and Net_JoinRequestCheckCode). The two players read them to each other: if they're the same, nobody sat in the
+// middle. This writes "Check code: 123 456", in two threes so it's easy to read out. Anything that isn't exactly 6 digits gives "", so
+// nothing half-made is ever shown as a code. words always ends with a 0.
+void OnlineScreens_CheckCodeWords(const char *digits, char *words, size_t size);
 
 #endif

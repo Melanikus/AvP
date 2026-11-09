@@ -561,6 +561,119 @@ static void TestWords()
 	Check(strlen(words) == strlen("Joined through , 7 ms") + kRelayListRegionLetters, "in play too, a region is cut to 16 letters");
 }
 
+// ---- The check code (protocol version 2, CRYPTO.md section 8). Added 2026-11-09 by Melanikus for the AvP port.
+
+static std::string ReadSource(const char *name)
+{
+	FILE *file = fopen(name, "rb");
+	std::string text;
+
+	if (!file)
+	{
+		return text;
+	}
+
+	char block[4096];
+	size_t got = 0;
+
+	while ((got = fread(block, 1, sizeof(block), file)) > 0)
+	{
+		for (size_t i = 0; i < got; i++)
+		{
+			if (block[i] != '\r')
+			{
+				text += block[i];
+			}
+		}
+	}
+
+	fclose(file);
+	return text;
+}
+
+static bool Has(const std::string &text, const char *part)
+{
+	return text.find(part) != std::string::npos;
+}
+
+// The text from the first start up to the end after it, or "" if either isn't there
+static std::string Between(const std::string &text, const char *start, const char *end)
+{
+	size_t const from = text.find(start);
+	size_t const to = from == std::string::npos ? std::string::npos : text.find(end, from + strlen(start));
+	return to == std::string::npos ? std::string() : text.substr(from, to - from);
+}
+
+static void TestTheCheckCode()
+{
+	puts("The check code");
+
+	char words[64];
+	OnlineScreens_CheckCodeWords("123456", words, sizeof(words));
+	Check(strcmp(words, "Check code: 123 456") == 0, "6 digits are shown in two threes, easy to read out");
+	OnlineScreens_CheckCodeWords("000000", words, sizeof(words));
+	Check(strcmp(words, "Check code: 000 000") == 0, "and 0s are digits like any other");
+
+	struct NotACode
+	{
+		const char *digits;
+		const char *what;
+	};
+
+	NotACode const notCodes[] = {
+		{ "12345", "5 digits" },
+		{ "1234567", "7 digits" },
+		{ "12a456", "a letter among them" },
+		{ "12 456", "a space among them" },
+		{ "", "nothing" },
+		{ "-12345", "a sign" }
+	};
+
+	bool noneShown = true;
+
+	for (size_t i = 0; i < sizeof(notCodes) / sizeof(notCodes[0]); i++)
+	{
+		memset(words, 'x', sizeof(words));
+		OnlineScreens_CheckCodeWords(notCodes[i].digits, words, sizeof(words));
+		noneShown = noneShown && words[0] == '\0';
+	}
+
+	memset(words, 'x', sizeof(words));
+	OnlineScreens_CheckCodeWords(NULL, words, sizeof(words));
+	Check(noneShown && words[0] == '\0', "anything but exactly 6 digits shows no code at all: 5 or 7 digits, a letter, a space, a sign, or nothing");
+
+	// Looked at a byte at a time, never as a string, so a line left unended can't be read past its room
+	char small[8];
+	memset(small, 'x', sizeof(small));
+	OnlineScreens_CheckCodeWords("123456", small, sizeof(small));
+	Check(memcmp(small, "Check c", 7) == 0 && small[7] == '\0', "a line with too little room is cut, and always ended");
+
+	// Where the screens show it: the network's half (networking.h, Fifth's) and the drawing need the game, so the source is read
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	Check(!page.empty() && !menus.empty(), "the screens' sources were found and read");
+
+	std::string const joiner = Between(page, "static void DrawTheCheckCode(void)", "\n}\n");
+	Check(Has(joiner, "if (!Net_RelayCheckCodeNow(digits))") && Has(joiner, "OnlineScreens_CheckCodeWords(digits, line, sizeof(line));") &&
+		Has(joiner, "Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans)"), "a joiner's own code is shown, with what it's for, once its handshake has made one");
+
+	std::string const asking = Between(page, "bool OnlinePage_DrawAsking(void)", "\n}\n");
+	size_t const firstDraw = asking.find("DrawTheCheckCode();");
+	Check(firstDraw != std::string::npos && asking.find("DrawTheCheckCode();", firstDraw + 1) != std::string::npos,
+		"on the screen asking the host, and on the one saying the host let them in");
+
+	std::string const host = Between(page, "bool OnlineHost_AskCheckCode(char *line, size_t size)", "\n}\n");
+	Check(Has(host, "if (!hostIsAsked || !Net_JoinRequestCheckCode(askingWho, digits))") && Has(host, "OnlineScreens_CheckCodeWords(digits, line, size);"),
+		"the host's code is the one for the joiner whose request it's answering");
+	Check(Has(menus, "OnlineHost_AskCheckCode(checkCodeLine, sizeof(checkCodeLine));") &&
+		Has(menus, "if (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,") &&
+		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)"), "and it's shown under the asking line, with what it's for");
+
+	std::string const ended = Between(page, "bool OnlinePage_JoinEnded(void)", "\n}\n");
+	Check(Has(ended, "case kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));"),
+		"a host that's another test build of the v2 draft is said so, not taken for a join that just failed");
+}
+
 int main()
 {
 	TestTheTail();
@@ -571,6 +684,7 @@ int main()
 	TestSearch();
 	TestPingAndWaits();
 	TestWords();
+	TestTheCheckCode();
 
 	if (checksFailed)
 	{

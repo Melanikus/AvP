@@ -77,6 +77,11 @@ bool OnlinePage_JoinEnded(void);
 // The request waiting at this host, if there is one: its joiner's name made safe to draw, and how many seconds are left to answer it.
 bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft);
 
+// The check code for that request, as "Check code: 123 456" (OnlineScreens_CheckCodeWords), once the joiner's handshake through the relay
+// is done. False, with "" in line, before then, for a joiner on this network (no handshake), or with no request waiting. Asked after
+// OnlineHost_AskWaiting, each frame. Added 2026-11-09 by Melanikus for the AvP port (CRYPTO.md section 8).
+bool OnlineHost_AskCheckCode(char *line, size_t size);
+
 // The host's answer, from the menu's row. An answer for a request that's gone does nothing (Net_AnswerJoinRequest).
 void OnlineHost_Answer(bool yes);
 
