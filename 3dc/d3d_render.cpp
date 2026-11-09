@@ -62,6 +62,9 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   a run of Hudson playing a level on foot draws the way he means to walk and where he's been as real shapes in the level, with walls
 //   hiding them (only in such a run: a normal game draws none of it)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an animated polygon's corners are read in 16.16, as CreateTxAnimUVArray now gives them, so flowing animated textures move smoothly
+//   (#97, reported by Bobblen). See texture_animation.h
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -1800,6 +1803,14 @@ static void WriteSurfaceNormals(const POLYHEADER *polygon, int shapePolygon)
 	}
 }
 
+// How many of a polygon's corner numbers make one texel of its picture. An animated texture's corners come from CreateTxAnimUVArray
+// (kshape.cpp) in 16.16 fixed point, 65536 to a texel, so that a flowing one can move by less than a texel at a time, as it did in 1999.
+// Every other polygon's are whole texels. See texture_animation.h (#97).
+static float CornerNumbersPerTexel(const POLYHEADER *polygon)
+{
+	return (polygon->PolyFlags & iflag_txanim) ? 65536.0f : 1.0f;
+}
+
 void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr, int shapePolygon)
 {
 	// bjd - This is the function responsible for drawing level geometry and the players weapon
@@ -1812,8 +1823,8 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 	uint32_t texWidth, texHeight;
 	Tex_GetDimensions(textureID, texWidth, texHeight);
 
-	float RecipW = 1.0f / /*(float)*/ texWidth;
-	float RecipH = 1.0f / /*(float)*/ texHeight;
+	float RecipW = 1.0f / ((float)texWidth * CornerNumbersPerTexel(inputPolyPtr));
+	float RecipH = 1.0f / ((float)texHeight * CornerNumbersPerTexel(inputPolyPtr));
 
 	if (gunLayer) {
 		if (!weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode)) {
@@ -1944,8 +1955,9 @@ void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	uint32_t texWidth, texHeight;
 	Tex_GetDimensions(textureID, texWidth, texHeight);
 
-	float RecipW = 1.0f / (float) texWidth;
-	float RecipH = 1.0f / (float) texHeight;
+	// an animated polygon's corners are in 16.16 (see CornerNumbersPerTexel)
+	float RecipW = 1.0f / ((float)texWidth * CornerNumbersPerTexel(inputPolyPtr));
+	float RecipH = 1.0f / ((float)texHeight * CornerNumbersPerTexel(inputPolyPtr));
 
 //	mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL);
 	if (gunLayer) {
