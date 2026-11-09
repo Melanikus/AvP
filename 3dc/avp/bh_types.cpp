@@ -13,6 +13,11 @@
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 //   NpcModelIsLoaded: a character whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1;
 //   found through Bobblen's avp-forever, commit 207704e); a placed hierarchy whose model isn't there is taken out
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a link a level makes that finds nothing is written in the log, when the level's links are made and when a switch with one goes on
+//   or off (link_misses.h, #130)
+//   code that could never run is taken out (#135): the xenoborg morph room, which nothing in a level makes; the lift's change of
+//   environment, as every lift station is in the level being played; and a proximity door's door_lock_target, which nothing read
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -51,7 +56,6 @@
 #include "lighting.h"
 #include "bh_link_switch.h"
 #include "bh_binary_switch.h"
-#include "bh_spcl.h"
 #include "bh_agun.h"
 #include "bh_lift.h"
 #include "bh_light_fx.h"
@@ -75,6 +79,9 @@
 #include "pldghost.h"
 #include "bh_corpse.h"
 #include "logString.h"
+#include "link_misses.h"
+
+static_assert(kLinkNameLength == SB_NAME_LENGTH, "link_misses.h keeps names as long as a strategy block's");
 
 extern void M79GrenadeBehaviour(STRATEGYBLOCK *sbPtr);
 extern void ThrownStaffBehaviour(STRATEGYBLOCK *sbPtr);
@@ -734,10 +741,6 @@ void EnableBehaviourType(STRATEGYBLOCK* sbptr, AVP_BEHAVIOUR_TYPE sb_type, void 
 			sbptr->SBdataptr  = InitDatabase(bhdata, sbptr);
 			break;
 
-		case I_BehaviourXenoborgMorphRoom:
-			sbptr->SBdataptr = InitXenoMorphRoom (bhdata, sbptr);
-			break;
-
 		case I_BehaviourLightFX:
 		{
 			sbptr->SBdataptr = LightFXBehaveInit (bhdata, sbptr);
@@ -904,15 +907,9 @@ static void* DoorProxBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 
 
 	doorbhv->PDmctrl = morphctrl;
-	doorbhv->lockable_door = doortt->has_lock_target;
 
 	doorbhv->door_opening_speed=doortt->door_opening_speed;
 	doorbhv->door_closing_speed=doortt->door_closing_speed;
-
-	if(doortt->has_lock_target)
-		{
-			COPY_NAME(doorbhv->target_name, doortt->target_name);
-		}
 
 	sbptr->SBmorphctrl = doorbhv->PDmctrl;
 	sbptr->SBmorphctrl->ObMorphCurrFrame = 1; /* this should be closed*/
@@ -1116,6 +1113,80 @@ static void* InitDatabase(void* bhdata, STRATEGYBLOCK* sbptr)
 /*********************************************************************
 ******************************** ASSIGN SB  Names ********************/
 
+// The names already written in this level for a link that finds nothing, one list for each of link_misses.h's two lines, and how many
+// links aimed at placed NPCs this machine hasn't made. LinkMisses_LevelEnds empties them, from DestroyAllStrategyBlocks.
+static LinkMisses linkMissesAtLoad = {};
+static LinkMisses linkMissesOnRequest = {};
+static int linksToNpcsNotMadeHere = 0;
+
+void LinkMisses_LevelEnds(void)
+{
+	LinkMisses_Forget(&linkMissesAtLoad);
+	LinkMisses_Forget(&linkMissesOnRequest);
+	linksToNpcsNotMadeHere = 0;
+}
+
+// Writes the log's line for a link that found nothing, once a level for each name (link_misses.h)
+static void SayLinkMissing(LinkMisses *misses, bool onRequest, STRATEGYBLOCK *source, char const *what, char const *name)
+{
+	if (LinkMisses_IsNoName(name))
+	{
+		return;
+	}
+
+	// A placed NPC this machine hasn't made isn't a broken link: a machine that joined a network game makes none, and some are only made at
+	// another difficulty. These find nothing on purpose, so they're only counted.
+	if (LevelNameIsAPlacedNpc(name))
+	{
+		if (!onRequest)
+		{
+			linksToNpcsNotMadeHere++;
+		}
+
+		return;
+	}
+
+	switch (LinkMisses_Note(misses, name))
+	{
+		case kLinkMissWrite:
+		{
+			bool const hasPlace = source->DynPtr != 0;
+			std::string const from = LinkMisses_Source(what, source->SBname, hasPlace, hasPlace ? source->DynPtr->Position.vx : 0,
+				hasPlace ? source->DynPtr->Position.vy : 0, hasPlace ? source->DynPtr->Position.vz : 0);
+
+			LogString(onRequest ? LinkMisses_OnRequestLine(from, name) : LinkMisses_AtLoadLine(from, name));
+			break;
+		}
+
+		case kLinkMissFirstOneTooMany:
+			LogString(LinkMisses_TooManyLine(onRequest));
+			break;
+
+		default:
+			break;
+	}
+}
+
+// FindSBWithName, for a link the level makes: a name that finds nothing is written in the log. what says what the link is from.
+static STRATEGYBLOCK *FindLinkTarget(STRATEGYBLOCK *source, char const *what, char *name)
+{
+	STRATEGYBLOCK *const found = FindSBWithName(name);
+
+	if (!found)
+	{
+		SayLinkMissing(&linkMissesAtLoad, false, source, what, name);
+	}
+
+	return found;
+}
+
+void LinkMisses_SwitchWentOnOrOff(STRATEGYBLOCK *source, char const *targetName)
+{
+	SayLinkMissing(&linkMissesOnRequest, true, source, "a switch", targetName);
+}
+
+// Turns every name a level gives a link into the thing it names. It runs when a level starts and each time it starts again, after
+// everything in it has been made, and that's when the log hears of a link that finds nothing.
 void AssignAllSBNames()
 {
 	int stratblock = NumActiveStBlocks;
@@ -1136,7 +1207,7 @@ void AssignAllSBNames()
 							GLOBALASSERT((bs_bhv->bhvr_type == I_BehaviourBinarySwitch));
 							for (i=0; i<bs_bhv->num_targets; i++)
 							{
-								bs_bhv->bs_targets[i] = FindSBWithName(bs_bhv->target_names[i].name);
+								bs_bhv->bs_targets[i] = FindLinkTarget(sbptr, "a switch", bs_bhv->target_names[i].name);
 							}
 			 				break;
 						}
@@ -1149,12 +1220,12 @@ void AssignAllSBNames()
 
 							for(i=0;i<ls_bhv->num_linked_switches;i++)
 							{
-								ls_bhv->lswitch_list[i].bswitch = FindSBWithName(ls_bhv->lswitch_list[i].bs_name);
+								ls_bhv->lswitch_list[i].bswitch = FindLinkTarget(sbptr, "a link switch", ls_bhv->lswitch_list[i].bs_name);
 							}
 
 							for(i=0;i<ls_bhv->num_targets;i++)
 							{
-								ls_bhv->ls_targets[i].sbptr=FindSBWithName(ls_bhv->ls_targets[i].name);
+								ls_bhv->ls_targets[i].sbptr=FindLinkTarget(sbptr, "a link switch", ls_bhv->ls_targets[i].name);
 							}
 
 			 				break;
@@ -1163,7 +1234,7 @@ void AssignAllSBNames()
 					{
 						SWITCH_DOOR_BEHAV_BLOCK *switchDoorBehaviourPtr = (SWITCH_DOOR_BEHAV_BLOCK *)sbptr->SBdataptr;
 						if(*((int *)switchDoorBehaviourPtr->linkedDoorName) + *( ((int *)switchDoorBehaviourPtr->linkedDoorName)+1 ) )
-							switchDoorBehaviourPtr->linkedDoorPtr = FindSBWithName(switchDoorBehaviourPtr->linkedDoorName);
+							switchDoorBehaviourPtr->linkedDoorPtr = FindLinkTarget(sbptr, "a switch door", switchDoorBehaviourPtr->linkedDoorName);
 			 			/* may or may not be linked to another door */
 			 			// the name comes from the level file, and anything but a switch door would be read as one
 			 			if(switchDoorBehaviourPtr->linkedDoorPtr && switchDoorBehaviourPtr->linkedDoorPtr->I_SBtype != I_BehaviourSwitchDoor)
@@ -1172,17 +1243,6 @@ void AssignAllSBNames()
 						}
 			 			break;
 					}
-					case I_BehaviourProximityDoor:
-						{
-							PROXDOOR_BEHAV_BLOCK *doorbhv;
-						 	doorbhv = (PROXDOOR_BEHAV_BLOCK*)sbptr->SBdataptr;
-							GLOBALASSERT((doorbhv->bhvr_type == I_BehaviourProximityDoor));
-							if(doorbhv->lockable_door)
-								{
-								 	doorbhv->door_lock_target = FindSBWithName(doorbhv->target_name);
-								}
-							break;
-						}
 					case I_BehaviourLift:
 					{
 						LIFT_BEHAV_BLOCK *lift_bhv;
@@ -1191,10 +1251,10 @@ void AssignAllSBNames()
 						GLOBALASSERT((lift_bhv->bhvr_type == I_BehaviourLift));
 						curr_stn = &lift_bhv->lift_station;
 						GLOBALASSERT(curr_stn);
-						curr_stn->lift_call_switch = FindSBWithName(curr_stn->lift_call_switch_name);
+						curr_stn->lift_call_switch = FindLinkTarget(sbptr, "a lift", curr_stn->lift_call_switch_name);
 						if((*(int*)&curr_stn->lift_floor_switch_name[0]) ||	(*(int*)&curr_stn->lift_floor_switch_name[4]))
-							curr_stn->lift_floor_switch = FindSBWithName(curr_stn->lift_floor_switch_name); //lifts with switches that don't teleport,don't know about their floor switches
-						curr_stn->lift_door = FindSBWithName(curr_stn->lift_door_name);
+							curr_stn->lift_floor_switch = FindLinkTarget(sbptr, "a lift", curr_stn->lift_floor_switch_name); //lifts with switches that don't teleport,don't know about their floor switches
+						curr_stn->lift_door = FindLinkTarget(sbptr, "a lift", curr_stn->lift_door_name);
 
 						// find my module pointer
 
@@ -1206,7 +1266,7 @@ void AssignAllSBNames()
 						}
 
 						// find the controlling lift behave block
-						lift_bhv->control_sb = FindSBWithName(lift_bhv->control_sb_name);
+						lift_bhv->control_sb = FindLinkTarget(sbptr, "a lift", lift_bhv->control_sb_name);
 
 						{
 							LIFT_STATION **lift_array;
@@ -1245,28 +1305,15 @@ void AssignAllSBNames()
 							GLOBALASSERT(lift_bhv->lift_control->curr_station == -1);
 
 							lift_bhv->lift_control->curr_station = curr_stn->num_floor;
-							if(curr_stn->env == AvP.CurrentEnv)
+							if(curr_stn->lift_call_switch)
 							{
-								if(curr_stn->lift_call_switch)
-								{
-									// turn on the floor lights
-									RequestState(curr_stn->lift_call_switch, 1, 0);
-									if((*(int*)&curr_stn->lift_floor_switch_name[0]) ||	(*(int*)&curr_stn->lift_floor_switch_name[4]))
-										RequestState(curr_stn->lift_floor_switch, 1, 0);
-								}
+								// turn on the floor lights
+								RequestState(curr_stn->lift_call_switch, 1, 0);
+								if((*(int*)&curr_stn->lift_floor_switch_name[0]) ||	(*(int*)&curr_stn->lift_floor_switch_name[4]))
+									RequestState(curr_stn->lift_floor_switch, 1, 0);
 							}
 						}
 
-						break;
-					}
-
-					case I_BehaviourXenoborgMorphRoom:
-					{
-						XENO_MORPH_ROOM_DATA * xmrd = (XENO_MORPH_ROOM_DATA *)sbptr->SBdataptr;
-
-						GLOBALASSERT (xmrd->bhvr_type == I_BehaviourXenoborgMorphRoom);
-
-						xmrd->DoorToRoom = FindSBWithName(xmrd->doorID);
 						break;
 					}
 
@@ -1276,49 +1323,49 @@ void AssignAllSBNames()
 					case I_BehaviourAlien:
 						{
 							ALIEN_STATUS_BLOCK *alienStatus = (ALIEN_STATUS_BLOCK *)sbptr->SBdataptr;
-							alienStatus->death_target_sbptr = FindSBWithName(alienStatus->death_target_ID);
+							alienStatus->death_target_sbptr = FindLinkTarget(sbptr, "an alien's death", alienStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourMarine:
 						{
 							MARINE_STATUS_BLOCK *marineStatus = (MARINE_STATUS_BLOCK *)sbptr->SBdataptr;
-							marineStatus->death_target_sbptr = FindSBWithName(marineStatus->death_target_ID);
+							marineStatus->death_target_sbptr = FindLinkTarget(sbptr, "a marine's death", marineStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourPredator:
 						{
 							PREDATOR_STATUS_BLOCK *predatorStatus = (PREDATOR_STATUS_BLOCK *)sbptr->SBdataptr;
-							predatorStatus->death_target_sbptr = FindSBWithName(predatorStatus->death_target_ID);
+							predatorStatus->death_target_sbptr = FindLinkTarget(sbptr, "a predator's death", predatorStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourXenoborg:
 						{
 							XENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbptr->SBdataptr;
-							xenoStatus->death_target_sbptr = FindSBWithName(xenoStatus->death_target_ID);
+							xenoStatus->death_target_sbptr = FindLinkTarget(sbptr, "a xenoborg's death", xenoStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourAutoGun:
 						{
 							AUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbptr->SBdataptr;
-							agunStatus->death_target_sbptr = FindSBWithName(agunStatus->death_target_ID);
+							agunStatus->death_target_sbptr = FindLinkTarget(sbptr, "a sentry gun's death", agunStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourQueenAlien:
 						{
 							QUEEN_STATUS_BLOCK *queenStatus = (QUEEN_STATUS_BLOCK *)sbptr->SBdataptr;
-							queenStatus->death_target_sbptr = FindSBWithName(queenStatus->death_target_ID);
+							queenStatus->death_target_sbptr = FindLinkTarget(sbptr, "the queen's death", queenStatus->death_target_ID);
 
 			 				break;
 						}
 					case I_BehaviourFaceHugger:
 						{
 							FACEHUGGER_STATUS_BLOCK *facehuggerStatus = (FACEHUGGER_STATUS_BLOCK *)sbptr->SBdataptr;
-							facehuggerStatus->death_target_sbptr = FindSBWithName(facehuggerStatus->death_target_ID);
+							facehuggerStatus->death_target_sbptr = FindLinkTarget(sbptr, "a facehugger's death", facehuggerStatus->death_target_ID);
 
 			 				break;
 						}
@@ -1332,11 +1379,11 @@ void AssignAllSBNames()
 								SPECIAL_TRACK_POINT* stp=&to_bhv->special_track_points[i];
 								for(j=0;j<stp->num_targets;j++)
 								{
-									stp->targets[j].target_sbptr=FindSBWithName(stp->targets[j].target_name);
+									stp->targets[j].target_sbptr=FindLinkTarget(sbptr, "a track", stp->targets[j].target_name);
 								}
 							}
 
-							to_bhv->destruct_target_sbptr=FindSBWithName(to_bhv->destruct_target_ID);
+							to_bhv->destruct_target_sbptr=FindLinkTarget(sbptr, "a track", to_bhv->destruct_target_ID);
 
 			 				break;
 						}
@@ -1350,7 +1397,7 @@ void AssignAllSBNames()
 								SPECIAL_TRACK_POINT* stp=&ph_bhv->special_track_points[i];
 								for(j=0;j<stp->num_targets;j++)
 								{
-									stp->targets[j].target_sbptr=FindSBWithName(stp->targets[j].target_name);
+									stp->targets[j].target_sbptr=FindLinkTarget(sbptr, "a hierarchy", stp->targets[j].target_name);
 								}
 							}
 
@@ -1364,7 +1411,7 @@ void AssignAllSBNames()
 							{
 								if(objectstatusptr->event_target)
 								{
-									objectstatusptr->event_target->event_target_sbptr=FindSBWithName(objectstatusptr->event_target->event_target_ID);
+									objectstatusptr->event_target->event_target_sbptr=FindLinkTarget(sbptr, "an object", objectstatusptr->event_target->event_target_ID);
 								}
 							}
 							break;
@@ -1376,7 +1423,7 @@ void AssignAllSBNames()
 							PLACED_LIGHT_BEHAV_BLOCK* pl_bhv=(PLACED_LIGHT_BEHAV_BLOCK*)sbptr->SBdataptr;
 							if(pl_bhv)
 							{
-								pl_bhv->destruct_target_sbptr=FindSBWithName(pl_bhv->destruct_target_ID);
+								pl_bhv->destruct_target_sbptr=FindLinkTarget(sbptr, "a light", pl_bhv->destruct_target_ID);
 
 							}
 							break;
@@ -1387,7 +1434,7 @@ void AssignAllSBNames()
 							VIDEO_SCREEN_BEHAV_BLOCK* videoScreen=(VIDEO_SCREEN_BEHAV_BLOCK*)sbptr->SBdataptr;
 							if(videoScreen)
 							{
-								videoScreen->destruct_target_sbptr=FindSBWithName(videoScreen->destruct_target_ID);
+								videoScreen->destruct_target_sbptr=FindLinkTarget(sbptr, "a video screen", videoScreen->destruct_target_ID);
 
 							}
 							break;
@@ -1395,6 +1442,12 @@ void AssignAllSBNames()
 						}
 			  }
 		}
+
+	// The links this machine finds nothing for on purpose, counted since the level was last made, in one line
+	if (linksToNpcsNotMadeHere > 0)
+	{
+		LogString(LinkMisses_NpcsNotMadeHereLine(linksToNpcsNotMadeHere));
+	}
 }
 
 
@@ -1423,8 +1476,6 @@ void ObjectBehaviours(void)
 		}
 	}
 #endif
-
-	RequestEnvChangeViaLift	= 0;
 
 	i = 0;
 
@@ -1653,10 +1704,6 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 
 		case I_BehaviourSmokeGenerator:
 			SmokeGeneratorBehaviour(sbptr);
-			break;
-
-		case I_BehaviourXenoborgMorphRoom:
-			XenoMorphRoomBehaviour (sbptr);
 			break;
 
 		case I_BehaviourLightFX:
@@ -2967,18 +3014,6 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 	// only destroy sbs if DoNotRemoveSB = 0
 	// and the destroy flag is set
 
-	// first check to see if we need the SB in the next env
-	// if we do we need to preserve the contents
-
-	if(SBNeededForNextEnv(sbptr))
-	{
-		//we take a copy and preserve everything except our
-		//ActiveStBlockList copy
-
-		DestroyActiveStrategyBlock(sbptr);
-		return;
-	}
-
 	// this notifies the game flow system that an object has been destroyed
 
 
@@ -3348,41 +3383,6 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 			break;
 		}
 
-		case I_BehaviourXenoborgMorphRoom:
-		{
-			XENO_MORPH_ROOM_DATA * xmrd = (XENO_MORPH_ROOM_DATA *)sbptr->SBdataptr;
-
-			if (sbptr->SBmorphctrl &&
-					sbptr->SBmorphctrl->ObMorphHeader &&
-					sbptr->SBmorphctrl->ObMorphHeader->mph_frames)
-				DeallocateMem( sbptr->SBmorphctrl->ObMorphHeader->mph_frames);
-
-			if (sbptr->SBmorphctrl &&
-					sbptr->SBmorphctrl->ObMorphHeader)
-				DeallocateMem( sbptr->SBmorphctrl->ObMorphHeader);
-
-			if (sbptr->SBmorphctrl)
-				DeallocateMem( sbptr->SBmorphctrl);
-
-			if (xmrd)
-			{
-				if (xmrd->tacb)
-				{
-					TXACTRLBLK *txactrl;
-					TXACTRLBLK *txactrl_next;
-
-					txactrl_next = xmrd->tacb;
-
-					while(txactrl_next)
-					{
-						txactrl = txactrl_next;
-						txactrl_next = txactrl->tac_next;
-						DeallocateMem((void*)txactrl);
-					}
-				}
-			}
-			break;
-		}
 		case I_BehaviourInanimateObject :
 		{
 			INANIMATEOBJECT_STATUSBLOCK* objectstatusptr=(INANIMATEOBJECT_STATUSBLOCK*)sbptr->SBdataptr;

@@ -13,6 +13,12 @@
 #include <string>
 #include <string.h>
 
+// The game's own folder, inside My Games. A second copy of the game on the same machine, for trying two players on one PC, keeps its
+// files in a folder of its own, so the two don't share a log, settings or saved games (-dev -secondcopy, winmain.cpp). Both names are fixed
+// here: no part of the command line, or of anything else from outside, ever becomes part of the path. (Added 2026-11-08.)
+static const char *const kSaveFolderGameName = "Aliens versus Predator";
+static const char *const kSaveFolderSecondCopyName = "Aliens versus Predator (second copy)";
+
 static const char *const kSaveFolderNothingGiven = "there's no folder to make the save folder in";
 static const char *const kSaveFolderCantMake = "a folder on the way to the save folder can't be made";
 static const char *const kSaveFolderTooLong = "the save folder's path is too long";
@@ -38,7 +44,8 @@ inline bool SaveFolder_MakeOne(const std::string &path, std::string *where)
 // under is the folder to make it in, and folder is where the answer goes, which has room for size characters.
 // It gives back 0 if it worked. Then folder holds the path, with / between its parts and one on the end, ready for a file's name.
 // Otherwise it gives back what went wrong, and folder is empty, so nobody can mistake half a path for the whole of one. where can be left out. If it's given, it says which folder was the trouble.
-inline const char *SaveFolder_Make(const char *under, char *folder, size_t size, std::string *where)
+// secondCopy makes the second copy's folder instead of the game's own (kSaveFolderSecondCopyName).
+inline const char *SaveFolder_Make(const char *under, char *folder, size_t size, std::string *where, bool secondCopy = false)
 {
 	if (where)
 	{
@@ -69,7 +76,7 @@ inline const char *SaveFolder_Make(const char *under, char *folder, size_t size,
 		return kSaveFolderCantMake;
 	}
 
-	path += "/Aliens versus Predator";
+	path += std::string("/") + (secondCopy ? kSaveFolderSecondCopyName : kSaveFolderGameName);
 
 	if (!SaveFolder_MakeOne(path, where))
 	{

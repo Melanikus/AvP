@@ -22,6 +22,7 @@
 //   every frame asks how big the HUD is drawn, so a new screen size or HUD size shows at once, and the Predator's symbols are drawn at
 //   that size (HUD-SCALE-1, see hud_scale.h). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 //   restarting a level forgets the target the sight had locked, as starting one does (ReInitHUD)
+//   RequestFadeToBlackLevel is no longer set here: the xenoborg morph room, the only thing that read it, is taken out (#135)
 
 
 /*
@@ -93,7 +94,6 @@ extern int NumActiveStBlocks;
 extern STRATEGYBLOCK *ActiveStBlockList[maxstblocks];
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;
-extern signed int RequestFadeToBlackLevel;
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
 extern fixed_t SmartTargetSightX, SmartTargetSightY;
 extern char CurrentlySmartTargetingObject;
@@ -214,9 +214,6 @@ void InitHUD(void)
 			LOCALASSERT(1==0);
 			break;
 	}
-
-	// This should be set elsewhere as well, but just to be sure!!
-	RequestFadeToBlackLevel = 0;
 }
 
 void InitMarineHUD(void)

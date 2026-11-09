@@ -281,7 +281,6 @@
     <ClCompile Include="..\..\3dc\avp\bh_rubberduck.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_self_destruct.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp" />
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_track.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_types.cpp" />
@@ -339,6 +338,7 @@
     <ClCompile Include="..\..\3dc\avp\sfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\shapes\cube.cpp" />
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp" />
+    <ClCompile Include="..\..\3dc\avp\near_wake.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_bind.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\coord_strategies.cpp" />
@@ -454,6 +454,9 @@
     <ClCompile Include="..\..\3dc\MusicPlayer.cpp" />
     <ClCompile Include="..\..\3dc\networking.cpp" />
     <ClCompile Include="..\..\3dc\net_close.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list_text.cpp" />
+    <ClCompile Include="..\..\3dc\relay_auto.cpp" />
     <ClCompile Include="..\..\3dc\net_host.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
@@ -540,6 +543,10 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake_game.h" />
+    <ClInclude Include="..\..\3dc\avp\link_misses.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
     <ClInclude Include="..\..\3dc\avp\win95\npc_ghosts.h" />
     <ClInclude Include="..\..\3dc\avp\bh_ais.h" />
@@ -571,7 +578,6 @@
     <ClInclude Include="..\..\3dc\avp\bh_rubberduck.h" />
     <ClInclude Include="..\..\3dc\avp\bh_self_destruct.h" />
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h" />
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h" />
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h" />
     <ClInclude Include="..\..\3dc\avp\bh_track.h" />
     <ClInclude Include="..\..\3dc\avp\bh_types.h" />
@@ -717,6 +723,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h" />
     <ClInclude Include="..\..\3dc\net_checks.h" />
     <ClInclude Include="..\..\3dc\net_host.h" />
+    <ClInclude Include="..\..\3dc\net_relay.h" />
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h" />
     <ClInclude Include="..\..\3dc\avp\sound_address.h" />
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
@@ -735,6 +742,10 @@
     <ClInclude Include="..\..\3dc\include\shape.h" />
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
     <ClInclude Include="..\..\3dc\net_close.h" />
+    <ClInclude Include="..\..\3dc\relay_list.h" />
+    <ClInclude Include="..\..\3dc\relay_list_text.h" />
+    <ClInclude Include="..\..\3dc\relay_auto.h" />
+    <ClInclude Include="..\..\3dc\relay_shared.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />

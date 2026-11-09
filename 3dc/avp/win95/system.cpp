@@ -8,6 +8,8 @@
 //   refused (level_log.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the log says which level file was loaded, with its size and MD5 sum (level_file_sum.h)
+//   ChangeEnvironmentToEnv and IntegrateNewEnvironment are taken out (#135): only the lift's change of environment called them, and
+//   it could never run
 
 #include "3dc.h"
 #include "level_file_sum.h"
@@ -421,66 +423,6 @@ static int ReadModuleMapList(MODULEMAPBLOCK *mmbptr)
 void UnloadRifFile()
 {
 	unload_rif(env_rif);
-}
-
-void ChangeEnvironmentToEnv(I_AVP_ENVIRONMENTS env_to_load)
-{
-	GLOBALASSERT(env_to_load != AvP.CurrentEnv);
-
-	GLOBALASSERT(Env_List[env_to_load]);
-
-	Destroy_CurrentEnvironment(); 
-	/* Patrick: 26/6/97
-	Stop and remove all sounds here */
-	SoundSys_StopAll();
-	SoundSys_RemoveAll(); 
-
-	Music_Stop();
-
-	// Loading functions
-	AvP.CurrentEnv = env_to_load;
-	LoadRifFile();
-}
-
-
-void IntegrateNewEnvironment()
-{
-	MODULEMAPBLOCK* mmbptr = &AvpCompiledMaps[0];
-
-	// elements we need form processsystemobjects
-
-	ReadMap(Map);                /* for chunck loader*/
-	ReadModuleMapList(mmbptr);
-
-	Global_ModulePtr = MainSceneArray;
-	PreprocessAllModules();
-	if (GetModuleVisArrays() == FALSE)
-	{
-		textprint("GetModuleVisArrays() failed\n");
-	}
-
-	// elements from start game for AI
-
-	InitObjectVisibilities();
-	InitPheromoneSystem();
-	BuildFarModuleLocs();
-	InitHive();
-
-	AssignAllSBNames();
-
-	/* KJL 20:54:55 05/15/97 - setup player vision (alien wideangle, etc) */
-	SetupVision();
-
-	UnloadRifFile();//deletes environment File_Chunk since it is no longer needed
-
-	/* Patrick: 26/6/97
-	Load our sounds for the new env */	
-	LoadSounds("PLAYER");
-
-	/* remove resident loaded 'fast' files */
-//	ffcloseall();
-
-	ResetFrameCounter();
 }
 
 const char *GameDataDirName = "avp_rifs";

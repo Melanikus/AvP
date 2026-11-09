@@ -129,6 +129,15 @@
     <ClCompile Include="..\..\3dc\net_close.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_list.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_list_text.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_auto.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -486,6 +495,9 @@
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\near_wake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\targeting.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -796,9 +808,6 @@
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp">
-      <Filter>Source Files\behaviours</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp">
@@ -1307,6 +1316,9 @@
     <ClInclude Include="..\..\3dc\net_host.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_relay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1395,6 +1407,18 @@
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\near_wake.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\near_wake_game.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\link_misses.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h">
@@ -1488,9 +1512,6 @@
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h">
-      <Filter>Header Files\behaviours</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h">
@@ -1611,6 +1632,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_close.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_list.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_list_text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_auto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_shared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\os_header.h">

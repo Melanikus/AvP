@@ -1,6 +1,10 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the M79's three grenades have numbers of their own, and so does a thrown staff
 //   NameFromTheLevel and BehaviourIsAnNpcTheHostRuns
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   LevelNameIsAPlacedNpc (#130)
+//   code that could never run is taken out (#135): the blocks kept for a lift's change of environment (MAX_PRESERVED_SB and the five
+//   calls), and the xenoborg morph room, whose number stays and says why
 #ifndef _stratdef_h_
 #define _stratdef_h_ 1
 
@@ -140,6 +144,8 @@ typedef enum bhvr_type
 
     I_BehaviourTest,
 
+    // The xenoborg morph room's number. The room itself was taken out (#135): nothing in a level ever made one. The number stays, so
+    // every kind after it keeps its number, as saved games carry these numbers (savegame.cpp reads them back).
     I_BehaviourXenoborgMorphRoom,
 
 	I_BehaviourLightFX,
@@ -180,7 +186,6 @@ typedef enum bhvr_type
 /* put the tags in here */
 
 #define SB_NAME_LENGTH  8	/* DO NOT CHANGE THIS! */
-#define MAX_PRESERVED_SB 20
 
 typedef struct
 {
@@ -251,6 +256,9 @@ extern const char *NpcNameInTheLevel(const STRATEGYBLOCK *sbPtr);
 
 // Is this kind one that only the host runs in a network game, with everyone else seeing what the host tells them?
 extern bool BehaviourIsAnNpcTheHostRuns(AVP_BEHAVIOUR_TYPE type);
+
+// Is this a name the level gives one of its placed NPCs, made here or not? In object_setup.cpp, which keeps the level's list.
+extern bool LevelNameIsAPlacedNpc(const char *name);
 extern STRATEGYBLOCK * AttachNewStratBlock(struct module* moptr,
 											 struct modulemapblock* momptr,
 											 struct displayblock* dptr);
@@ -269,19 +277,6 @@ extern void DestroyAllStrategyBlocks(void);
 
 /* This should be in PLAYER.  But Kevin was on holiday with his files checked out. */
 extern void GivePlayerCloakAway(void);
-
-
-
-
-// for lift and airlock code
-
-extern void InitPreservedSBs();
-extern void PreserveStBlocksInModule(MODULE* containing_mod);
-extern BOOL SBNeededForNextEnv(STRATEGYBLOCK* sbptr);
-extern void	AddPreservedSBsToActiveList();
-extern void TeleportPreservedSBsToNewEnvModule(MODULE* old_pos_module,
-											   MODULE* new_pos,
-											   int orient_diff);
 
 
 

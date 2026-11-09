@@ -15,6 +15,8 @@
 //
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It reads the source from the repository, and needs no game files.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 
 #include <fstream>
@@ -23,6 +25,7 @@
 
 #include "light_reach.h"
 #include "light_total_picture.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -66,18 +69,10 @@ static std::string ReadSourceFile(char const *name)
 	return text;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return text.substr(start, (end == std::string::npos) ? std::string::npos : end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Has(std::string const &text, char const *words)

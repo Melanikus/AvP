@@ -25,6 +25,7 @@
 //   the reload key loses nothing: see weapon_reload.h
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   MakeMatrixFromDirection gives back the matrix that turns nothing for a direction of nothing (NORMALISE-ZERO-1)
+//   UpdateWeaponShape is taken out (#135): only the lift's change of environment called it, and that could never run
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -3076,44 +3077,6 @@ static void StateDependentMovement(PLAYER_STATUS *playerStatusPtr, PLAYER_WEAPON
 }
 
 
-
-extern void UpdateWeaponShape(void)
-{
-	PLAYER_WEAPON_DATA *weaponPtr;
-	TEMPLATE_WEAPON_DATA *twPtr;
-    
-    /* access the extra data hanging off the strategy block */
-	PLAYER_STATUS *playerStatusPtr= (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
-    GLOBALASSERT(playerStatusPtr);
-    	
-	/* player's current weapon */
-    GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS);
-        
-    /* init a pointer to the weapon's data */
-    weaponPtr = &(playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot]);
-
-	/* Player doesn't have a weapon! This will eventually be changed into an assertion 
-	that the player *does* have a weapon */
-	if (weaponPtr->WeaponIDNumber == NULL_WEAPON)
-		return;
-
-    twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
-
-	GrabWeaponShape(weaponPtr);
-
-	if (!(twPtr->PrimaryIsMeleeWeapon)) 
-		GrabMuzzleFlashShape(twPtr);
-
-	PlayersWeapon.ObTxAnimCtrlBlks=weaponPtr->TxAnimCtrl;
-	if (twPtr->HasShapeAnimation) 
-	{
-		PlayersWeapon.ShapeAnimControlBlock=&weaponPtr->ShpAnimCtrl;
-	} 
-	else 
-	{
-		PlayersWeapon.ShapeAnimControlBlock=NULL;
-	}
-}
 
 void GetHierarchicalWeapon(char *riffname, char *hierarchyname, int sequence_type, int sub_sequence) 
 {

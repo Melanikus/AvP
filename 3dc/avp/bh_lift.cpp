@@ -2,6 +2,10 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a floor number from the level file must fit the list of stations before it is written there
 //   a lift with a station, door or module missing stays still, where it used to crash on its first frame or first move
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the lift's change of environment is taken out (#135). Every lift station is made in the level being played (add_lift, in
+//   object_setup.cpp), so the code for a station in another one could never run: CleanUpLiftControl, TeleportFloorSwitches, the
+//   checks of a station's environment, and the requests and copies they kept
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -29,20 +33,6 @@
 #include "psnd.h"
 #include "pldghost.h"
 
-// stuff for environment changing 
-
-extern void IntegrateNewEnvironment();
-extern int NumActiveBlocks;
-
-// Globals we are going to export
-
-int RequestEnvChangeViaLift	= 0;
-int RequestEnvChangeViaAirlock	= 0;
-
-LIFT_CONTROL_BLOCK	EC_Lift_Ctrl;
-MODULE Old_Pos_Module;
-
-static void TeleportFloorSwitches(MODULE* dest, MODULE* src, LIFT_CONTROL_BLOCK* liftCtrl);
 BOOL BadGuyInModuleOrNoPlayer();
 
 
@@ -73,22 +63,19 @@ void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 	COPY_NAME (sbptr->SBname, lift_tt->nameID);
 
 
-	// Setup module ref if not external
-	if (lift_tt->environment == (int)AvP.CurrentEnv)
+	// Setup module ref
 	{
-		{
-			MREF mref=lift_tt->my_module;
-			ConvertModuleNameToPointer (&mref, MainSceneArray[0]->sm_marray);
-		
-			my_mod = mref.mref_ptr;
-		}
-		GLOBALASSERT (my_mod);
+		MREF mref=lift_tt->my_module;
+		ConvertModuleNameToPointer (&mref, MainSceneArray[0]->sm_marray);
 
-		my_mod->m_sbptr = sbptr;
-		sbptr->SBmoptr = my_mod;
-		sbptr->SBmomptr = my_mod->m_mapptr;
-		sbptr->SBflags.no_displayblock = 1;
+		my_mod = mref.mref_ptr;
 	}
+	GLOBALASSERT (my_mod);
+
+	my_mod->m_sbptr = sbptr;
+	sbptr->SBmoptr = my_mod;
+	sbptr->SBmomptr = my_mod->m_mapptr;
+	sbptr->SBflags.no_displayblock = 1;
 
 	// loaded data - first the station
 
@@ -96,10 +83,8 @@ void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 	COPY_NAME(lift_stn->lift_door_name, lift_tt->lift_door_name);
 	COPY_NAME(lift_stn->lift_floor_switch_name, lift_tt->lift_floor_switch_name);
 	COPY_NAME(lift_stn->my_sb_name, lift_tt->my_module_name);
-	
-	lift_stn->env	    = static_cast<I_AVP_ENVIRONMENTS>(lift_tt->environment);
+
 	lift_stn->num_floor = lift_tt->num_floor;
-	lift_stn->orient    = lift_tt->orient;
 
 	// fill in the rest of the stn data;
 	
@@ -191,7 +176,6 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 	LIFT_BEHAV_BLOCK *lift_bhv;	
 	LIFT_CONTROL_BLOCK *lift_ctrl;
 	LIFT_STATION *curr_stn;
-	I_AVP_ENVIRONMENTS dest_env;
 
  	GLOBALASSERT(sbptr);
 	lift_bhv = (LIFT_BEHAV_BLOCK*)sbptr->SBdataptr;
@@ -208,13 +192,6 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 		 BLOCK
 	*/
 
-	/* the lifts will work between envs as well as on the same env 
-		 so the control of the doors in the other envs sin't actually set,
-		 but a record of the postion is maintained
-	*/
-
-
-		
 	if(lift_bhv->controller)
    	{
 		// everything below reads through the lift's list, its doors and its modules with no check of its own
@@ -304,7 +281,6 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 		 			lift_ctrl->prev_station = lift_ctrl->curr_station;
 		 			if(lift_stn->lift_door)
  					{
- 						// no door - must be on another env
  						RequestState(lift_stn->lift_door, 0, 0);
  					}
 		 			lift_ctrl->state = I_ls_closing_door;
@@ -322,29 +298,15 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 					MODULE* mptr;
 					
 					mptr = pos_stn->lift_module;
-					
-					// deal with the fact that the lift is in a different env
 
-					// same env - normal code
-					// called from us to another env -  normal code
-					// called from another env to us - jump the close door
+					// close the door before we change state to moving
 
-					if(pos_stn->env != AvP.CurrentEnv)
-						{
-	 						lift_ctrl->state = I_ls_moving;
-							lift_ctrl->delay_between_floors = LIFT_MOVE_DELAY;
-							break;
-						}							
-					
-					// otherwise run normal code
-					// close the door before we change state to moving						 
-			
 					door_state = GetState(pos_stn->lift_door);
 					
 					if(!door_state)
 						{
 							// turn off the current lift position station call switches
-							// run only when pos_stn is in our own env POSSIBLE BUG -
+							// POSSIBLE BUG -
 							// lift wont be called to our floor if there is an Alien in it
 
 							if(BadGuyInModuleOrNoPlayer())
@@ -381,64 +343,13 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 
 			case I_ls_moving:
 				{
-					int curr_station_num = lift_ctrl->curr_station;
 					LIFT_STATION *pos_stn = lift_ctrl->lift_stations[lift_ctrl->curr_station];
 					MODULE* mptr;
 					mptr = pos_stn->lift_module;
 
-					
-
-					dest_env = lift_ctrl->lift_stations[lift_ctrl->dest_station]->env;
-
 						lift_ctrl->delay_between_floors -= NormalFrameTime;
-					
-					// TRAP CHANGE OF ENVIRONMENT
-					// we need to trap it here so we don't have the delay
-					// between floors. However. The trap should make sure it is the nex array pos
 
-					if(AvP.CurrentEnv != dest_env)
-						{
-							// have to load an env - can we do it next - is the
-							// new env the next floor in the array??
-
-							if(lift_ctrl->motion == I_going_up)
-								{
-									curr_station_num --;												
-								}
-							else
-								{
-									curr_station_num ++;												
-								}
-							lift_ctrl->curr_station=curr_station_num;
-							if(curr_station_num == lift_ctrl->dest_station)
-								{
-									// OKAY chnage Environment VIA LIFT
-									// we need a copy of our current module pos
-									// (for the teleport), a copy of the
-									// SBs in our module and a copy of the lift
-									// control block
-
-									LIFT_STATION *lift_stn_old;
-									EC_Lift_Ctrl = *lift_ctrl;
-
-									lift_stn_old = EC_Lift_Ctrl.lift_stations[EC_Lift_Ctrl.prev_station];
-									Old_Pos_Module = *lift_stn_old->lift_module;				
-				
-									InitPreservedSBs();
-									PreserveStBlocksInModule(&Old_Pos_Module);
-													
-									EC_Lift_Ctrl.curr_station = curr_station_num;
-									RequestEnvChangeViaLift = 1;
-
-									// we now do the rest of the SBs. before we
-									// can chack the env - note that NOTHING can move
-									// into the lift now.
-								}
-						}
-
-					// else do normal code
-
-					else if((lift_ctrl->delay_between_floors < 0))
+					if((lift_ctrl->delay_between_floors < 0))
 						{
 							if(lift_ctrl->motion == I_going_up)
 								{
@@ -479,52 +390,19 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 
 								lift_stn_new->called = 0;
 
+								// every station has a module (LiftIsComplete), so this only guards against that changing
 								if(old_pos)
-								{	
-									// if we don't have an old pos, we must
-									// be coming from another env
+								{
 									TeleportContents(new_pos, old_pos,lift_ctrl->floor_switches_fixed);
 								}
 							}
 
-							else 
+							else
 							{
-							 	// interrupt monment to stop at new floor
-							 	//this should never happen in a seperate env
-							 	LIFT_STATION *lift_stn_new = lift_ctrl->lift_stations[lift_ctrl->curr_station];
-							 	LIFT_STATION *lift_stn_old = lift_ctrl->lift_stations[lift_ctrl->prev_station];
-							 	MODULE* old_pos, *new_pos;
-							 	// to trap button presses when moving between floors -
-							 	// not really ness and it complecates things
-							 	old_pos = lift_stn_old->lift_module;
-							 	new_pos = lift_stn_new->lift_module;
-#if 0						 				
-							
-							 	if(lift_stn_new->called)	
-						 		{
-						 			lift_ctrl->state = I_ls_opening_door;	
-						 			RequestState(lift_stn_new->lift_call_switch, 0, 0);
-						 			if(lift_stn_new->lift_floor_switch)
-						 				RequestState(lift_stn_new->lift_floor_switch, 0, 0);
-						 			RequestState(lift_stn_new->lift_door, 1, 0);
-
-						 			if(old_pos)
-						 				{	
-						 					// if we don't have an old pos, we must
-						 					// be coming from another env
-						 					TeleportContents(new_pos, old_pos,lift_ctrl->floor_switches_fixed);
-						 				}
-
-						 			lift_stn_new->called = 0;
-
-						 		}
-							 	else
-#endif
-						 		{												
-						 			// futher to go - move along now
-						 			lift_ctrl->delay_between_floors += LIFT_MOVE_DELAY;
-						 		}
-							 }
+								// further to go - move along now. The lift doesn't stop at a floor on the way, even one it was
+								// called to.
+								lift_ctrl->delay_between_floors += LIFT_MOVE_DELAY;
+							}
 						}
 						
 					break;
@@ -672,133 +550,4 @@ void TeleportContents(MODULE* new_pos, MODULE* old_pos,BOOL floor_switches_fixed
 											}
 									}
 		}
-}
-
-
-void CleanUpLiftControl()
-{
-	// okay - we have selected a new env AND it is the
-	// next env in the list - lets go with the load
-	// we need a copu list of strat blocks that WE DO NOT
-	// DEALLOCATE the behaviour / dyn blocks for. We then
-	// reinitialise AFTER these have been inserted into the
-
-
-	// ActiveStBlockList 
-	LIFT_STATION *lift_stn = EC_Lift_Ctrl.lift_stations[EC_Lift_Ctrl.dest_station];
-
-	char dest_mod_name[8];
-	MODULE *new_pos_module;
-	int orient_diff;
-
-	STRATEGYBLOCK* new_loc_sbptr;
-
-	COPY_NAME(dest_mod_name, lift_stn->my_sb_name);
-
-	orient_diff =  EC_Lift_Ctrl.lift_stations[EC_Lift_Ctrl.dest_station]->orient
-					- EC_Lift_Ctrl.lift_stations[EC_Lift_Ctrl.prev_station]->orient;
-
-
-	// DESTROYS ALL OUR OLD DATA - ONLY OUR
-	// COPIES REMAIN
-
-	ChangeEnvironmentToEnv(lift_stn->env);
-
-	IntegrateNewEnvironment();
-
-	// find where we have teleported to
-
-	new_loc_sbptr = FindSBWithName(dest_mod_name);
-	GLOBALASSERT(new_loc_sbptr);
-	new_pos_module = new_loc_sbptr->SBmoptr;
-
-	// teleport the bastrads
-	TeleportPreservedSBsToNewEnvModule(new_pos_module, &Old_Pos_Module,orient_diff);
-	AddPreservedSBsToActiveList();
-
-	// find the new control block anc copy our preserved one in
-	// need to recalc lift_station_new
-
-  	{
-  		LIFT_BEHAV_BLOCK *lift_bhv;	
-  		LIFT_CONTROL_BLOCK *lift_ctrl;
-  		LIFT_STATION *lift_stn_new;
-
-  		lift_bhv = (LIFT_BEHAV_BLOCK*)new_loc_sbptr->SBdataptr;
-  		GLOBALASSERT((lift_bhv->bhvr_type == I_BehaviourLift));
-  
-  		lift_ctrl = lift_bhv->lift_control;
-
-  		GLOBALASSERT(lift_ctrl->num_stations == EC_Lift_Ctrl.num_stations);
-
-  		// copy over the vital bits
-
-  		lift_ctrl->curr_station = EC_Lift_Ctrl.curr_station;
-  		lift_ctrl->prev_station = EC_Lift_Ctrl.prev_station;
-  		lift_ctrl->motion = EC_Lift_Ctrl.motion;
-  
-  		// and get into the right state
-
-  		lift_ctrl->state = I_ls_opening_door;					
-  		lift_ctrl->dest_station = -1;
-
-  		// and get the periphs into their right states
-		// get the new lift station
-  		lift_stn_new = lift_ctrl->lift_stations[lift_ctrl->curr_station];
-
-		//set all the other station switches to off to overdide
-		// the starting_station init in AssignAllSBNames
-		
-		{
-			int i;
-			LIFT_STATION *liftStnPtr;
-			
-			for(i=0; i < lift_ctrl->num_stations; i++)
-			{
-				liftStnPtr = lift_ctrl->lift_stations[i];
-				if(liftStnPtr->env == AvP.CurrentEnv)
-				{
-					RequestState(liftStnPtr->lift_call_switch, 0, 0);
-					RequestState(liftStnPtr->lift_floor_switch, 0, 0);
-					RequestState(liftStnPtr->lift_door, 0, 0);
-				}
-			}
-		}
-
-		// set our current stations periphs into the correct
-		// state
-
-
-		RequestState(lift_stn_new->lift_call_switch, 1, 0);
-		RequestState(lift_stn_new->lift_floor_switch, 1, 0);
-   		RequestState(lift_stn_new->lift_door, 1, 0);
-
-		TeleportFloorSwitches
-		(
-			lift_stn_new->lift_module,
-			lift_stn_new->lift_floor_switch->containingModule,
-			lift_ctrl			
-		);
-		
-  		InitPreservedSBs();
-
-  		UpdateWeaponShape(); // so we get the correct shape in the MSL
-  	}
-}
-
-
-
-
-
-static void TeleportFloorSwitches
-(
-	MODULE* dest,
-	MODULE* src,
-	LIFT_CONTROL_BLOCK * liftCtrl
-)
-{
-	if(dest != src)
-	{
-		TeleportContents(dest, src, 0);
-	}
 }

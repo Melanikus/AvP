@@ -3,6 +3,8 @@
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It uses no graphics card, and runs none of the game: the
 // decisions are all in the header. The last rows read the game's source files, to check they use those decisions the way the header says they do.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +16,7 @@
 
 #include "view_switches.h"
 #include "light_choice.h"
+#include "source_slice.h"
 
 // The switches themselves live in d3d_render.cpp. The header only has to know their names, and nothing here uses them.
 
@@ -400,19 +403,10 @@ static std::string ReadSourceFile(char const *name)
 	return text;
 }
 
-// The text from one marker up to the next one after it. Empty if either isn't there, so a row looking inside it fails instead of passing on nothing.
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Has(std::string const &text, char const *words)

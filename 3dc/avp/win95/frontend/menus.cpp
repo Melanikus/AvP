@@ -45,6 +45,9 @@
 //   a run with net= starts as a host or a client on this machine, without the multiplayer pages
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the Room echo row on the sound pages is saved when it changes, the same way the rendering page's rows are (REVERB-TOGGLE-1)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the multiplayer page asks the relay server's list where its relays are, and the page of games found asks it for its games as well
+//   as the LAN (relay_list.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -86,6 +89,7 @@
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
+#include "relay_list.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -152,6 +156,57 @@ void HandlePostGameFMVs(void);
 void HandlePreGameFMVs(void);
 
 static void SetupNewMenu(enum AVPMENU_ID menuID);
+
+// The relay server's games, for the page of games found: the last good answer, kept here so that they can be put back each time the page
+// is set up again. The page's list is emptied whenever a new search of the LAN starts, and these would go with it.
+static RelayListGame relayGamesFound[kRelayListMostGames];
+static int relayGamesKept = 0;
+
+// Puts the kept relay games on the page's list, after whatever the LAN found. Net_AddRelaySession leaves out a game that's there already,
+// one this machine can't play, and any once the list is full, so this can be called each time the page is set up.
+static void PutTheRelayGamesOnThePage(void)
+{
+	for (int i = 0; i < relayGamesKept; i++)
+	{
+		(void)Net_AddRelaySession(relayGamesFound[i]);
+	}
+}
+
+// Each frame of the page of games found: whether an answer has come from the relay server's list with games to show. An answer that
+// failed is written in the log, in the game's own words, never the server's.
+static bool TheRelayGamesHaveCome(void)
+{
+	int count = 0;
+	const char *why = NULL;
+
+	if (!RelayList_FoundGames(relayGamesFound, &count, &why))
+	{
+		return false;
+	}
+
+	relayGamesKept = why ? 0 : count;
+
+	if (why)
+	{
+		LogString(std::string("Relay list: no games from the list, because ") + why);
+	}
+
+	return relayGamesKept > 0;
+}
+
+// A join through a relay waits up to about 26 seconds for the relay's handshake, and the networking code asks this each 50 ms of it
+// (Net_SetRelayJoinWaitHook). It keeps the window answering Windows, so the game isn't marked "Not responding", and lets the player give up
+// with Esc, or by closing the game. False gives the join up.
+static bool KeepTheWindowAliveWhileJoining(void)
+{
+	extern bool bRunning;
+	extern unsigned char KeyboardInput[];
+
+	CheckForWindowsMessages();
+	DirectReadKeyboard();
+	return bRunning && !KeyboardInput[KEY_ESCAPE];
+}
+
 static void CountTheRowsOnThisPage(void);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
@@ -1138,7 +1193,8 @@ extern void AvP_UpdateMenus(void)
 	{
 		int selection = AvPMenus.CurrentlySelectedElement;
 
-		if (Net_UpdateSessionList(selection))
+		// The LAN's answers, or the relay server's: either way the page is set up again, and that puts the relay's games on it
+		if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())
 		{
 			// session list has changed, so we need to set the menu again
 			SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
@@ -1515,7 +1571,16 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				// save ip address (if it has been set)
 				SaveIPAddress(IP_Address_Name, IPAddressString);
 				Net_JoinGame();
+
+				// The relay server's games as well, once for each time the page is opened: the page is set up again each time its list
+				// changes, and asking then would ask again for every answer. A joiner needs the relays too, to reach a game's region.
+				relayGamesKept = 0;
+				RelayList_FindRelays();
+				RelayList_FindGames();
 			}
+
+			// After the LAN's search, which may have emptied the list, and before the page's rows are made from it
+			PutTheRelayGamesOnThePage();
 			MakeSelectSessionMenu();
 			break;
 		}
@@ -1622,6 +1687,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
+			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
+			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
+			RelayList_FindRelays();
+
 			//skirmishMode must be false
 			netGameData.skirmishMode = FALSE;
 
@@ -3701,8 +3770,17 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 						*bracket_pos = 0;
 					}
 
-					if (Net_ConnectToSession(s, MP_PlayerName) != NET_FAIL) {
+					// Only while this join waits: the hook is taken off again straight after, whatever happened
+					Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);
+					NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);
+					Net_SetRelayJoinWaitHook(NULL);
+
+					if (joined != NET_FAIL) {
 						SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
+					}
+					else if (SessionData[s].throughRelay) {
+						// The networking code's own fixed words, such as "that game is full": nothing from the network
+						LogString(std::string("Relay: couldn't join the game, because ") + Net_RelayJoinFailedWhy());
 					}
 				}
 			}

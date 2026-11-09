@@ -1,10 +1,13 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a game found can be one from the relay server's list: SESSION_DESC says so, with its region and code
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
 #include "TextureManager.h"
+#include "relay_list_text.h"
 
 extern bool mainMenu;
 
@@ -342,6 +345,9 @@ typedef struct
 	uint16_t port;
 	GUID Guid;
 	bool AllowedToJoin;
+	bool throughRelay;                               // a game from the relay server's list, joined through its region's relay (relay_list.h)
+	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
+	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
 } SESSION_DESC;
 
 #define MAX_NO_OF_SESSIONS 10

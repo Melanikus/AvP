@@ -3,6 +3,9 @@
 //   a switch that starts out moving needs a track to move along
 
 //   a saved switch has to be on a sequence of its own texture animation
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a walk-in box is also set off by a player near a sleeping NPC it wakes (near_wake.h), and a switch that goes on or off with a target
+//   that isn't in the level says so in the log (link_misses.h) (#130)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -20,8 +23,22 @@
 #include "pvisible.h"
 #include "plat_shp.h"
 #include "psnd.h"
+#include "near_wake_game.h"
 
 extern int ReturnPlayerSecurityClearance(STRATEGYBLOCK *sbPtr, unsigned int securityLevel);
+
+// A switch that has just gone on or off has sent its requests. A target that isn't in the level got nothing, and the log says so
+// (link_misses.h).
+static void SayTargetsNotThere(STRATEGYBLOCK *sbptr, BINARY_SWITCH_BEHAV_BLOCK const *bs_bhv)
+{
+	for (int i = 0; i < bs_bhv->num_targets; i++)
+	{
+		if (!bs_bhv->bs_targets[i])
+		{
+			LinkMisses_SwitchWentOnOrOff(sbptr, bs_bhv->target_names[i].name);
+		}
+	}
+}
 
 /*********************** SWITCH INIT *****************************/
 
@@ -302,8 +319,23 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		}
 	}
 
-	if(bs_bhv->switch_flags && SwitchFlag_UseTriggerVolume)
+	// A walk-in box is also set off by a player who comes near a sleeping NPC it wakes, as if walked into (near_wake.h). These say which one
+	// did, for the log.
+	bool setOffByNearness = false;
+	NearWakeSleeper nearSleeper;
+	double nearDistance = 0;
+
+	// switch_flags holds this one flag, and the test was written with && in 1999, which only worked because it's the only one
+	if(bs_bhv->switch_flags & SwitchFlag_UseTriggerVolume)
 	{
+		// The sleeping NPCs this box wakes
+		NearWakeSleepers sleepers;
+
+		if (NearWake_ThisMachineRunsNpcs())
+		{
+			NearWake_FindSleepers(sbptr, &bs_bhv->trigger_volume_min, &bs_bhv->trigger_volume_max, &sleepers);
+		}
+
 		/*See if switch has been set off*/
 		int i;
 		for (i=0; i<NumActiveStBlocks; i++)
@@ -327,17 +359,47 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 				}
 			}
 
-			if(needToTest&&
-				sbPtr->DynPtr->Position.vx > bs_bhv->trigger_volume_min.vx &&
-				sbPtr->DynPtr->Position.vx < bs_bhv->trigger_volume_max.vx &&
-				sbPtr->DynPtr->Position.vy > bs_bhv->trigger_volume_min.vy &&
-				sbPtr->DynPtr->Position.vy < bs_bhv->trigger_volume_max.vy &&
-				sbPtr->DynPtr->Position.vz > bs_bhv->trigger_volume_min.vz &&
-				sbPtr->DynPtr->Position.vz < bs_bhv->trigger_volume_max.vz)
+			if (!needToTest)
+			{
+				continue;
+			}
+
+			VECTORCH const &at = sbPtr->DynPtr->Position;
+			bool const inTheBox =
+				at.vx > bs_bhv->trigger_volume_min.vx &&
+				at.vx < bs_bhv->trigger_volume_max.vx &&
+				at.vy > bs_bhv->trigger_volume_min.vy &&
+				at.vy < bs_bhv->trigger_volume_max.vy &&
+				at.vz > bs_bhv->trigger_volume_min.vz &&
+				at.vz < bs_bhv->trigger_volume_max.vz;
+			// Near a sleeper, and in its room or in view of it: the user's "same room or in view", so nothing wakes through a floor
+			MODULE *const playerModule = sbPtr->containingModule;
+			int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance,
+				[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); });
+
+			if (inTheBox)
 	    	{
 	    		bs_bhv->request=I_request_on;
 				break;
 	    	}
+
+			if (sleeperNearBy >= 0)
+			{
+				// The whole box only if all else it does is open the way to the sleeper, the user's "only safe jobs"; otherwise the
+				// sleeper alone, and the box waits for the player as before
+				if (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))
+				{
+					bs_bhv->request=I_request_on;
+					setOffByNearness = true;
+					nearSleeper = sleepers.list[sleeperNearBy];
+				}
+				else
+				{
+					NearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);
+				}
+
+				break;
+			}
     	}
 	}
 
@@ -350,6 +412,12 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		else
 		{
 			bs_bhv->triggered_last = TRUE;
+
+			// Only when it really is set off, not on each frame the player stays near
+			if (setOffByNearness)
+			{
+				NearWake_SayBoxSetOff(nearSleeper, nearDistance);
+			}
 		}
 	}
 	else
@@ -357,6 +425,8 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		bs_bhv->triggered_last = FALSE;
 	}
 
+	// Whether it's on before this frame's turn, so that a change can be seen after it, for the log's line about a target that isn't there
+	BOOL const wasOn = bs_bhv->state;
 
 	switch(bs_bhv->bs_mode)
 		{
@@ -755,6 +825,11 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 			default:
 				GLOBALASSERT(2<1);
 		}
+
+	if (bs_bhv->state != wasOn)
+	{
+		SayTargetsNotThere(sbptr, bs_bhv);
+	}
 
 	bs_bhv->request = I_no_request;
 }

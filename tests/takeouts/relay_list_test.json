@@ -1,0 +1,758 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a list over 48 KB is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > mostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a 0 byte in a list is not looked for",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any escape is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (c != '\"' && c != '\\\\')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the character 0x7F is taken in a text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (byte < 0x20 || byte > 0x7E)\n\t\t\t\t{\n\t\t\t\t\treturn kRelayListBadText;",
+					"to": "if (byte < 0x20)\n\t\t\t\t{\n\t\t\t\t\treturn kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "an empty text is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return (why == kRelayListAccepted && length == 0) ? kRelayListBadText : why;",
+					"to": "return why;"
+				}
+			]
+		},
+		{
+			"name": "a number with a 0 in front is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(digits > 1 && *start == '0') || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a number with a point is not a bad number",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "after == '.' || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a number over its range is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (v < least || v > most)",
+					"to": "if (v < least)"
+				}
+			]
+		},
+		{
+			"name": "a number under its range is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (v < least || v > most)",
+					"to": "if (v > most)"
+				}
+			]
+		},
+		{
+			"name": "a field given twice is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (seen[field])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an entry missing a field is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!seen[f])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "more players than room is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (game.players > game.maxPlayers)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game for another version is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (game.version != g.ourVersion)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any 8 printable characters are a code",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(rule.text, length))) ? kRelayListBadCode : why;",
+					"to": "return why == kRelayListBadText ? kRelayListBadCode : why;"
+				}
+			]
+		},
+		{
+			"name": "any region of 16 printable characters is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !RelayList_IsRegion(rule.text))) ? kRelayListBadRegion",
+					"to": "(false)) ? kRelayListBadRegion"
+				}
+			]
+		},
+		{
+			"name": "a relay's host is taken as it comes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !RelayList_IsRelayHost(rule.text))) ? kRelayListBadHost",
+					"to": "(false)) ? kRelayListBadHost"
+				}
+			]
+		},
+		{
+			"name": "two games with one region and code are taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (strcmp(g.games[other].code, game.code) == 0 && strcmp(g.games[other].region, game.region) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game is known by its code alone",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " && strcmp(g.games[other].region, game.region) == 0)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "two relays for one region are taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (strcmp(relays[other].region, relay.region) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "anything after the end is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return Next(r) == 0 ? kRelayListAccepted : kRelayListMoreAfterTheEnd;",
+					"to": "return kRelayListAccepted;"
+				}
+			]
+		},
+		{
+			"name": "a field after the answer's one field is not called a second field",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (Next(r) == ',')\n\t\t{\n\t\t\treturn kRelayListNotItsField;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn kRelayListNotItsField;"
+				}
+			]
+		},
+		{
+			"name": "any field is taken for the answer's one field",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && strcmp(name, field) != 0)",
+					"to": "(false)"
+				}
+			]
+		},
+		{
+			"name": "a refused list of games leaves its count as it was",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t*count = 0;\n\tint n = 0;\n\tGamesInto",
+					"to": "\tint n = 0;\n\tGamesInto"
+				}
+			]
+		},
+		{
+			"name": "an owner's bytes are read with their digits the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "secret[i] = static_cast<uint8_t>(high * 16 + low);",
+					"to": "secret[i] = static_cast<uint8_t>(low * 16 + high);"
+				}
+			]
+		},
+		{
+			"name": "an owner is given back from an answer that was refused",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (why == kRelayListAccepted)\n\t{\n\t\tmemcpy(owner, read, sizeof(read));\n\t}",
+					"to": "\tmemcpy(owner, read, sizeof(read));"
+				}
+			]
+		},
+		{
+			"name": "a region may have capitals",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!allowed || n >= kRelayListRegionLetters)",
+					"to": "if (n >= kRelayListRegionLetters)"
+				}
+			]
+		},
+		{
+			"name": "a relay's host may be an address",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
+					"to": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a secret's hex digits are written the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "AddChar(w, kHex[secret[i] >> 4]);\n\t\t\tAddChar(w, kHex[secret[i] & 15]);",
+					"to": "AddChar(w, kHex[secret[i] & 15]);\n\t\t\tAddChar(w, kHex[secret[i] >> 4]);"
+				}
+			]
+		},
+		{
+			"name": "a \\ in a name is not escaped",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (text[i] == '\"' || text[i] == '\\\\')",
+					"to": "if (text[i] == '\"')"
+				}
+			]
+		},
+		{
+			"name": "a listing with more players than room is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "l.players < 1 || l.players > l.maxPlayers ||",
+					"to": "l.players < 1 ||"
+				}
+			]
+		},
+		{
+			"name": "a passTime past what JSON holds exactly is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "l.passTime > kRelayListMostPassTime ||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a level of any length is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "!IsListText(l.level, kRelayListLevelLetters)",
+					"to": "!IsListText(l.level, 64)"
+				}
+			]
+		},
+		{
+			"name": "a body that ran out of room is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!w.fits || w.used > kRelayListMostBodyBytes)",
+					"to": "if (w.used > kRelayListMostBodyBytes)"
+				}
+			]
+		},
+		{
+			"name": "a PUT is sent without its owner",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (owner)\n\t{\n\t\tAddName(w, \"owner\");",
+					"to": "\tif (false)\n\t{\n\t\tAddName(w, \"owner\");"
+				}
+			]
+		},
+		{
+			"name": "the game's own words keep what isn't printable ASCII",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "to[n] = (byte < 0x20 || byte > 0x7E) ? '?' : from[n];",
+					"to": "to[n] = from[n];"
+				}
+			]
+		},
+		{
+			"name": "empty words never become the fallback",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (FitInto(from, to, most) == 0 && FitInto(fallback, to, most) == 0)",
+					"to": "if (FitInto(from, to, most) == 0)"
+				}
+			]
+		},
+		{
+			"name": "a part of a server name may be 64 characters",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "partLength > 63 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a server name may be 254 characters",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (length < 1 || length > 253)",
+					"to": "if (length < 1)"
+				}
+			]
+		},
+		{
+			"name": "a part of a server name may end with -",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "name[i - 1] == '-' || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a part of a server name may start with -",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || name[i - partLength] == '-'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an _ is taken in a server name",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "|| c == '-';\n\n\t\tif (!allowed)\n",
+					"to": "|| c == '-' || c == '_';\n\n\t\tif (!allowed)\n"
+				}
+			]
+		},
+		{
+			"name": "co-op never says it is the campaign",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (gameStyle == 4 && coopCampaign)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ANY and the rest of 0.0.0.0/8 can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0x00000000u, 8))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the broadcast address is taken for one set aside",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (address == 0xFFFFFFFFu)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a multicast address can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0xE0000000u, 4))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an address set aside can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0xF0000000u, 4))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "this machine's own address is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!developer && in(0x7F000000u, 8))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "this machine's own address is refused even with -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!developer && in(0x7F000000u, 8))",
+					"to": "if (in(0x7F000000u, 8))"
+				}
+			]
+		},
+		{
+			"name": "10/8 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0x0A000000u, 8) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "172.16/12 is taken as only 172.16/16",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xAC100000u, 12)",
+					"to": "in(0xAC100000u, 16)"
+				}
+			]
+		},
+		{
+			"name": "192.168/16 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xC0A80000u, 16) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "169.254/16 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xA9FE0000u, 16) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a carrier's own 100.64/10 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || in(0x64400000u, 10)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay name is looked up for any kind of address, not IPv4 only",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "hints.ai_family = AF_INET;",
+					"to": "hints.ai_family = AF_UNSPEC;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the address rule is not asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "RelayList_AddressRefusal(ntohl(address), shared->developer)",
+					"to": "kRelayAddressUsable"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay whose address is refused is kept",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (why != kRelayAddressUsable)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call to the list that is not HTTPS",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WINHTTP_FLAG_SECURE) : NULL;",
+					"to": "0) : NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: TLS 1.1 is allowed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;",
+					"to": "DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the certificate check is turned off",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tDWORD neverSignIn = WINHTTP_AUTOLOGON_SECURITY_LEVEL_HIGH;\n",
+					"to": "\t\tDWORD neverSignIn = WINHTTP_AUTOLOGON_SECURITY_LEVEL_HIGH;\n\t\tDWORD ignore = SECURITY_FLAG_IGNORE_UNKNOWN_CA;\n\t\tWinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &ignore, sizeof(ignore));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: redirects are followed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_AUTHENTICATION",
+					"to": "WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call has no time limits",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000);",
+					"to": "WinHttpSetTimeouts(session, 0, 0, 0, 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer bigger than its room is read on",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (got >= room)\n\t\t\t{\n\t\t\t\ta.why = kTooBig;\n\t\t\t\tCloseAll(request, connection, session);\n\t\t\t\treturn a;\n\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list of games is read into more than 48 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "char gamesAnswer[kRelayListMostGamesBytes];",
+					"to": "char gamesAnswer[kRelayListMostGamesBytes * 2];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relays are read into more than 4 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "char relaysAnswer[kRelayListMostRelaysBytes];",
+					"to": "char relaysAnswer[kRelayListMostRelaysBytes * 2];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page of games found asks the list each time it is set up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tRelayList_FindRelays();\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
+					"to": "\t\t\t\tRelayList_FindRelays();\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the multiplayer page does not ask where the relays are",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRelayList_FindRelays();\n\n\t\t\t//skirmishMode must be false",
+					"to": "\t\t\t//skirmishMode must be false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relay's games aren't put back on the page when it's set up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tPutTheRelayGamesOnThePage();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer from the list doesn't set the page up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())",
+					"to": "if (Net_UpdateSessionList(selection))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait doesn't keep the window answering",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tCheckForWindowsMessages();\n\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];",
+					"to": "\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait hook is left on after the join",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\tNet_SetRelayJoinWaitHook(NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's news goes in the log without its name in front",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "LogString(std::string(\"Relay list: \") + piece);",
+					"to": "LogString(piece);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings' RelayServer is used without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!DevMode)\n\t\t{\n\t\t\tmemcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tmemcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings' RelayListPort is used without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\"",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: winmain asks for the list's name before -dev is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tStopGameIfNewFails();\n",
+					"to": "\tStopGameIfNewFails();\n\tRelay_ServerName();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's thread writes to the game's log",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tTell(\"the game is off the list\");",
+					"to": "\t\t\tLogString(\"the game is off the list\");"
+				}
+			]
+		}
+	]
+}

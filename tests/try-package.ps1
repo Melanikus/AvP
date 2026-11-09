@@ -113,7 +113,13 @@ Expect-Refused (Run-Test '--her') 'the only thing this takes is --here' 'a word 
 
 # --- Every library the package links to
 New-Copy
-Expect-Passes (Run-Imports) 'Every library the package links to is accounted for' 'the whole package accounts for every library'
+$whole = Run-Imports
+Expect-Passes $whole 'Every library the package links to is accounted for' 'the whole package accounts for every library'
+
+# The game reads the relay server's list over HTTPS with Windows' own WinHTTP (relay_list.cpp), so winhttp.dll has to be one of Windows'
+# libraries it's taken from, not one the package carries or misses (added 2026-11-09)
+Check ($whole.Code -eq 0 -and $whole.Text -match "Taken from Windows itself: [^\r\n]*\bwinhttp\.dll\b" -and -not (Test-Path -LiteralPath (Join-Path $work 'winhttp.dll'))) `
+    "the game's HTTPS library, winhttp.dll, is taken from Windows itself, and the package carries no copy" $whole.Text
 
 New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'ogg.dll')

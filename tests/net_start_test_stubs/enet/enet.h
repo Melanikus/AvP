@@ -40,6 +40,13 @@ struct ENetPacket
 	size_t referenceCount;
 };
 
+// Modified 2026-11-08 by Melanikus for the AvP port: what the relay's glue uses (net_relay.h): the host's socket, and the intercept that sees
+// each packet before ENet reads it, with what it's shown
+struct ENetHost;
+struct ENetEvent;
+#define ENET_CALLBACK
+typedef int (ENET_CALLBACK *ENetInterceptCallback)(ENetHost *host, ENetEvent *event);
+
 // The parts of the real one that networking.cpp uses
 struct ENetPeer
 {
@@ -68,6 +75,11 @@ struct ENetHost
 	size_t peerCount;
 	enet_uint32 totalSentData;            // these two, for the network's numbers in the log (net_stats.h)
 	enet_uint32 totalReceivedData;
+	ENetSocket socket;                    // these five, for the relay (net_relay.h): the relay's messages go from the host's own socket,
+	ENetAddress receivedAddress;          // and the intercept is shown each packet before ENet reads it
+	uint8_t *receivedData;
+	size_t receivedDataLength;
+	ENetInterceptCallback intercept;
 };
 
 struct ENetEvent

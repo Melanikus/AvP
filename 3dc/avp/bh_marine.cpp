@@ -18630,7 +18630,8 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//load target
 	COPY_NAME(marineStatusPointer->Target_SBname,block->Target_SBname);
-	marineStatusPointer->Target = FindSBWithName(marineStatusPointer->Target_SBname);
+	//the target's name comes from the save file, and can be anything in the level's: only one with a place in the world is kept
+	marineStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(marineStatusPointer->Target_SBname));
 
 
 	//find the marine's generator

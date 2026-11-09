@@ -5,6 +5,8 @@
 // none of the game: the decision is all in the header. The rows marked SOURCE read the game's files, to check that the sound code, the
 // menus and the text use the decision and the setting the way the header says.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 #include <string.h>
 
@@ -15,6 +17,7 @@
 #include <string>
 
 #include "reverb_choice.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -117,20 +120,10 @@ static int CountOf(std::string const &text, std::string const &words)
 	return count;
 }
 
-// The text from one marker up to the next one after it. Empty if either isn't there, so a row looking inside it fails instead of passing
-// on nothing.
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, std::string const &from, std::string const &to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void TheSoundCode()

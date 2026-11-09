@@ -929,7 +929,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tif (CoopRemoved_Has(removedPlayers, peer->address.host))\n\t{\n\t\tNet_NoteRefused(kCoopRefusedRemoved);\n\t\tenet_peer_disconnect(peer, kCoopRemovedByTheHost);\n\t\treturn;\n\t}\n\n",
+					"from": "\tif (!PeerIsThroughRelay(peer) && CoopRemoved_Has(removedPlayers, peer->address.host))\n\t{\n\t\tNet_NoteRefused(kCoopRefusedRemoved);\n\t\tenet_peer_disconnect(peer, kCoopRemovedByTheHost);\n\t\treturn;\n\t}\n\n",
 					"to": ""
 				}
 			]

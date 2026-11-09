@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "-relayhost and -relayjoin work without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!developer || host == join)",
+					"to": "if (host == join)"
+				}
+			]
+		},
+		{
+			"name": "both words at once is taken as one of them",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!developer || host == join)",
+					"to": "if (!developer || (!host && !join))"
+				}
+			]
+		},
+		{
+			"name": "-relayjoin is taken for -relayhost",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "return host ? kRelayAutoHost : kRelayAutoJoin;",
+					"to": "return kRelayAutoHost;"
+				}
+			]
+		},
+		{
+			"name": "a game of another version is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (game.version == ourVersion && game.players >= 0",
+					"to": "if (game.players >= 0"
+				}
+			]
+		},
+		{
+			"name": "a full game is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "game.players < game.maxPlayers && codeIsGood",
+					"to": "game.players <= game.maxPlayers && codeIsGood"
+				}
+			]
+		},
+		{
+			"name": "a game with fewer than no players is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "game.version == ourVersion && game.players >= 0 && game.players",
+					"to": "game.version == ourVersion && game.players"
+				}
+			]
+		},
+		{
+			"name": "a code of 7 letters is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "codeIsGood = codeIsGood && game.code[letter] != 0;",
+					"to": "codeIsGood = codeIsGood;"
+				}
+			]
+		},
+		{
+			"name": "a code with no end after its 8 letters is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "codeIsGood = codeIsGood && game.code[kRelayCodeLetters] == 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a count past the list's limit is read",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!games || count < 0 || count > kRelayListMostGames)",
+					"to": "if (!games || count < 0)"
+				}
+			]
+		}
+	]
+}

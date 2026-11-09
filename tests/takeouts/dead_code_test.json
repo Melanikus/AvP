@@ -1,0 +1,269 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the project lists the morph room again",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "    <ClCompile Include=\"..\\..\\3dc\\avp\\bh_types.cpp\" />\n",
+					"to": "    <ClCompile Include=\"..\\..\\3dc\\avp\\bh_types.cpp\" />\n    <ClCompile Include=\"..\\..\\3dc\\avp\\bh_spcl.cpp\" />\n"
+				}
+			]
+		},
+		{
+			"name": "hud.cpp names the morph room's fade to black again",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;\n",
+					"to": "extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;\nextern signed int RequestFadeToBlackLevel;\n"
+				}
+			]
+		},
+		{
+			"name": "bh_types.cpp includes the morph room again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "#include \"bh_binary_switch.h\"\n#include \"bh_agun.h\"\n",
+					"to": "#include \"bh_binary_switch.h\"\n#include \"bh_spcl.h\"\n#include \"bh_agun.h\"\n"
+				}
+			]
+		},
+		{
+			"name": "bh_types.cpp handles the morph room's kind again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\tcase I_BehaviourLightFX:\n\t\t\tLightFXBehaveFun (sbptr);",
+					"to": "\t\tcase I_BehaviourXenoborgMorphRoom:\n\t\t\tbreak;\n\n\t\tcase I_BehaviourLightFX:\n\t\t\tLightFXBehaveFun (sbptr);"
+				}
+			]
+		},
+		{
+			"name": "a proximity door is made lockable again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tdoorbhv->PDmctrl = morphctrl;\n",
+					"to": "\tdoorbhv->PDmctrl = morphctrl;\n\tdoorbhv->lockable_door = doortt->has_lock_target;\n"
+				}
+			]
+		},
+		{
+			"name": "a starting lift station checks its environment again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\t\t\t\tlift_bhv->lift_control->curr_station = curr_stn->num_floor;\n",
+					"to": "\t\t\t\t\t\t\tlift_bhv->lift_control->curr_station = curr_stn->num_floor;\n\t\t\t\t\t\t\tif(curr_stn->env != AvP.CurrentEnv) break;\n"
+				}
+			]
+		},
+		{
+			"name": "object_setup.cpp has the morph room's flag again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "const char * light_set_name = \"NORMALLT\";\n",
+					"to": "const char * light_set_name = \"NORMALLT\";\n\nBOOL Xenoborg_Morph_Thingy = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a lift station is given an environment again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "\tltt->num_floor = ls->Floor;\n",
+					"to": "\tltt->environment = AvP.CurrentEnv;\n\tltt->num_floor = ls->Floor;\n"
+				}
+			]
+		},
+		{
+			"name": "the morph room's kind is taken out of the list, so every kind after it moves",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.h",
+					"from": "    I_BehaviourXenoborgMorphRoom,\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a proximity door has a lock target again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.h",
+					"from": "\tBOOL door_locked;\n\tint SoundHandle;\n",
+					"to": "\tBOOL door_locked;\n\tSTRATEGYBLOCK* door_lock_target;\n\tint SoundHandle;\n"
+				}
+			]
+		},
+		{
+			"name": "bh_lift.cpp keeps a request for a change of environment again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_lift.cpp",
+					"from": "BOOL BadGuyInModuleOrNoPlayer();\n",
+					"to": "int RequestEnvChangeViaLift = 0;\nBOOL BadGuyInModuleOrNoPlayer();\n"
+				}
+			]
+		},
+		{
+			"name": "bh_lift.h declares CleanUpLiftControl again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_lift.h",
+					"from": "extern void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr);\n",
+					"to": "extern void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr);\nextern void CleanUpLiftControl();\n"
+				}
+			]
+		},
+		{
+			"name": "a lift station has an environment again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_lift.h",
+					"from": "\tMODULE* lift_module;\n",
+					"to": "\tMODULE* lift_module;\n\tI_AVP_ENVIRONMENTS env;\n"
+				}
+			]
+		},
+		{
+			"name": "the game looks for a change of environment each frame again",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tObjectDynamics();\n\n\t/* netgame support */",
+					"to": "\tObjectDynamics();\n\n\tif (RequestEnvChangeViaLift) {\n\t\tCleanUpLiftControl();\n\t}\n\n\t/* netgame support */"
+				}
+			]
+		},
+		{
+			"name": "system.cpp has IntegrateNewEnvironment again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tunload_rif(env_rif);\n}\n",
+					"to": "\tunload_rif(env_rif);\n}\n\nvoid IntegrateNewEnvironment()\n{\n}\n"
+				}
+			]
+		},
+		{
+			"name": "gamedef.h declares ChangeEnvironmentToEnv again",
+			"changes": [
+				{
+					"file": "3dc/avp/gamedef.h",
+					"from": "extern int Destroy_CurrentEnvironment();\n",
+					"to": "extern void ChangeEnvironmentToEnv(I_AVP_ENVIRONMENTS);\nextern int Destroy_CurrentEnvironment();\n"
+				}
+			]
+		},
+		{
+			"name": "strategy_def.cpp keeps blocks for another environment again",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "// RWH 5/6/97 these next two functions",
+					"to": "static int Num_SB_Preserved;\n\n// RWH 5/6/97 these next two functions"
+				}
+			]
+		},
+		{
+			"name": "strategy_def.h has MAX_PRESERVED_SB again",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.h",
+					"from": "#define SB_NAME_LENGTH  8\t/* DO NOT CHANGE THIS! */\n",
+					"to": "#define SB_NAME_LENGTH  8\t/* DO NOT CHANGE THIS! */\n#define MAX_PRESERVED_SB 20\n"
+				}
+			]
+		},
+		{
+			"name": "weapons.cpp has UpdateWeaponShape again",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "void GetHierarchicalWeapon(char *riffname",
+					"to": "void UpdateWeaponShape(void)\n{\n}\n\nvoid GetHierarchicalWeapon(char *riffname"
+				}
+			]
+		},
+		{
+			"name": "weapons.h declares UpdateWeaponShape again",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.h",
+					"from": "extern void GrabWeaponShape(PLAYER_WEAPON_DATA *weaponPtr);\n",
+					"to": "extern void UpdateWeaponShape(void);\nextern void GrabWeaponShape(PLAYER_WEAPON_DATA *weaponPtr);\n"
+				}
+			]
+		},
+		{
+			"name": "gameflow.cpp has GetMeThisStrategyBlock again",
+			"changes": [
+				{
+					"file": "3dc/avp/gameflow.cpp",
+					"from": "BOOL GameFlowOn = 1;\n",
+					"to": "BOOL GameFlowOn = 1;\n\nSTRATEGYBLOCK *GetMeThisStrategyBlock(int which);\n"
+				}
+			]
+		},
+		{
+			"name": "gameflow.h has the yard doors again",
+			"changes": [
+				{
+					"file": "3dc/avp/gameflow.h",
+					"from": "\tGOT_LASTGAMEOBJECT,\n",
+					"to": "\tGOT_LASTGAMEOBJECT,\n\tGT_YARD_DOOR_1,\n"
+				}
+			]
+		},
+		{
+			"name": "bh_link_switch.cpp has code under #if 0 again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "static BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)\n",
+					"to": "#if 0\nstatic void set_link_switch_states_off (LINK_SWITCH_BEHAV_BLOCK * lsbb);\n#endif\nstatic BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)\n"
+				}
+			]
+		},
+		{
+			"name": "a file the test reads has moved: its marker is gone",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tObjectDynamics();\n",
+					"to": "\tObjectDynamicsMoved();\n"
+				}
+			]
+		},
+		{
+			"name": "a name in a string still counts: only comments are left out",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "void GetHierarchicalWeapon(char *riffname",
+					"to": "static char const *const kOldName = \"// not a comment: UpdateWeaponShape\";\n\nvoid GetHierarchicalWeapon(char *riffname"
+				}
+			]
+		},
+		{
+			"name": "AudioStream gets back a function nothing calls",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "uint64_t AudioStream::GetNumSamplesPlayed()\n{\n",
+					"to": "uint32_t AudioStream::GetWritableBufferSize()\n{\n\treturn _bufferSize * CountFreeBuffers();\n}\n\nuint64_t AudioStream::GetNumSamplesPlayed()\n{\n"
+				}
+			]
+		}
+	]
+}

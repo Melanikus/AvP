@@ -1,0 +1,1119 @@
+// The words that go to and from the relay server's list. relay_list_text.h says what this is for, and what it refuses.
+// Written 2026-11-08 by Melanikus for the AvP port.
+
+#include "relay_list_text.h"
+
+#include <stdio.h>
+#include <string.h>
+
+namespace
+{
+	// ---- Reading an answer
+
+	// Where the reading has got to in an answer, and where the answer ends. Every step looks at the end before it reads.
+	struct Reader
+	{
+		const char *at;
+		const char *end;
+	};
+
+	bool IsSpace(char c)
+	{
+		return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+	}
+
+	// The next character that isn't a space, without moving past it. 0 at the end of the answer: an answer with a 0 in it is refused
+	// before any reading starts, so a 0 here can only mean the end.
+	char Next(Reader &r)
+	{
+		while (r.at < r.end && IsSpace(*r.at))
+		{
+			r.at++;
+		}
+
+		return r.at < r.end ? *r.at : 0;
+	}
+
+	// The next character that isn't a space has to be this one, and the reading moves past it
+	RelayListRefusal Expect(Reader &r, char wanted)
+	{
+		char const c = Next(r);
+
+		if (c == 0)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		if (c != wanted)
+		{
+			return kRelayListNotWhatComesNext;
+		}
+
+		r.at++;
+		return kRelayListAccepted;
+	}
+
+	// A string, "like this". The list writes only printable ASCII, and the only escapes it ever writes for that are \" and \\, so any
+	// other escape is refused, and so is any character outside printable ASCII. At most `most` characters, into out, which has room for
+	// most + 1, the 0 at the end included. More than that is kRelayListBadText.
+	RelayListRefusal ReadString(Reader &r, char *out, size_t most, size_t *length)
+	{
+		RelayListRefusal const why = Expect(r, '"');
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		size_t n = 0;
+
+		for (;;)
+		{
+			if (r.at >= r.end)
+			{
+				return kRelayListEndsTooSoon;
+			}
+
+			char c = *r.at++;
+
+			if (c == '"')
+			{
+				break;
+			}
+
+			if (c == '\\')
+			{
+				if (r.at >= r.end)
+				{
+					return kRelayListEndsTooSoon;
+				}
+
+				c = *r.at++;
+
+				if (c != '"' && c != '\\')
+				{
+					return kRelayListBadEscape;
+				}
+			}
+			else
+			{
+				// The game is built with /J, so a char is already 0 to 255, but this says so rather than relying on it
+				unsigned char const byte = static_cast<unsigned char>(c);
+
+				if (byte < 0x20 || byte > 0x7E)
+				{
+					return kRelayListBadText;
+				}
+			}
+
+			if (n >= most)
+			{
+				return kRelayListBadText;
+			}
+
+			out[n++] = c;
+		}
+
+		out[n] = '\0';
+		*length = n;
+		return kRelayListAccepted;
+	}
+
+	// A whole number from least to most. Only digits: no sign, no point, no exponent, and no 0 in front of another digit, which is what
+	// the list writes. Nine digits at most, which is past every limit here and can't overflow.
+	RelayListRefusal ReadNumber(Reader &r, long least, long most, long *value)
+	{
+		if (Next(r) == 0)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		const char *const start = r.at;
+		long v = 0;
+
+		while (r.at < r.end && *r.at >= '0' && *r.at <= '9')
+		{
+			if (r.at - start >= 9)
+			{
+				return kRelayListBadNumber;
+			}
+
+			v = v * 10 + (*r.at - '0');
+			r.at++;
+		}
+
+		size_t const digits = static_cast<size_t>(r.at - start);
+		char const after = r.at < r.end ? *r.at : 0;
+
+		if (digits == 0 || (digits > 1 && *start == '0') || after == '.' || after == 'e' || after == 'E' || after == '-' || after == '+')
+		{
+			return kRelayListBadNumber;
+		}
+
+		if (v < least || v > most)
+		{
+			return kRelayListBadNumber;
+		}
+
+		*value = v;
+		return kRelayListAccepted;
+	}
+
+	int HexValue(char c)
+	{
+		if (c >= '0' && c <= '9')
+		{
+			return c - '0';
+		}
+
+		if (c >= 'a' && c <= 'f')
+		{
+			return c - 'a' + 10;
+		}
+
+		return -1;
+	}
+
+	// An owner: 32 hex digits, small letters, as 16 bytes
+	RelayListRefusal ReadSecret(Reader &r, uint8_t *secret)
+	{
+		char hex[kRelayListSecretBytes * 2 + 1];
+		size_t length = 0;
+		RelayListRefusal const why = ReadString(r, hex, sizeof(hex) - 1, &length);
+
+		if (why == kRelayListBadText)
+		{
+			return kRelayListBadSecret;
+		}
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		if (length != sizeof(hex) - 1)
+		{
+			return kRelayListBadSecret;
+		}
+
+		for (size_t i = 0; i < kRelayListSecretBytes; i++)
+		{
+			int const high = HexValue(hex[i * 2]);
+			int const low = HexValue(hex[i * 2 + 1]);
+
+			if (high < 0 || low < 0)
+			{
+				return kRelayListBadSecret;
+			}
+
+			secret[i] = static_cast<uint8_t>(high * 16 + low);
+		}
+
+		return kRelayListAccepted;
+	}
+
+	// What kind of thing a field holds
+	enum Kind
+	{
+		kKindText,     // printable ASCII, 1 to mostLetters characters
+		kKindRegion,
+		kKindCode,
+		kKindHost,
+		kKindNumber    // a whole number from least to most
+	};
+
+	// One field an entry has to have: its name, its kind, its limits, and where what it holds goes
+	struct FieldRule
+	{
+		const char *name;
+		Kind kind;
+		size_t mostLetters;
+		long least;
+		long most;
+		char *text;
+		long *number;
+	};
+
+	// The longest field name is 11 (levelNumber). A name longer than this is no field the protocol has.
+	const size_t kMostFieldNameLetters = 16;
+	const int kMostFields = 16;
+
+	RelayListRefusal ReadValue(Reader &r, const FieldRule &rule)
+	{
+		size_t length = 0;
+		RelayListRefusal why = kRelayListAccepted;
+
+		switch (rule.kind)
+		{
+			case kKindText:
+				why = ReadString(r, rule.text, rule.mostLetters, &length);
+				return (why == kRelayListAccepted && length == 0) ? kRelayListBadText : why;
+
+			case kKindRegion:
+				why = ReadString(r, rule.text, kRelayListRegionLetters, &length);
+				return (why == kRelayListBadText || (why == kRelayListAccepted && !RelayList_IsRegion(rule.text))) ? kRelayListBadRegion : why;
+
+			case kKindCode:
+				why = ReadString(r, rule.text, kRelayCodeLetters, &length);
+				return (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(rule.text, length))) ? kRelayListBadCode : why;
+
+			case kKindHost:
+				why = ReadString(r, rule.text, kRelayListHostLetters, &length);
+				return (why == kRelayListBadText || (why == kRelayListAccepted && !RelayList_IsRelayHost(rule.text))) ? kRelayListBadHost : why;
+
+			case kKindNumber:
+				return ReadNumber(r, rule.least, rule.most, rule.number);
+		}
+
+		return kRelayListUnknownField;
+	}
+
+	// One entry, { ... }, with exactly the fields in rules, in any order
+	RelayListRefusal ReadEntry(Reader &r, const FieldRule *rules, int ruleCount)
+	{
+		char const first = Next(r);
+
+		if (first == 0)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		if (first != '{')
+		{
+			return kRelayListNotAnEntry;
+		}
+
+		r.at++;
+
+		if (Next(r) == '}')
+		{
+			return kRelayListFieldMissing;
+		}
+
+		bool seen[kMostFields] = {};
+
+		for (;;)
+		{
+			char name[kMostFieldNameLetters + 1];
+			size_t nameLength = 0;
+			RelayListRefusal why = ReadString(r, name, kMostFieldNameLetters, &nameLength);
+
+			// A name too long, or with something odd in it, is no field the protocol has
+			if (why == kRelayListBadText)
+			{
+				return kRelayListUnknownField;
+			}
+
+			if (why != kRelayListAccepted)
+			{
+				return why;
+			}
+
+			int field = -1;
+
+			for (int f = 0; f < ruleCount; f++)
+			{
+				if (strcmp(name, rules[f].name) == 0)
+				{
+					field = f;
+				}
+			}
+
+			if (field < 0)
+			{
+				return kRelayListUnknownField;
+			}
+
+			if (seen[field])
+			{
+				return kRelayListFieldTwice;
+			}
+
+			seen[field] = true;
+
+			why = Expect(r, ':');
+
+			if (why == kRelayListAccepted)
+			{
+				why = ReadValue(r, rules[field]);
+			}
+
+			if (why != kRelayListAccepted)
+			{
+				return why;
+			}
+
+			char const c = Next(r);
+
+			if (c == ',')
+			{
+				r.at++;
+				continue;
+			}
+
+			if (c == '}')
+			{
+				r.at++;
+				break;
+			}
+
+			return c == 0 ? kRelayListEndsTooSoon : kRelayListNotWhatComesNext;
+		}
+
+		for (int f = 0; f < ruleCount; f++)
+		{
+			if (!seen[f])
+			{
+				return kRelayListFieldMissing;
+			}
+		}
+
+		return kRelayListAccepted;
+	}
+
+	// What's in an answer's one field: a list read entry by entry, or an owner. Each kind reads it with its own function.
+	typedef RelayListRefusal (*ValueReader)(Reader &r, void *into, int *count);
+
+	// The whole answer, { "field": ... }, and nothing after it
+	RelayListRefusal ReadAnswer(const char *body, size_t bytes, size_t mostBytes, const char *field, ValueReader readValue, void *into, int *count)
+	{
+		if (bytes > mostBytes)
+		{
+			return kRelayListTooBig;
+		}
+
+		if (!body)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		if (bytes > 0 && memchr(body, 0, bytes) != NULL)
+		{
+			return kRelayListHasAZero;
+		}
+
+		Reader r = { body, body + bytes };
+		char const first = Next(r);
+
+		if (first == 0)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		if (first != '{')
+		{
+			return kRelayListNotAnObject;
+		}
+
+		r.at++;
+
+		if (Next(r) == '}')
+		{
+			return kRelayListNotItsField;
+		}
+
+		char name[kMostFieldNameLetters + 1];
+		size_t nameLength = 0;
+		RelayListRefusal why = ReadString(r, name, kMostFieldNameLetters, &nameLength);
+
+		if (why == kRelayListBadText || (why == kRelayListAccepted && strcmp(name, field) != 0))
+		{
+			return kRelayListNotItsField;
+		}
+
+		if (why == kRelayListAccepted)
+		{
+			why = Expect(r, ':');
+		}
+
+		if (why == kRelayListAccepted)
+		{
+			why = readValue(r, into, count);
+		}
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		// A second field after the first means the first wasn't the only one
+		if (Next(r) == ',')
+		{
+			return kRelayListNotItsField;
+		}
+
+		why = Expect(r, '}');
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		return Next(r) == 0 ? kRelayListAccepted : kRelayListMoreAfterTheEnd;
+	}
+
+	// A list, [ entry, entry ... ], of at most `most` entries, each read by readEntry, which gets its place on the list
+	typedef RelayListRefusal (*EntryReader)(Reader &r, void *into, int place);
+
+	RelayListRefusal ReadList(Reader &r, int most, EntryReader readEntry, void *into, int *count)
+	{
+		char const open = Next(r);
+
+		if (open == 0)
+		{
+			return kRelayListEndsTooSoon;
+		}
+
+		if (open != '[')
+		{
+			return kRelayListNotAList;
+		}
+
+		r.at++;
+		int n = 0;
+
+		if (Next(r) == ']')
+		{
+			r.at++;
+			*count = 0;
+			return kRelayListAccepted;
+		}
+
+		for (;;)
+		{
+			if (n >= most)
+			{
+				return kRelayListTooMany;
+			}
+
+			RelayListRefusal const why = readEntry(r, into, n);
+
+			if (why != kRelayListAccepted)
+			{
+				return why;
+			}
+
+			n++;
+
+			char const c = Next(r);
+
+			if (c == ',')
+			{
+				r.at++;
+				continue;
+			}
+
+			if (c == ']')
+			{
+				r.at++;
+				break;
+			}
+
+			return c == 0 ? kRelayListEndsTooSoon : kRelayListNotWhatComesNext;
+		}
+
+		*count = n;
+		return kRelayListAccepted;
+	}
+
+	// ---- The games
+
+	struct GamesInto
+	{
+		RelayListGame *games;
+		int ourVersion;
+	};
+
+	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
+	{
+		GamesInto const &g = *static_cast<GamesInto *>(into);
+		RelayListGame &game = g.games[place];
+		long gameStyle = 0, levelNumber = 0, coopLobby = 0, players = 0, maxPlayers = 0, version = 0, hostMs = 0, seconds = 0;
+
+		FieldRule const rules[] =
+		{
+			{ "region", kKindRegion, 0, 0, 0, game.region, NULL },
+			{ "code", kKindCode, 0, 0, 0, game.code, NULL },
+			{ "name", kKindText, kRelayListTextLetters, 0, 0, game.name, NULL },
+			{ "level", kKindText, kRelayListLevelLetters, 0, 0, game.level, NULL },
+			{ "mode", kKindText, kRelayListTextLetters, 0, 0, game.mode, NULL },
+			{ "gameStyle", kKindNumber, 0, 0, 255, NULL, &gameStyle },
+			{ "levelNumber", kKindNumber, 0, 0, kRelayListMostLevelNumber, NULL, &levelNumber },
+			{ "coopLobby", kKindNumber, 0, 0, 255, NULL, &coopLobby },
+			{ "players", kKindNumber, 0, 1, kRelayMostPlayers, NULL, &players },
+			{ "maxPlayers", kKindNumber, 0, 1, kRelayMostPlayers, NULL, &maxPlayers },
+			{ "version", kKindNumber, 0, 1, kRelayListMostVersion, NULL, &version },
+			{ "hostMs", kKindNumber, 0, 0, kRelayListMostHostMs, NULL, &hostMs },
+			{ "seconds", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }
+		};
+
+		RelayListRefusal const why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		game.gameStyle = static_cast<int>(gameStyle);
+		game.levelNumber = static_cast<int>(levelNumber);
+		game.coopLobby = static_cast<int>(coopLobby);
+		game.players = static_cast<int>(players);
+		game.maxPlayers = static_cast<int>(maxPlayers);
+		game.version = static_cast<int>(version);
+		game.hostMs = static_cast<int>(hostMs);
+		game.seconds = seconds;
+
+		if (game.players > game.maxPlayers)
+		{
+			return kRelayListMorePlayersThanRoom;
+		}
+
+		if (game.version != g.ourVersion)
+		{
+			return kRelayListOtherVersion;
+		}
+
+		// A game is known by its region and code together
+		for (int other = 0; other < place; other++)
+		{
+			if (strcmp(g.games[other].code, game.code) == 0 && strcmp(g.games[other].region, game.region) == 0)
+			{
+				return kRelayListTwice;
+			}
+		}
+
+		return kRelayListAccepted;
+	}
+
+	RelayListRefusal ReadTheGames(Reader &r, void *into, int *count)
+	{
+		return ReadList(r, kRelayListMostGames, ReadOneGame, into, count);
+	}
+
+	// ---- The relays
+
+	RelayListRefusal ReadOneRelay(Reader &r, void *into, int place)
+	{
+		RelayListRelay *const relays = static_cast<RelayListRelay *>(into);
+		RelayListRelay &relay = relays[place];
+		long port = 0;
+
+		FieldRule const rules[] =
+		{
+			{ "region", kKindRegion, 0, 0, 0, relay.region, NULL },
+			{ "host", kKindHost, 0, 0, 0, relay.host, NULL },
+			{ "port", kKindNumber, 0, 1, 65535, NULL, &port }
+		};
+
+		RelayListRefusal const why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+
+		if (why != kRelayListAccepted)
+		{
+			return why;
+		}
+
+		relay.port = static_cast<int>(port);
+
+		// One relay for each region
+		for (int other = 0; other < place; other++)
+		{
+			if (strcmp(relays[other].region, relay.region) == 0)
+			{
+				return kRelayListTwice;
+			}
+		}
+
+		return kRelayListAccepted;
+	}
+
+	RelayListRefusal ReadTheRelays(Reader &r, void *into, int *count)
+	{
+		return ReadList(r, kRelayListMostRelays, ReadOneRelay, into, count);
+	}
+
+	RelayListRefusal ReadTheOwner(Reader &r, void *into, int *)
+	{
+		return ReadSecret(r, static_cast<uint8_t *>(into));
+	}
+
+	// ---- Writing the bodies
+
+	// Adds to a body, as long as there's room: once something doesn't fit, nothing more is added, and the body is refused at the end
+	struct Writer
+	{
+		char *body;
+		size_t room;
+		size_t used;
+		bool fits;
+	};
+
+	void AddChar(Writer &w, char c)
+	{
+		if (!w.fits || w.used + 1 >= w.room)
+		{
+			w.fits = false;
+			return;
+		}
+
+		w.body[w.used++] = c;
+		w.body[w.used] = '\0';
+	}
+
+	void Add(Writer &w, const char *text)
+	{
+		for (size_t i = 0; text[i]; i++)
+		{
+			AddChar(w, text[i]);
+		}
+	}
+
+	// A text in quotes, with " and \ escaped, the only two characters in printable ASCII that need it
+	void AddText(Writer &w, const char *text)
+	{
+		AddChar(w, '"');
+
+		for (size_t i = 0; text[i]; i++)
+		{
+			if (text[i] == '"' || text[i] == '\\')
+			{
+				AddChar(w, '\\');
+			}
+
+			AddChar(w, text[i]);
+		}
+
+		AddChar(w, '"');
+	}
+
+	void AddNumber(Writer &w, unsigned long long value)
+	{
+		char digits[24];
+		snprintf(digits, sizeof(digits), "%llu", value);
+		Add(w, digits);
+	}
+
+	// A pass or an owner, as the list wants it: 32 hex digits, small letters
+	void AddSecret(Writer &w, const uint8_t secret[kRelayListSecretBytes])
+	{
+		static const char kHex[] = "0123456789abcdef";
+
+		AddChar(w, '"');
+
+		for (int i = 0; i < kRelayListSecretBytes; i++)
+		{
+			AddChar(w, kHex[secret[i] >> 4]);
+			AddChar(w, kHex[secret[i] & 15]);
+		}
+
+		AddChar(w, '"');
+	}
+
+	// A field's name and the : after it. The first field opens the body with {, and each after it starts with a ,
+	void AddName(Writer &w, const char *name)
+	{
+		AddChar(w, w.used == 0 ? '{' : ',');
+		AddChar(w, '"');
+		Add(w, name);
+		Add(w, "\":");
+	}
+
+	// 1 to most printable ASCII characters
+	bool IsListText(const char *text, size_t most)
+	{
+		if (!text)
+		{
+			return false;
+		}
+
+		size_t n = 0;
+
+		for (; text[n]; n++)
+		{
+			unsigned char const byte = static_cast<unsigned char>(text[n]);
+
+			if (byte < 0x20 || byte > 0x7E || n >= most)
+			{
+				return false;
+			}
+		}
+
+		return n >= 1;
+	}
+
+	// The end of a body: false, with an empty body, if it didn't fit or is past what the list takes
+	bool Finish(Writer &w)
+	{
+		if (!w.fits || w.used > kRelayListMostBodyBytes)
+		{
+			if (w.room > 0)
+			{
+				w.body[0] = '\0';
+			}
+
+			return false;
+		}
+
+		return true;
+	}
+
+	size_t FitInto(const char *from, char *to, size_t most)
+	{
+		size_t n = 0;
+
+		for (; from && from[n] && n < most; n++)
+		{
+			unsigned char const byte = static_cast<unsigned char>(from[n]);
+			to[n] = (byte < 0x20 || byte > 0x7E) ? '?' : from[n];
+		}
+
+		to[n] = '\0';
+		return n;
+	}
+
+	// The 8 letters of a code, which may or may not have a 0 after them
+	bool IsCodeText(const char *code)
+	{
+		return code && Relay_IsCode(code, strnlen(code, kRelayCodeLetters + 1));
+	}
+}
+
+const char *RelayList_RefusalWords(RelayListRefusal why)
+{
+	switch (why)
+	{
+		case kRelayListAccepted: return "the answer was read";
+		case kRelayListTooBig: return "the answer is bigger than any honest answer";
+		case kRelayListHasAZero: return "the answer has a 0 byte in it";
+		case kRelayListNotAnObject: return "the answer doesn't start with {";
+		case kRelayListNotItsField: return "the answer's only field isn't the one the protocol says";
+		case kRelayListNotAList: return "the answer's field isn't a list";
+		case kRelayListTooMany: return "the answer has more entries than the protocol allows";
+		case kRelayListNotAnEntry: return "something on the list isn't an entry";
+		case kRelayListUnknownField: return "an entry has a field the protocol doesn't have";
+		case kRelayListFieldTwice: return "an entry has a field twice";
+		case kRelayListFieldMissing: return "an entry is missing a field";
+		case kRelayListBadEscape: return "a text has an escape other than \\\" and \\\\";
+		case kRelayListBadText: return "a name, level or mode isn't printable characters of its length";
+		case kRelayListBadCode: return "a code isn't 8 code letters";
+		case kRelayListBadRegion: return "a region isn't 1 to 16 small letters, digits and -";
+		case kRelayListBadHost: return "a relay's host isn't a name, or is an address instead of one";
+		case kRelayListBadSecret: return "an owner isn't 32 hex digits";
+		case kRelayListBadNumber: return "a number isn't a whole number in its range";
+		case kRelayListMorePlayersThanRoom: return "a game has more players than room for them";
+		case kRelayListOtherVersion: return "a game is for another version of the game";
+		case kRelayListTwice: return "the answer has the same game or region twice";
+		case kRelayListEndsTooSoon: return "the answer stops before its end";
+		case kRelayListNotWhatComesNext: return "the answer has something else where a , : } or ] has to be";
+		case kRelayListMoreAfterTheEnd: return "the answer has more after its end";
+	}
+
+	return "the answer was refused for a reason with no words";
+}
+
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
+{
+	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
+	*count = 0;
+	int n = 0;
+	GamesInto into = { games, ourVersion };
+	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
+
+	if (why == kRelayListAccepted)
+	{
+		*count = n;
+	}
+
+	return why;
+}
+
+RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count)
+{
+	*count = 0;
+	int n = 0;
+	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostRelaysBytes, "relays", ReadTheRelays, relays, &n);
+
+	if (why == kRelayListAccepted)
+	{
+		*count = n;
+	}
+
+	return why;
+}
+
+RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes])
+{
+	int unused = 0;
+	uint8_t read[kRelayListSecretBytes];
+	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostOwnerBytes, "owner", ReadTheOwner, read, &unused);
+
+	// The owner is only given back once the whole answer is known to be good
+	if (why == kRelayListAccepted)
+	{
+		memcpy(owner, read, sizeof(read));
+	}
+
+	return why;
+}
+
+bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
+{
+	Writer w = { body, room, 0, room > 0 };
+
+	if (room > 0)
+	{
+		body[0] = '\0';
+	}
+
+	if (!RelayList_IsRegion(l.region) || !IsCodeText(l.code) || l.passTime > kRelayListMostPassTime ||
+		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
+		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
+		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs)
+	{
+		return false;
+	}
+
+	char code[kRelayCodeLetters + 1];
+	memcpy(code, l.code, kRelayCodeLetters);
+	code[kRelayCodeLetters] = '\0';
+
+	// The PUT's owner first, then the fields in the protocol's order
+	if (owner)
+	{
+		AddName(w, "owner");
+		AddSecret(w, owner);
+	}
+
+	AddName(w, "region");
+	AddText(w, l.region);
+	AddName(w, "code");
+	AddText(w, code);
+	AddName(w, "pass");
+	AddSecret(w, l.pass);
+	AddName(w, "passTime");
+	AddNumber(w, l.passTime);
+	AddName(w, "name");
+	AddText(w, l.name);
+	AddName(w, "level");
+	AddText(w, l.level);
+	AddName(w, "mode");
+	AddText(w, l.mode);
+	AddName(w, "gameStyle");
+	AddNumber(w, static_cast<unsigned long long>(l.gameStyle));
+	AddName(w, "levelNumber");
+	AddNumber(w, static_cast<unsigned long long>(l.levelNumber));
+	AddName(w, "coopLobby");
+	AddNumber(w, static_cast<unsigned long long>(l.coopLobby));
+	AddName(w, "players");
+	AddNumber(w, static_cast<unsigned long long>(l.players));
+	AddName(w, "maxPlayers");
+	AddNumber(w, static_cast<unsigned long long>(l.maxPlayers));
+	AddName(w, "version");
+	AddNumber(w, static_cast<unsigned long long>(l.version));
+	AddName(w, "hostMs");
+	AddNumber(w, static_cast<unsigned long long>(l.hostMs));
+	AddChar(w, '}');
+
+	return Finish(w);
+}
+
+bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room)
+{
+	Writer w = { body, room, 0, room > 0 };
+
+	if (room > 0)
+	{
+		body[0] = '\0';
+	}
+
+	if (!RelayList_IsRegion(region) || !IsCodeText(code) || !owner)
+	{
+		return false;
+	}
+
+	char letters[kRelayCodeLetters + 1];
+	memcpy(letters, code, kRelayCodeLetters);
+	letters[kRelayCodeLetters] = '\0';
+
+	AddName(w, "region");
+	AddText(w, region);
+	AddName(w, "code");
+	AddText(w, letters);
+	AddName(w, "owner");
+	AddSecret(w, owner);
+	AddChar(w, '}');
+
+	return Finish(w);
+}
+
+void RelayList_FitText(const char *from, const char *fallback, char *to, size_t most)
+{
+	if (FitInto(from, to, most) == 0 && FitInto(fallback, to, most) == 0)
+	{
+		to[0] = '?';
+		to[1] = '\0';
+	}
+}
+
+const char *RelayList_ModeWords(int gameStyle, bool coopCampaign)
+{
+	// In the order of NETGAME_TYPE: Individual, CoopDeathmatch, LastManStanding, PredatorTag, Coop, AlienTag
+	static const char *const kModes[] = { "Deathmatch", "Species deathmatch", "Last man standing", "Predator tag", "Co-op", "Alien tag" };
+
+	if (gameStyle == 4 && coopCampaign)
+	{
+		return "Co-op campaign";
+	}
+
+	if (gameStyle < 0 || gameStyle >= static_cast<int>(sizeof(kModes) / sizeof(kModes[0])))
+	{
+		return "Game";
+	}
+
+	return kModes[gameStyle];
+}
+
+bool Relay_IsServerName(const char *name)
+{
+	if (!name)
+	{
+		return false;
+	}
+
+	size_t const length = strlen(name);
+
+	if (length < 1 || length > 253)
+	{
+		return false;
+	}
+
+	size_t partLength = 0;
+
+	for (size_t i = 0; i <= length; i++)
+	{
+		char const c = name[i];
+
+		// The end of a part: at a dot, or at the end of the name
+		if (c == '.' || c == '\0')
+		{
+			if (partLength < 1 || partLength > 63 || name[i - 1] == '-' || name[i - partLength] == '-')
+			{
+				return false;
+			}
+
+			partLength = 0;
+			continue;
+		}
+
+		bool const allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+
+		if (!allowed)
+		{
+			return false;
+		}
+
+		partLength++;
+	}
+
+	return true;
+}
+
+bool RelayList_IsRegion(const char *region)
+{
+	if (!region)
+	{
+		return false;
+	}
+
+	size_t n = 0;
+
+	for (; region[n]; n++)
+	{
+		char const c = region[n];
+		bool const allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+
+		if (!allowed || n >= kRelayListRegionLetters)
+		{
+			return false;
+		}
+	}
+
+	return n >= 1;
+}
+
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer)
+{
+	// Whether address is in the block that starts at first and has its leading `prefix` bits in common with it
+	auto const in = [address](uint32_t first, int prefix)
+	{
+		uint32_t const mask = 0xFFFFFFFFu << (32 - prefix);
+		return (address & mask) == (first & mask);
+	};
+
+	if (in(0x00000000u, 8))
+	{
+		return kRelayAddressThisNetwork;
+	}
+
+	if (address == 0xFFFFFFFFu)
+	{
+		return kRelayAddressBroadcast;
+	}
+
+	if (in(0xE0000000u, 4))
+	{
+		return kRelayAddressMulticast;
+	}
+
+	if (in(0xF0000000u, 4))
+	{
+		return kRelayAddressReserved;
+	}
+
+	if (!developer && in(0x7F000000u, 8))
+	{
+		return kRelayAddressLoopback;
+	}
+
+	if (!developer && (in(0x0A000000u, 8) || in(0xAC100000u, 12) || in(0xC0A80000u, 16) || in(0xA9FE0000u, 16) || in(0x64400000u, 10)))
+	{
+		return kRelayAddressPrivate;
+	}
+
+	return kRelayAddressUsable;
+}
+
+const char *RelayList_AddressWords(RelayAddressRefusal why)
+{
+	switch (why)
+	{
+		case kRelayAddressUsable: return "the relay's address can be used";
+		case kRelayAddressThisNetwork: return "the relay's name looked up to an address that means this network, not a machine";
+		case kRelayAddressBroadcast: return "the relay's name looked up to the address for everyone on this network";
+		case kRelayAddressMulticast: return "the relay's name looked up to an address for many machines at once";
+		case kRelayAddressReserved: return "the relay's name looked up to an address that's never used on the internet";
+		case kRelayAddressPrivate: return "the relay's name looked up to an address inside a private network, which only -dev allows";
+		case kRelayAddressLoopback: return "the relay's name looked up to this machine's own address, which only -dev allows";
+	}
+
+	return "the relay's address was refused for a reason with no words";
+}
+
+bool RelayList_IsRelayHost(const char *host)
+{
+	if (!host || strlen(host) > kRelayListHostLetters || !Relay_IsServerName(host))
+	{
+		return false;
+	}
+
+	// A name made of digits and dots alone is an address, such as 203.0.113.9, and the list never gives one
+	for (size_t i = 0; host[i]; i++)
+	{
+		if (host[i] != '.' && (host[i] < '0' || host[i] > '9'))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}

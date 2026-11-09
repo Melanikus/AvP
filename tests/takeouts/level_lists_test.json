@@ -285,7 +285,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: nor the co-op list",
+			"name": "SOURCE: the co-op list has no room for them",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/mp_config.cpp",
@@ -325,7 +325,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: and on the other",
+			"name": "SOURCE: custom levels overwrite them on the deathmatch list",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/mp_config.cpp",
@@ -345,7 +345,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: and on the other",
+			"name": "SOURCE: a custom level is looked for among the 32 on the deathmatch list",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/mp_config.cpp",
@@ -375,7 +375,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: and on the other",
+			"name": "SOURCE: a joiner refuses one of the 32 on the deathmatch list",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/mp_config.cpp",
@@ -405,7 +405,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: nor the co-op list",
+			"name": "SOURCE: the co-op list doesn't load them",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/env_info.cpp",
