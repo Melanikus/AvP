@@ -66,6 +66,68 @@ jobs:
         shell: pwsh
         run: ./tests/release-test.ps1
 
+      # Every test is built with the standard library's own bounds checks, and tests/build.ps1 refuses one whose settings leave them out,
+      # turn them off again, or leave out the guard that won't compile a test without them (card STL-HARDEN-1, #140, added 2026-11-08 by
+      # Melanikus for the AvP port). This makes it refuse, from a copy of a test's settings, and checks each reason. It's last in this job,
+      # and builds into a folder of its own, because build.ps1 empties its folder before it builds.
+      - name: Make build.ps1 refuse a test without the bounds checks, and check each reason
+        shell: pwsh
+        run: |
+          $failed = [System.Collections.Generic.List[string]]::new()
+          function Check([bool]$ok, [string]$what) { if ($ok) { "ok      $what" } else { "FAILED  $what"; $failed.Add($what) } }
+          $pwsh = Join-Path $PSHOME 'pwsh.exe'
+          $env:RUNNER_TEMP = Join-Path $env:RUNNER_TEMP 'refusal-probe'
+          $good = [System.IO.File]::ReadAllText((Join-Path $PWD 'tests/glint_test.args'))
+
+          # Writes settings to a made-up test, runs build.ps1 on it alone in a PowerShell of its own, takes the made-up test away again
+          # whatever happens, and gives back the exit code and all build.ps1 said
+          function Try-Settings([string]$settings) {
+            $file = Join-Path $PWD 'tests/zz_refusal_probe_test.args'
+            [System.IO.File]::WriteAllText($file, $settings)
+            try { $said = & $pwsh -NoProfile -NonInteractive -File tests/build.ps1 -Only zz_refusal_probe_test 2>&1 | Out-String; $code = $LASTEXITCODE }
+            finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+            @{ code = $code; text = $said }
+          }
+
+          Check ($good -cmatch ' /D_MSVC_STL_HARDENING=1' -and $good -cmatch ' /FIevery_test\.h') 'the settings copied from have the checks and the guard'
+
+          $result = Try-Settings ($good -creplace ' /D_MSVC_STL_HARDENING=1', '')
+          $result.text
+          Check ($result.code -eq 1 -and $result.text -cmatch "zz_refusal_probe_test\.args doesn't ask for /D_MSVC_STL_HARDENING=1") 'without the checks, a test is refused, and told why'
+
+          $result = Try-Settings ($good.TrimEnd() + ' /D_MSVC_STL_HARDENING=0')
+          $result.text
+          Check ($result.code -eq 1 -and $result.text -cmatch 'zz_refusal_probe_test\.args asks for /D_MSVC_STL_HARDENING=0, which could turn') 'with the checks turned off again later, it is refused, and told why'
+
+          $result = Try-Settings ($good.TrimEnd() + ' /D_MSVC_STL_HARDENING_VECTOR=0')
+          $result.text
+          Check ($result.code -eq 1 -and $result.text -cmatch 'zz_refusal_probe_test\.args asks for /D_MSVC_STL_HARDENING_VECTOR=0, which could turn') 'with a part of them turned off, it is refused, and told why'
+
+          $result = Try-Settings ($good -creplace ' /FIevery_test\.h', '')
+          $result.text
+          Check ($result.code -eq 1 -and $result.text -cmatch "zz_refusal_probe_test\.args doesn't ask for /Itests/every_test /FIevery_test\.h") 'without the guard, it is refused, and told why'
+
+          Check (-not (Test-Path -LiteralPath (Join-Path $PWD 'tests/zz_refusal_probe_test.args'))) 'and the made-up test is gone again'
+
+          # The guard itself (tests/every_test/every_test.h): without the checks, a test doesn't compile at all, whichever way it's built. A
+          # take-out row can't show that, because the take-out runner needs every row's copy to build, so it's shown here, by the guard's own
+          # words. Visual Studio is set up as build.ps1 sets it up, and cl only reads the code (/Zs), writing nothing.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
+          Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+          $withoutChecks = @(((Get-Content tests/stl_bounds_canary_test.args) -join ' ') -split '\s+' | Where-Object { $_ -and $_ -cne '/D_MSVC_STL_HARDENING=1' })
+          $said = & cl.exe /nologo /Zs @withoutChecks 2>&1 | Out-String
+          $said
+          Check ($LASTEXITCODE -ne 0 -and $said -cmatch "Every test is built with the standard library's bounds checks") 'and without the checks, the guard refuses to compile a test at all, and says why'
+
+          # The step says how it went itself. A PowerShell step on GitHub otherwise ends with the exit code of the last program it ran, and
+          # here that's a build.ps1 that was meant to refuse, so it would fail even with every check above passing.
+          if ($failed.Count -gt 0) { throw "build.ps1 didn't refuse as it should: $($failed -join '; ')" }
+          'build.ps1 refused each way, with each reason'
+          exit 0
+
   # Every test again, built with the address sanitizer by tests/takeouts/sanitize.ps1 (card SANITIZE-RUN-1, added 2026-11-08 by Melanikus
   # for the AvP port). The sanitizer watches every read and write, and stops a test at the first one outside what it was given, so it finds
   # what a test doesn't look for. A crash or a memory bug is a security bug here (AvP Tao #1), so a test that doesn't pass under it stops the
