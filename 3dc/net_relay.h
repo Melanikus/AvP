@@ -459,6 +459,7 @@ uint32_t const kNetRelayJoinerHelloEveryMs = 500; // the joiner's hello, until R
 uint32_t const kNetRelayWaitForReadyMs = 15000;   // a relay frees a joiner's port this long after JOIN_PORT if both haven't said hello
 uint32_t const kNetRelayEchoEveryMs = 100;        // the echoes to each relay, this far apart
 uint32_t const kNetRelayEchoAnswerWithinMs = 1000;// an echo answered later than this doesn't count
+uint32_t const kNetRelayMostKeepMs = 9999;        // the most a keep's round trip is given as (NetRelayHost::KeepMs), the list's own limit on one
 
 size_t const kNetRelayMostJoiners = 8;            // a room's joiners (PROTOCOL.md, section 5), and so the host's hellos at once
 size_t const kNetRelayMostRelays = 16;            // the most relays the list names (PROTOCOL.md, section 5)
@@ -707,6 +708,8 @@ public:
 		joiners = 0;
 		lostWhy = kNetRelayFine;
 		startedAt = askedAt = keptAt = keepAt = 0;
+		keepWaiting = false;
+		keepMs = -1;
 		memset(hellos, 0, sizeof(hellos));
 		sendCount = 0;
 		sendsDropped = 0;
@@ -796,6 +799,15 @@ public:
 				}
 
 				keptAt = now;
+
+				// The keep's round trip, from the HOST_KEEP this answers (KeepMs)
+				if (keepWaiting)
+				{
+					uint32_t const took = now - keepAt;
+					keepMs = took < 1 ? 1 : (took > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(took));
+					keepWaiting = false;
+				}
+
 				joiners = m.number <= kNetRelayMostJoiners ? m.number : static_cast<int>(kNetRelayMostJoiners);
 				KeepPass(m);
 				return true;
@@ -865,6 +877,7 @@ public:
 		if (now - keepAt >= kNetRelayKeepEveryMs)
 		{
 			keepAt = now;
+			keepWaiting = true;
 			NetRelayMessage m = NetRelay_Message(kNetRelayHostKeep);
 			memcpy(m.secret, token, sizeof(token));
 			Queue(controlPort, m);
@@ -959,6 +972,12 @@ public:
 	uint32_t PassesHeard() const { return passesHeard; }   // goes up by one with each pass, so the list can be given each new one once
 	int Joiners() const { return joiners; }                // as the relay last counted them
 	int LostWhy() const { return lostWhy; }                // kNetRelayFine until the room is lost
+
+	// Added 2026-11-09 by Melanikus for the AvP port: the round trip of the last keep, in ms, from a HOST_KEEP going to the HOST_KEPT that
+	// answers it, for the line on the host's screen (Net_RelayPlayStateNow). -1 before the first. At most kNetRelayMostKeepMs. A keep lost on
+	// the way is answered by none, so the next keep's answer is the one timed.
+	int KeepMs() const { return keepMs; }
+
 	size_t HellosWaiting() const
 	{
 		size_t n = 0;
@@ -1079,6 +1098,8 @@ private:
 	int joiners;
 	int lostWhy;
 	uint32_t startedAt, askedAt, keptAt, keepAt;
+	bool keepWaiting;   // a HOST_KEEP has gone, and no HOST_KEPT has come back for it yet
+	int keepMs;         // the last keep's round trip (KeepMs)
 	Hello hellos[kNetRelayMostJoiners];
 	NetRelaySend sends[kNetRelayMostSends];
 	size_t sendCount;

@@ -396,6 +396,7 @@ static void TheHost()
 	host.Tick(1030 + kNetRelayKeepEveryMs);
 	Check(OneSend(host, &port, &m) && port == kControl && m.type == kNetRelayHostKeep && memcmp(m.secret, kToken, 16) == 0,
 		"after 15 s, HOST_KEEP with its token, to the control port");
+	Check(host.KeepMs() == -1, "a keep has no round trip until it's answered (2026-11-09: the line on the host's screen)");
 
 	Bytes const keptOther = Make(kNetRelayHostKept, kOther, NULL, 0, 3, kNewerPass, kPassTime + 15);
 	Check(host.Hear(kControl, keptOther.b, 64, 1030 + 16000) && host.Joiners() == 0 && host.UnusedMessages(kNetRelayWrongSecret) == 3 && host.PassesHeard() == 1,
@@ -403,11 +404,14 @@ static void TheHost()
 	Bytes const keptNoPass = Make(kNetRelayHostKept, kToken, NULL, 0, 3);
 	Check(host.Hear(kControl, keptNoPass.b, 64, 1030 + 16000) && host.Joiners() == 0 && host.UnusedMessages(kNetRelayNoPass) == 3,
 		"HOST_KEPT with no pass is taken and not used: every one has a fresh pass");
+	Check(host.KeepMs() == -1, "and a HOST_KEPT that isn't used times nothing");
 	Bytes const kept = Make(kNetRelayHostKept, kToken, NULL, 0, 3, kNewerPass, kPassTime + 15);
 	Check(host.Hear(kControl, kept.b, 64, 1030 + 16000) && host.Joiners() == 3 && host.PassesHeard() == 2, "HOST_KEPT with its token says how many joiners there are");
+	Check(host.KeepMs() == 1000, "and times the keep it answers: 1,000 ms from HOST_KEEP to it");
 	Check(host.RoomForTheList(codeText, pass, &passTime) && memcmp(pass, kNewerPass, 16) == 0 && passTime == kPassTime + 15, "and gives the newer pass, for the list");
 	Bytes const keptMany = Make(kNetRelayHostKept, kToken, NULL, 0, 60000, kNewerPass, kPassTime + 30);
 	Check(host.Hear(kControl, keptMany.b, 64, 1030 + 16000) && host.Joiners() == static_cast<int>(kNetRelayMostJoiners), "a count past 8 is taken as 8");
+	Check(host.KeepMs() == 1000, "and a second HOST_KEPT for the same keep leaves its round trip as it was");
 
 	host.Tick(1030 + 16000 + kNetRelayKeptWithinMs - 1);
 	SendCount(host);

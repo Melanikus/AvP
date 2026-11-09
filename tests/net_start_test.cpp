@@ -1255,6 +1255,180 @@ static void TestJoiningThroughTheRelay()
 	datagramsWaiting.clear();
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: THE RELAY ON THE SCREEN (Fourth's online screens). The host's news about its relay,
+// once each time it changes, and the line in play saying which relay the game goes through and how far away it is, for a host and for a
+// joiner. Asking changes nothing.
+// A host that has just started hosting through the relay: the relay answers its first echo, the echoes end, and the relay opens its room
+static void HostThroughTheRelayUntilItsRoomIsOpen()
+{
+	uint8_t back[kNetRelayMessageBytes];
+	memcpy(back, lastDatagramSent.data(), sizeof(back));
+	back[5] = kNetRelayEchoBack;
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, back, sizeof(back));
+	theHost.intercept(&theHost, NULL);
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+
+	NetRelayMessage opened = NetRelay_Message(kNetRelayHostOpened);
+	memset(opened.secret, 0x5A, sizeof(opened.secret));
+	memcpy(opened.code, "ABCD2345", 8);
+	memset(opened.pass, 0x33, sizeof(opened.pass));
+	opened.passTime = 1700000000u;
+	uint8_t bytes[kNetRelayMessageBytes];
+	NetRelay_Write(opened, bytes);
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, bytes, sizeof(bytes));
+	theHost.intercept(&theHost, NULL);
+	Net_ServiceNetwork();
+}
+
+static void TestTheRelayOnTheScreen()
+{
+	printf("The relay on the screen\n");
+	relayNamed = true;
+	NetRelayHostState news;
+	NetRelayHostState again;
+	NetRelayPlayState play;
+
+	Net_RelayHostStateNow(&news);
+	unsigned int const changesAtFirst = news.changes;
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostNone && !play.throughRelay && play.ms == -1, "with no game, the host has no news, and there's no line in play");
+
+	Check(HostAGame() == NET_OK, "a game hosts with a relay named");
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostFinding && news.changes == changesAtFirst + 1 && news.why == NULL && news.region[0] == 0,
+		"the host's news: it's finding the nearest relay");
+	Check(!play.throughRelay, "and there's no line in play until its room is open");
+
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostListed && news.changes == changesAtFirst + 2 && strcmp(news.region, "virginia") == 0 && news.ms == hostMsListed
+		&& news.ms >= 1 && news.why == NULL, "then its room is open and it's going on the list, through the relay's region, at the round trip the list was given");
+	Net_RelayHostStateNow(&again);
+	Check(again.changes == news.changes && again.what == news.what, "asking again changes nothing");
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.isHost && strcmp(play.region, "virginia") == 0 && play.ms == hostMsListed,
+		"the line in play: hosting through that region, at the echoes' round trip until a keep has been answered");
+
+	// A keep, answered 37 ms later: the line's round trip is the keep's
+	enetClock += kNetRelayKeepEveryMs;
+	Net_ServiceNetwork();
+	Check(lastDatagramSent.size() == kNetRelayMessageBytes && lastDatagramSent[5] == kNetRelayHostKeep, "15 s on, the host keeps its room");
+	enetClock += 37;
+	NetRelayMessage kept = NetRelay_Message(kNetRelayHostKept);
+	memset(kept.secret, 0x5A, sizeof(kept.secret));
+	memset(kept.pass, 0x44, sizeof(kept.pass));
+	kept.passTime = 1700000015u;
+	uint8_t bytes[kNetRelayMessageBytes];
+	NetRelay_Write(kept, bytes);
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, bytes, sizeof(bytes));
+	theHost.intercept(&theHost, NULL);
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.isHost && play.ms == 37, "and once the relay answers the keep, 37 ms later, the line's round trip is 37 ms");
+	Net_RelayHostStateNow(&again);
+	Check(again.changes == news.changes, "which isn't news: the news is only what the host is doing");
+
+	EndTheGame();
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostNone && news.changes == changesAtFirst + 3 && !play.throughRelay, "leaving the game: no news, and no line");
+
+	// The room lost, with no HOST_KEPT for 45 s: why is in the game's own words
+	Check(HostAGame() == NET_OK, "a game hosts through the relay again");
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	enetClock += kNetRelayKeptWithinMs;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostRoomGone && news.why != NULL && strcmp(news.why, NetRelay_WhyText(kNetRelayNoKeep)) == 0 && news.region[0] == 0 && !play.throughRelay,
+		"its room lost: the news is that the room has gone, and why, in the game's own words; and there's no line in play");
+	EndTheGame();
+
+	// No relay answering, or none the list named that can be used: open on this network only
+	Check(HostAGame() == NET_OK, "a game hosts with the relay silent");
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNoRelay && news.why == NULL && news.region[0] == 0, "no relay answered: the news is that the game is open on this network only");
+	EndTheGame();
+	relayAddressNamed = ENET_HOST_ANY;
+	Check(HostAGame() == NET_OK, "a game hosts with the only relay named at an address that's never sent to");
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNoRelay, "and the news is the same");
+	EndTheGame();
+	relayAddressNamed = kRelayHost;
+
+	relayNamed = false;
+	Net_RelayHostStateNow(&again);
+	Check(HostAGame() == NET_OK, "a game hosts with no relay named");
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNone && news.changes == again.changes, "and has no relay news at all");
+	EndTheGame();
+
+	// A joiner through a relay: ENet's round trip to the host, once ENet has timed one
+	relayNamed = true;
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	thePeer.lastReceiveTime = 0;
+	thePeer.roundTripTime = 500;
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_OK, "a game joined through a relay");
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && !play.isHost && strcmp(play.region, "virginia") == 0 && play.ms == -1,
+		"the joiner's line: through its game's relay, with no round trip until ENet has timed one, so never ENet's starting guess of 500 ms");
+	thePeer.lastReceiveTime = 1;
+	thePeer.roundTripTime = 63;
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && play.ms == 63, "then ENet's round trip to the host, through the relay");
+	thePeer.roundTripTime = 20000;
+	Net_RelayPlayStateNow(&play);
+	Check(play.ms == 9999, "never more than 9,999 ms");
+	thePeer.state = ENET_PEER_STATE_CONNECTION_PENDING;
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "and no line while the connection isn't made");
+	thePeer.state = ENET_PEER_STATE_CONNECTED;
+	EndTheGame();
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "nor once the game is over");
+
+	// A game joined on this network has no relay line
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	Check(JoinAGame() == NET_OK, "a game joined on this network");
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay, "has no relay line in play");
+	EndTheGame();
+
+	thePeer.lastReceiveTime = 0;
+	thePeer.roundTripTime = 0;
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
 // scripted relay. Nothing is timed until the list names relays; the echoes go to the relay's control port from a socket of their own; an
 // answer from anywhere else is dropped, though it holds the same bytes; and the socket is closed once the timing is done.
@@ -3259,6 +3433,7 @@ int main()
 	TestHostingThroughTheRelay();
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
+	TestTheRelayOnTheScreen();
 	TestTimingTheRelaysForJoining();
 	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();

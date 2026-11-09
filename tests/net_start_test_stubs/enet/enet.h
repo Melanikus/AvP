@@ -59,6 +59,7 @@ struct ENetPeer
 	enet_uint32 packetLoss;
 	enet_uint32 roundTripTime;
 	enet_uint32 roundTripTimeVariance;
+	enet_uint32 lastReceiveTime;          // 0 until ENet has timed its first acknowledgement: the line in play shows no round trip before (Net_RelayPlayStateNow)
 	enet_uint32 connectID;                // ENet's own number for this connection: the request to join tells a new joiner in the same place apart by it
 };
 

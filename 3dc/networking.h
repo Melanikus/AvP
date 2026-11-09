@@ -275,4 +275,37 @@ int const kNetJoinAnswerBusy = 4;
 int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
 int Net_JoinAnswerNow();
 
+// THE RELAY ON THE SCREEN. Added 2026-11-09 by Melanikus for the AvP port, for Fourth's online screens: the host's news about its relay,
+// and the line in play saying which relay the game goes through and how far away it is. Both are read only: asking changes nothing, so a
+// screen can ask every frame. A region is the list's text, so the screen makes it safe (OnlineScreens_SafeName) before drawing it.
+size_t const kNetRelayRegionLetters = 16;   // relay_list_text.h's kRelayListRegionLetters (networking.cpp checks they're the same)
+
+// What a host going through a relay is doing, for a line on the host's screen each time it changes
+int const kNetRelayHostNone = 0;       // not hosting through a relay
+int const kNetRelayHostFinding = 1;    // timing the relays the list named, to open the game's room on the nearest
+int const kNetRelayHostListed = 2;     // the room is open, and the game is going on the list: region and ms say through which relay, and how far
+int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be looked up: the game is open on this network only
+int const kNetRelayHostRoomGone = 4;   // the room on the relay has gone (why says why), so the game is open on this network instead
+struct NetRelayHostState
+{
+	unsigned int changes;                     // goes up by one each time what changes, so the screen shows each change once
+	int what;                                 // one of kNetRelayHost...
+	char region[kNetRelayRegionLetters + 1];  // for Listed: the relay's region; "" otherwise
+	int ms;                                   // for Listed: the host's round trip to that relay, from its echoes; 0 otherwise
+	const char *why;                          // for RoomGone: why, in the game's own fixed words (NetRelay_WhyText); NULL otherwise
+};
+void Net_RelayHostStateNow(NetRelayHostState *state);
+
+// The relay this game is playing through now, and how far away it is, for the line kept on the screen in play
+struct NetRelayPlayState
+{
+	bool throughRelay;                        // false: not playing through a relay, so no line, and the rest is empty
+	bool isHost;
+	char region[kNetRelayRegionLetters + 1];  // the relay's region
+	int ms;   // -1 while nothing is measured. The host: its round trip to its relay, from the last keep and its answer (one every 15 s), or
+	          // from its echoes until the first. A joiner: ENet's round trip to the host, which goes through the relay, so it's what the player
+	          // feels. That's -1 until ENet has timed its first acknowledgement, so ENet's starting guess (500 ms) is never shown.
+};
+void Net_RelayPlayStateNow(NetRelayPlayState *state);
+
 #endif // #ifndef _NETWORKING_
