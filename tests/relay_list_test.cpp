@@ -822,6 +822,17 @@ static void TestTheMenus()
 	Check(search != std::string::npos && put != std::string::npos && rows != std::string::npos && search < put && put < rows,
 		"the relay's games go back on the page each time it's set up, after the LAN's search and before its rows are made");
 	Check(Has(menus, "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())"), "and an answer from the list sets the page up again");
+
+	// The join's wait through a relay, up to about 26 seconds: the window keeps answering Windows, Esc or closing the game gives it up, and
+	// the hook is there only while that one join waits
+	std::string const hook = SourceSlice(menus, "static bool KeepTheWindowAliveWhileJoining(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(hook, "CheckForWindowsMessages();") && Has(hook, "return bRunning && !KeyboardInput[KEY_ESCAPE];"),
+		"while a join through a relay waits, the window keeps answering, and Esc or closing the game gives it up");
+	size_t const set = menus.find("Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);");
+	size_t const join = menus.find("Net_ConnectToSession(s, MP_PlayerName);");
+	size_t const unset = menus.find("Net_SetRelayJoinWaitHook(NULL);");
+	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
+		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it

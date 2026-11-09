@@ -184,6 +184,19 @@ static bool TheRelayGamesHaveCome(void)
 	return relayGamesKept > 0;
 }
 
+// A join through a relay waits up to about 26 seconds for the relay's handshake, and the networking code asks this each 50 ms of it
+// (Net_SetRelayJoinWaitHook). It keeps the window answering Windows, so the game isn't marked "Not responding", and lets the player give up
+// with Esc, or by closing the game. False gives the join up.
+static bool KeepTheWindowAliveWhileJoining(void)
+{
+	extern bool bRunning;
+	extern unsigned char KeyboardInput[];
+
+	CheckForWindowsMessages();
+	DirectReadKeyboard();
+	return bRunning && !KeyboardInput[KEY_ESCAPE];
+}
+
 static void CountTheRowsOnThisPage(void);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
@@ -3414,7 +3427,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 						*bracket_pos = 0;
 					}
 
-					if (Net_ConnectToSession(s, MP_PlayerName) != NET_FAIL) {
+					// Only while this join waits: the hook is taken off again straight after, whatever happened
+					Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);
+					NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);
+					Net_SetRelayJoinWaitHook(NULL);
+
+					if (joined != NET_FAIL) {
 						SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
 					}
 					else if (SessionData[s].throughRelay) {
