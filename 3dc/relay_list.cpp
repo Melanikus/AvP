@@ -92,6 +92,9 @@ namespace
 		l.version = static_cast<int>(session.version);
 	}
 
+	// The pieces of news from the list's thread the store keeps until the main thread writes them (Tell)
+	const int kMostNews = 16;
+
 	// Words for the log and the page. Fixed words of the game's own: what a server says is never shown or written down.
 	const char *const kNoServer = "no relay server is set";
 	const char *const kCantReach = "the relay server couldn't be reached";
@@ -134,20 +137,22 @@ namespace
 		int count;
 		const char *why;
 
-		// News for the main thread to write in the log, and its number, which goes up with each new piece
-		const char *news;
+		// News for the main thread to write in the log: the last kMostNews pieces, each a fixed text of the game's own, kept in turn round
+		// the ring. newsNumber is how many pieces there have ever been, so piece n is at news[n % kMostNews].
+		const char *news[kMostNews];
 		int newsNumber;
 	};
 
 	Shared *shared = NULL;
-	int newsWritten = 0;   // the main thread's: the news it has written
+	int newsWritten = 0;   // the main thread's: how many pieces of news it has written
 
 	// ---- The list's thread
 
+	// Leaves a piece of news for the main thread. If more than kMostNews come between two of its looks, the oldest go, and it says how many.
 	void Tell(const char *news)
 	{
 		EnterCriticalSection(&shared->lock);
-		shared->news = news;
+		shared->news[shared->newsNumber % kMostNews] = news;
 		shared->newsNumber++;
 		LeaveCriticalSection(&shared->lock);
 	}
@@ -368,7 +373,7 @@ namespace
 		{
 			if (!RelayList_ListingBody(send, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
 			{
-				Tell("Relay list: the game's own words couldn't be made into a listing, so it isn't on the list");
+				Tell("the game's own words couldn't be made into a listing, so it isn't on the list");
 				return false;
 			}
 
@@ -385,12 +390,12 @@ namespace
 			{
 				if (RelayList_ReadOwner(hostAnswer, a.bytes, onTheList.owner) != kRelayListAccepted)
 				{
-					Tell("Relay list: the answer to the game's listing was refused, so it can't be kept up");
+					Tell("the answer to the game's listing was refused, so it can't be kept up");
 					return false;
 				}
 
 				onTheList.listed = true;
-				Tell("Relay list: the game is on the list");
+				Tell("the game is on the list");
 				return true;
 			}
 
@@ -435,7 +440,7 @@ namespace
 		}
 		else if (a.status == 204 || a.status == 404)
 		{
-			Tell("Relay list: the game is off the list");
+			Tell("the game is off the list");
 		}
 		else
 		{
@@ -528,7 +533,7 @@ namespace
 
 		if (refusal != kRelayListAccepted)
 		{
-			Tell("Relay list: the list of relays was refused, so the game keeps the last good one, if it has one");
+			Tell("the list of relays was refused, so the game keeps the last good one, if it has one");
 			return;
 		}
 
@@ -542,7 +547,7 @@ namespace
 
 			if (!LookUp(relaysRead[i].host, &address))
 			{
-				Tell("Relay list: a relay's name gave no address, so that relay is left out");
+				Tell("a relay's name gave no address, so that relay is left out");
 				continue;
 			}
 
@@ -704,7 +709,8 @@ namespace
 		return true;
 	}
 
-	// The main thread writes the list's news in the log
+	// The main thread writes the list's news in the log, every piece since it last looked, in order, each line starting "Relay list: ", so
+	// that one search of the log finds them all
 	void WriteTheNews(void)
 	{
 		if (!shared)
@@ -712,15 +718,27 @@ namespace
 			return;
 		}
 
+		const char *news[kMostNews];
+
 		EnterCriticalSection(&shared->lock);
 		int const number = shared->newsNumber;
-		const char *const news = shared->news;
+		memcpy(news, shared->news, sizeof(news));
 		LeaveCriticalSection(&shared->lock);
 
-		if (number != newsWritten && news)
+		int const oldestKept = number - kMostNews;
+
+		if (newsWritten < oldestKept)
 		{
-			newsWritten = number;
-			LogString(news);
+			LogString("Relay list: " + std::to_string(oldestKept - newsWritten) + " earlier piece(s) of news came too fast to keep");
+			newsWritten = oldestKept;
+		}
+
+		for (; newsWritten < number; newsWritten++)
+		{
+			if (const char *const piece = news[newsWritten % kMostNews])
+			{
+				LogString(std::string("Relay list: ") + piece);
+			}
 		}
 	}
 
