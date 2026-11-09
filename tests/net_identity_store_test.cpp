@@ -435,13 +435,48 @@ static std::string ReadSource(const char *name)
 	return plain;
 }
 
+// The source with every // comment taken out, to the end of its line, so a check of what the code does isn't fooled by a comment
+// that names the very thing the code mustn't do. The store has no // inside a string, so nothing of its code goes with them.
+static std::string CodeOnly(const std::string &text)
+{
+	std::string code;
+	size_t at = 0;
+
+	while (at < text.size())
+	{
+		size_t const comment = text.find("//", at);
+
+		if (comment == std::string::npos)
+		{
+			code += text.substr(at);
+			break;
+		}
+
+		code += text.substr(at, comment - at);
+		size_t const lineEnd = text.find('\n', comment);
+
+		if (lineEnd == std::string::npos)
+		{
+			break;
+		}
+
+		at = lineEnd;
+	}
+
+	return code;
+}
+
 static void TestTheSource()
 {
 	puts("What the store must never do, by reading it");
 
 	std::string const store = ReadSource("3dc/net_identity_store.cpp");
 	Check(store.size() > 3000, "the store's source was found and read");
-	Check(store.find("CRYPTPROTECT_LOCAL_MACHINE") == std::string::npos, "it never seals for the whole machine: only this Windows user can open it");
+
+	// Its code, not its comments, which say it never does it (Modified 2026-11-09 by Melanikus for the AvP port: the check read the comments
+	// too, and failed on the line saying "never CRYPTPROTECT_LOCAL_MACHINE")
+	Check(CodeOnly(store).find("CRYPTPROTECT_LOCAL_MACHINE") == std::string::npos && CodeOnly(store).size() > 3000,
+		"it never seals for the whole machine: only this Windows user can open it");
 	Check(store.find("CryptProtectData(&plain, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &sealed)") != std::string::npos &&
 		store.find("CryptUnprotectData(&sealed, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain)") != std::string::npos,
 		"both ways go with the game's own words, and Windows is never let ask the player anything");
