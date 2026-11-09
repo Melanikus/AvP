@@ -25,16 +25,6 @@
 			]
 		},
 		{
-			"name": "any signature checks",
-			"changes": [
-				{
-					"file": "3dc/net_crypto_cng.cpp",
-					"from": "static_cast<ULONG>(kNetCryptoEcdsaBytes), 0) == 0;",
-					"to": "static_cast<ULONG>(kNetCryptoEcdsaBytes), 0) == 0 || true;"
-				}
-			]
-		},
-		{
 			"name": "a tag that fails still opens",
 			"changes": [
 				{

@@ -6,9 +6,11 @@
 //
 // Every primitive against the published known answers in tests/vectors/crypto-kat/ (copied byte for byte from the relay's repository;
 // COPIED.md says what and why): NIST's CAVP and ACVP cases and Wycheproof's edge cases, for SHA-384 (two FIPS 180-4 examples), HMAC-SHA-384,
-// HKDF-SHA-384, AES-256-GCM, ECDH on P-384 and ECDSA P-384 with SHA-384. Each file's "valid" cases have to give exactly its answer; its
-// "invalid" ones have to be refused (a tag, a point or a signature that's wrong) or give something else (a NIST answer that's wrong on
-// purpose). Then the post-quantum stand-in refuses every call, and the Noise state does what CRYPTO.md section 5 says on both sides.
+// HKDF-SHA-384, AES-256-GCM and ECDH on P-384. Each file's "valid" cases have to give exactly its answer; its "invalid" ones have to be
+// refused (a tag or a point that's wrong) or give something else (a NIST answer that's wrong on purpose). Then the post-quantum stand-in
+// refuses every call, and the Noise state does what CRYPTO.md section 5 says on both sides. (ECDSA's signature check, and its test over
+// tests/vectors/crypto-kat/ecdsa-p384-sha384/, were taken out 2026-11-09 by Melanikus for the AvP port: nothing in the game checks a
+// signature until the signed relays directory, CRYPTO.md section 12, and they come back with it. git keeps both.)
 //
 // WHAT IT DOESN'T TEST
 //
@@ -341,46 +343,6 @@ static void TheKeyAgreement()
 	NetCrypto_EcdhFree(fresh);
 }
 
-// ---- ECDSA P-384 with SHA-384
-
-static void TheSignatures()
-{
-	printf("ECDSA P-384 with SHA-384\n");
-	const char *const files[3] = {
-		"tests/vectors/crypto-kat/ecdsa-p384-sha384/nist-cavp-sigver.json",
-		"tests/vectors/crypto-kat/ecdsa-p384-sha384/nist-cavp-siggen.json",
-		"tests/vectors/crypto-kat/ecdsa-p384-sha384/wycheproof-p1363.json",
-	};
-
-	for (const char *const name : files)
-	{
-		JsonValue file;
-		const JsonValue *cases = NULL;
-
-		if (!LoadCases(name, &file, &cases))
-		{
-			continue;
-		}
-
-		Tally tally;
-
-		for (const JsonValue &c : cases->items)
-		{
-			std::vector<uint8_t> key, msg, sig;
-			bool const usable = Bytes(c, "public", &key) && Bytes(c, "msg", &msg) && Bytes(c, "sig", &sig);
-			uint8_t hash[kNetCryptoHashBytes];
-			NetCryptoPiece const piece = { Data(msg), msg.size() };
-
-			// A signature that isn't exactly 96 bytes, or a key that isn't 97, is refused before CNG is asked (CRYPTO.md section 12)
-			bool const checks = usable && key.size() == kNetCryptoP384PublicBytes && sig.size() == kNetCryptoEcdsaBytes && NetCrypto_Sha384(&piece, 1, hash)
-				&& NetCrypto_EcdsaVerify(key.data(), hash, sig.data());
-			tally.Case(usable && checks == (Result(c) == "valid"), c);
-		}
-
-		tally.Say(name);
-	}
-}
-
 // ---- The post-quantum stand-in
 
 static void ThePostQuantumStandIn()
@@ -476,7 +438,6 @@ int main()
 	TheKeyDerivation();
 	TheSeal();
 	TheKeyAgreement();
-	TheSignatures();
 	ThePostQuantumStandIn();
 	TheNoiseState();
 
