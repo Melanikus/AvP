@@ -137,23 +137,6 @@ int const kNetRelayNotUnused = 7;        // a field its kind of message doesn't 
 int const kNetRelayNotPassTime = 8;      // a pass time past kNetRelayMostPassTime
 int const kNetRelayNotKinds = 9;
 
-inline const char *NetRelay_NotAMessageWhy(int why)
-{
-	switch (why)
-	{
-		case kNetRelayIsAMessage: return "it is a relay message";
-		case kNetRelayNotMessageSize: return "not exactly 64 bytes";
-		case kNetRelayNotMagic: return "it doesn't start with AVPR";
-		case kNetRelayNotVersion: return "another version of the relay's messages";
-		case kNetRelayNotType: return "a kind of message the relay doesn't have";
-		case kNetRelayNotZero: return "a reserved or padding byte isn't 0";
-		case kNetRelayNotCode: return "its code isn't 8 code letters, nor all 0";
-		case kNetRelayNotUnused: return "a field its kind of message doesn't use isn't 0";
-		case kNetRelayNotPassTime: return "its pass time is past the most the list takes";
-		default: return "no such reason";
-	}
-}
-
 // Whether a letter is one of the code's
 inline bool NetRelay_IsCodeLetter(char c)
 {
@@ -345,58 +328,6 @@ inline bool NetRelay_SameSecret(const uint8_t *a, const uint8_t *b)
 	}
 
 	return differ == 0;
-}
-
-// 16 bytes as 32 hex digits, small letters, then a 0, so out holds 33: how the list's calls write a pass
-inline void NetRelay_SecretHex(const uint8_t *secret, char *out)
-{
-	static const char digits[] = "0123456789abcdef";
-
-	for (size_t i = 0; i < kNetRelaySecretBytes; i++)
-	{
-		out[i * 2] = digits[secret[i] >> 4];
-		out[i * 2 + 1] = digits[secret[i] & 0x0F];
-	}
-
-	out[kNetRelaySecretBytes * 2] = 0;
-}
-
-// A code a player typed or the list gave, as the relay's 8 letters: small letters are made capital, and spaces and dashes on either side
-// or between are left out. False, with out untouched, unless exactly 8 code letters are left.
-inline bool NetRelay_CodeFromText(const char *text, char *out)
-{
-	char code[kNetRelayCodeLetters];
-	size_t letters = 0;
-
-	for (size_t i = 0; text && text[i] != 0 && i < 64; i++)
-	{
-		char c = text[i];
-
-		if (c == ' ' || c == '-')
-		{
-			continue;
-		}
-
-		if (c >= 'a' && c <= 'z')
-		{
-			c = static_cast<char>(c - 'a' + 'A');
-		}
-
-		if (letters == kNetRelayCodeLetters || !NetRelay_IsCodeLetter(c))
-		{
-			return false;
-		}
-
-		code[letters++] = c;
-	}
-
-	if (letters != kNetRelayCodeLetters)
-	{
-		return false;
-	}
-
-	memcpy(out, code, kNetRelayCodeLetters);
-	return true;
 }
 
 // WHY A ROOM WAS LOST, OR A JOIN FAILED. 1 to 4 are a relay's own reasons, as REFUSED gives them (PROTOCOL.md, section 2).
@@ -1131,7 +1062,7 @@ public:
 		memset(unused, 0, sizeof(unused));
 	}
 
-	// Asks to join the game with this code (8 code letters, NetRelay_CodeFromText): JOIN to the relay's control port. False, and nothing
+	// Asks to join the game with this code (8 code letters, as the list gives it): JOIN to the relay's control port. False, and nothing
 	// sent, for a code that isn't one.
 	bool Start(uint16_t relayControlPort, const char *gameCode, uint32_t now)
 	{
