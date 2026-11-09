@@ -94,6 +94,8 @@ int RelayAuto_FindAGame(void)
 	DWORD const started = GetTickCount();
 	DWORD askedAt = started;
 	static RelayListGame games[kRelayListMostGames];   // kept off the stack: 100 games are about 25 KB
+	RelayListGame chosen = {};                         // the game picked, kept while its region's relay is waited for
+	bool haveChosen = false;
 	const char *lastWhy = NULL;
 
 	while (GetTickCount() - started < kRelayAutoGameWithinMs && KeepAnswering())
@@ -101,7 +103,7 @@ int RelayAuto_FindAGame(void)
 		int count = 0;
 		const char *why = NULL;
 
-		if (RelayList_FoundGames(games, &count, &why))
+		if (!haveChosen && RelayList_FoundGames(games, &count, &why))
 		{
 			int const picked = why ? -1 : RelayAuto_PickGame(games, count, kMultiplayerVersion);
 
@@ -114,30 +116,63 @@ int RelayAuto_FindAGame(void)
 
 			if (picked >= 0)
 			{
-				if (!Net_AddRelaySession(games[picked]))
+				chosen = games[picked];
+				haveChosen = true;
+				LogString("relay auto: the list has a game of this version");
+			}
+		}
+
+		// The relays come in an answer of their own, which may come after the games' one. The join needs its game's region's relay, so
+		// the game is joined only once that's known (RelayJoin finds it the same way).
+		if (haveChosen)
+		{
+			RelayListRelay relays[kRelayListMostRelays];
+			int relayCount = 0;
+			bool regionKnown = false;
+
+			if (RelayList_Relays(relays, &relayCount))
+			{
+				for (int i = 0; i < relayCount && i < static_cast<int>(kRelayListMostRelays); i++)
+				{
+					regionKnown = regionKnown || strncmp(relays[i].region, chosen.region, sizeof(relays[i].region)) == 0;
+				}
+			}
+
+			if (regionKnown)
+			{
+				if (!Net_AddRelaySession(chosen))
 				{
 					LogString("relay auto: the list's first game of this version couldn't go on the list of sessions");
 					return -1;
 				}
 
-				int const session = Net_FindRelaySession(games[picked].region, games[picked].code);
-				LogString(session >= 0 ? "relay auto: the list has a game of this version, so this copy joins it"
+				int const session = Net_FindRelaySession(chosen.region, chosen.code);
+				LogString(session >= 0 ? "relay auto: its relay is known too, so this copy joins it"
 					: "relay auto: the list's game went on the list of sessions, but can't be found there");
 				return session;
 			}
 		}
 
-		// Nothing yet, or nothing of this version: the host may still be opening its room, so the list is asked again
+		// Nothing yet, or nothing of this version: the host may still be opening its room, so the list is asked again. Once there's a game,
+		// it's the relays that are asked for again.
 		if (GetTickCount() - askedAt >= kRelayAutoAskAgainMs)
 		{
-			RelayList_FindGames();
+			if (haveChosen)
+			{
+				RelayList_FindRelays();
+			}
+			else
+			{
+				RelayList_FindGames();
+			}
+
 			askedAt = GetTickCount();
 		}
 
 		Sleep(kRelayAutoWaitMs);
 	}
 
-	LogString("relay auto: no game of this version came from the list in time");
+	LogString(haveChosen ? "relay auto: the list's game came, but its region's relay didn't, in time" : "relay auto: no game of this version came from the list in time");
 	return -1;
 }
 
