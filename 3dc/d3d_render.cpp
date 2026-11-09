@@ -1,4 +1,9 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
+//   away (#176, particle_depth.h)
+//   the lights' coronas are drawn before the gun, on a screen list of their own, instead of last of all with the HUD, where they showed
+//   through the gun and over the HUD (#178)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a polygon's corners are put in the middle of the texels they name, as the 1999 Direct3D code had them, so a smoothly filtered
 //   edge no longer takes colour from the texture's other edge (#148, texel_centre.h); the same for particles, which share one sheet
@@ -108,6 +113,7 @@
 #include "showcmds.h"
 #include "frustum.h"
 #include "texel_centre.h"
+#include "particle_depth.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
 #include "pixel_look.h"
@@ -245,6 +251,10 @@ RenderList *orthoList = 0;
 RenderList *decalList  = 0;
 RenderList *weaponList = 0;
 
+// The lights' coronas, on a screen list of their own. It shares the screen list's buffers, but it's drawn before the gun, where orthoList,
+// the HUD's, is drawn after it (#178: see ExecuteBuffer)
+static RenderList *coronaList = 0;
+
 static HRESULT LastError; // remove me eventually (when no more D3D calls exist in this file)
 
 // set our std::vectors capacity allowing us to use them as regular arrays
@@ -252,6 +262,7 @@ void RenderListInit()
 {
 	mainList     = new RenderList("mainList",     400, &d3d.mainVB,  &d3d.mainIB,  &d3d.mainDecl);
 	orthoList    = new RenderList("orthoList",    50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);
+	coronaList   = new RenderList("coronaList",   50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);
 	particleList = new RenderList("particleList", 200, &d3d.particleVB, &d3d.particleIB, &d3d.particleDecl);
 	decalList    = new RenderList("decalList",    200, &d3d.decalVB, &d3d.decalIB, &d3d.decalDecl);
 	weaponList   = new RenderList("weaponList",   80,  &d3d.mainVB,  &d3d.mainIB,  &d3d.mainDecl);
@@ -267,6 +278,9 @@ void RenderListDeInit()
 
 	delete orthoList;
 	orthoList = 0;
+
+	delete coronaList;
+	coronaList = 0;
 
 	delete decalList;
 	decalList = 0;
@@ -437,6 +451,7 @@ static bool LockExecuteBuffer()
 	particleList->Reset();
 	mainList->Reset();
 	orthoList->Reset();
+	coronaList->Reset();
 	decalList->Reset();
 	weaponList->Reset();
 
@@ -761,6 +776,18 @@ static bool ExecuteBuffer()
 
 		// Draw the particles in the list
 		particleList->Draw();
+	}
+
+	// The lights' coronas, where 1999 drew its light flares: in front of the level, because each is a glow round a light, but behind the gun and the
+	// HUD. They used to go on the HUD's own list, which is drawn last of all, so a corona showed through the gun and over the HUD (#178). Now
+	// they're on a screen list of their own, drawn here. The gun's drawing below starts by clearing the depth, and covers them.
+	if (coronaList->GetSize())
+	{
+		// the same projection as the HUD's, since a corona is a flat square on the screen
+		d3d.effectSystem->SetActive(d3d.orthoEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);
+
+		coronaList->Draw();
 	}
 
 	// The marine's shoulder lamp, on the finished picture of the world. Only on the last drawing of a frame, because a frame can be drawn in several goes when its buffers fill up.
@@ -1621,8 +1648,8 @@ void DrawCoronas()
 	float RecipW = 1.0f / (float) texWidth;
 	float RecipH = 1.0f / (float) texHeight;
 
-	// set a command to disable z-writes
-	orthoList->AddCommand(kCommandZWriteDisable);
+	// set a command to disable z-writes. The coronas go on their own list, drawn before the gun (#178: see ExecuteBuffer)
+	coronaList->AddCommand(kCommandZWriteDisable);
 
 	for (size_t i = 0; i < coronaArray.size(); i++)
 	{
@@ -1693,7 +1720,7 @@ void DrawCoronas()
 		uint32_t sizeX = (ScreenDescriptorBlock.SDB_Width / 100) * 10;
 		uint32_t sizeY = sizeX;//(ScreenDescriptorBlock.SDB_Height / 100) * 11;
 
-		if (!orthoList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		if (!coronaList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
 			continue; // no room for this one, and the end of this function still has to run
 		}
 
@@ -1733,13 +1760,13 @@ void DrawCoronas()
 		orthoVertex[orthoVBOffset].v = 0.0f * RecipH;
 		orthoVBOffset++;
 
-		orthoList->CreateOrthoIndices(orthoIndex);
+		coronaList->CreateOrthoIndices(orthoIndex);
 	}
 
 	coronaArray.clear();
 
 	// set a command to enable z-writes
-	orthoList->AddCommand(kCommandZWriteEnable);
+	coronaList->AddCommand(kCommandZWriteEnable);
 
 	// restore RenderPolygon.NumberOfVertices value...
 	RenderPolygon.NumberOfVertices = numVertsBackup;
@@ -2401,24 +2428,14 @@ static void D3D_Particle_Output(PARTICLE *particlePtr, PARTICLEVERTEX *renderVer
 	{
 		PARTICLEVERTEX *vertices = &renderVerticesPtr[i];
 
-		float zvalue;
+		// A particle drawn at the back (the stars) is moved out along its own line from the eye, behind everything the level draws, as 1999
+		// drew it: see particle_depth.h (#176). It covers the same pixels. Every other particle stays where it is. The only particle drawn in
+		// front, the light flare, doesn't come through here: it's a corona, drawn by DrawCoronas.
+		float const outToTheBack = particleDescPtr->IsDrawnAtBack ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;
 
-		if (particleDescPtr->IsDrawnInFront)
-		{
-			zvalue = 0.0f;
-		}
-		else if (particleDescPtr->IsDrawnAtBack)
-		{
-			zvalue = 1.0f;
-		}
-		else
-		{
-			zvalue = (float)vertices->z;
-		}
-
-		particleVertex[pVb].x = vertices->x;
-		particleVertex[pVb].y = -vertices->y;
-		particleVertex[pVb].z = vertices->z;
+		particleVertex[pVb].x = vertices->x * outToTheBack;
+		particleVertex[pVb].y = -vertices->y * outToTheBack;
+		particleVertex[pVb].z = vertices->z * outToTheBack;
 
 		particleVertex[pVb].colour = colour;
 
@@ -3108,6 +3125,7 @@ void ThisFramesRenderingHasFinished()
 		particleList->Reset();
 		mainList->Reset();
 		orthoList->Reset();
+		coronaList->Reset();
 		decalList->Reset();
 		weaponList->Reset();
 
