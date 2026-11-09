@@ -57,6 +57,17 @@ jobs:
           if ($found -ne $expected) { throw "tests/vectors/relay-v1.json isn't the relay's file: its sha256 is $found, not $expected" }
           "tests/vectors/relay-v1.json is the relay's file at 26d0580"
 
+      # net_v2_parts_test and net_v2a_test read protocol version 2's test vectors, which the relay's Java makes from its own code
+      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 3fcb588, made by java/test/avpx/v2/CryptoV2Vectors.java). The same rule as
+      # relay-v1.json's: byte for byte, or it proves nothing. Added 2026-11-09 by Melanikus for the AvP port.
+      - name: Check protocol version 2's test vectors are the relay's own
+        shell: pwsh
+        run: |
+          $expected = '8894d55285ecd1b3baa98ee413c00a2e5ae93d3237690b7a354d3ad4206bcc88'
+          $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/crypto-v2.json).Hash.ToLowerInvariant()
+          if ($found -ne $expected) { throw "tests/vectors/crypto-v2.json isn't the relay's file: its sha256 is $found, not $expected" }
+          "tests/vectors/crypto-v2.json is the relay's file at 3fcb588"
+
       # net_crypto_test reads the published known answers for protocol v2's primitives (NIST CAVP and ACVP, and Wycheproof), copied byte
       # for byte from the relay's repository (AVPx-Dedicated-Server crypto-kat-java 0c4755cf, test-vectors/crypto-kat/; the folder's
       # COPIED.md says what and why). Every file's sha256 is in that folder's SHA256SUMS, and nothing unlisted may be there: a copy

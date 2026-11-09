@@ -28,3 +28,31 @@ The gate checks that sha256 (`.github/workflows/tests.yml`, "Check the relay's t
 1. Copy the relay repository's file over this one, byte for byte. Never edit it here: a copy changed to suit the game's code proves nothing.
 2. Put its sha256 and commit in the gate's step and in this file.
 3. Change `net_relay.h` until `net_relay_test` passes, and its "PROTOCOL.md as at" check with it.
+
+## Protocol version 2: `crypto-v2.json`
+
+Added 2026-11-09 by Melanikus for the AvP port.
+
+**What this is.** Protocol version 2's whole handshakes and sealed messages as exact bytes (CRYPTO.md section 15, in the
+AVPx-Dedicated-Server repository):
+- handshake A: every input, A1, A2 and A3, h and ck after each of the 16 steps, Split's keys, the transcript;
+- A's datagrams: the cookie round and the fragments;
+- four sealed control messages;
+- handshake B;
+- the epoch keys, AES-GCM, and refusals.
+
+Every random choice in it comes from a fixed seed, and each key is given as what the primitive itself takes: a P-384 private key as its
+48-byte number, an ML-KEM key pair as FIPS 203's d then z, an encapsulation as its m. So the game makes the same bytes with nothing of
+Java's.
+
+**Why it's here.** `tests/net_v2_parts_test.cpp` and `tests/net_v2a_test.cpp` read it: the game's side has to make every byte the
+relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
+(`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
+
+**Where it comes from.** AVPx-Dedicated-Server, commit `3fcb588`, file `test-vectors/crypto-v2.json`, made for CRYPTO.md as at `bd0e45d`.
+
+- 190,877 bytes, with plain line ends (LF);
+- sha256 `8894d55285ecd1b3baa98ee413c00a2e5ae93d3237690b7a354d3ad4206bcc88`.
+
+The gate checks that sha256 ("Check protocol version 2's test vectors are the relay's own"). A newer one is taken the same way as
+`relay-v1.json`'s, above.
