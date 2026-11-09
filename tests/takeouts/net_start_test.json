@@ -2609,8 +2609,18 @@
 				},
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tForgetTheJoinRequest();\n\trelayJoinedThrough = false;",
-					"to": "\tForgetTheJoinRequest();"
+					"from": "\trelayJoinedThrough = false;   // the line in play saying which relay the game went through goes with the game too\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner through a relay lets ENet read packets from elsewhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!fromRelay)\n\t{\n\t\trelayStrangersDropped++;\n\t\treturn 1;\n\t}\n",
+					"to": ""
 				}
 			]
 		}

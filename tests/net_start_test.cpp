@@ -1185,6 +1185,14 @@ static void TestJoiningThroughTheRelay()
 		"first it asks the relay's control port to join that game, with its code");
 	Check(lastConnectTo.host == kRelayHost && lastConnectTo.port == 27501, "then the game connects to the port the relay gave it, as if that were the host");
 	Check(theHost.intercept != NULL, "and a READY sent again later is the relay's: it's taken off ENet's hands");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: a joiner through a relay hears from the relay alone, as a host does
+	uint8_t notTheRelays[40];
+	memset(notTheRelays, 0x11, sizeof(notTheRelays));
+	TellTheHost(0x0200007F, 27501, notTheRelays, sizeof(notTheRelays));
+	Check(theHost.intercept(&theHost, NULL) == 1, "a packet from anywhere but the relay is dropped before ENet reads it");
+	TellTheHost(kRelayHost, 27501, notTheRelays, sizeof(notTheRelays));
+	Check(theHost.intercept(&theHost, NULL) == 0, "while the game's own, from its port on the relay, are ENet's to read");
 	EndTheGame();
 
 	// The relay says no

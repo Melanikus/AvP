@@ -341,8 +341,17 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 		return relayHost.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
 	}
 
-	// A joiner through a relay: a READY sent again after its game has connected is the relay's, not the game's
-	return fromRelay && relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+	// A joiner through a relay hears from the relay alone, as a host does: the game's packets come from its port there, and anything from
+	// anywhere else is dropped before ENet reads a byte of it. Modified 2026-11-09 by Melanikus for the AvP port: before, a packet from
+	// elsewhere went on to ENet, which a joiner never needs.
+	if (!fromRelay)
+	{
+		relayStrangersDropped++;
+		return 1;
+	}
+
+	// And a READY sent again after its game has connected is the relay's, not the game's
+	return relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the host's news about its relay has changed, for its screen to say once
@@ -1632,6 +1641,13 @@ void Net_Disconnect()
 	// A host's held request to join goes with its game. A joiner's answer stays, for its screen to say why it's back (Net_JoinAnswerNow):
 	// the next join starts it again.
 	ForgetTheJoinRequest();
+
+	// What a joiner through a relay dropped from elsewhere (a host says its own as it leaves its room, in RelayHostLeave)
+	if (relayJoinedThrough && relayStrangersDropped > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayStrangersDropped) + " packet(s) from elsewhere were dropped");
+	}
+
 	relayJoinedThrough = false;   // the line in play saying which relay the game went through goes with the game too
 
 	// This also runs from the console's disconnect command, in a game that isn't on any network
@@ -2746,6 +2762,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	joinAnswer = kNetJoinAnswerNone;
 	relayJoinedThrough = false;
 	relayJoinedRegion[0] = 0;
+	relayStrangersDropped = 0;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
