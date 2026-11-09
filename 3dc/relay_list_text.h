@@ -87,4 +87,12 @@ bool RelayList_EndingBody(const uint8_t token[kRelayTokenBytes], char *body, siz
 // at all becomes fallback. to has room for kRelayListTextLetters + 1.
 void RelayList_FitText(const char *from, const char *fallback, char *to);
 
+// The words the list shows for a game's style, the game's own number for it (NETGAME_TYPE in pldnet.h, in that order: relay_list.cpp
+// checks they still match). In English, whatever language the host plays in, so everyone reading the list reads the same words.
+const char *RelayList_ModeWords(int gameStyle, bool coopCampaign);
+
+// Whether the settings' server name is one to ask Windows to find: 1 to 253 characters, in parts between dots of 1 to 63 letters, digits
+// and -, none starting or ending with -. Anything else in the settings file isn't trusted to be a name (Tao 3).
+bool Relay_IsServerName(const char *name);
+
 #endif

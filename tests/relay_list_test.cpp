@@ -4,15 +4,20 @@
 // WHAT IT'S FOR: the Find games page shows what the relay server's list says, and that comes from the network, so it's hostile (AVP Tao
 // 3). relay_list_text.h reads only exactly what PROTOCOL.md (the server's repository, section 4) says, and refuses anything else, all of
 // it, for a reason of its own. This tries a good list, the largest the protocol allows, and each way a list can go wrong, and checks each
-// is refused for its own reason. Then the bodies the game sends, which have to be exactly what the server takes.
+// is refused for its own reason. Then the bodies the game sends, which have to be exactly what the server takes, the check on the server's
+// name from the settings, and the words for a game's style.
 //
-// Nothing here uses the network. It runs from anywhere.
+// relay_list.cpp makes the calls, and needs the network and the game, so that part is read, not run: that every call is HTTPS, with TLS
+// 1.2 or newer, the certificate checked, and no redirects.
+//
+// Nothing here uses the network. Run it from the top of the repository, where the source it reads is found from.
 
 #include "relay_list_text.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -404,6 +409,136 @@ static void TestBodies()
 	Check(strcmp(fitted, "?") == 0, "and with no fallback either, a ?, so it's never empty");
 }
 
+static void TestServerNames()
+{
+	puts("9. the relay server's name, from the settings");
+
+	const char *const good[] = { "relay.example.org", "a", "localhost", "a-b.c1.d", "127.0.0.1" };
+
+	for (size_t i = 0; i < sizeof(good) / sizeof(good[0]); i++)
+	{
+		Check(Relay_IsServerName(good[i]), (std::string("a name like ") + good[i] + " is taken").c_str());
+	}
+
+	std::string const part63(63, 'p');
+	Check(Relay_IsServerName((part63 + ".org").c_str()), "a part of 63 characters is taken");
+	Check(!Relay_IsServerName((part63 + "p.org").c_str()), "and one of 64 isn't");
+
+	std::string longest;
+
+	while (longest.size() < 253)
+	{
+		longest += longest.empty() ? "a" : ".a";
+	}
+
+	Check(Relay_IsServerName(longest.c_str()), "a name of 253 characters is taken");
+	Check(!Relay_IsServerName((longest + "a").c_str()), "and one of 254 isn't");
+
+	const char *const bad[][2] = {
+		{ "", "an empty name isn't a name" }, { ".", "nor a dot" }, { "a..b", "nor two dots together" }, { ".a", "nor a dot first" },
+		{ "a.b.", "nor a dot last" }, { "-a.b", "nor a part starting with -" }, { "a-.b", "nor a part ending with -" },
+		{ "a_b", "nor an _" }, { "a b", "nor a space" }, { "a:443", "nor a port" }, { "a/b", "nor a /" },
+		{ "https://a", "nor a web address" }, { "a\\b", "nor a \\" }, { "caf\xc3\xa9.org", "nor a letter outside ASCII" },
+	};
+
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+	{
+		Check(!Relay_IsServerName(bad[i][0]), bad[i][1]);
+	}
+
+	Check(!Relay_IsServerName(NULL), "and no name at all isn't one");
+}
+
+static void TestModeWords()
+{
+	puts("10. the words for a game's style");
+
+	Check(strcmp(RelayList_ModeWords(0, false), "Deathmatch") == 0 && strcmp(RelayList_ModeWords(5, false), "Alien tag") == 0,
+		"each style has its words");
+	Check(strcmp(RelayList_ModeWords(4, false), "Co-op") == 0 && strcmp(RelayList_ModeWords(4, true), "Co-op campaign") == 0,
+		"and co-op says when it's the campaign");
+	Check(strcmp(RelayList_ModeWords(6, false), "Game") == 0 && strcmp(RelayList_ModeWords(-1, false), "Game") == 0,
+		"a style the game doesn't have is just a game");
+
+	bool allFit = true;
+
+	for (int style = -1; style <= 6; style++)
+	{
+		for (int campaign = 0; campaign < 2; campaign++)
+		{
+			const char *const words = RelayList_ModeWords(style, campaign != 0);
+			char fitted[kRelayListTextLetters + 1];
+			RelayList_FitText(words, "x", fitted);
+			allFit = allFit && strcmp(fitted, words) == 0;
+		}
+	}
+
+	Check(allFit, "and every one of them fits the list as it is");
+}
+
+// relay_list.cpp's own source, as text, from the top of the repository
+static std::string ReadSource(const char *name)
+{
+	FILE *file = fopen(name, "rb");
+	std::string text;
+
+	if (!file)
+	{
+		return text;
+	}
+
+	char block[4096];
+	size_t got = 0;
+
+	while ((got = fread(block, 1, sizeof(block), file)) > 0)
+	{
+		for (size_t i = 0; i < got; i++)
+		{
+			if (block[i] != '\r')
+			{
+				text += block[i];
+			}
+		}
+	}
+
+	fclose(file);
+	return text;
+}
+
+static void FailedSlice(const std::string &why)
+{
+	Check(false, why.c_str());
+}
+
+static bool Has(const std::string &text, const char *piece)
+{
+	return text.find(piece) != std::string::npos;
+}
+
+static void TestTheCalls()
+{
+	puts("11. how relay_list.cpp makes its calls (read, not run: it needs the network)");
+
+	std::string const source = ReadSource("3dc/relay_list.cpp");
+	Check(source.size() > 5000, "the source was found and read, from the top of the repository");
+
+	std::string const call = SourceSlice(source, "Answer Call(const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(call, "WINHTTP_FLAG_SECURE)"), "every call is HTTPS");
+	Check(Has(call, "WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;") && !Has(source, "TLS1_1") && !Has(source, "PROTOCOL_TLS1 ") &&
+		!Has(source, "PROTOCOL_SSL") && !Has(source, "PROTOCOL_ALL"), "with TLS 1.2 or newer, and nothing older named anywhere");
+	Check(!Has(source, "SECURITY_FLAG_IGNORE") && !Has(source, "WINHTTP_OPTION_SECURITY_FLAGS"), "and nothing turns the certificate check off");
+	Check(Has(call, "WINHTTP_DISABLE_REDIRECTS") && Has(call, "WINHTTP_DISABLE_COOKIES") && Has(call, "WINHTTP_DISABLE_AUTHENTICATION"),
+		"redirects, cookies and signing in are off");
+	Check(Has(call, "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000)"), "each step has 5 seconds");
+	Check(Has(call, "if (got >= room)") && Has(call, "a.why = kTooBig;"), "an answer bigger than its room is refused, not read on");
+	Check(Has(source, "char findAnswer[kRelayListMostAnswerBytes];") && Has(source, "RelayList_ReadGames(findAnswer, a.bytes, kMultiplayerVersion"),
+		"the list is read into 32 KB, and through the hostile reader, for this version");
+
+	std::string const thread = SourceSlice(source, "// ---- The list's thread", "// Makes the store and starts the thread", kSliceEndAfterTheStart, FailedSlice);
+	Check(thread.size() > 1000 && !Has(thread, "LogString(") && !Has(thread, "LogErrorString("), "the list's own thread never writes to the game's log");
+	Check(!Has(source, " printf(") && !Has(source, "\tprintf(") && !Has(source, "OutputDebugString"), "and nothing prints what a call sent or got");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -414,6 +549,9 @@ int main()
 	TestNumbers();
 	TestWords();
 	TestBodies();
+	TestServerNames();
+	TestModeWords();
+	TestTheCalls();
 
 	if (checksFailed)
 	{

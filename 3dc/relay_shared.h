@@ -38,6 +38,11 @@ inline bool Relay_IsCodeLetter(char c)
 	return false;
 }
 
+// The relay server's name, from the settings: [Network] RelayServer in the game's settings file. Read once, and checked as a host name
+// (Relay_IsServerName in relay_list_text.h). Empty when it isn't set, or isn't a host name, and then there's no relay: hosting and joining
+// are as they were without one. The list and the relay are the same machine. relay_list.cpp has it.
+const char *Relay_ServerName(void);
+
 // Whether these are exactly the 8 letters of a code. A code is never anything else, wherever it comes from.
 inline bool Relay_IsCode(const char *code, size_t length)
 {

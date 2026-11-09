@@ -446,6 +446,8 @@
     <ClCompile Include="..\..\3dc\MusicPlayer.cpp" />
     <ClCompile Include="..\..\3dc\networking.cpp" />
     <ClCompile Include="..\..\3dc\net_close.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list_text.cpp" />
     <ClCompile Include="..\..\3dc\net_host.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
@@ -731,6 +733,9 @@
     <ClInclude Include="..\..\3dc\include\shape.h" />
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
     <ClInclude Include="..\..\3dc\net_close.h" />
+    <ClInclude Include="..\..\3dc\relay_list.h" />
+    <ClInclude Include="..\..\3dc\relay_list_text.h" />
+    <ClInclude Include="..\..\3dc\relay_shared.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />

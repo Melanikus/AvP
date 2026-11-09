@@ -263,6 +263,146 @@
 					"to": "if (FitInto(from, to) == 0)"
 				}
 			]
+		},
+		{
+			"name": "a part of a server name may be 64 characters",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "partLength > 63 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a server name may be 254 characters",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (length < 1 || length > 253)",
+					"to": "if (length < 1)"
+				}
+			]
+		},
+		{
+			"name": "a part of a server name may end with -",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "name[i - 1] == '-' || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a part of a server name may start with -",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || name[i - partLength] == '-'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an _ is taken in a server name",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "|| c == '-';",
+					"to": "|| c == '-' || c == '_';"
+				}
+			]
+		},
+		{
+			"name": "co-op never says it is the campaign",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (gameStyle == 4 && coopCampaign)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call to the list that is not HTTPS",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WINHTTP_FLAG_SECURE) : NULL;",
+					"to": "0) : NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: TLS 1.1 is allowed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;",
+					"to": "DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the certificate check is turned off",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tDWORD neverSignIn = WINHTTP_AUTOLOGON_SECURITY_LEVEL_HIGH;\n",
+					"to": "\t\tDWORD neverSignIn = WINHTTP_AUTOLOGON_SECURITY_LEVEL_HIGH;\n\t\tDWORD ignore = SECURITY_FLAG_IGNORE_UNKNOWN_CA;\n\t\tWinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &ignore, sizeof(ignore));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: redirects are followed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_AUTHENTICATION",
+					"to": "WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call has no time limits",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000);",
+					"to": "WinHttpSetTimeouts(session, 0, 0, 0, 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer bigger than its room is read on",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (got >= room)\n\t\t\t{\n\t\t\t\ta.why = kTooBig;\n\t\t\t\tCloseAll(request, connection, session);\n\t\t\t\treturn a;\n\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list is read into more than 32 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "char findAnswer[kRelayListMostAnswerBytes];",
+					"to": "char findAnswer[kRelayListMostAnswerBytes * 2];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's thread writes to the game's log",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tTell(\"Relay list: the game is off the list\");",
+					"to": "\t\t\tLogString(\"Relay list: the game is off the list\");"
+				}
+			]
 		}
 	]
 }

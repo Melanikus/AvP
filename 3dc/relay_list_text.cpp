@@ -726,3 +726,66 @@ void RelayList_FitText(const char *from, const char *fallback, char *to)
 		to[1] = '\0';
 	}
 }
+
+const char *RelayList_ModeWords(int gameStyle, bool coopCampaign)
+{
+	// In the order of NETGAME_TYPE: Individual, CoopDeathmatch, LastManStanding, PredatorTag, Coop, AlienTag
+	static const char *const kModes[] = { "Deathmatch", "Species deathmatch", "Last man standing", "Predator tag", "Co-op", "Alien tag" };
+
+	if (gameStyle == 4 && coopCampaign)
+	{
+		return "Co-op campaign";
+	}
+
+	if (gameStyle < 0 || gameStyle >= static_cast<int>(sizeof(kModes) / sizeof(kModes[0])))
+	{
+		return "Game";
+	}
+
+	return kModes[gameStyle];
+}
+
+bool Relay_IsServerName(const char *name)
+{
+	if (!name)
+	{
+		return false;
+	}
+
+	size_t const length = strlen(name);
+
+	if (length < 1 || length > 253)
+	{
+		return false;
+	}
+
+	size_t partLength = 0;
+
+	for (size_t i = 0; i <= length; i++)
+	{
+		char const c = name[i];
+
+		// The end of a part: at a dot, or at the end of the name
+		if (c == '.' || c == '\0')
+		{
+			if (partLength < 1 || partLength > 63 || name[i - 1] == '-' || name[i - partLength] == '-')
+			{
+				return false;
+			}
+
+			partLength = 0;
+			continue;
+		}
+
+		bool const allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+
+		if (!allowed)
+		{
+			return false;
+		}
+
+		partLength++;
+	}
+
+	return true;
+}
