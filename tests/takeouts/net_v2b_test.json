@@ -1,0 +1,308 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a fingerprint isn't of \"AVPX-ID-2\"",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "kNetIdentityFingerprintWords[] = \"AVPX-ID-2\";",
+					"to": "kNetIdentityFingerprintWords[] = \"AVPX-ID-3\";"
+				}
+			]
+		},
+		{
+			"name": "a listing's fingerprint may have capitals",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "good = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'a' && hex[i] <= 'f');",
+					"to": "good = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'A' && hex[i] <= 'f');"
+				}
+			]
+		},
+		{
+			"name": "a listing's fingerprint may run on past 32 digits",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "good = good && hex[2 * kNetIdentityFingerprintBytes] == 0;",
+					"to": "good = good;"
+				}
+			]
+		},
+		{
+			"name": "the prologue leaves out the 0 after the region",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "&& NetNoise_MixHash(noise, named, regionBytes + 1)",
+					"to": "&& NetNoise_MixHash(noise, named, regionBytes)"
+				}
+			]
+		},
+		{
+			"name": "the prologue leaves out the relay port",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "&& NetNoise_MixHash(noise, port, sizeof(port))",
+					"to": "&& true"
+				}
+			]
+		},
+		{
+			"name": "the prologue leaves out the host's fingerprint",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "\n\t\t&& NetNoise_MixHash(noise, hostFingerprint, kNetIdentityFingerprintBytes);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a region may have capitals",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "bool const allowed = (c >= 'a' && c <= 'z')",
+					"to": "bool const allowed = (c >= 'A' && c <= 'z')"
+				}
+			]
+		},
+		{
+			"name": "a region may be longer than 16 letters",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!allowed || n == kNetHandshakeBMostRegionBytes)",
+					"to": "if (!allowed)"
+				}
+			]
+		},
+		{
+			"name": "the joiner doesn't mix its promise into h",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "&& NetNoise_MixHash(&noise, commitment, kNetHandshakeBCommitmentBytes);           // the promise",
+					"to": "&& true;"
+				}
+			]
+		},
+		{
+			"name": "B5's nJ isn't held to B1's promise (21)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!NetHandshakeB_Same(promise, commitment, sizeof(commitment)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the host's keys aren't held to the listing's fingerprint (10)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!NetHandshakeB_Same(theirFingerprint, expectedHost, sizeof(expectedHost)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "B2's tag isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "// B2's tag\n\t\tif (!NetHandshakeB_OpenNothing(&noise, tag))",
+					"to": "// B2's tag\n\t\tif (!NetHandshakeB_OpenNothing(&noise, tag) && false)"
+				}
+			]
+		},
+		{
+			"name": "B3's tag isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "// B3's tag\n\t\tif (!NetHandshakeB_OpenNothing(&noise, tag))",
+					"to": "// B3's tag\n\t\tif (!NetHandshakeB_OpenNothing(&noise, tag) && false)"
+				}
+			]
+		},
+		{
+			"name": "B4's tag (on nH) isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!opened)\n\t\t{\n\t\t\treturn Fail(kNetHandshakeBBadTag, b5Out, kNetHandshakeBB5Bytes);",
+					"to": "if (false)\n\t\t{\n\t\t\treturn Fail(kNetHandshakeBBadTag, b5Out, kNetHandshakeBB5Bytes);"
+				}
+			]
+		},
+		{
+			"name": "B5's tag isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!NetNoise_DecryptAndHash(&noise, b5, size, nJ, sizeof(nJ), &written) || written != sizeof(nJ))",
+					"to": "if (!NetNoise_DecryptAndHash(&noise, b5, size, nJ, sizeof(nJ), &written) && false)"
+				}
+			]
+		},
+		{
+			"name": "the check code takes the transcript as HKDF's input, not its salt",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "if (!NetCrypto_HkdfSha384(transcript, kNetCryptoHashBytes, NULL, 0,",
+					"to": "if (!NetCrypto_HkdfSha384(NULL, 0, transcript, kNetCryptoHashBytes,"
+				}
+			]
+		},
+		{
+			"name": "the check code reads its 8 bytes big-endian",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "number = (number << 8) | bytes[i - 1];",
+					"to": "number = (number << 8) | bytes[8 - i];"
+				}
+			]
+		},
+		{
+			"name": "a sealed datagram's counter goes big-endian",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "out[4 + i] = static_cast<uint8_t>((counter >> (8 * i)) & 0xFF);",
+					"to": "out[11 - i] = static_cast<uint8_t>((counter >> (8 * i)) & 0xFF);"
+				}
+			]
+		},
+		{
+			"name": "a sealed datagram's header isn't in the AAD",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "NetCrypto_AesGcmSeal(key, nonce, out, kNetSealedGameHeaderBytes,",
+					"to": "NetCrypto_AesGcmSeal(key, nonce, out, 0,"
+				}
+			]
+		},
+		{
+			"name": "the joiner seals with the host's key",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "NetV2_DirectionStart(&sending, joiner ? split.initiatorToResponderKey : split.responderToInitiatorKey,",
+					"to": "NetV2_DirectionStart(&sending, joiner ? split.responderToInitiatorKey : split.initiatorToResponderKey,"
+				}
+			]
+		},
+		{
+			"name": "a sealed datagram over 1,500 bytes is opened",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "|| size > kNetSealedGameMostBytes)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the replay window is off",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "if (!NetV2_ReplayIsNew(&window, counter))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "65,536 failed tags don't end a session",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "if (badTags >= kNetSealedGameMostBadTags)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a session never wears out",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_game.h",
+					"from": "return static_cast<uint32_t>(now - started) >= kNetSealedGameMostMs;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "a cookie that isn't 16 zeros is taken",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "if (memcmp(fragment.cookie, kNoCookie, sizeof(kNoCookie)) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a late frame pushes the later sends back",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "sentAt += kNetPeerWaitsMs[waits];",
+					"to": "sentAt = now;"
+				}
+			]
+		},
+		{
+			"name": "B5 is never sent again",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "bool const waiting = step == kWaitB2 || step == kWaitB4 || (step == kSealed && !heardFromHost);",
+					"to": "bool const waiting = step == kWaitB2 || step == kWaitB4;"
+				}
+			]
+		},
+		{
+			"name": "a message that comes again isn't answered again",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "if (same && static_cast<uint32_t>(now - answeredAt) < kNetPeerKeepAnswerMs)\n\t\t\t\t{\n\t\t\t\t\toutbox.Again();",
+					"to": "if (same && static_cast<uint32_t>(now - answeredAt) < kNetPeerKeepAnswerMs)\n\t\t\t\t{\n\t\t\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "the host never gives up on a joiner",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "if (waiting && static_cast<uint32_t>(now - since) >= kNetPeerKeepAnswerMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the joiner never gives up",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "if (waits + 1 >= kNetPeerWaits)\n\t\t{\n\t\t\tFail(kNetPeerNoAnswer);",
+					"to": "if (false)\n\t\t{\n\t\t\tFail(kNetPeerNoAnswer);"
+				}
+			]
+		}
+	]
+}

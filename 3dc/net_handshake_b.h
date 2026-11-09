@@ -70,6 +70,13 @@ size_t const kNetHandshakeBCheckCodeBytes = 7;       // 6 digits, then the 0 tha
 
 static const char kNetHandshakeBCheckCodeInfo[] = "AVPX check code v2";
 
+// The kinds of B's datagrams, one for each message in order (CRYPTO.md section 8's table, and 5.1 point 18): always 'AVPE'
+uint8_t const kNetHandshakeBKindB1 = 16;
+uint8_t const kNetHandshakeBKindB2 = 17;
+uint8_t const kNetHandshakeBKindB3 = 18;
+uint8_t const kNetHandshakeBKindB4 = 19;
+uint8_t const kNetHandshakeBKindB5 = 20;
+
 // Why a handshake B ended. The numbers up to 21 are CRYPTO.md section 16's. Section 16 has no number for the others, so they're 100 and up.
 int const kNetHandshakeBFine = 0;
 int const kNetHandshakeBWrongSize = 1;        // a message of the wrong size
@@ -492,6 +499,14 @@ public:
 		Fail(reason == kNetHandshakeBFine ? kNetHandshakeBGivenUp : reason, NULL, 0);
 	}
 
+	// Back to before the first message, for a new handshake: every secret wiped, every key destroyed, and no reason left over
+	void Forget()
+	{
+		Clear();
+		step = kNothing;
+		why = kNetHandshakeBFine;
+	}
+
 	int Why() const
 	{
 		return why;
@@ -818,6 +833,14 @@ public:
 	void Abandon(int reason)
 	{
 		Fail(reason == kNetHandshakeBFine ? kNetHandshakeBGivenUp : reason, NULL, 0);
+	}
+
+	// Back to before the first message, for a new handshake: every secret wiped, every key destroyed, and no reason left over
+	void Forget()
+	{
+		Clear();
+		step = kNothing;
+		why = kNetHandshakeBFine;
 	}
 
 	int Why() const

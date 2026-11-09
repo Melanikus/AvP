@@ -16,13 +16,24 @@
 //        tags, made from the test's own walk;
 //      - another region, port or fingerprint in the prologue (8);
 //      - one bit changed in every byte of B1 to B5;
-//   6. two handshakes with fresh keys and real randomness, from the game's own NetIdentity_Make: they agree, and differ from each other.
+//   6. two handshakes with fresh keys and real randomness, from the game's own NetIdentity_Make: they agree, and differ from each other;
+//   7. sealed game datagrams (3dc/net_sealed_game.h, CRYPTO.md section 9) with the file's handshake B keys: each one exactly what the test
+//      seals by hand from section 9's layout; both directions, and never one's own back; the smallest and the largest; epoch 1 from
+//      counter 2^20; the replay window's edges; one bit changed in every byte; the 65,536th failed tag ending the session; 24 hours;
+//      20,000 junk datagrams. The relay's Java seals no game datagrams, so until Primary adds its own (sealedGame) to the file, the
+//      hand-sealed bytes here are the only reference;
+//   8. a joiner and a host (3dc/net_peer_v2.h) over a pretend wire that loses what each test says: the whole join, then game datagrams
+//      both ways; the joiner's sends at exactly 0, 0.5, 1.5 and 3.5 s and its giving up at 7.5 s; B2, B4 and B5 lost once each, and the
+//      host's answers sent again byte for byte; a joiner that expected another host; another handshake's datagrams, a cookie that isn't
+//      0 and sealed datagrams before the keys, all dropped without harm; the host giving up on a joiner that goes quiet.
 //
 // The test's fixed randomness reaches mlkem-native's own "_derand" calls (keys from a seed, an encapsulation from its m) here alone: the
 // game's code never has a way to be given fixed ML-KEM randomness (net_pq_native.cpp).
 
 #include "net_handshake_b.h"
 #include "net_identity.h"
+#include "net_peer_v2.h"
+#include "net_sealed_game.h"
 #include "net_v2_fragments.h"
 
 #include <mlkem-native/avpx_mlkem.h>
@@ -1046,6 +1057,685 @@ static void TestFresh()
 	BCheck(memcmp(&host, &none, sizeof(host)) == 0, "a freed identity is all 0, its CNG key destroyed");
 }
 
+// ---- 7. Sealed game datagrams
+
+// A datagram sealed by hand from section 9's table, with the direction's Split key and IV: 'AVPG', the counter little-endian, the
+// text sealed with the 12 bytes in front as the associated data, then the tag. The epoch's key and the nonce come straight from
+// net_noise.h's NetNoise_EpochKey and NetNoise_Nonce, not from the class under test.
+static Bytes SealByHand(const uint8_t key[kNetCryptoAesKeyBytes], const uint8_t iv[kNetCryptoNonceBytes], uint64_t counter, const Bytes &text)
+{
+	Bytes out(kNetSealedGameOverheadBytes + text.size(), 0);
+	memcpy(out.data(), "AVPG", 4);
+
+	for (size_t i = 0; i < 8; i++)
+	{
+		out[4 + i] = static_cast<uint8_t>(counter >> (8 * i));
+	}
+
+	uint8_t epochKey[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
+	static const uint8_t kNothing[1] = { 0 };
+	bool const sealed = NetNoise_EpochKey(key, static_cast<uint32_t>(counter >> 20), epochKey) && (NetNoise_Nonce(iv, counter, nonce), true)
+		&& NetCrypto_AesGcmSeal(epochKey, nonce, out.data(), 12, text.empty() ? kNothing : text.data(), text.size(), out.data() + 12,
+			out.data() + 12 + text.size());
+	return sealed ? out : Bytes();
+}
+
+static Bytes Pattern(size_t size, uint8_t start)
+{
+	Bytes out(size);
+
+	for (size_t i = 0; i < size; i++)
+	{
+		out[i] = static_cast<uint8_t>(start + i * 7);
+	}
+
+	return out;
+}
+
+static std::string SealedName(int why)
+{
+	switch (why)
+	{
+		case kNetSealedGameFine: return "fine";
+		case kNetSealedGameWrongSize: return "the wrong size (1)";
+		case kNetSealedGameOtherMagic: return "another magic (2)";
+		case kNetSealedGameBadTag: return "a tag that fails (8)";
+		case kNetSealedGameSeenAlready: return "seen already (9)";
+		case kNetSealedGameTooManyBad: return "too many bad packets (16)";
+		case kNetSealedGameWornOut: return "worn out";
+		case kNetSealedGameNotLive: return "no session";
+		case kNetSealedGamePastTheEnd: return "past the session's end";
+		default: return "reason " + std::to_string(why);
+	}
+}
+
+// Opens bytes and says whether they were taken, and as what
+static bool Opens(NetSealedGame *side, const Bytes &sealed, Bytes *text, uint32_t now)
+{
+	text->assign(sealed.size() >= kNetSealedGameOverheadBytes ? sealed.size() - kNetSealedGameOverheadBytes : 0, 0xAA);
+	size_t written = 0;
+	uint8_t spare[1];
+	bool const taken = side->Open(sealed.empty() ? spare : sealed.data(), sealed.size(), text->empty() ? spare : text->data(), text->size(), &written, now);
+	text->resize(written);
+	return taken;
+}
+
+static void TestSealedGame(const Run &run)
+{
+	printf("\n7. Sealed game datagrams (section 9), with the file's handshake B keys\n");
+	const NetNoiseSplit &split = run.joinerKeys.split;
+	uint32_t const now = 1000;
+	NetSealedGame joiner, host;
+	joiner.Start(split, true, now);
+	host.Start(split, false, now);
+	BCheck(joiner.Live() && host.Live(), "both sides start a session from B's keys");
+
+	// Each one exactly as sealed by hand, both ways, and opened by the other side
+	bool same = true;
+	bool openedAll = true;
+	size_t const sizes[] = { 0, 1, 48, 1392, kNetSealedGameMostTextBytes };
+
+	for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++)
+	{
+		for (int way = 0; way < 2; way++)
+		{
+			NetSealedGame &from = way == 0 ? joiner : host;
+			NetSealedGame &to = way == 0 ? host : joiner;
+			Bytes const text = Pattern(sizes[i], static_cast<uint8_t>(i + way));
+			Bytes sealed(text.size() + kNetSealedGameOverheadBytes);
+			size_t written = 0;
+			uint64_t const counter = from.Sent();
+			bool const made = from.Seal(text.empty() ? NULL : text.data(), text.size(), sealed.data(), sealed.size(), &written, now) && written == sealed.size();
+			Bytes const byHand = way == 0 ? SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, counter, text)
+				: SealByHand(split.responderToInitiatorKey, split.responderToInitiatorIv, counter, text);
+			same = same && made && sealed == byHand;
+			Bytes back;
+			openedAll = openedAll && Opens(&to, sealed, &back, now) && back == text;
+		}
+	}
+
+	BCheck(same, "joiner to host and host to joiner, 0, 1, 48, 1,392 and 1,472 bytes: each datagram is exactly section 9's layout, sealed by hand");
+	BCheck(openedAll, "and each opens on the other side to exactly what was sent, the 28-byte and the 1,500-byte included");
+
+	// Never one's own back: a datagram the joiner sealed doesn't open as if the host had sent it
+	{
+		Bytes sealed(48 + kNetSealedGameOverheadBytes);
+		size_t written = 0;
+		Bytes const text = Pattern(48, 9);
+		Bytes back;
+		BCheck(joiner.Seal(text.data(), text.size(), sealed.data(), sealed.size(), &written, now) && !Opens(&joiner, sealed, &back, now)
+			&& joiner.Why() == kNetSealedGameBadTag, "a datagram sent back to the side that sealed it fails its tag (8): each direction has its own key");
+		BCheck(Opens(&host, sealed, &back, now) && back == text, "and the host still takes it");
+		BCheck(!Opens(&host, sealed, &back, now) && host.Why() == kNetSealedGameSeenAlready, "but only once: the same datagram again is seen already (9)");
+	}
+
+	// Sizes
+	{
+		Bytes back;
+		Bytes const short27(27, 0);
+		Bytes const long1501(1501, 0);
+		BCheck(!Opens(&host, short27, &back, now) && host.Why() == kNetSealedGameWrongSize, "27 bytes is the wrong size (1)");
+		BCheck(!Opens(&host, long1501, &back, now) && host.Why() == kNetSealedGameWrongSize, "1,501 bytes is the wrong size (1)");
+		Bytes const big = Pattern(kNetSealedGameMostTextBytes + 1, 1);
+		Bytes room(big.size() + kNetSealedGameOverheadBytes, 0xAA);
+		size_t written = 0;
+		BCheck(!joiner.Seal(big.data(), big.size(), room.data(), room.size(), &written, now) && joiner.Why() == kNetSealedGameWrongSize
+			&& written == 0 && room == Bytes(room.size(), 0), "a 1,473-byte datagram isn't sealed (it would be over 1,500), and nothing of it is left");
+		Bytes const text = Pattern(10, 1);
+		Bytes tight(text.size() + kNetSealedGameOverheadBytes - 1, 0xAA);
+		BCheck(!joiner.Seal(text.data(), text.size(), tight.data(), tight.size(), &written, now) && joiner.Why() == kNetSealedGameWrongSize,
+			"and no datagram is sealed into too little room");
+	}
+
+	// The counters past 2^20: epoch 1's key, from the counter alone. Made by hand, since sealing 2^20 datagrams would take too long here.
+	{
+		NetSealedGame fresh;
+		fresh.Start(split, false, now);
+		Bytes back;
+		Bytes const text = Pattern(64, 3);
+		uint64_t const last0 = (static_cast<uint64_t>(1) << 20) - 1;
+		Bytes const inEpoch0 = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, last0, text);
+		Bytes const inEpoch1 = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, last0 + 1, text);
+		BCheck(Opens(&fresh, inEpoch0, &back, now) && back == text, "the last datagram of epoch 0 (counter 2^20 - 1) opens with Split's key");
+		BCheck(Opens(&fresh, inEpoch1, &back, now) && back == text, "the first of epoch 1 (counter 2^20) opens with epoch 1's key");
+
+		// The same counter sealed with epoch 0's key doesn't: the key really changed
+		Bytes wrongKey = inEpoch1;
+		uint8_t nonce[kNetCryptoNonceBytes];
+		NetNoise_Nonce(split.initiatorToResponderIv, last0 + 2, nonce);
+		wrongKey[4] = static_cast<uint8_t>((last0 + 2) & 0xFF);
+		wrongKey[5] = static_cast<uint8_t>(((last0 + 2) >> 8) & 0xFF);
+		wrongKey[6] = static_cast<uint8_t>(((last0 + 2) >> 16) & 0xFF);
+		BCheck(NetCrypto_AesGcmSeal(split.initiatorToResponderKey, nonce, wrongKey.data(), 12, text.data(), text.size(), wrongKey.data() + 12,
+			wrongKey.data() + 12 + text.size()) && !Opens(&fresh, wrongKey, &back, now) && fresh.Why() == kNetSealedGameBadTag,
+			"counter 2^20 + 1 sealed with epoch 0's key fails its tag (8)");
+
+		Bytes const past = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, static_cast<uint64_t>(1) << 32, text);
+		BCheck(!Opens(&fresh, past, &back, now) && fresh.Why() == kNetSealedGamePastTheEnd, "counter 2^32 is past a session's end, and refused");
+	}
+
+	// The replay window: the highest taken, and the 1,023 below it, never more
+	{
+		NetSealedGame fresh;
+		fresh.Start(split, false, now);
+		Bytes back;
+		Bytes const text = Pattern(8, 5);
+		const uint8_t *const key = split.initiatorToResponderKey;
+		const uint8_t *const iv = split.initiatorToResponderIv;
+		BCheck(Opens(&fresh, SealByHand(key, iv, 5000, text), &back, now), "counter 5,000 is taken first: datagrams may come in any order");
+		BCheck(Opens(&fresh, SealByHand(key, iv, 5000 - 1023, text), &back, now), "then 3,977, the oldest still in the window");
+		BCheck(!Opens(&fresh, SealByHand(key, iv, 5000 - 1024, text), &back, now) && fresh.Why() == kNetSealedGameSeenAlready,
+			"but not 3,976, just below it (9)");
+		BCheck(!Opens(&fresh, SealByHand(key, iv, 5000 - 1023, text), &back, now) && fresh.Why() == kNetSealedGameSeenAlready,
+			"and 3,977 only once (9)");
+		BCheck(Opens(&fresh, SealByHand(key, iv, 4999, text), &back, now), "4,999, late, is still new");
+
+		// A forged datagram with an honest counter must not use the counter up
+		Bytes forged = SealByHand(key, iv, 4998, text);
+		forged[20] ^= 0x01;
+		BCheck(!Opens(&fresh, forged, &back, now) && fresh.Why() == kNetSealedGameBadTag, "a forgery of 4,998 fails its tag (8)");
+		BCheck(Opens(&fresh, SealByHand(key, iv, 4998, text), &back, now), "and the honest 4,998 is still taken after it: only a good tag marks a counter");
+	}
+
+	// One bit changed in every byte of a sealed datagram
+	{
+		Bytes const text = Pattern(100, 7);
+		Bytes const good = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 77, text);
+		size_t wrong = 0;
+
+		for (size_t i = 0; i < good.size(); i++)
+		{
+			NetSealedGame fresh;
+			fresh.Start(split, false, now);
+			Bytes changed = good;
+			changed[i] ^= static_cast<uint8_t>(1u << (i % 8));
+			Bytes back;
+			// The magic: another magic. The counter's high 4 bytes: a counter of 2^32 or more, past any session's end. Everything else,
+			// the counter's low bytes included (another counter, so another nonce and another AAD): the tag.
+			int const expected = i < 4 ? kNetSealedGameOtherMagic : (i >= 8 && i < 12) ? kNetSealedGamePastTheEnd : kNetSealedGameBadTag;
+			bool const refused = !Opens(&fresh, changed, &back, now) && fresh.Why() == expected && back.empty();
+
+			if (!refused && wrong++ == 0)
+			{
+				BCheck(false, "a sealed datagram with byte " + std::to_string(i) + " changed is refused as " + SealedName(expected) + ", not "
+					+ SealedName(fresh.Why()));
+			}
+		}
+
+		BCheck(wrong == 0, "every one of a datagram's " + std::to_string(good.size()) + " bytes changed is refused: the magic's as another magic (2), "
+			"the counter's high 4 as past a session's end, the rest at the tag (8)");
+	}
+
+	// The 65,536th failed tag ends the session
+	{
+		NetSealedGame fresh;
+		fresh.Start(split, false, now);
+		Bytes forged = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 1, Pattern(4, 1));
+		forged[forged.size() - 1] ^= 0x01;
+		Bytes back;
+		bool allBad = true;
+
+		for (uint32_t i = 0; i + 1 < kNetSealedGameMostBadTags; i++)
+		{
+			allBad = allBad && !Opens(&fresh, forged, &back, now) && fresh.Why() == kNetSealedGameBadTag;
+		}
+
+		BCheck(allBad && fresh.Live() && fresh.BadTags() == kNetSealedGameMostBadTags - 1, "65,535 forgeries are refused (8), and the session goes on");
+		BCheck(!Opens(&fresh, forged, &back, now) && !fresh.Live() && fresh.Ended() == kNetSealedGameTooManyBad,
+			"the 65,536th ends it: too many bad packets (16)");
+		Bytes const honest = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 2, Pattern(4, 1));
+		BCheck(!Opens(&fresh, honest, &back, now) && fresh.Why() == kNetSealedGameNotLive, "and then even an honest datagram is refused: no session");
+		Bytes room(4 + kNetSealedGameOverheadBytes);
+		size_t written = 0;
+		Bytes const text = Pattern(4, 1);
+		BCheck(!fresh.Seal(text.data(), text.size(), room.data(), room.size(), &written, now) && fresh.Why() == kNetSealedGameNotLive,
+			"and nothing can be sealed: there's no plaintext way out");
+	}
+
+	// 24 hours, and a clock that goes round past 2^32 milliseconds
+	{
+		NetSealedGame fresh;
+		uint32_t const start = 0xFFFFF000u;   // 4,096 ms before the clock goes round
+		fresh.Start(split, true, start);
+		Bytes const text = Pattern(4, 2);
+		Bytes room(text.size() + kNetSealedGameOverheadBytes);
+		size_t written = 0;
+		uint32_t const later = start + kNetSealedGameMostMs - 1;   // goes round: a small number
+		BCheck(fresh.Seal(text.data(), text.size(), room.data(), room.size(), &written, later) && fresh.Live(),
+			"a session started just before the clock went round still seals 1 ms before its 24 hours");
+		BCheck(!fresh.Seal(text.data(), text.size(), room.data(), room.size(), &written, later + 1) && !fresh.Live()
+			&& fresh.Ended() == kNetSealedGameWornOut, "and at 24 hours it ends, worn out: a new handshake must start");
+	}
+
+	// Before a session and after its end: nothing
+	{
+		NetSealedGame never;
+		Bytes back;
+		Bytes const good = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 0, Pattern(4, 1));
+		BCheck(!Opens(&never, good, &back, now) && never.Why() == kNetSealedGameNotLive, "a side never started opens nothing");
+		NetSealedGame ended;
+		ended.Start(split, false, now);
+		ended.End(kNetSealedGameFine);
+		BCheck(!Opens(&ended, good, &back, now) && ended.Why() == kNetSealedGameNotLive, "and nor does one that has ended");
+	}
+
+	// Junk
+	{
+		NetSealedGame fresh;
+		fresh.Start(split, false, now);
+		uint32_t seed = 12345;
+		size_t taken = 0;
+
+		for (int i = 0; i < 20000; i++)
+		{
+			seed = seed * 1103515245u + 12345u;
+			size_t const size = (seed >> 8) % 1601;
+			Bytes junk(size);
+
+			for (size_t j = 0; j < size; j++)
+			{
+				seed = seed * 1103515245u + 12345u;
+				junk[j] = static_cast<uint8_t>(seed >> 16);
+			}
+
+			// A quarter of them start as a sealed datagram would, with a counter under 2^32, so they get as far as the tag
+			if (size >= 12 && i % 4 == 0)
+			{
+				memcpy(junk.data(), "AVPG", 4);
+				memset(junk.data() + 8, 0, 4);
+			}
+
+			Bytes back;
+			taken += Opens(&fresh, junk, &back, now) ? 1 : 0;
+		}
+
+		BCheck(taken == 0, "20,000 junk datagrams of 0 to 1,600 bytes, a quarter starting 'AVPG': none taken, " + std::to_string(fresh.BadTags())
+			+ " of them reaching a tag that failed");
+	}
+
+	joiner.End(kNetSealedGameFine);
+	host.End(kNetSealedGameFine);
+}
+
+// ---- 8. A joiner and a host over a pretend wire
+
+static std::vector<Bytes> SendsOf(NetPeerJoiner *joiner)
+{
+	NetPeerSend sends[kNetPeerMostSends];
+	size_t const n = joiner->TakeSends(sends, kNetPeerMostSends);
+	std::vector<Bytes> out;
+
+	for (size_t i = 0; i < n; i++)
+	{
+		out.push_back(Bytes(sends[i].bytes, sends[i].bytes + sends[i].size));
+	}
+
+	return out;
+}
+
+static std::vector<Bytes> SendsOf(NetPeerHostSide *host)
+{
+	NetPeerSend sends[kNetPeerMostSends];
+	size_t const n = host->TakeSends(sends, kNetPeerMostSends);
+	std::vector<Bytes> out;
+
+	for (size_t i = 0; i < n; i++)
+	{
+		out.push_back(Bytes(sends[i].bytes, sends[i].bytes + sends[i].size));
+	}
+
+	return out;
+}
+
+// The kind of a handshake datagram (byte 5), or 0
+static uint8_t KindOf(const std::vector<Bytes> &datagrams)
+{
+	return !datagrams.empty() && datagrams[0].size() > 5 ? datagrams[0][5] : 0;
+}
+
+static Bytes HearAt(NetPeerHostSide *host, const Bytes &datagram, uint32_t now)
+{
+	Bytes out(kNetSealedGameMostBytes);
+	size_t written = 0;
+	host->Hear(datagram.data(), datagram.size(), out.data(), out.size(), &written, now);
+	out.resize(written);
+	return out;
+}
+
+static Bytes HearAt(NetPeerJoiner *joiner, const Bytes &datagram, uint32_t now)
+{
+	Bytes out(kNetSealedGameMostBytes);
+	size_t written = 0;
+	joiner->Hear(datagram.data(), datagram.size(), out.data(), out.size(), &written, now);
+	out.resize(written);
+	return out;
+}
+
+// The wire: each step, the time goes on 10 ms, both sides tick, and what each sends is handed to the other, unless lose says to drop it.
+// lose is given the kind of message (16 to 20) and how many of that kind went before. Stops once both are Ready, or one has failed, or
+// at untilMs. Every message the host sent is kept, by kind, to compare its sends again.
+struct Wire
+{
+	uint32_t now = 0;
+	int sentOfKind[256] = {};
+	std::vector<std::vector<Bytes> > hostSent[256];
+
+	template <typename Lose>
+	void Run(NetPeerJoiner *joiner, NetPeerHostSide *host, uint32_t untilMs, Lose lose)
+	{
+		for (; now <= untilMs; now += 10)
+		{
+			joiner->Tick(now);
+			host->Tick(now);
+			std::vector<Bytes> const fromJoiner = SendsOf(joiner);
+			uint8_t const jKind = KindOf(fromJoiner);
+
+			if (!fromJoiner.empty() && !lose(jKind, sentOfKind[jKind]++))
+			{
+				for (size_t i = 0; i < fromJoiner.size(); i++)
+				{
+					HearAt(host, fromJoiner[i], now);
+				}
+			}
+
+			std::vector<Bytes> const fromHost = SendsOf(host);
+			uint8_t const hKind = KindOf(fromHost);
+
+			if (!fromHost.empty())
+			{
+				hostSent[hKind].push_back(fromHost);
+
+				if (!lose(hKind, sentOfKind[hKind]++))
+				{
+					for (size_t i = 0; i < fromHost.size(); i++)
+					{
+						HearAt(joiner, fromHost[i], now);
+					}
+				}
+			}
+
+			if ((joiner->Ready() && host->Ready()) || joiner->Failed() || host->Failed())
+			{
+				return;
+			}
+		}
+	}
+};
+
+static bool NoLoss(uint8_t, int)
+{
+	return false;
+}
+
+// Seals a game datagram on one side and opens it on the other
+static bool GameDatagram(NetPeerJoiner *joiner, NetPeerHostSide *host, bool fromJoiner, const Bytes &text, uint32_t now)
+{
+	Bytes sealed(text.size() + kNetSealedGameOverheadBytes);
+	size_t written = 0;
+	bool const made = fromJoiner ? joiner->Seal(text.data(), text.size(), sealed.data(), sealed.size(), &written, now)
+		: host->Seal(text.data(), text.size(), sealed.data(), sealed.size(), &written, now);
+
+	if (!made || written != sealed.size() || memcmp(sealed.data(), "AVPG", 4) != 0)
+	{
+		return false;
+	}
+
+	Bytes const back = fromJoiner ? HearAt(host, sealed, now) : HearAt(joiner, sealed, now);
+	return back == text;
+}
+
+static void TestPeers()
+{
+	printf("\n8. A joiner and a host over a pretend wire\n");
+	NetIdentity hostI, joinerI;
+	BCheck(NetIdentity_Make(&hostI) && NetIdentity_Make(&joinerI), "two fresh identities");
+	const char *const region = "newyork";
+	uint16_t const port = 40123;
+
+	// The whole join, nothing lost
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		BCheck(host.Start(region, port, &hostI, 0) && joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "both sides start");
+		BCheck(!joiner.Ready() && !host.Ready(), "and neither has keys yet");
+		Bytes const early = Pattern(20, 1);
+		Bytes room(early.size() + kNetSealedGameOverheadBytes);
+		size_t written = 0;
+		BCheck(!joiner.Seal(early.data(), early.size(), room.data(), room.size(), &written, 0) && written == 0,
+			"the joiner seals nothing before B4: no game byte goes out before the keys");
+		wire.Run(&joiner, &host, 2000, NoLoss);
+		BCheck(joiner.Ready() && host.Ready(), "nothing lost: both have their keys after " + std::to_string(wire.now) + " ms");
+		BCheck(strlen(joiner.CheckCode()) == 6 && strcmp(joiner.CheckCode(), host.CheckCode()) == 0,
+			std::string("both screens show the same check code, ") + joiner.CheckCode());
+		BCheck(memcmp(host.JoinerFingerprint(), joinerI.fingerprint, kNetIdentityFingerprintBytes) == 0, "the host knows the joiner's fingerprint");
+		BCheck(GameDatagram(&joiner, &host, true, Pattern(100, 2), wire.now), "a game datagram from the joiner opens at the host");
+		BCheck(GameDatagram(&joiner, &host, false, Pattern(1392, 3), wire.now), "and one of 1,392 bytes from the host at the joiner");
+
+		// Having heard the host, the joiner sends B5 no more
+		size_t later = 0;
+
+		for (uint32_t t = wire.now; t < wire.now + 8000; t += 10)
+		{
+			joiner.Tick(t);
+			later += SendsOf(&joiner).size();
+		}
+
+		BCheck(later == 0 && joiner.Ready(), "once the host's first sealed datagram has come, the joiner sends B5 no more, and stays ready");
+		BCheck(host.Drops().notOurs == 0 && host.Drops().sealedEarly == 0 && joiner.Drops().notOurs == 0, "and nothing was dropped on the way");
+	}
+
+	// The joiner's sends when nothing answers: at 0, 0.5, 1.5 and 3.5 s, then it gives up at 7.5 s
+	{
+		NetPeerJoiner joiner;
+		BCheck(joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "a joiner starts, and its host never answers");
+		std::vector<uint32_t> times;
+		uint32_t failedAt = 0;
+
+		for (uint32_t t = 0; t <= 9000 && failedAt == 0; t++)
+		{
+			joiner.Tick(t);
+			std::vector<Bytes> const sent = SendsOf(&joiner);
+
+			if (!sent.empty())
+			{
+				times.push_back(t);
+				BCheck(sent.size() == 2 && KindOf(sent) == kNetHandshakeBKindB1, "B1, in 2 datagrams of 1,200 bytes, at " + std::to_string(t) + " ms");
+			}
+
+			failedAt = joiner.Failed() ? t : 0;
+		}
+
+		BCheck(times == std::vector<uint32_t>({ 0, 500, 1500, 3500 }), "B1 went at exactly 0, 500, 1,500 and 3,500 ms");
+		BCheck(failedAt == 7500 && joiner.Why() == kNetPeerNoAnswer, "and the joiner gave up at exactly 7,500 ms: the host doesn't answer (7)");
+	}
+
+	// A late frame doesn't push the later sends back: they're counted from the first
+	{
+		NetPeerJoiner joiner;
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		SendsOf(&joiner);
+		joiner.Tick(700);   // the first wait ended at 500, but the frame came at 700
+		bool const second = !SendsOf(&joiner).empty();
+		joiner.Tick(1499);
+		bool const notYet = SendsOf(&joiner).empty();
+		joiner.Tick(1500);
+		BCheck(second && notYet && !SendsOf(&joiner).empty(), "a send due at 500 that goes at 700 still has the next at 1,500, not 1,700");
+	}
+
+	// B2 lost once: the joiner sends B1 again, and the host answers with the very same B2
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB2 && before == 0; });
+		BCheck(joiner.Ready() && host.Ready(), "B2 lost once: the join still finishes, at " + std::to_string(wire.now) + " ms");
+		BCheck(wire.hostSent[kNetHandshakeBKindB2].size() == 2 && wire.hostSent[kNetHandshakeBKindB2][0] == wire.hostSent[kNetHandshakeBKindB2][1],
+			"and the host's second B2 is the first, byte for byte, never a fresh one");
+	}
+
+	// B4 lost once: the joiner sends B3 again, and gets the same B4
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB4 && before == 0; });
+		BCheck(joiner.Ready() && host.Ready(), "B4 lost once: the join still finishes, at " + std::to_string(wire.now) + " ms");
+		BCheck(wire.hostSent[kNetHandshakeBKindB4].size() == 2 && wire.hostSent[kNetHandshakeBKindB4][0] == wire.hostSent[kNetHandshakeBKindB4][1],
+			"and the host's second B4 is the first, byte for byte");
+		BCheck(strcmp(joiner.CheckCode(), host.CheckCode()) == 0, "and the check codes agree");
+	}
+
+	// B5 lost once: the host isn't ready, drops what the joiner seals, and is ready once B5 comes again
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB5 && before == 0; });
+
+		// The wire stops when one side is ready and the other isn't only at its end: run it on until the host has B5
+		BCheck(joiner.Ready() && host.Ready(), "B5 lost once: the joiner sends it again on its schedule, and the host gets its keys, at "
+			+ std::to_string(wire.now) + " ms");
+		BCheck(wire.sentOfKind[kNetHandshakeBKindB5] >= 2, "B5 went twice");
+	}
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int) { return kind == kNetHandshakeBKindB5; });
+		BCheck(joiner.Ready() && !host.Ready(), "with every B5 lost the joiner has its keys and the host doesn't");
+		BCheck(!GameDatagram(&joiner, &host, true, Pattern(30, 4), wire.now) && host.Drops().sealedEarly == 1,
+			"so the joiner's game datagram is dropped at the host: sealed, but before the host has keys");
+		Bytes room(30 + kNetSealedGameOverheadBytes);
+		size_t written = 0;
+		Bytes const text = Pattern(30, 4);
+		BCheck(!host.Seal(text.data(), text.size(), room.data(), room.size(), &written, wire.now), "and the host seals nothing before B5");
+	}
+
+	// A joiner that expected another host: B2 fails at its tag, and nothing more is sent
+	{
+		NetPeerJoiner joiner;
+		NetPeerHostSide host;
+		Wire wire;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, joinerI.fingerprint, &joinerI, 0);   // the listing named another fingerprint
+		wire.Run(&joiner, &host, 3000, NoLoss);
+		BCheck(joiner.Failed() && joiner.Why() == kNetHandshakeBBadTag, std::string("a joiner that expected another host's fingerprint fails at B2's tag: ")
+			+ ReasonName(joiner.Why()));
+		size_t later = 0;
+
+		for (uint32_t t = wire.now; t < wire.now + 9000; t += 10)
+		{
+			joiner.Tick(t);
+			later += SendsOf(&joiner).size();
+		}
+
+		BCheck(later == 0, "and it sends nothing after that");
+
+		for (uint32_t t = wire.now; t <= 20000; t += 10)
+		{
+			host.Tick(t);
+		}
+
+		BCheck(host.Failed() && host.Why() == kNetPeerNoAnswer, "the host gives up on it once its B2 has waited 10 s (7)");
+	}
+
+	// Hostile datagrams on the joiner's port while the join goes on: dropped, counted, and harmless
+	{
+		NetPeerJoiner joiner, other;
+		NetPeerHostSide host;
+		host.Start(region, port, &hostI, 0);
+		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		other.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		std::vector<Bytes> const b1 = SendsOf(&joiner);
+		std::vector<Bytes> const otherB1 = SendsOf(&other);
+
+		for (size_t i = 0; i < b1.size(); i++)
+		{
+			HearAt(&host, b1[i], 0);
+		}
+
+		std::vector<Bytes> const b2 = SendsOf(&host);
+		BCheck(KindOf(b2) == kNetHandshakeBKindB2, "the host answers the first joiner's B1");
+
+		// Another handshake's B1 (another id) on the same port: not this handshake's
+		uint32_t const before = host.Drops().notOurs;
+
+		for (size_t i = 0; i < otherB1.size(); i++)
+		{
+			HearAt(&host, otherB1[i], 10);
+		}
+
+		BCheck(host.Drops().notOurs == before + otherB1.size() && SendsOf(&host).empty(), "another handshake's B1 on a busy port is dropped, unanswered");
+
+		// A cookie that isn't 16 zeros
+		Bytes cookied = b1[0];
+		cookied[20] = 1;
+		HearAt(&host, cookied, 10);
+		BCheck(host.Drops().badCookie == 1 && SendsOf(&host).empty(), "a datagram whose cookie isn't 16 zeros is dropped (5)");
+
+		// Sealed before the keys, junk, and the relay's own magic
+		Bytes fakeSealed = Pattern(60, 9);
+		memcpy(fakeSealed.data(), "AVPG", 4);
+		HearAt(&host, fakeSealed, 10);
+		Bytes junk = Pattern(1200, 5);
+		HearAt(&host, junk, 10);
+		Bytes relays = b1[0];
+		memcpy(relays.data(), "AVPR", 4);
+		HearAt(&host, relays, 10);
+		Bytes shortOne(3, 0);
+		HearAt(&host, shortOne, 10);
+		BCheck(host.Drops().sealedEarly == 1 && host.Drops().notOurs == before + otherB1.size() + 3 && SendsOf(&host).empty(),
+			"a sealed datagram before the keys, 1,200 bytes of junk, an 'AVPR' datagram and 3 bytes: all dropped, none answered");
+
+		// And the join goes on as if none of it had come
+		for (size_t i = 0; i < b2.size(); i++)
+		{
+			HearAt(&joiner, b2[i], 20);
+		}
+
+		Wire wire;
+		wire.now = 20;
+		wire.Run(&joiner, &host, 3000, NoLoss);
+		BCheck(joiner.Ready() && host.Ready(), "and the join finishes as if none of them had come");
+	}
+
+	// A host whose joiner never sends B1 gives up at 10 s; and a joiner can start again after a failure
+	{
+		NetPeerHostSide host;
+		host.Start(region, port, &hostI, 0);
+		host.Tick(9990);
+		bool const stillWaiting = !host.Failed();
+		host.Tick(10000);
+		BCheck(stillWaiting && host.Failed() && host.Why() == kNetPeerNoAnswer, "a host side with no B1 within 10 s gives up (7)");
+
+		NetPeerJoiner joiner;
+		NetPeerHostSide again;
+		Wire wire;
+		joiner.Start(region, port, joinerI.fingerprint, &joinerI, 0);
+		again.Start(region, port, &hostI, 0);
+		wire.Run(&joiner, &again, 3000, NoLoss);
+		bool const failedFirst = joiner.Failed();
+		Wire second;
+		again.Start(region, port, &hostI, 0);
+		BCheck(failedFirst && joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "a joiner that failed starts again");
+		second.Run(&joiner, &again, 3000, NoLoss);
+		BCheck(joiner.Ready() && again.Ready(), "and this time the join finishes");
+	}
+
+	BCheck(!NetPeerHostSide().Start("New York", port, &hostI, 0) && !NetPeerHostSide().Start(region, 0, &hostI, 0), "a host side won't start for a bad region or port 0");
+	NetIdentity_Free(&hostI);
+	NetIdentity_Free(&joinerI);
+}
+
 int main()
 {
 	printf("Handshake B of protocol version 2, the game's side (net_handshake_b.h, net_identity.h)\n");
@@ -1068,9 +1758,11 @@ int main()
 			TestWrongHost(run);
 			TestBrokenPromise(run);
 			TestEveryByte(run);
+			TestSealedGame(run);
 		}
 
 		TestFresh();
+		TestPeers();
 		NetIdentity_Free(&hostId);
 		NetIdentity_Free(&joinerId);
 	}
