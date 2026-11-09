@@ -574,7 +574,8 @@ jobs:
           wrong=0
           want() {
             got=$(counted "$1")
-            if [ "$got" = "$2" ]; then echo "The relay counted $got $1, as it should"; else echo "::error::The relay counted $got $1, not $2"; wrong=1; fi
+            label=${1%, }   # "closed, " is matched with its comma, so it isn't found inside another count, but named without it
+            if [ "$got" = "$2" ]; then echo "The relay counted $got $label, as it should"; else echo "::error::The relay counted $got $label, not $2"; wrong=1; fi
           }
           if [ ! -s "$work/counts.txt" ]; then echo "::error::The relay wrote no counts"; wrong=1; fi
           want "games opened" 1
