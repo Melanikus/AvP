@@ -335,7 +335,7 @@
 			]
 		},
 		{
-			"name": "the log says so every time",
+			"name": "the log says so every time a message has nobody to send it to",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
@@ -509,8 +509,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (ENET_SOCKET_NULL == broadcastSocket)\n\t{\n\t\treturn;\n\t}\n\n\tenet_uint32 events",
-					"to": "enet_uint32 events"
+					"from": "if (ENET_SOCKET_NULL == broadcastSocket)\n\t{\n\t\treturn;\n\t}\n\n\t// Every minute, how many questions came",
+					"to": "// Every minute, how many questions came"
 				}
 			]
 		},
@@ -539,8 +539,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "OpenDiscoverySocket();\n\n\t\t\t// create session",
-					"to": "// create session"
+					"from": "\t\t\tif (OpenDiscoverySocket())\n",
+					"to": "\t\t\tif (false)\n"
 				}
 			]
 		},
@@ -559,8 +559,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "sessionCheckTimer = 0;\n\tCloseDiscoverySocket();",
-					"to": "CloseDiscoverySocket();"
+					"from": "\tsessionCheckTimer = 0;\n\n\t// A host's search counts for the whole game",
+					"to": "\t// A host's search counts for the whole game"
 				}
 			]
 		},
@@ -569,8 +569,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "sessionCheckTimer = 0;\n\tCloseDiscoverySocket();",
-					"to": "sessionCheckTimer = 0;"
+					"from": "\t}\n\n\tCloseDiscoverySocket();\n\n\t// The game has closed",
+					"to": "\t}\n\n\t// The game has closed"
 				}
 			]
 		},
@@ -1815,7 +1815,7 @@
 			]
 		},
 		{
-			"name": "the log says so every time",
+			"name": "the log says so every time a game message has no game running",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",

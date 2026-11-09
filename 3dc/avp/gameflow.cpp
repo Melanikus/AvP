@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a number conversion between signed and unsigned types is written out explicitly (the value is the same)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   GetMeThisStrategyBlock and the list of four yard doors only it read are taken out (#135): nothing called it
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -67,22 +69,6 @@ GAMEOBJECT GameObjects[] =
 	GOT_LASTGAMEOBJECT,
 	0,0
 	
-};
-
-GAME_STRATBLOCK_LIST_ENTRY GameStratblockList[] = {
-
-	GT_YARD_DOOR_1,
-	{0xd9,0x15,0xd7,0xcc,0xa7,0xf4,0xb6,0x00,},
-	GT_YARD_DOOR_2,
-	{0x01,0x0a,0x0f,0xf5,0x76,0x0b,0x5a,0x00,},
-	GT_YARD_DOOR_3,
-	{0x7b,0x18,0x0f,0xa7,0x14,0xae,0x67,0x00,},
-	GT_YARD_DOOR_4,
-	{0xd7,0x52,0x95,0x48,0xcc,0xf2,0x14,0x00,},
-
-	GT_LAST_TARGET_OBJECT,
-	{0,0,0,0,0,0,0,0,},
-
 };
 
 BOOL GameFlowOn = 1;
@@ -437,27 +423,4 @@ static GAMEOBJECT * GetGameObject (const char * id)
 	return(0);
 }
 
-STRATEGYBLOCK *GetMeThisStrategyBlock(GAMETARGETOBJECTS This_One) 
-{
-	int a,num;
-
-	a=0;
-	num=-1;
-	
-	while (GameStratblockList[a].TargetObjectNum!=GT_LAST_TARGET_OBJECT) 
-	{
-		if (GameStratblockList[a].TargetObjectNum==This_One) 
-		{
-			num=a;
-			break;
-		}
-		a++;
-	}
-
-	if (num==-1) {
-		return(NULL);
-	}
-
-	return(FindSBWithName(GameStratblockList[num].SBname));
-}
 

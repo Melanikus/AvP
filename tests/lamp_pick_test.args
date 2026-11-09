@@ -1,4 +1,4 @@
-/std:c++17 /EHsc /MD /J /W3 /sdl /FC
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DNDEBUG
 /I3dc
 tests/lamp_pick_test.cpp

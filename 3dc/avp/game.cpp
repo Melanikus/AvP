@@ -4,6 +4,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a level's start asks d3d_hud.cpp how big the HUD is drawn, for every species, in place of the motion tracker's width / 640
 //   (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   the lift's change of environment, which could never be asked for, is no longer looked for each frame (#135)
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -392,11 +393,6 @@ void UpdateGame(void)
 	}
 
 	ObjectDynamics();
-
-	// now for the env teleports
-	if (RequestEnvChangeViaLift) {
-		CleanUpLiftControl();
-	}
 
 	/* netgame support */
 	if (AvP.Network != I_No_Network) {

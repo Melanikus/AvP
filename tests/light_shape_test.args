@@ -1,3 +1,3 @@
-/std:c++17 /EHsc /MD /J /W3 /FC /we4996
+/std:c++17 /EHsc /MD /J /W3 /FC /we4996 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DNDEBUG
 tests/light_shape_test.cpp

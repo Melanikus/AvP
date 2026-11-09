@@ -9,6 +9,8 @@
 //   Whether the stream is playing or paused, and how much it has played and written, are atomics, because both threads use them;
 //   a buffer OpenAL couldn't hand back isn't counted as free; how much has been played is 0, not a division by 0, for a stream that
 //   didn't start; SetVolume keeps the volume, so GetVolume says what it is
+//   GetNumSamplesWritten and GetWritableBufferSize, which the game never calls, are gone, and so is the count of samples written,
+//   which only the first of them read
 
 #ifdef USE_OPENAL
 
@@ -33,7 +35,6 @@ AudioStream::AudioStream()
 	_rate = 0;
 	_bytesPerSample      = 0;
 	_totalBytesPlayed    = 0;
-	_totalSamplesWritten = 0;
 	_isPaused  = false;
 	_isPlaying = false;
 	_buffers  = NULL;
@@ -182,9 +183,6 @@ uint32_t AudioStream::WriteData(uint8_t *audioData, uint32_t size)
 	_currentBuffer++;
 	_currentBuffer %= _bufferCount;
 
-	// size in bytes divided by bytes per sample divided by the number of channels
-	_totalSamplesWritten += ((size / _bytesPerSample) / _nChannels);
-
 	return size;
 }
 
@@ -252,16 +250,6 @@ uint64_t AudioStream::GetNumSamplesPlayed()
 	}
 
 	return ((_totalBytesPlayed / _bytesPerSample) / _nChannels);
-}
-
-uint64_t AudioStream::GetNumSamplesWritten()
-{
-	return _totalSamplesWritten;
-}
-
-uint32_t AudioStream::GetWritableBufferSize()
-{
-	return _bufferSize * CountFreeBuffers();
 }
 
 int32_t AudioStream::SetVolume(uint32_t volume)

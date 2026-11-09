@@ -6,8 +6,11 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   MatrixFromZVector gives back the matrix that turns nothing for a vector of nothing, and makes a real matrix for a vector straight up
 //   or down, which it used to build from -2147483648s (NORMALISE-ZERO-1)
+//   ArcTan works out its sides' sizes and its place in ArcTanTable in 64 bits (arctan_index.h), so a side over 8.4 km, or the most
+//   negative int, can no longer make a place before the table
 
 #include "3dc.h"
+#include "arctan_index.h"
 #include "inline.h"
 #include "prototyp.h"
 #include "io.h"
@@ -1544,7 +1547,8 @@ int ArcSin(int s)
 
 int ArcTan(int height_x, int width_z)
 {
-	int abs_height_x, abs_width_z, angle, sign, signsame, temp;
+	int angle, sign, signsame;
+	long long abs_height_x, abs_width_z, temp;   // 64 bits, so no size or sum overflows (arctan_index.h)
 
 	sign = 0;
 
@@ -1553,15 +1557,8 @@ int ArcTan(int height_x, int width_z)
 	else
 		signsame = FALSE;
 
-	abs_height_x = height_x;
-
-	if (abs_height_x < 0)
-		abs_height_x =- abs_height_x;
-
-	abs_width_z = width_z;
-
-	if (abs_width_z < 0) 
-		abs_width_z =- abs_width_z;
+	abs_height_x = ArcTan_Size(height_x);
+	abs_width_z = ArcTan_Size(width_z);
 
 	/*
 		Find ATN
@@ -1585,9 +1582,7 @@ int ArcTan(int height_x, int width_z)
 
 		if (abs_height_x != 0)
 		{
-			/* angle = (abs_width_z << 8) / abs_height_x; */
-
-			angle = (abs_width_z << 8) / abs_height_x; //DIV_INT((abs_width_z << 8), abs_height_x);
+			angle = ArcTan_TableIndex(abs_width_z, abs_height_x);
 		}
 		else
 			angle = deg22pt5;
