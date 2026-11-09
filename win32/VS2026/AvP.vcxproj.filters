@@ -135,6 +135,9 @@
     <ClCompile Include="..\..\3dc\relay_list_text.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_auto.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1608,6 +1611,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\relay_list_text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_auto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\relay_shared.h">

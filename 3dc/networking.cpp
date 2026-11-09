@@ -720,6 +720,27 @@ bool Net_AddRelaySession(const RelayListGame &game)
 		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby));
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
+// AddRelaySession tells two apart; -1 if it isn't there (relay_auto.cpp)
+int Net_FindRelaySession(const char *region, const char *code)
+{
+	if (!region || !code)
+	{
+		return -1;
+	}
+
+	for (uint32_t i = 0; i < NumberOfSessionsFound && i < MAX_NO_OF_SESSIONS; i++)
+	{
+		if (SessionData[i].throughRelay && memcmp(SessionData[i].relayCode, code, kRelayCodeLetters) == 0
+			&& strncmp(SessionData[i].relayRegion, region, sizeof(SessionData[i].relayRegion)) == 0)
+		{
+			return static_cast<int>(i);
+		}
+	}
+
+	return -1;
+}
+
 extern void MinimalNetCollectMessages(void);
 extern void InitAVPNetGameForHost(int species, int gamestyle, int level);
 extern void InitAVPNetGameForJoin(void);

@@ -73,6 +73,7 @@
 #include "configFile.h"
 #include "VorbisPlayer.h"
 #include "networking.h"
+#include "relay_auto.h"
 #include "view.h"
 #include "renderer.h"
 #include "mp_config.h"
@@ -323,6 +324,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			LogString("shadows: the developer tools are on (-dev)");
 		}
+
+		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
+		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
+		RelayAuto_ReadCommandLine(command_line, DevMode != 0);
 
 		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
 		// for one with a number after its '=', a word that starts with its name (CommandLineFindSwitch).

@@ -229,4 +229,7 @@ void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook);
 struct RelayListGame;
 bool Net_AddRelaySession(const RelayListGame &game);
 
+// Where a game from the relays' list is on the list of sessions, by its region and its code's 8 letters; -1 if it isn't there
+int Net_FindRelaySession(const char *region, const char *code);
+
 #endif // #ifndef _NETWORKING_
