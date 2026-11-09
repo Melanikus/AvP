@@ -520,6 +520,26 @@ static void TestWords()
 
 	OnlineScreens_AskingWords(NULL, 3, words, sizeof(words));
 	Check(strcmp(words, " asks to join (3 s)") == 0, "no name at all is written as nothing");
+
+	// H2, the relay's news on the host's screen
+	OnlineScreens_ListedWords("saopaulo", 41, words, sizeof(words));
+	Check(strcmp(words, "Your game is on the list, through saopaulo, 41 ms") == 0, "the host is told its game is on the list, through which relay, and how far it is");
+
+	OnlineScreens_ListedWords("", 41, words, sizeof(words));
+	Check(strcmp(words, "Your game is on the list") == 0, "with no region, only that the game is on the list");
+
+	OnlineScreens_ListedWords("paris", 2000000000, words, sizeof(words));
+	Check(strcmp(words, "Your game is on the list, through paris, 9999 ms") == 0, "a round trip past 9999 ms is shown as 9999, as the list caps it");
+
+	std::string const longRegion(40, 'r');
+	OnlineScreens_ListedWords(longRegion.c_str(), 5, words, sizeof(words));
+	Check(strlen(words) == strlen("Your game is on the list, through , 5 ms") + kRelayListRegionLetters, "a region longer than a region can be is cut to 16 letters");
+
+	OnlineScreens_RoomGoneWords("the relay didn't answer", words, sizeof(words));
+	Check(strcmp(words, "Your game's room on the relay has gone: the relay didn't answer") == 0, "a room that's gone says why, in the networking code's words");
+
+	OnlineScreens_RoomGoneWords(NULL, words, sizeof(words));
+	Check(strcmp(words, "Your game's room on the relay has gone") == 0, "and with no reason, only that it's gone");
 }
 
 int main()

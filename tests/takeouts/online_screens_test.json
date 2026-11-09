@@ -425,6 +425,66 @@
 			]
 		},
 		{
+			"name": "the listed line leaves out the relay's region",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Put(region, sizeof(region), safeRegion);",
+					"to": "Put(region, sizeof(region), \"\");"
+				}
+			]
+		},
+		{
+			"name": "the listed line's round trip isn't capped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Between(ms, 0, kRelayListMostHostMs)",
+					"to": "Between(ms, 0, 2000000000)"
+				}
+			]
+		},
+		{
+			"name": "a region is never cut to its 16 letters",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char region[kRelayListRegionLetters + 1];",
+					"to": "char region[64];"
+				}
+			]
+		},
+		{
+			"name": "an empty region still says through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!safeRegion || safeRegion[0] == '\\0')",
+					"to": "if (!safeRegion)"
+				}
+			]
+		},
+		{
+			"name": "the room's reason is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Put(why, sizeof(why), safeWhy);",
+					"to": "Put(why, sizeof(why), \"\");"
+				}
+			]
+		},
+		{
+			"name": "no reason still gives a colon",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!safeWhy || safeWhy[0] == '\\0')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
 			"name": "the host is not told who asks",
 			"changes": [
 				{

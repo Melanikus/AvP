@@ -202,4 +202,11 @@ void OnlineScreens_AskingWords(const char *safeName, int secondsLeft, char *word
 void OnlineScreens_LetInWords(const char *safeName, char *words, size_t size);
 void OnlineScreens_SayNoWords(const char *safeName, char *words, size_t size);
 
+// H2's two lines with more than fixed words: "Your game is on the list, through saopaulo, 41 ms" (the relay's region, made safe already, and
+// the host's round trip to it, taken as 0 to 9999; no region gives the line without it), and "Your game's room on the relay has gone: the
+// relay didn't answer" (the networking code's own words for why, made safe already; none gives the line without them). words always
+// ends with a 0.
+void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size_t size);
+void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
+
 #endif

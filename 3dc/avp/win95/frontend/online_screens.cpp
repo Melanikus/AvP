@@ -516,3 +516,43 @@ void OnlineScreens_SayNoWords(const char *safeName, char *words, size_t size)
 	_snprintf(words, size - 1, "Say no to %s", RowName(safeName).letters);
 	words[size - 1] = '\0';
 }
+
+void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	if (!safeRegion || safeRegion[0] == '\0')
+	{
+		Put(words, size, OnlineScreens_Words(kOnlineWordsRelayListed));
+		return;
+	}
+
+	char region[kRelayListRegionLetters + 1];
+	Put(region, sizeof(region), safeRegion);
+
+	_snprintf(words, size - 1, "%s, through %s, %d ms", OnlineScreens_Words(kOnlineWordsRelayListed), region, Between(ms, 0, kRelayListMostHostMs));
+	words[size - 1] = '\0';
+}
+
+void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	if (!safeWhy || safeWhy[0] == '\0')
+	{
+		Put(words, size, OnlineScreens_Words(kOnlineWordsRelayGone));
+		return;
+	}
+
+	char why[64];
+	Put(why, sizeof(why), safeWhy);
+
+	_snprintf(words, size - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsRelayGone), why);
+	words[size - 1] = '\0';
+}
