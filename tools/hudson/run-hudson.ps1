@@ -277,7 +277,10 @@ if ($AlienWaysWatch -ge 0) { $alienWaysSwitch += " -alienwayswatch=$AlienWaysWat
 if ($AlienWaysSwitches -and (-not $AlienWays -or $AlienWaysSwitches -notmatch '^-alienways[a-z]+(=\d+)?( -alienways[a-z]+(=\d+)?)*$')) { Stop-Here "-AlienWaysSwitches only takes the game's -alienways... switches, each letters with an optional =number, and it needs -AlienWays" }
 if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 
-$arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
+# -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
+# starts with -, and one in among them would cut them short
+$relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+$arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }
 if ($Views -gt 0) { $arguments += " views=$Views" }
 if ($Hold -gt 0) { $arguments += " hold=$Hold" }
@@ -301,7 +304,6 @@ if ($Vision) { $arguments += " vision=$Vision" }
 if ($Break) { $arguments += " break=$Break" }
 if ($NoFilm) { $arguments += " film=no" }
 if ($Net) { $arguments += " net=$Net" }
-if ($Relay) { $arguments += $(if ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }) }
 if ($Lamp) { $arguments += " lamp=$Lamp" }
 if ($LampKind) { $arguments += " lampkind=$LampKind" }
 if ($LampAt) { $arguments += " lampat=$LampAt" }
