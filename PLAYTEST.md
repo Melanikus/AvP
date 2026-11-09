@@ -40,6 +40,15 @@ VirusTotal's report on the zip.
    ```
    Nothing printed means every file matches.
 
+**A test build instead of a release** (the owner's Build workflow, kept for 30 days as the artifact `avp-avpx_main`):
+`tools\install-build.ps1` downloads the newest one and makes all these checks itself. To check one by hand, unzip it into a new,
+empty folder. There is no zip hash to compare, so step 1 is skipped. Step 2 is made on the list of hashes inside it instead:
+```
+gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main
+```
+Then step 3, in that folder. Also check that it holds no file the list doesn't name: a release's record covers its whole zip, but
+here only the list is recorded.
+
 ## 2. Where to unzip (Steam)
 Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, inside your Steam library. It holds `bin`,
 `avp_rifs`, `avp_huds` and the rest. The zip is laid out the same way.

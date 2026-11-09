@@ -1725,6 +1725,36 @@ $listInBuild = [regex]::Match($buildWorkflow, '\$required = (.*)').Groups[1].Val
 $listInCheck = [regex]::Match($checkScript, '\$requiredChecks = (.*)').Groups[1].Value.Trim()
 Check ($listInBuild.Length -gt 0 -and $listInBuild -ceq $listInCheck) 'a release asks for the same checks as a test build'
 
+# --- The test build, read as text. What it makes is recorded by a job that builds nothing, and only once that job has checked it, so the
+# owner can ask GitHub to vouch for a test build as for a release. Added 2026-11-09 by Melanikus for the AvP port.
+$buildWithoutComments = ((($buildWorkflow -replace "`r", '') -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+$buildJobs = [regex]::Split($buildWithoutComments, '(?m)^  (?=(?:build|attest):\n)')
+Check ($buildJobs.Count -eq 3) 'the test build has its two jobs, and no others'
+$buildTop = $buildJobs[0]; $testBuildJob = $buildJobs[1]; $attestJob = $buildJobs[$buildJobs.Count - 1]
+Check ($buildTop -match '(?m)^on:\n  workflow_dispatch:\n' -and $buildTop -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):') 'the test build starts by hand, and in no other way'
+Check ($buildTop -notmatch ':\s*write\b' -and $testBuildJob -notmatch ':\s*write\b') 'the job that builds, which runs the libraries'' own build scripts, can write nothing and record nothing'
+Check ($attestJob -match '(?m)^    needs: build$') 'what the test build made is recorded once it is made'
+Check ($attestJob -match '(?m)^    permissions:\n      contents: read\n      id-token: write( +#[^\n]*)?\n      attestations: write( +#[^\n]*)?\n    steps:') 'by a job that can read, prove which workflow it is, and record, and nothing more'
+Check (-not $attestJob.Contains('actions/checkout') -and -not $attestJob.Contains('./tools/') -and -not $attestJob.Contains('vcpkg')) 'which has no copy of the code and builds nothing'
+Check ($testBuildJob.Contains('name: avp-${{ github.ref_name }}') -and $attestJob.Contains("name: avp-`${{ github.ref_name }}`n          path: package`n")) 'it gets the very package the build kept'
+Check-Order $attestJob "name: Refuse a package or libraries that don't match their list" 'subject-path: package/SHA256SUMS.txt' "the package's list is checked before it is recorded"
+Check-Order $attestJob "name: Refuse a package or libraries that don't match their list" 'subject-path: libraries/SHA256SUMS.txt' "and so is the libraries' list"
+Check ($attestJob.Contains("foreach (`$folder in 'package', 'libraries') {")) 'the check is made on both'
+Check ($attestJob.Contains('foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force) {')) 'and it looks at hidden files too, so none gets through unlisted'
+Check ($attestJob.Contains("is there and isn't listed") -and $attestJob.Contains("is listed and isn't there") -and $attestJob.Contains("isn't what the list says")) 'every file must be on the list, every one on it must be there, and each must be the same'
+$testBuildAttests = @([regex]::Matches($attestJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ') | ForEach-Object { $_.Groups[1].Value })
+$releaseAttest = [regex]::Match($publishJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ').Groups[1].Value
+Check ($testBuildAttests.Count -eq 2 -and $releaseAttest.Length -eq 40 -and @($testBuildAttests | Where-Object { $_ -cne $releaseAttest }).Count -eq 0) 'both are recorded by the action release.yml uses, pinned to the same commit'
+
+# tools/install-build.ps1, which the owner uses to install a test build, asks GitHub to vouch for the list before it believes it
+$installScript = (Get-Content -Raw (Join-Path $repository 'tools/install-build.ps1')) -replace "`r", ''
+$vouching = 'gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners'
+Check ($installScript.Contains("    $vouching`n    if (`$LASTEXITCODE -ne 0) { throw ")) 'install-build.ps1 asks GitHub to vouch for the list: that workflow exactly, on avpx_main, at the commit it downloaded, and stops if it can''t'
+Check-Order $installScript $vouching 'foreach ($line in Get-Content -LiteralPath $sums) {' 'before it reads the list'
+Check-Order $installScript $vouching 'Copy-Item -LiteralPath' 'and before it copies anything'
+Check-Order $installScript "if (`"`$(`$run.headSha)`" -cnotmatch '\A[0-9a-f]{40}\z') { throw" 'gh api "repos/$repo/compare/$($run.headSha)' 'the commit GitHub named is checked before it is used'
+Check ($installScript.Contains('foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File -Force) {')) 'and every file in the download is looked at, hidden ones too'
+
 # --- Every pull request refuses any way a player's game could run Hudson as well, in a check that's already required, so a way in left awake fails
 # the pull request that brings it
 $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''

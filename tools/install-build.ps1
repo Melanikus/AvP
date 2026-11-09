@@ -10,8 +10,10 @@ Needs the GitHub CLI (gh), signed in. From a copy of this repository:
 What the checks mean:
 - It only takes a build that the project's owner started from avpx_main. A run from a fork's pull request can carry the same
   workflow name and the same branch name, but only someone with write access to this repository can start one of these.
-- The hashes show that the download is complete and undamaged. They do NOT show who made it: the list of hashes comes inside
-  the same download, so anyone who could replace a file could replace the list too.
+- The hashes show that the download is complete and undamaged. On their own they don't show who made it: the list of hashes
+  comes inside the same download, so anyone who could replace a file could replace the list too. So before the list is
+  believed, GitHub must vouch for it: build.yml records which workflow made the list, from which commit, and this asks GitHub
+  for that record (gh attestation verify). A build made before that record was added (2026-11-09) has none, and is refused.
 
 Your previous files are copied to a new <GameFolder>-previous-build-<date and time> folder first, so you can go back. If the
 install fails part of the way through, they are put back.
@@ -45,6 +47,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not ask GitHub for the builds. Is gh ins
 if (-not $found -or "$found" -eq 'null') { throw "No build found. Builds are made only when the project's owner starts one (see PLAYTEST.md)." }
 $run = ($found -join "`n") | ConvertFrom-Json
 
+# Added 2026-11-09 by Melanikus for the AvP port: what GitHub answered is checked before it's used in a command or an address (AvP
+# Tao #3): a run's number is digits, and a commit is 40 small hex digits.
+if ("$($run.databaseId)" -cnotmatch '\A[1-9][0-9]{0,19}\z') { throw "GitHub's answer has no run number. Nothing was installed." }
+if ("$($run.headSha)" -cnotmatch '\A[0-9a-f]{40}\z') { throw "GitHub's answer has no commit. Nothing was installed." }
+
 # The commit must be part of avpx_main. "ahead" means avpx_main has moved on since: it is still on the branch, but newer code exists.
 $compare = gh api "repos/$repo/compare/$($run.headSha)...$branch" --jq '.status + " " + (.ahead_by | tostring)'
 if ($LASTEXITCODE -ne 0) { throw 'Could not ask GitHub about that commit.' }
@@ -63,6 +70,15 @@ try {
     # so a file can't be slipped in unlisted, and an empty list proves nothing.
     $sums = Join-Path $download 'SHA256SUMS.txt'
     if (-not (Test-Path -LiteralPath $sums)) { throw 'The build has no SHA256SUMS.txt. Nothing was installed.' }
+
+    # Added 2026-11-09 by Melanikus for the AvP port: who made the list. GitHub must vouch that this very file came from this
+    # repository's Build workflow (build.yml) run on avpx_main, at the commit GitHub named above, on GitHub's own machines. build.yml
+    # records that only once a job that builds nothing has checked every file against the list. --cert-identity is the workflow
+    # and branch exactly, where --signer-workflow would also let through a workflow whose name only starts the same.
+    gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners
+    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed." }
+    "GitHub vouches for the list: $repo's Build workflow made it, from commit $($run.headSha)."
+
     $expected = @{}
     foreach ($line in Get-Content -LiteralPath $sums) {
         $hash, $file = $line -split '  ', 2
@@ -70,7 +86,8 @@ try {
     }
     if ($expected.Count -eq 0) { throw 'SHA256SUMS.txt lists no files. Nothing was installed.' }
     $names = @()
-    foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File) {
+    # -Force, so a hidden file is looked at too: one left out here would be a file nobody listed
+    foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File -Force) {
         $name = $item.FullName.Substring($download.Length + 1).Replace('\', '/')
         if ($name -eq 'SHA256SUMS.txt') { continue }
         if (-not $expected.ContainsKey($name)) { throw "The build holds a file its list doesn't mention: $name. Nothing was installed." }
