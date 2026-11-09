@@ -214,6 +214,10 @@ int ConnectionCheck_Lines(const ConnectionFacts &f, char lines[][kConnLineBytes]
 		char names[kConnMostOthers * (kConnNameLetters + 2) + 24];
 		OthersWords(f, names, sizeof(names));
 		Line(made[n++], "Other firewalls on: ", names, ". AVPx can't see their rules: look there first if you can't connect");
+
+		// Its mode can't be read, so this is said whenever there's one (PO's card, from the owner's own firewall, 2026-11-09)
+		Line(made[n++], "If one asks whether AvP_Classic.exe may send UDP, it's set to ask about every program: allow it for the addresses in "
+			"servers.cfg, and nothing else");
 	}
 
 	int const given = n < most ? n : most;

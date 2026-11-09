@@ -33,7 +33,7 @@ enum
 	kConnMostOthers = 3,       // other firewalls kept by name; any more are only counted (3 names of the most letters fit in a line)
 	kConnNameLetters = 32,     // the most letters of a product's name that are kept
 	kConnLineBytes = 200,      // the most a line of the check's words takes, its 0 too
-	kConnMostLines = 4         // network, going out, coming in, other firewalls
+	kConnMostLines = 5         // network, going out, coming in, other firewalls, and what to do when one asks
 };
 
 // What was read. Each "Read" says whether Windows answered that part at all: a part it didn't answer says so in the words, and is never
@@ -76,8 +76,10 @@ enum ConnectionVerdict
 
 ConnectionVerdict ConnectionCheck_Verdict(const ConnectionFacts &facts);
 
-// The check's lines, in order: the network, going out, coming in (only when something stops it), and other firewalls. Each is fixed
-// words with only the kinds of network and the safe names put in. Gives how many lines it wrote, at most `most`.
+// The check's lines, in order: the network, going out, coming in (only when something stops it), other firewalls, and, when there are
+// any, what to do if one asks about AVPx going out (a firewall set to ask about every program does: the owner's own, 2026-11-09, asked
+// whether AVP_Classic.exe may send UDP; Windows Firewall as it comes never asks about going out, and another firewall's mode can't be
+// read). Each is fixed words with only the kinds of network and the safe names put in. Gives how many lines it wrote, at most `most`.
 int ConnectionCheck_Lines(const ConnectionFacts &facts, char lines[][kConnLineBytes], int most);
 
 // One line for the log: the same facts in fixed words and counts. No address, no network's name and no path is ever in it.

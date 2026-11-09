@@ -203,6 +203,16 @@
 					"to": "WideCharToMultiByte(CP_UTF8, 0, name, -1, f.others[f.othersOn], sizeof(f.others[f.othersOn]), NULL, NULL);"
 				}
 			]
+		},
+		{
+			"name": "the line on what to do when another firewall asks is left out",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "\t\tLine(made[n++], \"If one asks whether AvP_Classic.exe",
+					"to": "\t\tif (false) Line(made[n++], \"If one asks whether AvP_Classic.exe"
+				}
+			]
 		}
 	]
 }

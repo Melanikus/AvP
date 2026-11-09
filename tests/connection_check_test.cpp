@@ -192,6 +192,8 @@ static void TestTheWords()
 	strcpy(f.others[0], "Norton");
 	Check(Lines(f).find("\nOther firewalls on: Norton. AVPx can't see their rules: look there first if you can't connect\n") != std::string::npos,
 		"one other firewall, by name");
+	Check(Lines(f).find("connect\nIf one asks whether AvP_Classic.exe may send UDP, it's set to ask about every program: allow it for the addresses "
+		"in servers.cfg, and nothing else\n") != std::string::npos, "and, right after, what to do if it asks about AVPx going out");
 	f.othersOn = 2;
 	strcpy(f.others[1], "ESET");
 	Check(Lines(f).find("\nOther firewalls on: Norton and ESET. ") != std::string::npos, "two");
