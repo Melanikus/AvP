@@ -77,8 +77,8 @@ inline void NetSealedControl_Start(NetSealedControl *c, const NetHandshakeAKeys 
 {
 	NetSealedControl_Wipe(c);
 	memcpy(c->sessionId, keys->sessionId, sizeof(c->sessionId));
-	NetV2_DirectionStart(&c->out, keys->split.initiatorToResponderKey, keys->split.initiatorToResponderIv);
-	NetV2_DirectionStart(&c->in, keys->split.responderToInitiatorKey, keys->split.responderToInitiatorIv);
+	NetV2_DirectionStart(&c->out, keys->split.initiatorToResponderSecret, keys->split.initiatorToResponderIv);
+	NetV2_DirectionStart(&c->in, keys->split.responderToInitiatorSecret, keys->split.responderToInitiatorIv);
 	NetV2_ReplayClear(&c->window);
 	c->startedAt = now;
 	c->started = true;

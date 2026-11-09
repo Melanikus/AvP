@@ -88,9 +88,9 @@ public:
 	void Start(const NetNoiseSplit &split, bool joiner, uint32_t now)
 	{
 		Clear();
-		NetV2_DirectionStart(&sending, joiner ? split.initiatorToResponderKey : split.responderToInitiatorKey,
+		NetV2_DirectionStart(&sending, joiner ? split.initiatorToResponderSecret : split.responderToInitiatorSecret,
 			joiner ? split.initiatorToResponderIv : split.responderToInitiatorIv);
-		NetV2_DirectionStart(&receiving, joiner ? split.responderToInitiatorKey : split.initiatorToResponderKey,
+		NetV2_DirectionStart(&receiving, joiner ? split.responderToInitiatorSecret : split.initiatorToResponderSecret,
 			joiner ? split.responderToInitiatorIv : split.initiatorToResponderIv);
 		started = now;
 		live = true;

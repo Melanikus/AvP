@@ -413,15 +413,28 @@ static void TheNoiseState()
 	Check(NetNoise_DecryptAndHash(&b, sent, sentSize, got, sizeof(got), &gotSize) && gotSize == sizeof(words) && memcmp(got, words, sizeof(words)) == 0
 		&& memcmp(a.h, b.h, sizeof(a.h)) == 0, "as they came, they open, and both sides' h still agree");
 
+	// Modified 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3, Third's a7a369f): Split gives a 48-byte secret each way,
+	// and every epoch's key, epoch 0's too, is made from it. The vectors (net_v2_parts_test, net_v2b_test) say the bytes; this says the
+	// shape: the 120 bytes' order, and that no epoch seals with the secret itself.
 	NetNoiseSplit splitA, splitB;
 	Check(NetNoise_Split(&a, &splitA) && NetNoise_Split(&b, &splitB) && memcmp(&splitA, &splitB, sizeof(splitA)) == 0
-		&& memcmp(splitA.initiatorToResponderKey, splitA.responderToInitiatorKey, kNetCryptoAesKeyBytes) != 0,
-		"the split gives both sides the same two keys, and a different one each way");
+		&& memcmp(splitA.initiatorToResponderSecret, splitA.responderToInitiatorSecret, kNetNoiseSecretBytes) != 0,
+		"the split gives both sides the same two secrets, and a different one each way");
 
-	uint8_t epoch0[kNetCryptoAesKeyBytes], epoch1[kNetCryptoAesKeyBytes];
-	Check(NetNoise_EpochKey(splitA.initiatorToResponderKey, 0, epoch0) && memcmp(epoch0, splitA.initiatorToResponderKey, sizeof(epoch0)) == 0
-		&& NetNoise_EpochKey(splitA.initiatorToResponderKey, 1, epoch1) && memcmp(epoch1, epoch0, sizeof(epoch1)) != 0,
-		"epoch 0 is the split's own key, and epoch 1 is another");
+	uint8_t all[kNetNoiseSplitBytes];
+	Check(kNetNoiseSplitBytes == 120 && kNetNoiseSecretBytes == 48
+		&& NetCrypto_HkdfSha384(a.ck, sizeof(a.ck), NULL, 0, reinterpret_cast<const uint8_t *>("AVPX split v2"), 13, all, sizeof(all))
+		&& memcmp(all, splitA.initiatorToResponderSecret, 48) == 0 && memcmp(all + 48, splitA.responderToInitiatorSecret, 48) == 0
+		&& memcmp(all + 96, splitA.initiatorToResponderIv, 12) == 0 && memcmp(all + 108, splitA.responderToInitiatorIv, 12) == 0,
+		"Split's 120 bytes, in CRYPTO.md's order: the secret each way (48 each), then the IV each way (12 each)");
+
+	uint8_t epoch0[kNetCryptoAesKeyBytes], epoch1[kNetCryptoAesKeyBytes], byHand[kNetCryptoAesKeyBytes];
+	uint8_t const info0[17] = { 'A', 'V', 'P', 'X', ' ', 'e', 'p', 'o', 'c', 'h', ' ', 'v', '2', 0, 0, 0, 0 };
+	Check(NetNoise_EpochKey(splitA.initiatorToResponderSecret, 0, epoch0)
+		&& NetCrypto_HkdfExpandSha384(splitA.initiatorToResponderSecret, kNetNoiseSecretBytes, info0, sizeof(info0), byHand, sizeof(byHand))
+		&& memcmp(epoch0, byHand, sizeof(epoch0)) == 0 && memcmp(epoch0, splitA.initiatorToResponderSecret, sizeof(epoch0)) != 0
+		&& NetNoise_EpochKey(splitA.initiatorToResponderSecret, 1, epoch1) && memcmp(epoch1, epoch0, sizeof(epoch1)) != 0,
+		"epoch 0's key is made from the secret like any other's (never the secret's own bytes), and epoch 1 is another");
 
 	NetNoise_Wipe(&a);
 	Check(std::all_of(a.k, a.k + sizeof(a.k), [](uint8_t x) { return x == 0; }) && !a.hasKey, "wiping leaves nothing of the keys");

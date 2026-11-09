@@ -17,10 +17,14 @@
 //   - MixKey: HKDF-SHA-384 (RFC 5869) with salt ck, the secret as its input, and no info, 80 bytes: the new ck is bytes 0-47, k 48-79.
 //   - A nonce: the 12-byte IV, with its last 8 bytes XORed with n, little-endian (CRYPTO.md's nonce(n)). During a handshake the IV is 0.
 //     (Noise's own AES-GCM puts n big-endian: version 2 differs on purpose.)
-//   - Split: HKDF-SHA-384 with salt ck, no input and info "AVPX split v2", 88 bytes: the initiator-to-responder key (32), the
-//     responder-to-initiator key (32), then the initiator-to-responder IV (12) and the responder-to-initiator IV (12).
-//   - An epoch's key (CRYPTO.md section 9): epoch 0 is Split's key itself; epoch e from 1 is HKDF-Expand(Split's key, "AVPX epoch v2"
-//     then e as 4 bytes little-endian, 32 bytes). The IV stays Split's.
+//   - Split: HKDF-SHA-384 with salt ck, no input and info "AVPX split v2", 120 bytes: the initiator-to-responder secret (48), the
+//     responder-to-initiator secret (48), then the initiator-to-responder IV (12) and the responder-to-initiator IV (12).
+//   - An epoch's key (CRYPTO.md section 9): for every epoch e, 0 included, HKDF-Expand(that direction's secret, "AVPX epoch v2" then e
+//     as 4 bytes little-endian, 32 bytes). The IV stays Split's.
+//   MODIFIED 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3, Third's a7a369f, from Secondary's reads): Split used to give
+//   two 32-byte keys, and epoch 0 sealed with the very key every later epoch was made from: one key with two jobs. Now a direction's
+//   secret only ever makes keys, and never seals anything itself. It's 48 bytes, the hash's own length, as RFC 5869 asks of a key for
+//   HKDF-Expand.
 //
 // SECRETS. h isn't secret, but ck and k are: NetNoise_Wipe wipes all of it, and the handshakes call it the moment they're done.
 
@@ -44,7 +48,8 @@ static const char kNetNoiseSplitInfo[] = "AVPX split v2";
 static const char kNetNoiseEpochInfo[] = "AVPX epoch v2";
 
 size_t const kNetNoiseMixKeyBytes = 80;      // MixKey's HKDF: the new ck (48), then k (32)
-size_t const kNetNoiseSplitBytes = 88;       // Split's HKDF: two keys (32 each), then two IVs (12 each)
+size_t const kNetNoiseSecretBytes = kNetCryptoHashBytes;   // a direction's secret: 48, SHA-384's length
+size_t const kNetNoiseSplitBytes = 2 * kNetNoiseSecretBytes + 2 * kNetCryptoNonceBytes;   // Split's HKDF: two secrets, then two IVs: 120
 
 struct NetNoiseState
 {
@@ -55,11 +60,12 @@ struct NetNoiseState
 	uint64_t n;                         // how many words have been sealed with this k
 };
 
-// What a finished handshake gives: a key and an IV for each direction
+// What a finished handshake gives: a secret and an IV for each direction. A secret never seals anything: each epoch's key is made from it
+// (NetNoise_EpochKey).
 struct NetNoiseSplit
 {
-	uint8_t initiatorToResponderKey[kNetCryptoAesKeyBytes];
-	uint8_t responderToInitiatorKey[kNetCryptoAesKeyBytes];
+	uint8_t initiatorToResponderSecret[kNetNoiseSecretBytes];
+	uint8_t responderToInitiatorSecret[kNetNoiseSecretBytes];
 	uint8_t initiatorToResponderIv[kNetCryptoNonceBytes];
 	uint8_t responderToInitiatorIv[kNetCryptoNonceBytes];
 };
@@ -236,7 +242,7 @@ inline bool NetNoise_DecryptAndHash(NetNoiseState *s, const uint8_t *sealed, siz
 	return true;
 }
 
-// Split: the handshake is over, and gives one key and IV for each direction
+// Split: the handshake is over, and gives one secret and IV for each direction, in CRYPTO.md's order (5.1 point 3)
 inline bool NetNoise_Split(const NetNoiseState *s, NetNoiseSplit *out)
 {
 	uint8_t all[kNetNoiseSplitBytes];
@@ -245,10 +251,10 @@ inline bool NetNoise_Split(const NetNoiseState *s, NetNoiseSplit *out)
 
 	if (ok)
 	{
-		memcpy(out->initiatorToResponderKey, all, kNetCryptoAesKeyBytes);
-		memcpy(out->responderToInitiatorKey, all + kNetCryptoAesKeyBytes, kNetCryptoAesKeyBytes);
-		memcpy(out->initiatorToResponderIv, all + 2 * kNetCryptoAesKeyBytes, kNetCryptoNonceBytes);
-		memcpy(out->responderToInitiatorIv, all + 2 * kNetCryptoAesKeyBytes + kNetCryptoNonceBytes, kNetCryptoNonceBytes);
+		memcpy(out->initiatorToResponderSecret, all, kNetNoiseSecretBytes);
+		memcpy(out->responderToInitiatorSecret, all + kNetNoiseSecretBytes, kNetNoiseSecretBytes);
+		memcpy(out->initiatorToResponderIv, all + 2 * kNetNoiseSecretBytes, kNetCryptoNonceBytes);
+		memcpy(out->responderToInitiatorIv, all + 2 * kNetNoiseSecretBytes + kNetCryptoNonceBytes, kNetCryptoNonceBytes);
 	}
 	else
 	{
@@ -259,15 +265,10 @@ inline bool NetNoise_Split(const NetNoiseState *s, NetNoiseSplit *out)
 	return ok;
 }
 
-// The key for one epoch of a direction (CRYPTO.md section 9): epoch 0 is Split's key itself, and each one after comes from it alone
-inline bool NetNoise_EpochKey(const uint8_t splitKey[kNetCryptoAesKeyBytes], uint32_t epoch, uint8_t out[kNetCryptoAesKeyBytes])
+// The key for one epoch of a direction (CRYPTO.md section 9): every epoch's, 0 included, is made the same way from the direction's secret,
+// so nothing ever seals with the secret itself
+inline bool NetNoise_EpochKey(const uint8_t secret[kNetNoiseSecretBytes], uint32_t epoch, uint8_t out[kNetCryptoAesKeyBytes])
 {
-	if (epoch == 0)
-	{
-		memcpy(out, splitKey, kNetCryptoAesKeyBytes);
-		return true;
-	}
-
 	uint8_t info[sizeof(kNetNoiseEpochInfo) - 1 + 4];
 	memcpy(info, kNetNoiseEpochInfo, sizeof(kNetNoiseEpochInfo) - 1);
 
@@ -276,7 +277,7 @@ inline bool NetNoise_EpochKey(const uint8_t splitKey[kNetCryptoAesKeyBytes], uin
 		info[sizeof(kNetNoiseEpochInfo) - 1 + i] = static_cast<uint8_t>((epoch >> (8 * i)) & 0xFF);
 	}
 
-	return NetCrypto_HkdfExpandSha384(splitKey, kNetCryptoAesKeyBytes, info, sizeof(info), out, kNetCryptoAesKeyBytes);
+	return NetCrypto_HkdfExpandSha384(secret, kNetNoiseSecretBytes, info, sizeof(info), out, kNetCryptoAesKeyBytes);
 }
 
 #endif

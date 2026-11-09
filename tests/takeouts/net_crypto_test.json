@@ -110,22 +110,42 @@
 			]
 		},
 		{
-			"name": "both directions get the same key",
+			"name": "both directions get the same secret",
 			"changes": [
 				{
 					"file": "3dc/net_noise.h",
-					"from": "memcpy(out->responderToInitiatorKey, all + kNetCryptoAesKeyBytes, kNetCryptoAesKeyBytes);",
-					"to": "memcpy(out->responderToInitiatorKey, all, kNetCryptoAesKeyBytes);"
+					"from": "memcpy(out->responderToInitiatorSecret, all + kNetNoiseSecretBytes, kNetNoiseSecretBytes);",
+					"to": "memcpy(out->responderToInitiatorSecret, all, kNetNoiseSecretBytes);"
 				}
 			]
 		},
 		{
-			"name": "epoch 0 isn't the split's own key",
+			"name": "epoch 0 seals with the secret's own bytes, as before",
 			"changes": [
 				{
 					"file": "3dc/net_noise.h",
-					"from": "\tif (epoch == 0)\n\t{",
-					"to": "\tif (false)\n\t{"
+					"from": "\tuint8_t info[sizeof(kNetNoiseEpochInfo) - 1 + 4];\n\tmemcpy(info, kNetNoiseEpochInfo, sizeof(kNetNoiseEpochInfo) - 1);",
+					"to": "\tif (epoch == 0)\n\t{\n\t\tmemcpy(out, secret, kNetCryptoAesKeyBytes);\n\t\treturn true;\n\t}\n\n\tuint8_t info[sizeof(kNetNoiseEpochInfo) - 1 + 4];\n\tmemcpy(info, kNetNoiseEpochInfo, sizeof(kNetNoiseEpochInfo) - 1);"
+				}
+			]
+		},
+		{
+			"name": "Split's IVs come from the old 88-byte layout's place",
+			"changes": [
+				{
+					"file": "3dc/net_noise.h",
+					"from": "memcpy(out->initiatorToResponderIv, all + 2 * kNetNoiseSecretBytes, kNetCryptoNonceBytes);",
+					"to": "memcpy(out->initiatorToResponderIv, all + 2 * kNetCryptoAesKeyBytes, kNetCryptoNonceBytes);"
+				}
+			]
+		},
+		{
+			"name": "an epoch's key is made from only the secret's first 32 bytes",
+			"changes": [
+				{
+					"file": "3dc/net_noise.h",
+					"from": "return NetCrypto_HkdfExpandSha384(secret, kNetNoiseSecretBytes, info",
+					"to": "return NetCrypto_HkdfExpandSha384(secret, kNetCryptoAesKeyBytes, info"
 				}
 			]
 		}

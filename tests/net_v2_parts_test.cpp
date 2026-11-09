@@ -376,15 +376,17 @@ static void TheDirection(const JsonValue &all)
 {
 	const JsonValue *const nonces = all.Member("nonces");
 	const JsonValue *const epochs = all.Member("epochKeys");
-	PartsCheck(nonces && nonces->kind == kJsonList && nonces->items.size() == 6 && epochs && epochs->kind == kJsonList && epochs->items.size() == 3,
-		"the file's 6 nonces and 3 epoch keys are there");
+	// Modified 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3, the relay's file at 2b8dcd6): each epoch's key comes from a
+	// 48-byte secret, and epoch 0 is in the file too, since it's made like the others
+	PartsCheck(nonces && nonces->kind == kJsonList && nonces->items.size() == 6 && epochs && epochs->kind == kJsonList && epochs->items.size() == 4,
+		"the file's 6 nonces and 4 epoch keys (0, 1, 2 and 4095) are there");
 
 	if (!nonces || !epochs || nonces->kind != kJsonList || epochs->kind != kJsonList)
 	{
 		return;
 	}
 
-	static const uint8_t kKey[kNetCryptoAesKeyBytes] = { 0x42 };
+	static const uint8_t kSecret[kNetNoiseSecretBytes] = { 0x42 };
 	int nonceRight = 0;
 
 	for (const JsonValue &n : nonces->items)
@@ -396,7 +398,7 @@ static void TheDirection(const JsonValue &all)
 
 		if (iv.size() == kNetCryptoNonceBytes && counter && counter->kind == kJsonNumber)
 		{
-			NetV2_DirectionStart(&d, kKey, iv.data());
+			NetV2_DirectionStart(&d, kSecret, iv.data());
 			nonceRight += NetV2_DirectionFor(&d, counter->number, key, nonce) && Same(want, nonce, sizeof(nonce)) ? 1 : 0;
 			NetV2_DirectionWipe(&d);
 		}
@@ -408,32 +410,35 @@ static void TheDirection(const JsonValue &all)
 
 	for (const JsonValue &e : epochs->items)
 	{
-		Bytes const splitKey = HexOf(&e, "key"), want = HexOf(&e, "epochKey");
+		Bytes const secret = HexOf(&e, "secret"), want = HexOf(&e, "epochKey");
 		const JsonValue *const epoch = e.Member("epoch");
 		static const uint8_t kIv[kNetCryptoNonceBytes] = {};
 		NetV2Direction d;
 		uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
 
-		if (splitKey.size() == kNetCryptoAesKeyBytes && epoch && epoch->kind == kJsonNumber)
+		if (secret.size() == kNetNoiseSecretBytes && epoch && epoch->kind == kJsonNumber)
 		{
-			NetV2_DirectionStart(&d, splitKey.data(), kIv);
+			NetV2_DirectionStart(&d, secret.data(), kIv);
 			uint64_t const first = epoch->number << kNetV2EpochShift;
 			uint8_t lastKey[kNetCryptoAesKeyBytes];
+			// Epoch 0 has no epoch before it, so its "another just before" is the next epoch's first key instead
+			uint64_t const other = first == 0 ? first + (1u << kNetV2EpochShift) : first - 1;
 			bool const right = NetV2_DirectionFor(&d, first, key, nonce) && Same(want, key, sizeof(key)) &&
 				NetV2_DirectionFor(&d, first + (1u << kNetV2EpochShift) - 1, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) == 0 &&
-				NetV2_DirectionFor(&d, first - 1, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) != 0;
+				NetV2_DirectionFor(&d, other, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) != 0;
 			epochRight += right ? 1 : 0;
 			NetV2_DirectionWipe(&d);
 		}
 	}
 
-	PartsCheck(epochRight == 3, std::to_string(epochRight) + " of 3 epoch keys are the relay's, the same key all through its epoch, another just before it");
+	PartsCheck(epochRight == 4, std::to_string(epochRight) + " of 4 epoch keys are the relay's, the same key all through its epoch, another next to it");
 
 	NetV2Direction d;
 	uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
 	static const uint8_t kIv[kNetCryptoNonceBytes] = {};
-	NetV2_DirectionStart(&d, kKey, kIv);
-	PartsCheck(NetV2_DirectionFor(&d, 0, key, nonce) && memcmp(key, kKey, sizeof(key)) == 0, "epoch 0's key is Split's key itself");
+	NetV2_DirectionStart(&d, kSecret, kIv);
+	PartsCheck(NetV2_DirectionFor(&d, 0, key, nonce) && memcmp(key, kSecret, sizeof(key)) != 0,
+		"epoch 0's key is made from the secret, and isn't the secret's own bytes: nothing seals with the secret itself");
 
 	memset(key, 0x5A, sizeof(key));
 	memset(nonce, 0x5A, sizeof(nonce));
