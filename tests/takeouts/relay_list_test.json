@@ -725,12 +725,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: Find Games' help doesn't say the online list",
+			"name": "SOURCE: Find Games' help promises a player the online list, which a release game can't reach",
 			"changes": [
 				{
 					"file": "3dc/avp/language.cpp",
-					"from": "\"Press ENTER to look for games on this network and on the online list of games.\",",
-					"to": "\"Press ENTER to look for games on this network.\","
+					"from": "\"Press ENTER to look for games on this network.\",",
+					"to": "\"Press ENTER to look for games on this network and on the online list of games.\","
 				}
 			]
 		},

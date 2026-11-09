@@ -999,14 +999,17 @@ static void TestTheMenus()
 	Check(Has(answers, "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);") && Has(answers, "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;"),
 		"the host's answer rows never take the selection when they come, and only the first lets the player in");
 
-	// The Join page's first row says what its search does now: this network and the online list, not 1999's "Find Local Servers". The
-	// words are the game's own (language.cpp, after everything language.txt holds), so a player's language file isn't touched.
+	// The Join page's first row is Find Games, not 1999's "Find Local Servers". Its help says only what a player's search does: it looks on
+	// this network. The online list is asked only with -dev, and a release game reaches no server, so the help never promises it (the
+	// owner's ruling). The words are the game's own (language.cpp, after everything language.txt holds), so a player's language file isn't
+	// touched.
 	std::string const pages = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
 	std::string const joinPage = SourceSlice(pages, "static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=", "\n};\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(joinPage, "{TEXTSTRING_MULTIPLAYER_FINDGAMES},") && Has(joinPage, "TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP}") && !Has(joinPage, "FINDLOCAL"),
 		"the Join page's first row is Find Games, with its own help, and nothing of the old local-servers words");
 	std::string const words = ReadSource("3dc/avp/language.cpp");
-	Check(Has(words, "\t\"Find Games\",\n") && Has(words, "on this network and on the online list of games"), "and its words say both: this network, and the online list");
+	Check(Has(words, "\t\"Find Games\",\n\t\"Press ENTER to look for games on this network.\",\n") && !Has(words, "online list of games\""),
+		"and its help says only this network: nothing a player's game can't reach");
 
 	// -dev -findgames: only with -dev, and then the player's own way to the page of games found, one page after another
 	std::string const startUp = ReadSource("3dc/avp/win95/winmain.cpp");
