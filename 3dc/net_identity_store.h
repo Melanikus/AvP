@@ -16,7 +16,9 @@
 // - It's opened once, and everything is checked through that one handle, so it can't be swapped between a check and the read.
 // - Its owner has to be this Windows user. A file someone else put there, even with keys that hold together, is refused: whoever made it
 //   would know its private halves (Primary's read, finding 3). The game writes it owned by this user, readable and writable by this user
-//   alone.
+//   alone: not even SYSTEM or the Administrators group is on its list, since an administrator can take a file over anyway, and backups
+//   read past the list. The cost, which is right for a sealed secret: a file restored onto another Windows account or PC is refused as not
+//   this user's, and the player confirms a new identity there.
 // - A file that can't be used is never half used: what's in it is refused whole, and the player is asked before a new identity replaces it
 //   (their friends and any approval would see a new fingerprint).
 //
