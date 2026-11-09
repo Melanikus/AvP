@@ -487,6 +487,7 @@
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\view_keys.cpp" />
+    <ClCompile Include="..\..\3dc\fast_random.cpp" />
     <ClCompile Include="..\..\3dc\hud_scale.cpp" />
     <ClCompile Include="..\..\3dc\texture_animation.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />

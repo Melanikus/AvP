@@ -204,6 +204,9 @@
     <ClCompile Include="..\..\3dc\view_keys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\fast_random.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\hud_scale.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
