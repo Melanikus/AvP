@@ -203,8 +203,9 @@ size_t const kNetRelayAtPassTime = 52;
 size_t const kNetRelayAtPadding = 60;
 
 // The latest pass time there can be: 2^53 - 1 seconds. The list's pass time is a JSON number, and that's the most a JSON number holds
-// exactly (PROTOCOL.md, section 4), so a later one could never be listed. The relay refuses a message with one, so the game does too, and
-// the two read the same bytes the same way (the relay's test vectors, tests/vectors/relay-v1.json, have one of each).
+// exactly (PROTOCOL.md, section 4), so a later one could never be listed. A message with one isn't a message (PROTOCOL.md, section 2,
+// "Not a message", since AVPx-Dedicated-Server c7d610f), so the relay and the game both refuse it, and the two read the same bytes the same
+// way (the relay's test vectors, tests/vectors/relay-v1.json, have two such packets).
 uint64_t const kNetRelayMostPassTime = 9007199254740991ull;
 
 // Reads a relay message out of a packet. Gives back kNetRelayIsAMessage and fills out, or why the packet isn't one, and then out is left as
