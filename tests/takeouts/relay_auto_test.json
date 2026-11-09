@@ -93,6 +93,86 @@
 					"to": "if (!games || count < 0)"
 				}
 			]
+		},
+		{
+			"name": "-askjoiners isn't a word for hosting",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "CommandLineHasWord(commandLine, \"-relayhost\") || CommandLineHasWord(commandLine, \"-askjoiners\");",
+					"to": "CommandLineHasWord(commandLine, \"-relayhost\");"
+				}
+			]
+		},
+		{
+			"name": "-relayhost asks about each joiner too",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "== kRelayAutoHost && CommandLineHasWord(commandLine, \"-askjoiners\");",
+					"to": "== kRelayAutoHost;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus never host by themselves",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tHostByItselfThroughTheRelay();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it hosts the game's skirmish, which has no network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tnetGameData.skirmishMode = FALSE;   // the game's \"skirmish\" is against the computer, with no network at all\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -askjoiners lets every joiner in",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "asks the person at it about each joiner\");\n",
+					"to": "asks the person at it about each joiner\");\n\t\tNet_LetEveryJoinerIn(true);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -relayhost asks about each joiner",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "lets every joiner in without asking\");\n\t\tNet_LetEveryJoinerIn(true);\n",
+					"to": "lets every joiner in without asking\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host copy hosts by itself every time the menus start",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "\thosted = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it hosts without waiting for the list's relays",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tLogString(RelayAuto_WaitForRelays() ? \"relay auto: the list's relays have come, so this copy hosts through the nearest\"\n\t\t: \"relay auto: no relay came from the list in time, so this copy hosts on this network only\");\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
