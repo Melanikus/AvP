@@ -101,6 +101,12 @@ enum { kOnlineMostRows = 16 };
 // rows are written, the games there now first. Gives back how many there are.
 int OnlineScreens_MergeRows(const OnlineRow *before, int beforeCount, const OnlineRow *now, int nowCount, OnlineRow *out, int mostOut);
 
+// Where the selection goes when the rows have changed: the row with the selected game, wherever it moved, or, when that game isn't there
+// any more, the same row number as before, kept inside the rows there are. -1 when there are no rows. The games page uses it while the
+// list is shown, as answers change the rows, and when the list comes back after a Refresh, for the game the selection was last on
+// (online_screens_page.cpp, OnlinePage_Frame).
+int OnlineScreens_SelectAgain(const OnlineGameKey &selected, int selectedRow, const OnlineRow *rows, int count);
+
 // ---- The list page's Search box (J2)
 
 // What the player types to show only some games. It's hostile all the same: only the letters the fonts have count (SafeName), and at

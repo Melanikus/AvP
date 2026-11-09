@@ -743,6 +743,76 @@
 					"to": "enum { kMostLines = kShadowStatusMostLines + 1, kLineLength = 48 };"
 				}
 			]
+		},
+		{
+			"name": "SelectAgain never looks for the game, so a Refresh puts the selection on its old row number, whatever game is there now",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (OnlineScreens_SameGame(selected, rows[i].key))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SelectAgain gives back a row past the last one, or before the first, when the selected game has gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return Between(selectedRow, 0, count - 1);",
+					"to": "return selectedRow;"
+				}
+			]
+		},
+		{
+			"name": "with no rows, or none to read, the first row is still selected",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!rows || count <= 0)\n\t{\n\t\treturn -1;",
+					"to": "if (!rows || count <= 0)\n\t{\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: after a Refresh, the selection goes to the first game, not back to the one it was on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "int const again = lastGameKept ? OnlineScreens_SelectAgain(lastGame, lastGameRow, visible, visibleCount) : (visibleCount > 0 ? 0 : -1);",
+					"to": "int const again = visibleCount > 0 ? 0 : -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page never keeps the game the selection is on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tlastGame = selected;\n\t\tlastGameRow = oldElement - kFirstGameElement;\n\t\tlastGameKept = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a page just opened goes back to a game from before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tlastGameKept = false;\n\tStartFetching();",
+					"to": "\tStartFetching();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: while the list is shown, the selection keeps its row number instead of following its game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "int const again = OnlineScreens_SelectAgain(selected, oldElement - kFirstGameElement, visible, visibleCount);",
+					"to": "int const again = oldElement - kFirstGameElement;"
+				}
+			]
 		}
 	]
 }
