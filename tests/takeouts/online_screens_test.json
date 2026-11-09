@@ -1,0 +1,508 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a name keeps every byte as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "to[used++] = (letter >= 32 && letter <= 126) ? (char)letter : '?';",
+					"to": "to[used++] = (char)letter;"
+				}
+			]
+		},
+		{
+			"name": "a name keeps 127 and the bytes above it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "(letter >= 32 && letter <= 126)",
+					"to": "(letter >= 32)"
+				}
+			]
+		},
+		{
+			"name": "a name is read past the bytes it is given",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "for (size_t i = 0; from && i < mostBytes && used + 1 < toSize; i++)",
+					"to": "for (size_t i = 0; from && used + 1 < toSize; i++)"
+				}
+			]
+		},
+		{
+			"name": "a name fills its room to the last byte, leaving none for its 0",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "used + 1 < toSize",
+					"to": "used < toSize"
+				}
+			]
+		},
+		{
+			"name": "a room of no bytes is written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (toSize == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a shortened name has no dots",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "text[keep] = '.';",
+					"to": "text[keep] = '\\0';"
+				}
+			]
+		},
+		{
+			"name": "a shortened name can grow past its room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "while (keep < length - 2)",
+					"to": "while (keep < length)"
+				}
+			]
+		},
+		{
+			"name": "a column too narrow for the dots still gets them",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (dots > mostWidth)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name too wide is left as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (width <= mostWidth)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "one letter too wide is kept as two dots",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (length < 2)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a letter's width is taken below 0",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return Between(widthOf((unsigned char)letter), 0, 1000);",
+					"to": "return Between(widthOf((unsigned char)letter), -1000000, 1000);"
+				}
+			]
+		},
+		{
+			"name": "the spaces before a bracket stay in the name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "while (nameEnd > 0 && sessionName[nameEnd - 1] == ' ')",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "a name that does not end with a bracket is split",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (length >= 2 && sessionName[length - 1] == ')')",
+					"to": "if (length >= 2)"
+				}
+			]
+		},
+		{
+			"name": "the players part is copied as it comes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "OnlineScreens_SafeName(sessionName + open + 1, length - open - 2, players, playersSize);",
+					"to": "{ size_t const n = (length - open - 2 < playersSize - 1) ? length - open - 2 : playersSize - 1; memcpy(players, sessionName + open + 1, n); players[n] = '\\0'; }"
+				}
+			]
+		},
+		{
+			"name": "a code is told apart by its first seven letters",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "memcmp(a.code, b.code, sizeof(a.code)) == 0",
+					"to": "memcmp(a.code, b.code, sizeof(a.code) - 1) == 0"
+				}
+			]
+		},
+		{
+			"name": "games on this network are told apart by their address alone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return a.host == b.host && a.port == b.port;",
+					"to": "return a.host == b.host;"
+				}
+			]
+		},
+		{
+			"name": "a relay game and a game on this network can be the same game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (a.throughRelay != b.throughRelay)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game that was gone already comes back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (before[j].gone)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game that went can still be joined",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "out[made].canJoin = false;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game that went keeps its old place in the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "out[made].session = -1;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game that went is not marked gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "out[made].gone = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game that went is written past the room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "for (int j = 0; before && j < beforeCount && made < mostOut; j++)",
+					"to": "for (int j = 0; before && j < beforeCount; j++)"
+				}
+			]
+		},
+		{
+			"name": "the games there now are written past the room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "for (int i = 0; now && i < nowCount && made < mostOut; i++)",
+					"to": "for (int i = 0; now && i < nowCount; i++)"
+				}
+			]
+		},
+		{
+			"name": "the selection keeps its row number, not its game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (OnlineScreens_SameGame(selected, rows[i].key))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the selection can be past the last row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return Between(selectedRow, 0, count - 1);",
+					"to": "return selectedRow;"
+				}
+			]
+		},
+		{
+			"name": "the search never gives up",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "else if (search->tries >= kOnlineSearchMostTries)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "the search asks every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (search->givenUp || !HasCome(now, search->nextAskAt))",
+					"to": "if (search->givenUp)"
+				}
+			]
+		},
+		{
+			"name": "the clock wrapping round makes the next ask due at once",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return (uint32_t)(now - moment) < 0x80000000u;",
+					"to": "return now >= moment;"
+				}
+			]
+		},
+		{
+			"name": "the count of tries never starts again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\t\tsearch->tries = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the search gives up while games are shown",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (gamesShown)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the seconds to the next ask are counted from the wrong moment",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "OnlineScreens_SecondsLeft(search->nextAskAt - kOnlineSearchEveryMs, now, kOnlineSearchEveryMs)",
+					"to": "OnlineScreens_SecondsLeft(search->nextAskAt, now, kOnlineSearchEveryMs)"
+				}
+			]
+		},
+		{
+			"name": "the first ask names the list instead of this network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "stage == 0 ? kOnlineWordsLookingHere : kOnlineWordsLookingList",
+					"to": "kOnlineWordsLookingList"
+				}
+			]
+		},
+		{
+			"name": "a game on this network gets a ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!throughRelay)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a relay nobody has timed gets a ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (joinerMs < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the host's time is left out of the ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Between(joinerMs, 0, kRelayListMostHostMs) + Between(hostMs, 0, kRelayListMostHostMs)",
+					"to": "Between(joinerMs, 0, kRelayListMostHostMs)"
+				}
+			]
+		},
+		{
+			"name": "the host's time isn't capped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "+ Between(hostMs, 0, kRelayListMostHostMs)",
+					"to": "+ Between(hostMs, 0, 1000000)"
+				}
+			]
+		},
+		{
+			"name": "a host's time below 0 is taken off the ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Between(hostMs, 0, kRelayListMostHostMs)",
+					"to": "Between(hostMs, -1000, kRelayListMostHostMs)"
+				}
+			]
+		},
+		{
+			"name": "the seconds left are rounded down",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "(mostMs - gone + 999) / 1000",
+					"to": "(mostMs - gone) / 1000"
+				}
+			]
+		},
+		{
+			"name": "a wait goes on past its end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (gone >= mostMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a screen has no words",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"Esc gives up\",",
+					"to": "\"\","
+				}
+			]
+		},
+		{
+			"name": "a wait's words leave out its seconds",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"%s (%d s)\"",
+					"to": "\"%s\""
+				}
+			]
+		},
+		{
+			"name": "a name longer than a row is kept whole",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char letters[kOnlineRowLetters];",
+					"to": "char letters[kOnlineRowLetters + 20];"
+				}
+			]
+		},
+		{
+			"name": "the host is not told who asks",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"%s asks to join (%d s)\", RowName(safeName).letters",
+					"to": "\"%s asks to join (%d s)\", \"\""
+				}
+			]
+		},
+		{
+			"name": "the tail turns anticlockwise",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "double const angle = lead - i * step;",
+					"to": "double const angle = -lead - i * step;"
+				}
+			]
+		},
+		{
+			"name": "the tail turns by something other than the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "(double)(ms % kOnlineTailTurnMs)",
+					"to": "(double)(ms % (kOnlineTailTurnMs + 1))"
+				}
+			]
+		},
+		{
+			"name": "the tail's size isn't kept in its range",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "double const s = Between(size, kOnlineTailSmallest, kOnlineTailBiggest);",
+					"to": "double const s = size;"
+				}
+			]
+		},
+		{
+			"name": "the tail's middle isn't kept near the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "double const middleX = Between(centreX, -kOnlineTailFarthest, kOnlineTailFarthest);",
+					"to": "double const middleX = centreX;"
+				}
+			]
+		},
+		{
+			"name": "the bones never fade",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "piece.brightness = 230 - (i - 1) * 11;",
+					"to": "piece.brightness = 230;"
+				}
+			]
+		},
+		{
+			"name": "a bone's corners don't go round in order",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "piece.corner[2].y = Pixel(atY + aheadY * halfLong + outY * halfWide);",
+					"to": "piece.corner[2].y = Pixel(atY - aheadY * halfLong + outY * halfWide);"
+				}
+			]
+		},
+		{
+			"name": "the blade's point is behind it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "piece.corner[2].y = Pixel(atY + aheadY * length * 0.60);",
+					"to": "piece.corner[2].y = Pixel(atY - aheadY * length * 0.60);"
+				}
+			]
+		}
+	]
+}
