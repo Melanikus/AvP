@@ -126,6 +126,14 @@ static bool listFailed = false;
 static OnlineGameKey joinedKey;
 static bool joinedKeyKept = false;
 
+// The game the selection was last on while the list was shown, and its row among the games shown then. To press Refresh the player moves
+// the selection up onto the Refresh row, so this is what it goes back to when the list comes back (OnlineScreens_SelectAgain). A page
+// just opened has none, and starts on its first game.
+// Added 2026-11-09 by Melanikus for the AvP port.
+static OnlineGameKey lastGame;
+static int lastGameRow = 0;
+static bool lastGameKept = false;
+
 static uint32_t Now(void)
 {
 	return (uint32_t)GetTickCount();
@@ -331,6 +339,7 @@ void OnlinePage_Opened(void)
 	visibleCount = 0;
 	askNow = false;
 	searchBox[0] = '\0';
+	lastGameKept = false;
 	StartFetching();
 	Net_ForgetRelayTimes();
 }
@@ -451,6 +460,11 @@ bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 	if (onAGame)
 	{
 		selected = shownRows[visibleRows[oldElement - kFirstGameElement]].key;
+
+		// Kept for when the player goes up to Refresh, and the list comes back
+		lastGame = selected;
+		lastGameRow = oldElement - kFirstGameElement;
+		lastGameKept = true;
 	}
 
 	OnlineRow live[kOnlineMostRows];
@@ -507,9 +521,18 @@ bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 
 	Filter();
 
-	// Where the selection goes: on the fetching screen, its one row. Coming to the list: the game last joined, if it's there, or the first
-	// game, or Refresh when there's none. On the list: its game wherever it moved, or where it was, kept inside the rows.
-	int const lastElement = kFirstGameElement + visibleCount - 1;
+	// The games the search lets through, in their order, for OnlineScreens_SelectAgain
+	OnlineRow visible[kOnlineMostRows];
+
+	for (int i = 0; i < visibleCount; i++)
+	{
+		visible[i] = shownRows[visibleRows[i]];
+	}
+
+	// Where the selection goes. On the fetching screen: its one row. Coming to the list: the game last joined, if it's there; after a
+	// Refresh, the game the selection was last on, wherever it moved, or its row number if it went; on a page just opened, the first game.
+	// Refresh when there are none. On the list: its game wherever it moved, or where it was, kept inside the rows. SelectAgain gives -1
+	// when there are no games, and the selection goes to Refresh.
 	int newElement = 0;
 
 	if (pageState == kPageList)
@@ -523,13 +546,14 @@ bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 		}
 		else if (stateBefore != kPageList)
 		{
-			newElement = visibleCount > 0 ? kFirstGameElement : 1;
+			int const again = lastGameKept ? OnlineScreens_SelectAgain(lastGame, lastGameRow, visible, visibleCount) : (visibleCount > 0 ? 0 : -1);
+			newElement = again >= 0 ? kFirstGameElement + again : 1;
 			joinedKeyKept = false;
 		}
 		else if (onAGame)
 		{
-			int const found = VisibleIndexOf(selected);
-			newElement = found >= 0 ? kFirstGameElement + found : (oldElement < lastElement ? oldElement : (lastElement >= kFirstGameElement ? lastElement : 1));
+			int const again = OnlineScreens_SelectAgain(selected, oldElement - kFirstGameElement, visible, visibleCount);
+			newElement = again >= 0 ? kFirstGameElement + again : 1;
 		}
 		else
 		{

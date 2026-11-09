@@ -4,9 +4,10 @@
 // WHAT IT'S FOR: the games page shows names that come from other people's computers, so they're hostile (AVP Tao 3). This checks that a name
 // can only ever be drawn in the letters the game's fonts have, and never past its column. It checks the spinning tail stays in its box, turns
 // the right way at the same speed at any frame rate, and that each of its pieces is a shape the game can draw. And it checks a refresh puts
-// the games there now first and shows the ones that went as gone, that the Search box keeps only the letters the fonts have and finds names
-// by them, that the fetching screen names the server the game dialled, and that the waits count down right, even when the clock wraps
-// round.
+// the games there now first and shows the ones that went as gone, that the selection goes back to the game it was last on when the list
+// comes back after a Refresh, and follows its game as the rows change, that the Search box keeps only the letters the fonts have and finds
+// names by them, that the fetching screen names the server the game dialled, and that the waits count down right, even when the clock
+// wraps round.
 //
 // Nothing here uses the network or the game. Where the game draws the screens is checked by reading its source (the last part).
 
@@ -370,6 +371,25 @@ static void TestRows()
 
 	Check(OnlineScreens_MergeRows(NULL, 0, before, 3, merged, 2) == 2, "no more rows are written than there's room for, even of the games there now");
 	Check(OnlineScreens_MergeRows(NULL, 0, NULL, 0, merged, kOnlineMostRows) == 0, "no games before or now gives no rows");
+
+	// Where the selection goes when the rows change: while the list is shown, and when it comes back after a Refresh, for the game the
+	// selection was last on before the player went up to the Refresh row (OnlinePage_Frame)
+	OnlineRow rows[3] = { d, b, a };
+	Check(OnlineScreens_SelectAgain(b.key, 0, rows, 3) == 1, "the selection follows its game to its new row");
+	Check(OnlineScreens_SelectAgain(c.key, 7, rows, 3) == 2, "when its game has gone, it stays on the same row number, kept inside the rows");
+	Check(OnlineScreens_SelectAgain(c.key, -4, rows, 3) == 0, "and never above the first row");
+	Check(OnlineScreens_SelectAgain(a.key, 0, rows, 0) == -1, "with no rows, nothing is selected");
+	Check(OnlineScreens_SelectAgain(a.key, 0, NULL, 3) == -1, "and nothing is read from rows that aren't there");
+
+	// A Refresh, as the page has it: the player was on b (row 1 of a, b, c), went up to Refresh, and the list came back merged
+	OnlineRow beforeRefresh[3] = { a, b, c };
+	OnlineRow afterRefresh[kOnlineMostRows];
+	OnlineRow nowThere[2] = { d, b };
+	int const afterCount = OnlineScreens_MergeRows(beforeRefresh, 3, nowThere, 2, afterRefresh, kOnlineMostRows);
+	Check(OnlineScreens_SelectAgain(b.key, 1, afterRefresh, afterCount) == 1 && OnlineScreens_SameGame(afterRefresh[1].key, b.key),
+		"after a Refresh, the selection goes back to the game it was on, at its new row");
+	Check(OnlineScreens_SelectAgain(a.key, 0, afterRefresh, afterCount) == 2 && afterRefresh[2].gone,
+		"and a game that went is still found, shown gone, so the player sees what happened to it");
 }
 
 // ---- The Search box and the fetching screen
@@ -656,6 +676,22 @@ static void TestWhereTheyAreDrawn()
 		Has(tag, "DrawQuad(rightX - widest - margin, margin / 2, widest + margin * 2 - margin / 2, lineHeight * numLines + margin, ") &&
 		Has(tag, "DrawStatusLine(lines[i], rightX, margin + i * lineHeight, scale);"),
 		"and the tag itself has no more lines than that, at the same sizes, from the same top");
+
+	// The selection across a Refresh (added 2026-11-09). The page keeps the game the selection was last on while the list was shown, goes back
+	// to it with OnlineScreens_SelectAgain when the list comes back, and uses the same function while the list is shown. A page just opened
+	// forgets it, and starts on its first game.
+	std::string const frame = SourceSlice(page, "bool OnlinePage_Frame(bool listChanged, int *selectedElement)\n{", "\n}\n", kSliceEndAfterTheStart,
+		FailedSlice);
+	Check(Has(frame, "lastGame = selected;\n\t\tlastGameRow = oldElement - kFirstGameElement;\n\t\tlastGameKept = true;"),
+		"the page keeps the game the selection is on, and its row, while the list is shown");
+	Check(Has(frame, "int const again = lastGameKept ? OnlineScreens_SelectAgain(lastGame, lastGameRow, visible, visibleCount) : (visibleCount > 0 ? 0 : -1);"),
+		"when the list comes back, the selection goes back to that game by OnlineScreens_SelectAgain, or to the first game on a page just opened");
+	Check(Has(frame, "int const again = OnlineScreens_SelectAgain(selected, oldElement - kFirstGameElement, visible, visibleCount);"),
+		"while the list is shown, the selection follows its game by the same function");
+	Check(Has(frame, "visible[i] = shownRows[visibleRows[i]];") && Has(frame, "newElement = again >= 0 ? kFirstGameElement + again : 1;"),
+		"over the games the search lets through, going to Refresh when there are none");
+	std::string const opened = SourceSlice(page, "void OnlinePage_Opened(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(opened, "lastGameKept = false;"), "a page just opened forgets the game last selected");
 }
 
 int main()
