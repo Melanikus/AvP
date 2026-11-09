@@ -439,8 +439,68 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "Between(ms, 0, kRelayListMostHostMs)",
-					"to": "Between(ms, 0, 2000000000)"
+					"from": "region, Between(ms, 0, kRelayListMostHostMs)",
+					"to": "region, Between(ms, 0, 2000000000)"
+				}
+			]
+		},
+		{
+			"name": "the play line leaves out the relay's region",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Put(place, sizeof(place), (safeRegion && safeRegion[0] != '\\0') ? safeRegion : OnlineScreens_Words(kOnlineWordsARelay));",
+					"to": "Put(place, sizeof(place), OnlineScreens_Words(kOnlineWordsARelay));"
+				}
+			]
+		},
+		{
+			"name": "an unknown region is left empty in play",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "? safeRegion : OnlineScreens_Words(kOnlineWordsARelay)",
+					"to": "? safeRegion : \"\""
+				}
+			]
+		},
+		{
+			"name": "the joiner says it hosts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "isHost ? kOnlineWordsHostingThrough : kOnlineWordsJoinedThrough",
+					"to": "kOnlineWordsHostingThrough"
+				}
+			]
+		},
+		{
+			"name": "a time not yet measured shows as 0 ms",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (ms < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the play line's round trip isn't capped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "place, Between(ms, 0, kRelayListMostHostMs)",
+					"to": "place, Between(ms, 0, 2000000000)"
+				}
+			]
+		},
+		{
+			"name": "a region is never cut in play",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char place[kRelayListRegionLetters + 1];",
+					"to": "char place[64];"
 				}
 			]
 		},

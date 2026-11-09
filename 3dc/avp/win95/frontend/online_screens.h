@@ -183,6 +183,9 @@ enum OnlineWords
 	kOnlineWordsListFailed,           // J1 and J2: the start of the line when the list of games didn't answer, before the list code's words
 	kOnlineWordsHostBusy,             // J5: the host was answering someone else
 	kOnlineWordsEscToAnswer,          // H1: in play, after the asking line, how the host gets to the answer
+	kOnlineWordsHostingThrough,       // the line kept up in play: a host's start
+	kOnlineWordsJoinedThrough,        //     and a joiner's
+	kOnlineWordsARelay,               //     in place of a region that isn't known
 	kOnlineWordsRelayFinding,         // H2
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,
@@ -208,5 +211,11 @@ void OnlineScreens_SayNoWords(const char *safeName, char *words, size_t size);
 // ends with a 0.
 void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size_t size);
 void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
+
+// The line kept on the screen for as long as a game is played through a relay (the user: "I want the Hudsons showing server name and
+// ping"): "Hosting through virginia, 41 ms" on the host, "Joined through virginia, 63 ms" on a joiner. The region comes made safe already,
+// and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet) leaves the time out, and above 9999
+// is 9999. words always ends with a 0.
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size);
 
 #endif

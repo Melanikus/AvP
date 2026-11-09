@@ -443,6 +443,9 @@ static const char *const kWords[] =
 	"No games from the list",                                     // kOnlineWordsListFailed
 	"The host is answering someone else. Try again in a moment",  // kOnlineWordsHostBusy
 	"Esc to answer",                                              // kOnlineWordsEscToAnswer
+	"Hosting through",                                            // kOnlineWordsHostingThrough
+	"Joined through",                                             // kOnlineWordsJoinedThrough
+	"a relay",                                                    // kOnlineWordsARelay
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
@@ -534,6 +537,30 @@ void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size
 	Put(region, sizeof(region), safeRegion);
 
 	_snprintf(words, size - 1, "%s, through %s, %d ms", OnlineScreens_Words(kOnlineWordsRelayListed), region, Between(ms, 0, kRelayListMostHostMs));
+	words[size - 1] = '\0';
+}
+
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	char place[kRelayListRegionLetters + 1];
+	Put(place, sizeof(place), (safeRegion && safeRegion[0] != '\0') ? safeRegion : OnlineScreens_Words(kOnlineWordsARelay));
+
+	OnlineWords const start = isHost ? kOnlineWordsHostingThrough : kOnlineWordsJoinedThrough;
+
+	if (ms < 0)
+	{
+		_snprintf(words, size - 1, "%s %s", OnlineScreens_Words(start), place);
+	}
+	else
+	{
+		_snprintf(words, size - 1, "%s %s, %d ms", OnlineScreens_Words(start), place, Between(ms, 0, kRelayListMostHostMs));
+	}
+
 	words[size - 1] = '\0';
 }
 

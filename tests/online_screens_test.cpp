@@ -540,6 +540,25 @@ static void TestWords()
 
 	OnlineScreens_RoomGoneWords(NULL, words, sizeof(words));
 	Check(strcmp(words, "Your game's room on the relay has gone") == 0, "and with no reason, only that it's gone");
+
+	// The line kept up in play, on both copies of a game through a relay
+	OnlineScreens_PlayLineWords(true, "virginia", 41, words, sizeof(words));
+	Check(strcmp(words, "Hosting through virginia, 41 ms") == 0, "in play, the host's line names its relay and its round trip");
+
+	OnlineScreens_PlayLineWords(false, "virginia", 63, words, sizeof(words));
+	Check(strcmp(words, "Joined through virginia, 63 ms") == 0, "and a joiner's names the game's relay and its round trip to the host");
+
+	OnlineScreens_PlayLineWords(false, "virginia", -1, words, sizeof(words));
+	Check(strcmp(words, "Joined through virginia") == 0, "until a round trip is measured, the line leaves the time out");
+
+	OnlineScreens_PlayLineWords(true, "paris", 2000000000, words, sizeof(words));
+	Check(strcmp(words, "Hosting through paris, 9999 ms") == 0, "a round trip past 9999 ms is shown as 9999, in play too");
+
+	OnlineScreens_PlayLineWords(true, "", 12, words, sizeof(words));
+	Check(strcmp(words, "Hosting through a relay, 12 ms") == 0, "a region that isn't known is said as a relay");
+
+	OnlineScreens_PlayLineWords(false, longRegion.c_str(), 7, words, sizeof(words));
+	Check(strlen(words) == strlen("Joined through , 7 ms") + kRelayListRegionLetters, "in play too, a region is cut to 16 letters");
 }
 
 int main()
