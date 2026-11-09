@@ -218,9 +218,10 @@ void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 //   a joiner:   "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)", ms being ENet's time to the host and back,
 //               through the server, then ", 146 ms round trip to server" when serverMs isn't below 0: its own time to the server and
 //               back, as the games page measured it before the join.
-// The region comes made safe already, and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet)
-// leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
-// Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, and serverMs.
+// safeRegion is the name people see for the server ("NY Mel's Server", Relay_ServerShownName) when it has one, otherwise the relay's
+// region. It comes made safe already, and is cut to a shown name's 32 letters; with none it says "a relay". ms below 0 (nothing measured
+// yet) leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
+// Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, serverMs, and the server's shown name.
 void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, int serverMs, char *words, size_t size);
 
 #endif

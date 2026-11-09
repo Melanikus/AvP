@@ -571,9 +571,13 @@ static void TestWords()
 	OnlineScreens_PlayLineWords(true, "", 12, -1, line, sizeof(line));
 	Check(strcmp(line, "HOST, Relay: a relay, 12 ms (round trip, host to server)") == 0, "a region that isn't known is said as a relay");
 
+	OnlineScreens_PlayLineWords(true, "NY Mel's Server", 145, -1, line, sizeof(line));
+	Check(strcmp(line, "HOST, Relay: NY Mel's Server, 145 ms (round trip, host to server)") == 0,
+		"the server's shown name goes where the region would, spaces and all");
+
 	OnlineScreens_PlayLineWords(false, longRegion.c_str(), 7, -1, line, sizeof(line));
-	Check(strlen(line) == strlen("CLIENT, Relay: , 7 ms (round trip, client to host through server)") + kRelayListRegionLetters,
-		"in play too, a region is cut to 16 letters");
+	Check(strlen(line) == strlen("CLIENT, Relay: , 7 ms (round trip, client to host through server)") + kRelayListShownNameLetters,
+		"in play too, a name is cut to a shown name's 32 letters");
 
 	char small[20];
 	OnlineScreens_PlayLineWords(false, "nyc3", 290, 146, small, sizeof(small));

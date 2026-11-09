@@ -495,11 +495,11 @@
 			]
 		},
 		{
-			"name": "a region is never cut in play",
+			"name": "a name is never cut in play",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "char place[kRelayListRegionLetters + 1];",
+					"from": "char place[kRelayListShownNameLetters + 1];",
 					"to": "char place[64];"
 				}
 			]

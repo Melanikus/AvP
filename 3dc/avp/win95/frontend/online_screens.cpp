@@ -547,7 +547,8 @@ void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, in
 		return;
 	}
 
-	char place[kRelayListRegionLetters + 1];
+	// The server's shown name or its region: room for the longer, a shown name's 32 letters
+	char place[kRelayListShownNameLetters + 1];
 	Put(place, sizeof(place), (safeRegion && safeRegion[0] != '\0') ? safeRegion : OnlineScreens_Words(kOnlineWordsARelay));
 
 	OnlineWords const start = isHost ? kOnlineWordsHostingThrough : kOnlineWordsJoinedThrough;

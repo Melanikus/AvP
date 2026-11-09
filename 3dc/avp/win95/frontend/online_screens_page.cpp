@@ -934,14 +934,24 @@ static void RelayLineInPlay(void)
 		return;
 	}
 
-	char region[kRelayListRegionLetters + 1];
+	// The server by the name people see for it (-dev's RelayServerName, the owner's "NY Mel's Server") when it has one, otherwise by the
+	// relay's region, made safe either way, as anything drawn here is
+	char place[kRelayListShownNameLetters + 1];
 	char line[160];
+	const char *const shownName = Relay_ServerShownName();
 
-	OnlineScreens_SafeName(state.region, sizeof(state.region), region, sizeof(region));
+	if (shownName[0] != '\0')
+	{
+		OnlineScreens_SafeName(shownName, kRelayListShownNameLetters, place, sizeof(place));
+	}
+	else
+	{
+		OnlineScreens_SafeName(state.region, sizeof(state.region), place, sizeof(place));
+	}
 
 	// A joiner's own time to the server and back, as the games page measured it before the join, or -1 when it has none (a host has none)
 	int const serverMs = state.isHost ? -1 : Net_JoinerMsToRelay(state.region);
-	OnlineScreens_PlayLineWords(state.isHost, region, state.ms, serverMs, line, sizeof(line));
+	OnlineScreens_PlayLineWords(state.isHost, place, state.ms, serverMs, line, sizeof(line));
 	PlayLineAtTheTopRight(line);
 }
 
