@@ -294,6 +294,19 @@ static void TestFollowingTheWay()
 	Check(aim.x == 2000 && aim.z == 1000 - (2000 - 1500) + 0 + 0 && aim.nextPoint == 2, "the place he aims for goes round a corner, by the distance along the way");
 	Check(aim.furtherX == 2000 && aim.furtherZ == 2000, "and it stops at the way's end, however far it's asked to look");
 
+	// The way's end is reached 400 mm across from its last point, and not from further off. The numbers are written out, not taken from
+	// kHudsonPlayPointReachedAcross, so that a change to that is seen here.
+	aim = HudsonPlay_AimAlongTheWay(way, 4, 5000 - 400, 1000, 0);
+	Check(aim.nextPoint == way.size() && aim.x == 5000 - 400 && aim.onTheWay, "400 mm short of the way's end he's there, and makes for where he stands");
+	aim = HudsonPlay_AimAlongTheWay(way, 4, 5000 - 500, 1000, 0);
+	Check(aim.nextPoint == way.size() - 1, "but 500 mm short of it he isn't, and still makes for its last point");
+
+	// Asked from past the way's last point, there's nowhere more to go, however far past: he's at the end, where he stands
+	aim = HudsonPlay_AimAlongTheWay(way, way.size(), 0, 1000, 0);
+	Check(aim.nextPoint == way.size() && aim.x == 0 && aim.z == 0 && aim.onTheWay, "asked from just past the way's end, he's at its end");
+	aim = HudsonPlay_AimAlongTheWay(way, way.size() + 5, 0, 1000, 0);
+	Check(aim.nextPoint == way.size() && aim.x == 0 && aim.onTheWay, "and from well past it, the same");
+
 	// The stair on invasion, 2026-11-06: on the low floor beside it, with the way on the treads above him
 	std::vector<Point> const stair = { { 5804, 3868, 10989 }, { 6104, 3478, 10989 }, { 6404, 3478, 11289 }, { 6704, 3088, 11589 }, { 6704, 2699, 12489 } };
 

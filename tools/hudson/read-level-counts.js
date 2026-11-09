@@ -3,11 +3,13 @@
 // The promise is that the mode plays as single player does, so the first three should hold the same things. A joiner
 // runs no NPCs and only sees a ghost of some, so it's listed to read, not expected to match.
 // It only reads. Run it with node, on one or more folders that hold run folders:
-//   node read-level-counts.js <runs folder> [<runs folder>...] [--from <first run folder's name>]
+//   node read-level-counts.js <copy>\runs [<copy>\runs...] [--from <first run folder's name>]
+// from the folder that holds the game copies (run-folders.js says why).
 // --from leaves out older runs, so that it only reads one build's. Where a level has run more than once the latest counts.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { runsFolder, isRunName } = require('./run-folders.js');
 
 // These are what the promise is about. Anything else that differs is listed too, below them.
 const npcKinds = ['alien', 'marine', 'predator', 'xenoborg', 'queen', 'facehugger', 'sentry gun', 'dormant predator', 'predator alien', 'seal', 'generator'];
@@ -49,8 +51,9 @@ const levels = {};
 let runsRead = 0;
 let runsWithoutCounts = 0;
 
-for (const folder of folders) {
-  for (const name of fs.readdirSync(folder).sort()) {
+for (const folder of folders.map((given) => runsFolder(given, 'each folder of runs'))) {
+  // Only the folders run-hudson.ps1 made, by their own names
+  for (const name of fs.readdirSync(folder).filter(isRunName).map((found) => path.basename(found)).sort()) {
     const runFile = path.join(folder, name, 'run.txt');
     const logFile = path.join(folder, name, 'avp_log.txt');
 

@@ -2,6 +2,7 @@
 // one on the host. One line per difference, for as long as it lasted, plainly enough to read without knowing the code.
 // It only reads. Run it with node:
 //   node ghost-compare.js <the host's run folder> <the joiner's run folder> [most mm apart before it counts, 500 if not said]
+// from the folder that holds the game copies, each run folder being <copy>\runs\<date and time> (run-folders.js says why).
 // The message takes a moment to arrive, and each log only says a line a second unless something changes, so two lines
 // are compared if they're within a second of each other, and a difference has to last a second or be a death to be listed.
 // An NPC counts as dead on the host from the host's own line for sending its death. A sentry gun has no ways of dying, so its
@@ -10,8 +11,11 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { runFolder } = require('./run-folders.js');
 
-const [hostFolder, joinFolder, apart] = process.argv.slice(2);
+const [hostGiven, joinGiven, apart] = process.argv.slice(2);
+const hostFolder = runFolder(hostGiven, 'The host\'s run folder');
+const joinFolder = runFolder(joinGiven, 'The joiner\'s run folder');
 const mostApart = Number(apart) || 500;
 const kKinds = { 4: 'alien', 5: 'queen', 6: 'facehugger', 7: 'predator', 8: 'xenoborg', 9: 'marine', 19: 'sentry gun' };
 const kMostAwayInTime = 1000;

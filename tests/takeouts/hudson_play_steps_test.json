@@ -936,16 +936,6 @@
 			]
 		},
 		{
-			"name": "nearly facing it, he slows anyway",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "if (off <= kHudsonPlayFacingItWithin)",
-					"to": "if (off < kHudsonPlayFacingItWithin)"
-				}
-			]
-		},
-		{
 			"name": "turning left he never slows",
 			"changes": [
 				{

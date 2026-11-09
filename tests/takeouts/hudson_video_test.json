@@ -445,16 +445,6 @@
 			]
 		},
 		{
-			"name": "a finished film wants pictures",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_video_writer.cpp",
-					"from": "if (!video.goingOn || video.finishAsked)\n\t{\n\t\treturn false;",
-					"to": "if (!video.goingOn)\n\t{\n\t\treturn false;"
-				}
-			]
-		},
-		{
 			"name": "a stopped film takes pictures",
 			"changes": [
 				{
