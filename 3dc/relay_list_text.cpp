@@ -539,6 +539,7 @@ namespace
 	{
 		RelayListGame *games;
 		int ourVersion;
+		bool fingerprints;   // whether each game carries its host's fingerprint: only a v2 draft's do (RelayList_ReadGames)
 	};
 
 	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
@@ -567,7 +568,16 @@ namespace
 			{ "fingerprint", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }
 		};
 
-		RelayListRefusal const why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+		// Modified 2026-11-09 by Melanikus for the AvP port: the fingerprint is the last rule, and only a v2 draft's games have it. Without,
+		// the rules are version 1's, so a game is read exactly as version 1 reads it, and its fingerprint is left all 0.
+		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0])) - (g.fingerprints ? 0 : 1);
+
+		if (!g.fingerprints)
+		{
+			memset(game.fingerprint, 0, sizeof(game.fingerprint));
+		}
+
+		RelayListRefusal const why = ReadEntry(r, rules, ruleCount);
 
 		if (why != kRelayListAccepted)
 		{
@@ -914,12 +924,12 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 	return "the answer was refused for a reason with no words";
 }
 
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count)
 {
 	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
 	*count = 0;
 	int n = 0;
-	GamesInto into = { games, ourVersion };
+	GamesInto into = { games, ourVersion, fingerprints };
 	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
 
 	if (why == kRelayListAccepted)
@@ -959,7 +969,7 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 	return why;
 }
 
-bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
+bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, const uint8_t *owner, char *body, size_t room)
 {
 	Writer w = { body, room, 0, room > 0 };
 
@@ -972,7 +982,7 @@ bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char
 		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
 		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
 		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
-		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || !IsAFingerprint(l.fingerprint))
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || (withFingerprint && !IsAFingerprint(l.fingerprint)))
 	{
 		return false;
 	}
@@ -1014,8 +1024,14 @@ bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char
 	AddNumber(w, static_cast<unsigned long long>(l.maxPlayers));
 	AddName(w, "version");
 	AddNumber(w, static_cast<unsigned long long>(l.version));
-	AddName(w, "fingerprint");
-	AddFingerprint(w, l.fingerprint);
+
+	// Only a v2 draft's listing carries the fingerprint (modified 2026-11-09 by Melanikus for the AvP port): version 1's has no such field
+	if (withFingerprint)
+	{
+		AddName(w, "fingerprint");
+		AddFingerprint(w, l.fingerprint);
+	}
+
 	AddName(w, "hostMs");
 	AddNumber(w, static_cast<unsigned long long>(l.hostMs));
 	AddChar(w, '}');

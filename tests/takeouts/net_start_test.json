@@ -290,7 +290,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = kMultiplayerVersion;\n",
+					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = Net_OurVersion();\n",
 					"to": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n"
 				}
 			]
@@ -1965,8 +1965,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);",
-					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);"
+					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, Net_V2DraftOn() ? OurCommitWord() : 0);"
 				}
 			]
 		},
@@ -2862,6 +2862,166 @@
 					"file": "3dc/networking.cpp",
 					"from": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n\tRelayIdentityReady();\n",
 					"to": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on without -dev",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return NetV2DraftAsked && BuildIdentity_CommitWord(&word);"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on in a build that doesn't know its commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return NetV2DraftAsked && DevMode != 0;"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on without -netv2",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return DevMode != 0 && BuildIdentity_CommitWord(&word);"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft says the players' version",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return Net_V2DraftOn() ? kNetV2DraftVersion : kMultiplayerVersion;",
+					"to": "return kMultiplayerVersion;"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogString(\"net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a draft's CONNECT doesn't say its commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "kNetChannels, 0);"
+				}
+			]
+		},
+		{
+			"name": "a CONNECT says the commit without the draft",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "kNetChannels, OurCommitWord());"
+				}
+			]
+		},
+		{
+			"name": "a draft host lets in a joiner of another commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Host && Net_V2DraftOn() && eEvent.data != OurCommitWord())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a host without the draft looks at a CONNECT's data",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Host && Net_V2DraftOn() && eEvent.data != OurCommitWord())",
+					"to": "if (AvP.Network == I_Host && eEvent.data != OurCommitWord())"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit is closed with no reason",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);",
+					"to": "enet_peer_disconnect(eEvent.peer, 0);"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit leaves its place to whoever had it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\teEvent.peer->data = NULL;\n\t\t\t\t\t\tenet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);",
+					"to": "\t\t\t\t\t\tenet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit is closed and shown joining too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);\n\t\t\t\t\t\tbreak;",
+					"to": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);"
+				}
+			]
+		},
+		{
+			"name": "a joiner closed with JBLD doesn't know why",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\t\tjoinAnswer = kNetJoinAnswerOtherBuild;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a relay host without the draft seals what it sends",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\thost->sendHook = RelaySealedSend;",
+					"to": "\tif (true)\n\t{\n\t\thost->sendHook = RelaySealedSend;"
+				}
+			]
+		},
+		{
+			"name": "a relay host without the draft drops its joiners' game datagrams",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\treturn Net_V2DraftOn() ? RelayEndToEndHeard(on, now) : 0;\n\t}",
+					"to": "\t\treturn RelayEndToEndHeard(on, now);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a join through the relay without the draft does handshake B",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayEndToEndJoinFailed = Net_V2DraftOn() ? RelayEndToEndJoin(",
+					"to": "relayEndToEndJoinFailed = true ? RelayEndToEndJoin("
 				}
 			]
 		}

@@ -333,6 +333,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			LogString("shadows: the developer tools are on (-dev)");
 		}
 
+		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -netv2, protocol version 2's draft, for tests only (networking.h). Only
+		// whether the word is there is read; networking.cpp decides whether it counts (with -dev, in a build that knows its commit).
+		NetV2DraftAsked = CommandLineHasWord(command_line, "-netv2");
+
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
 		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
 		RelayAuto_ReadCommandLine(command_line, DevMode != 0);

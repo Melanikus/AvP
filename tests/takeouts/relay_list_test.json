@@ -894,7 +894,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\tAddName(w, \"fingerprint\");\n\tAddFingerprint(w, l.fingerprint);\n",
+					"from": "\t\tAddName(w, \"fingerprint\");\n\t\tAddFingerprint(w, l.fingerprint);\n",
 					"to": ""
 				}
 			]
@@ -914,7 +914,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (!hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
+					"from": "\tif (Net_V2DraftOn() && !hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
 					"to": ""
 				}
 			]
@@ -1176,6 +1176,116 @@
 					"file": "3dc/relay_list_text.cpp",
 					"from": "for (size_t i = 0; i + 3 <= size; i += 3)",
 					"to": "for (size_t i = 0; i + 3 < size; i += 3)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept without its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tkept[letters] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept whole, however long",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "size_t const letters = strnlen(news, kMostNewsLetters);",
+					"to": "size_t const letters = strlen(news);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is copied past its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "memcpy(kept, news, letters);",
+					"to": "memcpy(kept, news, kMostNewsLetters);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news isn't ended again before it's written",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tpiece[kMostNewsLetters] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "without the draft, a game must still carry a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " - (g.fingerprints ? 0 : 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "without the draft, a game keeps whatever was in its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\t\tmemset(game.fingerprint, 0, sizeof(game.fingerprint));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a listing without the draft carries the fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (withFingerprint)\n\t{\n\t\tAddName(w, \"fingerprint\");",
+					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"fingerprint\");"
+				}
+			]
+		},
+		{
+			"name": "a listing without the draft needs a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(withFingerprint && !IsAFingerprint(l.fingerprint))",
+					"to": "!IsAFingerprint(l.fingerprint)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list asks for the players' version's games, draft or not",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "L\"/v1/games?version=%d\", shared->version);",
+					"to": "L\"/v1/games?version=%d\", kMultiplayerVersion);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's version isn't this copy's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "made->version = Net_OurVersion();",
+					"to": "made->version = kMultiplayerVersion;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list reads and writes fingerprints without the draft",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "made->v2Draft = Net_V2DraftOn();",
+					"to": "made->v2Draft = true;"
 				}
 			]
 		}

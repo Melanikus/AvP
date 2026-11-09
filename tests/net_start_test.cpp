@@ -64,6 +64,19 @@ void Con_PrintError(const std::string &)
 	errorLines++;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: the v2 draft's stand-ins (networking.h), for -dev and the commit this build was made from,
+// which the game has from d3d_render.cpp and build_identity.cpp. The tests run with the draft on, because the relay's tests need handshake
+// B; TestTheV2Draft turns each part off, and shows that off is version 1.
+int DevMode = 1;
+static uint32_t const kTestCommitWord = 0x5a1e7c03u;
+static bool testCommitKnown = true;
+
+bool BuildIdentity_CommitWord(uint32_t *out)
+{
+	*out = testCommitKnown ? kTestCommitWord : 0;
+	return testCommitKnown;
+}
+
 void Con_PrintMessage(const std::string &)
 {
 }
@@ -450,10 +463,12 @@ void enet_host_destroy(ENetHost *)
 }
 
 static ENetAddress lastConnectTo;   // where the game last connected to (the relay's tests)
+static enet_uint32 lastConnectData = 0xFFFFFFFFu;   // and what its CONNECT said: the v2 draft's commit, or 0 (TestTheV2Draft)
 
-ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *address, size_t channelCount, enet_uint32)
+ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *address, size_t channelCount, enet_uint32 data)
 {
 	channelsAsked = channelCount;
+	lastConnectData = data;
 
 	if (address)
 	{
@@ -1156,7 +1171,7 @@ static RelayListGame AGameOnTheList(const char *code)
 	strcpy(game.mode, "Cooperative");
 	game.players = 1;
 	game.maxPlayers = 4;
-	game.version = kMultiplayerVersion;
+	game.version = Net_OurVersion();
 	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay's fingerprint, as a listing carries it
 	memcpy(game.fingerprint, scriptedHostIdentity.fingerprint, sizeof(game.fingerprint));
 	return game;
@@ -1184,7 +1199,7 @@ static void TestRelayGamesOnTheList()
 	Check(!Net_AddRelaySession(outOfRange) && NumberOfSessionsFound == 1, "nor one whose level number is past 100");
 
 	RelayListGame older = AGameOnTheList("ABCD2347");
-	older.version = kMultiplayerVersion - 1;
+	older.version = Net_OurVersion() - 1;
 	Check(Net_AddRelaySession(older) && NumberOfSessionsFound == 2 && !SessionData[1].AllowedToJoin && strstr(SessionData[1].Name, "(V ") != NULL,
 		"another version is listed with its version, and can't be joined, as on this network");
 	RelayListGame full = AGameOnTheList("ABCD2348");
@@ -2315,11 +2330,15 @@ static std::vector<uint8_t> AGameMessage(NetID from)
 // The game's buffer holds kMostMessageBytes. The rest is so that a test can see something too big without it doing any harm.
 static uint8_t received[kMostMessageBytes + 64];
 
+// What a joiner's CONNECT says (modified 2026-11-09 by Melanikus for the AvP port): the test's commit, as a v2 draft of the same commit
+// says it, unless a test says otherwise (TestTheV2Draft)
+static enet_uint32 connectSays = kTestCommitWord;
+
 static void Connects(int n)
 {
 	peers[n].state = ENET_PEER_STATE_CONNECTED;
 
-	ENetEvent const event = { ENET_EVENT_TYPE_CONNECT, &peers[n], NULL };
+	ENetEvent const event = { ENET_EVENT_TYPE_CONNECT, &peers[n], NULL, connectSays };
 
 	eventsWaiting.push_back(event);
 }
@@ -2510,7 +2529,7 @@ static void TestTheRequestToJoin()
 
 	if (older.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
 	{
-		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = Net_OurVersion() - 1;
 	}
 
 	Hears(1, older);
@@ -2835,7 +2854,7 @@ static void TestWhoDoesntGetIn()
 
 	if (oldVersion.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
 	{
-		((PlayerDetails *)(oldVersion.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+		((PlayerDetails *)(oldVersion.data() + sizeof(MessageHeader)))->version = Net_OurVersion() - 1;
 	}
 
 	Connects(1);
@@ -2896,7 +2915,7 @@ static void TestANameWithNoEnd()
 	PlayerDetails details;
 
 	memset(&details, 'A', sizeof(details));
-	details.version = kMultiplayerVersion;
+	details.version = Net_OurVersion();
 	Connects(1);
 	TakeEverything();
 	Hears(1, AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details)));
@@ -3678,6 +3697,163 @@ static void TestTheKeptIdentity()
 	Check(Net_OurIdentity(statics, fingerprint), "the network started again, with the kept identity");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: PROTOCOL VERSION 2'S DRAFT (networking.h, Secondary's ruling). It's on only with -dev,
+// -netv2 and a build that knows its commit, at version 115. Off, every part of version 2 is off and the version is 114, as before: no
+// identity, no handshake, nothing sealed, and a CONNECT that says 0. Two 115 copies play only if they're the same commit: the joiner says
+// its commit in its CONNECT, and the host closes any other at once with JBLD. A 114 host doesn't look at a CONNECT's data at all.
+static void RestartTheNetworkForTheDraft()
+{
+	EndTheGame();
+	Net_Deinitialise();
+	logLines.clear();
+	Net_Initialise();
+}
+
+static bool LogMentions(const char *words)
+{
+	for (std::string const &line : logLines)
+	{
+		if (line.find(words) != std::string::npos)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Whether anything sent since first was version 2's own (a handshake datagram, AVPE, or a sealed one, AVPG)
+static bool SentAnyV2Datagram(size_t first)
+{
+	for (size_t i = first; i < datagramsSentBytes.size(); i++)
+	{
+		std::vector<uint8_t> const &sent = datagramsSentBytes[i];
+
+		if (sent.size() >= 4 && sent[0] == 'A' && sent[1] == 'V' && sent[2] == 'P' && (sent[3] == 'E' || sent[3] == 'G'))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void TestTheV2Draft()
+{
+	printf("Protocol version 2's draft, for tests only (-dev -netv2)\n");
+
+	// When it's on, and what the log says
+	Check(Net_V2DraftOn() && Net_OurVersion() == kNetV2DraftVersion, "with -dev, -netv2 and a build that knows its commit, the draft is on, at version 115");
+	RestartTheNetworkForTheDraft();
+	Check(LogHas("net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit"),
+		"and the log says so when the network starts");
+	DevMode = 0;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == kMultiplayerVersion && LogHas("net: -netv2 needs -dev, so this copy speaks version 114, without the v2 draft"),
+		"without -dev, -netv2 does nothing: version 114, and the log says why");
+	DevMode = 1;
+	testCommitKnown = false;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == kMultiplayerVersion
+		&& LogHas("net: -netv2 needs a copy made by tools/build-and-package.ps1, which knows the commit it was made from, so this copy speaks version 114, without the v2 draft"),
+		"in a build that doesn't know its commit, -netv2 does nothing either, and the log says why");
+	testCommitKnown = true;
+	NetV2DraftAsked = false;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == 114 && !LogMentions("v2 draft") && !LogMentions("-netv2"),
+		"without -netv2, a player's game: version 114, and the log says nothing of the draft");
+
+	// Off: a joiner says 114, and its CONNECT says 0, as before
+	Check(JoinAGame() == NET_OK && thisClientPlayer.version == kMultiplayerVersion && lastConnectData == 0,
+		"with the draft off, a joiner says version 114, and its CONNECT says nothing (0), as before");
+	EndTheGame();
+
+	// Off: a host doesn't look at a CONNECT's data, so a 115 joiner meets a clean "another version" there instead
+	HostWithClients(0);
+	int const closedBeforeOff = closedGently;
+	connectSays = kTestCommitWord ^ 1u;
+	Connects(1);
+	TakeEverything();
+	Check(closedGently == closedBeforeOff, "a host with the draft off doesn't look at a CONNECT's data: a joiner that says something there isn't closed for it");
+	EndTheGame();
+	connectSays = kTestCommitWord;
+
+	// On: the joiner's CONNECT says its commit
+	NetV2DraftAsked = true;
+	Check(JoinAGame() == NET_OK && thisClientPlayer.version == kNetV2DraftVersion && lastConnectData == kTestCommitWord,
+		"with the draft on, a joiner says version 115, and its CONNECT says its commit");
+	EndTheGame();
+
+	// On: the host closes a joiner of another commit at once, with JBLD, before anything is shown; one of the same commit goes on as before
+	HostWithClients(0);
+	size_t const shownBefore = screenLines.size();
+	int const closedBeforeOn = closedGently;
+	static int whoeverHadThePlace = 0;
+	peers[1].data = &whoeverHadThePlace;   // as if a player had had this place before
+	connectSays = kTestCommitWord ^ 1u;
+	Connects(1);
+	TakeEverything();
+	Check(closedGently == closedBeforeOn + 1 && lastDisconnectData == kNetJoinRefusedOtherBuild && screenLines.size() == shownBefore && peers[1].data == NULL,
+		"a host with the draft on closes a joiner of another commit as its CONNECT arrives, with JBLD; nothing is shown, and its place is nobody's");
+	connectSays = kTestCommitWord;
+	Connects(2);
+	TakeEverything();
+	Check(closedGently == closedBeforeOn + 1 && screenLines.size() == shownBefore + 1, "a joiner of the same commit isn't closed: it's shown joining, as before");
+	EndTheGame();
+
+	// The joiner's side: closed with JBLD, its answer says why
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a draft joins a host, and waits for its answer");
+	{
+		ENetEvent const closed = { ENET_EVENT_TYPE_DISCONNECT, &peers[0], NULL, kNetJoinRefusedOtherBuild };
+		peers[0].state = ENET_PEER_STATE_DISCONNECTED;
+		eventsWaiting.push_back(closed);
+		TakeEverything();
+	}
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerOtherBuild, "a joiner the host closed with JBLD knows why: the host is a draft of another commit");
+	EndTheGame();
+
+	// Off means version 1 through a relay too: no identity, no handshake, nothing sealed, and the game's datagrams are ENet's
+	NetV2DraftAsked = false;
+	relayNamed = true;
+	size_t const sentBeforeHosting = datagramsSentBytes.size();
+	Check(HostAGame() == NET_OK && theHost.sendHook == NULL, "with the draft off, a game hosted through the relay sends ENet's datagrams itself, unsealed, as version 1 does");
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	uint8_t game[48];
+	memset(game, 0x47, sizeof(game));
+	TellTheHost(kRelayHost, 27777, game, sizeof(game));
+	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's datagram through the relay goes to ENet, as in version 1");
+	Check(!SentAnyV2Datagram(sentBeforeHosting), "and nothing the host sent was version 2's");
+	EndTheGame();
+
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	size_t const sentBeforeJoining = datagramsSentBytes.size();
+	Check(Net_ConnectToSession(0, playerName) == NET_OK && theHost.sendHook == NULL && lastConnectData == 0 && !SentAnyV2Datagram(sentBeforeJoining),
+		"with the draft off, a join through the relay is version 1's: no handshake B, nothing sealed, and a CONNECT that says 0");
+	EndTheGame();
+
+	// As the tests after this expect
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+	NetV2DraftAsked = true;
+	RestartTheNetworkForTheDraft();
+}
+
 // The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
 // to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
 // The three numbers the settings file holds, one per line, as a player's file has them
@@ -3725,6 +3901,10 @@ static void TestNoHeaderLeftAnything()
 
 int main()
 {
+	// The relay's tests need handshake B, so the tests run with the v2 draft on (-dev -netv2, networking.h). TestTheV2Draft shows that off is
+	// version 1. (Added 2026-11-09 by Melanikus for the AvP port.)
+	NetV2DraftAsked = true;
+
 	// The tests written before the request to join (version 114) let their joiners in at once, as a test's host does. TestTheRequestToJoin
 	// is the one that asks.
 	Net_LetEveryJoinerIn(true);
@@ -3786,6 +3966,7 @@ int main()
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
 	TestTheKeptIdentity();
+	TestTheV2Draft();
 	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();

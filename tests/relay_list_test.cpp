@@ -112,7 +112,7 @@ static std::string AllEscaped(int letters)
 
 static RelayListRefusal Read(const std::string &text, int *count, int version = kOurVersion)
 {
-	return RelayList_ReadGames(text.data(), text.size(), version, games, count);
+	return RelayList_ReadGames(text.data(), text.size(), version, true, games, count);
 }
 
 // The list has to be refused, for exactly this reason, with no games kept
@@ -627,7 +627,7 @@ static void TestBodies()
 	char body[kRelayListMostBodyBytes + 1];
 	RelayListListing l = GoodListing();
 
-	Check(RelayList_ListingBody(l, NULL, body, sizeof(body)), "a listing is made");
+	Check(RelayList_ListingBody(l, true, NULL, body, sizeof(body)), "a listing is made");
 	Check(strcmp(body, "{\"region\":\"saopaulo\",\"code\":\"ABCDEFGH\",\"pass\":\"00112233445566778899aabbccddeeff\",\"passTime\":1762646400123,"
 		"\"name\":\"Hicks's game\",\"level\":\"Derelict\",\"mode\":\"Deathmatch\",\"gameStyle\":0,\"levelNumber\":3,\"coopLobby\":0,\"players\":2,"
 		"\"maxPlayers\":4,\"version\":113,\"fingerprint\":\"0123456789abcdeffedcba9876543210\",\"hostMs\":42}") == 0,
@@ -636,18 +636,18 @@ static void TestBodies()
 	uint8_t owner[kRelayListSecretBytes];
 	memset(owner, 0xAB, sizeof(owner));
 	std::string const putStart = "{\"owner\":\"abababababababababababababababab\",\"region\":";
-	Check(RelayList_ListingBody(l, owner, body, sizeof(body)) && std::string(body).compare(0, putStart.size(), putStart) == 0,
+	Check(RelayList_ListingBody(l, true, owner, body, sizeof(body)) && std::string(body).compare(0, putStart.size(), putStart) == 0,
 		"a PUT is the same, with the owner first");
 
 	l.passTime = kRelayListMostPassTime;
-	Check(RelayList_ListingBody(l, NULL, body, sizeof(body)) && strstr(body, "\"passTime\":9007199254740991,") != NULL, "the largest passTime is written whole");
+	Check(RelayList_ListingBody(l, true, NULL, body, sizeof(body)) && strstr(body, "\"passTime\":9007199254740991,") != NULL, "the largest passTime is written whole");
 
 	l.passTime = kRelayListMostPassTime + 1;
-	Check(!RelayList_ListingBody(l, NULL, body, sizeof(body)) && body[0] == '\0', "and one past it isn't sent");
+	Check(!RelayList_ListingBody(l, true, NULL, body, sizeof(body)) && body[0] == '\0', "and one past it isn't sent");
 
 	l = GoodListing();
 	l.name = "say \"hi\" \\o/";
-	Check(RelayList_ListingBody(l, NULL, body, sizeof(body)) && strstr(body, "\"name\":\"say \\\"hi\\\" \\\\o/\"") != NULL, "a \" and a \\ in a name are escaped");
+	Check(RelayList_ListingBody(l, true, NULL, body, sizeof(body)) && strstr(body, "\"name\":\"say \\\"hi\\\" \\\\o/\"") != NULL, "a \" and a \\ in a name are escaped");
 
 	// The largest body: every text at its longest, made of characters JSON writes as two, under the 1 KB the list takes
 	std::string const name(32, '"'), level(39, '\\'), mode(32, '"');
@@ -661,7 +661,7 @@ static void TestBodies()
 	l.version = 65535;
 	l.hostMs = 9999;
 	l.region = "abcdefghijklmnop";
-	Check(RelayList_ListingBody(l, owner, body, sizeof(body)) && strlen(body) < kRelayListMostBodyBytes, "the largest PUT fits in the 1 KB the list takes");
+	Check(RelayList_ListingBody(l, true, owner, body, sizeof(body)) && strlen(body) < kRelayListMostBodyBytes, "the largest PUT fits in the 1 KB the list takes");
 
 	struct Bad
 	{
@@ -693,11 +693,11 @@ static void TestBodies()
 	{
 		RelayListListing x = GoodListing();
 		bad[i].make(x);
-		Check(!RelayList_ListingBody(x, NULL, body, sizeof(body)) && body[0] == '\0', bad[i].what);
+		Check(!RelayList_ListingBody(x, true, NULL, body, sizeof(body)) && body[0] == '\0', bad[i].what);
 	}
 
 	l = GoodListing();
-	Check(!RelayList_ListingBody(l, NULL, body, 40) && body[0] == '\0', "a body with too little room isn't sent, and is left empty");
+	Check(!RelayList_ListingBody(l, true, NULL, body, 40) && body[0] == '\0', "a body with too little room isn't sent, and is left empty");
 
 	Check(RelayList_EndingBody("saopaulo", "ABCDEFGH", owner, body, sizeof(body)) &&
 		strcmp(body, "{\"region\":\"saopaulo\",\"code\":\"ABCDEFGH\",\"owner\":\"abababababababababababababababab\"}") == 0,
@@ -838,8 +838,14 @@ static void TestTheCalls()
 		"redirects, cookies and signing in are off");
 	Check(Has(call, "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000)"), "each step has 5 seconds");
 	Check(Has(call, "if (got >= room)") && Has(call, "a.why = kTooBig;"), "an answer bigger than its room is refused, not read on");
-	Check(Has(source, "char gamesAnswer[kRelayListMostGamesBytes];") && Has(source, "RelayList_ReadGames(gamesAnswer, a.bytes, kMultiplayerVersion"),
+	Check(Has(source, "char gamesAnswer[kRelayListMostGamesBytes];") && Has(source, "RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, shared->v2Draft"),
 		"the list of games is read into 48 KB, and through the hostile reader, for this version");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: the version and the v2 draft (networking.h) are this copy's, read once on the main
+	// thread when the list starts, so a copy without the draft asks for, reads and writes the list exactly as version 1 does
+	Check(Has(source, "made->version = Net_OurVersion();") && Has(source, "made->v2Draft = Net_V2DraftOn();")
+		&& Has(source, "L\"/v1/games?version=%d\", shared->version);") && Has(source, "RelayList_ListingBody(send, shared->v2Draft, "),
+		"SOURCE: the list asks for this copy's version's games, and reads and writes fingerprints only with the v2 draft");
 	Check(Has(source, "char relaysAnswer[kRelayListMostRelaysBytes];") && Has(source, "RelayList_ReadRelays(relaysAnswer, a.bytes"),
 		"and the relays into 4 KB, the same way");
 
@@ -852,6 +858,13 @@ static void TestTheCalls()
 	std::string const news = SourceSlice(source, "void WriteTheNews(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + piece);"),
 		"the main thread writes every piece of the list's news, each starting \"Relay list: \"");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): each piece is a copy of its text, kept with its end, never a pointer
+	// handed from one thread to the other, and it's ended again at the last place of its room before it's written
+	std::string const tell = SourceSlice(source, "void Tell(const char *news)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(tell, "size_t const letters = strnlen(news, kMostNewsLetters);") && Has(tell, "memcpy(kept, news, letters);") && Has(tell, "kept[letters] = 0;"),
+		"each piece of news is kept as a copy of at most kMostNewsLetters letters, with its end");
+	Check(Has(news, "piece[kMostNewsLetters] = 0;"), "and it's ended again at the last place of its room before it's written");
 
 	// The settings file is shared, so it mustn't point anyone's game at another list (settings_file_test): both settings are read only with -dev
 	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
@@ -897,7 +910,7 @@ static void TestTheCalls()
 	Check(Has(identity, "hostIdentityGiven = false;") && Has(identity, "hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;"),
 		"a fingerprint given to the host counts only if it isn't all 0, which is what an identity never made looks like");
 	std::string const opened = SourceSlice(source, "void RelayList_HostRoomOpened(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const noIdentity = opened.find("if (!hostIdentityGiven)\n\t{\n\t\tLogString(");
+	size_t const noIdentity = opened.find("if (Net_V2DraftOn() && !hostIdentityGiven)\n\t{\n\t\tLogString(");
 	size_t const started = opened.find("if (!Start())");
 	Check(noIdentity != std::string::npos && started != std::string::npos && noIdentity < started,
 		"a room that opens with no identity given isn't put on the list, and the log says so, before the list is even started");
@@ -1320,6 +1333,60 @@ static void TestAccessAnswers()
 	Check(allHaveWords && allDiffer, "each answer has words of its own, for the log");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: VERSION 1'S LIST, WITHOUT THE V2 DRAFT (networking.h, Net_V2DraftOn). Only a v2 draft's
+// games and listings carry the host's fingerprint. A copy without the draft, which is every player's, reads and writes the list exactly as
+// version 1 does.
+static void TestVersionOne()
+{
+	puts("20. version 1's list, without the v2 draft");
+	GameFields f;
+	std::string noFingerprint = Game(f);
+	std::string const fingerprintField = ",\"fingerprint\":" + f.fingerprint;
+	noFingerprint.replace(noFingerprint.find(fingerprintField), fingerprintField.size(), "");
+	std::string const v1List = ListOf(noFingerprint);
+	int count = -1;
+	memset(games, 0xA5, sizeof(games));
+	bool allZero = true;
+	RelayListRefusal const read = RelayList_ReadGames(v1List.data(), v1List.size(), kOurVersion, false, games, &count);
+
+	for (size_t i = 0; i < sizeof(games[0].fingerprint); i++)
+	{
+		allZero = allZero && games[0].fingerprint[i] == 0;
+	}
+
+	Check(read == kRelayListAccepted && count == 1 && strcmp(games[0].code, "ABCDEFGH") == 0 && allZero,
+		"without the draft, a game with no fingerprint is read, as version 1 reads it, and its fingerprint is left all 0");
+	std::string const v2List = ListOf(Game(f));
+	count = -1;
+	Check(RelayList_ReadGames(v2List.data(), v2List.size(), kOurVersion, false, games, &count) == kRelayListUnknownField && count == 0,
+		"and a game that carries one is refused for a field version 1 doesn't have, as version 1 refuses it");
+	count = -1;
+	Check(RelayList_ReadGames(v1List.data(), v1List.size(), kOurVersion, true, games, &count) == kRelayListFieldMissing && count == 0,
+		"while a draft refuses a game with no fingerprint, as before");
+
+	// A listing without the draft is the draft's with its fingerprint field taken out, and nothing else changed
+	char withIt[kRelayListMostBodyBytes + 1];
+	char without[kRelayListMostBodyBytes + 1];
+	char withoutAny[kRelayListMostBodyBytes + 1];
+	RelayListListing l = GoodListing();
+	Check(RelayList_ListingBody(l, true, NULL, withIt, sizeof(withIt)) && RelayList_ListingBody(l, false, NULL, without, sizeof(without)),
+		"a listing is made with the draft and without it");
+	std::string expected = withIt;
+	std::string const listed = ",\"fingerprint\":\"0123456789abcdeffedcba9876543210\"";
+	size_t const at = expected.find(listed);
+
+	if (at != std::string::npos)
+	{
+		expected.replace(at, listed.size(), "");
+	}
+
+	Check(at != std::string::npos && expected == without && strstr(without, "fingerprint") == NULL,
+		"without the draft, the body has no fingerprint at all: it's the draft's with that one field taken out");
+	l.fingerprint = NULL;
+	Check(!RelayList_ListingBody(l, true, NULL, withoutAny, sizeof(withoutAny)) && RelayList_ListingBody(l, false, NULL, withoutAny, sizeof(withoutAny))
+		&& strcmp(withoutAny, without) == 0, "a listing with no fingerprint isn't sent by a draft, and is sent, the same, without one");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -1341,6 +1408,7 @@ int main()
 	TestAccessNames();
 	TestAccessBody();
 	TestAccessAnswers();
+	TestVersionOne();
 
 	if (checksFailed)
 	{
