@@ -216,9 +216,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	{
 		LogString("this is the second copy: its settings, log and saved games are in My Games/Aliens versus Predator (second copy) (-dev -secondcopy)");
 	}
-	else if (secondCopyAsked)
+	else if (secondCopyAsked && !CommandLineHasWord(lpCmdLine, "-dev"))
 	{
 		LogString("-secondcopy needs -dev, so this copy keeps its files in the usual folder");
+	}
+	else if (secondCopyAsked)
+	{
+		// Something asked for the save folder before this, so everything since is in the usual one, and it isn't changed now
+		LogString("-secondcopy came after the save folder was first used, so this copy keeps its files in the usual folder");
 	}
 
 	char *command_line = lpCmdLine;
