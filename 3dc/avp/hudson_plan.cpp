@@ -1801,7 +1801,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			seenWindowBig = true;
 
-			if (!ReadNumber(value, valueLength, &plan->windowBig) || plan->windowBig < 0 || plan->windowBig > 1)
+			// ReadNumber reads figures only, so the number is never below 0
+			if (!ReadNumber(value, valueLength, &plan->windowBig) || plan->windowBig > 1)
 			{
 				return kHudsonRefusedWindowBig;
 			}
@@ -2372,8 +2373,9 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedPicturesWord;
 	}
 
-	// All three, or none, and only where there's another machine and the level plays as single player
-	if ((plan->killKind != kHudsonBotFightNone || plan->killAtSaid || plan->killerSaid) && (plan->killKind == kHudsonBotFightNone || !plan->killAtSaid || !plan->killerSaid || plan->netMode == kHudsonNetNone || !plan->coop))
+	// All three, or none, and only where there's another machine and the level plays as single player. coop=yes is refused above without
+	// net=, so needing coop=yes here needs another machine too.
+	if ((plan->killKind != kHudsonBotFightNone || plan->killAtSaid || plan->killerSaid) && (plan->killKind == kHudsonBotFightNone || !plan->killAtSaid || !plan->killerSaid || !plan->coop))
 	{
 		return kHudsonRefusedKillWords;
 	}
@@ -2641,7 +2643,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedLookAtWithoutWalk;
 	}
 
-	if (plan->walkSaid && (plan->combatAlien || seenStrategy || seenNav || seenRoute || plan->rooms > 0))
+	// A fight needs rooms=1 (above), so rooms > 0 covers a walk with a fight too
+	if (plan->walkSaid && (seenStrategy || seenNav || seenRoute || plan->rooms > 0))
 	{
 		return kHudsonRefusedWalkNotAlone;
 	}

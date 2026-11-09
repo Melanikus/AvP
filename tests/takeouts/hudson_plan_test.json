@@ -5527,22 +5527,12 @@
 			]
 		},
 		{
-			"name": "a kill run can go with no other machine",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "|| plan->netMode == kHudsonNetNone || !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;",
-					"to": "|| !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;"
-				}
-			]
-		},
-		{
 			"name": "a kill run can go without the campaign mode",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "|| plan->netMode == kHudsonNetNone || !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;",
-					"to": "|| plan->netMode == kHudsonNetNone))\n\t{\n\t\treturn kHudsonRefusedKillWords;"
+					"from": "|| !plan->killerSaid || !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;",
+					"to": "|| !plan->killerSaid))\n\t{\n\t\treturn kHudsonRefusedKillWords;"
 				}
 			]
 		},
@@ -6767,22 +6757,12 @@
 			]
 		},
 		{
-			"name": "windowbig= has no least",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": " || plan->windowBig < 0 || plan->windowBig > 1)",
-					"to": " || plan->windowBig > 1)"
-				}
-			]
-		},
-		{
 			"name": "windowbig= has no most",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": " || plan->windowBig < 0 || plan->windowBig > 1)",
-					"to": " || plan->windowBig < 0)"
+					"from": " || plan->windowBig > 1)",
+					"to": ")"
 				}
 			]
 		},
@@ -7923,16 +7903,6 @@
 					"file": "3dc/avp/hudson_plan.cpp",
 					"from": "if (seenLookAt && !plan->walkSaid)",
 					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "a walk goes with a fight",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->walkSaid && (plan->combatAlien || seenStrategy",
-					"to": "if (plan->walkSaid && (seenStrategy"
 				}
 			]
 		},
