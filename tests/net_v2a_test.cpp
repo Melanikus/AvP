@@ -675,6 +675,66 @@ static void TheSession(const JsonValue &all, const Vectors &v)
 	}
 }
 
+// ----- Picking the nearest relay by the cookie round (NetRelayV2Picker)
+
+static void ThePicker()
+{
+	uint16_t const ports[2] = { 27500, 28500 };
+	uint8_t ids[2][kNetRelayEchoes][kNetV2IdBytes];
+
+	for (size_t r = 0; r < 2; r++)
+	{
+		for (size_t k = 0; k < kNetRelayEchoes; k++)
+		{
+			for (size_t b = 0; b < kNetV2IdBytes; b++)
+			{
+				ids[r][k][b] = static_cast<uint8_t>(r * 100 + k * 10 + b + 1);
+			}
+		}
+	}
+
+	Bytes const cookie(kNetV2CookieBytes, 0x77);
+	NetRelayV2PickerSend sent[kNetRelayV2MostPickerSends];
+	NetRelayV2Picker p;
+	ACheck(p.Start(2, ports, &ids[0][0][0], 1000), "the picker starts for 2 relays");
+	size_t const first = p.TakeSends(sent, kNetRelayV2MostPickerSends);
+	uint8_t ask[kNetV2DatagramBytes];
+	NetV2_CookieAsk(ids[1][0], ask);
+	ACheck(first == 2 && sent[1].relay == 1 && sent[1].port == 28500 && memcmp(sent[1].bytes, ask, sizeof(ask)) == 0,
+		"its first round is a COOKIE_ASK to each relay's control port, each with its own id");
+
+	p.Tick(1099);
+	ACheck(p.TakeSends(sent, kNetRelayV2MostPickerSends) == 0, "the next round not before 100 ms");
+	p.Tick(1100);
+	ACheck(p.TakeSends(sent, kNetRelayV2MostPickerSends) == 2, "and then, to both");
+	p.Tick(1200);
+	p.TakeSends(sent, kNetRelayV2MostPickerSends);
+
+	// Relay 0 answers its first ask after 90 ms; relay 1 its second after 40 ms
+	Bytes const answer00 = CookieAnswer(Bytes(ids[0][0], ids[0][0] + kNetV2IdBytes), cookie);
+	Bytes const answer11 = CookieAnswer(Bytes(ids[1][1], ids[1][1] + kNetV2IdBytes), cookie);
+	Bytes const wrongRelay = CookieAnswer(Bytes(ids[1][2], ids[1][2] + kNetV2IdBytes), cookie);
+	ACheck(p.Hear(0, 27500, answer00.data(), answer00.size(), 1090), "relay 0's answer to its first ask is its own");
+	ACheck(!p.Hear(0, 27501, answer00.data(), answer00.size(), 1091), "one from another of its ports isn't its control port's");
+	p.Hear(0, 27500, wrongRelay.data(), wrongRelay.size(), 1092);
+	ACheck(p.NotOurs() == 1, "an answer for relay 1's id, from relay 0, isn't taken");
+	p.Hear(0, 27500, answer00.data(), answer00.size(), 1093);
+	ACheck(p.NotOurs() == 2, "nor the same answer twice");
+	ACheck(p.Hear(1, 28500, answer11.data(), answer11.size(), 1140), "relay 1's answer to its second ask");
+
+	uint32_t ms = 0;
+	ACheck(p.RelayMs(0, &ms) && ms == 90 && p.RelayMs(1, &ms) && ms == 40, "each relay's round trip: 90 and 40 ms");
+	ACheck(!p.Done(2199) && p.Done(2200), "done once the last ask has had its second");
+	ACheck(p.Best() == 1 && p.BestMs() == 40, "the nearest is relay 1, at 40 ms");
+
+	NetRelayV2Picker late;
+	late.Start(2, ports, &ids[0][0][0], 0);
+	Bytes const answer10 = CookieAnswer(Bytes(ids[1][0], ids[1][0] + kNetV2IdBytes), cookie);
+	late.Hear(1, 28500, answer10.data(), answer10.size(), 1001);
+	ACheck(late.Best() == -1, "an answer later than 1 s counts for nothing");
+	ACheck(!late.Start(0, ports, &ids[0][0][0], 0) && !late.Start(kNetRelayMostRelays + 1, ports, &ids[0][0][0], 0), "no relays, or too many: refused");
+}
+
 // ----- The game's real draws
 
 static void TheRealDraws(const Vectors &v)
@@ -719,6 +779,8 @@ int main()
 		TheSession(all, v);
 		TheRealDraws(v);
 	}
+
+	ThePicker();
 
 	if (aChecksFailed > 0)
 	{

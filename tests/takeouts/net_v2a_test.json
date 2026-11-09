@@ -183,6 +183,36 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "the picker counts an answer later than 1 s",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (took <= kNetRelayEchoAnswerWithinMs && (!hasTime[relay] || took < bestMs[relay]))",
+					"to": "if (!hasTime[relay] || took < bestMs[relay])"
+				}
+			]
+		},
+		{
+			"name": "the picker takes an answer from any of the relay's ports",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (!started || relay >= count || fromPort != controlPorts[relay])",
+					"to": "if (!started || relay >= count)"
+				}
+			]
+		},
+		{
+			"name": "the picker takes an answer to an ask already answered, so one answer counts twice",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (!answered[relay][k] && NetV2_ReadCookie(data, size, askIds[relay][k], cookie))",
+					"to": "if (NetV2_ReadCookie(data, size, askIds[relay][k], cookie))"
+				}
+			]
 		}
 	]
 }

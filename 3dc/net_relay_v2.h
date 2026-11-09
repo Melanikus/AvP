@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "net_crypto.h"
+#include "net_relay.h"
 #include "net_v2_fragments.h"
 #include "net_handshake_a.h"
 #include "net_sealed_control.h"
@@ -455,6 +456,206 @@ private:
 	NetRelayV2Opened opened[kNetRelayV2MostOpened];
 	size_t openedCount;
 	NetRelayV2Drops drops;
+};
+
+// ----- Picking the nearest relay, in version 2 (CRYPTO.md section 5.1 point 11)
+//
+// Version 1 times each relay with ECHO (net_relay.h, NetRelayPicker). A version 2 relay answers no ECHO, plain or sealed: its timing echo
+// is the cookie round, A0 and A0', which asks 1,200 bytes and answers 64 and keeps nothing. So this sends kNetRelayEchoes COOKIE_ASKs to
+// every relay, kNetRelayEchoEveryMs apart, each with an id of its own (8 fresh random bytes, handed in, as the version 1 picker's are). An
+// A0' counts only from that relay's control port, for an id this sent to that relay and not answered yet, within
+// kNetRelayEchoAnswerWithinMs. Each relay's lowest round trip counts, and the lowest wins. The same rules as version 1's, so the two
+// pick alike. Picking makes no session: the relay picked gets a fresh one (NetRelayV2Session), with a fresh cookie round of its own.
+
+// One COOKIE_ASK to send, to relay number relay
+struct NetRelayV2PickerSend
+{
+	uint8_t relay;
+	uint16_t port;
+	uint8_t bytes[kNetV2DatagramBytes];
+};
+
+size_t const kNetRelayV2MostPickerSends = kNetRelayMostRelays;   // one round of asks to every relay
+
+class NetRelayV2Picker
+{
+public:
+	NetRelayV2Picker()
+	{
+		Reset();
+	}
+
+	void Reset()
+	{
+		memset(this, 0, sizeof(*this));
+	}
+
+	// Starts timing relayCount relays (at most kNetRelayMostRelays), each at its control port. ids holds 8 fresh random bytes for each ask,
+	// kNetRelayEchoes of them to each relay, relay by relay. The first ask to each goes at once. False, and nothing sent, for none.
+	bool Start(size_t relayCount, const uint16_t *ports, const uint8_t *ids, uint32_t now)
+	{
+		Reset();
+
+		if (relayCount == 0 || relayCount > kNetRelayMostRelays || !ports || !ids)
+		{
+			return false;
+		}
+
+		count = relayCount;
+		memcpy(controlPorts, ports, count * sizeof(uint16_t));
+		memcpy(askIds, ids, count * kNetRelayEchoes * kNetV2IdBytes);
+		started = true;
+		startedAt = now;
+		Ask(now);
+		return true;
+	}
+
+	// A datagram from relay number relay's address, from its port fromPort. True if it was that relay's, from its control port.
+	bool Hear(size_t relay, uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
+	{
+		if (!started || relay >= count || fromPort != controlPorts[relay])
+		{
+			return false;
+		}
+
+		uint8_t cookie[kNetV2CookieBytes];
+
+		for (size_t k = 0; k < asksSent; k++)
+		{
+			if (!answered[relay][k] && NetV2_ReadCookie(data, size, askIds[relay][k], cookie))
+			{
+				answered[relay][k] = true;
+				uint32_t const took = now - askSentAt[k];
+
+				if (took <= kNetRelayEchoAnswerWithinMs && (!hasTime[relay] || took < bestMs[relay]))
+				{
+					bestMs[relay] = took;
+					hasTime[relay] = true;
+				}
+
+				return true;
+			}
+		}
+
+		notOurs++;
+		return true;
+	}
+
+	// The time has moved on: the next asks, when it's their time
+	void Tick(uint32_t now)
+	{
+		while (started && asksSent < kNetRelayEchoes && now - startedAt >= static_cast<uint32_t>(asksSent) * kNetRelayEchoEveryMs)
+		{
+			Ask(now);
+		}
+	}
+
+	// Every ask sent, and the last one's time to be answered gone by
+	bool Done(uint32_t now) const
+	{
+		return started && asksSent == kNetRelayEchoes && now - askSentAt[kNetRelayEchoes - 1] >= kNetRelayEchoAnswerWithinMs;
+	}
+
+	// The relay with the lowest round trip, or -1 if none answered in time; and that time, in ms
+	int Best() const
+	{
+		int best = -1;
+
+		for (size_t i = 0; i < count; i++)
+		{
+			if (hasTime[i] && (best < 0 || bestMs[i] < bestMs[best]))
+			{
+				best = static_cast<int>(i);
+			}
+		}
+
+		return best;
+	}
+
+	uint32_t BestMs() const
+	{
+		int const best = Best();
+		return best < 0 ? 0 : bestMs[best];
+	}
+
+	// One relay's own lowest round trip, in ms: false if it hasn't one
+	bool RelayMs(size_t relay, uint32_t *ms) const
+	{
+		if (relay >= count || !hasTime[relay] || !ms)
+		{
+			return false;
+		}
+
+		*ms = bestMs[relay];
+		return true;
+	}
+
+	size_t TakeSends(NetRelayV2PickerSend *out, size_t most)
+	{
+		size_t const n = sendCount < most ? sendCount : most;
+
+		for (size_t i = 0; i < n && out; i++)
+		{
+			out[i] = sends[i];
+		}
+
+		for (size_t i = n; i < sendCount; i++)
+		{
+			sends[i - n] = sends[i];
+		}
+
+		sendCount -= n;
+		return n;
+	}
+
+	uint32_t NotOurs() const
+	{
+		return notOurs;
+	}
+
+	uint32_t SendsDropped() const
+	{
+		return sendsDropped;
+	}
+
+private:
+	// One ask to every relay: the next of kNetRelayEchoes. Its round trip is timed from now. A round not taken yet is dropped and counted,
+	// never kept growing.
+	void Ask(uint32_t now)
+	{
+		askSentAt[asksSent] = now;
+
+		for (size_t i = 0; i < count; i++)
+		{
+			if (sendCount == kNetRelayV2MostPickerSends)
+			{
+				sendsDropped++;
+				continue;
+			}
+
+			sends[sendCount].relay = static_cast<uint8_t>(i);
+			sends[sendCount].port = controlPorts[i];
+			NetV2_CookieAsk(askIds[i][asksSent], sends[sendCount].bytes);
+			sendCount++;
+		}
+
+		asksSent++;
+	}
+
+	size_t count;
+	bool started;
+	uint32_t startedAt;
+	size_t asksSent;
+	uint32_t askSentAt[kNetRelayEchoes];
+	uint16_t controlPorts[kNetRelayMostRelays];
+	uint8_t askIds[kNetRelayMostRelays][kNetRelayEchoes][kNetV2IdBytes];
+	bool answered[kNetRelayMostRelays][kNetRelayEchoes];
+	uint32_t bestMs[kNetRelayMostRelays];
+	bool hasTime[kNetRelayMostRelays];
+	NetRelayV2PickerSend sends[kNetRelayV2MostPickerSends];
+	size_t sendCount;
+	uint32_t sendsDropped;
+	uint32_t notOurs;
 };
 
 #endif
