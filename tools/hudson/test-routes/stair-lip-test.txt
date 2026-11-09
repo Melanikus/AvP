@@ -1,0 +1,23 @@
+# Puts him just short of a stair over and over, a little closer each time, and has him walk over it.
+# His box reaches 450 in front of him, and this stair's face is at z -51446. At one of these, his box catches on the lip of the stair.
+# A walk that only went past here at full speed might never find that out. See test-stairs.ps1.
+putat 48570 -2301 -50988 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50990 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50991 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50992 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50993 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50994 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50995 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50996 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -50998 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04
+putat 48570 -2301 -51000 COMM-ENT03
+walk 48570 -3075 -52600 COMM-ENT04

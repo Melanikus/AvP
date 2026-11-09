@@ -1,9 +1,13 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a game pad doesn't reach a Hudson run
 // Interface  functions (written in C++) for
 // Direct3D immediate mode system
 
 #define DIRECTINPUT_VERSION 0x0800
 
 #include "logString.h"
+#include "hudson.h"
 #include <dinput.h>
 #include <XInput.h> // XInput API
 #include "io.h"
@@ -155,6 +159,7 @@ unsigned char MouseButtons[5] = {0};
 extern void IngameKeyboardInput_KeyDown(unsigned char key);
 extern void IngameKeyboardInput_KeyUp(unsigned char key);
 extern void IngameKeyboardInput_ClearBuffer(void);
+extern bool bActive;   // win_proj.cpp: this window is the one in front
 
 // defines to make the keyboard buffer code a little more readable - taken from http://msdn.microsoft.com/en-us/library/ms645540.aspx
 #define LETTER_A	0x41
@@ -343,7 +348,13 @@ void DirectReadKeyboard(void)
 #endif
 
 	// read gamepad/joystick input
-	ReadJoysticks();
+	// Modified 2026-11-09 by Melanikus for the AvP port: only while this window is in front. A gamepad is read whatever window is, and a
+	// network game goes on behind another one (win_func.cpp), so a pad used for something else must not play here. Its buttons were let
+	// go when the window stopped being in front (IngameKeyboardInput_ClearBuffer, from WM_ACTIVATEAPP).
+	if (bActive)
+	{
+		ReadJoysticks();
+	}
 
 	// Take a copy of last frame's inputs:
 	memcpy((void*)LastFramesKeyboardInput, (void*)KeyboardInput, MAX_NUMBER_OF_INPUT_KEYS);
@@ -1306,7 +1317,8 @@ void ReadJoysticks(void)
 	GotJoystick = 0;//= ReadJoystick();
 
 	// check XInput pads
-	GotXPad = UpdateControllerState();
+	// A pad can be read whether the game has the focus or not, and a run isn't anyone playing
+	GotXPad = HudsonRunIsOn ? 0 : UpdateControllerState();
 
 	memset(&GamePadButtons[0], 0, NUMPADBUTTONS);
 

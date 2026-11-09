@@ -19,6 +19,7 @@
 #include "weapon_hooks.h"
 #include "weapon_pulse_counter.h"
 #include "weapon_pulse_counter_sums.h"
+#include "hudson.h"
 #include "logString.h"
 
 #include <stdio.h>
@@ -50,11 +51,16 @@ static void PulseCounter_AtPlayerStart(void)
 	PulseCounter_Start(&Counter);
 }
 
+// What the last frame found on the model, for a test run's log
+static int TensPatchesFound, UnitsPatchesFound, FramesInAPatch;
 
 // Puts the digits on the patches. The patches are looked for every frame rather than kept, because the model is made again
 // whenever a gun is brought up or a game's loaded, and a kept pointer could then point at something that's gone.
 static void PulseCounter_ShowOnModel(int wholeRounds)
 {
+	TensPatchesFound = 0;
+	UnitsPatchesFound = 0;
+	FramesInAPatch = 0;
 
 	if (!PlayersWeapon.HModelControlBlock)
 	{
@@ -80,10 +86,12 @@ static void PulseCounter_ShowOnModel(int wholeRounds)
 		if (patch->tac_txah_s->txa_anim_id == kPulseCounterTensId)
 		{
 			digit = PulseCounter_Tens(wholeRounds);
+			TensPatchesFound++;
 		}
 		else if (patch->tac_txah_s->txa_anim_id == kPulseCounterUnitsId)
 		{
 			digit = PulseCounter_Units(wholeRounds);
+			UnitsPatchesFound++;
 		}
 		else
 		{
@@ -91,7 +99,31 @@ static void PulseCounter_ShowOnModel(int wholeRounds)
 		}
 
 		patch->tac_txah.txa_currentframe = PulseCounter_FrameForDigit(digit, patch->tac_txah.txa_numframes);
+		FramesInAPatch = patch->tac_txah.txa_numframes;
 	}
+}
+
+// A test run says in its log whenever the counter's number or its step in a reload changes, because the spin down lasts less time
+// than a picture can catch. In a normal game this does nothing.
+static void PulseCounter_LogForATestRun(int wholeRounds, int roundsOnTheScreen)
+{
+	static int lastRounds = -1, lastOnTheScreen = -1, lastSpinning = -1, lastNewMagazine = -1;
+
+	if (!HudsonRunIsOn || (wholeRounds == lastRounds && roundsOnTheScreen == lastOnTheScreen && (int)Counter.spinningDown == lastSpinning && (int)Counter.newMagazineIn == lastNewMagazine))
+	{
+		return;
+	}
+
+	lastRounds = wholeRounds;
+	lastOnTheScreen = roundsOnTheScreen;
+	lastSpinning = (int)Counter.spinningDown;
+	lastNewMagazine = (int)Counter.newMagazineIn;
+
+	char line[140];
+
+	snprintf(line, sizeof(line), "counter: shows %d, screen says %d, spinning %d, new magazine %d, tens patches %d, units patches %d, frames in a patch %d",
+		wholeRounds, roundsOnTheScreen, lastSpinning, lastNewMagazine, TensPatchesFound, UnitsPatchesFound, FramesInAPatch);
+	LogString(line);
 }
 
 // This only watches, so it always leaves the common code to look after the gun
@@ -110,6 +142,7 @@ static int PulseCounter_EveryFrame(void *playerStatus, PLAYER_WEAPON_DATA *weapo
 		(marks & kPulseCounterMagazineOutMark) != 0, (marks & kPulseCounterMagazineInMark) != 0, NormalFrameTime);
 
 	PulseCounter_ShowOnModel(PulseCounter_WholeRounds(Counter.shown));
+	PulseCounter_LogForATestRun(PulseCounter_WholeRounds(Counter.shown), roundsOnTheScreen);
 
 	return 0;
 }

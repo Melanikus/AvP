@@ -29,6 +29,7 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+//   a Hudson run can ask what lighting is really being drawn, and take a picture of a frame before it goes to the screen
 //   the marine's shoulder lamp is drawn on the finished picture of the world, under the HUD, and while it's on in Gouraud the surface pictures are drawn for it. See shoulder_lamp.h
 //   it goes on before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   the developers' view moves from G to J, which no default control set uses, because G is now the marine's shoulder lamp
@@ -55,6 +56,12 @@
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
 //   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the tag on the top right, which says how the shadows and the lighting are set, is off until it's asked for (F7, or -dev
+//   -statuson), so it no longer covers the game and the relay's line in play; F7 says in the log each time it shows or hides it
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a run of Hudson playing a level on foot draws the way he means to walk and where he's been as real shapes in the level, with walls
+//   hiding them (only in such a run: a normal game draws none of it)
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -109,6 +116,7 @@
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
+#include "hudson.h"
 #include "light_choice.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
@@ -118,6 +126,9 @@
 #define AVP_BUILD_COMMIT "not known"
 #endif
 #include "static_frame.h"
+#include "hudson_vision.h"
+#include "hudson_play.h"
+#include "hudson_play_ribbon.h"
 #include "surface_static.h"
 #include "static_level.h"
 #include "normal_lines.h"
@@ -535,6 +546,83 @@ void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
 static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
 
+// Draws Hudson on foot's ribbon: see hudson_play_ribbon.h. It goes through the same sum as the level's own polygons (TranslatePointIntoViewspace), so it lands exactly where the
+// level is, and the depth buffer can compare the two. That's what makes a wall hide it. The main pixel shader wants a texture and there's none, so a plain one does for this. Everything
+// this changes on the card is put back afterwards, because it's in the middle of the frame, and it only happens on a run of his.
+static void DrawHudsonPlayRibbon()
+{
+	static std::vector<HudsonPlayRibbonCorner> corners;
+	static std::vector<D3DLVERTEX> vertices;
+
+	HudsonPlay_RibbonCorners(corners);
+
+	if (corners.empty())
+	{
+		return;
+	}
+
+	vertices.resize(corners.size());
+
+	for (size_t i = 0; i < corners.size(); i++)
+	{
+		VECTORCH place;
+
+		place.vx = corners[i].x;
+		place.vy = corners[i].y;
+		place.vz = corners[i].z;
+		TranslatePointIntoViewspace(&place);
+
+		vertices[i].x = (float)place.vx;
+		vertices[i].y = (float)-place.vy;
+		vertices[i].z = (float)place.vz;
+		vertices[i].color = RGBA_MAKE(corners[i].red, corners[i].green, corners[i].blue, 255);
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+
+	// This is what makes a wall hide it. Turning it off would paint it over the wall.
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	// It can be looked at from any side
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(vertices.size() / 3), &vertices[0], sizeof(D3DLVERTEX));
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 static bool ExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorDrawing);
@@ -644,6 +732,12 @@ static bool ExecuteBuffer()
 		DrawNormalLines();
 	}
 
+	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
+	if (toyFinalFlush && HudsonPlay_RibbonIsOn())
+	{
+		DrawHudsonPlayRibbon();
+	}
+
 	// render any particles
 	if (particleList->GetSize())
 	{
@@ -664,7 +758,20 @@ static bool ExecuteBuffer()
 
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
+		compareTheLamp = Hudson_LampCompareIsDue();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("before");
+		}
+
 		DrawShoulderLamp();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("after");
+			Hudson_SaveLampCompareSurface(SurfacePictures_Colour());
+		}
 	}
 
 	// Other marines' lamp beams, on the finished picture of the world and before the gun, which they mustn't shine through. Only on the last
@@ -696,6 +803,16 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		weaponList->Draw();
+	}
+
+	if (compareTheLamp)
+	{
+		Hudson_SaveLampCompareScreen("final");
+	}
+
+	if (toyFinalFlush && Hudson_NetPictureIsDue())
+	{
+		Hudson_SaveLampCompareScreen(Hudson_NetPictureKind());
 	}
 
 	// render any orthographic quads
@@ -2968,6 +3085,11 @@ void ThisFramesRenderingHasFinished()
 		FrameTiming_EndFrame();
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 		Mark_EndFrame(d3d.lpD3DDevice);
+
+		if (HudsonRunIsOn)
+		{
+			Hudson_TakePictureIfDue();
+		}
 	}
 
 	// Whether or not it could be drawn, this frame is over, and its beams with it
@@ -4062,7 +4184,7 @@ static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
 int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and J, F7, F8 and the shoot tool's keys do nothing
-int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
+int ShadowStatusOn = 0;     // the tag on the top right of the screen: off until F7 shows it, or -dev -statuson starts with it on
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
 static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
@@ -4894,11 +5016,21 @@ static void ToySetVolumeProgram(LPDIRECT3DDEVICE9 device)
 	device->SetPixelShader(NULL);
 }
 
+// For Hudson's vision: what this frame's shadow pass did.
+static HudsonVisionShadows visionShadows = { false, 0, 0, 0 };
+
 // the prisms in toyVerts, then whatever this light has kept on the card, under the same stencil and depth settings
 static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	HRESULT result = S_OK;
 
+	// break=prisms: a run breaks the shadows on purpose, to see that Hudson's finding really fires
+	if (HudsonBreaksPrisms)
+	{
+		return result;
+	}
+
+	visionShadows.corners += toyNumVerts;
 
 	FrameTiming_Mark(kStageShading);
 	FrameTiming_CountPrismCorners(toyNumVerts, 0);
@@ -4937,6 +5069,7 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 
 		ToySetVolumeProgram(d3d.lpD3DDevice);
 		FrameTiming_CountPrismCorners(numWorldCorners, keptCornersThisPass);
+		visionShadows.corners += numWorldCorners + keptCornersThisPass;
 		FrameTiming_Mark(kStagePrismsKept);
 	}
 
@@ -5301,6 +5434,7 @@ static void DrawShoulderLamp()
 
 	if (isARealLight)
 	{
+		ShoulderLamp_NoteARealLightFrame();
 		return;
 	}
 
@@ -5924,6 +6058,51 @@ struct RoutePictures
 		return pictures;
 	}
 };
+
+// See hudson_vision.h. Reads what's drawn now, and doesn't draw anything or change what the card is doing.
+bool SurfacePictures_LookAtThisFrame(HudsonVisionCounts *counts, HudsonVisionView *view)
+{
+	RoutePictures pictures;
+
+	if (!toyDepthSurface || !SurfacePictures_Normal() || !SurfacePictures_Colour() || !pictures.Read(d3d.lpD3DDevice, toyDepthSurface))
+	{
+		return false;
+	}
+
+	view->width = (int)pictures.colour.description.Width;
+	view->height = (int)pictures.colour.description.Height;
+	view->projection11 = d3d.matProjection._11;
+	view->projection22 = d3d.matProjection._22;
+	ToyShadows_ViewMatrix(view->view);
+	view->shadows = visionShadows;
+
+	HudsonVision_Count(pictures.InMemory(), pictures.colour.description.Width, pictures.colour.description.Height, pictures.normal.description.Format == D3DFMT_A2R10G10B10, counts);
+
+	// Only if there's something to compare. Reading the screen stops the game for a moment too. A screen of another shape of pixel can't be read this way, and then there's just nothing to say.
+	view->screenPixels = 0;
+
+	IDirect3DSurface9 *screen = 0;
+
+	if (counts->samples > 0 && SUCCEEDED(d3d.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen)))
+	{
+		PictureInMemory finished;
+
+		if (finished.Read(d3d.lpD3DDevice, screen) && (finished.description.Format == D3DFMT_X8R8G8B8 || finished.description.Format == D3DFMT_A8R8G8B8))
+		{
+			for (int i = 0; i < counts->samples; i++)
+			{
+				if (HudsonVision_ScreenAt(finished.bits, finished.pitch, (int)finished.description.Width, (int)finished.description.Height, counts->sampleX[i], counts->sampleY[i], &view->screen[view->screenPixels]))
+				{
+					view->screenPixels++;
+				}
+			}
+		}
+
+		screen->Release();
+	}
+
+	return true;
+}
 
 // Two empty pictures match perfectly, so a line of zeros only means something if there was a surface to compare. An error goes in the log, so that this can't be read as a pass.
 static void SayIfNothingWasCompared(const char *which, int frame, const PictureDifferences &differences)
@@ -7321,6 +7500,8 @@ static void DrawStatusLine(const char *text, int rightX, int y, int scale)
 
 // The tag on the top right of the screen, which says how this build is running, so that a moment in a video can be matched to the log. It's only
 // a few more polygons on the list the display already uses, so it can't hold anything up. It's only there while a level is being shown.
+// It's off until it's asked for, with F7 in play or -dev -statuson at the start, because it covers the top right of the game, where the relay's
+// line in play is.
 static void ShadowStatus_Draw()
 {
 	const char *ToyShadows_RoomName();
@@ -8188,6 +8369,11 @@ static bool MainDrawUsesHeights()
 	return mainDrawUsedHeights;
 }
 
+bool ViewSwitches_MainDrawWentThroughHeights()
+{
+	return mainDrawUsedHeights;
+}
+
 // The solid polygons, by the shader that marches through their height pictures. The normals and tangents are attached for this one draw, and taken off again straight after, so every other
 // draw sees the game's list of corners as it always has.
 static void DrawSolidsWithHeights()
@@ -8418,7 +8604,8 @@ static void ToyShadows_Draw()
 
 	KeepDeveloperToolsOutOfNetworkGames();
 
-	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like J.
+	// F8 saves the next frames as images, and F7 shows or hides the tag on the screen, which starts hidden, and says which in the log, so a
+	// film can be matched to it. Neither is used by the game. Not while typing, like J.
 	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
@@ -8429,6 +8616,7 @@ static void ToyShadows_Draw()
 		if (DebouncedKeyboardInput[KEY_F7])
 		{
 			ShadowStatusOn = !ShadowStatusOn;
+			LogString(ShadowStatusOn ? "tag: shown on the top right (F7)" : "tag: hidden (F7)");
 		}
 
 		// F9 shoots, F10 stops the polygon last shot from casting, and F5 undoes the newest stop. See shadow_shoot.cpp. The game leaves these three keys alone.
@@ -8490,6 +8678,11 @@ static void ToyShadows_Draw()
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
 	report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+
+	visionShadows.volumesOn = volumesThisFrame;
+	visionShadows.lights = report.lights;
+	visionShadows.casters = report.casters;
+	visionShadows.corners = 0;
 
 
 	if (!report.lights)

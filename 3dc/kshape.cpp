@@ -6831,6 +6831,14 @@ void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
 	mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;
 }
 
+// The same numbers, for a Hudson run's result. How many frames comes first, because no shadow pass having run and a shadow pass finding no lights would otherwise read the same. The room goes last, as a name it has no limit on what's in it.
+void ShadowLights_ForTheResult(char *line, int size)
+{
+	_snprintf(line, size - 1, "shadow_light_frames=%d allowed_steady=%d allowed_brief=%d most_in_reach=%d most_steady=%d most_brief=%d most_shadow_passes=%d most_shadow_ms=%.1f most_in_reach_frame=%d most_in_reach_room=%s",
+		framesNoted, ToyShadowsMaxLights, ToyShadowsMaxBrief, mostInReach, mostSteady, mostBrief, mostPasses, mostMilliseconds, mostInReachFrame, mostInReachRoom);
+	line[size - 1] = 0;
+}
+
 // Two lines for each report: what the choosing did on this frame and what it cost, then the most there have been. A light with no place left is
 // still in the game's own lighting, so it hasn't gone dark. It just casts no shadow.
 void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float milliseconds, float frameMilliseconds)

@@ -1,0 +1,34 @@
+# level: breakout_p   end started by: kill
+# campaign: Predator 10
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens Mhangar, Mstor02
+where Object01
+destroy shatter
+where tunnel09
+destroy Object03
+where tunnel09
+destroy smash12
+where tunnel09
+destroy Object04
+where tunnel09
+destroy smash11
+where tunnel10
+destroy smash13
+where tunnel10
+destroy Object08
+where tunnel10
+destroy smash14
+# opens Mtrain03
+where tunnel10
+destroy Object06
+where tunnel20
+destroy smash03
+where tunnel20
+destroy smash04
+where tunnel19
+destroy smash02
+# opens Mtunnel14
+where tunnel19
+destroy smash01
+missing officer | a network game leaves out this marine
+end end of level

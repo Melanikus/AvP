@@ -1,0 +1,11 @@
+# level: fall_m   end started by: kill
+# campaign: Marine 11
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens gate05
+where gpost01
+press switch12
+# opens gate03
+where watergateb
+press switch04
+missing predator | a network game leaves out this predator
+end endmissionstrategy

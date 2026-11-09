@@ -1,0 +1,5 @@
+# level: sulaco_a   end started by: kill
+# campaign: Alien 8
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+missing predator | a network game leaves out this predator
+end endmissionstrategy

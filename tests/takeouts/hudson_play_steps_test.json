@@ -1,0 +1,1279 @@
+{
+	"copy": [
+		"3dc",
+		"tools",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a file of any size is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (text.size() > kHudsonPlayMostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a file exactly at the limit is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (text.size() > kHudsonPlayMostBytes)",
+					"to": "if (text.size() >= kHudsonPlayMostBytes)"
+				}
+			]
+		},
+		{
+			"name": "a line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (line.size() > kHudsonPlayLongestLine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line exactly at the limit is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (line.size() > kHudsonPlayLongestLine)",
+					"to": "if (line.size() >= kHudsonPlayLongestLine)"
+				}
+			]
+		},
+		{
+			"name": "a comment is read as a step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (line.empty() || line[0] == '#')",
+					"to": "if (line.empty())"
+				}
+			]
+		},
+		{
+			"name": "a blank line is read as a step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (line.empty() || line[0] == '#')",
+					"to": "if (!line.empty() && line[0] == '#')"
+				}
+			]
+		},
+		{
+			"name": "a line with no bar is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (bar == std::string::npos)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (name.size() > kHudsonPlayLongestName)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name exactly at the limit is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (name.size() > kHudsonPlayLongestName)",
+					"to": "if (name.size() >= kHudsonPlayLongestName)"
+				}
+			]
+		},
+		{
+			"name": "a name can hold a tab",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (name[i] < ' ' || name[i] > '~' || name[i] == '|')",
+					"to": "if (name[i] > '~' || name[i] == '|')"
+				}
+			]
+		},
+		{
+			"name": "a name can hold what is above plain letters",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (name[i] < ' ' || name[i] > '~' || name[i] == '|')",
+					"to": "if (name[i] < ' ' || name[i] == '|')"
+				}
+			]
+		},
+		{
+			"name": "a name can hold a second bar",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (name[i] < ' ' || name[i] > '~' || name[i] == '|')",
+					"to": "if (name[i] < ' ' || name[i] > '~')"
+				}
+			]
+		},
+		{
+			"name": "press is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words[0] == \"press\")",
+					"to": "if (words[0] == \"nope\")"
+				}
+			]
+		},
+		{
+			"name": "walk is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words[0] == \"walk\")",
+					"to": "if (words[0] == \"nope\")"
+				}
+			]
+		},
+		{
+			"name": "pickup is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words[0] == \"pickup\")",
+					"to": "if (words[0] == \"nope\")"
+				}
+			]
+		},
+		{
+			"name": "destroy is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words[0] == \"destroy\")",
+					"to": "if (words[0] == \"nope\")"
+				}
+			]
+		},
+		{
+			"name": "kill is not a word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words[0] == \"kill\")",
+					"to": "if (words[0] == \"nope\")"
+				}
+			]
+		},
+		{
+			"name": "press is read as a kill",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "step.kind = kHudsonPlayPress;",
+					"to": "step.kind = kHudsonPlayKill;"
+				}
+			]
+		},
+		{
+			"name": "walk is read as a press",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "step.kind = kHudsonPlayWalkInto;",
+					"to": "step.kind = kHudsonPlayPress;"
+				}
+			]
+		},
+		{
+			"name": "pickup is read as a press",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "step.kind = kHudsonPlayPickUp;",
+					"to": "step.kind = kHudsonPlayPress;"
+				}
+			]
+		},
+		{
+			"name": "destroy is read as a press",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "step.kind = kHudsonPlayDestroy;",
+					"to": "step.kind = kHudsonPlayPress;"
+				}
+			]
+		},
+		{
+			"name": "kill is read as a press",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "step.kind = kHudsonPlayKill;",
+					"to": "step.kind = kHudsonPlayPress;"
+				}
+			]
+		},
+		{
+			"name": "any word is a press",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return \"this file doesn't use that word\";",
+					"to": "step.kind = kHudsonPlayPress;"
+				}
+			]
+		},
+		{
+			"name": "too few numbers are read (this one can crash)",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words.size() != 4)",
+					"to": "if (words.size() > 4)"
+				}
+			]
+		},
+		{
+			"name": "too many numbers are read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (words.size() != 4)",
+					"to": "if (words.size() < 4)"
+				}
+			]
+		},
+		{
+			"name": "the first number can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "!HudsonPlay_ReadWholeNumber(words[1], &step.x)",
+					"to": "(HudsonPlay_ReadWholeNumber(words[1], &step.x), false)"
+				}
+			]
+		},
+		{
+			"name": "the second number can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "!HudsonPlay_ReadWholeNumber(words[2], &step.y)",
+					"to": "(HudsonPlay_ReadWholeNumber(words[2], &step.y), false)"
+				}
+			]
+		},
+		{
+			"name": "the third number can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "!HudsonPlay_ReadWholeNumber(words[3], &step.z)",
+					"to": "(HudsonPlay_ReadWholeNumber(words[3], &step.z), false)"
+				}
+			]
+		},
+		{
+			"name": "any number of steps is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (steps->size() >= kHudsonPlayMostSteps)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "one step too many is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (steps->size() >= kHudsonPlayMostSteps)",
+					"to": "if (steps->size() > kHudsonPlayMostSteps)"
+				}
+			]
+		},
+		{
+			"name": "an earlier file's steps stay",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "steps->clear(); // anything left from an earlier file goes",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused file's steps stay",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "steps->clear(); // nothing from a refused file is kept",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a file with no steps is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (steps->empty())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the reason gives the wrong line",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "lineNumber++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line can end in a return",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "line[line.size() - 1] == '\\r' || line[line.size() - 1] == ' '",
+					"to": "line[line.size() - 1] == ' '"
+				}
+			]
+		},
+		{
+			"name": "a line can end in spaces",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "line[line.size() - 1] == '\\r' || line[line.size() - 1] == ' '",
+					"to": "line[line.size() - 1] == '\\r'"
+				}
+			]
+		},
+		{
+			"name": "a word that is only a minus is a number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (word.size() == at || word.size() - at > 8)",
+					"to": "if (word.size() - at > 8)"
+				}
+			]
+		},
+		{
+			"name": "a number of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (word.size() == at || word.size() - at > 8)",
+					"to": "if (word.size() == at)"
+				}
+			]
+		},
+		{
+			"name": "letters count as digits",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (word[at] < '0' || word[at] > '9')",
+					"to": "if (word[at] < '0')"
+				}
+			]
+		},
+		{
+			"name": "what comes before the digits counts as one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (word[at] < '0' || word[at] > '9')",
+					"to": "if (word[at] > '9')"
+				}
+			]
+		},
+		{
+			"name": "a place can be any distance away",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (value > kHudsonPlayFurthest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the furthest place is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (value > kHudsonPlayFurthest)",
+					"to": "if (value >= kHudsonPlayFurthest)"
+				}
+			]
+		},
+		{
+			"name": "a minus does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "*number = below ? -value : value;",
+					"to": "*number = value;"
+				}
+			]
+		},
+		{
+			"name": "a minus is not allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "bool const below = word[0] == '-';",
+					"to": "bool const below = false;"
+				}
+			]
+		},
+		{
+			"name": "he turns when he is facing nowhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if ((forwardX == 0 && forwardZ == 0) || (wantedX == 0 && wantedZ == 0))",
+					"to": "if (wantedX == 0 && wantedZ == 0)"
+				}
+			]
+		},
+		{
+			"name": "he turns when he is going nowhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if ((forwardX == 0 && forwardZ == 0) || (wantedX == 0 && wantedZ == 0))",
+					"to": "if (forwardX == 0 && forwardZ == 0)"
+				}
+			]
+		},
+		{
+			"name": "he goes the long way round to the right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "while (turn > kHudsonPlayWholeTurn / 2)",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "he goes the long way round to the left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "while (turn < -kHudsonPlayWholeTurn / 2)",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "the control goes past full to the right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (wanted > 65536.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the control goes past full to the left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (wanted < -65536.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a frame of no time is divided by",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (frameTime <= 0 || fullTurnsPerSecond <= 0)",
+					"to": "if (frameTime < 0 || fullTurnsPerSecond <= 0)"
+				}
+			]
+		},
+		{
+			"name": "a frame of less than no time turns him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (frameTime <= 0 || fullTurnsPerSecond <= 0)",
+					"to": "if (frameTime == 0 || fullTurnsPerSecond <= 0)"
+				}
+			]
+		},
+		{
+			"name": "no turning speed is divided by",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (frameTime <= 0 || fullTurnsPerSecond <= 0)",
+					"to": "if (frameTime <= 0)"
+				}
+			]
+		},
+		{
+			"name": "he walks however far he faces to the left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -512 && angle < 512;",
+					"to": "return angle < 512;"
+				}
+			]
+		},
+		{
+			"name": "he walks however far he faces to the right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -512 && angle < 512;",
+					"to": "return angle > -512;"
+				}
+			]
+		},
+		{
+			"name": "the limit to the left is one out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -512 && angle < 512;",
+					"to": "return angle >= -512 && angle < 512;"
+				}
+			]
+		},
+		{
+			"name": "the limit to the right is one out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -512 && angle < 512;",
+					"to": "return angle > -512 && angle <= 512;"
+				}
+			]
+		},
+		{
+			"name": "he fires however far he aims to the left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -60 && angle < 60;",
+					"to": "return angle < 60;"
+				}
+			]
+		},
+		{
+			"name": "he fires however far he aims to the right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -60 && angle < 60;",
+					"to": "return angle > -60;"
+				}
+			]
+		},
+		{
+			"name": "the aim to the left is one out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -60 && angle < 60;",
+					"to": "return angle >= -60 && angle < 60;"
+				}
+			]
+		},
+		{
+			"name": "the aim to the right is one out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return angle > -60 && angle < 60;",
+					"to": "return angle > -60 && angle <= 60;"
+				}
+			]
+		},
+		{
+			"name": "a point below counts as reached",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (upOrDown > closeUpOrDown || upOrDown < -closeUpOrDown)",
+					"to": "if (upOrDown < -closeUpOrDown)"
+				}
+			]
+		},
+		{
+			"name": "a point above counts as reached",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (upOrDown > closeUpOrDown || upOrDown < -closeUpOrDown)",
+					"to": "if (upOrDown > closeUpOrDown)"
+				}
+			]
+		},
+		{
+			"name": "exactly close enough across is not close enough",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "<= (double)closeAcross * closeAcross;",
+					"to": "< (double)closeAcross * closeAcross;"
+				}
+			]
+		},
+		{
+			"name": "only one way across is measured",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "(double)acrossX * acrossX + (double)acrossZ * acrossZ",
+					"to": "(double)acrossX * acrossX"
+				}
+			]
+		},
+		{
+			"name": "the other way across is the only one measured",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "(double)acrossX * acrossX + (double)acrossZ * acrossZ",
+					"to": "(double)acrossZ * acrossZ"
+				}
+			]
+		},
+		{
+			"name": "the distance is added in whole numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "(double)acrossX * acrossX + (double)acrossZ * acrossZ",
+					"to": "(double)(acrossX * acrossX + acrossZ * acrossZ)"
+				}
+			]
+		},
+		{
+			"name": "the log says the same for two things he does",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case kHudsonPlayStepLeft: return \"he steps to his left\";",
+					"to": "case kHudsonPlayStepLeft: return \"he steps to his right\";"
+				}
+			]
+		},
+		{
+			"name": "the log doesn't say he was moved",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "default: return \"he's moved on along his way\";",
+					"to": "default: return \"he stops\";"
+				}
+			]
+		},
+		{
+			"name": "a real list with a bad line in it is read",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion.play",
+					"from": "walk 49822 -29299 23871 | liftdoorswitch",
+					"to": "walk 49822 -29299 | liftdoorswitch"
+				}
+			]
+		},
+		{
+			"name": "a real list that has lost a step goes unnoticed",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion.play",
+					"from": "walk 49822 -29299 23871 | liftdoorswitch",
+					"to": "# gone"
+				}
+			]
+		},
+		{
+			"name": "a hop goes no distance",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const int kHudsonPlayHopAtLeast = 3000;",
+					"to": "static const int kHudsonPlayHopAtLeast = 300;"
+				}
+			]
+		},
+		{
+			"name": "a hop starts from the first point of the way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "for (size_t i = from; i + 1 < way.size(); i++)",
+					"to": "for (size_t i = 0; i + 1 < way.size(); i++)"
+				}
+			]
+		},
+		{
+			"name": "a hop counts up and down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "double const x = (double)way[i + 1].x - way[i].x, z = (double)way[i + 1].z - way[i].z;",
+					"to": "double const x = (double)way[i + 1].x - way[i].x, z = (double)way[i + 1].y - way[i].y + (double)way[i + 1].z - way[i].z;"
+				}
+			]
+		},
+		{
+			"name": "a hop forgets how far it has gone",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "gone += sqrt(x * x + z * z);",
+					"to": "gone = sqrt(x * x + z * z);"
+				}
+			]
+		},
+		{
+			"name": "a hop stops short of how far it should go",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (gone >= (double)atLeast)",
+					"to": "if (gone + 1000.0 >= (double)atLeast)"
+				}
+			]
+		},
+		{
+			"name": "a hop goes past a point exactly that far",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (gone >= (double)atLeast)",
+					"to": "if (gone > (double)atLeast)"
+				}
+			]
+		},
+		{
+			"name": "a hop lands on the point before",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return i + 1;",
+					"to": "return i;"
+				}
+			]
+		},
+		{
+			"name": "a short way lands him back where he is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return way.size() - 1;",
+					"to": "return from;"
+				}
+			]
+		},
+		{
+			"name": "he never backs up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 0: return kHudsonPlayBackUp;",
+					"to": "case 0: return kHudsonPlayStepLeft;"
+				}
+			]
+		},
+		{
+			"name": "he cheats without stepping left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 1: return kHudsonPlayStepLeft;",
+					"to": "case 1: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he cheats without stepping right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 2: return kHudsonPlayStepRight;",
+					"to": "case 2: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he cheats without looking for the way again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 3: return kHudsonPlayFindTheWayAgain;",
+					"to": "case 3: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he cheats without crouching",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 4: return kHudsonPlayCrouch;",
+					"to": "case 4: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he cheats without jumping",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 5: return kHudsonPlayJump;",
+					"to": "case 5: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he gets no second go, backing up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 6: return kHudsonPlayBackUp;",
+					"to": "case 6: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he gets no second go, stepping right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 7: return kHudsonPlayStepRight;",
+					"to": "case 7: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he gets no second go, stepping left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 8: return kHudsonPlayStepLeft;",
+					"to": "case 8: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he gets no second go, looking again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 9: return kHudsonPlayFindTheWayAgain;",
+					"to": "case 9: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he never cheats",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "default: return kHudsonPlayTeleport;",
+					"to": "default: return kHudsonPlayJump;"
+				}
+			]
+		},
+		{
+			"name": "the log says nothing about backing up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case kHudsonPlayBackUp: return \"he backs up\";",
+					"to": "case kHudsonPlayBackUp: return \"he steps to his left\";"
+				}
+			]
+		},
+		{
+			"name": "being stuck takes too long to notice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const unsigned int kHudsonPlayStuckAfter = 1000;",
+					"to": "static const unsigned int kHudsonPlayStuckAfter = 5000;"
+				}
+			]
+		},
+		{
+			"name": "he never slows down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return 65536 - (int)((double)(65536 - kHudsonPlaySlowestWalk) * (off - kHudsonPlayFacingItWithin) / (512 - kHudsonPlayFacingItWithin));",
+					"to": "return 65536;"
+				}
+			]
+		},
+		{
+			"name": "nearly facing it, he slows anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (off <= kHudsonPlayFacingItWithin)",
+					"to": "if (off < kHudsonPlayFacingItWithin)"
+				}
+			]
+		},
+		{
+			"name": "turning left he never slows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "int const off = angle < 0 ? -angle : angle;",
+					"to": "int const off = angle;"
+				}
+			]
+		},
+		{
+			"name": "he has no slowest",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (off >= 512)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "how far off ignores the side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "double const offX = hisX - along * lineX, offZ = hisZ - along * lineZ;",
+					"to": "double const offX = hisX - along * lineX, offZ = 0.0;"
+				}
+			]
+		},
+		{
+			"name": "how far off runs past the end of the line",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "along = along < 0.0 ? 0.0 : (along > 1.0 ? 1.0 : along);",
+					"to": "along = along < 0.0 ? 0.0 : along;"
+				}
+			]
+		},
+		{
+			"name": "how far off runs past the start of the line",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "along = along < 0.0 ? 0.0 : (along > 1.0 ? 1.0 : along);",
+					"to": "along = along > 1.0 ? 1.0 : along;"
+				}
+			]
+		},
+		{
+			"name": "how far off divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "double along = lengthSquared > 0.0 ? (hisX * lineX + hisZ * lineZ) / lengthSquared : 0.0;",
+					"to": "double along = (hisX * lineX + hisZ * lineZ) / lengthSquared;"
+				}
+			]
+		},
+		{
+			"name": "a point counts from further across",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const int kHudsonPlayPointReachedAcross = 400;",
+					"to": "static const int kHudsonPlayPointReachedAcross = 700;"
+				}
+			]
+		},
+		{
+			"name": "a point counts from a tread above",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const int kHudsonPlayPointReachedUpOrDown = 450;",
+					"to": "static const int kHudsonPlayPointReachedUpOrDown = 2500;"
+				}
+			]
+		},
+		{
+			"name": "he aims further ahead",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const int kHudsonPlayAimAhead = 1000;",
+					"to": "static const int kHudsonPlayAimAhead = 3000;"
+				}
+			]
+		},
+		{
+			"name": "he looks at the way behind him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "size_t const first = from < 1 ? 1 : from;",
+					"to": "size_t const first = 1;"
+				}
+			]
+		},
+		{
+			"name": "he reads before the start of the way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "size_t const first = from < 1 ? 1 : from;",
+					"to": "size_t const first = from;"
+				}
+			]
+		},
+		{
+			"name": "he looks too far ahead",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const size_t kHudsonPlayPartsToLookAhead = 12;",
+					"to": "static const size_t kHudsonPlayPartsToLookAhead = 40;"
+				}
+			]
+		},
+		{
+			"name": "he only looks at the next part",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "i < way.size() && i < first + kHudsonPlayPartsToLookAhead",
+					"to": "i < way.size() && i < first + 1"
+				}
+			]
+		},
+		{
+			"name": "another floor counts as his level",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "static const int kHudsonPlayOnTheSameLevel = 900;",
+					"to": "static const int kHudsonPlayOnTheSameLevel = 3000;"
+				}
+			]
+		},
+		{
+			"name": "nothing near him says he is off the way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "aim.onTheWay = false;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "below him counts however far",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "upOrDown <= kHudsonPlayOnTheSameLevel && upOrDown >= -kHudsonPlayOnTheSameLevel",
+					"to": "upOrDown >= -kHudsonPlayOnTheSameLevel"
+				}
+			]
+		},
+		{
+			"name": "above him counts however far",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "upOrDown <= kHudsonPlayOnTheSameLevel && upOrDown >= -kHudsonPlayOnTheSameLevel",
+					"to": "upOrDown <= kHudsonPlayOnTheSameLevel"
+				}
+			]
+		},
+		{
+			"name": "he takes the first part he finds",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "(bestOff < 0 || off < bestOff)",
+					"to": "(bestOff < 0)"
+				}
+			]
+		},
+		{
+			"name": "the end of the way can come early",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "bool const atTheLastPart = from + kHudsonPlayPartsToLookAhead >= way.size();",
+					"to": "bool const atTheLastPart = true;"
+				}
+			]
+		},
+		{
+			"name": "the end of the way is never found",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (atTheLastPart && HudsonPlay_ReachedPoint(",
+					"to": "if (false && HudsonPlay_ReachedPoint("
+				}
+			]
+		},
+		{
+			"name": "past the end he reads on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (way.empty() || from >= way.size())",
+					"to": "if (way.empty())"
+				}
+			]
+		},
+		{
+			"name": "no way at all is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (way.empty() || from >= way.size())",
+					"to": "if (from > way.size())"
+				}
+			]
+		},
+		{
+			"name": "a way of one point is treated as a line",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "if (way.size() == 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "he says nothing of how far along",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "*alongOut = along;",
+					"to": "*alongOut = 0.0;"
+				}
+			]
+		},
+		{
+			"name": "the aim stops at the corner",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "left -= length;",
+					"to": "return;"
+				}
+			]
+		},
+		{
+			"name": "further on is the same as the aim",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "HudsonPlay_PlaceFurtherAlong(way, best, bestAlong, (double)kHudsonPlayLookFurther, &x, &y, &z);",
+					"to": "HudsonPlay_PlaceFurtherAlong(way, best, bestAlong, (double)kHudsonPlayAimAhead, &x, &y, &z);"
+				}
+			]
+		},
+		{
+			"name": "how hard is not shared",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "*sideControl = (int)(side * howHard);",
+					"to": "*sideControl = (int)(side * 65536.0);"
+				}
+			]
+		},
+		{
+			"name": "forward is all he has",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "*forwardControl = (int)(ahead * howHard);",
+					"to": "*forwardControl = howHard;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: a moment out of sight starts the fight again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return sameThreat && outOfSightFor < kHudsonPlaySameFightWithin;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: another threat counts as the same fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return sameThreat && outOfSightFor < kHudsonPlaySameFightWithin;",
+					"to": "return outOfSightFor < kHudsonPlaySameFightWithin;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: a threat he can't hurt holds him for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: a threat he is hurting is left alone too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;",
+					"to": "return fightingFor >= kHudsonPlayCantHurtItAfter;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: the game ends a fight the moment it is out of sight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play.cpp",
+					"from": "if (lastThreat && !HudsonPlay_IsTheSameFight(true, now - lastSawItAt))",
+					"to": "if (lastThreat)"
+				}
+			]
+		}
+	]
+}

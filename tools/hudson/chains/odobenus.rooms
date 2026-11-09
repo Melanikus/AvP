@@ -1,0 +1,285 @@
+# Rooms of odobenus, read from the level file by a script. Nobody has walked them. This level was worked out the rooms as the file joins them.
+room Railing03
+room Object09
+room Object10
+room Garden04
+room oUTSIDE
+room OUTSIDE
+room oUTSIDE1
+room oUTSIDE04
+door DoorAirlok | lift
+door DoorLok2 | lift
+door DoorEight | proximity
+door DoorTrans | proximity
+door DoorThin01 | proximity
+door DoorThin02 | proximity
+door DoorThin07 | proximity
+door DoorThin03 | proximity
+door DoorCorr02 | lift
+door DoorThin09 | proximity
+door DoorThin11 | proximity
+door DoorGarden | proximity
+door DoorFlat | proximity
+door Door | lift
+door DoorThin13 | proximity
+door DoorThin15 | proximity
+door Door03 | proximity
+door DoorGard01 | proximity
+door DoorFinal | proximity
+door Doorrr | lift
+join Docktube | Docktube01 | file
+join Docktube01 | Docktube02 | file
+join Docktube02 | Terminus | file
+join DoorAirlok | Airlock | file
+join DoorAirlok | Terminus | file
+join Airlock | DoorLok2 | file
+join DoorLok2 | Corridor | file
+join Railing02 | Secure03B | file
+join Corridor | Secure01 | file
+join Secure01 | Secure02 | file
+join Secure01 | Duct23 | file
+join Secure02 | Secure03 | file
+join Secure02 | Secure03B | file
+join Secure03 | Gallery02 | file
+join Secure03 | Secure03B | file
+join Gallery02 | Gallery05 | file
+join Terminus01 | Gallery05 | file
+join Terminus01 | DoorTrans | file
+join DoorEight | Corridor03 | file
+join DoorEight | Object08 | file
+join DoorTrans | Object08 | file
+join Corridor01 | Corridor02 | file
+join Corridor01 | Endcap | file
+join Corridor01 | Doorrr | file
+join Corridor02 | Corridor05 | file
+join Corridor02 | Duct42 | file
+join Corridor03 | Corridor05 | file
+join Endcap | Doorsmall1 | file
+join Endcap | Doorsmall2 | file
+join Doorsmall1 | StairsA | file
+join Doorsmall2 | Corridor07 | file
+join Corridor07 | View03 | file
+join Corridor07 | View04 | file
+join Corridor07 | View02 | file
+join View01 | View02 | file
+join View01 | View04 | file
+join View02 | View03 | file
+join View03 | Duct24 | file
+join Stairs | DoorCorr | file
+join Stairs | StairsA | file
+join LowCorr | LowCorr2 | file
+join LowCorr | DoorThin07 | file
+join LowCorr | DoorCorr | file
+join LowCorr | DoorThin01 | file
+join LowCorr2 | DoorCorr01 | file
+join LowCorr2 | DoorThin03 | file
+join LowCorr2 | DoorThin02 | file
+join LowCorr2 | Duct30 | file
+join DoorCorr01 | Cubicle13 | file
+join DoorThin01 | Cubicle1 | file
+join DoorThin02 | Cubicle03 | file
+join DoorThin05 | Cubicle1 | file
+join DoorThin05 | Cubicle01 | file
+join DoorThin06 | Cubicle03 | file
+join DoorThin06 | Cubicle | file
+join DoorThin07 | Cubicle05 | file
+join DoorThin08 | Cubicle05 | file
+join DoorThin08 | Cubicle10 | file
+join DoorThin03 | Cubicle07 | file
+join DoorThin04 | Cubicle07 | file
+join DoorThin04 | Cubicle12 | file
+join Cubicle13 | LowCorr01 | file
+join Cubicle13 | Object04 | file
+join Cubicle13 | Duct36 | file
+join DoorCorr02 | Object04 | file
+join DoorCorr02 | T-Junct | file
+join LowCorr01 | DoorThin09 | file
+join LowCorr01 | Cubicle16 | file
+join DoorThin09 | Cubicle14 | file
+join DoorThin10 | Cubicle14 | file
+join DoorThin10 | Cubicle08 | file
+join Cubicle16 | LowCorr02 | file
+join LowCorr02 | DoorThin11 | file
+join LowCorr02 | Cubicle18 | file
+join DoorThin11 | Cubicle17 | file
+join DoorThin12 | Cubicle17 | file
+join DoorThin12 | Cubicle06 | file
+join Cubicle18 | Door | file
+join Aaaaa | FuelLow01 | file
+join Aaaaa | FuelLow | file
+join Aaaaa | GardenLo02 | file
+join Aaaaa | Stairs01A | file
+join GardenAnte | GardenLo01 | file
+join GardenAnte | GardenLo02 | file
+join Corridor06 | DomeTop08 | file
+join Corridor06 | FuelLowA | file
+join Corridor04 | pASS04 | file
+join Stairs03 | FuelLow | file
+join Stairs01 | DoorLift | file
+join Stairs01 | Stairs02 | file
+join FuelLow | FuelLow01 | file
+join FuelLow | DoorCorr03 | file
+join FuelLow | GardenLo04 | file
+join GardenLow | GardenLo01 | file
+join GardenLow | DoorFlat | file
+join GardenLo01 | GardenLo02 | file
+join DoorCorr03 | pASS | file
+join GardenLo04 | FuelLowA | file
+join DoorLift | Stairs01A | file
+join Stairs5 | Stairs02 | file
+join Stairs5 | Stairs05 | file
+join Stairs05 | Object02 | file
+join Garden09 | Garden11 | file
+join Garden09 | Garden10 | file
+join Garden09 | Garden14 | file
+join Garden09 | Garden13 | file
+join Garden09 | gardenn | file
+join Garden09 | Switch03 | file
+join DoorGarden | Switch03 | file
+join DoorGarden | Switch05 | file
+join DoorFlat | Switch07 | file
+join Object01 | Door | file
+join Object01 | Loos01 | file
+join Object01 | LowCorr03 | file
+join Refectory2 | Refectory | file
+join Refectory2 | Duct18 | file
+join Loos | Loo1 | file
+join Loos | Loos01 | file
+join Loos | Loo01 | file
+join Loos | Shower02 | file
+join Loos | Duct34 | file
+join Loo02 | Loos01 | file
+join Shower | Shower01 | file
+join Shower01 | Shower02 | file
+join Bend | T-Junct | file
+join Bend | Corridor3 | file
+join T-Junct | Access01 | file
+join Corridor08 | Corridor3 | file
+join Corridor08 | Refectory | file
+join LowCorr03 | DoorThin13 | file
+join LowCorr03 | LowCorr04 | file
+join LowCorr03 | Duct38 | file
+join DoorThin13 | Cubicle09 | file
+join DoorThin14 | Cubicle09 | file
+join DoorThin14 | Cubicle02 | file
+join LowCorr04 | DoorThin15 | file
+join LowCorr04 | Access03 | file
+join DoorThin15 | Cubicle11 | file
+join DoorThin16 | Cubicle11 | file
+join DoorThin16 | Cubicle04 | file
+join Access01 | Door01 | file
+join Door01 | DomeTop05 | file
+join Access03 | Door02 | file
+join Door02 | DomeTop05 | file
+join Dome | DomeTop05 | file
+join Door03 | DomeTop05 | file
+join Door03 | DomeTop06 | file
+join DomeTop | DomeTop01 | file
+join DomeTop | DomeTop03 | file
+join DomeTop | Duct25 | file
+join DomeTop01 | DomeTop03 | file
+join DomeTop03 | DomeTop04 | file
+join DomeTop03 | Dor | file
+join DomeTop04 | DomeTop05 | file
+join DomeTop06 | DomeTop07 | file
+join DomeTop07 | DomeTop08 | file
+join Garden10 | gardenn | file
+join Garden12 | gardenn | file
+join Garden15 | gardenn | file
+join Stairs04 | pASS01 | file
+join Stairs04 | pASS02 | file
+join Stairs04 | pASS03 | file
+join Stairs04 | Stairs04A | file
+join Object02 | Stairs04A | file
+join bEND3 | pASS | file
+join bEND3 | pASS01 | file
+join pASS01 | pASS02 | file
+join pASS02 | pASS03 | file
+join pASS03 | pASS04 | file
+join gardenn | DoorGard01 | file
+join DoorGard01 | tip | file
+join DoorFinal | Object12 | file
+join DoorFinal | tip | file
+join Switch05 | Switch07 | file
+join Controll | Controll2 | file
+join Controll | Display | file
+join Controll2 | Duct41 | file
+join Controll2 | Room01 | file
+join Controll2 | Dor | file
+join Duct01 | Duct02 | file
+join Duct01 | Ducts | file
+join Duct02 | Duct11 | file
+join Duct02 | Duct16 | file
+join Duct02 | Duct03 | file
+join Duct03 | Duct68 | file
+join Duct04 | Duct05 | file
+join Duct04 | Duct22 | file
+join Duct05 | Duct18 | file
+join Duct06 | Duct07 | file
+join Duct06 | Duct61 | file
+join Duct06 | Duct40 | file
+join Duct07 | Duct08 | file
+join Duct08 | Duct09 | file
+join Duct09 | Duct29 | file
+join Duct09 | Duct10 | file
+join Duct10 | Duct11 | file
+join Duct12 | Duct13 | file
+join Duct12 | Duct20 | file
+join Duct13 | Duct14 | file
+join Duct14 | Duct15 | file
+join Duct15 | Duct16 | file
+join Duct19 | Duct23 | file
+join Duct19 | Duct47 | file
+join Duct20 | Duct21 | file
+join Duct21 | Duct22 | file
+join Duct24 | Duct54 | file
+join Duct25 | Duct27 | file
+join Duct26 | Duct27 | file
+join Duct26 | Duct28 | file
+join Duct28 | Duct29 | file
+join Duct30 | Duct62 | file
+join Duct34 | Duct35 | file
+join Duct35 | Duct43 | file
+join Duct36 | Duct37 | file
+join Duct37 | Duct46 | file
+join Duct38 | Duct39 | file
+join Duct39 | Duct40 | file
+join Duct41 | Ducts | file
+join Duct42 | Duct50 | file
+join Duct43 | Duct58 | file
+join Duct45 | Duct68 | file
+join Duct45 | Room01 | file
+join Duct46 | Duct64 | file
+join Duct47 | Duct48 | file
+join Duct48 | Duct49 | file
+join Duct49 | Duct50 | file
+join Duct50 | Duct51 | file
+join Duct51 | Duct52 | file
+join Duct52 | Duct55 | file
+join Duct52 | Duct56 | file
+join Duct53 | Duct54 | file
+join Duct53 | Duct62 | file
+join Duct53 | Duct55 | file
+join Duct56 | Duct57 | file
+join Duct57 | Duct58 | file
+join Duct58 | Duct59 | file
+join Duct59 | Duct60 | file
+join Duct60 | Duct61 | file
+join Duct62 | Duct63 | file
+join Duct63 | Duct65 | file
+join Duct64 | Duct65 | file
+join Duct65 | Duct69 | file
+join Duct66 | Ducts01 | file
+join Duct66 | Duct67 | file
+join Duct67 | Duct68 | file
+join Duct67 | Duct69 | file
+join Room01 | DoorThick | file
+join DomeRoom | DoorThick | file
+join DomeRoom | Lshape02 | file
+join DomeRoom | UpCorr | file
+join DomeRoom | Security | file
+join Doorrr | UpCorr | file
+join Ducts01 | Ducts70 | file
+join Ducts70 | Lshape02 | file
+join Lshape01 | Lshape02 | file
+join Lshape01 | Lshape1 | file

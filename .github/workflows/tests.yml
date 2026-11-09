@@ -45,6 +45,17 @@ jobs:
         with:
           ports: dxsdk-d3dx enet
 
+      # net_relay_test reads the relay's test vectors, a file the relay's repository makes from its own code (AVPx-Dedicated-Server,
+      # test-vectors/relay-v1.json at 26d0580). The copy here has to be that file byte for byte: a copy changed to suit the game's code would
+      # prove nothing. tests/vectors/README.md says how to take a newer one. Added 2026-11-08 by Melanikus for the AvP port.
+      - name: Check the relay's test vectors are the relay's own
+        shell: pwsh
+        run: |
+          $expected = 'c982ae7d94fcf8e0c71fe69180c01beae6fbd9aa6b5b998c010c2d3fdc5dc2f7'
+          $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/relay-v1.json).Hash.ToLowerInvariant()
+          if ($found -ne $expected) { throw "tests/vectors/relay-v1.json isn't the relay's file: its sha256 is $found, not $expected" }
+          "tests/vectors/relay-v1.json is the relay's file at 26d0580"
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1

@@ -23,6 +23,9 @@
 //   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the words of the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the Join page's first row, "Find Games", and its help: the search asks this network and the online list of games, not only the
+//   local network that the 1999 "Find Local Servers" said
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -166,6 +169,8 @@ static char OurTextStrings[][200] =
 	"Lamp beams",
 	"Whether other marines' lamps show their beam in the air. Off, a lamp still lights what it points at.",
 	"This does nothing here: with Gouraud Rendering a lamp's beam is its only light, so it always shows.",
+	"Find Games",
+	"Press ENTER to look for games on this network and on the online list of games.",
 	"HUD size",
 	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };

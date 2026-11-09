@@ -1,0 +1,8 @@
+# level: furyall_a   end started by: kill
+# campaign: Alien 10
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens wastedoor
+where endroom
+press endswch01
+missing predator2 | a network game leaves out this predator
+end endmission
