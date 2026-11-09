@@ -216,6 +216,13 @@ extern PlayerDetails thisClientPlayer;
 // the game's own fixed sentences (NetRelay_WhyText, net_relay.h), never text from the network.
 const char *Net_RelayJoinFailedWhy();
 
+// Modified 2026-11-08 by Melanikus for the AvP port: the join through a relay waits up to about 26 s, in 50 ms slices. The hook is asked once
+// each slice. It keeps the game's window answering Windows, so it isn't marked "Not responding", and gives back false when the player has
+// given up (Esc): the join stops at once, and Net_RelayJoinFailedWhy says "the join was given up". The menus set it (Fourth's cold read,
+// finding 2). With none set, the wait goes on to its limit.
+typedef bool (*NetRelayJoinWaitHook)(void);
+void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook);
+
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
 // nothing is ever written past it. Only on the game's main thread, like the list of sessions.

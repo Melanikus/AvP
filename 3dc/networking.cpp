@@ -193,12 +193,14 @@ static bool relayLostSaid = false;             // the log has been told the room
 static uint32_t relayListedAt = 0;             // when the list was last given the game as it is now: once a second
 static uint32_t relayStrangersDropped = 0;     // packets to a host going through a relay, from anywhere but the relays
 static int relayJoinFailedWhy = kNetRelayFine; // why the last join through a relay failed
+static NetRelayJoinWaitHook relayJoinWaitHook = NULL;   // asked each slice of the join's wait (Net_SetRelayJoinWaitHook)
 
 uint32_t const kRelayListEveryMs = 1000;
 size_t const kRelayMostPacketBytes = 1500;     // the most a relay passes on (PROTOCOL.md, section 2)
 size_t const kRelayMostPacketsAWait = 16;      // the join's handshake reads at most this many packets each time it waits
 uint32_t const kRelayWaitMs = 50;              // and waits this long each time for one
 uint32_t const kRelayJoinMostMs = kNetRelayGiveUpAskingMs + kNetRelayWaitForReadyMs + 1000;   // the most a join's handshake can take
+size_t const kRelayJoinMostTurns = kRelayJoinMostMs / kRelayWaitMs + 100;   // and the most times it waits, so it ends even if the clock stood still
 int const kRelayMostHostMs = 9999;             // the most round trip the list takes (PROTOCOL.md, section 4)
 
 // One relay from the list, looked up: its address, from its name, at its control port. False for a name that gives no address, or a port
@@ -371,8 +373,9 @@ static bool RelayHostStart()
 	return true;
 }
 
-// No relay answered the echoes: the game is open on this network instead, as it would be with no relays at all
-static void RelayHostGiveUp()
+// No relay answered the echoes, or the room on the relay is gone: the game is open on this network instead, as it would be with no relays
+// at all, so a player can still join it here (Fourth's cold read, finding 4). why is the game's own fixed words.
+static void RelayHostGiveUp(const char *why)
 {
 	relayHosting = false;
 	relayPicking = false;
@@ -383,7 +386,7 @@ static void RelayHostGiveUp()
 		host->duplicatePeers = kMostConnectionsFromOneAddress;
 	}
 
-	Con_PrintError("net: no relay answered, so this game is open on this network only");
+	Con_PrintError(why);
 	OpenDiscoverySocket();
 }
 
@@ -411,7 +414,7 @@ static void RelayHostFrame()
 
 		if (best < 0)
 		{
-			RelayHostGiveUp();
+			RelayHostGiveUp("net: no relay answered, so this game is open on this network only");
 			return;
 		}
 
@@ -423,7 +426,8 @@ static void RelayHostFrame()
 		relayHostMs = ms < 1 ? 1 : (ms > static_cast<uint32_t>(kRelayMostHostMs) ? kRelayMostHostMs : static_cast<int>(ms));
 		relayHost.Start(relayAddress.port, now);
 		relayListedAt = now;
-		Con_PrintMessage(std::string("net: this game is opening through the relay in ") + relayRegion + ", " + std::to_string(relayHostMs) + " ms away");
+		// Fixed words: the region is checked, but it's the list's text, so it isn't written (Fourth's cold read, finding 3)
+		Con_PrintMessage("net: this game is opening through the nearest relay, " + std::to_string(relayHostMs) + " ms away");
 	}
 
 	relayHost.Tick(now);
@@ -461,7 +465,10 @@ static void RelayHostFrame()
 		if (relayRoomListed)
 		{
 			RelayList_HostRoomClosed();
+			relayRoomListed = false;
 		}
+
+		RelayHostGiveUp("net: this game is open on this network instead");
 	}
 }
 
@@ -515,8 +522,15 @@ static uint16_t RelayHandshake(const char *code)
 
 	static uint8_t packet[kRelayMostPacketBytes];
 
-	while (!relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs)
+	for (size_t turn = 0; turn < kRelayJoinMostTurns && !relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs; turn++)
 	{
+		// The window keeps answering, and the player can give up (the menu's hook)
+		if (relayJoinWaitHook && !relayJoinWaitHook())
+		{
+			relayJoinFailedWhy = kNetRelayGivenUp;
+			return 0;
+		}
+
 		RelaySendAll(host, relayJoiner, &relayAddress, 1);
 		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
 
@@ -562,6 +576,11 @@ static uint16_t RelayHandshake(const char *code)
 const char *Net_RelayJoinFailedWhy()
 {
 	return NetRelay_WhyText(relayJoinFailedWhy);
+}
+
+void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook)
+{
+	relayJoinWaitHook = hook;
 }
 
 // A join through a relay: the relay of the game's region, from the relays the list names, looked up, then its handshake (RelayHandshake).
@@ -628,6 +647,21 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	SESSION_DESC &entry = SessionData[NumberOfSessionsFound];
 	memset(&entry, 0, sizeof(entry));
 	entry.throughRelay = true;
+
+	// Its GUID, the same each time the page is set up again, so the page keeps its highlight on it (Fourth's cold read, finding 6): the
+	// region's letters summed into the first part (FNV-1a), "RL" and 1 in the next two, so it can't be a GUID a LAN game makes, and the code's
+	// 8 letters in the last
+	uint32_t regionSum = 2166136261u;
+
+	for (size_t i = 0; i < regionLetters; i++)
+	{
+		regionSum = (regionSum ^ static_cast<uint8_t>(region[i])) * 16777619u;
+	}
+
+	entry.Guid.Data1 = regionSum;
+	entry.Guid.Data2 = 0x524C;
+	entry.Guid.Data3 = 1;
+	memcpy(entry.Guid.Data4, code, kNetRelayCodeLetters);
 	memcpy(entry.relayCode, code, kNetRelayCodeLetters);
 	memcpy(entry.relayRegion, region, regionLetters);
 	entry.relayRegion[regionLetters] = 0;
