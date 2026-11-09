@@ -975,6 +975,31 @@ static void TestHostingThroughTheRelay()
 		"leaving tells the relay HOST_CLOSE");
 	Check(roomsUnlisted == unlistedBefore + 1, "and takes the game off the list");
 
+	// A room that's lost (no HOST_KEPT for 45 s): off the list, and open on this network instead (Fourth's cold read, finding 4)
+	Check(HostAGame() == NET_OK, "a game hosts through the relay again");
+	memcpy(back, lastDatagramSent.data(), sizeof(back));
+	back[5] = kNetRelayEchoBack;
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, back, sizeof(back));
+	theHost.intercept(&theHost, NULL);
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	NetRelay_Write(opened, bytes);
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, bytes, sizeof(bytes));
+	theHost.intercept(&theHost, NULL);
+	Net_ServiceNetwork();
+	int const openWhileOpen = socketsOpen;
+	int const unlistedWhileOpen = roomsUnlisted;
+	enetClock += kNetRelayKeptWithinMs;
+	Net_ServiceNetwork();
+	Check(roomsUnlisted == unlistedWhileOpen + 1 && socketsOpen == openWhileOpen + 1 && theHost.intercept == NULL && theHost.duplicatePeers == 4,
+		"with no HOST_KEPT for 45 s the room is lost: the game comes off the list, and is open on this network instead, as with no relay");
+	EndTheGame();
+	Check(roomsUnlisted == unlistedWhileOpen + 1, "and leaving after that doesn't take it off the list twice");
+
 	// A relay named, and nobody answering: open on this network instead
 	int const sentQuietly = datagramsSent;
 	int const openQuietly = socketsOpen;
@@ -994,6 +1019,8 @@ static void TestHostingThroughTheRelay()
 	Check(HostAGame() == NET_OK && datagramsSent == sentAfter && theHost.intercept == NULL && theHost.duplicatePeers == 4,
 		"with no relay named, hosting is as it always was: nothing goes to a relay, and 4 places from one address");
 	EndTheGame();
+
+	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "+ relayRegion"), "SOURCE: no line the game writes holds the list's region: the words are the game's own (Fourth's cold read, finding 3)");
 }
 
 // Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list goes on the list of sessions (Net_AddRelaySession), as
@@ -1050,6 +1077,18 @@ static void TestRelayGamesOnTheList()
 
 	Check(NumberOfSessionsFound == MAX_NO_OF_SESSIONS && added == MAX_NO_OF_SESSIONS - 3, "the list fills to its end");
 	Check(!Net_AddRelaySession(AGameOnTheList("ABCD2362")) && NumberOfSessionsFound == MAX_NO_OF_SESSIONS, "and nothing more goes on it");
+
+	// Each one's GUID, from its region and code: the same game the same each time, two games apart (Fourth's cold read, finding 6)
+	GUID const first = SessionData[0].Guid;
+	Check(first.Data2 == 0x524C && first.Data3 == 1 && memcmp(first.Data4, "ABCD2345", 8) == 0, "a relay game's GUID is its own kind, and holds its code");
+	Check(memcmp(&SessionData[0].Guid, &SessionData[1].Guid, sizeof(GUID)) != 0, "two relay games' GUIDs differ");
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	Check(memcmp(&SessionData[0].Guid, &first, sizeof(GUID)) == 0, "and the same game put on the list again gets the same GUID, so the page's highlight stays on it");
+	RelayListGame elsewhere = AGameOnTheList("ABCD2345");
+	strcpy(elsewhere.region, "paris");
+	Net_AddRelaySession(elsewhere);
+	Check(NumberOfSessionsFound == 2 && memcmp(&SessionData[1].Guid, &first, sizeof(GUID)) != 0, "a game with the same code on another region's relay is another game, with another GUID");
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
 }
@@ -1057,6 +1096,21 @@ static void TestRelayGamesOnTheList()
 // Modified 2026-11-08 by Melanikus for the AvP port: joining a game from the relays' list, through a scripted relay. The relay's answers
 // wait at the new host's socket before the join starts: JOIN_PORT from its control port, then READY from the joiner's port. Then each way it
 // fails: the relay saying no, the relay silent, and no relay for the game's region.
+// The menu's wait hook, as tests set it: how often it was asked, and whether it says to go on
+static int waitHookAsked = 0;
+
+static bool GiveUpAtOnce(void)
+{
+	waitHookAsked++;
+	return false;
+}
+
+static bool KeepWaiting(void)
+{
+	waitHookAsked++;
+	return true;
+}
+
 static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
 {
 	WaitingDatagram waiting;
@@ -1116,6 +1170,25 @@ static void TestJoiningThroughTheRelay()
 	AvP.Network = I_Peer;
 	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "the relay didn't answer") == 0,
 		"a silent relay: the join gives up, even with the clock standing still, and says the relay didn't answer");
+	EndTheGame();
+
+	// The player gives up: the menu's hook says so on the first slice, and the join stops at once
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	waitHookAsked = 0;
+	Net_SetRelayJoinWaitHook(GiveUpAtOnce);
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "the join was given up") == 0 && waitHookAsked == 1,
+		"the player giving up (Esc, through the menu's hook): the join stops on that slice, and says it was given up");
+	EndTheGame();
+	Net_SetRelayJoinWaitHook(KeepWaiting);
+	waitHookAsked = 0;
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && strcmp(Net_RelayJoinFailedWhy(), "the relay didn't answer") == 0 && waitHookAsked > 100,
+		"with a hook that keeps waiting, it's asked each slice, and the wait goes to its limit");
+	Net_SetRelayJoinWaitHook(NULL);
 	EndTheGame();
 
 	// No relay for its region

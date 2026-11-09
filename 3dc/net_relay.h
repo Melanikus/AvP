@@ -393,6 +393,7 @@ int const kNetRelayNoKeep = 7;                // the relay stopped answering the
 int const kNetRelayNoReady = 8;               // the host never said hello on the joiner's port in time
 int const kNetRelayClosed = 9;                // the host closed its room
 int const kNetRelayNoRelay = 10;              // no relay answered the echoes, or there's no relay for that game's region
+int const kNetRelayGivenUp = 11;              // the player gave up waiting for the join (the menu's wait hook, networking.h)
 
 inline const char *NetRelay_WhyText(int why)
 {
@@ -409,6 +410,7 @@ inline const char *NetRelay_WhyText(int why)
 		case kNetRelayNoReady: return "the game's host didn't answer through the relay";
 		case kNetRelayClosed: return "the room was closed";
 		case kNetRelayNoRelay: return "no relay could be reached";
+		case kNetRelayGivenUp: return "the join was given up";
 		default: return "no such reason";
 	}
 }
