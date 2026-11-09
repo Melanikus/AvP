@@ -142,7 +142,7 @@ jobs:
               $hash, $name = $line -split '  ', 2
               # Both lists were written by the build job, which ran the libraries' own build scripts, so each is read as hostile: each line
               # is a hash and a name inside the folder, with / between folders, and nothing that could lead outside it
-              if ($hash -cnotmatch '^[0-9a-f]{64}$' -or [string]::IsNullOrEmpty($name)) { throw "A line of the $folder's list isn't a hash and a name: $line" }
+              if ($hash -cnotmatch '^[0-9a-f]{64}\z' -or [string]::IsNullOrEmpty($name)) { throw "A line of the $folder's list isn't a hash and a name: $line" }
               if ([System.IO.Path]::IsPathRooted($name) -or $name.Contains(':') -or $name.Contains('\') -or @($name.Split('/') | Where-Object { $_ -in '', '.', '..' }).Count -gt 0) {
                 throw "The $folder's list names something outside it: $name"
               }

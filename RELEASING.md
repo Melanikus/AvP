@@ -114,7 +114,7 @@ can't do that, so it takes the libraries GitHub built, once, and checks them bef
 - A test build (Build workflow, artifact `avp-avpx_main`) has no zip hash of its own. Instead, Build records how the package's
   `SHA256SUMS.txt` was made ("Record how the package was built"), once a job that builds nothing has checked every file against it.
   `gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity
-  https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners`
+  https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-ref refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners`
   asks GitHub whether that list came out of Build, on avpx_main, at that commit (all 40 digits), on GitHub's own machines. Without
   `--source-digest`, any older build of avpx_main would pass too. Then every file must have the hash the list gives it, with none
   missing and none extra, and `BUILD.txt` must say `avpx_main` and that commit. `tools/install-build.ps1` does all of it, with the

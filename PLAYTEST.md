@@ -46,7 +46,7 @@ these checks itself. When you've been told which commit to test, give it. To che
 empty folder. There is no zip hash to compare, so step 1 is skipped. Step 2 is made on the list of hashes inside it instead, with
 the commit you expect (all 40 digits) in place of `<commit>`:
 ```
-gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners
+gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-ref refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners
 ```
 Without `--source-digest`, any older build of avpx_main would pass too. Then step 3, in that folder. Also check that it holds no file
 the list doesn't name: a release's record covers its whole zip, but here only the list is recorded. Last, `BUILD.txt` (which is on

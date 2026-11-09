@@ -94,7 +94,7 @@ try {
     # records that only once a job that builds nothing has checked every file against the list. --cert-identity is the workflow
     # and branch exactly, where --signer-workflow would also let through a workflow whose name only starts the same.
     gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners
-    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed." }
+    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed. (If gh said it doesn't know a flag: this was written with gh 2.103.3, and yours says $(gh --version | Select-Object -First 1). Update gh first.)" }
     "GitHub vouches for the list: $repo's Build workflow made it, from commit $($run.headSha)."
 
     $expected = @{}
