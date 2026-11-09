@@ -8775,6 +8775,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a TCP socket only bound is a finding",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a bound TCP socket is fine whatever its far end",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$noAddress = '^(0\\.0\\.0\\.0|::)$'",
+					"to": "$noAddress = '.*'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -CheckTheWatch leaves out server #14's bound socket",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "@('tcp', 'Bound', '::', '::', $false), ",
+					"to": ""
+				}
+			]
 		}
 	]
 }

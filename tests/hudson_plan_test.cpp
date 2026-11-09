@@ -1774,8 +1774,11 @@ static void TestTourAndSharedMachine()
 			"every UDP and TCP socket goes through the watch's one rule");
 		Check(Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen')\n    {\n        return $remoteAddress -notmatch $thisMachine\n    }\n\n    return $localAddress -notmatch $thisMachine"),
 			"a TCP connection the game made is judged by its far end, and UDP and a TCP listener by their own address (server #14: the relays' list's HTTPS shows :: while it's connecting)");
-		Check(Has(pairScript, "@('tcp', 'SynSent', '::', '::1', $false)") && Has(pairScript, "@('udp', '', '0.0.0.0', '', $true)") && Has(pairScript, "@('tcp', 'Listen', '::', '::', $true)") && Has(pairScript, "@('tcp', 'SynSent', '0.0.0.0', '203.0.113.7', $true)"),
-			"and -CheckTheWatch tries the rule on both sides: a connection to this machine is fine, and a UDP or TCP socket open to every network, or a connection to another machine, is a finding");
+		Check(Has(pairScript, "$noAddress = '^(0\\.0\\.0\\.0|::)$'") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)\n    {\n        return $false\n    }"),
+			"and a TCP socket only bound, with no far end yet, is fine, because it can't take a connection (server #14's second run: the same HTTPS socket, the moment before it connects)");
+		Check(Has(pairScript, "@('tcp', 'SynSent', '::', '::1', $false)") && Has(pairScript, "@('tcp', 'Bound', '::', '::', $false)") && Has(pairScript, "@('udp', '', '0.0.0.0', '', $true)") && Has(pairScript, "@('tcp', 'Listen', '::', '::', $true)")
+			&& Has(pairScript, "@('tcp', 'SynSent', '0.0.0.0', '203.0.113.7', $true)") && Has(pairScript, "@('tcp', 'Bound', '::', '203.0.113.7', $true)"),
+			"and -CheckTheWatch tries the rule on both sides: a connection to this machine and a socket only bound are fine, and a UDP or TCP socket open to every network, or a connection to another machine, is a finding");
 		Check(Has(pairScript, "exit 110") && Has(pairScript, "Stop-TheGames\n    $lines += @($offTheMachine"), "and ends both if anything is off this machine");
 		Check(Has(pairScript, "Get-Process -Name 'claude'"), "and won't start with nobody here");
 		Check(ComesBefore(pairScript, "$rulesBefore = @(Get-FirewallRulesForThese)", "$hostRun = Start-OneRun") && Has(pairScript, "$rulesAfter = @(Get-FirewallRulesForThese)"), "and compares the firewall's rules before and after");

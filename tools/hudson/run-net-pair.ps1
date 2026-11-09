@@ -87,11 +87,18 @@ function Stop-Here([string]$why)
 #  - UDP, the game's own network sockets: fine only on one of this machine's own addresses. One on 0.0.0.0 or :: hears every network the machine is on, so it's a finding.
 #  - TCP that is listening (waiting for others to connect to it): the same, because a listener on any other address could be reached from another machine.
 #  - TCP that isn't listening: a connection this game made itself, which here is the relays' list, over HTTPS to localhost. While it's still connecting, Windows shows its own end as :: or 0.0.0.0, because it hasn't
-#    been given an address yet. That isn't a listener and hears nothing, so what decides is the far end, the machine it's connecting to: it has to be this one. (A socket bound to a port but neither listening nor
-#    connecting shows its far end as 0.0.0.0, so it's a finding too, which is the safe side.)
+#    been given an address yet. That isn't a listener and hears nothing, so what decides is the far end, the machine it's connecting to: it has to be this one.
+#  - TCP that is only "Bound", with no far end (0.0.0.0 or ::): fine. Windows gives the connection a port a moment before it starts connecting, and the watch can look in that moment (server #14's second run,
+#    2026-11-09: "tcp Bound :::64861 to :::0"). A bound socket can't take a connection: only a listening one can, and one that went on to listen would show as listening the next second.
 function Test-SocketIsOffThisMachine([string]$protocol, [string]$state, [string]$localAddress, [string]$remoteAddress)
 {
     $thisMachine = '^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
+    $noAddress = '^(0\.0\.0\.0|::)$'
+
+    if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)
+    {
+        return $false
+    }
 
     if ($protocol -eq 'tcp' -and $state -ne 'Listen')
     {
@@ -103,7 +110,8 @@ function Test-SocketIsOffThisMachine([string]$protocol, [string]$state, [string]
 
 if ($CheckTheWatch)
 {
-    # Each: what the socket is, and whether the watch must call it a finding. The first of the TCP ones that connect is what ended server #14's run on 2026-11-09: the game connecting to the relays' list.
+    # Each: what the socket is, and whether the watch must call it a finding. The first of the TCP ones that connect, and the first Bound one, are what ended server #14's first two runs on 2026-11-09: the game
+    # connecting to the relays' list.
     $cases = @(
         @('udp', '', '127.0.0.1', '', $false), @('udp', '', '127.5.6.7', '', $false), @('udp', '', '::1', '', $false), @('udp', '', '::ffff:127.0.0.1', '', $false),
         @('udp', '', '0.0.0.0', '', $true), @('udp', '', '::', '', $true), @('udp', '', '192.168.1.5', '', $true), @('udp', '', '::10', '', $true), @('udp', '', '1127.0.0.1', '', $true), @('udp', '', '127.0.0.1.5', '', $true),
@@ -111,8 +119,10 @@ if ($CheckTheWatch)
         @('tcp', 'Listen', '0.0.0.0', '0.0.0.0', $true), @('tcp', 'Listen', '::', '::', $true), @('tcp', 'Listen', '192.168.1.5', '0.0.0.0', $true),
         @('tcp', 'SynSent', '::', '::1', $false), @('tcp', 'SynSent', '0.0.0.0', '127.0.0.1', $false), @('tcp', 'Established', '::1', '::1', $false), @('tcp', 'Established', '127.0.0.1', '127.0.0.1', $false),
         @('tcp', 'TimeWait', '::1', '::1', $false), @('tcp', 'Established', '::ffff:127.0.0.1', '::ffff:127.0.0.1', $false),
-        @('tcp', 'SynSent', '0.0.0.0', '203.0.113.7', $true), @('tcp', 'SynSent', '::', '2001:db8::7', $true), @('tcp', 'Established', '192.168.1.5', '203.0.113.7', $true), @('tcp', 'Bound', '0.0.0.0', '0.0.0.0', $true),
-        @('tcp', 'Established', '127.0.0.1', '::10', $true)
+        @('tcp', 'Bound', '::', '::', $false), @('tcp', 'Bound', '0.0.0.0', '0.0.0.0', $false), @('tcp', 'Bound', '::1', '::', $false),
+        @('tcp', 'SynSent', '0.0.0.0', '203.0.113.7', $true), @('tcp', 'SynSent', '::', '2001:db8::7', $true), @('tcp', 'Established', '192.168.1.5', '203.0.113.7', $true),
+        @('tcp', 'Established', '127.0.0.1', '::10', $true), @('tcp', 'Bound', '::', '203.0.113.7', $true), @('tcp', 'SynSent', '::', '::', $true), @('tcp', 'Established', '::', '::', $true),
+        @('tcp', 'Bound', '::', '::10', $true)
     )
     $wrong = @()
     foreach ($case in $cases)
