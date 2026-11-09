@@ -35,26 +35,47 @@ namespace
 void RelayAuto_ReadCommandLine(const char *commandLine, bool developer)
 {
 	mode = RelayAuto_FromCommandLine(commandLine, developer);
-	bool const host = CommandLineHasWord(commandLine, "-relayhost");
+	bool const host = CommandLineHasWord(commandLine, "-relayhost") || CommandLineHasWord(commandLine, "-askjoiners");
 	bool const join = CommandLineHasWord(commandLine, "-relayjoin");
 
-	if (mode == kRelayAutoHost)
+	// Modified 2026-11-09 by Melanikus for the AvP port: the lines say what the words do, and no more. A host copy hosts by itself as the
+	// menus start (menus.cpp, HostByItselfThroughTheRelay), or in a Hudson run, as Hudson starts. A joiner copy joins by itself only in a
+	// Hudson run; otherwise someone joins from the games page. (A copy started by hand with -relayhost once sat at the menus while its log
+	// said it hosted: it didn't host by itself then.)
+	if (mode == kRelayAutoHost && RelayAuto_AsksJoiners(commandLine, developer))
 	{
-		LogString("relay auto: this copy hosts through the relay (-dev -relayhost), and as a test's host it lets every joiner in without asking");
+		LogString("relay auto: -dev -askjoiners: this copy hosts by itself through the relay, and asks the person at it about each joiner");
+	}
+	else if (mode == kRelayAutoHost)
+	{
+		LogString("relay auto: -dev -relayhost: this copy hosts by itself through the relay, and lets every joiner in without asking");
 		Net_LetEveryJoinerIn(true);
 	}
 	else if (mode == kRelayAutoJoin)
 	{
-		LogString("relay auto: this copy joins the first game of its version on the relays' list (-dev -relayjoin)");
+		LogString("relay auto: -dev -relayjoin: a Hudson run joins the first game of its version on the relays' list by itself; otherwise join from the games page");
 	}
 	else if ((host || join) && !developer)
 	{
-		LogString("relay auto: -relayhost and -relayjoin are for tests, and need -dev, so this copy does neither");
+		LogString("relay auto: -relayhost, -askjoiners and -relayjoin are for tests, and need -dev, so this copy does none of them");
 	}
 	else if (host && join)
 	{
-		LogString("relay auto: -relayhost and -relayjoin can't both be done, so this copy does neither");
+		LogString("relay auto: hosting (-relayhost or -askjoiners) and joining (-relayjoin) can't both be done, so this copy does neither");
 	}
+}
+
+bool RelayAuto_HostsByItselfNow(void)
+{
+	static bool hosted = false;
+
+	if (mode != kRelayAutoHost || hosted)
+	{
+		return false;
+	}
+
+	hosted = true;
+	return true;
 }
 
 int RelayAuto_Mode(void)
