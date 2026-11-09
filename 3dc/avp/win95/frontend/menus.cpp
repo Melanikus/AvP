@@ -53,6 +53,7 @@
 //   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
 //   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
 //   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, only with -dev
+//   a host asked to let someone in through a relay sees the check code under the asking line (CRYPTO.md section 8)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
 //   Bobblen's avp-forever (ec6446f), rewritten
@@ -1191,6 +1192,7 @@ extern int InGameMenusAreRunning(void)
 static AVPMENU_ELEMENT answerRows[2 + 31 + 1];
 static bool answerRowsShown = false;
 static char letInRow[96], sayNoRow[96], askingLine[96];
+static char checkCodeLine[48];   // the request's check code, once the joiner's handshake through the relay is done; "" before or without one
 
 static bool ThePageAnswersRequests(enum AVPMENU_ID page)
 {
@@ -1223,6 +1225,7 @@ static void UpdateTheAnswerRows(void)
 	OnlineScreens_LetInWords(name, letInRow, sizeof(letInRow));
 	OnlineScreens_SayNoWords(name, sayNoRow, sizeof(sayNoRow));
 	OnlineScreens_AskingWords(name, seconds, askingLine, sizeof(askingLine));
+	OnlineHost_AskCheckCode(checkCodeLine, sizeof(checkCodeLine));
 
 	// Each row keeps how bright it was last frame, so the copy made again doesn't flicker
 	int const room = (int)(sizeof(answerRows) / sizeof(answerRows[0]));
@@ -2214,6 +2217,14 @@ static void RenderMenu(void)
 	if (answerRowsShown && AvPMenus.MenuElements == answerRows)
 	{
 		RenderSmallMenuText(askingLine, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+
+		// And, through a relay, the check code for the two players to read to each other (CRYPTO.md section 8)
+		if (checkCodeLine[0])
+		{
+			RenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)), MENU_CENTREX, 74, ONE_FIXED / 2,
+				AVPMENUFORMAT_CENTREJUSTIFIED);
+		}
 	}
 
 	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes
