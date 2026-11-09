@@ -164,8 +164,18 @@ static void NoneOf(std::string const &code, char const *file, char const *const 
 		NoneOf(code, file, names, sizeof(names) / sizeof(names[0])); \
 	} while (0)
 
+// AudioStream's two functions the game never calls, and the count of samples written that only one of them read (the beta.0 train)
+static void AudioStreamDeadCode()
+{
+	std::string const stream = Code("3dc/avp/win95/openal_stream.cpp", "uint64_t AudioStream::GetNumSamplesPlayed()");
+	NONE_OF(stream, "openal_stream.cpp", "GetNumSamplesWritten", "GetWritableBufferSize", "_totalSamplesWritten");
+	std::string const streaming = Code("3dc/AudioStreaming.h", "uint64_t GetNumSamplesPlayed();");
+	NONE_OF(streaming, "AudioStreaming.h", "GetNumSamplesWritten", "GetWritableBufferSize", "_totalSamplesWritten");
+}
+
 int main()
 {
+	AudioStreamDeadCode();
 	printf("dead_code_test: code that could never run stays out (#135)\n");
 
 	// The xenoborg morph room

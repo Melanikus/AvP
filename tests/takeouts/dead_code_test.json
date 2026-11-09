@@ -254,6 +254,16 @@
 					"to": "static char const *const kOldName = \"// not a comment: UpdateWeaponShape\";\n\nvoid GetHierarchicalWeapon(char *riffname"
 				}
 			]
+		},
+		{
+			"name": "AudioStream gets back a function nothing calls",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "uint64_t AudioStream::GetNumSamplesPlayed()\n{\n",
+					"to": "uint32_t AudioStream::GetWritableBufferSize()\n{\n\treturn _bufferSize * CountFreeBuffers();\n}\n\nuint64_t AudioStream::GetNumSamplesPlayed()\n{\n"
+				}
+			]
 		}
 	]
 }

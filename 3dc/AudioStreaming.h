@@ -30,6 +30,8 @@
 //   an OpenAL stream's list of free buffers is only ever looked at with its lock held, and what its own thread and its user both
 //   read is kept so that both can read it at once safely. Its code is in 3dc/avp/win95/openal_stream.cpp. GetBytesWritten, which
 //   was never written or used, is gone
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   GetNumSamplesWritten and GetWritableBufferSize, which the game never calls, are gone, with the count of samples written
 
 #ifndef _AudioStreaming_h_
 #define _AudioStreaming_h_
@@ -64,7 +66,6 @@ class AudioStream
 		uint32_t	_nChannels;
 		uint32_t	_rate;
 		uint32_t	_bytesPerSample;
-		std::atomic<uint64_t> _totalSamplesWritten;
 		ALuint		*_buffers;
 		ALenum		_format;
 		uint8_t		*_dataBuffers;
@@ -86,8 +87,6 @@ class AudioStream
 		uint32_t WriteData(uint8_t *audioData, uint32_t size);
 		uint32_t GetNumFreeBuffers();
 		uint64_t GetNumSamplesPlayed();
-		uint64_t GetNumSamplesWritten();
-		uint32_t GetWritableBufferSize();
 		uint32_t GetBufferSize();
 		void WaitForFreeBuffer();
 
@@ -148,7 +147,6 @@ class AudioStream
 		uint32_t	_nChannels;
 		uint32_t	_rate;
 		uint32_t	_bytesPerSample;
-		uint64_t	_totalSamplesWritten;
 		bool		_isPaused;
 		uint32_t    _volume;
 		uint8_t	   *_buffers;
@@ -166,8 +164,6 @@ class AudioStream
 		uint32_t WriteData(uint8_t *audioData, uint32_t size);
 		uint32_t GetNumFreeBuffers();
 		uint64_t GetNumSamplesPlayed();
-		uint64_t GetNumSamplesWritten();
-		uint32_t GetWritableBufferSize();
 		uint32_t GetBufferSize();
 		void WaitForFreeBuffer();
 
