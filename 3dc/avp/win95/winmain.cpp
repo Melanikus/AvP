@@ -41,6 +41,8 @@
 //   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
 //   -dev -findgames: at the first menus, straight to the page of games found, the player's own way (online_screens_page.h)
 //   the tag on the top right is off until it's asked for: -dev -statuson starts with it on; -statusoff still means off, and says so
+//   the log lines for -dev and for a developer switch asked for without it start "developer tools:", not "shadows:", as the switches
+//   aren't all about the shadows, and the comment over them says what -dev turns on now; G is the shoulder lamp, not a shadow key (#122)
 
 #include "3dc.h"
 #include "window_slot.h"
@@ -348,13 +350,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	{
-		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, L, H, F7 and F8, the shoot tool, the flicker
-		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		// -dev turns on the developer tools. A tester has no need of them, and shouldn't be able to reach them by accident, so without it
+		// they're off. They are:
+		// - the shadows' tools: the tag; J, or the key chosen for it on the rendering page, F7 and F8; the shoot tool's F9, F10 and F5; the
+		//   flicker number and the full report (d3d_render.cpp, where DevMode is);
+		// - every switch below that's read through devSwitch or devNumber: Hudson's -hudson, and the shadows' and the still polygons' alike;
+		// - the test words that check it where they're read: -relayhost and -relayjoin (relay_auto.h), the relay list's own settings
+		//   (relay_list.cpp), -onlinescreens, -findgames, -windowed and -secondcopy.
+		// Their log lines start "developer tools:", because they aren't all about the shadows (#122).
 		extern int DevMode;
 		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
 		if (DevMode)
 		{
-			LogString("shadows: the developer tools are on (-dev)");
+			LogString("developer tools: on (-dev)");
 		}
 
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
@@ -401,7 +409,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 			if (!DevMode)
 			{
-				LogString(std::string("shadows: ") + name + " needs -dev, so it's off");
+				LogString(std::string("developer tools: ") + name + " needs -dev, so it's off");
 			}
 			return DevMode != 0;
 		};

@@ -503,7 +503,7 @@ static void TheRealGame()
 		Check(!readWithoutDev(name), std::string(name) + " has no way round that");
 	}
 
-	Check(Has(switches, "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");"), "asking without -dev says why it's off");
+	Check(Has(switches, "LogString(std::string(\"developer tools: \") + name + \" needs -dev, so it's off\");"), "asking without -dev says why it's off");
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
 	Check(Has(switches, "CommandLineHasWord(command_line, \"-shadowsoff\")") && Has(switches, "CommandLineHasWord(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
