@@ -1186,11 +1186,6 @@ void OnlineDemo_TurnOn(void)
 	demoIsOn = true;
 }
 
-bool OnlineDemo_IsOn(void)
-{
-	return demoIsOn;
-}
-
 // Every screen, in order. Each name is fixed words, for the log and the mark's line.
 static const char *const kDemoSteps[] =
 {

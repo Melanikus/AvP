@@ -3,9 +3,10 @@
 //
 // WHAT IT'S FOR: the games page shows names that come from other people's computers, so they're hostile (AVP Tao 3). This checks that a name
 // can only ever be drawn in the letters the game's fonts have, and never past its column. It checks the spinning tail stays in its box, turns
-// the right way at the same speed at any frame rate, and that each of its pieces is a shape the game can draw. And it checks the page keeps
-// the selected game while the list refreshes, that the Search box keeps only the letters the fonts have and finds names by them, that the
-// fetching screen names the server the game dialled, and that the waits count down right, even when the clock wraps round.
+// the right way at the same speed at any frame rate, and that each of its pieces is a shape the game can draw. And it checks a refresh puts
+// the games there now first and shows the ones that went as gone, that the Search box keeps only the letters the fonts have and finds names
+// by them, that the fetching screen names the server the game dialled, and that the waits count down right, even when the clock wraps
+// round.
 //
 // Nothing here uses the network or the game. Where the game draws the screens is checked by reading its source (the last part).
 
@@ -369,12 +370,6 @@ static void TestRows()
 
 	Check(OnlineScreens_MergeRows(NULL, 0, before, 3, merged, 2) == 2, "no more rows are written than there's room for, even of the games there now");
 	Check(OnlineScreens_MergeRows(NULL, 0, NULL, 0, merged, kOnlineMostRows) == 0, "no games before or now gives no rows");
-
-	OnlineRow rows[3] = { d, b, a };
-	Check(OnlineScreens_SelectAgain(b.key, 0, rows, 3) == 1, "the selection follows its game to its new row");
-	Check(OnlineScreens_SelectAgain(c.key, 7, rows, 3) == 2, "when its game has gone, it stays on the same row number, kept inside the rows");
-	Check(OnlineScreens_SelectAgain(c.key, -4, rows, 3) == 0, "and never above the first row");
-	Check(OnlineScreens_SelectAgain(a.key, 0, rows, 0) == -1, "with no rows, nothing is selected");
 }
 
 // ---- The Search box and the fetching screen

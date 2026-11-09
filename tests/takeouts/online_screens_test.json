@@ -235,26 +235,6 @@
 			]
 		},
 		{
-			"name": "the selection keeps its row number, not its game",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "if (OnlineScreens_SameGame(selected, rows[i].key))",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "the selection can be past the last row",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "return Between(selectedRow, 0, count - 1);",
-					"to": "return selectedRow;"
-				}
-			]
-		},
-		{
 			"name": "a game on this network gets a ping",
 			"changes": [
 				{

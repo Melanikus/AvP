@@ -16,11 +16,6 @@ void WindowSlot_TurnOn(bool secondCopy)
 	isTheSecondCopy = secondCopy;
 }
 
-bool WindowSlot_IsOn(void)
-{
-	return turnedOn;
-}
-
 bool WindowSlot_ForThisScreen(unsigned long windowStyle, const int *modeWidths, const int *modeHeights, int count, WindowSlot *slot)
 {
 	if (!turnedOn || !slot)

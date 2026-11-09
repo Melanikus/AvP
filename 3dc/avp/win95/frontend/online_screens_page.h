@@ -124,7 +124,6 @@ bool OnlinePage_GoStraightToFindGames(void);
 
 // winmain.cpp turns it on, only with -dev
 void OnlineDemo_TurnOn(void);
-bool OnlineDemo_IsOn(void);
 
 // The run itself, in frames of its own, from the main menus' start. F2 saves a picture of the screen (a mark, mark_key.h) and goes on to
 // the next. Esc ends it, and the menus go on as usual. It runs once.

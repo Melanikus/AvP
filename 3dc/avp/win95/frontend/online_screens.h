@@ -101,10 +101,6 @@ enum { kOnlineMostRows = 16 };
 // rows are written, the games there now first. Gives back how many there are.
 int OnlineScreens_MergeRows(const OnlineRow *before, int beforeCount, const OnlineRow *now, int nowCount, OnlineRow *out, int mostOut);
 
-// Where the selected game is after a refresh: the row with the same game, or, when it's gone, the same row number as before, kept inside
-// the rows there are. -1 when there are no rows.
-int OnlineScreens_SelectAgain(const OnlineGameKey &selected, int selectedRow, const OnlineRow *rows, int count);
-
 // ---- The list page's Search box (J2)
 
 // What the player types to show only some games. It's hostile all the same: only the letters the fonts have count (SafeName), and at

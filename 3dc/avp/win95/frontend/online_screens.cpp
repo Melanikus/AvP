@@ -272,24 +272,6 @@ int OnlineScreens_MergeRows(const OnlineRow *before, int beforeCount, const Onli
 	return made;
 }
 
-int OnlineScreens_SelectAgain(const OnlineGameKey &selected, int selectedRow, const OnlineRow *rows, int count)
-{
-	if (!rows || count <= 0)
-	{
-		return -1;
-	}
-
-	for (int i = 0; i < count; i++)
-	{
-		if (OnlineScreens_SameGame(selected, rows[i].key))
-		{
-			return i;
-		}
-	}
-
-	return Between(selectedRow, 0, count - 1);
-}
-
 // Copies words into a buffer of size characters, always ending it with a 0
 static void Put(char *words, size_t size, const char *what)
 {
