@@ -19,6 +19,7 @@
 #include "net_crypto.h"
 #include "net_pq.h"
 #include "net_handshake_a.h"
+#include "net_sealed_control.h"
 #include "net_v2_test_keys.h"
 #include "json_reader.h"
 
@@ -311,6 +312,193 @@ static void TheRefusals(const Vectors &v)
 	ACheck(NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, NULL, NULL) == kNetHandshakeABadState, "A1 with no draws: refused");
 }
 
+// ----- The sealed control channel (net_sealed_control.h), under the file's handshake A keys
+
+// The file's keys, as a finished handshake A gives them to the game
+static NetHandshakeAKeys FileKeys(const Vectors &v)
+{
+	NetHandshakeAKeys keys;
+	memset(&keys, 0, sizeof(keys));
+	memcpy(keys.split.initiatorToResponderKey, v.keyGameToRelay.data(), kNetCryptoAesKeyBytes);
+	memcpy(keys.split.responderToInitiatorKey, v.keyRelayToGame.data(), kNetCryptoAesKeyBytes);
+	memcpy(keys.split.initiatorToResponderIv, v.ivGameToRelay.data(), kNetCryptoNonceBytes);
+	memcpy(keys.split.responderToInitiatorIv, v.ivRelayToGame.data(), kNetCryptoNonceBytes);
+	memcpy(keys.sessionId, v.sessionId.data(), kNetHandshakeSessionIdBytes);
+	return keys;
+}
+
+// The relay's side of the same session: its two directions are the game's the other way round. Only for opening the game's own messages
+// as the relay does, which is how the file writes its refusals down.
+static void RelaySide(NetSealedControl *c)
+{
+	NetV2Direction const game = c->out;
+	c->out = c->in;
+	c->in = game;
+}
+
+static void TheSealedChannel(const JsonValue &all, const Vectors &v)
+{
+	if (v.keyGameToRelay.size() != kNetCryptoAesKeyBytes || v.ivGameToRelay.size() != kNetCryptoNonceBytes ||
+		v.sessionId.size() != kNetHandshakeSessionIdBytes)
+	{
+		ACheck(false, "the file's split and session id, for the sealed channel");
+		return;
+	}
+
+	NetHandshakeAKeys keys = FileKeys(v);
+	const JsonValue *const sealed = all.Member("sealed");
+	ACheck(sealed && sealed->kind == kJsonList && sealed->items.size() == 4, "the file's 4 sealed control messages are there");
+
+	if (!sealed || sealed->kind != kJsonList)
+	{
+		return;
+	}
+
+	uint32_t const now = 1000;
+	int right = 0;
+	Bytes firstGame;
+
+	for (const JsonValue &s : sealed->items)
+	{
+		const JsonValue *const from = TextMember(s, "from");
+		const JsonValue *const counter = s.Member("counter");
+		Bytes const message = HexOf(&s, "message"), want = HexOf(&s, "sealed");
+
+		if (!from || !counter || counter->kind != kJsonNumber || message.size() != kNetSealedControlMessageBytes || want.size() != kNetSealedControlBytes)
+		{
+			ACheck(false, "a sealed message in the file isn't the shape of one");
+			continue;
+		}
+
+		NetSealedControl c;
+		NetSealedControl_Start(&c, &keys, now);
+
+		if (from->text == "game")
+		{
+			// The game's: sealed here at the file's counter, to exactly the file's bytes
+			c.sent = counter->number;
+			uint8_t made[kNetSealedControlBytes];
+			bool const ok = NetSealedControl_Seal(&c, message.data(), made, now) && Same(want, made, sizeof(made));
+			right += ok ? 1 : 0;
+			ACheck(ok, "the game's sealed message at counter " + std::to_string(counter->number) + " is the relay's own bytes");
+
+			if (counter->number == 0)
+			{
+				firstGame = want;
+			}
+		}
+		else
+		{
+			// The relay's: opened here to exactly the file's message
+			uint8_t got[kNetSealedControlMessageBytes];
+			bool const ok = NetSealedControl_Open(&c, want.data(), want.size(), got, now) == kNetSealedOk && Same(message, got, sizeof(got));
+			right += ok ? 1 : 0;
+			ACheck(ok, "the relay's sealed message at counter " + std::to_string(counter->number) + " opens to the file's message");
+		}
+
+		NetSealedControl_Wipe(&c);
+	}
+
+	ACheck(right == 4, std::to_string(right) + " of 4 sealed messages, the one in epoch 1 among them, are the relay's");
+
+	if (firstGame.size() != kNetSealedControlBytes)
+	{
+		return;
+	}
+
+	// The file's refusals, as the relay refuses them: opening the game's first sealed message
+	NetSealedControl relay;
+	uint8_t got[kNetSealedControlMessageBytes];
+	NetSealedControl_Start(&relay, &keys, now);
+	RelaySide(&relay);
+	Bytes tagChanged = firstGame, messageChanged = firstGame;
+	tagChanged[100] ^= 0x01;
+	messageChanged[30] ^= 0x01;
+	ACheck(NetSealedControl_Open(&relay, firstGame.data(), kNetSealedControlBytes - 1, got, now) == kNetSealedWrongSize, "103 bytes: refused (1)");
+	ACheck(NetSealedControl_Open(&relay, tagChanged.data(), tagChanged.size(), got, now) == kNetSealedTag && AllZero(got, sizeof(got)),
+		"a bit of its tag changed: refused (8), nothing given");
+	ACheck(NetSealedControl_Open(&relay, messageChanged.data(), messageChanged.size(), got, now) == kNetSealedTag, "a bit of its message changed: refused (8)");
+	ACheck(NetSealedControl_Open(&relay, firstGame.data(), firstGame.size(), got, now) == kNetSealedOk, "as it is: opened");
+	ACheck(NetSealedControl_Open(&relay, firstGame.data(), firstGame.size(), got, now) == kNetSealedReplayed, "the same again: refused (9)");
+
+	// The file's own refused sealed messages, each by its number, as the relay opens them (refusal 9's after the first was taken)
+	const JsonValue *const refusals = all.Member("refusals");
+	int sealedRefusals = 0, sealedRight = 0;
+
+	for (size_t i = 0; refusals && refusals->kind == kJsonList && i < refusals->items.size(); i++)
+	{
+		const JsonValue &r = refusals->items[i];
+		const JsonValue *const number = r.Member("refusal");
+		Bytes const bytes = HexOf(&r, "bytes");
+
+		if (!number || number->kind != kJsonNumber || (bytes.size() != kNetSealedControlBytes && bytes.size() != kNetSealedControlBytes - 1))
+		{
+			continue;
+		}
+
+		sealedRefusals++;
+		NetSealedControl fresh;
+		NetSealedControl_Start(&fresh, &keys, now);
+		RelaySide(&fresh);
+
+		if (number->number == static_cast<uint64_t>(kNetSealedReplayed))
+		{
+			NetSealedControl_Open(&fresh, firstGame.data(), firstGame.size(), got, now);
+		}
+
+		int const why = NetSealedControl_Open(&fresh, bytes.data(), bytes.size(), got, now);
+		sealedRight += static_cast<uint64_t>(why) == number->number ? 1 : 0;
+		NetSealedControl_Wipe(&fresh);
+	}
+
+	ACheck(sealedRefusals == 4 && sealedRight == 4, std::to_string(sealedRight) + " of the file's " + std::to_string(sealedRefusals) +
+		" refused sealed messages (1, 8, 8, 9) are refused for their own number");
+
+	// What the file can't show
+	Bytes other = firstGame;
+	other[8] ^= 0x01;
+	ACheck(NetSealedControl_Open(&relay, other.data(), other.size(), got, now) == kNetSealedNotOurs, "another session's id: refused as not ours");
+	other = firstGame;
+	other[6] = 1;
+	ACheck(NetSealedControl_Open(&relay, other.data(), other.size(), got, now) == kNetSealedWrongShape, "byte 6 not 0: refused (2)");
+	other = firstGame;
+	other[5] = kNetV2KindA2;
+	ACheck(NetSealedControl_Open(&relay, other.data(), other.size(), got, now) == kNetSealedWrongShape, "another kind: refused (2)");
+	other = firstGame;
+	other[20] = 1;   // counter 2^32
+	ACheck(NetSealedControl_Open(&relay, other.data(), other.size(), got, now) == kNetSealedReplayed, "a counter of 2^32, past a session's most: refused (9)");
+
+	// 65,536 failed tags end the session; then even a good one is refused
+	NetSealedControl worn;
+	NetSealedControl_Start(&worn, &keys, now);
+	RelaySide(&worn);
+	int failed = 0;
+
+	for (uint64_t i = 0; i < kNetSealedControlMostFailedTags; i++)
+	{
+		failed += NetSealedControl_Open(&worn, tagChanged.data(), tagChanged.size(), got, now) == kNetSealedTag ? 1 : 0;
+	}
+
+	ACheck(failed == 65536 && NetSealedControl_Open(&worn, firstGame.data(), firstGame.size(), got, now) == kNetSealedOver,
+		"after 65,536 failed tags the session is over (16), and a good message is refused too");
+
+	// 24 hours end it, by the clock's difference, past the clock's own wrap
+	NetSealedControl old;
+	NetSealedControl_Start(&old, &keys, 0xFFFFFF00u);
+	uint8_t made[kNetSealedControlBytes];
+	uint8_t const message[kNetSealedControlMessageBytes] = { 1 };
+	ACheck(NetSealedControl_Seal(&old, message, made, 0xFFFFFF00u + kNetSealedControlMostMs - 1), "a millisecond before 24 hours, across the clock's wrap: sealed");
+	ACheck(!NetSealedControl_Seal(&old, message, made, 0xFFFFFF00u + kNetSealedControlMostMs) && AllZero(made, sizeof(made)),
+		"at 24 hours: nothing sealed, and the session over");
+	ACheck(!NetSealedControl_Seal(&old, message, made, 0xFFFFFF00u), "and over for good, whatever the clock says after");
+
+	NetSealedControl_Wipe(&relay);
+	NetSealedControl_Wipe(&worn);
+	NetSealedControl_Wipe(&old);
+	ACheck(AllZero(&relay, sizeof(relay)), "wiping leaves nothing of the keys");
+	NetHandshakeA_WipeKeys(&keys);
+}
+
 // ----- The game's real draws
 
 static void TheRealDraws(const Vectors &v)
@@ -351,6 +539,7 @@ int main()
 		TheVectors(v);
 		EveryChangedA2(v);
 		TheRefusals(v);
+		TheSealedChannel(all, v);
 		TheRealDraws(v);
 	}
 

@@ -103,6 +103,56 @@
 					"to": "(void)0;"
 				}
 			]
+		},
+		{
+			"name": "a sealed message taken twice: the replay window isn't asked",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (counter >= kNetSealedControlMostMessages || !NetV2_ReplayIsNew(&c->window, counter))",
+					"to": "if (counter >= kNetSealedControlMostMessages)"
+				}
+			]
+		},
+		{
+			"name": "another session's sealed message isn't refused by its id",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (memcmp(d + 8, c->sessionId, kNetHandshakeSessionIdBytes) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "failed tags never end a session",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (++c->failedTags >= kNetSealedControlMostFailedTags)",
+					"to": "if (++c->failedTags >= kNetSealedControlMostFailedTags && false)"
+				}
+			]
+		},
+		{
+			"name": "a session never ends at 24 hours",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "static_cast<uint32_t>(now - c->startedAt) >= kNetSealedControlMostMs",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a counter is taken before its tag has checked, so a forged message uses up an honest one",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes], tag[kNetCryptoTagBytes];",
+					"to": "NetV2_ReplayTake(&c->window, counter); uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes], tag[kNetCryptoTagBytes];"
+				}
+			]
 		}
 	]
 }
