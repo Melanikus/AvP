@@ -990,8 +990,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "Failed to connect to server host\");\n\t\tenet_host_destroy(host);\n\t\thost = NULL;",
-					"to": "Failed to connect to server host\");"
+					"from": "\t\trelayJoinedThrough = false;\n\t\tenet_host_destroy(host);\n\t\thost = NULL;\n\t\treturn NET_FAIL;\n\t}\n\n\tenet_peer_timeout(ServerPeer",
+					"to": "\t\trelayJoinedThrough = false;\n\t\treturn NET_FAIL;\n\t}\n\n\tenet_peer_timeout(ServerPeer"
 				}
 			]
 		},
@@ -2525,7 +2525,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));",
+					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));",
 					"to": "RelayHostNews(kNetRelayHostRoomGone, NULL);"
 				}
 			]
@@ -3110,8 +3110,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tRelayV2Hear(on->receivedAddress.port",
-					"to": "\t\tif (RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now))\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tRelayV2Hear(on->receivedAddress.port"
+					"from": "\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tif (channelOn)\n\t\t\t{\n\t\t\t\tRelayV2Hear(on->receivedAddress.port",
+					"to": "\t\tif (RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now))\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tif (channelOn)\n\t\t\t{\n\t\t\t\tRelayV2Hear(on->receivedAddress.port"
 				}
 			]
 		},
@@ -3230,8 +3230,208 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\tif (on->receivedAddress.host != relayV2Address.host)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))",
+					"from": "\t\tif (on->receivedAddress.host != (channelOn ? relayV2Address.host : relayAddress.host))\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))",
 					"to": "\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))"
+				}
+			]
+		},
+		{
+			"name": "giving up the relay leaves its connections to ENet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && host)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "version 1's host ends its connections through the relay too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && host)\n",
+					"to": "\tif (wasOpen && host)\n"
+				}
+			]
+		},
+		{
+			"name": "connections from elsewhere end with the relay too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (peer->state == ENET_PEER_STATE_DISCONNECTED || peer->address.host != relayAddress.host)",
+					"to": "if (peer->state == ENET_PEER_STATE_DISCONNECTED)"
+				}
+			]
+		},
+		{
+			"name": "a connection that ends with the relay is left open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tenet_peer_reset(peer);\n\t\t\tended++;\n",
+					"to": "\t\t\tended++;\n"
+				}
+			]
+		},
+		{
+			"name": "a connection that ends with the relay keeps its player in the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (id != 0)\n\t\t\t{\n\t\t\t\tnetSession.nPlayers--;\n\t\t\t\tNet_PlayerHasGone(id);\n\t\t\t}\n\t\t}\n\n\t\tif (ended > 0)",
+					"to": "\t\t}\n\n\t\tif (ended > 0)"
+				}
+			]
+		},
+		{
+			"name": "after a channel has ended, the relay's plain messages are read again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_V2DraftOn() && (channelOn || relayV2Used))",
+					"to": "if (Net_V2DraftOn() && channelOn)"
+				}
+			]
+		},
+		{
+			"name": "after a joiner's channel has ended, B's datagrams are dropped",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const gameGoesOn = channelOn ? relayV2Step == kRelayV2Ready && !(relayHosting && relayPicking) : !relayHosting;",
+					"to": "bool const gameGoesOn = channelOn ? relayV2Step == kRelayV2Ready && !(relayHosting && relayPicking) : false;"
+				}
+			]
+		},
+		{
+			"name": "a game that begins a channel isn't marked as having used one",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayV2Step = kRelayV2Keys;\n\trelayV2Used = true;\n",
+					"to": "\trelayV2Step = kRelayV2Keys;\n"
+				}
+			]
+		},
+		{
+			"name": "a game's end doesn't forget that it used a channel",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayV2Forget();\n\trelayV2Used = false;\n",
+					"to": "\tRelayV2Forget();\n"
+				}
+			]
+		},
+		{
+			"name": "a join that ENet can't start keeps the channel and B's keys",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayEndToEndForget();   // B's keys and the channel go too (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a join whose request can't be sent keeps the channel and B's keys",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!Net_CreatePlayer(playerName)) {\n\t\tRelayEndToEndForget();\n",
+					"to": "\tif (!Net_CreatePlayer(playerName)) {\n"
+				}
+			]
+		},
+		{
+			"name": "a join whose request can't be sent keeps its ENet host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\trelayJoinedThrough = false;\n\t\tenet_host_destroy(host);\n\t\thost = NULL;\n\t\tServerPeer = NULL;\n\t\treturn NET_FAIL;\n\t}\n\n\tInitAVPNetGameForJoin();",
+					"to": "\t\trelayJoinedThrough = false;\n\t\treturn NET_FAIL;\n\t}\n\n\tInitAVPNetGameForJoin();"
+				}
+			]
+		},
+		{
+			"name": "a join the relay refused keeps what the relay's handshake left",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tRelayEndToEndForget();   // every way a join fails forgets and wipes (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new join keeps the last one's channel going",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayEndToEndForget();   // the last game's handshakes and channel, if anything kept them (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lost room's why is read after giving up has wiped it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));",
+					"to": "\t\tRelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));"
+				}
+			]
+		},
+		{
+			"name": "a game's end keeps the room's token and a joiner's ticket",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayHost.Reset();\n\trelayJoiner.Reset();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host machine's reset keeps the messages still waiting",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\tmemset(sends, 0, sizeof(sends));   // the messages still here hold the token and the cookie (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the joiner machine's reset keeps the messages still waiting",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\tmemset(sends, 0, sizeof(sends));   // the messages still here hold the ticket and the cookie (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the plain messages are left on the stack once sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tNetCrypto_Wipe(sends, sizeof(sends));\n\tRelayV2SendAll(on);",
+					"to": "\tRelayV2SendAll(on);"
+				}
+			]
+		},
+		{
+			"name": "the opened messages are left on the stack once read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\tNetCrypto_Wipe(opened, sizeof(opened));\n",
+					"to": "\n"
 				}
 			]
 		}

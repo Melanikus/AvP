@@ -1573,6 +1573,9 @@ int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem
 
 // The settings' RelayKey is read once, and only with -dev: a player's game never has a relay's fingerprint, so it uses no relay of
 // version 2. A setting that isn't a region, a colon and 96 hex digits is no setting, and the log says so once.
+// ONCE A RUN, ON PURPOSE (Secondary's finding 6.1; added 2026-11-09 by Melanikus for the AvP port): it's what the relay's keys are checked
+// against, so it stays the same for the whole run, and a setting edited while the game runs can't change it halfway through a game. A
+// tester who changes it starts the game again, and the steps for testers say so.
 bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes])
 {
 	static bool read = false;

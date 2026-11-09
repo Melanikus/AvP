@@ -131,4 +131,12 @@ extern uint32_t NumberOfSessionsFound;
 bool IsCustomLevel(int index, int gameType);
 int GetLocalMultiplayerLevelIndex(int index, char *levelName, int gameType);
 
+// Added 2026-11-09 by Melanikus for the AvP port (step 7): THE STAND-IN FOR THE CHANNEL TO THE RELAY, IN EVERY FILE THIS TEST BUILDS.
+// networking.cpp asks for "net_relay_v2.h", and the compiler looks for a name in quotes first in the folder of the file that asks: 3dc,
+// where the real session is. So networking.cpp got the real one while this test got the stand-in (net_start_test_stubs), which then
+// couldn't link (handshake A's functions aren't in this test), and would have been two different sessions in one program if it had.
+// Asked for here, from this folder, the stand-in is found first; it has the real one's guard (NET_RELAY_V2_H), so 3dc's is never
+// read after it, in any file. GitHub's test run found it, as that link error.
+#include "net_relay_v2.h"
+
 #endif

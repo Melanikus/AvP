@@ -422,12 +422,24 @@ static void RelayV2Forget();   // further down: the channel to the relay (step 7
 static void RelayV2Hear(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now);
 static void RelayV2JoinerFrame();
 static bool HasMagic(const uint8_t *data, size_t size, const char magic[5]);
+static NetID IDOfConnection(const ENetPeer *peer);   // further down, beside the game's own messages
+extern void Net_PlayerHasGone(NetID id);
+
+// Whether this game has used a draft channel to its relay (step 7; added 2026-11-09 by Melanikus for the AvP port, Secondary's finding
+// 2.1). Once it has, the relay is heard sealed-only until the game ends, even after the channel itself has ended, so a plain version 1
+// message from it is never read again. RelayV2Begin sets it, and only the game's end (RelayEndToEndForget) clears it.
+static bool relayV2Used = false;
 
 // Every handshake is ended, its keys wiped: when a game through a relay ends, or the relay is given up. Modified 2026-11-09 by Melanikus
-// for the AvP port: the channel to the relay too (step 7), so whatever ends a game through the relay ends that as well.
+// for the AvP port: the channel to the relay too (step 7), so whatever ends a game through the relay ends that as well. And version 1's
+// two machines, which hold the room's token and pass, or a joiner's ticket (Secondary's finding 4.3): v2 only ever sent those sealed, so
+// they're secrets, and they open nothing once the room or the join is over.
 static void RelayEndToEndForget()
 {
 	RelayV2Forget();
+	relayV2Used = false;
+	relayHost.Reset();
+	relayJoiner.Reset();
 	relayEndToEndJoiner.Reset();
 	relayEndToEndPort = 0;
 
@@ -994,6 +1006,7 @@ static bool RelayV2Begin(const ENetAddress &relay, const char *region, bool time
 	relayV2Region[kRelayListRegionLetters] = 0;
 	relayV2Times = times;
 	relayV2Step = kRelayV2Keys;
+	relayV2Used = true;
 	return true;
 }
 
@@ -1151,7 +1164,14 @@ static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
 }
 
 // The messages the session has opened go to net_relay.h's machines, as if they had come plain from the port they came from (those
-// machines check the port), through the one door version 1's messages always go through
+// machines check the port), through the one door version 1's messages always go through.
+// THE PORT ISN'T SEALED (Secondary's finding 3.1, and why it's safe today): the seal covers the message, not the UDP port it came from,
+// so someone on the path could deliver a real sealed message first from another port, and the real one would then be a replay. But the
+// machines take each kind of message from one port only (the host from the control port; a joiner READY from its own port, the rest from
+// the control port), so a moved message is simply dropped, which is no more than such a person could do by dropping it. If a kind of
+// message is ever taken from two ports with different meanings, the port has to go inside the sealed message first.
+// The copies here hold the room's token, a joiner's ticket and the list's pass, which v2 seals to keep secret, so they're wiped when
+// they've been read (Secondary's finding 5.1; modified 2026-11-09 by Melanikus for the AvP port).
 static void RelayV2TakeOpened(uint32_t now)
 {
 	NetRelayV2Opened opened[kNetRelayV2MostOpened];
@@ -1161,6 +1181,8 @@ static void RelayV2TakeOpened(uint32_t now)
 	{
 		RelayControlDatagram(opened[i].fromPort, opened[i].message, kNetSealedControlMessageBytes, now);
 	}
+
+	NetCrypto_Wipe(opened, sizeof(opened));
 }
 
 // A datagram from the relay whose first four bytes are 'AVPR': the timing's answer, or the session's
@@ -1199,6 +1221,9 @@ static void RelayControlSendAll(ENetHost *on, End &end)
 		}
 	}
 
+	// The messages before they were sealed: the room's token, a joiner's ticket, a cookie. Wiped, as the session wipes its own copies
+	// (Secondary's finding 5.1; added 2026-11-09 by Melanikus for the AvP port).
+	NetCrypto_Wipe(sends, sizeof(sends));
 	RelayV2SendAll(on);
 }
 
@@ -1246,9 +1271,14 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 	// relay is heard, on any of its ports, and what it sends is sorted by its first four bytes. 'AVPR' is the channel's (the timing,
 	// handshake A and sealed control); once it's open, 'AVPE' and 'AVPG' are the end to end's (B and the sealed game). Anything else from it,
 	// a plain version 1 message among them, is dropped, never read.
-	if (Net_V2DraftOn() && relayV2Step != kRelayV2None)
+	// AND ONCE THE CHANNEL HAS ENDED (Secondary's finding 2.1; modified 2026-11-09 by Melanikus for the AvP port): a joiner's game goes on
+	// over B's sealed datagrams, and the relay is still heard only this way until that game ends (relayV2Used). Its 'AVPR' then has no
+	// channel to open it, so it's dropped too: a plain version 1 message is never read again in a game that has used the channel.
+	bool const channelOn = relayV2Step != kRelayV2None;
+
+	if (Net_V2DraftOn() && (channelOn || relayV2Used))
 	{
-		if (on->receivedAddress.host != relayV2Address.host)
+		if (on->receivedAddress.host != (channelOn ? relayV2Address.host : relayAddress.host))
 		{
 			relayStrangersDropped++;
 			return 1;
@@ -1256,13 +1286,25 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 
 		if (HasMagic(on->receivedData, on->receivedDataLength, "AVPR"))
 		{
-			RelayV2Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now);
+			if (channelOn)
+			{
+				RelayV2Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now);
+			}
+			else
+			{
+				relayStrangersDropped++;
+			}
+
 			return 1;
 		}
 
 		bool const endToEnd = HasMagic(on->receivedData, on->receivedDataLength, "AVPE") || HasMagic(on->receivedData, on->receivedDataLength, "AVPG");
 
-		if (relayV2Step != kRelayV2Ready || (relayHosting && relayPicking) || !endToEnd)
+		// B's and the sealed game's datagrams count once the channel is open (and not while a host is still timing the relays), or, after
+		// it has ended, for a joiner, whose game goes on over them. A host whose channel ends gives the relay up (RelayHostFrame).
+		bool const gameGoesOn = channelOn ? relayV2Step == kRelayV2Ready && !(relayHosting && relayPicking) : !relayHosting;
+
+		if (!gameGoesOn || !endToEnd)
 		{
 			relayStrangersDropped++;
 			return 1;
@@ -1469,6 +1511,7 @@ static bool RelayHostStart()
 // at all, so a player can still join it here (Fourth's cold read, finding 4). why is the game's own fixed words.
 static void RelayHostGiveUp(const char *why)
 {
+	bool const wasOpen = relayHosting && !relayPicking;   // while still timing the relays, nobody has come through one
 	relayHosting = false;
 	relayPicking = false;
 
@@ -1479,12 +1522,47 @@ static void RelayHostGiveUp(const char *why)
 		host->duplicatePeers = kMostConnectionsFromOneAddress;
 	}
 
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): every handshake ends, its keys wiped. The send hook stays, so
-	// anything ENet still has for the relay's address is dropped, never sent unsealed; a joiner there is lost, as the room is.
-	RelayEndToEndForget();
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's finding 4.1): every connection that came through the relay ends here, at
+	// once. It can't work any more, as what the game sends it is dropped (below), and with the intercept gone ENet would otherwise read
+	// whatever came from the relay's address as that joiner's, unsealed, until the connection timed out: exactly what v2's sealing is
+	// there to stop, the relay included. Ending a connection this way tells ENet nothing more of it will come (enet_peer_reset), so the
+	// game is told here that each player in it has gone, as when a connection closes. Only with the v2 draft (networking.h): version 1's
+	// game is as it always was. While hosting through a relay nothing else is heard (RelayIntercept), so these are all through it.
+	if (Net_V2DraftOn() && wasOpen && host)
+	{
+		int ended = 0;
 
-	// The channel to the relay goes too, its keys wiped (step 7, added 2026-11-09 by Melanikus for the AvP port)
-	RelayV2Forget();
+		for (size_t i = 0; i < host->peerCount; i++)
+		{
+			ENetPeer *const peer = &host->peers[i];
+
+			if (peer->state == ENET_PEER_STATE_DISCONNECTED || peer->address.host != relayAddress.host)
+			{
+				continue;
+			}
+
+			NetID const id = IDOfConnection(peer);
+			peer->data = NULL;
+			enet_peer_reset(peer);
+			ended++;
+
+			if (id != 0)
+			{
+				netSession.nPlayers--;
+				Net_PlayerHasGone(id);
+			}
+		}
+
+		if (ended > 0)
+		{
+			LogString("net: " + std::to_string(ended) + " connection(s) through the relay ended with it");
+		}
+	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): every handshake ends, its keys wiped, and so does the channel
+	// to the relay (step 7), inside RelayEndToEndForget. The send hook stays, so anything ENet still has for the relay's address is
+	// dropped, never sent unsealed.
+	RelayEndToEndForget();
 
 	Con_PrintError(why);
 	OpenTheSearchPortForAHost();
@@ -1603,7 +1681,9 @@ static void RelayHostFrame()
 	if (!relayHost.Open() && !relayHost.Asking() && !relayLostSaid)
 	{
 		relayLostSaid = true;
-		Con_PrintError(std::string("net: this game's room on the relay is gone, so nobody more can join through it: ") + NetRelay_WhyText(relayHost.LostWhy()));
+		// Kept here, as giving up wipes the machine that knows it (modified 2026-11-09 by Melanikus for the AvP port)
+		int const lostWhy = relayHost.LostWhy();
+		Con_PrintError(std::string("net: this game's room on the relay is gone, so nobody more can join through it: ") + NetRelay_WhyText(lostWhy));
 
 		if (relayRoomListed)
 		{
@@ -1612,7 +1692,7 @@ static void RelayHostFrame()
 		}
 
 		RelayHostGiveUp("net: this game is open on this network instead");
-		RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));
+		RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));
 	}
 }
 
@@ -4243,6 +4323,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	relayJoinedThrough = false;
 	relayJoinedRegion[0] = 0;
 	relayStrangersDropped = 0;
+	RelayEndToEndForget();   // the last game's handshakes and channel, if anything kept them (added 2026-11-09 by Melanikus for the AvP port)
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -4286,6 +4367,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		if (relayPort == 0)
 		{
 			Con_PrintError(std::string("Net_ConnectToSession - couldn't join through the relay: ") + Net_RelayJoinFailedWhy());
+			RelayEndToEndForget();   // every way a join fails forgets and wipes (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)
 			enet_host_destroy(host);
 			host = NULL;
 			return NET_FAIL;
@@ -4320,6 +4402,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	if (ServerPeer == NULL)
 	{
 		Con_PrintError("Net_ConnectToSession - Failed to connect to server host");
+		RelayEndToEndForget();   // B's keys and the channel go too (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)
+		relayJoinedThrough = false;
 		enet_host_destroy(host);
 		host = NULL;
 		return NET_FAIL;
@@ -4367,6 +4451,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		Con_PrintError("Net_ConnectToSession - failed to connect to server!");
 
 		RelayEndToEndForget();   // the handshake's keys go too (protocol version 2, added 2026-11-09 by Melanikus for the AvP port)
+		relayJoinedThrough = false;
 
 		// There's no game, so nothing should stay open
 		enet_host_destroy(host);
@@ -4375,7 +4460,15 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
+	// Modified 2026-11-09 by Melanikus for the AvP port (Secondary's finding 4.2): a join that fails here ends as the failures above do.
+	// Before, the connection, the channel to the relay and B's keys all stayed, and the channel went on talking to the relay after the
+	// player was told the join had failed.
 	if (!Net_CreatePlayer(playerName)) {
+		RelayEndToEndForget();
+		relayJoinedThrough = false;
+		enet_host_destroy(host);
+		host = NULL;
+		ServerPeer = NULL;
 		return NET_FAIL;
 	}
 

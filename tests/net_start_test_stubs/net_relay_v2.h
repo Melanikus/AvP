@@ -73,6 +73,10 @@ struct NetRelayV2StandIn
 	std::vector<uint16_t> sealedTo;
 	std::vector<uint16_t> heardFrom;
 	int wipes;
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's review of step 7): of the wipes, the ones that ended a session that was
+	// going (Start had worked, and it hadn't failed), and how many messages the session opened and handed on (TakeOpened)
+	int liveWipes;
+	int openedGiven;
 	// The test's wishes
 	bool startRefused;
 	bool goReady;
@@ -183,6 +187,7 @@ public:
 		size_t const count = openedCount < most ? openedCount : most;
 		memcpy(out, opened, sizeof(opened[0]) * count);
 		openedCount = 0;
+		netRelayV2StandIn.openedGiven += static_cast<int>(count);
 		return count;
 	}
 
@@ -194,6 +199,7 @@ public:
 	void Wipe()
 	{
 		netRelayV2StandIn.wipes++;
+		netRelayV2StandIn.liveWipes += live ? 1 : 0;
 		Clear();
 	}
 
