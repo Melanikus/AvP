@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a second copy of the game on the same machine keeps its files in a folder of its own, by a fixed name (-dev -secondcopy)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the save folder is never missing: without one the path is empty and the log says why once, where before the log and this went round until the game crashed
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -42,6 +44,9 @@
 
 static char saveFolder[MAX_PATH] = {0};
 static bool noSaveFolder = false;
+
+// Whether this is the second copy, whose files go in a folder of their own (SaveFolder_UseTheSecondCopy, save_folder.h)
+static bool saveFolderIsTheSecondCopy = false;
 
 // What went wrong finding the save folder. It isn't logged there, because the log asks for the save folder before it can write anything. See TheLogWriter in logString.cpp.
 // It's plain characters because this can be asked for before the game's own start, when a std::string in this file might not be ready.
@@ -121,6 +126,23 @@ char const *GetSaveFolderProblem()
 	return noSaveFolder ? saveFolderProblem : NULL;
 }
 
+bool SaveFolder_UseTheSecondCopy()
+{
+	// Once the folder has been found, or found not to be there, everything since has gone where it said, so it isn't changed
+	if (saveFolder[0] != 0 || noSaveFolder)
+	{
+		return false;
+	}
+
+	saveFolderIsTheSecondCopy = true;
+	return true;
+}
+
+bool SaveFolder_IsTheSecondCopy()
+{
+	return saveFolderIsTheSecondCopy;
+}
+
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one
@@ -143,7 +165,7 @@ char *GetSaveFolderPath()
 
 	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
 	{
-		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
+		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where, saveFolderIsTheSecondCopy);
 	}
 
 	if (whatWentWrong)
