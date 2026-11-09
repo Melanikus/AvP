@@ -12,10 +12,13 @@
 // Microsoft's compiler doesn't make anyone look at them. So these functions:
 // - take every buffer with its length, and refuse unless it's exactly the size ML-KEM-1024 uses, before the library sees anything;
 // - look at every answer, and take anything but "done" as a refusal;
-// - on a refusal, wipe every buffer they were to fill, to zeros, so nothing half-made can be taken for a key or a secret;
+// - on a refusal, wipe every buffer they were to fill, to zeros, so nothing half-made can be taken for a key or a secret: the length
+//   given, but never more than ML-KEM-1024's own size for that buffer, so a length that's wrong can't make the wipe write past the
+//   buffer's end (Fourth's cold read, 2026-11-09);
 // - give back true for done and false for refused, and the compiler refuses to build a call that ignores which ([[nodiscard]] with
 //   the game's /we4834).
-// The buffers mustn't overlap each other.
+// The buffers mustn't overlap each other: a call whose buffers share a byte is refused (inputs that are only read may share with each
+// other), as the library may write one while it still reads another.
 //
 // tests/pq_mlkem_test.cpp runs NIST's and Wycheproof's published answers, and the library's own, through these and the library.
 

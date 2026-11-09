@@ -14,7 +14,7 @@
 #include "pq_signature_check.h"
 
 #include <mldsa-native/avpx_mldsa.h>
-#include <mldsa-native/upstream-tests/expected_test_vectors.h>
+#include <upstream-tests/expected_test_vectors.h>   // from vcpkg_installed's share/mldsa-native, which only this test's .args names
 
 #include "crypto_kat_reader.h"
 

@@ -15,7 +15,7 @@
 #include "pq_key_exchange.h"
 
 #include <mlkem-native/avpx_mlkem.h>
-#include <mlkem-native/upstream-tests/expected_test_vectors.h>
+#include <upstream-tests/expected_test_vectors.h>   // from vcpkg_installed's share/mlkem-native, which only this test's .args names
 
 #include "crypto_kat_reader.h"
 
@@ -47,6 +47,14 @@ static bool AllAre(uint8_t const *bytes, size_t length, uint8_t value)
 	}
 
 	return true;
+}
+
+// A refusal's wipe, in a buffer of room bytes set to 0xAA before (Fourth's cold read, finding 1): zeros for the length the call was given,
+// but never past ML-KEM-1024's own size for that buffer (most), and everything after that still 0xAA
+static bool WipedJustSo(uint8_t const *bytes, size_t room, size_t given, size_t most)
+{
+	size_t const wiped = given < most ? given : most;
+	return wiped <= room && AllAre(bytes, wiped, 0) && AllAre(bytes + wiped, room - wiped, 0xAA);
 }
 
 static bool Same(Bytes const &a, uint8_t const *b, size_t length)
@@ -618,9 +626,10 @@ static void TestTheWrapper()
 			uint8_t newSecret[kPqSecretKeyBytes + 1];
 			memset(newPublic, 0xAA, sizeof newPublic);
 			memset(newSecret, 0xAA, sizeof newSecret);
-			KemCheck(!Pq_NewKeyPair(newPublic, size.publicKey, newSecret, size.secretKey) && AllAre(newPublic, size.publicKey, 0) &&
-			             AllAre(newSecret, size.secretKey, 0),
-			         std::string("Pq_NewKeyPair refuses ") + size.what + ", and wipes both");
+			KemCheck(!Pq_NewKeyPair(newPublic, size.publicKey, newSecret, size.secretKey) &&
+			             WipedJustSo(newPublic, sizeof newPublic, size.publicKey, kPqPublicKeyBytes) &&
+			             WipedJustSo(newSecret, sizeof newSecret, size.secretKey, kPqSecretKeyBytes),
+			         std::string("Pq_NewKeyPair refuses ") + size.what + ", and wipes both, never past ML-KEM's own sizes");
 		}
 
 		if (encapsulateSizes)
@@ -628,8 +637,9 @@ static void TestTheWrapper()
 			memset(ciphertext, 0xAA, sizeof ciphertext);
 			memset(sent, 0xAA, sizeof sent);
 			KemCheck(!Pq_Encapsulate(publicKey, size.publicKey, ciphertext, size.ciphertext, sent, size.secret) &&
-			             AllAre(ciphertext, size.ciphertext, 0) && AllAre(sent, size.secret, 0),
-			         std::string("Pq_Encapsulate refuses ") + size.what + ", and wipes the ciphertext and the secret");
+			             WipedJustSo(ciphertext, sizeof ciphertext, size.ciphertext, kPqCiphertextBytes) &&
+			             WipedJustSo(sent, sizeof sent, size.secret, kPqSharedSecretBytes),
+			         std::string("Pq_Encapsulate refuses ") + size.what + ", and wipes the ciphertext and the secret, never past ML-KEM's own sizes");
 		}
 
 		if (decapsulateSizes)
@@ -637,8 +647,8 @@ static void TestTheWrapper()
 			uint8_t const anyCiphertext[kPqCiphertextBytes + 1] = {0};
 			memset(back, 0xAA, sizeof back);
 			KemCheck(!Pq_Decapsulate(anyCiphertext, size.ciphertext, secretKey, size.secretKey, back, size.secret) &&
-			             AllAre(back, size.secret, 0),
-			         std::string("Pq_Decapsulate refuses ") + size.what + ", and wipes the secret");
+			             WipedJustSo(back, sizeof back, size.secret, kPqSharedSecretBytes),
+			         std::string("Pq_Decapsulate refuses ") + size.what + ", and wipes the secret, never past ML-KEM's own size");
 		}
 	}
 
@@ -654,6 +664,48 @@ static void TestTheWrapper()
 	             !Pq_Decapsulate(anyCiphertext, sizeof anyCiphertext, NULL, kPqSecretKeyBytes, back, kPqSharedSecretBytes) &&
 	             !Pq_Decapsulate(anyCiphertext, sizeof anyCiphertext, secretKey, kPqSecretKeyBytes, NULL, kPqSharedSecretBytes),
 	         "Pq_Decapsulate refuses a missing buffer");
+
+	// Buffers that share a byte are refused before the library sees them; buffers that only touch are fine (Fourth's cold read, finding
+	// 3). Each case is set up in one buffer of its own, big enough that every wipe stays inside it.
+	static uint8_t pair[kPqPublicKeyBytes + kPqSecretKeyBytes];
+	KemCheck(!Pq_NewKeyPair(pair, kPqPublicKeyBytes, pair + kPqPublicKeyBytes - 1, kPqSecretKeyBytes),
+	         "Pq_NewKeyPair refuses a public key and a secret key that share a byte");
+	KemCheck(Pq_NewKeyPair(pair, kPqPublicKeyBytes, pair + kPqPublicKeyBytes, kPqSecretKeyBytes),
+	         "and makes a key pair into two that only touch");
+
+	static uint8_t sending[kPqPublicKeyBytes + kPqCiphertextBytes + kPqSharedSecretBytes];
+	uint8_t *const sendingCiphertext = sending + kPqPublicKeyBytes;
+	uint8_t *const sendingSecret = sendingCiphertext + kPqCiphertextBytes;
+	memcpy(sending, publicKey, kPqPublicKeyBytes);
+	KemCheck(!Pq_Encapsulate(sending, kPqPublicKeyBytes, sendingCiphertext - 1, kPqCiphertextBytes, sendingSecret, kPqSharedSecretBytes),
+	         "Pq_Encapsulate refuses a ciphertext that shares a byte with the public key");
+	memcpy(sending, publicKey, kPqPublicKeyBytes);
+	KemCheck(!Pq_Encapsulate(sending, kPqPublicKeyBytes, sendingCiphertext, kPqCiphertextBytes, sendingSecret - 1, kPqSharedSecretBytes),
+	         "Pq_Encapsulate refuses a secret that shares a byte with the ciphertext");
+	memcpy(sending, publicKey, kPqPublicKeyBytes);
+	KemCheck(!Pq_Encapsulate(sending, kPqPublicKeyBytes, sendingCiphertext, kPqCiphertextBytes, sending + 8, kPqSharedSecretBytes),
+	         "Pq_Encapsulate refuses a secret that shares bytes with the public key");
+	memcpy(sending, publicKey, kPqPublicKeyBytes);
+	KemCheck(Pq_Encapsulate(sending, kPqPublicKeyBytes, sendingCiphertext, kPqCiphertextBytes, sendingSecret, kPqSharedSecretBytes),
+	         "and encapsulates into buffers that only touch");
+
+	// That ciphertext, and the secret it carries, for the decapsulations below (the checks above it wrote over the earlier ones)
+	static uint8_t opening[kPqCiphertextBytes + kPqSecretKeyBytes + kPqSharedSecretBytes];
+	uint8_t *const openingKey = opening + kPqCiphertextBytes;
+	uint8_t *const openingSecret = openingKey + kPqSecretKeyBytes;
+	uint8_t expected[kPqSharedSecretBytes];
+	memcpy(expected, sendingSecret, kPqSharedSecretBytes);
+	memcpy(opening, sendingCiphertext, kPqCiphertextBytes);
+	memcpy(openingKey, secretKey, kPqSecretKeyBytes);
+	KemCheck(!Pq_Decapsulate(opening, kPqCiphertextBytes, openingKey, kPqSecretKeyBytes, openingSecret - 1, kPqSharedSecretBytes),
+	         "Pq_Decapsulate refuses a secret that shares a byte with the secret key");
+	memcpy(openingKey, secretKey, kPqSecretKeyBytes);
+	KemCheck(!Pq_Decapsulate(opening, kPqCiphertextBytes, openingKey, kPqSecretKeyBytes, opening + 8, kPqSharedSecretBytes),
+	         "Pq_Decapsulate refuses a secret that shares bytes with the ciphertext");
+	memcpy(opening, sendingCiphertext, kPqCiphertextBytes);
+	KemCheck(Pq_Decapsulate(opening, kPqCiphertextBytes, openingKey, kPqSecretKeyBytes, openingSecret, kPqSharedSecretBytes) &&
+	             memcmp(openingSecret, expected, kPqSharedSecretBytes) == 0,
+	         "and decapsulates into a secret that only touches the secret key, the same secret that was sent");
 }
 
 // The reader of tests/crypto-kat refuses a file that isn't the shape (tests/crypto-kat/README.md promises it), so a damaged file
