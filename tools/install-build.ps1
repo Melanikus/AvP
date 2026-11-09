@@ -6,6 +6,10 @@ same steps by hand.
 Needs the GitHub CLI (gh), signed in. From a copy of this repository:
 
   powershell -ExecutionPolicy Bypass -File tools\install-build.ps1 -GameFolder C:\Games\AvP-test
+  powershell -ExecutionPolicy Bypass -File tools\install-build.ps1 -GameFolder C:\Games\AvP-test -Commit <all 40 digits>
+
+Without -Commit it takes the newest build. With it, only a build of that very commit: when you've been told which commit to test,
+give it, and the script checks the build is that one, so nobody has to compare 40 digits by eye.
 
 What the checks mean:
 - It only takes a build that the project's owner started from avpx_main. A run from a fork's pull request can carry the same
@@ -19,11 +23,19 @@ Your previous files are copied to a new <GameFolder>-previous-build-<date and ti
 install fails part of the way through, they are put back.
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$GameFolder
+    [Parameter(Mandatory = $true)][string]$GameFolder,
+    [string]$Commit = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = 'Melanikus/AvP'
 $branch = 'avpx_main'
+
+# Added 2026-11-09 by Melanikus for the AvP port (Secondary's dry run of the weekend, R2-5): the commit the build must be of, typed by a
+# person, so it's held to its one form before anything is asked: all 40 hex digits, never a short one that several commits could share
+if ($Commit) {
+    if ($Commit -cnotmatch '\A[0-9a-fA-F]{40}\z') { throw '-Commit must be the whole commit: all 40 hex digits. Nothing was installed.' }
+    $Commit = $Commit.ToLowerInvariant()
+}
 
 # The script replaces the game's files, so it refuses the real Steam folder and anything that isn't a game folder. This guards
 # against a slip, not against someone determined: a mapped drive, for one, still looks like any other folder. It walks up
@@ -41,9 +53,12 @@ for ($folder = $targetItem; $folder; $folder = $folder.Parent) {
 $target = $targetItem.FullName.TrimEnd('\')
 if (-not (Test-Path -LiteralPath (Join-Path $target 'avp_rifs'))) { throw "$target has no avp_rifs folder, so it is not a copy of the game." }
 
-# The newest build the owner started from avpx_main.
-$found = gh run list -R $repo --workflow build.yml --branch $branch --event workflow_dispatch --status success --limit 1 --json 'databaseId,headSha,createdAt' --jq '.[0]'
+# The newest build the owner started from avpx_main, or with -Commit, the newest of that commit
+$which = @('run', 'list', '-R', $repo, '--workflow', 'build.yml', '--branch', $branch, '--event', 'workflow_dispatch', '--status', 'success', '--limit', '1', '--json', 'databaseId,headSha,createdAt', '--jq', '.[0]')
+if ($Commit) { $which += @('--commit', $Commit) }
+$found = gh @which
 if ($LASTEXITCODE -ne 0) { throw 'Could not ask GitHub for the builds. Is gh installed and signed in?' }
+if ((-not $found -or "$found" -eq 'null') -and $Commit) { throw "No build of commit $Commit was found: the owner hasn't started one from $branch, or it didn't pass. Nothing was installed." }
 if (-not $found -or "$found" -eq 'null') { throw "No build found. Builds are made only when the project's owner starts one (see PLAYTEST.md)." }
 $run = ($found -join "`n") | ConvertFrom-Json
 
@@ -51,6 +66,9 @@ $run = ($found -join "`n") | ConvertFrom-Json
 # Tao #3): a run's number is digits, and a commit is 40 small hex digits.
 if ("$($run.databaseId)" -cnotmatch '\A[1-9][0-9]{0,19}\z') { throw "GitHub's answer has no run number. Nothing was installed." }
 if ("$($run.headSha)" -cnotmatch '\A[0-9a-f]{40}\z') { throw "GitHub's answer has no commit. Nothing was installed." }
+
+# And with -Commit, the build GitHub named must be of that commit: its answer is checked, not trusted to have filtered
+if ($Commit -and $run.headSha -cne $Commit) { throw "GitHub named a build of another commit, $($run.headSha), not $Commit. Nothing was installed." }
 
 # The commit must be part of avpx_main. "ahead" means avpx_main has moved on since: it is still on the branch, but newer code exists.
 $compare = gh api "repos/$repo/compare/$($run.headSha)...$branch" --jq '.status + " " + (.ahead_by | tostring)'

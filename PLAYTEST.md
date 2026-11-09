@@ -41,7 +41,8 @@ VirusTotal's report on the zip.
    Nothing printed means every file matches.
 
 **A test build instead of a release** (the owner's Build workflow, kept for 30 days as the artifact `avp-avpx_main`):
-`tools\install-build.ps1` downloads the newest one and makes all these checks itself. To check one by hand, unzip it into a new,
+`tools\install-build.ps1` downloads the newest one, or with `-Commit <all 40 digits>` only a build of that commit, and makes all
+these checks itself. When you've been told which commit to test, give it. To check one by hand, unzip it into a new,
 empty folder. There is no zip hash to compare, so step 1 is skipped. Step 2 is made on the list of hashes inside it instead, with
 the commit you expect (all 40 digits) in place of `<commit>`:
 ```

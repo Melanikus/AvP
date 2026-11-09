@@ -1755,6 +1755,11 @@ Check-Order $installScript $vouching 'Copy-Item -LiteralPath' 'and before it cop
 Check-Order $installScript "if (`"`$(`$run.headSha)`" -cnotmatch '\A[0-9a-f]{40}\z') { throw" 'gh api "repos/$repo/compare/$($run.headSha)' 'the commit GitHub named is checked before it is used'
 Check ($installScript.Contains('foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File -Force) {')) 'and every file in the download is looked at, hidden ones too'
 
+# -Commit (Secondary's dry run of the weekend, R2-5): the machine checks the build is the commit the owner was told to test
+Check ($installScript.Contains("    if (`$Commit -cnotmatch '\A[0-9a-fA-F]{40}\z') { throw ")) 'a commit given to install-build.ps1 must be all 40 hex digits'
+Check ($installScript.Contains("if (`$Commit) { `$which += @('--commit', `$Commit) }`n`$found = gh @which`n")) 'GitHub is asked for a build of that commit only'
+Check-Order $installScript 'if ($Commit -and $run.headSha -cne $Commit) { throw ' 'gh run download $run.databaseId' 'and the build it names is checked to be of that commit before anything is downloaded'
+
 # --- Every pull request refuses any way a player's game could run Hudson as well, in a check that's already required, so a way in left awake fails
 # the pull request that brings it
 $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''
