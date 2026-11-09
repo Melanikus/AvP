@@ -655,6 +655,16 @@
 			]
 		},
 		{
+			"name": "SOURCE: the page of games found never asks the list again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRelayList_FindGames();\n\t\t\tlistChanged = true;",
+					"to": "\t\t\tlistChanged = true;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the multiplayer page does not ask where the relays are",
 			"changes": [
 				{
@@ -669,8 +679,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tPutTheRelayGamesOnThePage();\n",
-					"to": ""
+					"from": "\t\t\tPutTheRelayGamesOnThePage();\n\t\t\tMakeSelectSessionMenu();",
+					"to": "\t\t\tMakeSelectSessionMenu();"
 				}
 			]
 		},
@@ -691,6 +701,36 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "\tCheckForWindowsMessages();\n\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];",
 					"to": "\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's answer rows take the selection when they come",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);",
+					"to": "int const selected = ours ? AvPMenus.CurrentlySelectedElement : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both answer rows let the player in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;",
+					"to": "answerRows[answer].MaxValue = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a join goes to the row number, not its game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);",
+					"to": "int const s = AvPMenus.CurrentlySelectedElement;"
 				}
 			]
 		},

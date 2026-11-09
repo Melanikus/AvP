@@ -1671,7 +1671,8 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "\" windowslot=$WindowSlot windowsof=$WindowsTogether\""), "and it says which part of the second screen is this game's");
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "'-WindowSlot', $slot, '-WindowsTogether'"), "and the pair gives each game its own part");
 	Check(Has(ReadSourceFile("3dc/avp/win95/win_proj.cpp"), "Hudson_PlaceTheWindow(&startLeft, &startTop, &startWidth, &startHeight);"), "a run's window starts where it's going to stay");
-	Check(Has(ReadSourceFile("3dc/avp/win95/win_proj.cpp"), "Hudson_PlaceTheWindow(&left, &top, &wide, &tall);"), "and the game's own sizing doesn't send it back to the main screen");
+	Check(Has(ReadSourceFile("3dc/avp/win95/win_proj.cpp"), "if (WindowMode == WindowModeSubWindow && !Hudson_PlaceTheWindow(&left, &top, &wide, &tall) && WindowSlot_Last(&slot))"),
+		"and the game's own sizing doesn't send it back to the main screen: a run places its window before -windowed's slot is asked");
 	Check(Has(ReadSourceFile("3dc/avp/win95/win_proj.cpp"), "::SetWindowPos(hWndMain, 0, left, top, wide, tall, howToSize)"), "which is what it uses to size it");
 	Check(Has(ReadSourceFile("win32/d3_func.cpp"), "Hudson_SayWhereTheWindowWent();"), "the log says where it went");
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($Look) { $words += @('-Look', $Look) }"), "and the pair passes it on");

@@ -8,6 +8,12 @@ The game's files and its log are in `Documents\My Games\Aliens versus Predator`.
 
 One player hosts, and the others join by typing the host's internet address on the join page. The address shows as dots, so it stays off streams and screenshots. Hold Tab to see what you typed.
 
+**Every join asks the host first,** however it's joined: by address, from the list, or on your own network, co-op included. Nobody gets into a game without the host's yes.
+- **The host** sees `Ripley asks to join (25 s). Esc to answer` on the screen. In the Esc menu, or on the co-op lobby page, two rows come first: **Let Ripley in** and **Say no to Ripley**. The selection stays where it was, so a key pressed by chance can't let anyone in.
+- **The joiner** sees `Asking the host to let you in (25 s)`, and Esc gives up.
+- **One at a time:** while the host is answering one player, another who asks is told the host is busy, and can try again in a moment.
+- **30 seconds** with no answer counts as no.
+
 **The host forwards two UDP ports on their router to their PC:**
 
 | Port | What it's for |
@@ -35,12 +41,16 @@ A port can't be forwarded on any of those. Those players can still join: someone
 **What it is:** a server of ours that carries a game's packets between the host and each joiner. Nobody has to forward anything, and a player behind carrier-grade NAT can host. It also keeps a **list of games**, so you pick a game instead of typing an address.
 
 **What you'll see:**
-- **On the page of games found,** the list's games appear after the ones found on your own network, as `Name (2/4)`: the game's name, then how many play and how many fit.
-  - A game for another version of the game shows its version, as `Name (V 1.13)`, and can't be joined.
-  - A full game can't be joined.
+- **While the page of games found looks,** an alien's tail turns in the middle, and one line says what it's doing: looking on your own network, then asking the list. It asks again every 5 seconds. If it finds nothing in a minute, it stops and says so, and **Enter looks again**. Esc goes back.
+- **The games** are a table: **Game | Level | Players | Region | Ping**. The list's games come after the ones found on your own network.
+  - **Region** is the game's relay, or `this network` for a game on your own network.
+  - **Ping** is about how long a packet takes from the host to you through the relay: your own time to that relay, plus the host's. It shows `?` until your game has timed the relay, and `-` for a game on your own network.
+  - The table keeps itself up to date every 5 seconds, and **the selection stays on the game you picked**, wherever it moves. A game that has ended shows `gone` once, then goes.
+  - A game for another version of the game shows its version, as `V 1.13`, and can't be joined. A full game shows `full`, and can't be joined either.
   - A game on a level you don't have isn't shown. A co-op campaign game still is, as on your own network: its page tells you if you're missing its map.
-  - The page shows at most 10 games, the newest first.
-- **Joining** takes a few seconds while the relay introduces you to the host. It gives up by itself after about 26 seconds, and **Esc gives up at once**.
+  - The page shows at most 10 games, the newest first. A name too long for its column ends with two dots, and a letter the game's font doesn't have shows as `?`.
+- **Joining** takes a few seconds while the relay introduces you to the host: the tail turns, with `Reaching the relay in saopaulo`, then `The relay is introducing you to the host`. It gives up by itself after about 26 seconds, and **Esc gives up at once**.
+- **Then the host is asked** (above). If the answer is no, or the host is busy, or doesn't answer, or you press Esc, you're back on the list, with that game still selected and a line saying which.
 - **Hosting:**
   - the game times each relay and opens on the nearest, and its game goes on the list;
   - a host open through the relay hears only the relay, so **friends on your own network join through the list too**;
@@ -100,6 +110,15 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | `Relay list: the settings' RelayServer is for tests only, with -dev, so the game's own is used` | the settings name a relay server, but the game started without `-dev`, so they're ignored | nothing, unless you're testing |
 | `Relay list: couldn't start, …` | the game couldn't start its list calls | send us the log |
 | `Relay list: N earlier piece(s) of news came too fast to keep` | some list lines were left out | nothing |
+| `Relay list: the games page looks for games again` | Enter on the page of games found, after it had stopped looking | nothing |
+
+**Lines starting `online screens:`** These are about asking the host. They never name the player.
+
+| Line | What it means | What to do |
+|---|---|---|
+| `online screens: a player asks to join this game` | someone has joined and is waiting for the host's answer | answer from the Esc menu |
+| `online screens: the host let the player in` and `… said no to the player` | the host's answer | nothing |
+| `online screens: every screen will be shown at the menus, …` and the other `-onlinescreens` lines | a tester asked for every screen, with made-up games, for pictures (`-dev -onlinescreens`) | nothing, unless you're testing |
 
 ## 4. What's private, and what isn't
 

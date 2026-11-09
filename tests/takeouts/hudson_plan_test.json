@@ -5981,7 +5981,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/win_proj.cpp",
-					"from": "Hudson_PlaceTheWindow(&left, &top, &wide, &tall);",
+					"from": "!Hudson_PlaceTheWindow(&left, &top, &wide, &tall) && ",
 					"to": ""
 				}
 			]

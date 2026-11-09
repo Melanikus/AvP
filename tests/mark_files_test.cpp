@@ -1,6 +1,9 @@
 // The test of a tester's mark: its pictures' names and numbers, keeping the newest 20, writing only new files into a plain folder, one
 // mark a second, the mark's line, and where the game uses them. Written 2026-11-07 by Melanikus for the AvP port.
 //
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a menu page's mark, and its line
+//
 // WHAT IT'S FOR: mark_files.h says what a mark is and why its folder is treated as input. The picture itself needs a graphics card, so
 // that part is read, not run.
 //
@@ -334,6 +337,12 @@ static void TestTheLine()
 	m.network = "connection 1 at 45 ms, connection 2 at 120 ms";
 	Mark_DescribeMoment(m, words, sizeof(words));
 	Check(Has(words, "picture mark-12.png; connection 1 at 45 ms, connection 2 at 120 ms"), "in a network game, each connection by number with its round trip");
+
+	// A menu page's mark (Mark_ThisPage): there's no player, so nothing of one is said, only the page
+	m.page = "J3 reaching the relay";
+	Mark_DescribeMoment(m, words, sizeof(words));
+	Check(strcmp(words, "MARK 12 at 19:05:34: the page J3 reaching the relay, picture mark-12.png") == 0, "a menu page's mark says the page, the time and its picture, and nothing of a player");
+	m.page = NULL;
 
 	// Through the log's leaving out, with a made-up player whose names are in the level's and the connections' words
 	LogFiles_Private p;

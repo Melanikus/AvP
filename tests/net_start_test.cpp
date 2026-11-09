@@ -2093,6 +2093,32 @@ static void TestJoining()
 	AvP.Network = I_No_Network;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: a network game goes on while its window isn't the one in front. A host whose window
+// wasn't lost its room on the relay (no HOST_KEEP for 45 s): the game waited in Windows' messages for as long as another window was in
+// front, and everything that keeps it in the game runs on its own thread. The waiting itself is win_func.cpp's, read here, not run.
+static void TestAGameGoesOnBehindAnotherWindow()
+{
+	printf("A network game behind another window\n");
+	Check(!Net_GameGoesOnWhileInactive(), "with no network game, the game waits while its window isn't in front, as it always has");
+	Check(HostAGame() == NET_OK && Net_GameGoesOnWhileInactive(), "a host goes on");
+	EndTheGame();
+	Check(!Net_GameGoesOnWhileInactive(), "and once its game is over, it waits again");
+	Check(JoinAGame() == NET_OK && Net_GameGoesOnWhileInactive(), "a joiner goes on too");
+	EndTheGame();
+	Check(!Net_GameGoesOnWhileInactive(), "until its game is over");
+
+	std::string const messages = ReadSourceFile("3dc/win95/win_func.cpp");
+	Check(Has(messages, "if (!bActive && !Net_GameGoesOnWhileInactive())") && Has(messages, "while (!bActive && bRunning && !Net_GameGoesOnWhileInactive());"),
+		"SOURCE: Windows' messages hold the game while its window isn't in front only when there's no network game");
+	std::string const window = ReadSourceFile("3dc/avp/win95/win_proj.cpp");
+	Check(Has(window, "if (raw->header.dwType == RIM_TYPEMOUSE && bActive)"), "SOURCE: the mouse, which Windows gives the game even then, doesn't move the player");
+	Check(Has(window, "if (dwSize > sizeof(lpb) || ::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) == (UINT)-1)"),
+		"SOURCE: and the mouse's report is read only when it fits its room");
+	std::string const input = ReadSourceFile("win32/di_func.cpp");
+	Check(Has(input, "\tif (bActive)\n\t{\n\t\tReadJoysticks();\n\t}"), "SOURCE: nor does a gamepad, which is read whatever window is in front");
+	Check(Has(window, "\t\t\tIngameKeyboardInput_ClearBuffer();\n\t\t\treturn 0;"), "SOURCE: and every key and button held is let go as the window stops being in front");
+}
+
 static void TestJoiningAgainWhenItCantBeDone()
 {
 	Check(JoinAGame() == NET_OK, "joining again");
@@ -3588,6 +3614,7 @@ int main()
 	TestSkirmish();
 	DirtyTheStack();
 	TestJoining();
+	TestAGameGoesOnBehindAnotherWindow();
 	TestJoiningAgainWhenItCantBeDone();
 	TestJoinThatGetsNoAnswerThenHosting();
 	TestHostingWhileStillInAGame();

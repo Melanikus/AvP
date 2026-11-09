@@ -74,6 +74,7 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData mu
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();
+bool      Net_GameGoesOnWhileInactive(void);   // a network game is going, so it goes on behind another window (win_func.cpp)
 
 // Called all the way through a level load. It answers the other machines, and leaves what they sent waiting for when the level is ready.
 void      Net_KeepAnsweringWhileLoading();

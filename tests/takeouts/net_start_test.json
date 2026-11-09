@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"win32"
 	],
 	"rows": [
 		{
@@ -2671,6 +2672,66 @@
 					"file": "3dc/networking.cpp",
 					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game still waits while its window isn't in front",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "\t\tif (!bActive && !Net_GameGoesOnWhileInactive())\n",
+					"to": "\t\tif (!bActive)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Windows' messages hold a network game until its window is in front",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "while (!bActive && bRunning && !Net_GameGoesOnWhileInactive());",
+					"to": "while (!bActive && bRunning);"
+				}
+			]
+		},
+		{
+			"name": "no game ever goes on behind another window",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool Net_GameGoesOnWhileInactive(void)\n{\n\treturn host != NULL;",
+					"to": "bool Net_GameGoesOnWhileInactive(void)\n{\n\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a mouse moved in another window turns the player",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (raw->header.dwType == RIM_TYPEMOUSE && bActive)",
+					"to": "if (raw->header.dwType == RIM_TYPEMOUSE)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mouse's report is read whatever its size",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (dwSize > sizeof(lpb) || ::GetRawInputData(",
+					"to": "if (::GetRawInputData("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gamepad plays the game behind another window",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\tif (bActive)\n\t{\n\t\tReadJoysticks();\n\t}",
+					"to": "\tReadJoysticks();"
 				}
 			]
 		}

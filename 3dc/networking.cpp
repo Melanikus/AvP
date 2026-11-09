@@ -2265,6 +2265,14 @@ void Net_SayLongestGapWhileLoading()
 	longestGapWhileLoading = 0;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: whether a network game is going (hosting, joined, or joining), which goes on while its
+// window isn't the one in front (win_func.cpp, CheckForWindowsMessages). Everything that keeps it in the game runs on the game's own thread.
+// A single player game, and a skirmish, which has no network, still wait.
+bool Net_GameGoesOnWhileInactive(void)
+{
+	return host != NULL;
+}
+
 void Net_ServiceNetwork()
 {
 	if (host)

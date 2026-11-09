@@ -34,11 +34,18 @@
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   -dev -onlinescreens shows every online-play screen at the menus, with made-up games, for pictures (online_screens_page.h)
+//   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer; the relay's news on
+//   the host, and on both copies the relay and its round trip, kept up at the top right while the game goes through a relay
+//   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
 
 #include "3dc.h"
+#include "window_slot.h"
 #include "build_identity.h"
 #include "mark_key.h"
 #include "hudson.h"
+#include "online_screens_page.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
@@ -352,6 +359,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
 		RelayAuto_ReadCommandLine(command_line, DevMode != 0);
 
+		// -dev -onlinescreens: every online-play screen, once, at the menus, with made-up games and no network, for pictures. A word only,
+		// with no value after it.
+		if (CommandLineHasWord(command_line, "-onlinescreens"))
+		{
+			if (DevMode)
+			{
+				OnlineDemo_TurnOn();
+				LogString("online screens: every screen will be shown at the menus, F2 for each picture (-dev -onlinescreens)");
+			}
+			else
+			{
+				LogString("online screens: -onlinescreens needs -dev, so it's left out");
+			}
+		}
+
 		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
 		// for one with a number after its '=', a word that starts with its name (CommandLineFindSwitch).
 		auto const devSwitch = [&](const char *name)
@@ -647,6 +669,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	if (CommandLineHasWord(command_line, "-w"))
 	{
 		WindowMode = WindowModeSubWindow;
+	}
+
+	// -dev -windowed: a test copy in a window on its own half of the screen, the first copy on the left and the second (-dev -secondcopy)
+	// on the right, so two copies run side by side on one PC (window_slot.h). A word only: the size comes from the screen, never from the
+	// command line, and the player's settings aren't changed.
+	if (CommandLineHasWord(command_line, "-windowed"))
+	{
+		if (CommandLineHasWord(command_line, "-dev"))
+		{
+			WindowMode = WindowModeSubWindow;
+			WindowSlot_TurnOn(secondCopy);
+			LogString(secondCopy ? "windowed: this copy opens in a window on the right half of the screen (-dev -windowed)"
+				: "windowed: this copy opens in a window on the left half of the screen (-dev -windowed)");
+		}
+		else
+		{
+			LogString("windowed: -windowed needs -dev, so this copy opens as it usually does");
+		}
 	}
 
 	if (CommandLineHasWord(command_line, "-dontgrabmouse"))
@@ -976,6 +1016,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 							// A tester's mark: noted now, and its picture taken when this frame is drawn
 							Mark_ReadKey();
+
+							// Online play's lines: a player asking to join this host, the relay's news, and the relay and its round trip, kept up
+							// at the top right for as long as the game goes through a relay (online_screens_page.h)
+							OnlinePlay_Frame();
 
 							FlushTextprintBuffer();
 

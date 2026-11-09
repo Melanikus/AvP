@@ -5,6 +5,7 @@
 //   a game found can be one from the relay server's list: SESSION_DESC says so, with its region and code
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
+//   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER)
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
@@ -223,6 +224,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_START, // a host starts the co-op campaign chosen on the page, for everyone with the map
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
+	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
 };
 
 

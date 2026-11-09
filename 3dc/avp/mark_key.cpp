@@ -1,5 +1,8 @@
 // The tester's mark key: a line in the log and a picture of the game's own screen. Written 2026-11-07 by Melanikus for the AvP port.
 // mark_files.h says what a mark is for, how its pictures are kept, and why the folder is treated as input.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   Mark_ThisPage marks a menu page, with no player (-dev -onlinescreens' pictures). Its number and time start the same way a level's do.
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -62,19 +65,16 @@ static bool KeyIsTaken()
 	return Mark_KeyIsIn((const unsigned char *)primary, sizeof(*primary), kMarkKey) || Mark_KeyIsIn((const unsigned char *)secondary, sizeof(*secondary), kMarkKey);
 }
 
-void Mark_ReadKey()
+// The start of any mark: its number and the time of day, in moment, and nothing else of it yet. False, with the reason on the screen, when
+// there can't be a mark now: within a second of the last, or with no number left in the folder.
+static bool StartAMoment()
 {
-	if (!DebouncedKeyboardInput[kMarkKey] || momentWaiting || !Player || !Player->ObStrategyBlock || KeyIsTaken())
-	{
-		return;
-	}
-
 	unsigned long const now = GetTickCount();
 
 	if (Mark_TooSoon(now, lastMarkAt))
 	{
 		Show("One mark a second: that one wasn't saved");
-		return;
+		return false;
 	}
 
 	std::string const folder = GetSaveFolderPath() ? GetSaveFolderPath() : "";
@@ -84,13 +84,12 @@ void Mark_ReadKey()
 	if (number == 0 || number > kMarkHighestNumber)
 	{
 		Show("No more marks can be saved in this folder");
-		return;
+		return false;
 	}
 
 	lastMarkAt = now ? now : 1;
 	lastNumber = number;
 
-	PLAYER_STATUS const *status = (PLAYER_STATUS const *)Player->ObStrategyBlock->SBdataptr;
 	time_t const clock = time(NULL);
 	struct tm local;
 
@@ -99,16 +98,34 @@ void Mark_ReadKey()
 		memset(&local, 0, sizeof(local));
 	}
 
+	memset(&moment, 0, sizeof(moment));
+	moment.number = number;
+	moment.hours = local.tm_hour;
+	moment.minutes = local.tm_min;
+	moment.seconds = local.tm_sec;
+	return true;
+}
+
+void Mark_ReadKey()
+{
+	if (!DebouncedKeyboardInput[kMarkKey] || momentWaiting || !Player || !Player->ObStrategyBlock || KeyIsTaken())
+	{
+		return;
+	}
+
+	if (!StartAMoment())
+	{
+		return;
+	}
+
+	PLAYER_STATUS const *status = (PLAYER_STATUS const *)Player->ObStrategyBlock->SBdataptr;
+
 	// The level's name: one of the game's own, or a custom one's, which the log has said already
 	_snprintf(momentLevel, sizeof(momentLevel) - 1, "%s", (AvP.CurrentEnv >= 0 && AvP.CurrentEnv < I_Num_Environments && Env_List[AvP.CurrentEnv]) ? Env_List[AvP.CurrentEnv]->main : "a level of its own");
 	momentLevel[sizeof(momentLevel) - 1] = '\0';
 
 	Net_DescribeConnections(momentNetwork, sizeof(momentNetwork));
 
-	moment.number = number;
-	moment.hours = local.tm_hour;
-	moment.minutes = local.tm_min;
-	moment.seconds = local.tm_sec;
 	moment.level = momentLevel;
 	moment.species = AvP.PlayerType == I_Alien ? "alien" : (AvP.PlayerType == I_Predator ? "predator" : "marine");
 	moment.x = Player->ObWorld.vx;
@@ -121,6 +138,18 @@ void Mark_ReadKey()
 	moment.weapon = (slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS) ? (int)status->WeaponSlot[slot].WeaponIDNumber : -1;
 	moment.network = momentNetwork[0] ? momentNetwork : NULL;
 	momentWaiting = true;
+}
+
+bool Mark_ThisPage(const char *page)
+{
+	if (!page || momentWaiting || !StartAMoment())
+	{
+		return false;
+	}
+
+	moment.page = page;
+	momentWaiting = true;
+	return true;
 }
 
 // The frame as it is now, as a PNG in memory, from the game's own picture of it: never the desktop. Gives back NULL if it can't be made.

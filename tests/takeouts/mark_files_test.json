@@ -64,6 +64,8 @@
     { "name": "SOURCE: no picture is ever taken",
       "changes": [{ "file": "3dc/d3d_render.cpp", "from": "\t\tMark_EndFrame(d3d.lpD3DDevice);\n", "to": "" }] },
     { "name": "SOURCE: a connection is named by its address",
-      "changes": [{ "file": "3dc/networking.cpp", "from": "int const added = _snprintf(words + used, size - 1 - used, \"%sconnection %u at %u ms\", used ? \", \" : \"\", (unsigned)i + 1, (unsigned)peer.roundTripTime);", "to": "int const added = _snprintf(words + used, size - 1 - used, \"%sconnection %u at %u ms, address %u\", used ? \", \" : \"\", (unsigned)i + 1, (unsigned)peer.roundTripTime, (unsigned)peer.address.host);" }] }
+      "changes": [{ "file": "3dc/networking.cpp", "from": "int const added = _snprintf(words + used, size - 1 - used, \"%sconnection %u at %u ms\", used ? \", \" : \"\", (unsigned)i + 1, (unsigned)peer.roundTripTime);", "to": "int const added = _snprintf(words + used, size - 1 - used, \"%sconnection %u at %u ms, address %u\", used ? \", \" : \"\", (unsigned)i + 1, (unsigned)peer.roundTripTime, (unsigned)peer.address.host);" }] },
+    { "name": "a menu page's mark is written as a level's",
+      "changes": [{ "file": "3dc/mark_files.h", "from": "if (m.page)", "to": "if (false)" }] }
   ]
 }
