@@ -53,6 +53,16 @@ for ($folder = $targetItem; $folder; $folder = $folder.Parent) {
 $target = $targetItem.FullName.TrimEnd('\')
 if (-not (Test-Path -LiteralPath (Join-Path $target 'avp_rifs'))) { throw "$target has no avp_rifs folder, so it is not a copy of the game." }
 
+# Added 2026-11-09 by Melanikus for the AvP port (Secondary's read of #187, B-2): gh must know every flag the checks below use. An older
+# gh refuses one it doesn't know, and that would read as "not signed in" or "GitHub can't vouch". Nobody here knows which gh release
+# brought each, so each flag is looked for in gh's own help, which asks nothing of GitHub.
+if (-not (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue)) { throw "gh, the GitHub CLI, isn't installed (winget install GitHub.cli). Nothing was installed." }
+$listHelp = (gh run list --help) -join "`n"
+$verifyHelp = (gh attestation verify --help) -join "`n"
+foreach ($flag in @(@($listHelp, '--commit'), @($verifyHelp, '--cert-identity'), @($verifyHelp, '--source-ref'), @($verifyHelp, '--source-digest'), @($verifyHelp, '--deny-self-hosted-runners'))) {
+    if (-not $flag[0].Contains($flag[1])) { throw "This gh is too old for the checks. Update it (winget upgrade GitHub.cli), then run this again. Nothing was installed." }
+}
+
 # The newest build the owner started from avpx_main, or with -Commit, the newest of that commit
 $which = @('run', 'list', '-R', $repo, '--workflow', 'build.yml', '--branch', $branch, '--event', 'workflow_dispatch', '--status', 'success', '--limit', '1', '--json', 'databaseId,headSha,createdAt', '--jq', '.[0]')
 if ($Commit) { $which += @('--commit', $Commit) }
@@ -94,7 +104,7 @@ try {
     # records that only once a job that builds nothing has checked every file against the list. --cert-identity is the workflow
     # and branch exactly, where --signer-workflow would also let through a workflow whose name only starts the same.
     gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners
-    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed. (If gh said it doesn't know a flag: this was written with gh 2.103.3, and yours says $(gh --version | Select-Object -First 1). Update gh first.)" }
+    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed." }
     "GitHub vouches for the list: $repo's Build workflow made it, from commit $($run.headSha)."
 
     $expected = @{}

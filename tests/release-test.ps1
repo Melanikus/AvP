@@ -1760,6 +1760,12 @@ Check ($installScript.Contains("    if (`$Commit -cnotmatch '\A[0-9a-fA-F]{40}\z
 Check ($installScript.Contains("if (`$Commit) { `$which += @('--commit', `$Commit) }`n`$found = gh @which`n")) 'GitHub is asked for a build of that commit only'
 Check-Order $installScript 'if ($Commit -and $run.headSha -cne $Commit) { throw ' 'gh run download $run.databaseId' 'and the build it names is checked to be of that commit before anything is downloaded'
 
+# An older gh refuses a flag it doesn't know, which would read as something else (Secondary's read of #187, B-2): each flag is looked for
+# in gh's own help first
+Check ($installScript.Contains("@(`$listHelp, '--commit'), @(`$verifyHelp, '--cert-identity'), @(`$verifyHelp, '--source-ref'), @(`$verifyHelp, '--source-digest'), @(`$verifyHelp, '--deny-self-hosted-runners')") -and
+    $installScript.Contains('if (-not $flag[0].Contains($flag[1])) { throw "This gh is too old for the checks.')) 'install-build.ps1 refuses a gh too old to know every flag its checks use'
+Check-Order $installScript 'foreach ($flag in @(' '$found = gh @which' 'before it asks GitHub anything'
+
 # --- Every pull request refuses any way a player's game could run Hudson as well, in a check that's already required, so a way in left awake fails
 # the pull request that brings it
 $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''
