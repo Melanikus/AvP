@@ -1367,6 +1367,19 @@ static void TestRelayKeys()
 	Check(RelayList_ReadRelayKeys(NULL, 0, "newyork", p384, kem) == kRelayListEndsTooSoon && KeysAreZero(p384, kem), "no answer at all is refused");
 	Check(ReadKeys(good, "New York", p384, kem) == kRelayListBadRegion && KeysAreZero(p384, kem),
 		"and a region asked about that can't be one is refused before anything is read");
+
+	// How relay_list.cpp asks for them, and gives them to the game (read, not run: it needs the network)
+	std::string const source = ReadSource("3dc/relay_list.cpp");
+	std::string const fetch = SourceSlice(source, "void ReadTheRelayKeys(const char *region, int asking)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(fetch, "L\"/v1/relay-keys?region=%hs\", region") && Has(fetch, "Call(L\"GET\", path, NULL, keysAnswer, sizeof(keysAnswer))")
+		&& Has(fetch, "RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);"),
+		"SOURCE: the list's thread asks for one region's keys, into 8 KB, and reads the answer through the hostile reader");
+	std::string const came = SourceSlice(source, "int RelayList_RelayKeysCame(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(came, "if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)") && Has(came, "if (came == kRelayKeysCame)\n\t\t{"),
+		"SOURCE: only the answer to the newest asking is taken, and only keys that came whole are handed over");
+	std::string const setting = SourceSlice(source, "bool RelayList_RelayKeyFingerprint(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(setting, "\t\tif (DevMode)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");")
+		&& CountOf(source, "\"RelayKey\"") == 1, "SOURCE: the settings' RelayKey is read in one place, and only with -dev");
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: -dev's test server reached with nothing changed on the tester's computer (relay_list.h):

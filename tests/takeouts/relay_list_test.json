@@ -1593,6 +1593,46 @@
 					"to": "\n\tif (false)\n\t{\n\t\treturn kRelayListHasAZero;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a relay's keys aren't read through the hostile reader",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);",
+					"to": "RelayListRefusal const refusal = kRelayListAccepted;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keys from an older asking are taken for the newest",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)",
+					"to": "if (shared->keysAnswered > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: keys that were refused are handed over anyway",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (came == kRelayKeysCame)\n\t\t{",
+					"to": "\t\tif (true)\n\t\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings' RelayKey is read without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");"
+				}
+			]
 		}
 	]
 }
