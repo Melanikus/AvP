@@ -1,0 +1,218 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the relay's static P-384 key isn't hashed (Noise's <- s pre-message left out)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, relay->p384, sizeof(relay->p384), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "the game's ephemeral ML-KEM key isn't hashed (only the P-384 half of e)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, draws->ekPublic, sizeof(draws->ekPublic), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "the prologue leaves out the 0 byte after the region's name",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, prologue, letters + 1, trace);",
+					"to": "ok = ok && MixHash(&hs->noise, prologue, letters, trace);"
+				}
+			]
+		},
+		{
+			"name": "A2's seal isn't checked: what it opens to, or not, is taken anyway",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (ok && (!NetNoise_DecryptAndHash(&hs->noise, sealedId, sealedIdBytes, sessionId, sizeof(sessionId), &written) || written != sizeof(sessionId)))",
+					"to": "if (ok && (NetNoise_DecryptAndHash(&hs->noise, sealedId, sealedIdBytes, sessionId, sizeof(sessionId), &written), false))"
+				}
+			]
+		},
+		{
+			"name": "an A2 key that isn't on the curve isn't refused as one",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (ok && !NetCrypto_EcdhAgree(hs->e, re, ee))",
+					"to": "if (ok && !NetCrypto_EcdhAgree(hs->e, re, ee) && false)"
+				}
+			]
+		},
+		{
+			"name": "the transcript is ck, not h",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "memcpy(keysOut->transcript, hs->noise.h, sizeof(keysOut->transcript));",
+					"to": "memcpy(keysOut->transcript, hs->noise.ck, sizeof(keysOut->transcript));"
+				}
+			]
+		},
+		{
+			"name": "an A2 longer than 1,689 bytes is taken",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (!a2 || size != kNetHandshakeA2Bytes)",
+					"to": "if (!a2 || size < kNetHandshakeA2Bytes)"
+				}
+			]
+		},
+		{
+			"name": "a region of no letters is taken",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "return letters >= 1;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the draws are left as they were, e's private ML-KEM key among them",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "NetCrypto_Wipe(draws, sizeof(*draws));",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "a finished handshake's chain and keys are left in memory",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "NetCrypto_Wipe(hs, sizeof(*hs));",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "a sealed message taken twice: the replay window isn't asked",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (counter >= kNetSealedControlMostMessages || !NetV2_ReplayIsNew(&c->window, counter))",
+					"to": "if (counter >= kNetSealedControlMostMessages)"
+				}
+			]
+		},
+		{
+			"name": "another session's sealed message isn't refused by its id",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (memcmp(d + 8, c->sessionId, kNetHandshakeSessionIdBytes) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "failed tags never end a session",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "if (++c->failedTags >= kNetSealedControlMostFailedTags)",
+					"to": "if (++c->failedTags >= kNetSealedControlMostFailedTags && false)"
+				}
+			]
+		},
+		{
+			"name": "a session never ends at 24 hours",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "static_cast<uint32_t>(now - c->startedAt) >= kNetSealedControlMostMs",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a counter is taken before its tag has checked, so a forged message uses up an honest one",
+			"changes": [
+				{
+					"file": "3dc/net_sealed_control.h",
+					"from": "uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes], tag[kNetCryptoTagBytes];",
+					"to": "NetV2_ReplayTake(&c->window, counter); uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes], tag[kNetCryptoTagBytes];"
+				}
+			]
+		},
+		{
+			"name": "an A2 datagram with a cookie that isn't 16 zeros is taken",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (memcmp(f.cookie, kNoCookie, kNetV2CookieBytes) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "A0 and A1 never go again",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (resends < 3 && since >= kNetRelayV2ResendAtMs[resends])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the session never gives up on a relay that doesn't answer",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (since >= kNetRelayV2GiveUpMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the picker counts an answer later than 1 s",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (took <= kNetRelayEchoAnswerWithinMs && (!hasTime[relay] || took < bestMs[relay]))",
+					"to": "if (!hasTime[relay] || took < bestMs[relay])"
+				}
+			]
+		},
+		{
+			"name": "the picker takes an answer from any of the relay's ports",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (!started || relay >= count || fromPort != controlPorts[relay])",
+					"to": "if (!started || relay >= count)"
+				}
+			]
+		},
+		{
+			"name": "the picker takes an answer to an ask already answered, so one answer counts twice",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (!answered[relay][k] && NetV2_ReadCookie(data, size, askIds[relay][k], cookie))",
+					"to": "if (NetV2_ReadCookie(data, size, askIds[relay][k], cookie))"
+				}
+			]
+		}
+	]
+}
