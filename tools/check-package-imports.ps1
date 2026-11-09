@@ -28,10 +28,12 @@ $ErrorActionPreference = 'Stop'
 # since Windows Vista: the game links it because ENet's host_secret.c (vcpkg-overlay-ports/enet, for patch 006) asks it for random
 # numbers with BCryptGenRandom. winhttp.dll is Windows' own HTTPS, there since Windows XP, in Windows' own folder (System32, and SysWOW64
 # for a 32-bit program like the game) and signed by Microsoft: the game links it because relay_list.cpp reads the relay server's list of
-# games and relays over HTTPS with it (added 2026-11-09).
+# games and relays over HTTPS with it (added 2026-11-09). crypt32.dll is Windows' own, there since Windows 2000, in the same folders and
+# signed the same way: the game links it because net_identity_store.cpp keeps a player's identity sealed for that Windows user with
+# CryptProtectData (DPAPI, #21; added 2026-11-09).
 $partOfWindows = @(
-    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll',
-    'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
+    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'crypt32.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll',
+    'user32.dll', 'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
 # Microsoft's Visual C++ runtime. The game and every library built for it take it from DLLs (the /MD switch). It was built into them (/MT)

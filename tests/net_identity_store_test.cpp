@@ -1,0 +1,468 @@
+// The test of keeping a player's identity between runs (3dc/net_identity_store.cpp and net_identity.h's NetIdentity_FromKept, #21).
+// Written 2026-11-09 by Melanikus for the AvP port.
+//
+// WHAT IT TESTS
+//
+// That an identity kept in a file and read back is the same identity: the same public halves and fingerprint, and private halves that
+// still agree the same secrets. That what's sealed is the private halves and nothing else, and opens only with the game's own words. Then
+// each way the file can go wrong: none there, a folder where the file should be, laid out wrong, sealed bytes changed (Windows refuses to
+// unseal them), sealed bytes that open to the wrong size, public halves changed (the private halves no longer belong to them), and a file
+// too big. Each gives its own answer, and none leaves half an identity behind. Then that private halves from another identity are refused,
+// and that keeping replaces a file whole, with nothing left beside it, or leaves the old one as it was. Last, it reads the store's source
+// for what it must never do: seal for the whole machine, or let Windows ask the player anything.
+//
+// HOW IT RUNS
+//
+// It uses Windows' own sealing (DPAPI, crypt32) and the game's real cryptography, so it's built and run on GitHub only, with the libraries
+// net_v2b_test uses (tests/net_identity_store_test.args). Its files have fixed names in the folder it runs in, and are deleted at the end.
+// The program gives back a non-zero result if anything failed.
+
+#include <windows.h>
+#include <wincrypt.h>
+
+#include <fstream>
+#include <sstream>
+#include <stdio.h>
+#include <string.h>
+#include <string>
+#include <vector>
+
+#include "net_identity_store.h"
+#include "source_slice.h"
+
+static int checksFailed = 0;
+
+static void Check(bool passed, std::string const &what)
+{
+	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what.c_str());
+
+	if (!passed)
+	{
+		checksFailed++;
+	}
+}
+
+static void FailedSlice(std::string const &why)
+{
+	Check(false, why);
+}
+
+// The store's save folder, for this test: none, so the save folder's own file is never touched here
+char *GetSaveFolderPath()
+{
+	static char none[1] = { 0 };
+	return none;
+}
+
+static const char *const kKept = "net_identity_store_test.bin";
+static const char *const kMissing = "net_identity_store_test_missing.bin";
+static const char *const kFolder = "net_identity_store_test_folder";
+
+// The words the store seals with, as CRYPTO.md section 4.1 gives them: written out here, not taken from the store, so a change there shows
+static const char kWords[] = "AVPX identity v2";
+
+static DATA_BLOB Words(void)
+{
+	DATA_BLOB words;
+	words.pbData = reinterpret_cast<BYTE *>(const_cast<char *>(kWords));
+	words.cbData = static_cast<DWORD>(sizeof(kWords) - 1);
+	return words;
+}
+
+// Seals bytes the way the store does, so the test can make a sealed part the store didn't write
+static std::vector<uint8_t> Seal(std::vector<uint8_t> const &bytes)
+{
+	DATA_BLOB plain;
+	plain.pbData = const_cast<BYTE *>(bytes.data());
+	plain.cbData = static_cast<DWORD>(bytes.size());
+	DATA_BLOB words = Words();
+	DATA_BLOB sealed = { 0, NULL };
+	std::vector<uint8_t> out;
+
+	if (CryptProtectData(&plain, NULL, &words, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &sealed))
+	{
+		out.assign(sealed.pbData, sealed.pbData + sealed.cbData);
+		LocalFree(sealed.pbData);
+	}
+
+	return out;
+}
+
+// An identity's two private halves side by side, as the store seals them: P-384 first, then ML-KEM
+static std::vector<uint8_t> PrivateHalves(const NetIdentity &id)
+{
+	std::vector<uint8_t> halves(kNetIdentitySealedPlainBytes);
+	NetIdentity_ExportP384Private(&id, halves.data());
+	memcpy(halves.data() + kNetCryptoP384ScalarBytes, id.kemPrivate, kNetPqKemPrivateBytes);
+	return halves;
+}
+
+// An identity filled with a byte that's never 0, so a refusal that doesn't empty it shows
+static void Dirty(NetIdentity *id)
+{
+	memset(id, 0xEE, sizeof(*id));
+}
+
+static std::vector<uint8_t> ReadAll(const char *path)
+{
+	std::ifstream file(path, std::ios::binary);
+	return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+static void WriteAll(const char *path, std::vector<uint8_t> const &bytes)
+{
+	std::ofstream file(path, std::ios::binary | std::ios::trunc);
+	file.write(reinterpret_cast<const char *>(bytes.data()), (std::streamsize)bytes.size());
+}
+
+// Whether two identities agree the same secret with a third party's key, and open the same sealed secret: the same private halves
+static bool SameKeys(NetIdentity *a, NetIdentity *b)
+{
+	uint8_t otherPublic[kNetCryptoP384PublicBytes];
+	NetEcdhKey *const other = NetCrypto_EcdhNew(otherPublic);
+	uint8_t one[kNetCryptoP384ScalarBytes];
+	uint8_t two[kNetCryptoP384ScalarBytes];
+	bool same = other && NetCrypto_EcdhAgree(a->p384, otherPublic, one) && NetCrypto_EcdhAgree(b->p384, otherPublic, two) &&
+		memcmp(one, two, sizeof(one)) == 0;
+	NetCrypto_EcdhFree(other);
+
+	uint8_t ciphertext[kNetPqKemCiphertextBytes];
+	uint8_t sealed[kNetPqKemSecretBytes];
+	uint8_t opened[kNetPqKemSecretBytes];
+	same = same && NetPq_KemEncapsulate(NetIdentity_KemPublic(a), ciphertext, sealed) && NetPq_KemDecapsulate(b->kemPrivate, ciphertext, opened) &&
+		memcmp(sealed, opened, sizeof(sealed)) == 0;
+	return same;
+}
+
+static bool NothingLeft(const NetIdentity &id)
+{
+	static NetIdentity const empty = {};
+	return !id.made && id.p384 == NULL && memcmp(&id, &empty, sizeof(id)) == 0;
+}
+
+static void TestKeepAndRead()
+{
+	puts("Kept, then read back");
+
+	NetIdentity made;
+	Check(NetIdentity_Make(&made), "an identity is made");
+	DeleteFileA(kKept);
+	Check(NetIdentityStore_KeepTo(kKept, &made), "and kept");
+
+	std::vector<uint8_t> const file = ReadAll(kKept);
+	NetIdentityFileView view;
+	Check(NetIdentityFile_Read(file.data(), file.size(), &view) == kNetIdentityFileGood &&
+		memcmp(view.statics, made.statics, kNetIdentityStaticBytes) == 0, "the file is laid out right, with its public halves as they are");
+
+	bool privateInTheClear = false;
+
+	for (size_t i = 0; i + 32 <= file.size(); i++)
+	{
+		privateInTheClear = privateInTheClear || memcmp(file.data() + i, made.kemPrivate, 32) == 0;
+	}
+
+	Check(!privateInTheClear, "and nothing of the private halves can be found in it unsealed");
+
+	NetIdentity read;
+	const char *why = "not set";
+	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreLoaded && why == NULL, "it's read back");
+	Check(read.made && memcmp(read.statics, made.statics, kNetIdentityStaticBytes) == 0 &&
+		memcmp(read.fingerprint, made.fingerprint, kNetIdentityFingerprintBytes) == 0, "with the same public halves and fingerprint");
+	Check(SameKeys(&made, &read), "and private halves that agree the same secrets as the ones made");
+
+	NetIdentity_Free(&read);
+	NetIdentity_Free(&made);
+}
+
+static void TestTheSealing()
+{
+	puts("What's sealed, and what opens it");
+
+	NetIdentity made;
+	NetIdentity_Make(&made);
+	DeleteFileA(kKept);
+	NetIdentityStore_KeepTo(kKept, &made);
+	std::vector<uint8_t> const file = ReadAll(kKept);
+	NetIdentityFileView view;
+	bool const laidOut = NetIdentityFile_Read(file.data(), file.size(), &view) == kNetIdentityFileGood;
+
+	DATA_BLOB sealed = { 0, NULL };
+	sealed.pbData = laidOut ? const_cast<BYTE *>(view.sealed) : NULL;
+	sealed.cbData = laidOut ? static_cast<DWORD>(view.sealedBytes) : 0;
+
+	DATA_BLOB words = Words();
+	DATA_BLOB plain = { 0, NULL };
+	bool const opened = laidOut && CryptUnprotectData(&sealed, NULL, &words, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain);
+	std::vector<uint8_t> halves = PrivateHalves(made);
+	Check(opened && plain.cbData == kNetIdentitySealedPlainBytes && memcmp(plain.pbData, halves.data(), halves.size()) == 0,
+		"the sealed part opens, with CRYPTO.md's words, to the private halves and nothing else: P-384 first, then ML-KEM");
+
+	if (plain.pbData)
+	{
+		SecureZeroMemory(plain.pbData, plain.cbData);
+		LocalFree(plain.pbData);
+		plain.pbData = NULL;
+	}
+
+	bool const openedBare = laidOut && CryptUnprotectData(&sealed, NULL, NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain);
+	Check(laidOut && !openedBare, "and without the words, it doesn't open");
+
+	if (plain.pbData)
+	{
+		SecureZeroMemory(plain.pbData, plain.cbData);
+		LocalFree(plain.pbData);
+	}
+
+	SecureZeroMemory(halves.data(), halves.size());
+	NetIdentity_Free(&made);
+}
+
+static void TestFilesThatCantBeUsed()
+{
+	puts("Files that can't be used, each with its own answer");
+
+	NetIdentity made;
+	NetIdentity_Make(&made);
+	DeleteFileA(kKept);
+	NetIdentityStore_KeepTo(kKept, &made);
+	std::vector<uint8_t> const good = ReadAll(kKept);
+
+	NetIdentity read;
+	const char *why = NULL;
+
+	DeleteFileA(kMissing);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kMissing, &read, &why) == kNetIdentityStoreNoFile && NothingLeft(read), "no file is no identity kept yet");
+
+	// A folder can't be opened as a file, but it's there: never taken for no file, which would make a new identity in its place
+	CreateDirectoryA(kFolder, NULL);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kFolder, &read, &why) == kNetIdentityStoreCantRead && NothingLeft(read),
+		"something there that can't be opened is a file that can't be read, never no file");
+
+	std::vector<uint8_t> notOurs = good;
+	notOurs[0] = 'B';
+	WriteAll(kKept, notOurs);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) && why &&
+		strcmp(why, NetIdentityFile_Words(kNetIdentityFileNotOurs)) == 0, "a file laid out wrong is refused, saying how");
+
+	std::vector<uint8_t> sealedChanged = good;
+	sealedChanged[kNetIdentityFileHeadBytes + 40] ^= 0x01;
+	WriteAll(kKept, sealedChanged);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreCantUnseal && NothingLeft(read),
+		"a sealed part with one bit changed isn't opened by Windows");
+
+	// Sealed parts the store didn't write, sealed the same way: the private halves with a byte more, and with a byte fewer
+	std::vector<uint8_t> halves = PrivateHalves(made);
+	std::vector<uint8_t> longer = halves;
+	longer.push_back(0);
+	std::vector<uint8_t> shorter(halves.begin(), halves.end() - 1);
+	std::vector<uint8_t> const sealedLonger = Seal(longer);
+	std::vector<uint8_t> const sealedShorter = Seal(shorter);
+	std::vector<uint8_t> wrongSize(kNetIdentityFileMostBytes);
+	bool refusedBoth = !sealedLonger.empty() && !sealedShorter.empty();
+
+	for (std::vector<uint8_t> const *sealed : { &sealedLonger, &sealedShorter })
+	{
+		size_t const size = NetIdentityFile_Write(made.statics, sealed->data(), sealed->size(), wrongSize.data(), wrongSize.size());
+		WriteAll(kKept, std::vector<uint8_t>(wrongSize.begin(), wrongSize.begin() + size));
+		Dirty(&read);
+		refusedBoth = refusedBoth && size > 0 && NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) &&
+			why && strstr(why, "wrong size") != NULL;
+	}
+
+	Check(refusedBoth, "a sealed part that opens to a byte more or a byte fewer than the private halves is refused, saying so");
+	SecureZeroMemory(halves.data(), halves.size());
+	SecureZeroMemory(longer.data(), longer.size());
+	SecureZeroMemory(shorter.data(), shorter.size());
+
+	std::vector<uint8_t> kemPublicChanged = good;
+	kemPublicChanged[12 + kNetCryptoP384PublicBytes + 100] ^= 0x01;
+	WriteAll(kKept, kemPublicChanged);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) && why &&
+		strstr(why, "don't belong") != NULL, "public halves changed by a bit are refused: the private halves no longer belong to them");
+
+	std::vector<uint8_t> tooBig(kNetIdentityFileMostBytes + 1, 0);
+	WriteAll(kKept, tooBig);
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) && why &&
+		strcmp(why, NetIdentityFile_Words(kNetIdentityFileTooBig)) == 0, "a file bigger than any this game writes is refused");
+
+	Dirty(&read);
+	Check(NetIdentityStore_LoadFrom("", &read, &why) == kNetIdentityStoreCantRead && NothingLeft(read), "no path is no identity read");
+
+	NetIdentity_Free(&made);
+}
+
+static void TestHalvesFromAnother()
+{
+	puts("Private halves from another identity");
+
+	NetIdentity a;
+	NetIdentity b;
+	NetIdentity_Make(&a);
+	NetIdentity_Make(&b);
+
+	uint8_t bP384[kNetCryptoP384ScalarBytes];
+	Check(NetIdentity_ExportP384Private(&b, bP384), "an identity's P-384 private number can be taken, to be sealed");
+
+	NetIdentity mixed;
+	Check(!NetIdentity_FromKept(a.statics, bP384, b.kemPrivate, &mixed) && NothingLeft(mixed),
+		"a's public halves with b's private halves are refused, with nothing left");
+
+	uint8_t aP384[kNetCryptoP384ScalarBytes];
+	NetIdentity_ExportP384Private(&a, aP384);
+	Check(!NetIdentity_FromKept(a.statics, aP384, b.kemPrivate, &mixed) && NothingLeft(mixed), "and so is a's P-384 half with b's ML-KEM half");
+
+	NetIdentity whole;
+	Check(NetIdentity_FromKept(a.statics, aP384, a.kemPrivate, &whole) && whole.made &&
+		memcmp(whole.fingerprint, a.fingerprint, kNetIdentityFingerprintBytes) == 0, "a's own halves make a whole again, with a's fingerprint");
+
+	// Halves swapped in memory, past anything Windows checks when a key is brought in: only NetIdentity_HalvesMatch can see these
+	Check(NetIdentity_HalvesMatch(&a), "an identity's own halves match");
+	NetIdentity swapped = a;
+	swapped.p384 = b.p384;
+	bool const p384Refused = !NetIdentity_HalvesMatch(&swapped);
+	swapped.p384 = a.p384;
+	memcpy(swapped.kemPrivate, b.kemPrivate, kNetPqKemPrivateBytes);
+	bool const kemRefused = !NetIdentity_HalvesMatch(&swapped);
+	SecureZeroMemory(&swapped, sizeof(swapped));
+	Check(p384Refused, "another identity's P-384 private key doesn't match a's public halves");
+	Check(kemRefused, "nor does its ML-KEM private key");
+
+	uint8_t same[16];
+	uint8_t other[16];
+	memset(same, 0x5A, sizeof(same));
+	memcpy(other, same, sizeof(other));
+	bool const sameIsSame = NetIdentity_SameSecret(same, other, sizeof(same));
+	other[0] ^= 0x01;
+	bool const firstDiffers = !NetIdentity_SameSecret(same, other, sizeof(same));
+	other[0] = same[0];
+	other[15] ^= 0x80;
+	bool const lastDiffers = !NetIdentity_SameSecret(same, other, sizeof(same));
+	Check(sameIsSame && firstDiffers && lastDiffers, "two secrets are the same only when every byte is, the first and the last too");
+
+	NetIdentity none = {};
+	uint8_t out[kNetCryptoP384ScalarBytes];
+	memset(out, 0xEE, sizeof(out));
+	Check(!NetIdentity_ExportP384Private(&none, out) && out[0] == 0 && out[47] == 0, "an identity never made gives nothing, and out is wiped");
+	memset(out, 0xEE, sizeof(out));
+	Check(!NetCrypto_EcdhExportPrivate(NULL, out) && out[0] == 0 && out[47] == 0, "and CNG's own export, given no key, wipes out too");
+
+	SecureZeroMemory(aP384, sizeof(aP384));
+	SecureZeroMemory(bP384, sizeof(bP384));
+	NetIdentity_Free(&whole);
+	NetIdentity_Free(&a);
+	NetIdentity_Free(&b);
+}
+
+static void TestReplacing()
+{
+	puts("Keeping again");
+
+	NetIdentity first;
+	NetIdentity second;
+	NetIdentity_Make(&first);
+	NetIdentity_Make(&second);
+	DeleteFileA(kKept);
+	NetIdentityStore_KeepTo(kKept, &first);
+	Check(NetIdentityStore_KeepTo(kKept, &second), "a second identity is kept in place of the first");
+
+	NetIdentity read;
+	Check(NetIdentityStore_LoadFrom(kKept, &read, NULL) == kNetIdentityStoreLoaded &&
+		memcmp(read.fingerprint, second.fingerprint, kNetIdentityFingerprintBytes) == 0, "and it's the second that's read back");
+	Check(GetFileAttributesA((std::string(kKept) + ".new").c_str()) == INVALID_FILE_ATTRIBUTES, "with nothing left beside it");
+
+	NetIdentity none = {};
+	Check(!NetIdentityStore_KeepTo(kKept, &none), "an identity never made isn't kept");
+	NetIdentity_Free(&read);
+	Check(NetIdentityStore_LoadFrom(kKept, &read, NULL) == kNetIdentityStoreLoaded &&
+		memcmp(read.fingerprint, second.fingerprint, kNetIdentityFingerprintBytes) == 0, "and the file is left as it was");
+
+	// A file can't be put in a folder's place, so keeping there fails at the last step: what was written for it mustn't be left behind
+	CreateDirectoryA(kFolder, NULL);
+	std::string const folderNew = std::string(kFolder) + ".new";
+	DeleteFileA(folderNew.c_str());
+	bool const keptInFolder = NetIdentityStore_KeepTo(kFolder, &second);
+	DWORD const folderNow = GetFileAttributesA(kFolder);
+	Check(!keptInFolder && folderNow != INVALID_FILE_ATTRIBUTES && (folderNow & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
+		GetFileAttributesA(folderNew.c_str()) == INVALID_FILE_ATTRIBUTES,
+		"keeping that can't put its file in place says no, leaves what was there, and leaves nothing beside it");
+
+	NetIdentity_Free(&read);
+	NetIdentity_Free(&first);
+	NetIdentity_Free(&second);
+}
+
+static std::string ReadSource(const char *name)
+{
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	std::string text = all.str();
+	std::string plain;
+
+	for (char c : text)
+	{
+		if (c != '\r')
+		{
+			plain += c;
+		}
+	}
+
+	return plain;
+}
+
+static void TestTheSource()
+{
+	puts("What the store must never do, by reading it");
+
+	std::string const store = ReadSource("3dc/net_identity_store.cpp");
+	Check(store.size() > 3000, "the store's source was found and read");
+	Check(store.find("CRYPTPROTECT_LOCAL_MACHINE") == std::string::npos, "it never seals for the whole machine: only this Windows user can open it");
+	Check(store.find("CryptProtectData(&plain, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &sealed)") != std::string::npos &&
+		store.find("CryptUnprotectData(&sealed, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain)") != std::string::npos,
+		"both ways go with the game's own words, and Windows is never let ask the player anything");
+	Check(store.find("const char kSealWords[] = \"AVPX identity v2\";") != std::string::npos, "the game's own words are CRYPTO.md section 4.1's");
+
+	std::string const unseal = SourceSlice(store, "if (plain.pbData)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(unseal.find("SecureZeroMemory(plain.pbData, plain.cbData);") != std::string::npos && unseal.find("SecureZeroMemory") < unseal.find("LocalFree"),
+		"the unsealed private halves are wiped before Windows gets their memory back");
+	Check(store.find("MoveFileExA(fresh.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)") != std::string::npos,
+		"a new file is put in place in one step, never written over the old one");
+}
+
+int main()
+{
+	TestKeepAndRead();
+	TestTheSealing();
+	TestFilesThatCantBeUsed();
+	TestHalvesFromAnother();
+	TestReplacing();
+	TestTheSource();
+
+	DeleteFileA(kKept);
+	DeleteFileA(kMissing);
+	DeleteFileA((std::string(kFolder) + ".new").c_str());
+	RemoveDirectoryA(kFolder);
+
+	if (checksFailed)
+	{
+		printf("%d checks FAILED\n", checksFailed);
+		return 1;
+	}
+
+	printf("All checks passed\n");
+	return 0;
+}

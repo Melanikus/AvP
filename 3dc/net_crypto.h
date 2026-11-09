@@ -65,9 +65,15 @@ struct NetEcdhKey;
 // (with publicOut wiped) if it couldn't. NetCrypto_EcdhFree it when done.
 NetEcdhKey *NetCrypto_EcdhNew(uint8_t publicOut[kNetCryptoP384PublicBytes]);
 
-// A P-384 key from fixed bytes, for test vectors only: a game in play always uses NetCrypto_EcdhNew. Its public half must be given too,
-// and must be that private key's. NULL if CNG refuses either.
+// A P-384 key from fixed bytes: for test vectors, and for a player's identity kept between runs (net_identity_store.cpp), which is made
+// once by NetCrypto_EcdhNew. Its public half must be given too, and must be that private key's: CNG doesn't promise to check that, so
+// NetIdentity_FromKept checks it itself. NULL if CNG refuses either. (Modified 2026-11-09 by Melanikus for the AvP port, #21.)
 NetEcdhKey *NetCrypto_EcdhFromPrivate(const uint8_t privateKey[kNetCryptoP384ScalarBytes], const uint8_t publicKey[kNetCryptoP384PublicBytes]);
+
+// The private number of a P-384 key, big-endian, for keeping it sealed between runs (#21): nothing else may ask for it. False, with
+// privateOut wiped, if CNG won't give it, or gives something that isn't a P-384 private key. The caller wipes privateOut once it's sealed.
+// Added 2026-11-09 by Melanikus for the AvP port.
+bool NetCrypto_EcdhExportPrivate(NetEcdhKey *key, uint8_t privateOut[kNetCryptoP384ScalarBytes]);
 
 // The secret two P-384 keys agree on: the X of mine times theirs, big-endian, as Java and the other implementations give it. False (with
 // secretOut wiped) for a public key that isn't one: the wrong first byte, a point not on the curve, or an answer of all 0.
