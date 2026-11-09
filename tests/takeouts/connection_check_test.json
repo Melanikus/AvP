@@ -1,0 +1,208 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a rule counts where Windows Firewall is off",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "return f.firewallRead ? (f.firewallOn & kinds) : kinds;",
+					"to": "return kinds;"
+				}
+			]
+		},
+		{
+			"name": "a firewall that wasn't read lets a blocking rule off",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "return f.firewallRead ? (f.firewallOn & kinds) : kinds;",
+					"to": "return f.firewallRead ? (f.firewallOn & kinds) : 0;"
+				}
+			]
+		},
+		{
+			"name": "a rule that allows wins over one that blocks",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "return f.rulesRead ? (Active(f) & f.avpxOutBlocked) : 0;",
+					"to": "return f.rulesRead ? (Active(f) & f.avpxOutBlocked & ~f.avpxOutAllowed) : 0;"
+				}
+			]
+		},
+		{
+			"name": "a rule letting AVPx out on any kind of network is taken for all of them",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "return f.rulesRead ? (byDefault & ~f.avpxOutAllowed) : 0;",
+					"to": "return f.rulesRead && !f.avpxOutAllowed ? byDefault : 0;"
+				}
+			]
+		},
+		{
+			"name": "no network connected isn't taken as stopping it",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "if (f.networksRead && f.connected <= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a rule for a kind of network that isn't connected counts",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "unsigned const kinds = f.networksRead ? (f.kinds & kConnAllKinds) : 0;",
+					"to": "unsigned const kinds = kConnAllKinds;"
+				}
+			]
+		},
+		{
+			"name": "another firewall that's on isn't counted",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "if ((f.othersRead && f.othersOn > 0) || InBlocked(f) || outUnknown)",
+					"to": "if (InBlocked(f) || outUnknown)"
+				}
+			]
+		},
+		{
+			"name": "block everything coming in isn't counted",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "unsigned const all = f.firewallRead ? f.inAllBlocked : 0;",
+					"to": "unsigned const all = 0;"
+				}
+			]
+		},
+		{
+			"name": "rules that couldn't be read are taken as letting AVPx out",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "|| InBlocked(f) || outUnknown)",
+					"to": "|| InBlocked(f))"
+				}
+			]
+		},
+		{
+			"name": "a product's name keeps every letter as it is",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "to[used++] = (letter >= 32 && letter <= 126) ? (char)letter : '?';",
+					"to": "to[used++] = (char)letter;"
+				}
+			]
+		},
+		{
+			"name": "a product's name isn't cut to the most letters",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": " && used < kConnNameLetters",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a product's name is read past the letters it's given",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "from && i < mostChars && from[i] != 0",
+					"to": "from && from[i] != 0"
+				}
+			]
+		},
+		{
+			"name": "more lines are given than there's room for",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "int const given = n < most ? n : most;",
+					"to": "int const given = n;"
+				}
+			]
+		},
+		{
+			"name": "the LAN line is shown when nothing stops AVPx coming in",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "if (InBlocked(f))\n\t{\n\t\tKindsWords(InBlocked(f)",
+					"to": "if (true)\n\t{\n\t\tKindsWords(InBlocked(f)"
+				}
+			]
+		},
+		{
+			"name": "the other firewalls past the named ones aren't counted in the words",
+			"changes": [
+				{
+					"file": "3dc/connection_check.cpp",
+					"from": "if (f.othersOn > named && used + 1 < size)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a rule list read only in part counts as read",
+			"changes": [
+				{
+					"file": "3dc/win95/connection_check_win.cpp",
+					"from": "f.rulesRead = ended;",
+					"to": "f.rulesRead = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a rule against AVPx coming in counts for TCP too",
+			"changes": [
+				{
+					"file": "3dc/win95/connection_check_win.cpp",
+					"from": "(protocol == NET_FW_IP_PROTOCOL_UDP || protocol == NET_FW_IP_PROTOCOL_ANY)",
+					"to": "(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the network page is opened through a program found by its name",
+			"changes": [
+				{
+					"file": "3dc/win95/connection_check_win.cpp",
+					"from": "ShellExecuteW(NULL, L\"open\", L\"ms-settings:network-status\", NULL, NULL, SW_SHOWNORMAL);",
+					"to": "ShellExecuteW(NULL, L\"open\", L\"control.exe\", L\"ncpa.cpl\", NULL, SW_SHOWNORMAL);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the check turns Windows Firewall on",
+			"changes": [
+				{
+					"file": "3dc/win95/connection_check_win.cpp",
+					"from": "\t\tf.firewallRead = allRead;",
+					"to": "\t\tpolicy->put_FirewallEnabled(NET_FW_PROFILE2_PUBLIC, VARIANT_TRUE);\n\t\tf.firewallRead = allRead;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a product's name is kept as Windows gives it",
+			"changes": [
+				{
+					"file": "3dc/win95/connection_check_win.cpp",
+					"from": "ConnectionCheck_SafeName(name, SysStringLen(name), f.others[f.othersOn], sizeof(f.others[f.othersOn]));",
+					"to": "WideCharToMultiByte(CP_UTF8, 0, name, -1, f.others[f.othersOn], sizeof(f.others[f.othersOn]), NULL, NULL);"
+				}
+			]
+		}
+	]
+}

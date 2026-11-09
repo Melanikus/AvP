@@ -435,6 +435,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\win_proj.cpp" />
     <ClCompile Include="..\..\3dc\build_identity.cpp" />
     <ClCompile Include="..\..\3dc\ConfigFile.cpp" />
+    <ClCompile Include="..\..\3dc\connection_check.cpp" />
     <ClCompile Include="..\..\3dc\console.cpp" />
     <ClCompile Include="..\..\3dc\d3d_render.cpp" />
     <ClCompile Include="..\..\3dc\FastFile.cpp" />
@@ -517,6 +518,7 @@
     <ClCompile Include="..\..\3dc\win95\bitmap_names.cpp" />
     <ClCompile Include="..\..\3dc\win95\chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\chunk_dummy.cpp" />
+    <ClCompile Include="..\..\3dc\win95\connection_check_win.cpp" />
     <ClCompile Include="..\..\3dc\win95\chunk_fragments.cpp" />
     <ClCompile Include="..\..\3dc\win95\chunk_gsprites.cpp" />
     <ClCompile Include="..\..\3dc\win95\chunk_light.cpp" />
@@ -756,6 +758,7 @@
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
     <ClInclude Include="..\..\3dc\net_close.h" />
     <ClInclude Include="..\..\3dc\relay_list.h" />
+    <ClInclude Include="..\..\3dc\connection_check.h" />
     <ClInclude Include="..\..\3dc\relay_list_text.h" />
     <ClInclude Include="..\..\3dc\relay_auto.h" />
     <ClInclude Include="..\..\3dc\window_slot.h" />

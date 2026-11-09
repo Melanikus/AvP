@@ -31,10 +31,14 @@ $ErrorActionPreference = 'Stop'
 # games and relays over HTTPS with it (added 2026-11-09). crypt32.dll is Windows' own certificate library, part of Windows 10 and 11, in
 # the same folder and signed by Microsoft: the game links it because relay_list.cpp, with -dev's RelayListPin, reads the list's
 # certificate from WinHTTP to check it against the pin, and must give it back with CertFreeCertificateContext (added 2026-11-09, PO's
-# approval; the hash itself is bcrypt's).
+# approval; the hash itself is bcrypt's). oleaut32.dll is Windows' own library for the strings and values COM hands back, part of
+# Windows 10 and 11, in the same folder, one of the libraries Windows always loads from there (its KnownDLLs), and signed by Microsoft:
+# the game links it because the Connection check (3dc/win95/connection_check_win.cpp) reads Windows' own network and firewall settings
+# through COM, and must give back the names and values it gets with SysFreeString and VariantClear (added 2026-11-09, PO's go for
+# "nobody blocked silently").
 $partOfWindows = @(
-    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'crypt32.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll',
-    'user32.dll', 'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
+    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'crypt32.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll',
+    'shell32.dll', 'user32.dll', 'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
 # Microsoft's Visual C++ runtime. The game and every library built for it take it from DLLs (the /MD switch). It was built into them (/MT)
