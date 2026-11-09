@@ -1,0 +1,88 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "solid texels are coloured too, not only holes",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "\t\t\tif (texel[3] != 0)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a hole's colour is read as a neighbour's, so the order matters",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "\t\t\t\t\tif (neighbour[3] == 0)\n\t\t\t\t\t{\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n",
+					"to": "\t\t\t\t\tif (false)\n\t\t\t\t\t{\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "neighbours stop at the edges instead of wrapping",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "uint32_t const nx = (dx < 0) ? (x == 0 ? width - 1 : x - 1) : (dx > 0) ? (x == width - 1 ? 0 : x + 1) : x;",
+					"to": "uint32_t const nx = (dx < 0) ? (x == 0 ? x : x - 1) : (dx > 0) ? (x == width - 1 ? x : x + 1) : x;"
+				}
+			]
+		},
+		{
+			"name": "a hole takes only the last solid neighbour, not the average",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "\t\t\t\t\tblue += neighbour[0];\n\t\t\t\t\tgreen += neighbour[1];\n\t\t\t\t\tred += neighbour[2];\n\t\t\t\t\tsolid++;",
+					"to": "\t\t\t\t\tblue = neighbour[0];\n\t\t\t\t\tgreen = neighbour[1];\n\t\t\t\t\tred = neighbour[2];\n\t\t\t\t\tsolid = 1;"
+				}
+			]
+		},
+		{
+			"name": "a hole's alpha is set too, so it stops being a hole",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "\t\t\t\ttexel[2] = (uint8_t)(red / solid);\n",
+					"to": "\t\t\t\ttexel[2] = (uint8_t)(red / solid);\n\t\t\t\ttexel[3] = 255;\n"
+				}
+			]
+		},
+		{
+			"name": "rows shorter than the picture are not refused",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "if (!pixels || width == 0 || height == 0 || width > pitch / 4)",
+					"to": "if (!pixels || width == 0 || height == 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never colours a picture's holes",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\tif (decoded && usage == TextureUsage_Normal)\n\t{\n\t\tRimEdges_ColourTheHoles(dest, width, height, pitch);\n\t}\n",
+					"to": "\tif (decoded && usage == TextureUsage_Normal)\n\t{\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture that didn't decode is coloured too",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\tif (decoded && usage == TextureUsage_Normal)\n",
+					"to": "\tif (usage == TextureUsage_Normal)\n"
+				}
+			]
+		}
+	]
+}

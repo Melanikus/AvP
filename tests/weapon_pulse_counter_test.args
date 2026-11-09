@@ -1,4 +1,4 @@
-/std:c++17 /EHsc /MD /J /W3 /FC /we4996
+/std:c++17 /EHsc /MD /J /W3 /FC /we4996 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DNDEBUG
 /I3dc/avp
 tests/weapon_pulse_counter_test.cpp

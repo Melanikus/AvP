@@ -1,4 +1,4 @@
-/std:c++17 /EHsc /MD /J /W3 /FC
+/std:c++17 /EHsc /MD /J /W3 /FC /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DUSE_OPENAL /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602
 /Itests/audio_stream_test_stubs /I3dc /I3dc/avp /I3dc/avp/win95 /I3dc/include /I3dc/win95 /Iwin32
 tests/audio_stream_test.cpp

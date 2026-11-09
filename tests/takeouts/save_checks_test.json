@@ -964,6 +964,66 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a saved disc keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_weapon.cpp",
+					"from": "\tbehav->Target = Save_TargetWithAPlace(behav->Target);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a target with no place in the world is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tif (found && !found->DynPtr)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien from a save keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "alienStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(alienStatusPointer->Target_SBname));",
+					"to": "alienStatusPointer->Target = FindSBWithName(alienStatusPointer->Target_SBname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine from a save keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(marineStatusPointer->Target_SBname));",
+					"to": "marineStatusPointer->Target = FindSBWithName(marineStatusPointer->Target_SBname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator from a save keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "predatorStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(predatorStatusPointer->Target_SBname));",
+					"to": "predatorStatusPointer->Target = FindSBWithName(predatorStatusPointer->Target_SBname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a xenoborg from a save keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "xenoStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(xenoStatusPointer->Target_SBname));",
+					"to": "xenoStatusPointer->Target = FindSBWithName(xenoStatusPointer->Target_SBname);"
+				}
+			]
 		}
 	]
 }

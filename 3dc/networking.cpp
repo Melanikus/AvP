@@ -56,6 +56,9 @@
 //   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 //   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
 //   (net_stats.h)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a host's log says when it starts answering searches, or that it can't, when the first search question comes, and every minute how
+//   many came and were answered, never from which address (net_search_log.h)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -70,6 +73,7 @@
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
+#include "net_search_log.h"
 #include "net_relay.h"
 #include "relay_shared.h"
 #include "relay_list.h"
@@ -165,6 +169,7 @@ static uint32_t outgoingBandwidth = 0;
 SessionDescription netSession; // main game session
 
 static bool OpenDiscoverySocket();   // further down: a host the relays don't answer opens it instead (RelayHostGiveUp)
+static void OpenTheSearchPortForAHost();   // further down, beside the search log it tells
 static void LogDroppedMessage(const char *why);   // further down: a game on the relays' list that can't be joined is logged as dropped
 
 // Modified 2026-11-08 by Melanikus for the AvP port: THE RELAY (net_relay.h, and AVPx Dedicated Server's PROTOCOL.md at 7014de1).
@@ -385,7 +390,7 @@ static void RelayHostGiveUp(const char *why)
 	}
 
 	Con_PrintError(why);
-	OpenDiscoverySocket();
+	OpenTheSearchPortForAHost();
 }
 
 // Each frame while hosting through a relay: time the relays, then keep the room, say hello to joiners, and keep the list told
@@ -945,6 +950,26 @@ static bool OpenDiscoverySocket()
 	return true;
 }
 
+// The host's count of the search questions it hears, for the log: see net_search_log.h. Only a host opens it.
+static NetSearchLog searchLog = {};
+static_assert(kNetSearchPort == broadcastPort, "net_search_log.h's lines name the port a search asks on");
+
+// Added 2026-11-08 by Melanikus for the AvP port: a host that started through a relay and is open on this network after all
+// (RelayHostGiveUp) opens the search port with the same lines as one with no relay (Net_HostGame), so the search log counts for it too
+static void OpenTheSearchPortForAHost()
+{
+	if (OpenDiscoverySocket())
+	{
+		char line[160];
+		NetSearchLog_Opened(&searchLog, enet_time_get(), line, sizeof(line));
+		LogString(line);
+	}
+	else
+	{
+		LogString("net: this game can't answer searches: UDP port " + std::to_string(broadcastPort) + " couldn't be opened, so a search won't find it");
+	}
+}
+
 static void CloseDiscoverySocket()
 {
 	if (ENET_SOCKET_NULL != broadcastSocket)
@@ -1207,10 +1232,23 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			}
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
-			// Modified 2026-11-08 by Melanikus for the AvP port: through the relay instead, when one is set (RelayHostStart, above).
-			if (!RelayHostStart())
+			// The log says which, and from then on what the search port hears (net_search_log.h).
+			// Modified 2026-11-08 by Melanikus for the AvP port: through the relay instead, when one is set (RelayHostStart, above). Then
+			// nothing on this network can find it by searching, and the search port stays shut. If the relay falls through, RelayHostGiveUp
+			// opens it after all, with the same lines (OpenTheSearchPortForAHost).
+			if (RelayHostStart())
 			{
-				OpenDiscoverySocket();
+				Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay");
+			}
+			else if (OpenDiscoverySocket())
+			{
+				char line[160];
+				NetSearchLog_Opened(&searchLog, enet_time_get(), line, sizeof(line));
+				LogString(line);
+			}
+			else
+			{
+				LogString("net: this game can't answer searches: UDP port " + std::to_string(broadcastPort) + " couldn't be opened, so a search won't find it");
 			}
 
 			// create session
@@ -1294,6 +1332,17 @@ void Net_Disconnect()
 	ServerPeer = NULL;
 
 	sessionCheckTimer = 0;
+
+	// A host's search counts for the whole game, before the port closes (net_search_log.h)
+	{
+		char line[320];
+
+		if (NetSearchLog_Closed(&searchLog, enet_time_get(), line, sizeof(line)))
+		{
+			LogString(line);
+		}
+	}
+
 	CloseDiscoverySocket();
 
 	// The game has closed, and the list was only for this game
@@ -1371,6 +1420,16 @@ static void Net_CheckForSessionRequest()
 		return;
 	}
 
+	// Every minute, how many questions came and how many were answered (net_search_log.h)
+	{
+		char line[320];
+
+		if (NetSearchLog_Minute(&searchLog, enet_time_get(), line, sizeof(line)))
+		{
+			LogString(line);
+		}
+	}
+
 	enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
 
 	while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
@@ -1387,6 +1446,7 @@ static void Net_CheckForSessionRequest()
 		}
 		if (len > 0) {
 			Con_PrintDebugMessage("Got a packet of some sort..");
+			NetSearchLog_Packet(&searchLog);
 		}
 		// Only a question as big as its answer: see kSearchQuestionBytes. An older game's question, a header alone, gets nothing.
 		if (len == (int)kSearchQuestionBytes)
@@ -1403,35 +1463,53 @@ static void Net_CheckForSessionRequest()
 				continue;
 			}
 
-			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
+			if (NETSYS_REQUEST_SESSION_INFO != header.messageType)
 			{
-				MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
-
-				header.marker = kMarker;
-				header.isSystemMessage = true;
-				header.messageType = NETSYS_SESSION_INFO;
-				ws.PutBytes(&header, sizeof(header));
-				ws.PutBytes(&netSession, sizeof(SessionDescription));
-
-				buf.dataLength = ws.GetBytesWritten();
-				buf.data = packetBuffer;
-
-					int ret = enet_socket_send(broadcastSocket, &addr, &buf, 1);
-					if (0 == ret) {
-						// blocking - wait 1 second then try again (for a maximum of 5 seconds)
-//						Sleep(1000);
-						return;
-					}
-					else if (0 > ret) {
-						Con_PrintError("Couldn't send session details");
-						return;
-					}
-					else {
-						Con_PrintDebugMessage("Sent session details");
-						return;
-					}
-//				}
+				continue;
 			}
+
+			// A question for this game's description. What happens to it is counted for the log, never with its address: the first one
+			// gets a line of its own (net_search_log.h).
+			char line[200];
+
+			if (!(NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond)))
+			{
+				if (NetSearchLog_Question(&searchLog, kNetSearchTooMany, enet_time_get(), line, sizeof(line)))
+				{
+					LogString(line);
+				}
+
+				continue;
+			}
+
+			MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
+
+			header.marker = kMarker;
+			header.isSystemMessage = true;
+			header.messageType = NETSYS_SESSION_INFO;
+			ws.PutBytes(&header, sizeof(header));
+			ws.PutBytes(&netSession, sizeof(SessionDescription));
+
+			buf.dataLength = ws.GetBytesWritten();
+			buf.data = packetBuffer;
+
+			// 0 means the network can't take it now, and below 0 that it failed: either way the asker gets no answer this time, and the
+			// rest wait for the next frame, as before
+			int const ret = enet_socket_send(broadcastSocket, &addr, &buf, 1);
+
+			if (NetSearchLog_Question(&searchLog, ret > 0 ? kNetSearchAnswered : kNetSearchNotSent, enet_time_get(), line, sizeof(line)))
+			{
+				LogString(line);
+			}
+
+			if (0 > ret) {
+				Con_PrintError("Couldn't send session details");
+			}
+			else if (ret > 0) {
+				Con_PrintDebugMessage("Sent session details");
+			}
+
+			return;
 		}
 	}
 }
@@ -1644,9 +1722,12 @@ void Net_ServiceNetwork()
 	if (host)
 	{
 		enet_host_service(host, NULL, 0);
-		RelayHostFrame();
 
 		LogConnectionNumbers();
+
+		// The relay's part of hosting, after ENet has handed over what came: the echoes, the room, the keep and the hellos. It does
+		// nothing unless this game is hosted through a relay.
+		RelayHostFrame();
 
 		// also check for session data requests
 		if (AvP.Network == I_Host) {

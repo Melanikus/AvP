@@ -1,5 +1,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   LinkMisses_LevelEnds and LinkMisses_SwitchWentOnOrOff, for the log's lines about links that find nothing (#130)
+//   a proximity door's lock by another door is taken out (#135): the level loader always made it "no lock", so its target was never
+//   looked for (door_lock_target was never read)
 #ifndef _bhtypes_h_
 #define _bhtypes_h_ 1
 
@@ -344,15 +346,7 @@ typedef struct ProxDoorBehaviourType
 	unsigned int marineTrigger :1;
 	unsigned int triggeredByMarine :1;
 
-	/*---- Roxby 1/1/97 ----- 
-	Added so that another door can lock
-	this door closed
-	--------------------------*/
-
-	BOOL lockable_door;
 	BOOL door_locked;
-	char target_name[SB_NAME_LENGTH];
-	STRATEGYBLOCK* door_lock_target;
 	int SoundHandle;
 	int doorType;      // Used to determine door sound type  
 
@@ -362,8 +356,6 @@ typedef struct ProxDoorBehaviourType
 
 typedef struct prox_door_tools_template
 {
-	BOOL has_lock_target;
-	char target_name [SB_NAME_LENGTH];
 	MREF my_module;
 	int shape_open;
 	int shape_closed;

@@ -281,7 +281,6 @@
     <ClCompile Include="..\..\3dc\avp\bh_rubberduck.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_self_destruct.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp" />
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_track.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_types.cpp" />
@@ -569,7 +568,6 @@
     <ClInclude Include="..\..\3dc\avp\bh_rubberduck.h" />
     <ClInclude Include="..\..\3dc\avp\bh_self_destruct.h" />
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h" />
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h" />
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h" />
     <ClInclude Include="..\..\3dc\avp\bh_track.h" />
     <ClInclude Include="..\..\3dc\avp\bh_types.h" />
