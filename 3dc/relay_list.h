@@ -80,4 +80,17 @@ void RelayList_FindGames(void);
 // no games, and why says why in words for the page, fixed words of the game's own, never the list's. False while there's no new answer.
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 
+// ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
+// AvP port. Only the Online access page calls these, and that page is only there with -dev (the owner's ruling: nothing a release game
+// does may reach a server yet), so these refuse without -dev as well, whatever calls them.
+
+// Sends the request: the player's name, this PC's public halves, and the fingerprint the answer has to be about. Only when the player has
+// pressed the page's row for it, or (PO's ruling) when the page opens after the player has sent one this run. False, with nothing sent,
+// without -dev, with no list set, or if the name or key can't be sent (RelayList_AccessBody). The answer comes a moment later.
+bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
+
+// Once for each answer: true, with answered true and what the list said, or answered false and why in fixed words of the game's own (never
+// the list's). False while there's no new answer. The log gets only those words: never the name, the key, the fingerprint or the code.
+bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why);
+
 #endif

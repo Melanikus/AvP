@@ -23,6 +23,8 @@
 //   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the words of the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the words of the Online access page (server #24), which is only there with -dev for now
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -166,6 +168,46 @@ static char OurTextStrings[][200] =
 	"Lamp beams",
 	"Whether other marines' lamps show their beam in the air. Off, a lamp still lights what it points at.",
 	"This does nothing here: with Gouraud Rendering a lamp's beam is its only light, so it always shows.",
+	"Online access",
+	"Ask the server to let this PC play online, and see whether it has.",
+	"Request access asks Mel's server to let this PC play online. It sends the name below and a key made on this PC, and nothing else.",
+	"A person looks at each request when they can. Come back here to see if you're approved.",
+	"Name to send",
+	"The name the owner sees with your request: your profile's, to start with. Up to 15 letters, digits, spaces and signs, but no \" or \\.",
+	"Request access",
+	"Sends the request: the name above and this PC's key. Nothing is sent until you press this.",
+	"Check again",
+	"Asks the server whether your request has been approved yet. It sends the same name and key again, and nothing new.",
+	"Copy access code",
+	"Puts your access code on the clipboard, to paste into a message to the owner.",
+	"Make a new identity",
+	"Makes this PC a new key, with a new access code. You'll need approving again.",
+	"Your access code",
+	"Give the owner this code yourself, by message or email. Only a request with this exact code is approved.",
+	"Asking the server...",
+	"Waiting for approval. A person looks at each request when they can.",
+	"Approved: this PC may play online.",
+	"Not approved. To ask again, make a new identity.",
+	"No longer approved. To ask again, make a new identity.",
+	"The server wouldn't take this request.",
+	"The server is busy: try again in a minute.",
+	"The server isn't taking requests just now.",
+	"Couldn't reach the server.",
+	"No server is set, so nothing was sent.",
+	"Wait a minute before asking again.",
+	"The access code is on the clipboard.",
+	"The access code couldn't be copied.",
+	"Type a name to send first.",
+	"The name can have at most 15 letters.",
+	"The name can't have \" or \\, or letters with accents.",
+	"The name can't start or end with a space.",
+	"This PC has no identity to send. Make a new identity first.",
+	"The identity kept on this PC couldn't be used. Make a new one to ask for access.",
+	"A new identity has a new access code. Friends and the server will see a new one, and you'll need approving again. The old one can't be brought back.",
+	"Yes, make a new identity",
+	"No, go back",
+	"A new identity was made.",
+	"A new identity couldn't be made.",
 	"HUD size",
 	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };

@@ -1140,21 +1140,7 @@ static void TestAccessNames()
 	RelayAccess_NameFromProfile(NULL, 16, name);
 	Check(name[0] == '\0', "and so is no name at all");
 
-	bool allHaveWords = true;
-	bool allDiffer = true;
-
-	for (int a = kRelayAccessNameGood; a <= kRelayAccessNameSpaceAtAnEnd; a++)
-	{
-		const char *const words = RelayAccess_NameWords(static_cast<RelayAccessNameRefusal>(a));
-		allHaveWords = allHaveWords && words && words[0] && strstr(words, "no words") == NULL;
-
-		for (int b = kRelayAccessNameGood; b < a; b++)
-		{
-			allDiffer = allDiffer && strcmp(words, RelayAccess_NameWords(static_cast<RelayAccessNameRefusal>(b))) != 0;
-		}
-	}
-
-	Check(allHaveWords && allDiffer, "each reason a name can't be sent has words of its own");
+	// The page's words for each reason are access_page_test's to check (AccessPage_NameText)
 }
 
 // A made-up identity's public halves: 04, then byte i is (i * 37 + 11) & 255, the same as access-code.js

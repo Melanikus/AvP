@@ -220,10 +220,8 @@ enum RelayAccessNameRefusal
 	kRelayAccessNameSpaceAtAnEnd   // a space first or last, which nobody reading it could see
 };
 
+// The page shows its own words for each (access_page_rules.h, AccessPage_NameText, from language.cpp's table)
 RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name);
-
-// The words for why a name can't be sent, for the log and the tests (the page has its own, in language.cpp's table)
-const char *RelayAccess_NameWords(RelayAccessNameRefusal why);
 
 // The name the request page starts with: the profile's (at most profileBytes of it), kept to the rule. A letter the rule doesn't take is
 // left out, spaces at either end are taken off, and it's cut to 15 bytes. Empty if nothing is left, and then the player types one. to has

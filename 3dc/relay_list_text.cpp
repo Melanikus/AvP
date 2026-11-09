@@ -1257,20 +1257,6 @@ RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name)
 	return kRelayAccessNameGood;
 }
 
-const char *RelayAccess_NameWords(RelayAccessNameRefusal why)
-{
-	switch (why)
-	{
-		case kRelayAccessNameGood: return "the name can be sent";
-		case kRelayAccessNameEmpty: return "the name is empty";
-		case kRelayAccessNameTooLong: return "the name is longer than 15 letters";
-		case kRelayAccessNameBadLetter: return "the name has a letter that can't be sent: only plain letters, digits, spaces and signs, and no \" or \\";
-		case kRelayAccessNameSpaceAtAnEnd: return "the name starts or ends with a space";
-	}
-
-	return "the name was refused for a reason with no words";
-}
-
 void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char *to)
 {
 	size_t n = 0;

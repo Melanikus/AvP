@@ -891,6 +891,9 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
@@ -1650,6 +1653,12 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h">
