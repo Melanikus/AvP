@@ -1224,6 +1224,56 @@
 					"to": "*forwardControl = howHard;"
 				}
 			]
+		},
+		{
+			"name": "FIGHT: a moment out of sight starts the fight again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return sameThreat && outOfSightFor < kHudsonPlaySameFightWithin;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: another threat counts as the same fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return sameThreat && outOfSightFor < kHudsonPlaySameFightWithin;",
+					"to": "return outOfSightFor < kHudsonPlaySameFightWithin;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: a threat he can't hurt holds him for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: a threat he is hurting is left alone too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;",
+					"to": "return fightingFor >= kHudsonPlayCantHurtItAfter;"
+				}
+			]
+		},
+		{
+			"name": "FIGHT: the game ends a fight the moment it is out of sight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play.cpp",
+					"from": "if (lastThreat && !HudsonPlay_IsTheSameFight(true, now - lastSawItAt))",
+					"to": "if (lastThreat)"
+				}
+			]
 		}
 	]
 }
