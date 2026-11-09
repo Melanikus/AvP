@@ -797,10 +797,31 @@ static void TestTheCalls()
 	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
 		"and the list's port is the settings' only with -dev");
 
-	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks
+	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks.
+	// Modified 2026-11-09 by Melanikus for the AvP port: its one call of the list's is RelayList_BeforeQuitting, after the menus have ended
+	// and before the game shuts down, and that never starts the list (below).
 	std::string const winmain = ReadSource("3dc/avp/win95/winmain.cpp");
-	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && !Has(winmain, "RelayList_"),
-		"nothing asks for the list's name or port before -dev has been read");
+	size_t const firstListCall = winmain.find("RelayList_");
+	size_t const quitting = winmain.find("\tRelayList_BeforeQuitting(2000);\n");
+	size_t const afterMenus = winmain.find("TimeStampedMessage(\"After Menus\");");
+	size_t const exitSystem = winmain.find("\tExitSystem();\n");
+	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && firstListCall == quitting
+		&& winmain.find("RelayList_", quitting + 1) == std::string::npos,
+		"nothing asks for the list's name or port before -dev has been read: winmain's only call of the list's is the one as the game quits");
+	Check(quitting != std::string::npos && afterMenus != std::string::npos && exitSystem != std::string::npos && afterMenus < quitting && quitting < exitSystem,
+		"and that comes after the menus have ended, before the game shuts down");
+
+	// As the game quits, a game still on the list comes off it, waiting at most that long for the list's thread to send the DELETE (server
+	// #14's run: the game had gone before the DELETE did). The wait starts nothing, and the thread says it has caught up only after the DELETE.
+	std::string const beforeQuitting = SourceSlice(source, "void RelayList_BeforeQuitting(unsigned int mostMs)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(beforeQuitting, "if (!shared)\n\t{\n\t\treturn;\n\t}") && !Has(beforeQuitting, "Start()") && Has(beforeQuitting, "RelayList_HostRoomClosed();"),
+		"as the game quits, a game still on the list is asked off it, and a list never used isn't started for that");
+	Check(Has(beforeQuitting, "if (waited >= mostMs)") && Has(beforeQuitting, "WaitForSingleObject(shared->endDone, mostMs - waited);"),
+		"and the game waits for the list's thread no longer than it was told to");
+	size_t const takenOff = thread.find("TakeOffTheList();\n");
+	size_t const caughtUp = thread.find("shared->endsDone = endsAsked;");
+	Check(takenOff != std::string::npos && caughtUp != std::string::npos && takenOff < caughtUp && Has(thread, "SetEvent(shared->endDone);"),
+		"the list's thread says it has caught up only once the DELETE has been sent");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)

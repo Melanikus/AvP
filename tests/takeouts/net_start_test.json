@@ -2478,6 +2478,151 @@
 					"to": "\tmemcpy(&player, details, sizeof(player));\n"
 				}
 			]
+		},
+		{
+			"name": "the host's news never says it's finding the relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayHostNews(kNetRelayHostFinding, NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no news when no relay answers",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n\t\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n",
+					"to": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n"
+				}
+			]
+		},
+		{
+			"name": "no news when no relay the list named can be used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "so this game is open on this network only\");\n\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n\t\treturn false;",
+					"to": "so this game is open on this network only\");\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the room going on the list isn't news",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayHostNews(kNetRelayHostListed, NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lost room's news has no why",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));",
+					"to": "RelayHostNews(kNetRelayHostRoomGone, NULL);"
+				}
+			]
+		},
+		{
+			"name": "leaving the game leaves the host's news as it was",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayHostNews.what != kNetRelayHostNone)\n\t{\n\t\tRelayHostNews(kNetRelayHostNone, NULL);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's news has no region",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tmemcpy(relayHostNews.region, relayRegion, sizeof(relayHostNews.region));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's line is there before its room is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayHosting && !relayPicking && relayHost.Open())\n\t{\n\t\tint const keepMs",
+					"to": "\tif (relayHosting)\n\t{\n\t\tint const keepMs"
+				}
+			]
+		},
+		{
+			"name": "the host's line leaves out the keep's round trip",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "state->ms = keepMs >= 0 ? keepMs : (relayHostMs > 0 ? relayHostMs : -1);",
+					"to": "state->ms = relayHostMs;"
+				}
+			]
+		},
+		{
+			"name": "the joiner's line shows ENet's starting guess",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (ServerPeer->lastReceiveTime > 0)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the joiner's round trip has no limit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "state->ms = ServerPeer->roundTripTime > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(ServerPeer->roundTripTime);",
+					"to": "state->ms = static_cast<int>(ServerPeer->roundTripTime);"
+				}
+			]
+		},
+		{
+			"name": "the joiner's line is there before its connection is made",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " && relayJoinedThrough && ServerPeer && ServerPeer->state == ENET_PEER_STATE_CONNECTED)",
+					"to": " && relayJoinedThrough && ServerPeer)"
+				}
+			]
+		},
+		{
+			"name": "a game joined on this network keeps the last relay line",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tjoinAnswer = kNetJoinAnswerNone;\n\trelayJoinedThrough = false;\n\trelayJoinedRegion[0] = 0;\n",
+					"to": "\tjoinAnswer = kNetJoinAnswerNone;\n"
+				},
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayJoinedThrough = false;   // the line in play saying which relay the game went through goes with the game too\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner through a relay lets ENet read packets from elsewhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!fromRelay)\n\t{\n\t\trelayStrangersDropped++;\n\t\treturn 1;\n\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
