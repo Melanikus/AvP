@@ -101,6 +101,10 @@ extern void D3D_RenderHUDString(char *stringPtr, int x, int y, int colour);
 extern void D3D_DecalSystem_Setup();
 extern void D3D_DecalSystem_End();
 
+// Added 2026-11-09 by Melanikus for the AvP port (#177): see-through polygons between these two don't write depth (d3d_render.cpp)
+extern void D3D_SeeThroughWithoutDepth_Begin();
+extern void D3D_SeeThroughWithoutDepth_End();
+
 extern void D3D_FadeDownScreen(int brightness, int colour);
 extern void D3D_PlayerOnFireOverlay();
 
@@ -111,6 +115,12 @@ static void D3D_OutputTriangles();
 
 void ThisFramesRenderingHasBegun();
 void ThisFramesRenderingHasFinished();
+
+// How far down the screen the -dev tag at the top right can reach, in pixels, with every line it can have: 0 when it isn't shown (no -dev,
+// or F7 turned it off). Anything else drawn at the top right goes below this, so the two never overlap.
+// Modified 2026-11-09 by Melanikus for the AvP port: so the relay's line in play sits under the tag (online_screens_page.cpp).
+int ShadowStatus_Bottom();
+
 extern void D3D_DrawSliderBar(int x, int y, int alpha);
 extern void D3D_DrawSlider(int x, int y, int alpha);
 extern void D3D_FadeDownScreen(int brightness, int colour);

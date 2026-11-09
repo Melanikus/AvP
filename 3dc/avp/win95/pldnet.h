@@ -1157,6 +1157,11 @@ extern void Coop_LevelChangeHasStarted(void);
 // A message was refused, and why. It goes to the log, but only so often, because anyone can cause this as fast as they like.
 extern void Net_NoteRefused(const char *why);
 
+// For a test run only: puts these bytes on the way out as one part of a message, with no checks at all.
+extern void HudsonTest_AddRawPart(int kind, const void *part, int size);
+
+// For a test run only: the game description, with one player left off it.
+extern void HudsonTest_AddDescriptionWithout(NetID left);
 // Whether the level a host named is on the list for the game type it named. It says why in the log if not.
 extern bool Net_HostsLevelIsOnItsList();
 

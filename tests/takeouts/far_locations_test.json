@@ -14,6 +14,26 @@
 					"to": "\t\t\t\tmodulearray++;"
 				}
 			]
+		},
+		{
+			"name": "a four-cornered ceiling's 4th corner is read as its 3rd again",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "if(polygonData.PolyPoint[3].vy > tmpHeight) tmpHeight = polygonData.PolyPoint[3].vy;",
+					"to": "if(polygonData.PolyPoint[3].vy > tmpHeight) tmpHeight = polygonData.PolyPoint[2].vy;"
+				}
+			]
+		},
+		{
+			"name": "a four-cornered floor's 4th corner is read as its 3rd again",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "if(polygonData.PolyPoint[3].vy < tmpHeight) tmpHeight = polygonData.PolyPoint[3].vy;",
+					"to": "if(polygonData.PolyPoint[3].vy < tmpHeight) tmpHeight = polygonData.PolyPoint[2].vy;"
+				}
+			]
 		}
 	]
 }

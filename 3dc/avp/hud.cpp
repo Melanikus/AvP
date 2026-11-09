@@ -14,6 +14,7 @@
 //   zoom-level search stops at the last zoom level
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   an Observer's world isn't drawn as if it were the gun
+//   a Hudson run has no messages on the screen, because they would be in its pictures
 //   asks for the marine's shoulder lamp on each frame of the game, and tells it where he's looking
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a gun can say not to draw it, and draw over the screen. See weapon_hooks.h
@@ -21,6 +22,7 @@
 //   every frame asks how big the HUD is drawn, so a new screen size or HUD size shows at once, and the Predator's symbols are drawn at
 //   that size (HUD-SCALE-1, see hud_scale.h). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 //   restarting a level forgets the target the sight had locked, as starting one does (ReInitHUD)
+//   RequestFadeToBlackLevel is no longer set here: the xenoborg morph room, the only thing that read it, is taken out (#135)
 
 
 /*
@@ -80,6 +82,7 @@
 ****************************************************************************************KJL*/
 
 #include "RenderList.h"
+#include "hudson.h"
 extern bool gunLayer;
 
 extern DISPLAYBLOCK* Player;
@@ -91,7 +94,6 @@ extern int NumActiveStBlocks;
 extern STRATEGYBLOCK *ActiveStBlockList[maxstblocks];
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;
-extern signed int RequestFadeToBlackLevel;
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
 extern fixed_t SmartTargetSightX, SmartTargetSightY;
 extern char CurrentlySmartTargetingObject;
@@ -212,9 +214,6 @@ void InitHUD(void)
 			LOCALASSERT(1==0);
 			break;
 	}
-
-	// This should be set elsewhere as well, but just to be sure!!
-	RequestFadeToBlackLevel = 0;
 }
 
 void InitMarineHUD(void)
@@ -2041,6 +2040,12 @@ int Fast2dMagnitude(int dx, int dy)
 
 extern void NewOnScreenMessage(char *messagePtr)
 {
+	// Words on the screen would be in a run's pictures, so two pictures of the same thing wouldn't match. A hostile run is testing the words themselves.
+	if (HudsonRunIsOn && !Hudson_NetIsHostile())
+	{
+		return;
+	}
+
 	GADGET_NewOnScreenMessage(messagePtr);
 }
 

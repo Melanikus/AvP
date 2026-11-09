@@ -1,4 +1,4 @@
-/std:c++17 /EHsc /MD /J /W3
+/std:c++17 /EHsc /MD /J /W3 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
 /I3dc
 tests/surface_tangent_test.cpp

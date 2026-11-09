@@ -7,6 +7,8 @@
 //   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
 //   the M79's three grenades join the list of things the game can make and run, and so does a thrown staff
 //   a sentry gun's ghost doesn't hold a door open
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   in a Hudson run with a marine, other people and what makes them don't run
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 //   NpcModelIsLoaded: a character whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1;
@@ -14,6 +16,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a link a level makes that finds nothing is written in the log, when the level's links are made and when a switch with one goes on
 //   or off (link_misses.h, #130)
+//   code that could never run is taken out (#135): the xenoborg morph room, which nothing in a level makes; the lift's change of
+//   environment, as every lift station is in the level being played; and a proximity door's door_lock_target, which nothing read
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -24,6 +28,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "bonusabilities.h"
+#include "hudson.h"
 #include "weapons.h"
 #include "compiled_shapes.h"
 #include "inventory.h"
@@ -51,7 +56,6 @@
 #include "lighting.h"
 #include "bh_link_switch.h"
 #include "bh_binary_switch.h"
-#include "bh_spcl.h"
 #include "bh_agun.h"
 #include "bh_lift.h"
 #include "bh_light_fx.h"
@@ -737,10 +741,6 @@ void EnableBehaviourType(STRATEGYBLOCK* sbptr, AVP_BEHAVIOUR_TYPE sb_type, void 
 			sbptr->SBdataptr  = InitDatabase(bhdata, sbptr);
 			break;
 
-		case I_BehaviourXenoborgMorphRoom:
-			sbptr->SBdataptr = InitXenoMorphRoom (bhdata, sbptr);
-			break;
-
 		case I_BehaviourLightFX:
 		{
 			sbptr->SBdataptr = LightFXBehaveInit (bhdata, sbptr);
@@ -907,15 +907,9 @@ static void* DoorProxBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 
 
 	doorbhv->PDmctrl = morphctrl;
-	doorbhv->lockable_door = doortt->has_lock_target;
 
 	doorbhv->door_opening_speed=doortt->door_opening_speed;
 	doorbhv->door_closing_speed=doortt->door_closing_speed;
-
-	if(doortt->has_lock_target)
-		{
-			COPY_NAME(doorbhv->target_name, doortt->target_name);
-		}
 
 	sbptr->SBmorphctrl = doorbhv->PDmctrl;
 	sbptr->SBmorphctrl->ObMorphCurrFrame = 1; /* this should be closed*/
@@ -1249,17 +1243,6 @@ void AssignAllSBNames()
 						}
 			 			break;
 					}
-					case I_BehaviourProximityDoor:
-						{
-							PROXDOOR_BEHAV_BLOCK *doorbhv;
-						 	doorbhv = (PROXDOOR_BEHAV_BLOCK*)sbptr->SBdataptr;
-							GLOBALASSERT((doorbhv->bhvr_type == I_BehaviourProximityDoor));
-							if(doorbhv->lockable_door)
-								{
-								 	doorbhv->door_lock_target = FindLinkTarget(sbptr, "a door", doorbhv->target_name);
-								}
-							break;
-						}
 					case I_BehaviourLift:
 					{
 						LIFT_BEHAV_BLOCK *lift_bhv;
@@ -1322,28 +1305,15 @@ void AssignAllSBNames()
 							GLOBALASSERT(lift_bhv->lift_control->curr_station == -1);
 
 							lift_bhv->lift_control->curr_station = curr_stn->num_floor;
-							if(curr_stn->env == AvP.CurrentEnv)
+							if(curr_stn->lift_call_switch)
 							{
-								if(curr_stn->lift_call_switch)
-								{
-									// turn on the floor lights
-									RequestState(curr_stn->lift_call_switch, 1, 0);
-									if((*(int*)&curr_stn->lift_floor_switch_name[0]) ||	(*(int*)&curr_stn->lift_floor_switch_name[4]))
-										RequestState(curr_stn->lift_floor_switch, 1, 0);
-								}
+								// turn on the floor lights
+								RequestState(curr_stn->lift_call_switch, 1, 0);
+								if((*(int*)&curr_stn->lift_floor_switch_name[0]) ||	(*(int*)&curr_stn->lift_floor_switch_name[4]))
+									RequestState(curr_stn->lift_floor_switch, 1, 0);
 							}
 						}
 
-						break;
-					}
-
-					case I_BehaviourXenoborgMorphRoom:
-					{
-						XENO_MORPH_ROOM_DATA * xmrd = (XENO_MORPH_ROOM_DATA *)sbptr->SBdataptr;
-
-						GLOBALASSERT (xmrd->bhvr_type == I_BehaviourXenoborgMorphRoom);
-
-						xmrd->DoorToRoom = FindSBWithName(xmrd->doorID);
 						break;
 					}
 
@@ -1507,8 +1477,6 @@ void ObjectBehaviours(void)
 	}
 #endif
 
-	RequestEnvChangeViaLift	= 0;
-
 	i = 0;
 
 	while(i < NumActiveStBlocks)
@@ -1521,6 +1489,16 @@ void ObjectBehaviours(void)
 void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 {
 	GLOBALASSERT(sbptr);
+
+	if (HudsonMarineIsOn && Hudson_KeepsStill(sbptr))
+	{
+		return;
+	}
+
+	if (HudsonPeopleStandStill && (sbptr->I_SBtype == I_BehaviourAlien || sbptr->I_SBtype == I_BehaviourMarine))
+	{
+		return;
+	}
 
 	switch(sbptr->I_SBtype)
 	{
@@ -1726,10 +1704,6 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 
 		case I_BehaviourSmokeGenerator:
 			SmokeGeneratorBehaviour(sbptr);
-			break;
-
-		case I_BehaviourXenoborgMorphRoom:
-			XenoMorphRoomBehaviour (sbptr);
 			break;
 
 		case I_BehaviourLightFX:
@@ -3040,18 +3014,6 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 	// only destroy sbs if DoNotRemoveSB = 0
 	// and the destroy flag is set
 
-	// first check to see if we need the SB in the next env
-	// if we do we need to preserve the contents
-
-	if(SBNeededForNextEnv(sbptr))
-	{
-		//we take a copy and preserve everything except our
-		//ActiveStBlockList copy
-
-		DestroyActiveStrategyBlock(sbptr);
-		return;
-	}
-
 	// this notifies the game flow system that an object has been destroyed
 
 
@@ -3421,41 +3383,6 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 			break;
 		}
 
-		case I_BehaviourXenoborgMorphRoom:
-		{
-			XENO_MORPH_ROOM_DATA * xmrd = (XENO_MORPH_ROOM_DATA *)sbptr->SBdataptr;
-
-			if (sbptr->SBmorphctrl &&
-					sbptr->SBmorphctrl->ObMorphHeader &&
-					sbptr->SBmorphctrl->ObMorphHeader->mph_frames)
-				DeallocateMem( sbptr->SBmorphctrl->ObMorphHeader->mph_frames);
-
-			if (sbptr->SBmorphctrl &&
-					sbptr->SBmorphctrl->ObMorphHeader)
-				DeallocateMem( sbptr->SBmorphctrl->ObMorphHeader);
-
-			if (sbptr->SBmorphctrl)
-				DeallocateMem( sbptr->SBmorphctrl);
-
-			if (xmrd)
-			{
-				if (xmrd->tacb)
-				{
-					TXACTRLBLK *txactrl;
-					TXACTRLBLK *txactrl_next;
-
-					txactrl_next = xmrd->tacb;
-
-					while(txactrl_next)
-					{
-						txactrl = txactrl_next;
-						txactrl_next = txactrl->tac_next;
-						DeallocateMem((void*)txactrl);
-					}
-				}
-			}
-			break;
-		}
 		case I_BehaviourInanimateObject :
 		{
 			INANIMATEOBJECT_STATUSBLOCK* objectstatusptr=(INANIMATEOBJECT_STATUSBLOCK*)sbptr->SBdataptr;

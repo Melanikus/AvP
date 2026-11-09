@@ -1,0 +1,55 @@
+# level: vaults   end started by: walk
+# campaign: Predator 3
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+where VEKONC-01
+destroy CONT-04
+where VEKONB-01
+destroy CONT-02
+where VEKONA-01
+destroy CONT-01
+# opens DR-VKD, DR-VKC, DR-VKB, DR-VKA
+where VEKOND-01
+destroy CONT-03
+# opens DR-ALIEN01
+where ALIEN-SR01 | ALIENENT03 | ALIENENT02
+walk AreaALS
+# opens DR-XENOS02, DR-OPSA, DR-OPSB, DR-MOPS02, DR-OPSC, DR-ALIEN02, DR-XENOS01, DR-MOPS01
+where ALFT
+press ALFTSWCH
+where FINAL | DR-PRED01
+walk Vmessage134a
+# opens DR-PRED01
+where OFF-DESK
+walk Vpass
+# opens DR-PRED02
+where PRED-SR02
+walk VpredDr2
+# opens DR-PRED03
+where DR-PRED03 | PRED-SR03
+walk VpredDr3
+# opens DR-PRED04
+where PRED-SR05
+walk VpredDr4
+# opens DR-PRED05
+where PRED-SR08
+walk VpredDr5
+# opens DR-PRED06, DR-PRED07
+where PRED-SR10
+walk VpredDr6
+# opens DR-PRED10
+where PRED-SR17 | PRED-SR16
+walk VprdDr7
+# opens DR-PRED09
+where PRED-SR13
+walk VpredDr8
+# opens DR-LFTCON1
+where PRED
+press PREDSWCH
+# opens DR-LIFT01, DR-LIFT02, LIFT01
+where LFTCON
+press LFTCONSWCH
+where PRED
+press PREDSWCH
+where HANGAR04 | HANGAR
+walk VENDvol
+end VendVOL

@@ -1,0 +1,3 @@
+# 27 degrees, sulaco hang01, bottom to top. Rises 1724 mm. Run with level=sulaco
+putat 17535 4676 24747 hang01
+walkoff 17535 2952 20100 hang01

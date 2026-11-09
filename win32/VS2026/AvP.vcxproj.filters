@@ -129,6 +129,21 @@
     <ClCompile Include="..\..\3dc\net_close.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_list.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_list_text.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\relay_auto.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\window_slot_game.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\window_slot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -189,10 +204,58 @@
     <ClCompile Include="..\..\3dc\view_keys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\fast_random.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\hud_scale.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\texture_animation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\shadow_debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_play.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_video.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_video_writer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_nav.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_plan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_graph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_grid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_grid_level.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_save.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_feel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp">
@@ -273,7 +336,7 @@
     <ClCompile Include="..\..\3dc\win95\enumsch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\win95\fail.cpp">
+    <ClCompile Include="..\..\3dc\fail.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\win95\hierarchy_chunk.cpp">
@@ -774,9 +837,6 @@
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp">
-      <Filter>Source Files\behaviours</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
@@ -861,6 +921,12 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\env_info.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
@@ -914,7 +980,7 @@
     <ClInclude Include="..\..\3dc\win95\environment_chunk.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\win95\fail.h">
+    <ClInclude Include="..\..\3dc\fail.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\win95\hash_tem.hpp">
@@ -1283,6 +1349,9 @@
     <ClInclude Include="..\..\3dc\net_host.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_relay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1478,9 +1547,6 @@
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h">
-      <Filter>Header Files\behaviours</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
@@ -1571,6 +1637,12 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\coop_lobby.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
@@ -1599,6 +1671,21 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_close.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_list.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_list_text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_auto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\window_slot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\relay_shared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\os_header.h">

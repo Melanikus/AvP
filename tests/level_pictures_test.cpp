@@ -1,9 +1,11 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a stand-in for what the memory code now tells the game's sounds
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a place on an animation's picture too far out keeps the shape still (#97)
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
-// Two things are checked here, and both come from level files being untrustworthy:
+// Three things are checked here, and all come from level files being untrustworthy:
 //
 //  1. One file can only ask for so many pictures. Each one asked for costs time, even if there's no such picture, so a small file naming a
 //     million of them could keep the game busy for as long as it liked.
@@ -13,6 +15,9 @@
 //     texture number, reading far outside the list of textures. Every animated polygon in the game's own levels shows just one picture, so
 //     if that picture is refused the polygon loses its texture and never animates. Only a crafted file can reach this: a polygon whose own
 //     picture is real, with another frame showing one that isn't.
+//
+//  3. A frame's places on its picture are worked out in 16.16 (texture_animation.h), so one too far out would run over. A shape with one
+//     stays still, the same way as for a refused picture. Every one in the game's own levels is 0 to 127 texels.
 
 #include <memory>
 #include <stdio.h>
@@ -28,6 +33,7 @@
 #include "mempool.h"
 #include "mishchnk.hpp"
 #include "module.h"
+#include "texture_animation.h"
 
 // These are in chunk_load.cpp, which doesn't list them in a header
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
@@ -362,8 +368,9 @@ struct TwoPolygons
 	}
 };
 
-// A polygon's animation, as a level file holds it: one sequence of two frames, each showing the picture with that number
-static void AddAnimatedPolygon(Bytes &to, int polygon, int firstFrameShows, int secondFrameShows)
+// A polygon's animation, as a level file holds it: one sequence of two frames, each showing the picture with that number. Each corner of
+// each frame sits at the picture's own corner, except the very last number, which is lastPlace.
+static void AddAnimatedPolygon(Bytes &to, int polygon, int firstFrameShows, int secondFrameShows, int lastPlace = 0)
 {
 	AddNumber(to, polygon);
 	AddNumber(to, 0);
@@ -383,7 +390,7 @@ static void AddAnimatedPolygon(Bytes &to, int polygon, int firstFrameShows, int 
 
 	for (int i = 0; i < 2 * 2 * 3; i++)
 	{
-		AddNumber(to, 0);   // where each corner of each frame sits in the picture
+		AddNumber(to, i == 2 * 2 * 3 - 1 ? lastPlace : 0);   // where each corner of each frame sits in the picture
 	}
 }
 
@@ -472,10 +479,68 @@ static void TestARefusedPicture()
 	}
 }
 
+// ---- 3. a place on the picture too far out (#97) ----
+
+// Sets up a one-polygon animation of real pictures whose last corner sits at that place on its picture, and says whether it animates
+static bool AnimatesWithLastPlace(int lastPlace, TwoPolygons &polygons)
+{
+	LevelFile level;
+	LoadLevelWithARefusedPicture(level);
+
+	Bytes bytes;
+	AddNumber(bytes, 1);
+	AddAnimatedPolygon(bytes, 0, 0, 1, lastPlace);
+	SetUpAnimation(level, polygons, bytes);
+
+	return polygons.Animated(0);
+}
+
+static void TestPlacesTooFarOut()
+{
+	puts("3. a place on the picture too far out");
+
+	{
+		TwoPolygons polygons;
+		Check(AnimatesWithLastPlace(kTextureAnimationFurthestTexel, polygons), "the furthest place there can be animates");
+	}
+
+	{
+		TwoPolygons polygons;
+		Check(AnimatesWithLastPlace(-kTextureAnimationFurthestTexel, polygons), "and so does the furthest the other way");
+	}
+
+	{
+		TwoPolygons polygons;
+		Check(!AnimatesWithLastPlace(kTextureAnimationFurthestTexel + 1, polygons), "one texel further: the polygon stays still, because in 16.16 it wouldn't fit");
+		Check(polygons.KeptItsCoordinates(0), "and keeps the texture it has");
+		Check((polygons.shape.shapeflags & ShapeFlag_HasTextureAnimation) == 0, "and its shape doesn't say it has animation");
+	}
+
+	{
+		TwoPolygons polygons;
+		Check(!AnimatesWithLastPlace(-kTextureAnimationFurthestTexel - 1, polygons), "and one texel further the other way");
+	}
+
+	{
+		LevelFile level;
+		LoadLevelWithARefusedPicture(level);
+
+		TwoPolygons polygons;
+		Bytes bytes;
+		AddNumber(bytes, 2);
+		AddAnimatedPolygon(bytes, 0, 0, 1);
+		AddAnimatedPolygon(bytes, 1, 0, 1, kTextureAnimationFurthestTexel + 1);
+		SetUpAnimation(level, polygons, bytes);
+
+		Check(!polygons.Animated(1) && !polygons.Animated(0) && polygons.KeptItsCoordinates(0), "the last polygon's last place is checked, and keeps the whole shape still");
+	}
+}
+
 int main()
 {
 	TestTheLimit();
 	TestARefusedPicture();
+	TestPlacesTooFarOut();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;

@@ -1,0 +1,16 @@
+# What Hudson does to play breakout_p on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+destroy -40549 -18646 4878 | shatter
+destroy 26227 4482 2539 | Object03
+destroy 26227 4482 1370 | smash12
+destroy 26227 4482 -1358 | Object04
+destroy 26227 4482 -2527 | smash11
+destroy 1094 4482 -2527 | smash13
+destroy 1094 4482 -1358 | Object08
+destroy 1094 4482 1370 | smash14
+destroy 1094 4482 2539 | Object06
+destroy 1094 4482 -181189 | smash03
+destroy 1094 4482 -177293 | smash04
+destroy 26227 4482 -177293 | smash02
+destroy 26227 4482 -181189 | smash01
+kill 12181 6358 -207100 | officer

@@ -2404,7 +2404,8 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//load target
 	COPY_NAME(alienStatusPointer->Target_SBname,block->Target_SBname);
-	alienStatusPointer->Target = FindSBWithName(alienStatusPointer->Target_SBname);
+	//the target's name comes from the save file, and can be anything in the level's: only one with a place in the world is kept
+	alienStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(alienStatusPointer->Target_SBname));
 
 	//load hunting module
 	if(block->huntingModuleIndex>=0 && block->huntingModuleIndex< AIModuleArraySize)

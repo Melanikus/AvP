@@ -93,6 +93,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the xenoborg turns at another speed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.h",
+					"from": "\t#define XENO_FOOT_TURN_RATE\t\t\t(5)",
+					"to": "\t#define XENO_FOOT_TURN_RATE\t\t\t(4)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: MUL_FIXED rounds to the nearest",
+			"changes": [
+				{
+					"file": "3dc/mathline.cpp",
+					"from": "return (((__int64)a * b) >> ONE_FIXED_SHIFT) & 0xFFFFFFFF;",
+					"to": "return ((((__int64)a * b) + 32768) >> ONE_FIXED_SHIFT) & 0xFFFFFFFF;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a turn left is worked out another way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "turnThisFrame = (4096-maxTurnThisFrame);",
+					"to": "turnThisFrame = (4095-maxTurnThisFrame);"
+				}
+			]
 		}
 	]
 }

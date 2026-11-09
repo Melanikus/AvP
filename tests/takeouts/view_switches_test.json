@@ -41,7 +41,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");",
+					"from": "LogString(std::string(\"developer tools: \") + name + \" needs -dev, so it's off\");",
 					"to": ""
 				}
 			]
@@ -543,6 +543,36 @@
 					"file": "3dc/view_settings.cpp",
 					"from": "static const char kLampBeams[] = \"LampBeams\";",
 					"to": "static const char kLampBeams[] = \"LampsCastShadows\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag has room for one line fewer than it can write",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "enum { kShadowStatusMostLines = 15 };",
+					"to": "enum { kShadowStatusMostLines = 14 };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag's room names a number that's written nowhere",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "enum { kMostLines = kShadowStatusMostLines, kLineLength = 48 };",
+					"to": "enum { kMostLines = kShadowStatusMostLinez, kLineLength = 48 };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag's room is a sum, which the check can't take as a number",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "enum { kMostLines = kShadowStatusMostLines, kLineLength = 48 };",
+					"to": "enum { kMostLines = kShadowStatusMostLines + 1, kLineLength = 48 };"
 				}
 			]
 		}

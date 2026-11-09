@@ -1,5 +1,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   two declarations: whether this game plays the same as single player, and the call that tells the other machines an NPC's death has happened
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   ChangeEnvironmentToEnv's declaration goes with it (#135)
 #ifndef GAMEDEF_INCLUDED
 
 /*
@@ -208,7 +210,6 @@ typedef struct environment_list_object{
 extern ELO* Env_List[];
 extern int EnvToLoad;
 
-extern void ChangeEnvironmentToEnv(I_AVP_ENVIRONMENTS);
 extern int Destroy_CurrentEnvironment();
 extern void LoadGameFromFile();
 extern void SaveGameToFile();

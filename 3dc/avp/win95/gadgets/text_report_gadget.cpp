@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the queue of lines waiting to go on the screen has a limit, because anyone can send chat as fast as they like
+//   it counts the lines that went straight on and those that waited, for a Hudson run's log
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed two switched-off blocks of placeholder code that could never run
 /*******************************************************************
@@ -30,6 +31,10 @@
 extern void Net_NoteRefused(const char *why);
 
 static const int kMostLinesWaitingForTheScreen = 64;
+
+// How many lines went straight on the screen, and how many had to wait. A Hudson test run writes these in its log.
+int TextReport_LinesStraightOn = 0;
+int TextReport_LinesWaited = 0;
 
 
 	#include "root_gadget.hpp"
@@ -592,6 +597,8 @@ void TextReportGadget :: AddTeletypeLine
 					return;
 				}
 
+				TextReport_LinesWaited++;
+
 				RefList_SCString_ToAppear . AddToEnd
 				(
 					*pSCString_ToAdd
@@ -603,6 +610,8 @@ void TextReportGadget :: AddTeletypeLine
 
 		// Otherwise you can add the teletype object:
 		{
+			TextReport_LinesStraightOn++;
+
 			DirectAddTeletypeLine
 			(
 				pSCString_ToAdd

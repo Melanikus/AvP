@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the tag starts on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\nint ShadowStatusOn = 0;",
+					"to": "\nint ShadowStatusOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag is drawn without -dev",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!DevMode || !ShadowStatusOn || !viewRan)",
+					"to": "if (!ShadowStatusOn || !viewRan)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag is drawn while it is off",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!DevMode || !ShadowStatusOn || !viewRan)",
+					"to": "if (!DevMode || !viewRan)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: F7 no longer shows or hides the tag",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ShadowStatusOn = !ShadowStatusOn;",
+					"to": "ShadowStatusOn = ShadowStatusOn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: F7 says nothing in the log",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tLogString(ShadowStatusOn ? \"tag: shown on the top right (F7)\" : \"tag: hidden (F7)\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -statuson works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-statuson\"))",
+					"to": "if (CommandLineHasWord(command_line, \"-statuson\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -statuson leaves the tag off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "ShadowStatusOn = 1;\n\t\t\tLogString(\"tag: shown on the top right from the start",
+					"to": "ShadowStatusOn = 0;\n\t\t\tLogString(\"tag: shown on the top right from the start"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -statusoff turns the tag on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "ShadowStatusOn = 0;\n\t\t\tLogString(\"tag: off (-statusoff)",
+					"to": "ShadowStatusOn = 1;\n\t\t\tLogString(\"tag: off (-statusoff)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -statusoff says nothing in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tLogString(\"tag: off (-statusoff), as it is anyway until F7 or -dev -statuson asks for it\");\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

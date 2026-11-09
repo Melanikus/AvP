@@ -1,0 +1,21 @@
+# level: derelict   end started by: walk
+# campaign: Marine 1
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DR-COMM03
+where CORR-10
+press CORR-12
+# opens DR-COMM04, DR-COMM05 shuts DR-COMM02, lft-COMM
+where COMM-01
+press swch-COMM
+# opens DR-VAENT01, DR-VAENT02
+where LABEX-02
+press swch-ALCK1
+# opens DR-VAENT03 shuts DR-VAENT01
+where VA-ENT02 | DR-VAENT02 | DR-VAENT03
+walk V timer airlock area switch
+# opens DR-VIEWD
+where VIEWD-SWRM
+press swch-VIEWD
+where END
+walk VENDOFLEVEL1
+end Vendoflevelb

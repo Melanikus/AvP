@@ -1,0 +1,32 @@
+{
+	"copy": [
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the copy's list has an item, so its first is there to read and nothing looks past the end",
+			"changes": [
+				{
+					"file": "tests/stl_bounds_canary_test.cpp",
+					"from": "std::vector<int> const empty;",
+					"to": "std::vector<int> const empty(1, 7);"
+				}
+			]
+		},
+		{
+			"name": "the checks are off and the guard lets that through: the canary's copy reads past the end and ends normally",
+			"changes": [
+				{
+					"file": "tests/stl_bounds_canary_test.args",
+					"from": " /D_MSVC_STL_HARDENING=1",
+					"to": ""
+				},
+				{
+					"file": "tests/every_test/every_test.h",
+					"from": "#if !defined(_MSVC_STL_HARDENING_VECTOR) || !_MSVC_STL_HARDENING_VECTOR",
+					"to": "#if 0"
+				}
+			]
+		}
+	]
+}

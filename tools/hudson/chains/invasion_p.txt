@@ -1,0 +1,13 @@
+# level: invasion_p   end started by: kill
+# campaign: Predator 7
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DoorHanga
+where topview
+press AddSwitch2
+# opens DoorShaft
+where DoorShaft | TopLiftS01 | EndRoom1
+walk lift open the bottom door.
+where EndRoom1
+press Addswitch4
+missing Gorman. End of level switch | a network game leaves out this marine
+end end of demo

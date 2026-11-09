@@ -1,0 +1,4 @@
+# Hudson walks off an edge on purpose, on Derelict. The gallery at VIEWC is 24 metres above the chamber floor, with no railing on this side.
+# The game kills a marine who falls more than about 8 metres, so this run has to end with the reason for a fatal fall. See test-deaths.ps1.
+putat -32090 -18279 -340000 VIEWC-03
+walkoff -43878 5485 -310066 VIEWC-01

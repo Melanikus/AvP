@@ -1,0 +1,21 @@
+# What Hudson does to play vaults on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+destroy 105407 6855 -25542 | CONT-04
+destroy 105407 6855 6255 | CONT-02
+destroy 69562 6850 6260 | CONT-01
+destroy 69557 6855 -25542 | CONT-03
+walk 160741 15584 -62639 | AreaALS
+press 259003 15272 -51272 | ALFTSWCH
+walk 30049 13324 34551 | Vmessage134a
+walk -106872 14713 14332 | Vpass
+walk 30122 12935 42090 | VpredDr2
+walk 31917 14494 50429 | VpredDr3
+walk 36123 14494 50367 | VpredDr4
+walk 39864 14494 50367 | VpredDr5
+walk 50529 14493 48866 | VpredDr6
+walk 55217 14493 41638 | VprdDr7
+walk 55217 14493 48379 | VpredDr8
+press 87638 14181 68759 | PREDSWCH
+press 47891 14181 -13774 | LFTCONSWCH
+press 87638 14181 68759 | PREDSWCH
+walk 483 -4506 1510 | VENDvol
