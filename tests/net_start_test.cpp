@@ -1127,6 +1127,22 @@ static bool KeepWaiting(void)
 	return true;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: a hook that notes the join's step each time it's asked (Net_RelayJoinStep), as the
+// menu's does to say where the join has got to
+static int stepsSeen[3] = {};
+
+static bool NoteTheStep(void)
+{
+	int const step = Net_RelayJoinStep();
+
+	if (step >= 0 && step < 3)
+	{
+		stepsSeen[step]++;
+	}
+
+	return true;
+}
+
 static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
 {
 	WaitingDatagram waiting;
@@ -1207,6 +1223,21 @@ static void TestJoiningThroughTheRelay()
 	Net_SetRelayJoinWaitHook(NULL);
 	EndTheGame();
 
+	// The join's step, as the menu's hook sees it: reaching the relay, then, once JOIN_PORT has come, the relay introducing the two ends;
+	// and none once the join is over. The host's hellos never come here, so READY never does.
+	memset(stepsSeen, 0, sizeof(stepsSeen));
+	Net_SetRelayJoinWaitHook(NoteTheStep);
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && stepsSeen[kNetRelayJoinStepReaching] >= 1 && stepsSeen[kNetRelayJoinStepIntroducing] >= 1
+		&& stepsSeen[kNetRelayJoinStepNone] == 0 && Net_RelayJoinStep() == kNetRelayJoinStepNone,
+		"the menu's hook sees the join reaching the relay, then the relay introducing the two ends, and no step once it's over");
+	Net_SetRelayJoinWaitHook(NULL);
+	EndTheGame();
+	datagramsWaiting.clear();
+
 	// No relay for its region
 	relayNamed = false;
 	NumberOfSessionsFound = 0;
@@ -1217,6 +1248,78 @@ static void TestJoiningThroughTheRelay()
 
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
+// scripted relay. Nothing is timed until the list names relays; the echoes go to the relay's control port from a socket of their own; an
+// answer from anywhere else is dropped, though it holds the same bytes; and the socket is closed once the timing is done.
+static void TestTimingTheRelaysForJoining()
+{
+	printf("Timing the relays for the games page\n");
+	datagramsWaiting.clear();
+	relayNamed = false;
+	Net_ForgetRelayTimes();
+	int const openBefore = socketsOpen;
+	int const sentNothing = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && socketsOpen == openBefore && datagramsSent == sentNothing,
+		"with no relays from the list yet, nothing is timed, opened or sent");
+
+	relayNamed = true;
+	int const sentBefore = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(datagramsSent == sentBefore + 1 && datagramsSentTo.back().host == kRelayHost && datagramsSentTo.back().port == kNetRelayDefaultControlPort
+		&& lastDatagramSent.size() == kNetRelayMessageBytes && lastDatagramSent[5] == kNetRelayEcho && socketsOpen == openBefore + 1,
+		"once the list has its relays: the first echo goes to the relay's control port, from a socket of its own");
+
+	NetRelayMessage echo;
+	Check(NetRelay_Read(lastDatagramSent.data(), lastDatagramSent.size(), &echo) == kNetRelayIsAMessage, "(the echo reads back as one)");
+	NetRelayMessage back = echo;
+	back.type = kNetRelayEchoBack;
+
+	// 10 ms on, a stranger answers with the very same bytes; 40 ms on, the relay does
+	WaitingDatagram stranger;
+	stranger.bytes.resize(kNetRelayMessageBytes);
+	NetRelay_Write(back, stranger.bytes.data());
+	stranger.from.host = 0x0E0E0E0E;
+	stranger.from.port = kNetRelayDefaultControlPort;
+	enetClock += 10;
+	datagramsWaiting.push_back(stranger);
+	Net_TimeRelaysForJoining();
+	enetClock += 30;
+	ArrivesFromTheRelay(back, kNetRelayDefaultControlPort);
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1, "no time is given before the timing is done");
+
+	// The other two echoes, unanswered, then a second for any late answer
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += kNetRelayEchoAnswerWithinMs;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == 40, "then the relay's time is its answer's, 40 ms: the stranger's earlier one wasn't heard");
+	Check(Net_JoinerMsToRelay("paris") == -1 && Net_JoinerMsToRelay(NULL) == -1, "a region with no timed relay, or none at all: no time");
+	Check(socketsOpen == openBefore, "and the socket is closed once the timing is done");
+
+	int const sentAfter = datagramsSent;
+	Net_TimeRelaysForJoining();
+	Check(datagramsSent == sentAfter && Net_JoinerMsToRelay("virginia") == 40, "after that, each frame's call does nothing, and the time stays");
+
+	// Timed again, when the page opens again, and this time the relay never answers
+	Net_ForgetRelayTimes();
+	Check(Net_JoinerMsToRelay("virginia") == -1, "forgotten when the page opens again");
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += 100;
+	Net_TimeRelaysForJoining();
+	enetClock += kNetRelayEchoAnswerWithinMs;
+	Net_TimeRelaysForJoining();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && socketsOpen == openBefore, "a relay that never answers has no time, and the socket is still closed");
+
+	Net_ForgetRelayTimes();
 	datagramsWaiting.clear();
 }
 
@@ -3006,6 +3109,7 @@ int main()
 	TestHostingThroughTheRelay();
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
+	TestTimingTheRelaysForJoining();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
 	TestSkirmish();

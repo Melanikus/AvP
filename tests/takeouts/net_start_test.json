@@ -2298,6 +2298,66 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "the join's step is always reaching the relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
+					"to": "relayJoinStep = kNetRelayJoinStepReaching;"
+				}
+			]
+		},
+		{
+			"name": "the join's step stays once the join is over",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayJoinStep = kNetRelayJoinStepNone;\n\n\tif (!relayJoiner.Ready())",
+					"to": "\tif (!relayJoiner.Ready())"
+				}
+			]
+		},
+		{
+			"name": "the relays' timing hears an answer from anywhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (from.host == joinerTimed[i].host && from.port == joinerTimed[i].port)",
+					"to": "if (from.port == joinerTimed[i].port)"
+				}
+			]
+		},
+		{
+			"name": "the relays' timing leaves its socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (joinerPicker.Done(now))\n\t{\n\t\tCloseJoinerTimingSocket();\n",
+					"to": "\tif (joinerPicker.Done(now))\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "a relay's time is given before the timing is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!region || !joinerTimingDone)",
+					"to": "if (!region)"
+				}
+			]
+		},
+		{
+			"name": "a relay that never answered is given a time",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (relay >= count || !hasTime[relay] || !ms)",
+					"to": "if (relay >= count || !ms)"
+				}
+			]
 		}
 	]
 }

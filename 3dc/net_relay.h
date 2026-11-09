@@ -603,6 +603,19 @@ public:
 		return best < 0 ? 0 : bestMs[best];
 	}
 
+	// One relay's own lowest round trip, in ms: false if it hasn't one (no echo answered in time, or no such relay). For the joiner's ping
+	// column (networking.cpp, Net_JoinerMsToRelay), which times every relay.
+	bool RelayMs(size_t relay, uint32_t *ms) const
+	{
+		if (relay >= count || !hasTime[relay] || !ms)
+		{
+			return false;
+		}
+
+		*ms = bestMs[relay];
+		return true;
+	}
+
 	size_t TakeSends(NetRelaySend *out, size_t most)
 	{
 		size_t const n = sendCount < most ? sendCount : most;
@@ -1265,6 +1278,7 @@ public:
 
 	bool Ready() const { return state == kReady; }
 	bool Failed() const { return state == kFailed; }
+	bool Introducing() const { return state == kHello; }   // the relay has given it a port, and the two ends are saying hello
 	int FailedWhy() const { return failedWhy; }
 	uint16_t Port() const { return state == kReady ? port : 0; }   // the relay's port to connect the game to, once Ready
 

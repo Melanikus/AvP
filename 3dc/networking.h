@@ -223,6 +223,21 @@ const char *Net_RelayJoinFailedWhy();
 typedef bool (*NetRelayJoinWaitHook)(void);
 void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook);
 
+// Where a join through a relay has got to, for the menu's wait hook to say (Fourth's online screens): reaching the relay (asking it, and
+// its cookie round), or the relay introducing the two ends (their hellos, until READY). None when no join is under way.
+int const kNetRelayJoinStepNone = 0;
+int const kNetRelayJoinStepReaching = 1;
+int const kNetRelayJoinStepIntroducing = 2;
+int Net_RelayJoinStep();
+
+// The joiner's round trip to each relay, for the games page's ping column (PROTOCOL.md: 3 echoes to each relay the list names, the lowest
+// kept; a game's estimate is this and its hostMs). Net_TimeRelaysForJoining goes each frame the page is up, and starts once the list has
+// named its relays; Net_ForgetRelayTimes, when the page opens, so they're timed again. Net_JoinerMsToRelay gives a region's time in ms, or
+// -1 until it's timed, or if its relay didn't answer.
+void Net_TimeRelaysForJoining();
+void Net_ForgetRelayTimes();
+int Net_JoinerMsToRelay(const char *region);
+
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
 // nothing is ever written past it. Only on the game's main thread, like the list of sessions.

@@ -199,6 +199,7 @@ static uint32_t relayListedAt = 0;             // when the list was last given t
 static uint32_t relayStrangersDropped = 0;     // packets to a host going through a relay, from anywhere but the relays
 static int relayJoinFailedWhy = kNetRelayFine; // why the last join through a relay failed
 static NetRelayJoinWaitHook relayJoinWaitHook = NULL;   // asked each slice of the join's wait (Net_SetRelayJoinWaitHook)
+static int relayJoinStep = kNetRelayJoinStepNone;       // where that join has got to (Net_RelayJoinStep)
 
 uint32_t const kRelayListEveryMs = 1000;
 size_t const kRelayMostPacketBytes = 1500;     // the most a relay passes on (PROTOCOL.md, section 2)
@@ -527,9 +528,13 @@ static uint16_t RelayHandshake(const char *code)
 
 	for (size_t turn = 0; turn < kRelayJoinMostTurns && !relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs; turn++)
 	{
+		// Where it's got to, for the menu's hook to say (Net_RelayJoinStep)
+		relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;
+
 		// The window keeps answering, and the player can give up (the menu's hook)
 		if (relayJoinWaitHook && !relayJoinWaitHook())
 		{
+			relayJoinStep = kNetRelayJoinStepNone;
 			relayJoinFailedWhy = kNetRelayGivenUp;
 			return 0;
 		}
@@ -564,6 +569,8 @@ static uint16_t RelayHandshake(const char *code)
 		relayJoiner.Tick(enet_time_get());
 	}
 
+	relayJoinStep = kNetRelayJoinStepNone;
+
 	if (!relayJoiner.Ready())
 	{
 		relayJoinFailedWhy = relayJoiner.Failed() ? relayJoiner.FailedWhy() : kNetRelayNoAnswer;
@@ -584,6 +591,180 @@ const char *Net_RelayJoinFailedWhy()
 void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook)
 {
 	relayJoinWaitHook = hook;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: where a join through a relay has got to, for the menu's wait (Fourth's online screens)
+int Net_RelayJoinStep()
+{
+	return relayJoinStep;
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column (Fourth's online
+// screens). PROTOCOL.md, "How the game uses it": 3 echoes to each relay the list names, once for each relay, not for each game, and the
+// lowest kept. A game's estimate is this and its hostMs. The echoes go from a socket of their own, open only while they're timed, and only
+// an answer from a timed relay's own address and control port is heard (NetRelayPicker checks its bytes and count).
+static ENetSocket joinerTimingSocket = ENET_SOCKET_NULL;
+static NetRelayPicker joinerPicker;
+static ENetAddress joinerTimed[kNetRelayMostRelays];
+static char joinerTimedRegions[kNetRelayMostRelays][kRelayListRegionLetters + 1];
+static size_t joinerTimedCount = 0;
+static bool joinerTimingStarted = false;   // since the last Net_ForgetRelayTimes
+static bool joinerTimingDone = false;
+
+static void CloseJoinerTimingSocket()
+{
+	if (joinerTimingSocket != ENET_SOCKET_NULL)
+	{
+		enet_socket_destroy(joinerTimingSocket);
+		joinerTimingSocket = ENET_SOCKET_NULL;
+	}
+}
+
+void Net_ForgetRelayTimes()
+{
+	CloseJoinerTimingSocket();
+	joinerPicker.Reset();
+	joinerTimedCount = 0;
+	joinerTimingStarted = false;
+	joinerTimingDone = false;
+}
+
+void Net_TimeRelaysForJoining()
+{
+	if (joinerTimingDone)
+	{
+		return;
+	}
+
+	uint32_t const now = enet_time_get();
+
+	// The first time the list has relays: each one looked up as a host does (RelayLookUp), and the first echo to each sent
+	if (!joinerTimingStarted)
+	{
+		RelayListRelay relays[kRelayListMostRelays];
+		int named = 0;
+
+		if (!RelayList_Relays(relays, &named) || named <= 0)
+		{
+			return;
+		}
+
+		joinerTimingStarted = true;
+		joinerTimedCount = 0;
+
+		for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays) && joinerTimedCount < kNetRelayMostRelays; i++)
+		{
+			if (RelayLookUp(relays[i], &joinerTimed[joinerTimedCount]))
+			{
+				strncpy(joinerTimedRegions[joinerTimedCount], relays[i].region, kRelayListRegionLetters);
+				joinerTimedRegions[joinerTimedCount][kRelayListRegionLetters] = 0;
+				joinerTimedCount++;
+			}
+		}
+
+		uint16_t ports[kNetRelayMostRelays];
+		uint8_t random[kNetRelayMostRelays * kNetRelayEchoes * kNetRelaySecretBytes];
+
+		for (size_t i = 0; i < joinerTimedCount; i++)
+		{
+			ports[i] = joinerTimed[i].port;
+		}
+
+		RelayRandomBytes(random, joinerTimedCount * kNetRelayEchoes * kNetRelaySecretBytes);
+		joinerTimingSocket = joinerTimedCount > 0 ? enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM) : ENET_SOCKET_NULL;
+
+		ENetAddress any;
+		any.host = ENET_HOST_ANY;
+		any.port = 0;
+
+		if (joinerTimingSocket == ENET_SOCKET_NULL || enet_socket_set_option(joinerTimingSocket, ENET_SOCKOPT_NONBLOCK, 1) < 0
+			|| enet_socket_bind(joinerTimingSocket, &any) < 0 || !joinerPicker.Start(joinerTimedCount, ports, random, now))
+		{
+			CloseJoinerTimingSocket();
+			joinerTimingDone = true;
+			return;
+		}
+
+		LogString("net: the relays are being timed for the games page");
+	}
+
+	// What has come: from a timed relay only, by its address and control port. Anything else is dropped.
+	static uint8_t packet[kRelayMostPacketBytes];
+
+	for (size_t n = 0; n < kRelayMostPacketsAWait; n++)
+	{
+		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+
+		if (enet_socket_wait(joinerTimingSocket, &condition, 0) < 0 || !(condition & ENET_SOCKET_WAIT_RECEIVE))
+		{
+			break;
+		}
+
+		ENetAddress from;
+		ENetBuffer buffer;
+		buffer.data = packet;
+		buffer.dataLength = sizeof(packet);
+		int const got = enet_socket_receive(joinerTimingSocket, &from, &buffer, 1);
+
+		if (got <= 0)
+		{
+			break;
+		}
+
+		for (size_t i = 0; i < joinerTimedCount; i++)
+		{
+			if (from.host == joinerTimed[i].host && from.port == joinerTimed[i].port)
+			{
+				joinerPicker.Hear(i, from.port, packet, static_cast<size_t>(got), now);
+				break;
+			}
+		}
+	}
+
+	joinerPicker.Tick(now);
+
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t const sendCount = joinerPicker.TakeSends(sends, kNetRelayMostSends);
+
+	for (size_t i = 0; i < sendCount; i++)
+	{
+		if (sends[i].relay < joinerTimedCount)
+		{
+			ENetAddress to = joinerTimed[sends[i].relay];
+			to.port = sends[i].port;
+			ENetBuffer buffer;
+			buffer.data = sends[i].bytes;
+			buffer.dataLength = kNetRelayMessageBytes;
+			enet_socket_send(joinerTimingSocket, &to, &buffer, 1);
+		}
+	}
+
+	if (joinerPicker.Done(now))
+	{
+		CloseJoinerTimingSocket();
+		joinerTimingDone = true;
+		LogString("net: the relays are timed for the games page");
+	}
+}
+
+int Net_JoinerMsToRelay(const char *region)
+{
+	if (!region || !joinerTimingDone)
+	{
+		return -1;
+	}
+
+	for (size_t i = 0; i < joinerTimedCount; i++)
+	{
+		uint32_t ms = 0;
+
+		if (strncmp(region, joinerTimedRegions[i], sizeof(joinerTimedRegions[i])) == 0)
+		{
+			return joinerPicker.RelayMs(i, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs) ? static_cast<int>(ms) : -1;
+		}
+	}
+
+	return -1;
 }
 
 // A join through a relay: the relay of the game's region, from the relays the list names, looked up, then its handshake (RelayHandshake).
