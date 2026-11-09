@@ -48,6 +48,13 @@ void RelayList_HostSessionNow(const SessionDescription &session);
 // The room has ended: the game comes off the list
 void RelayList_HostRoomClosed(void);
 
+// The game is quitting (winmain.cpp, just before the game shuts down). Added 2026-11-09 by Melanikus for the AvP port. A game this
+// machine still has on the list is taken off it, and this waits at most mostMs for the list's thread to finish doing that: otherwise
+// the game can be gone before the DELETE is sent, and the list goes on showing a game nobody can join until it forgets it by itself,
+// 45 seconds after its last renewal (server #14's run, 2026-11-09). Nothing waits if nothing has to come off, or if the list was
+// never used.
+void RelayList_BeforeQuitting(unsigned int mostMs);
+
 // ---- The relays: where each region's relay is
 
 // Asks the list for its relays. The answer comes a moment later. The menus ask when the host page and the Find games page open.

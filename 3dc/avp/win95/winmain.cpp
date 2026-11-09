@@ -74,6 +74,7 @@
 #include "VorbisPlayer.h"
 #include "networking.h"
 #include "relay_auto.h"
+#include "relay_list.h"
 #include "view.h"
 #include "renderer.h"
 #include "mp_config.h"
@@ -1090,6 +1091,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	Tex_Release(AAFontImageNumber);
 	Tex_Release(AVPMENUGFX_SLIDERBAR);
 	Tex_Release(AVPMENUGFX_SLIDER);
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: a game this machine hosted through a relay comes off the relays' list before the
+	// game closes, waiting at most 2 seconds for that (relay_list.h)
+	RelayList_BeforeQuitting(2000);
 
 	ExitSystem();
 

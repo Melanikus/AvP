@@ -124,6 +124,12 @@ namespace
 		char endRegion[kRelayListRegionLetters + 1];
 		char endCode[kRelayCodeLetters + 1];
 
+		// How many times the game has asked for that, and how many of those the list's thread has seen to (taken the game off, or found it
+		// wasn't on). endDone is set each time the thread catches up, for RelayList_BeforeQuitting to wait on.
+		int endsAsked;
+		int endsDone;
+		HANDLE endDone;
+
 		// The relays: a call wanted, and the last good answer
 		bool relaysWanted;
 		bool relaysKnown;
@@ -584,6 +590,7 @@ namespace
 
 			EnterCriticalSection(&shared->lock);
 			bool const end = shared->endWanted;
+			int const endsAsked = shared->endsAsked;
 			char endRegion[kRelayListRegionLetters + 1];
 			char endCode[kRelayCodeLetters + 1];
 			memcpy(endRegion, shared->endRegion, sizeof(endRegion));
@@ -604,6 +611,15 @@ namespace
 			if (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)
 			{
 				TakeOffTheList();
+			}
+
+			// Every end asked for up to now has been seen to, so a game that's quitting can stop waiting (RelayList_BeforeQuitting)
+			if (end)
+			{
+				EnterCriticalSection(&shared->lock);
+				shared->endsDone = endsAsked;
+				LeaveCriticalSection(&shared->lock);
+				SetEvent(shared->endDone);
 			}
 
 			tryAgainLater = false;
@@ -669,6 +685,7 @@ namespace
 		memset(made, 0, sizeof(*made));
 		InitializeCriticalSection(&made->lock);
 		made->wake = CreateEventW(NULL, FALSE, FALSE, NULL);
+		made->endDone = CreateEventW(NULL, FALSE, FALSE, NULL);
 
 		// The name is letters, digits, - and . only (Relay_IsServerName), so each one is the same as a wide character
 		for (size_t i = 0; name[i] && i + 1 < sizeof(made->server) / sizeof(made->server[0]); i++)
@@ -689,7 +706,7 @@ namespace
 			return false;
 		}
 
-		if (!made->wake)
+		if (!made->wake || !made->endDone)
 		{
 			LogString("Relay list: couldn't start, so hosts aren't listed and the list can't be read");
 			return false;
@@ -920,6 +937,7 @@ void RelayList_HostRoomClosed(void)
 	{
 		shared->hostWanted = false;
 		shared->endWanted = true;
+		shared->endsAsked++;
 		memcpy(shared->endRegion, shared->listing.region, sizeof(shared->endRegion));
 		memcpy(shared->endCode, shared->listing.code, sizeof(shared->endCode));
 		ended = true;
@@ -932,6 +950,45 @@ void RelayList_HostRoomClosed(void)
 		SetEvent(shared->wake);
 	}
 
+	WriteTheNews();
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port: see relay_list.h. The list's thread does the DELETE, so this only waits for it.
+void RelayList_BeforeQuitting(unsigned int mostMs)
+{
+	if (!shared)
+	{
+		return;
+	}
+
+	// A game still on the list comes off it, even if the networking code never said the room had ended. If it did, this does nothing.
+	RelayList_HostRoomClosed();
+
+	DWORD const started = GetTickCount();
+
+	for (;;)
+	{
+		EnterCriticalSection(&shared->lock);
+		bool const waiting = shared->endsDone != shared->endsAsked;
+		LeaveCriticalSection(&shared->lock);
+
+		if (!waiting)
+		{
+			break;
+		}
+
+		DWORD const waited = GetTickCount() - started;
+
+		if (waited >= mostMs)
+		{
+			LogString("Relay list: the game closed before it could come off the list, so the list forgets it by itself, within 45 seconds");
+			break;
+		}
+
+		WaitForSingleObject(shared->endDone, mostMs - waited);
+	}
+
+	// What the thread said about it (the game is off the list, or why not) goes in the log before the game closes
 	WriteTheNews();
 }
 
