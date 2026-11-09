@@ -150,7 +150,10 @@ const char *RelayList_RefusalWords(RelayListRefusal why);
 
 // Reads a GET /v1/games answer. games has room for kRelayListMostGames. ourVersion is the version that was asked for. On a refusal,
 // count is 0 and nothing in games is to be used.
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count);
+// Modified 2026-11-09 by Melanikus for the AvP port: fingerprints says whether the games carry their host's fingerprint, which only a v2
+// draft's do (networking.h, Net_V2DraftOn). Then a game without one is refused. Without it, the answer is read as version 1's, with no
+// fingerprint field, and each game's fingerprint is left all 0.
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count);
 
 // Reads a GET /v1/relays answer. relays has room for kRelayListMostRelays.
 RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count);
@@ -160,8 +163,10 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
-// A listing with no fingerprint, or one that's all 0 (no identity was made for this run), is one of those.
-bool RelayList_ListingBody(const RelayListListing &listing, const uint8_t *owner, char *body, size_t room);
+// With withFingerprint (a v2 draft's listing, Net_V2DraftOn), a listing with no fingerprint, or one that's all 0 (no identity was made for
+// this run), is one of those. Without it (modified 2026-11-09 by Melanikus for the AvP port), the body is version 1's, with no fingerprint
+// field at all, whatever the listing holds.
+bool RelayList_ListingBody(const RelayListListing &listing, bool withFingerprint, const uint8_t *owner, char *body, size_t room);
 
 // The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
 bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room);
