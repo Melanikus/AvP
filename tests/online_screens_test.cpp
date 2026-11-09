@@ -704,6 +704,28 @@ static void TestWhereTheyAreDrawn()
 	Check(Has(opened, "lastGameKept = false;"), "a page just opened forgets the game last selected");
 }
 
+// A join the host didn't answer says why, in plain words (beta.2's "nobody blocked silently"). Added 2026-11-09 by Melanikus for the
+// AvP port.
+static void TestTheNoAnswerReason()
+{
+	puts("Why a host didn't answer");
+
+	Check(strcmp(OnlineScreens_Words(kOnlineWordsNoAnswerWhy),
+		"They may not have seen it (it's on their screen for 30 s, under Esc), or their network stopped your request") == 0,
+		"both things a joiner can't tell apart are said: a host who didn't see the question, and a network that stopped the request");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const ended = SourceSlice(page, "bool OnlinePage_JoinEnded(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(ended, "SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer), OnlineScreens_Words(kOnlineWordsNoAnswerWhy));"),
+		"a join with no answer gives that reason under its line");
+	std::string const top = SourceSlice(page, "void OnlinePage_DrawTop(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(top, "if (failedWhy[0])\n\t\t{\n\t\t\tWords(failedWhy, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 34, ONE_FIXED / 2,"),
+		"and the games page draws it, smaller, under the line");
+	std::string const failed = SourceSlice(page, "void OnlinePage_JoinFailed(const char *why)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const gaveUp = SourceSlice(page, "void OnlinePage_JoinGivenUp(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(failed, "failedWhy[0] = '\\0';") && Has(gaveUp, "failedWhy[0] = '\\0';"), "a later failure never keeps an earlier one's reason");
+}
+
 int main()
 {
 	TestTheTail();
@@ -715,6 +737,7 @@ int main()
 	TestPingAndWaits();
 	TestWords();
 	TestWhereTheyAreDrawn();
+	TestTheNoAnswerReason();
 
 	if (checksFailed)
 	{

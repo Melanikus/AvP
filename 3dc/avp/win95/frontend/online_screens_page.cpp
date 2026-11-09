@@ -115,6 +115,7 @@ static RelayTime relayTimes[kRelayListMostGames];
 static int relayTimesKept = 0;
 
 static char failedLine[96];
+static char failedWhy[128];         // and, for some, why in plain words, smaller under it ("" for none). Added 2026-11-09 by Melanikus.
 static uint32_t failedAt = 0;
 static bool failedShown = false;
 
@@ -620,6 +621,7 @@ void OnlinePage_JoinFailed(const char *why)
 	OnlineScreens_SafeName(why, sizeof(safe), safe, sizeof(safe));
 	_snprintf(failedLine, sizeof(failedLine) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsCouldNotJoin), safe);
 	failedLine[sizeof(failedLine) - 1] = '\0';
+	failedWhy[0] = '\0';
 	failedAt = Now();
 	failedShown = true;
 }
@@ -627,6 +629,7 @@ void OnlinePage_JoinFailed(const char *why)
 void OnlinePage_JoinGivenUp(void)
 {
 	Put(failedLine, sizeof(failedLine), OnlineScreens_Words(kOnlineWordsGaveUp));
+	failedWhy[0] = '\0';
 	failedAt = Now();
 	failedShown = true;
 }
@@ -765,11 +768,16 @@ void OnlinePage_DrawTop(void)
 			AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
-	// A failed join's line, under the rows, for a few seconds
+	// A failed join's line, under the rows, for a few seconds, and why, smaller under it, when there's a plain reason
 	if (failedShown && !HasCome(Now(), failedAt + kFailedLineMs))
 	{
 		int const rows = visibleCount > 0 ? visibleCount : 1;
 		Words(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+
+		if (failedWhy[0])
+		{
+			Words(failedWhy, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 34, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		}
 	}
 }
 
@@ -867,10 +875,12 @@ static void TwoLines(const char *first, const char *second, bool tail)
 	Words(second, MENU_CENTREX, kWordsTop + 20, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 }
 
-// The failed join's line on the games page, in the page's own fixed words
-static void SayOnThePage(const char *words)
+// The failed join's line on the games page, in the page's own fixed words, and why in plain words under it when there's more to say
+// (beta.2's "nobody blocked silently": modified 2026-11-09 by Melanikus for the AvP port)
+static void SayOnThePage(const char *words, const char *why = "")
 {
 	Put(failedLine, sizeof(failedLine), words);
+	Put(failedWhy, sizeof(failedWhy), why ? why : "");
 	failedAt = Now();
 	failedShown = true;
 }
@@ -935,7 +945,8 @@ bool OnlinePage_JoinEnded(void)
 			SayOnThePage(OnlineScreens_Words(kOnlineWordsHostBusy));
 			return true;
 		case kNetJoinAnswerNoAnswer:
-			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));
+			// Either the host didn't press in time, or nothing came back at all (networking.h): the joiner can't tell which, so both are said
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer), OnlineScreens_Words(kOnlineWordsNoAnswerWhy));
 			return true;
 		case kNetJoinAnswerWaiting:
 			// The host's no, busy and no answer all come as answers (networking.h), so a request still waiting when the join ends was Esc

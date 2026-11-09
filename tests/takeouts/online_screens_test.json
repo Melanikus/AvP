@@ -823,6 +823,46 @@
 					"to": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tms);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a join with no answer says no reason",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer), OnlineScreens_Words(kOnlineWordsNoAnswerWhy));",
+					"to": "SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games page never draws a failed join's reason",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tif (failedWhy[0])\n\t\t{\n\t\t\tWords(failedWhy,",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tWords(failedWhy,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a join that failed for another reason keeps the reason before it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tfailedLine[sizeof(failedLine) - 1] = '\\0';\n\tfailedWhy[0] = '\\0';\n",
+					"to": "\tfailedLine[sizeof(failedLine) - 1] = '\\0';\n"
+				}
+			]
+		},
+		{
+			"name": "the reason under a join with no answer leaves out the network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": ", or their network stopped your request\"",
+					"to": "\""
+				}
+			]
 		}
 	]
 }

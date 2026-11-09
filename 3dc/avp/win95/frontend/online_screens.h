@@ -179,6 +179,7 @@ enum OnlineWords
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,
 	kOnlineWordsRelayGone,
+	kOnlineWordsNoAnswerWhy,          // under "The host didn't answer in time": why, in plain words (beta.2, added 2026-11-09)
 	kOnlineWordsCount
 };
 

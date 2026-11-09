@@ -499,7 +499,8 @@ static const char *const kWords[] =
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
-	"Your game's room on the relay has gone"                      // kOnlineWordsRelayGone
+	"Your game's room on the relay has gone",                     // kOnlineWordsRelayGone
+	"They may not have seen it (it's on their screen for 30 s, under Esc), or their network stopped your request"   // kOnlineWordsNoAnswerWhy
 };
 
 static_assert(sizeof(kWords) / sizeof(kWords[0]) == kOnlineWordsCount, "kWords needs one line for each of OnlineWords, in its order");
