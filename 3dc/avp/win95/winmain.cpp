@@ -31,6 +31,8 @@
 //   same letters in it isn't taken for a switch; -ip refuses a word too long to be an address, instead of cutting it short
 //   -staticcomparedrop turns the comparing on itself, as it did when -staticcompare was found inside it
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
 
 #include "3dc.h"
 #include "build_identity.h"
@@ -199,10 +201,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 {
 	StopGameIfNewFails();
 
+	// -dev -secondcopy: a second copy of the game on this machine, for trying two players on one PC, keeps its files in a folder of its own,
+	// by a fixed name, so the two don't share a log. It's decided first of all, because the log, opened just below, is in that folder. Only
+	// whether the two words are there is read from the command line: no part of it becomes part of a path.
+	bool const secondCopyAsked = CommandLineHasWord(lpCmdLine, "-secondcopy");
+	bool const secondCopy = secondCopyAsked && CommandLineHasWord(lpCmdLine, "-dev") && SaveFolder_UseTheSecondCopy();
+
 	SetWindowTitle();
 	ClearLog();
 	LogString(GetWindowTitle());
 	LogString(BuildIdentity_Lines());
+
+	if (secondCopy)
+	{
+		LogString("this is the second copy: its settings, log and saved games are in My Games/Aliens versus Predator (second copy) (-dev -secondcopy)");
+	}
+	else if (secondCopyAsked)
+	{
+		LogString("-secondcopy needs -dev, so this copy keeps its files in the usual folder");
+	}
 
 	char *command_line = lpCmdLine;
 
