@@ -36,8 +36,10 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   -dev -onlinescreens shows every online-play screen at the menus, with made-up games, for pictures (online_screens_page.h)
 //   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer
+//   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
 
 #include "3dc.h"
+#include "window_slot.h"
 #include "build_identity.h"
 #include "mark_key.h"
 #include "online_screens_page.h"
@@ -640,6 +642,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	if (CommandLineHasWord(command_line, "-w"))
 	{
 		WindowMode = WindowModeSubWindow;
+	}
+
+	// -dev -windowed: a test copy in a window on its own half of the screen, the first copy on the left and the second (-dev -secondcopy)
+	// on the right, so two copies run side by side on one PC (window_slot.h). A word only: the size comes from the screen, never from the
+	// command line, and the player's settings aren't changed.
+	if (CommandLineHasWord(command_line, "-windowed"))
+	{
+		if (CommandLineHasWord(command_line, "-dev"))
+		{
+			WindowMode = WindowModeSubWindow;
+			WindowSlot_TurnOn(secondCopy);
+			LogString(secondCopy ? "windowed: this copy opens in a window on the right half of the screen (-dev -windowed)"
+				: "windowed: this copy opens in a window on the left half of the screen (-dev -windowed)");
+		}
+		else
+		{
+			LogString("windowed: -windowed needs -dev, so this copy opens as it usually does");
+		}
 	}
 
 	if (CommandLineHasWord(command_line, "-dontgrabmouse"))

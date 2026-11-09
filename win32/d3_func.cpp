@@ -43,7 +43,11 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   with -dev -windowed, a test copy draws at the largest of the screen's modes that fits its half of the screen (window_slot.h),
+//   not at the settings' size, which stays as it is
 #include "d3_func.h"
+#include "window_slot.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
 #include "frame_timing.h"
@@ -2378,6 +2382,33 @@ bool InitialiseDirect3D()
 		{
 			d3d.CurrentVideoMode = i;
 			break;
+		}
+	}
+
+	// -dev -windowed: a test copy's window has a picture size of its own, the largest of this screen's modes that fits its half of the
+	// screen, so two copies can run side by side (window_slot.h). The settings' size is left as it is. It's chosen from the modes found
+	// above, so the check below always finds it.
+	if (windowed)
+	{
+		int modeWidths[sizeof(d3d.Driver[0].DisplayMode) / sizeof(d3d.Driver[0].DisplayMode[0])];
+		int modeHeights[sizeof(d3d.Driver[0].DisplayMode) / sizeof(d3d.Driver[0].DisplayMode[0])];
+		int const most = (int)(sizeof(modeWidths) / sizeof(modeWidths[0]));
+		int modes = 0;
+
+		for (uint32_t j = 0; j < d3d.Driver[defaultDevice].NumModes && modes < most; j++)
+		{
+			modeWidths[modes] = (int)d3d.Driver[defaultDevice].DisplayMode[j].Width;
+			modeHeights[modes] = (int)d3d.Driver[defaultDevice].DisplayMode[j].Height;
+			modes++;
+		}
+
+		WindowSlot slot;
+
+		if (WindowSlot_ForThisScreen((unsigned long)::GetWindowLongPtr(hWndMain, GWL_STYLE), modeWidths, modeHeights, modes, &slot))
+		{
+			width = (uint32_t)slot.pictureWidth;
+			height = (uint32_t)slot.pictureHeight;
+			Con_PrintMessage("windowed: this copy draws at " + Util::IntToString(width) + " x " + Util::IntToString(height) + ", in its half of the screen");
 		}
 	}
 

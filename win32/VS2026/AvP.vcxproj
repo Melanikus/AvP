@@ -450,6 +450,8 @@
     <ClCompile Include="..\..\3dc\relay_list.cpp" />
     <ClCompile Include="..\..\3dc\relay_list_text.cpp" />
     <ClCompile Include="..\..\3dc\relay_auto.cpp" />
+    <ClCompile Include="..\..\3dc\window_slot_game.cpp" />
+    <ClCompile Include="..\..\3dc\window_slot.cpp" />
     <ClCompile Include="..\..\3dc\net_host.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
@@ -740,6 +742,7 @@
     <ClInclude Include="..\..\3dc\relay_list.h" />
     <ClInclude Include="..\..\3dc\relay_list_text.h" />
     <ClInclude Include="..\..\3dc\relay_auto.h" />
+    <ClInclude Include="..\..\3dc\window_slot.h" />
     <ClInclude Include="..\..\3dc\relay_shared.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
