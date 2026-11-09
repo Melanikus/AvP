@@ -830,8 +830,15 @@ static void TestTheCalls()
 	// The thread's news: every piece since the main thread last looked, kept in a ring, each written with "Relay list: " in front, so one
 	// search of the log finds them all
 	std::string const news = SourceSlice(source, "void WriteTheNews(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + std::string(piece, strnlen(piece, kMostNewsLetters)));"),
+	Check(Has(news, "for (; newsWritten < number; newsWritten++)") && Has(news, "LogString(std::string(\"Relay list: \") + piece);"),
 		"the main thread writes every piece of the list's news, each starting \"Relay list: \"");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): each piece is a copy of its text, kept with its end, never a pointer
+	// handed from one thread to the other, and it's ended again at the last place of its room before it's written
+	std::string const tell = SourceSlice(source, "void Tell(const char *news)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(tell, "size_t const letters = strnlen(news, kMostNewsLetters);") && Has(tell, "memcpy(kept, news, letters);") && Has(tell, "kept[letters] = 0;"),
+		"each piece of news is kept as a copy of at most kMostNewsLetters letters, with its end");
+	Check(Has(news, "piece[kMostNewsLetters] = 0;"), "and it's ended again at the last place of its room before it's written");
 
 	// The settings file is shared, so it mustn't point anyone's game at another list (settings_file_test): both settings are read only with -dev
 	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);

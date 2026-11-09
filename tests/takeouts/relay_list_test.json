@@ -919,8 +919,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "LogString(std::string(\"Relay list: \") + std::string(piece, strnlen(piece, kMostNewsLetters)));",
-					"to": "LogString(std::string(piece, strnlen(piece, kMostNewsLetters)));"
+					"from": "LogString(std::string(\"Relay list: \") + piece);",
+					"to": "LogString(std::string(piece));"
 				}
 			]
 		},
@@ -1261,6 +1261,46 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL)",
 					"to": "bodyWent && WinHttpReceiveResponse(request, NULL)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept without its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tkept[letters] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept whole, however long",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "size_t const letters = strnlen(news, kMostNewsLetters);",
+					"to": "size_t const letters = strlen(news);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is copied past its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "memcpy(kept, news, letters);",
+					"to": "memcpy(kept, news, kMostNewsLetters);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news isn't ended again before it's written",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tpiece[kMostNewsLetters] = 0;\n",
+					"to": ""
 				}
 			]
 		}
