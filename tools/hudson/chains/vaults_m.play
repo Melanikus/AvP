@@ -1,0 +1,8 @@
+# What Hudson does to play vaults_m on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk 12758 14649 16465 | V trigger PREDATOR
+kill 26518 17974 -10791 | PREDATOR 01
+press 121181 6232 -25781 | NEWSWITCH
+kill 103966 6387 -29467 | KILLER ALIEN03
+kill 73576 7040 -32932 | KILLER ALIEN02
+kill 99494 6387 10150 | KILLER ALIEN04

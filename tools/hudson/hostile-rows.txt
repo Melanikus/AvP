@@ -1,0 +1,83 @@
+# What each row of hostile=yes sends, and the refusal the machine it's sent to has to name. tools/hudson/read-hostile.js reads this file.
+# The numbers (B1, C4 and so on) are from the two independent reads of the network code. NEW is a message written for the co-op campaign.
+# Four columns, with tabs between them:
+#   who sends it: join, host, or joinself (the joiner asks itself what its menu would ask)
+#   how the line in the sender's log starts, after "hostile: row N: "
+#   the reason the log has to name, after "net: refused: ". "-" is a row that sets up the next one and is refused by nothing. "SHOWN" means the sender's own line is the proof.
+#   when it counts: ifsent (it can only be sent on a level that lacks something), any, species (only in a species game), campaign (only in the campaign mode) or flood (one row causes many refusals)
+joinself	B9 a host's level one past the end	a host named a level that isn't on that game's list	any
+join	B1 a pick-up message	a pick-up message named something that can't be picked up	any
+join	B2 a ghost message using the number	a ghost message used the number of a player's body	any
+join	B2 a ghost message of a kind	a ghost message named a kind that isn't on the list	any
+join	B4 a damage message	a damage message counted its hit a number of times it can't	any
+join	B5 a kill by a killer kind	a killer's kind has no species score	species
+join	B6 ninety new ghosts	a player has as many things alive as one player may	flood
+join	B6 ninety new ghosts	too many new ghosts from one player in a second	flood
+join	B6 forty dropped guns	too many dropped guns from one player in a second	species
+join	B6 forty dropped guns	a dropped gun was sent in a game that plays as single player	campaign
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	C4 a part only a host may send	a part only a host may send	any
+join	NEW asking for an event no such object has	a client asked for something to happen in the level that couldn't have, so it was ignored	campaign
+join	NEW asking for an event by a switch	a client asked for something to happen in the level that couldn't have, so it was ignored	campaign
+join	B7 a ghost whose shape	a ghost with a model or shape this level hasn't loaded	any
+join	N2 a kill giving the corpse	a kill message gave the corpse the number of a player's body	any
+join	B6 thirty explosions	a client sent more of one kind of part in a second than any game does	any
+join	B6 twenty gibbings	a client sent more of one kind of part in a second than any game does	any
+join	B6 three kills	a client sent more of one kind of part in a second than any game does	any
+join	N5 ten chat lines	a client sent more of one kind of part in a second than any game does	any
+join	N2 a sound holding an address	SHOWN	any
+join	SURVIVE: every display block has gone	SHOWN	any
+join	SURVIVE: this player is being killed with no display blocks	SHOWN	any
+join	SURVIVE: every strategy block has gone	SHOWN	any
+join	SURVIVE: this player is being killed with no strategy blocks	SHOWN	species
+join	SURVIVE: every light has gone	SHOWN	any
+join	SURVIVE: a flare has been thrown	SHOWN	any
+join	SURVIVE: everything is back	SHOWN	any
+join	N4 four hundred fragments	SHOWN	any
+join	B6 seventy things destroyed	a client sent more of one kind of part in a second than any game does	any
+join	SEEDS an explosion no game sends	an explosion message named a kind no game sends	any
+join	SEEDS a flechette with no seed	a flechette message had no seed	any
+joinself	N5 eighty lines for this machine's own screen	too many lines are waiting to go on the screen	any
+join	NEW huge hits on track objects	-	any
+joinself	B3gap a player's ghost with no body	a player's ghost held a gun this level has no model for	ifsent
+join	NPC a joiner saying what an NPC is doing	a part only a host may send	any
+join	END the joiner	SHOWN	any
+host	HOST makes a rocket's ghost	-	any
+host	B2 an alien message naming a rocket	an alien message named a ghost that isn't an alien	any
+host	B3 an alien of a kind	a ghost with a model or shape this level hasn't loaded	any
+host	NEW a next level this game can't go to	a next-level message named a place this campaign can't go to, so it was ignored	any
+host	NEW an event no such object has	a host named something happening in the level that isn't in this level	campaign
+host	B8 a game description leaving the joiner off	this game isn't on the list the host sent	flood
+host	N5 eighty chat lines	too many lines are waiting to go on the screen	flood
+host	N7 an autogun message	an autogun message named something that isn't an autogun	any
+host	SURVIVE: every display block has gone	SHOWN	any
+host	SURVIVE: this player is being killed with no display blocks	SHOWN	species
+host	SURVIVE: every strategy block has gone	SHOWN	any
+host	SURVIVE: this player is being killed with no strategy blocks	SHOWN	any
+host	SURVIVE: every light has gone	SHOWN	any
+host	SURVIVE: a flare has been thrown	SHOWN	any
+host	SURVIVE: everything is back	SHOWN	any
+host	N4 four hundred fragments	SHOWN	any
+host	NPC a number no NPC can have	an NPC message with a number no NPC can have	any
+host	NPC a kind that isn't on the list	an NPC message of a kind that isn't on the list	any
+host	NPC an animation length that can't be right	an NPC message with an animation length that can't be right	any
+host	NPC a model this level hasn't loaded	an NPC message with a model this level hasn't loaded	any
+host	NPC a message naming a rocket's ghost	an NPC message named a ghost that isn't that kind	any
+host	NPC a xenoborg's head naming a rocket's ghost	a xenoborg's head named a ghost that isn't a xenoborg	any
+host	NPC a death naming a rocket's ghost	an NPC's death named a ghost that isn't an NPC	any
+host	NPC a death with a time that can't be right	an NPC's death had a time that can't be right	any
+host	NPC a sound in a voice that isn't on the list	an NPC's sound named a voice that isn't on the list	any
+host	NPC a sound at a pitch that can't be right	an NPC's sound had a pitch that can't be right	any
+host	NPC a xenoborg's beams with one he hasn't got	a xenoborg's message named a beam he hasn't got	any
+host	NPC something a queen doesn't throw, as if she'd thrown it	a thrown object's message named something a queen doesn't throw	any
+host	LIFT something that isn't a lift, in a lift's sync message	a lift's sync message named something that isn't a platform lift	ifsent
+host	LIFT a lift with a state lifts don't have	a lift's sync message named a state lifts don't have	ifsent
+host	LIFT a lift with an end it doesn't have	a lift's sync message named an end a lift doesn't have	ifsent
+host	LIFT a lift's car off its track	a lift's sync message put the car off its track	ifsent
+host	END the host	SHOWN	any

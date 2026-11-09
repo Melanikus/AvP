@@ -1,0 +1,6 @@
+# level: invasion_a   end started by: walk
+# campaign: Alien 6
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+where shaft02
+walk endstrategy
+end endswitch

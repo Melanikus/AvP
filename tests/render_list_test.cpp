@@ -183,19 +183,25 @@ bool VertexDeclaration::Set()
 }
 
 // Each draw the list asks for is written down here, so a check can look at what it would have drawn
+// Modified 2026-11-09 by Melanikus for the AvP port (#177): with the picture it was drawn with, and whether depth writes were on, so a
+// check can tell which polygon wrote depth
 struct DrawnBatch
 {
 	uint32_t startIndex;
 	uint32_t triangles;
 	uint32_t corners;
+	texID_t picture;
+	bool depthWritten;
 };
 
 static std::vector<DrawnBatch> drawn;
 static int commandsRun = 0;
+static enum ZWRITE_ENABLE depthWritesNow = ZWRITE_ENABLED;   // what the card was last told about writing depth
+static texID_t pictureNow = 0;                              // and the picture it was last given, on stage 0
 
 bool R_DrawIndexedPrimitive(uint32_t, uint32_t, uint32_t numVerts, uint32_t startIndex, uint32_t numPrimitives)
 {
-	DrawnBatch const batch = { startIndex, numPrimitives, numVerts };
+	DrawnBatch const batch = { startIndex, numPrimitives, numVerts, pictureNow, depthWritesNow == ZWRITE_ENABLED };
 	drawn.push_back(batch);
 	return true;
 }
@@ -204,13 +210,19 @@ void R_ClearZBuffer()
 {
 }
 
-void ChangeZWriteEnable(enum ZWRITE_ENABLE)
+void ChangeZWriteEnable(enum ZWRITE_ENABLE setting)
 {
 	commandsRun++;
+	depthWritesNow = setting;
 }
 
-bool R_SetTexture(uint32_t, texID_t)
+bool R_SetTexture(uint32_t stage, texID_t picture)
 {
+	if (stage == 0)
+	{
+		pictureNow = picture;
+	}
+
 	return true;
 }
 
@@ -868,6 +880,169 @@ static void CheckCommands()
 	}
 }
 
+// ---- Added 2026-11-09 by Melanikus for the AvP port (#177): see-through polygons without depth
+// The 1999 game drew its glass and its particles in one stretch with depth writes off, so particles behind a window showed. This port
+// draws the particles after the whole main list, so glass that wrote depth hid them. Between kCommandSeeThroughWithoutDepth and
+// kCommandSeeThroughWithDepth, see-through polygons don't write depth; solid ones still do; the sky's own commands still win, and the sky
+// still counts as solid; and a list its caller draws with depth writes off (the decals) is left that way.
+
+static std::string ReadSourceFile(char const *name);   // below, with the other checks that read the game's source
+
+// One four-cornered polygon of the given kind, with its own picture, so a check can find it among what was drawn
+static bool WriteQuadOfKind(TestList &t, texID_t picture, enum TRANSLUCENCY_TYPE kind)
+{
+	if (!t.list.AddItem(4, picture, kind))
+	{
+		return false;
+	}
+
+	t.WriteCorners(4);
+	t.list.CreateIndices(t.indices, 4);
+	return true;
+}
+
+// -1 if that picture wasn't drawn, 0 if it was drawn without depth writes, 1 if with them
+static int DrawnWithDepth(texID_t picture)
+{
+	int found = -1;
+
+	for (size_t i = 0; i < drawn.size(); i++)
+	{
+		if (drawn[i].picture == picture)
+		{
+			found = drawn[i].depthWritten ? 1 : 0;
+		}
+	}
+
+	return found;
+}
+
+static std::string WithoutReturns(std::string const &text)
+{
+	std::string out;
+
+	for (size_t i = 0; i < text.size(); i++)
+	{
+		if (text[i] != '\r')
+		{
+			out += text[i];
+		}
+	}
+
+	return out;
+}
+
+static void CheckGlassWithoutDepth()
+{
+	printf("See-through polygons without depth, between their two commands (#177):\n");
+
+	texID_t const kSky = 11, kWall = 12, kGlass = 13, kBolt = 14, kSmoke = 15, kSkyInside = 16, kDirt = 17, kGlassAfter = 18;
+
+	{
+		TestList t("glass", 32, 400, 800, sizeof(ORTHOVERTEX));
+		t.Open();
+		bool written = true;
+		t.list.AddCommand(kCommandZWriteDisable);
+		written = written && WriteQuadOfKind(t, kSky, TRANSLUCENCY_GLOWING);
+		t.list.AddCommand(kCommandZWriteEnable);
+		written = written && WriteQuadOfKind(t, kWall, TRANSLUCENCY_OFF);
+		t.list.AddCommand(kCommandSeeThroughWithoutDepth);
+		written = written && WriteQuadOfKind(t, kGlass, TRANSLUCENCY_NORMAL);
+		written = written && WriteQuadOfKind(t, kBolt, TRANSLUCENCY_OFF);
+		written = written && WriteQuadOfKind(t, kSmoke, TRANSLUCENCY_GLOWING);
+		t.list.AddCommand(kCommandZWriteDisable);
+		written = written && WriteQuadOfKind(t, kSkyInside, TRANSLUCENCY_GLOWING);
+		t.list.AddCommand(kCommandZWriteEnable);
+		written = written && WriteQuadOfKind(t, kDirt, TRANSLUCENCY_COLOUR);
+		t.list.AddCommand(kCommandSeeThroughWithDepth);
+		written = written && WriteQuadOfKind(t, kGlassAfter, TRANSLUCENCY_NORMAL);
+		t.Close();
+		Check(written, "a frame's sky, wall, glass, solid bolt, smoke, a sky inside the stretch, a mirror's dirt and glass after it all went in");
+
+		depthWritesNow = ZWRITE_ENABLED;
+		drawn.clear();
+		t.list.Draw();
+		Check(DrawnWithDepth(kSky) == 0 && DrawnWithDepth(kWall) == 1, "before the stretch: the sky without depth, as always, and a wall with it");
+		Check(DrawnWithDepth(kGlass) == 0 && DrawnWithDepth(kSmoke) == 0 && DrawnWithDepth(kDirt) == 0,
+			"in the stretch, glass and the other see-through polygons don't write depth, so particles drawn after them still show");
+		Check(DrawnWithDepth(kBolt) == 1, "but a solid polygon there still writes depth, or the walls drawn later would paint over it");
+		Check(DrawnWithDepth(kSkyInside) == 0, "and the sky's own commands still win inside it");
+		Check(DrawnWithDepth(kGlassAfter) == 1 && depthWritesNow == ZWRITE_ENABLED, "after the stretch, glass writes depth again, and the list leaves depth writes on");
+
+		drawn.clear();
+		t.list.Draw(RenderList::kSolid);
+		Check(DrawnWithDepth(kSky) == 0 && DrawnWithDepth(kSkyInside) == 0 && DrawnWithDepth(kWall) == 1 && DrawnWithDepth(kBolt) == 1 &&
+			DrawnWithDepth(kGlass) == -1 && DrawnWithDepth(kSmoke) == -1 && DrawnWithDepth(kDirt) == -1 && DrawnWithDepth(kGlassAfter) == -1,
+			"the solid half: the wall and the bolt with depth, both skies without (the sky still counts as solid), and nothing see-through");
+		Check(depthWritesNow == ZWRITE_ENABLED, "and depth writes are on after it");
+
+		drawn.clear();
+		t.list.Draw(RenderList::kSeeThrough);
+		Check(DrawnWithDepth(kGlass) == 0 && DrawnWithDepth(kSmoke) == 0 && DrawnWithDepth(kDirt) == 0 && DrawnWithDepth(kGlassAfter) == 1 &&
+			DrawnWithDepth(kWall) == -1 && DrawnWithDepth(kBolt) == -1 && DrawnWithDepth(kSky) == -1 && DrawnWithDepth(kSkyInside) == -1,
+			"the see-through half: the stretch's glass without depth, the glass after it with depth, and nothing solid");
+		Check(depthWritesNow == ZWRITE_ENABLED, "and depth writes are on after it");
+	}
+
+	{
+		TestList t("open", 8, 100, 200, sizeof(ORTHOVERTEX));
+		t.Open();
+		t.list.AddCommand(kCommandSeeThroughWithoutDepth);
+		bool const written = WriteQuadOfKind(t, kGlass, TRANSLUCENCY_NORMAL);
+		t.Close();
+		depthWritesNow = ZWRITE_ENABLED;
+		drawn.clear();
+		t.list.Draw();
+		Check(written && DrawnWithDepth(kGlass) == 0 && depthWritesNow == ZWRITE_ENABLED,
+			"a list drawn with its stretch still open (it filled up mid-frame) draws the glass without depth, then puts depth writes back on");
+	}
+
+	{
+		TestList t("decals", 8, 100, 200, sizeof(ORTHOVERTEX));
+		t.Open();
+		bool const written = WriteQuadOfKind(t, kWall, TRANSLUCENCY_OFF) && WriteQuadOfKind(t, kGlass, TRANSLUCENCY_NORMAL);
+		t.Close();
+		depthWritesNow = ZWRITE_DISABLED;
+		drawn.clear();
+		t.list.Draw();
+		Check(written && DrawnWithDepth(kWall) == 0 && DrawnWithDepth(kGlass) == 0 && depthWritesNow == ZWRITE_DISABLED,
+			"a list its caller draws with depth writes off, with no stretch in it, is left that way: nothing turns them on");
+		depthWritesNow = ZWRITE_ENABLED;
+	}
+
+	// Where the game opens and closes the stretch (read, not run: it needs the whole game)
+	std::string const particles = WithoutReturns(ReadSourceFile("3dc/avp/particle.cpp"));
+	std::string const render = WithoutReturns(ReadSourceFile("3dc/d3d_render.cpp"));
+	size_t const handle = particles.find("void HandleParticleSystem(void)\n{");
+	size_t const handleEnd = handle == std::string::npos ? std::string::npos : particles.find("\n}\n", handle);
+	std::string const handling = handleEnd == std::string::npos ? std::string() : particles.substr(handle, handleEnd + 3 - handle);
+	Check(handling.find("PostLandscapeRendering();\n") != std::string::npos &&
+		handling.find("\tD3D_SeeThroughWithoutDepth_Begin();\n\tOutputTranslucentPolyList();\n") != std::string::npos &&
+		handling.find("\tD3D_SeeThroughWithoutDepth_End();\n}\n") != std::string::npos,
+		"SOURCE: the particles' frame opens the stretch just before the glass goes out, sorted with the particles, and closes it at its end, as 1999's did");
+
+	size_t const begin = render.find("void D3D_SeeThroughWithoutDepth_Begin()\n{\n\tseeThroughWithoutDepth = true;\n\tmainList->AddCommand(kCommandSeeThroughWithoutDepth);\n}\n");
+	size_t const end = render.find("void D3D_SeeThroughWithoutDepth_End()\n{\n\tseeThroughWithoutDepth = false;\n\tmainList->AddCommand(kCommandSeeThroughWithDepth);\n}\n");
+	Check(begin != std::string::npos && end != std::string::npos, "SOURCE: opening the stretch puts its start on the main list, and closing it puts its end there");
+
+	size_t const flush = render.find("static void FlushLists()\n{");
+	size_t const flushEnd = flush == std::string::npos ? std::string::npos : render.find("\n}\n", flush);
+	std::string const flushing = flushEnd == std::string::npos ? std::string() : render.substr(flush, flushEnd - flush);
+	size_t const relock = flushing.find("LockExecuteBuffer();\n");
+	size_t const again = flushing.find("if (seeThroughWithoutDepth)\n\t{\n\t\tmainList->AddCommand(kCommandSeeThroughWithoutDepth);");
+	Check(relock != std::string::npos && again != std::string::npos && relock < again,
+		"SOURCE: a list drawn and started again in the middle of the stretch gets its start again");
+
+	size_t const frameStart = render.find("void ThisFramesRenderingHasBegun()\n{");
+	size_t const reset = render.find("\tseeThroughWithoutDepth = false;\n", frameStart);
+	size_t const sceneStarts = render.find("R_BeginScene()", frameStart);
+	Check(frameStart != std::string::npos && reset != std::string::npos && sceneStarts != std::string::npos && reset < sceneStarts,
+		"SOURCE: and a frame always starts outside the stretch");
+
+	Check(render.find("\t\t\tD3D_SeeThroughWithoutDepth_Begin();\n\t\t\tRenderParticlesInMirror();\n\t\t\tRenderMirrorSurface();\n\t\t\tRenderMirrorSurface2();\n\t\t\tD3D_SeeThroughWithoutDepth_End();\n") != std::string::npos,
+		"SOURCE: the mirror's dirt goes on without depth too, so the smoke and flashes in the mirror show through it");
+}
+
 // What the list draws afterwards has to be exactly what was written
 static void CheckWhatGetsDrawn()
 {
@@ -1401,7 +1576,10 @@ static SourceFindings ReadTheWriters(std::string const &source)
 	found.writersRead = 0;
 	found.mainWritersRead = 0;
 
-	static char const * const lists[] = { "orthoList", "particleList", "decalList", "mainList", "weaponList" };
+	// The lists a writer can add to. coronaList shares the screen list's buffers (#178). The ones from firstMainList on share the main buffers,
+	// and anything adding to those has to make room first (below).
+	static char const * const lists[] = { "orthoList", "coronaList", "particleList", "decalList", "mainList", "weaponList" };
+	static size_t const firstMainList = 4;
 	static char const * const stores[] = { "orthoVertex[", "particleVertex[", "decalVertex[", "mainVertex[" };
 
 	for (size_t f = 0; f < functions.size(); f++)
@@ -1423,7 +1601,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 				adds++;
 				firstAdd = (at < firstAdd) ? at : firstAdd;
 
-				if (l >= 3)
+				if (l >= firstMainList)
 				{
 					firstMainAdd = (at < firstMainAdd) ? at : firstMainAdd;
 				}
@@ -1500,7 +1678,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			found.twoPartsUnchecked.push_back(function.name);
 		}
 
-		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") == 1)
+		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") + CountOf(body, "coronaList->AddItem(4,") == 1)
 		{
 			int const corners = CountOf(body, "orthoVBOffset++") + 4 * CountOf(body, "orthoVBOffset += 4");
 
@@ -1546,6 +1724,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			found.frameEndForgetsCasters = guard != std::string::npos && body.find("ToyForgetCasters();", guard) < body.find("frameIsOpen = false");
 			found.frameEndEmptiesTheLists = guard != std::string::npos
 				&& guard < body.find("particleList->Reset();") && guard < body.find("mainList->Reset();") && guard < body.find("orthoList->Reset();")
+				&& guard < body.find("coronaList->Reset();") && body.find("coronaList->Reset();") != std::string::npos
 				&& guard < body.find("decalList->Reset();") && guard < body.find("weaponList->Reset();")
 				&& body.find("weaponList->Reset();") != std::string::npos && body.find("decalList->Reset();") != std::string::npos
 				&& body.find("orthoList->Reset();") != std::string::npos && body.find("mainList->Reset();") != std::string::npos && body.find("particleList->Reset();") != std::string::npos;
@@ -1742,7 +1921,8 @@ static void CheckTheRealWriters()
 	Check(closedAfterClear != std::string::npos && stoppedAfterClear != std::string::npos && closedAfterClear < stoppedAfterClear, "and a frame stopped by a failed clear closes the scene it opened, or no frame could ever start again");
 
 	std::string const windows = JustTheCode(ReadSourceFile("3dc/win95/win_func.cpp"));
-	Check(windows.find("while (!bActive && bRunning)") != std::string::npos, "and being closed also ends the wait for the game to become active");
+	// Modified 2026-11-09 by Melanikus for the AvP port: the loop's end also lets a network game go on behind another window, after bRunning
+	Check(windows.find("while (!bActive && bRunning") != std::string::npos, "and being closed also ends the wait for the game to become active");
 
 	// Nothing else adds to these lists. kshape.cpp has the only other mention, in code that's switched off.
 	std::string const shapes = JustTheCode(ReadSourceFile("3dc/kshape.cpp"));
@@ -1764,6 +1944,7 @@ int main()
 	CheckClosedLists();
 	CheckTheNextFrame();
 	CheckCommands();
+	CheckGlassWithoutDepth();
 	CheckWhatGetsDrawn();
 	CheckSharedBuffers();
 	CheckRain();

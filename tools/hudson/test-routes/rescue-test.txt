@@ -1,0 +1,5 @@
+# Hudson can't get to this spot, so he's rescued, and it's in mid-air, over a shaft on Derelict with its floor 25 metres down.
+# The rescue has to see that and put him back, and nobody can count that as moving him on.
+# Without that, this is a fall he wouldn't survive, as it was in one real run. See test-deaths.ps1.
+putat -24746 1616 -194286 SHIPCOR-04
+walk -28055 5614 -192795 JOCKEY-01

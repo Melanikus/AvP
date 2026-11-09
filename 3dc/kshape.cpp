@@ -38,10 +38,13 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   when you play the alien, facehuggers and the queen glow in the alien colour, in a network game too, and so do parts
 //   blown off them. Found through Bobblen's avp-forever (commit 12e3cd1), rewritten
+//   an animated texture's corners between two frames are worked out in 16.16 again, exactly, so flowing ones move smoothly (#97,
+//   reported by Bobblen). See texture_animation.h
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
 #include "logString.h"
+#include "texture_animation.h"
 #include <math.h>
 #include <vector>
 #include "module.h"
@@ -2694,8 +2697,6 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	TXANIMFRAME *txaf;
 	TXANIMFRAME *txaf0;
 	TXANIMFRAME *txaf1;
-	int *txaf0_uv;
-	int *txaf1_uv;
 	int CurrentFrame, NextFrame, Alpha, OneMinusAlpha;
 	int i;
 	int *iptr;
@@ -2759,29 +2760,10 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	*/
 	pheader->PolyColour &= ClrTxIndex;
 	pheader->PolyColour |= txaf0->txf_image;
-	txaf0_uv = txaf0->txf_uvdata;
-	txaf1_uv = txaf1->txf_uvdata;
-	/* Calculate UVs */
-	iptr = uv_array;
 
-	if (txah->txa_flags & txa_flag_interpolate_uvs) {
-		for (i = txaf0->txf_numuvs; i != 0; i--) {
-			iptr[0] = MUL_FIXED(txaf0_uv[0], OneMinusAlpha) + MUL_FIXED(txaf1_uv[0], Alpha);
-			iptr[1] = MUL_FIXED(txaf0_uv[1], OneMinusAlpha) + MUL_FIXED(txaf1_uv[1], Alpha);
-			/*textprint("%d, %d\n", iptr[0] >> 16, iptr[1] >> 16);*/
-			txaf0_uv += 2;
-			txaf1_uv += 2;
-			iptr += 2;
-		}
-	} else {
-		for (i = txaf0->txf_numuvs; i != 0; i--) {
-			iptr[0] = txaf0_uv[0];
-			iptr[1] = txaf0_uv[1];
-			/*textprint("%d, %d\n", iptr[0] >> 16, iptr[1] >> 16);*/
-			txaf0_uv += 2;
-			iptr += 2;
-		}
-	}
+	// The corners' places on the picture, in 16.16 fixed point, as in 1999, so that a flowing animation moves by less than a texel at a
+	// time. The two drawing functions that take an animated polygon read them that way (d3d_render.cpp). See texture_animation.h.
+	TextureAnimation_Corners(txaf0->txf_uvdata, txaf1->txf_uvdata, txaf0->txf_numuvs, Alpha, (txah->txa_flags & txa_flag_interpolate_uvs) != 0, uv_array);
 
 	/* Interpolate Orient and Scale */
 	o1 = txaf0->txf_orient;
@@ -4518,7 +4500,12 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 	fixed_t centeredSmartTargetSightY = SmartTargetSightY - (ScreenDescriptorBlock.SDB_Height << 15);
 	z = MUL_FIXED(MUL_FIXED(z, z), 2048);
 	{
-		centreY = MUL_FIXED((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY, z);
+		// Modified 2026-11-09 by Melanikus for the AvP port (#179), the vertical error the note above names: SmartTarget (targeting.cpp) puts
+		// the sight's height on the screen at 4/3 of the plain sum, because the 1999 game drew its world 4/3 tall and drew this triangle in
+		// that same stretched space. This game draws the world without the stretch, through the same sum as this triangle
+		// (d3d.matProjection), so the 4/3 is taken off here, as the gun's aim takes it off (CalculateWhereGunIsPointing). Without it, the
+		// triangle stood 4/3 as far above or below the middle of the screen as its target did.
+		centreY = MUL_FIXED((((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);
 
 		if (MIRROR_CHEATMODE) {
 			centreX = MUL_FIXED((- (centeredSmartTargetSightX - (ScreenDescriptorBlock.SDB_Width))) / Global_VDB_Ptr->VDB_ProjX, z);
@@ -6829,6 +6816,14 @@ void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
 	mostBrief = (lightsThisFrame.briefChosen > mostBrief) ? lightsThisFrame.briefChosen : mostBrief;
 	mostPasses = (passes > mostPasses) ? passes : mostPasses;
 	mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;
+}
+
+// The same numbers, for a Hudson run's result. How many frames comes first, because no shadow pass having run and a shadow pass finding no lights would otherwise read the same. The room goes last, as a name it has no limit on what's in it.
+void ShadowLights_ForTheResult(char *line, int size)
+{
+	_snprintf(line, size - 1, "shadow_light_frames=%d allowed_steady=%d allowed_brief=%d most_in_reach=%d most_steady=%d most_brief=%d most_shadow_passes=%d most_shadow_ms=%.1f most_in_reach_frame=%d most_in_reach_room=%s",
+		framesNoted, ToyShadowsMaxLights, ToyShadowsMaxBrief, mostInReach, mostSteady, mostBrief, mostPasses, mostMilliseconds, mostInReachFrame, mostInReachRoom);
+	line[size - 1] = 0;
 }
 
 // Two lines for each report: what the choosing did on this frame and what it cost, then the most there have been. A light with no place left is

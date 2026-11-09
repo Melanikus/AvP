@@ -49,6 +49,7 @@ bool ShoulderLamp_BeamsAreWanted();
 
 // Where the real lamp is from his eyes, in millimetres: across to his right, up, and ahead. See kShoulderLampAcross.
 const float *ShoulderLamp_PlaceFromEyes();
+void ShoulderLamp_SetPlaceFromEyes(float across, float up, float ahead);
 
 // THE ROBOT ARM. The lamp is on a little robot arm, like the ones in the game's universe, and it centres on what he's looking at, a moment behind him. So it has an aim of its own, which stays where it was in the world when he turns, and then catches up on a smooth curve, starting
 // and stopping gently. This is told every frame, whether the lamp is on or not, so that it's never behind when it's switched on. Everything else about the lamp's aim comes from here, so the painted lamp and the real one follow the same way.
@@ -89,6 +90,10 @@ bool ReadPlainNumber(const char *words, unsigned int length, double *out);
 // How far its aim is from where he's looking, across to the right and down, for each unit ahead. Both are 0 when he's been still for a moment.
 float ShoulderLamp_AimAcross();
 float ShoulderLamp_AimDown();
+
+// How many frames it has been a real light, rather than the painted version
+void ShoulderLamp_NoteARealLightFrame();
+long ShoulderLamp_FramesAsARealLight();
 
 // HOW THE ROBOT ARM MOVES. The user asked for a smooth movement that takes no more than a second. How long it takes can be changed while playing, with the LAMPFOLLOW command. The others need a rebuild. How much of the following shows on the screen is a number in shaders/shoulderLamp.psh, which doesn't.
 double const kShoulderLampFollowSeconds = 1.0;      // it's within 1% of where he's looking by this long after he stops turning, until LAMPFOLLOW says otherwise

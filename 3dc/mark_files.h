@@ -15,6 +15,9 @@
 // At most one mark a second, so holding the key down can't fill the disk.
 //
 // tests/mark_files_test.cpp tries all of this on files it makes. mark_key.cpp is what the game uses.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a mark can be of a menu page too (Mark_ThisPage, for -dev -onlinescreens' pictures): its line names the page, not a player
 #ifndef MARK_FILES_H
 #define MARK_FILES_H
 
@@ -207,6 +210,7 @@ struct Mark_Moment
 	int health;                    // their health, as the HUD shows it
 	int weapon;                    // the weapon they hold, by its number in the game
 	const char *network;           // the other players' connections and round trips, or NULL out of a network game
+	const char *page;              // a menu page's name, fixed words of the game's own, for a mark with no player; NULL in a level
 };
 
 // The mark's line, with no line end, in words of size characters, which always end with a 0
@@ -214,6 +218,16 @@ inline void Mark_DescribeMoment(const Mark_Moment &m, char *words, size_t size)
 {
 	if (size == 0)
 	{
+		return;
+	}
+
+	// A menu page's mark: there's no player, so it says the page, the time and the picture, and nothing else
+	if (m.page)
+	{
+		int const pageWords = _snprintf(words, size - 1, "MARK %d at %02d:%02d:%02d: the page %s, picture mark-%d.png", m.number, m.hours, m.minutes,
+			m.seconds, m.page, m.number);
+
+		words[(pageWords < 0 || (size_t)pageWords >= size) ? size - 1 : (size_t)pageWords] = '\0';
 		return;
 	}
 

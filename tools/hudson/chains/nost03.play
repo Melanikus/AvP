@@ -1,0 +1,13 @@
+# What Hudson does to play nost03 on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward here, the rooms as the file joins them
+kill 67609 30586 -16030 | mar02
+destroy 101556 16708 -54494 | cap05
+destroy 100688 16745 -53588 | cap06
+destroy 100713 17813 -53601 | cap08
+destroy 101571 17814 -54479 | cap09
+walk 153531 20460 -12075 | imm01
+walk 143956 20850 -9768 | imm
+walk 141865 20460 47 | imm03
+destroy 128470 11082 46654 | switch07
+walk 47628 26864 13339 | areatoddoor
+walk 47628 48426 10611 | endarea

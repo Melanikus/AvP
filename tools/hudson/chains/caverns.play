@@ -1,0 +1,8 @@
+# What Hudson does to play caverns on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 78129 13547 -109456 | swch-CAVED
+press -28832 47349 -117681 | ALCK-SWCH1
+press -52750 47349 -143015 | ALCK-SWCH3
+destroy 68147 46477 -215375 | TANK02
+destroy 68147 46478 -210699 | TANK01
+walk 28058 63496 -364924 | END OF LEVEL

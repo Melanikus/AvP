@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"win32"
 	],
 	"rows": [
 		{
@@ -539,8 +540,18 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\t\tif (OpenDiscoverySocket())\n",
-					"to": "\t\t\tif (false)\n"
+					"from": "\t\t\telse if (OpenDiscoverySocket())\n",
+					"to": "\t\t\telse if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a host the relay falls through for can't be found on its own network either",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tCon_PrintError(why);\n\tOpenTheSearchPortForAHost();\n",
+					"to": "\tCon_PrintError(why);\n"
 				}
 			]
 		},
@@ -719,8 +730,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "player.name[kPlayerNameSize - 1] = '\\0';",
-					"to": ""
+					"from": "memcpy(&player, details, sizeof(PlayerDetails));\n\n\t// Nothing says this name ends\n\tplayer.name[kPlayerNameSize - 1] = '\\0';",
+					"to": "memcpy(&player, details, sizeof(PlayerDetails));"
 				}
 			]
 		},
@@ -1249,8 +1260,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 113;",
-					"to": "const int kMultiplayerVersion = 112;"
+					"from": "const int kMultiplayerVersion = 114;",
+					"to": "const int kMultiplayerVersion = 113;"
 				}
 			]
 		},
@@ -2266,6 +2277,471 @@
 					"file": "3dc/networking.cpp",
 					"from": "sstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \")\";",
 					"to": "sstream << \"A player is joining\";"
+				}
+			]
+		},
+		{
+			"name": "a LAN game's players aren't kept for the games page",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tSessionData[NumberOfSessionsFound].players = session.nPlayers;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a relay game's level isn't kept for the games page",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tstrncpy(entry.levelName, levelName, sizeof(entry.levelName) - 1);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the join's step is always reaching the relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
+					"to": "relayJoinStep = kNetRelayJoinStepReaching;"
+				}
+			]
+		},
+		{
+			"name": "the join's step stays once the join is over",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayJoinStep = kNetRelayJoinStepNone;\n\n\tif (!relayJoiner.Ready())",
+					"to": "\tif (!relayJoiner.Ready())"
+				}
+			]
+		},
+		{
+			"name": "the relays' timing hears an answer from anywhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (from.host == joinerTimed[i].host && from.port == joinerTimed[i].port)",
+					"to": "if (from.port == joinerTimed[i].port)"
+				}
+			]
+		},
+		{
+			"name": "the relays' timing leaves its socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (joinerPicker.Done(now))\n\t{\n\t\tCloseJoinerTimingSocket();\n",
+					"to": "\tif (joinerPicker.Done(now))\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "a relay's time is given before the timing is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!region || !joinerTimingDone)",
+					"to": "if (!region)"
+				}
+			]
+		},
+		{
+			"name": "a relay that never answered is given a time",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (relay >= count || !hasTime[relay] || !ms)",
+					"to": "if (relay >= count || !ms)"
+				}
+			]
+		},
+		{
+			"name": "a test's host asks every joiner anyway",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const noQuestion = letEveryJoinerIn || player.version",
+					"to": "bool const noQuestion = player.version"
+				}
+			]
+		},
+		{
+			"name": "a second joiner meanwhile is left waiting, not told the host is busy",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tenet_peer_disconnect(peer, kNetJoinRefusedBusy);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's no leaves the joiner connected",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tenet_peer_disconnect(asking, kNetJoinRefusedNo);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a request is never given up on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (now - joinRequestSince >= kNetJoinAnswerWithinMs)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a joiner the host is answering is dropped at the limit for saying who it is",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\t\t\t&& peer != JoinRequestPeer())",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a new joiner in the same place takes over the last one's request",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer->connectID == joinRequestConnectID && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an answer for somebody else is taken",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " || who.connectID != joinRequestConnectID",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner never hears its yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tjoinAnswer = kNetJoinAnswerYes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner never waits for the answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tjoinAnswer = kNetJoinAnswerWaiting;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's no reads as no answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "joinAnswer = eEvent.data == kNetJoinRefusedNo ? kNetJoinAnswerNo : ",
+					"to": "joinAnswer = "
+				}
+			]
+		},
+		{
+			"name": "a joiner waits for ever",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (joinAnswer == kNetJoinAnswerWaiting && enet_time_get() - joinAskedAt >= kNetJoinAnswerWithinMs + kJoinAnswerSpareMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a held request's name with no end stays that way",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tmemcpy(&player, details, sizeof(player));\n\tplayer.name[kPlayerNameSize - 1] = '\\0';\n",
+					"to": "\tmemcpy(&player, details, sizeof(player));\n"
+				}
+			]
+		},
+		{
+			"name": "the host's news never says it's finding the relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayHostNews(kNetRelayHostFinding, NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no news when no relay answers",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n\t\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n",
+					"to": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n"
+				}
+			]
+		},
+		{
+			"name": "no news when no relay the list named can be used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "so this game is open on this network only\");\n\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n\t\treturn false;",
+					"to": "so this game is open on this network only\");\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the room going on the list isn't news",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayHostNews(kNetRelayHostListed, NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lost room's news has no why",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));",
+					"to": "RelayHostNews(kNetRelayHostRoomGone, NULL);"
+				}
+			]
+		},
+		{
+			"name": "leaving the game leaves the host's news as it was",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayHostNews.what != kNetRelayHostNone)\n\t{\n\t\tRelayHostNews(kNetRelayHostNone, NULL);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's news has no region",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tmemcpy(relayHostNews.region, relayRegion, sizeof(relayHostNews.region));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's line is there before its room is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayHosting && !relayPicking && relayHost.Open())\n\t{\n\t\tint const keepMs",
+					"to": "\tif (relayHosting)\n\t{\n\t\tint const keepMs"
+				}
+			]
+		},
+		{
+			"name": "the host's line leaves out the keep's round trip",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "state->ms = keepMs >= 0 ? keepMs : (relayHostMs > 0 ? relayHostMs : -1);",
+					"to": "state->ms = relayHostMs;"
+				}
+			]
+		},
+		{
+			"name": "the joiner's line shows ENet's starting guess",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (ServerPeer->lastReceiveTime > 0)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the joiner's round trip has no limit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "state->ms = ServerPeer->roundTripTime > kNetRelayMostKeepMs ? static_cast<int>(kNetRelayMostKeepMs) : static_cast<int>(ServerPeer->roundTripTime);",
+					"to": "state->ms = static_cast<int>(ServerPeer->roundTripTime);"
+				}
+			]
+		},
+		{
+			"name": "the joiner's line is there before its connection is made",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " && relayJoinedThrough && ServerPeer && ServerPeer->state == ENET_PEER_STATE_CONNECTED)",
+					"to": " && relayJoinedThrough && ServerPeer)"
+				}
+			]
+		},
+		{
+			"name": "a game joined on this network keeps the last relay line",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tjoinAnswer = kNetJoinAnswerNone;\n\trelayJoinedThrough = false;\n\trelayJoinedRegion[0] = 0;\n",
+					"to": "\tjoinAnswer = kNetJoinAnswerNone;\n"
+				},
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayJoinedThrough = false;   // the line in play saying which relay the game went through goes with the game too\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner through a relay lets ENet read packets from elsewhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!fromRelay)\n\t{\n\t\trelayStrangersDropped++;\n\t\treturn 1;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a run given a relay beyond this machine still puts its sockets on 127.0.0.1",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\taddress->host = remoteRelayRoute;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the relay's name may point anywhere later",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a relay by any name is let through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
+					"to": ": false)"
+				}
+			]
+		},
+		{
+			"name": "a lost room leaves the host on the way to the relay hearing anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
+					"to": "host->intercept = NULL;"
+				}
+			]
+		},
+		{
+			"name": "a run's host on the way to the relay hears anyone when no relay is used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game still waits while its window isn't in front",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "\t\tif (!bActive && !Net_GameGoesOnWhileInactive())\n",
+					"to": "\t\tif (!bActive)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Windows' messages hold a network game until its window is in front",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "while (!bActive && bRunning && !Net_GameGoesOnWhileInactive());",
+					"to": "while (!bActive && bRunning);"
+				}
+			]
+		},
+		{
+			"name": "no game ever goes on behind another window",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool Net_GameGoesOnWhileInactive(void)\n{\n\treturn host != NULL;",
+					"to": "bool Net_GameGoesOnWhileInactive(void)\n{\n\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a mouse moved in another window turns the player",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (raw->header.dwType == RIM_TYPEMOUSE && bActive)",
+					"to": "if (raw->header.dwType == RIM_TYPEMOUSE)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mouse's report is read whatever its size",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (dwSize > sizeof(lpb) || ::GetRawInputData(",
+					"to": "if (::GetRawInputData("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gamepad plays the game behind another window",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\tif (bActive)\n\t{\n\t\tReadJoysticks();\n\t}",
+					"to": "\tReadJoysticks();"
+				}
+			]
+		},
+		{
+			"name": "a run given the relay by address knows it by name only",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "givenAnAddress ? relay.address != givenAsENetKeepsIt : ",
+					"to": ""
 				}
 			]
 		}

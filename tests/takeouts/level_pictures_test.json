@@ -184,6 +184,26 @@
 					"to": "if (true)\n\t\t\t\t{\n\t\t\t\t\th->tex_index_nos[bns().index] = imgnum;"
 				}
 			]
+		},
+		{
+			"name": "PLACES: a place on an animation's picture too far out is played (#97)",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (!TextureAnimation_PlacesFit(sequence->UVCoords, 2LL * animation->NumVerts * sequence->NumFrames))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "PLACES: only the first polygon's places are checked (#97)",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "for (int i = 0; i < ac->NumPolys; i++)\n\t{\n\t\tTEXANIM const *animation = ac->AnimList[i];",
+					"to": "for (int i = 0; i < 1; i++)\n\t{\n\t\tTEXANIM const *animation = ac->AnimList[i];"
+				}
+			]
 		}
 	]
 }

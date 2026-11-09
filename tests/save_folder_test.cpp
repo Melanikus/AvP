@@ -13,6 +13,8 @@
 //   the backslash check hands in a folder that really has a backslash, now that this run's folder is a bare name with no slash in it
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the second copy's folder (-dev -secondcopy): made beside the game's own by its fixed name, decided before the log opens, and only with -dev
 #include "save_folder.h"
 #include "save_file_write.h"
 
@@ -83,14 +85,19 @@ static bool FolderIsThere(const std::string &path)
 	return what != INVALID_FILE_ATTRIBUTES && (what & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-// Only ever these folders, one at a time, and only if they're empty, so this can't take away anything it didn't make.
+// Only ever these folders, one at a time, and only if they're empty, so this can't take away anything it didn't make. The game's own
+// folder and the second copy's are both taken away, since the test makes both.
 static void TakeAwayWhatWasMade(const std::string &base)
 {
-	std::string const top = base + "/My Games/Aliens versus Predator";
+	for (const char *name : { "Aliens versus Predator", "Aliens versus Predator (second copy)" })
+	{
+		std::string const top = base + "/My Games/" + name;
 
-	::RemoveDirectoryA((top + "/User_Profiles").c_str());
-	::RemoveDirectoryA((top + "/MPConfig").c_str());
-	::RemoveDirectoryA(top.c_str());
+		::RemoveDirectoryA((top + "/User_Profiles").c_str());
+		::RemoveDirectoryA((top + "/MPConfig").c_str());
+		::RemoveDirectoryA(top.c_str());
+	}
+
 	::RemoveDirectoryA((base + "/My Games").c_str());
 	::RemoveDirectoryA(base.c_str());
 }
@@ -158,6 +165,14 @@ static void TestMakingIt()
 	Check(SaveFolder_Make(base.c_str(), folder, 0, NULL) == kSaveFolderNothingGiven, "and so does no room for one");
 	Check(folder[0] == 'x', "without writing in the room it was told it hasn't got");
 
+	// The second copy of the game on one machine (-dev -secondcopy): a folder of its own, beside the game's, by its fixed name
+	std::string const second = base + "/My Games/Aliens versus Predator (second copy)/";
+	Check(SaveFolder_Make(base.c_str(), folder, sizeof(folder), &where, true) == 0 && second == folder,
+		"the second copy's folder is made beside the game's own, by its fixed name");
+	Check(FolderIsThere(second + "User_Profiles") && FolderIsThere(second + "MPConfig"), "with its own folders for profiles and network settings");
+	Check(FolderIsThere(base + "/My Games/Aliens versus Predator/User_Profiles"), "and the game's own folder is still there, apart from it");
+	Check(SaveFolder_Make(base.c_str(), folder, sizeof(folder), NULL, false) == 0 && expected == folder, "without it, the folder is the game's own");
+
 	TakeAwayWhatWasMade(base);
 	Check(!FolderIsThere(base), "this test's folders are gone again");
 }
@@ -177,7 +192,22 @@ static void TestTheGamesCode()
 	Check(Has(finding, "SaveFolder_MakeOne(\"User_Profiles/\", NULL);") && Has(finding, "SaveFolder_MakeOne(\"MPConfig/\", NULL);"), "and the folders for saved games and network settings are made where the files go instead");
 	Check(Has(finding, "char documents[MAX_PATH]"), "Documents is found in a space of its own");
 	Check(Has(finding, "SHGFP_TYPE_CURRENT, documents)"), "so that a path to Documents is never left where the game's folder goes");
-	Check(Has(finding, "SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where)"), "and the folder is made by the part this test tries for real");
+	Check(Has(finding, "SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where, saveFolderIsTheSecondCopy)"), "and the folder is made by the part this test tries for real");
+
+	// The second copy: asked for too late, once the folder has been found, it changes nothing, because everything since went in that folder
+	std::string const useIt = Between(code, "bool SaveFolder_UseTheSecondCopy()", "char *GetSaveFolderPath()");
+	Check(Has(useIt, "if (saveFolder[0] != 0 || noSaveFolder)") && Has(useIt, "return false;"), "the second copy asked for too late changes nothing");
+
+	// Its two names are fixed in save_folder.h: nothing from the command line, or from anywhere else, becomes part of the path
+	std::string const names = ReadSourceFile("3dc/save_folder.h");
+	Check(Has(names, "kSaveFolderSecondCopyName = \"Aliens versus Predator (second copy)\";") &&
+		Has(names, "path += std::string(\"/\") + (secondCopy ? kSaveFolderSecondCopyName : kSaveFolderGameName);"), "the second copy's folder has a fixed name");
+
+	// winmain.cpp: decided first of all, before the log, which is in that folder, is opened; and only with -dev
+	std::string const start = Between(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "int WINAPI WinMain(", "char *command_line = lpCmdLine;");
+	Check(ComesBefore(start, "SaveFolder_UseTheSecondCopy()", "ClearLog();"), "the second copy is decided before the log is opened");
+	Check(Has(start, "bool const secondCopy = secondCopyAsked && CommandLineHasWord(lpCmdLine, \"-dev\") && SaveFolder_UseTheSecondCopy();"),
+		"and only with -dev");
 }
 
 static void TestWhatTheyAreTold()

@@ -129,8 +129,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\t\tif (OpenDiscoverySocket())\n\t\t\t{\n\t\t\t\tchar line[160];",
-					"to": "\t\t\tOpenDiscoverySocket();\n\t\t\tif (true)\n\t\t\t{\n\t\t\t\tchar line[160];"
+					"from": "\t\t\telse if (OpenDiscoverySocket())\n\t\t\t{\n\t\t\t\tchar line[160];",
+					"to": "\t\t\telse if (OpenDiscoverySocket() || true)\n\t\t\t{\n\t\t\t\tchar line[160];"
 				}
 			]
 		},
@@ -139,8 +139,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": " couldn't be opened, so a search won't find it\");",
-					"to": " couldn't be opened\");"
+					"from": "\t\t\t\tLogString(\"net: this game can't answer searches: UDP port \" + std::to_string(broadcastPort) + \" couldn't be opened, so a search won't find it\");",
+					"to": "\t\t\t\tLogString(\"net: this game can't answer searches: UDP port \" + std::to_string(broadcastPort) + \" couldn't be opened\");"
 				}
 			]
 		},
