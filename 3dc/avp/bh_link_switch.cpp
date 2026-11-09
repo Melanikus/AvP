@@ -6,6 +6,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a walk-in box is also set off by a player near a sleeping NPC it wakes (near_wake.h), and a switch that goes on or off with a target
 //   that isn't in the level says so in the log (link_misses.h) (#130)
+//   set_link_switch_states_off, switched off with #if 0 since 1999, is taken out (#135)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -76,25 +77,6 @@ static BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)
 
 	return(TRUE);
 }
-
-#if 0
-static void set_link_switch_states_off (LINK_SWITCH_BEHAV_BLOCK * lsbb)
-{
-	int i=0;
-	LSWITCH_ITEM * lsi = lsbb->lswitch_list;
-
-	while (lsi[i].bswitch && i < MAX_SWITCHES_FOR_LINK)
-	{
-		BINARY_SWITCH_BEHAV_BLOCK * bsbb = ((BINARY_SWITCH_BEHAV_BLOCK *)lsi[i].bswitch->SBdataptr);
-
-		// if it's on, tell it to go off
-
-		if (! ((bsbb->state && bsbb->rest_state) || (!bsbb->state && !bsbb->rest_state)) )
-			RequestState (lsi->bswitch, 0, 0);
-		i++;
-	}
-}
-#endif
 
 void* LinkSwitchBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 {

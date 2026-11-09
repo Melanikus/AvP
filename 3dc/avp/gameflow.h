@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the two types only GetMeThisStrategyBlock used go with it (#135)
 #ifndef _gameflow_h
 #define _gameflow_h 1
 
@@ -93,19 +95,6 @@ typedef struct
 	int id2;
 }	GAMEOBJECT;
 
-typedef enum {
-	GT_YARD_DOOR_1,
-	GT_YARD_DOOR_2,
-	GT_YARD_DOOR_3,
-	GT_YARD_DOOR_4,
-
-	GT_LAST_TARGET_OBJECT,
-} GAMETARGETOBJECTS;
-
-typedef struct {
-	GAMETARGETOBJECTS TargetObjectNum;
-	char SBname[SB_NAME_LENGTH];
-} GAME_STRATBLOCK_LIST_ENTRY;
 
 struct player_status;
 

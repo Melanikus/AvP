@@ -3,6 +3,8 @@
 //   NameFromTheLevel and BehaviourIsAnNpcTheHostRuns
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   LevelNameIsAPlacedNpc (#130)
+//   code that could never run is taken out (#135): the blocks kept for a lift's change of environment (MAX_PRESERVED_SB and the five
+//   calls), and the xenoborg morph room, whose number stays and says why
 #ifndef _stratdef_h_
 #define _stratdef_h_ 1
 
@@ -142,6 +144,8 @@ typedef enum bhvr_type
 
     I_BehaviourTest,
 
+    // The xenoborg morph room's number. The room itself was taken out (#135): nothing in a level ever made one. The number stays, so
+    // every kind after it keeps its number, as saved games carry these numbers (savegame.cpp reads them back).
     I_BehaviourXenoborgMorphRoom,
 
 	I_BehaviourLightFX,
@@ -182,7 +186,6 @@ typedef enum bhvr_type
 /* put the tags in here */
 
 #define SB_NAME_LENGTH  8	/* DO NOT CHANGE THIS! */
-#define MAX_PRESERVED_SB 20
 
 typedef struct
 {
@@ -274,19 +277,6 @@ extern void DestroyAllStrategyBlocks(void);
 
 /* This should be in PLAYER.  But Kevin was on holiday with his files checked out. */
 extern void GivePlayerCloakAway(void);
-
-
-
-
-// for lift and airlock code
-
-extern void InitPreservedSBs();
-extern void PreserveStBlocksInModule(MODULE* containing_mod);
-extern BOOL SBNeededForNextEnv(STRATEGYBLOCK* sbptr);
-extern void	AddPreservedSBsToActiveList();
-extern void TeleportPreservedSBsToNewEnvModule(MODULE* old_pos_module,
-											   MODULE* new_pos,
-											   int orient_diff);
 
 
 

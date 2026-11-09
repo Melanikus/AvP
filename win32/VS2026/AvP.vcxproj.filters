@@ -774,9 +774,6 @@
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp">
-      <Filter>Source Files\behaviours</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
@@ -1476,9 +1473,6 @@
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h">
-      <Filter>Header Files\behaviours</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h">
