@@ -1697,12 +1697,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a fall hurts him",
+			"name": "SOURCE: outside a run, a fall that would kill does no damage",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "if (HudsonMarineIsOn) {\n\t\treturn;\n\t}\n\n\tLOCALASSERT(sbPtr);\n\tmarineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);\n\tLOCALASSERT(marineStatusPointer);\n\n\tif (sbPtr->DynPtr->IsInContactWithFloor)",
-					"to": "LOCALASSERT(sbPtr);\n\tmarineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);\n\tLOCALASSERT(marineStatusPointer);\n\n\tif (sbPtr->DynPtr->IsInContactWithFloor)"
+					"from": "} else if (wouldKillHim) {",
+					"to": "} else if (false) {"
 				}
 			]
 		},
@@ -9643,6 +9643,36 @@
 					"file": "3dc/avp/hudson_plan.cpp",
 					"from": "if (seenRemoteRelay && plan->hostile)",
 					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "FALL: a run is not told of a landing",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "Hudson_MarineLanded(sbPtr, marineStatusPointer->lastframe_fallingspeed, wouldKillHim);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "FALL: a run can never be told it would kill",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "wouldKillHim = marineStatusPointer->lastframe_fallingspeed>Marine_Terminal_Velocity;",
+					"to": "wouldKillHim = false;"
+				}
+			]
+		},
+		{
+			"name": "FALL: a fall hurts him in a run",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (HudsonMarineIsOn) {\n\t\t\t\tHudson_MarineLanded",
+					"to": "if (false) {\n\t\t\t\tHudson_MarineLanded"
 				}
 			]
 		}
