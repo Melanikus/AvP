@@ -33,7 +33,7 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
    - The first beta was named `betarelease` and its day, `betarelease20261107`, which allowed one a day. That name isn't taken any more.
      The one published that way stays as it is.
 2. The first job checks whether this commit may be released. If it refuses, the last lines of its log say why, starting `REFUSED:`.
-   `tools/check-release.ps1`, `tools/check-hudson-asleep.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
+   `tools/check-release.ps1`, `tools/check-hudson-asleep.ps1`, `tools/check-servers-dev-only.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
    built or published at this point.
 3. The second job builds the game and checks the package. `tools/check-release-package.ps1` is the list of what it looks for. The first
    build on a clean machine takes a while, because the libraries are built from source.

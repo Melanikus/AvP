@@ -2,7 +2,8 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1, tools/check-hudson-asleep.ps1, tools/check-release-package.ps1 and tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
+- tools/check-release.ps1, tools/check-hudson-asleep.ps1, tools/check-servers-dev-only.ps1, tools/check-release-package.ps1 and
+  tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
   and tools/check-virustotal.ps1 on made-up answers from VirusTotal. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
 - .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
@@ -594,6 +595,639 @@ foreach ($tracked in @(& git -C $repository ls-files))
 $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
 Check ($result.Code -eq 0 -and $result.Text.Contains($letThrough)) "the real repository's Hudson stays asleep in a player's game. It said: $($result.Text)"
 
+# --- check-servers-dev-only.ps1: the owner's ruling (2026-11-09) that a player's game can reach none of our servers. Each way it can be
+# broken is refused, for its own reason, and each way the code is written to need -dev is let through. The cases are AvP-docs'
+# servers_dev_only_cases.js, tried by hand on 2026-11-09, written out here.
+$serverGood = @{ '3dc/d3d_render.cpp' = (@'
+int DevMode = 0;
+'@) + "`n"; '3dc/avp/win95/winmain.cpp' = (@'
+void Begin(const char *command_line)
+{
+	DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
+}
+'@) + "`n"; '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }
+$serverCases = @(
+    @{ What = 'no server code at all is let through'; None = $true; Files = @{ '3dc/game.cpp' = (@'
+void Frame()
+{
+}
+'@) + "`n" }; Passes = 'None of the game''s server code is in this commit, so a player''s game can''t reach a server.' },
+    @{ What = 'the smallest list that needs -dev for its server is let through'; None = $false; Files = @{  }; Passes = 'A player''s game can''t reach a server: no server is built in, every call beyond this PC is in 3dc/relay_list.cpp and needs one, and 1 server settings are read only with -dev.' },
+    @{ What = 'a server setting read only inside if (DevMode) is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+int Relay_ListPort(void)
+{
+	int port = 443;
+
+	if (DevMode)
+	{
+		int const setting = Config_GetInt("[Network]", "RelayListPort", 443);
+		port = setting;
+	}
+
+	return port;
+}
+'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
+    @{ What = 'and one read, then ignored without -dev unless empty, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+
+	if (setting.empty())
+	{
+	}
+	else if (!DevMode)
+	{
+		LogString("ignored");
+	}
+	else
+	{
+		UseThePin(setting);
+	}
+}
+'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
+    @{ What = 'a server built into the game is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "nyc3.relay.example";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must define kRelayBuiltInServer once, as static const char kRelayBuiltInServer[] = ""; (no server built into the game)' },
+    @{ What = 'a server name the settings give without -dev is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must give back the built-in name without -dev' },
+    @{ What = 'a server setting a player''s game would use is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+	UseThePin(setting);
+}
+'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
+    @{ What = 'and one whose -dev branch is the wrong way round'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+
+	if (!DevMode)
+	{
+		UseThePin(setting);
+	}
+}
+'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
+    @{ What = 'and a key setting in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void ReadTheKeys(void)
+{
+	std::string const fingerprint = Config_GetString("[Online]", "RelayKeysFingerprint", "");
+	Keep(fingerprint);
+}
+'@) + "`n" }; Reason = 'reads the setting RelayKeysFingerprint from [Online], and a player''s game would use it' },
+    @{ What = 'a name looked up outside the list''s file is refused'; None = $false; Files = @{ '3dc/networking.cpp' = (@'
+void LookUp(const char *name)
+{
+	getaddrinfo(name, NULL, &hints, &found);
+}
+'@) + "`n" }; Reason = '3dc/networking.cpp line 3 calls getaddrinfo, which reaches beyond this PC: only 3dc/relay_list.cpp may' },
+    @{ What = 'and a web call outside it'; None = $false; Files = @{ '3dc/news.cpp' = (@'
+void Fetch(void)
+{
+	HINTERNET s = WinHttpOpen(L"x", 0, 0, 0, 0);
+}
+'@) + "`n" }; Reason = '3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC' },
+    @{ What = 'the list calling a host other than the one it started with is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, otherServer, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to shared->server' },
+    @{ What = 'the list starting with no name is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must take its name from Relay_ServerName, and make nothing when there''s none' },
+    @{ What = 'the list''s server written a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		made->server[0] = 0;
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must write the list''s server in one place only, from the name it started with' },
+    @{ What = 'DevMode starting on is refused'; None = $false; Files = @{ '3dc/d3d_render.cpp' = (@'
+int DevMode = 1;
+'@) + "`n" }; Reason = 'DevMode must be defined once, as int DevMode = 0; it is: 3dc/d3d_render.cpp line 1: int DevMode = 1;' },
+    @{ What = 'DevMode turned on anywhere else is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Cheat(void)
+{
+	DevMode = 1;
+}
+'@) + "`n" }; Reason = '3dc/menus.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' },
+    @{ What = 'DevMode turned on by another word is refused'; None = $false; Files = @{ '3dc/avp/win95/winmain.cpp' = (@'
+void Begin(const char *command_line)
+{
+	DevMode = CommandLineHasWord(command_line, "-play") ? 1 : 0;
+}
+'@) + "`n" }; Reason = '3dc/avp/win95/winmain.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' }
+)
+
+foreach ($case in $serverCases)
+{
+    Make-GoodRepository
+    $all = @{}
+    if (-not $case.None) { foreach ($name in $serverGood.Keys) { $all[$name] = $serverGood[$name] } }
+    foreach ($name in $case.Files.Keys) { $all[$name] = $case.Files[$name] }
+    foreach ($name in $all.Keys) { Write-File (Join-Path $work $name) ($all[$name] -replace "`r", '') }
+
+    if ($case.ContainsKey('Passes'))
+    {
+        $result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
+        Check ($result.Code -eq 0 -and $result.Text.Contains($case.Passes)) "$($case.What). It said: $($result.Text)"
+    }
+    else
+    {
+        Expect-Refused 'check-servers-dev-only.ps1' @('-Repository', $work) $case.Reason $case.What
+    }
+}
+
+# The real repository, as it is now: only what git tracks. If this is ever refused, a way to one of our servers that a player's game
+# could take has come in, or the check has started to refuse something that needs -dev.
+Clear-Work
+
+foreach ($tracked in @(& git -C $repository ls-files))
+{
+    $from = Join-Path $repository $tracked
+
+    if (Test-Path -LiteralPath $from -PathType Leaf)
+    {
+        $to = Join-Path $work $tracked
+        New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+        Copy-Item -LiteralPath $from -Destination $to -Force
+    }
+}
+
+$result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0 -and ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains('None of the game''s server code'))) "the real repository's game can reach no server without -dev. It said: $($result.Text)"
+
 # --- The checks that ask GitHub. There's no network here, so all that can be tried is that it refuses to go on without being on avpx_main.
 Make-GoodRepository
 $savedRef = $env:GITHUB_REF
@@ -806,6 +1440,8 @@ Check ($result.Text.Contains('RELEASE-BLOCKERS.md still lists') -or $result.Text
 # What it answers depends on what's been built beside the code, but it has to be one of the script's own answers.
 $result = Run-Script 'check-hudson-asleep.ps1' @()
 Check ($result.Text.Contains("A player's game can't run Hudson") -or $result.Text.Contains('None of Hudson is in this commit') -or $result.Text.Contains('REFUSED: ')) "check-hudson-asleep.ps1 finds the repository by itself. It said: $($result.Text)"
+$result = Run-Script 'check-servers-dev-only.ps1' @()
+Check ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains("None of the game's server code") -or $result.Text.Contains('REFUSED: ')) "check-servers-dev-only.ps1 finds the repository by itself. It said: $($result.Text)"
 
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'License.txt')
@@ -826,6 +1462,11 @@ Clear-Work
 Check ((Run-AsAStep 'check-hudson-asleep.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-hudson-asleep.ps1 passes when it should'
 Write-File (Join-Path $work '3dc/avp/hudson.cpp') 'bool HudsonRunIsOn = true;'
 Check ((Run-AsAStep 'check-hudson-asleep.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
+
+Clear-Work
+Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-servers-dev-only.ps1 passes when it should'
+Write-File (Join-Path $work '3dc/net.cpp') 'void Look() { getaddrinfo(n, 0, 0, 0); }'
+Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
 
 Remove-Item -Force -LiteralPath $stepFile
 
@@ -939,7 +1580,7 @@ $big.SetLength(32000001)
 $big.Dispose()
 Expect-Refused 'check-virustotal.ps1' @('-Package', (Join-Path $work 'big.zip'), '-Sha256', $zipHash) 'VirusTotal takes at most 32000000 in one upload' 'a zip too big for one upload is refused'
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-hudson-asleep.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
+foreach ($name in 'tools/check-release.ps1', 'tools/check-hudson-asleep.ps1', 'tools/check-servers-dev-only.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -967,6 +1608,7 @@ Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything
 
 Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
 Check ($checkJob -match 'run: \./tools/check-hudson-asleep\.ps1\n') 'and refuses any way a player''s game could run Hudson'
+Check ($checkJob -match 'run: \./tools/check-servers-dev-only\.ps1\n') 'and refuses any way a player''s game could reach one of our servers'
 Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses a new function the game does not use'
 Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
@@ -1089,6 +1731,8 @@ $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tes
 Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
 Check-Order $testsWorkflow 'name: Unit tests' './tools/check-hudson-asleep.ps1' 'and the required Unit tests check refuses any way a player''s game could run Hudson'
 Check-Order $testsWorkflow './tools/check-hudson-asleep.ps1' './tests/build.ps1' 'before it builds anything'
+Check-Order $testsWorkflow 'name: Unit tests' './tools/check-servers-dev-only.ps1' 'and the required Unit tests check refuses any way a player''s game could reach one of our servers'
+Check-Order $testsWorkflow './tools/check-servers-dev-only.ps1' './tests/build.ps1' 'before it builds anything'
 
 # --- Pull requests try the release's own checks on the machine the release runs them on
 $ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
@@ -1097,6 +1741,7 @@ $ubuntuMachine = [regex]::Match($ubuntuJob, '(?m)^    runs-on: (\S+)').Groups[1]
 $ubuntuName = [regex]::Match($ubuntuJob, '(?m)^    name: (.+)$').Groups[1].Value.Trim()
 Check ($releaseMachine.Length -gt 0 -and $ubuntuMachine -ceq $releaseMachine) 'pull requests try the checks on the machine the release uses'
 Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-hudson-asleep\.ps1\s') 'and refuse any way a player''s game could run Hudson there, with the same PowerShell'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-servers-dev-only\.ps1\s') 'and refuse any way a player''s game could reach one of our servers there, with the same PowerShell'
 Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tests/release-test\.ps1 -OnlyNewFunctions\s') 'and try the new-function rows there'
 Check ($ubuntuJob -match '(?m)^          fetch-depth: 0\b') 'with the history, so the real code gets read as well'
 Check ($ubuntuJob.Contains('persist-credentials: false')) 'leaving no token behind'

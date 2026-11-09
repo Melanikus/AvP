@@ -69,6 +69,12 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
+      # The owner's ruling, 2026-11-09: nothing in a release may reach one of our servers; the code for them runs only with -dev. Every
+      # pull request has already run this: this is the last look.
+      - name: Refuse any way a player's game could reach one of our servers
+        shell: pwsh
+        run: ./tools/check-servers-dev-only.ps1
+
       # A function added to the game that the game never uses is dead code left behind. It reads the code, so it needs nothing from GitHub.
       - name: Refuse a new function the game does not use
         shell: pwsh
