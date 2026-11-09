@@ -93,6 +93,14 @@ void OnlinePlay_Frame(void);
 // The relay's latest news for the co-op lobby page, where the host waits before play: true for 8 s after it came, with its words
 bool OnlineHost_NewsLine(char *line, size_t size);
 
+// ---- -dev -findgames: the page of games found with nobody at the keyboard
+
+// At the first menus the copy goes the player's own way, Multiplayer, Join Game, Find Games, to the page of games found, and stays there,
+// so a test can show the listed games with nobody at the keyboard. winmain.cpp turns it on, only with -dev; the menus ask once, and it's
+// off from then on.
+void OnlinePage_FindGamesAtStart(void);
+bool OnlinePage_GoStraightToFindGames(void);
+
 // ---- -dev -onlinescreens: every screen, with made-up games and no network, for pictures
 
 // winmain.cpp turns it on, only with -dev

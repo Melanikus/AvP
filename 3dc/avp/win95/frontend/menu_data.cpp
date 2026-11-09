@@ -17,6 +17,7 @@
 //   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
+//   the Join page's first row is "Find Games": its search asks this network and the online list of games (language.cpp's words)
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -494,7 +495,7 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerStartGame[]=
 
 static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=
 {
-	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDLOCAL},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDLOCAL_HELP},
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDGAMES},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_OPENADDRESS},	{AVPMENU_MULTIPLAYEROPENADDRESS},	{0},	{0},	TEXTSTRING_MULTIPLAYER_OPENADDRESS_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };

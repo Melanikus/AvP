@@ -915,6 +915,24 @@ void OnlinePlay_Frame(void)
 	RelayLineInPlay();
 }
 
+// ---- -dev -findgames
+
+static bool findGamesAtStart = false;
+
+void OnlinePage_FindGamesAtStart(void)
+{
+	findGamesAtStart = true;
+}
+
+bool OnlinePage_GoStraightToFindGames(void)
+{
+	bool const go = findGamesAtStart;
+
+	// Once: back in the menus after a game, they open as usual
+	findGamesAtStart = false;
+	return go;
+}
+
 // ---- -dev -onlinescreens
 
 static bool demoIsOn = false;

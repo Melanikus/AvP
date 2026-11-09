@@ -888,6 +888,26 @@ static void TestTheMenus()
 	std::string const answers = SourceSlice(menus, "static void UpdateTheAnswerRows(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(answers, "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);") && Has(answers, "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;"),
 		"the host's answer rows never take the selection when they come, and only the first lets the player in");
+
+	// The Join page's first row says what its search does now: this network and the online list, not 1999's "Find Local Servers". The
+	// words are the game's own (language.cpp, after everything language.txt holds), so a player's language file isn't touched.
+	std::string const pages = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const joinPage = SourceSlice(pages, "static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=", "\n};\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(joinPage, "{TEXTSTRING_MULTIPLAYER_FINDGAMES},") && Has(joinPage, "TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP}") && !Has(joinPage, "FINDLOCAL"),
+		"the Join page's first row is Find Games, with its own help, and nothing of the old local-servers words");
+	std::string const words = ReadSource("3dc/avp/language.cpp");
+	Check(Has(words, "\t\"Find Games\",\n") && Has(words, "on this network and on the online list of games"), "and its words say both: this network, and the online list");
+
+	// -dev -findgames: only with -dev, and then the player's own way to the page of games found, one page after another
+	std::string const startUp = ReadSource("3dc/avp/win95/winmain.cpp");
+	std::string const findGamesWord = SourceSlice(startUp, "if (CommandLineHasWord(command_line, \"-findgames\"))", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(findGamesWord, "if (DevMode)\n\t\t\t{\n\t\t\t\tOnlinePage_FindGamesAtStart();"), "-findgames does anything only with -dev");
+	std::string const findGames = SourceSlice(menus, "if (OnlinePage_GoStraightToFindGames())", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const toMultiplayer = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYER);");
+	size_t const toJoin = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);");
+	size_t const toFind = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);");
+	Check(toMultiplayer != std::string::npos && toJoin != std::string::npos && toFind != std::string::npos && toMultiplayer < toJoin && toJoin < toFind,
+		"and it goes Multiplayer, then Join Game, then Find Games, each page set up as pressing it would");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it

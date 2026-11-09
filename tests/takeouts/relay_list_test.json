@@ -705,6 +705,56 @@
 			]
 		},
 		{
+			"name": "SOURCE: the Join page still says Find Local Servers",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{TEXTSTRING_MULTIPLAYER_FINDGAMES},",
+					"to": "{TEXTSTRING_MULTIPLAYER_FINDLOCAL},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Join page's help still says a local network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},",
+					"to": "TEXTSTRING_MULTIPLAYER_FINDLOCAL_HELP},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Find Games' help doesn't say the online list",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\"Press ENTER to look for games on this network and on the online list of games.\",",
+					"to": "\"Press ENTER to look for games on this network.\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -findgames works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tif (DevMode)\n\t\t\t{\n\t\t\t\tOnlinePage_FindGamesAtStart();",
+					"to": "\t\t\tif (true)\n\t\t\t{\n\t\t\t\tOnlinePage_FindGamesAtStart();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -findgames skips the Join page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tSetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);\n\t\tSetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);",
+					"to": "\t\tSetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the host's answer rows take the selection when they come",
 			"changes": [
 				{
