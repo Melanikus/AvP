@@ -35,7 +35,8 @@ Added 2026-11-09 by Melanikus for the AvP port.
 
 **What this is.** Protocol version 2's whole handshakes and sealed messages as exact bytes (CRYPTO.md section 15, in the
 AVPx-Dedicated-Server repository):
-- handshake A: every input, A1, A2 and A3, h and ck after each of the 16 steps, Split's keys, the transcript;
+- handshake A, pqIK: every input (the player's static keys among them), A1, A2 and A3, h and ck after each of the 21 steps, Split's
+  keys, the transcript;
 - A's datagrams: the cookie round and the fragments;
 - four sealed control messages;
 - handshake B, with its refusals 10 and 21 as bytes;
@@ -50,13 +51,16 @@ Java's.
 relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
 (`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
 
-**Where it comes from.** AVPx-Dedicated-Server, commit `d0d268b`, file `test-vectors/crypto-v2.json`, made for CRYPTO.md as at `b9113a7`.
-The file is the same at `379ec97`, whose CRYPTO.md changes no bytes. From `3fcb588`'s copy, only three places changed (2026-11-09): the
-"about" line, handshake B's refusals 10 and 21, and the new sealed game datagrams. Handshake A's bytes, which this repository's tests
-read, are the same.
+**Where it comes from.** AVPx-Dedicated-Server, branch v2, the commit after `5071bc6` that makes handshake A pqIK (its hash is added
+here once it's pushed; the sha256 below is the pin either way), file `test-vectors/crypto-v2.json`: handshake A made pqIK
+(2026-11-09, server #24), for CRYPTO.md section 6 as Third wrote it (`1ee8aa9`). From `d0d268b`'s copy (compared section by section):
+handshake A and its datagrams are new (A1 4,930 bytes in 5, A2 3,257 in 3, a `player` and a `skemToPlayer`), and so is everything made
+from A's keys or datagrams: the sealed control messages, the nonces, the epoch keys, and the refusals cut from them (one of which now
+says "a count of 4, for a length that takes 5"). The relay's static keys (`relayStatic`) are the same, so its fingerprint is too.
+Handshake B, AES-GCM, ML-KEM, the signatures and the sealed game datagrams are the same bytes.
 
-- 211,149 bytes, with plain line ends (LF);
-- sha256 `402e557962071ba62b647daa3d17d50e1b62e70d9e183fe5fe4bf616fc333fc2`.
+- 237,729 bytes, with plain line ends (LF);
+- sha256 `5f49ab8cb8977c4e57db40039e3d7e03b3672757c19ffbda449f96c92852595a`.
 
 The gate checks that sha256 ("Check protocol version 2's test vectors are the relay's own"). A newer one is taken the same way as
 `relay-v1.json`'s, above.

@@ -34,7 +34,10 @@
 #include "net_crypto.h"
 
 // The protocol names (CRYPTO.md section 5): each handshake's h starts as the SHA-384 of its name, so the two can never be mixed up
-static const char kNetNoiseNameRelay[] = "AVPX_pqNK_P384+MLKEM1024_AESGCM_SHA384_v2";   // handshake A, a game and its relay
+// Handshake A, a game and its relay: pqIK since 2026-11-09 (server #24: the player's identity proves an approved player), so h starts
+// apart from the old pqNK's, and a game of one can never finish a handshake with a relay of the other. (Modified 2026-11-09 by Melanikus
+// for the AvP port.)
+static const char kNetNoiseNameRelay[] = "AVPX_pqIK_P384+MLKEM1024_AESGCM_SHA384_v2";
 static const char kNetNoiseNamePeers[] = "AVPX_pqXX_P384+MLKEM1024_AESGCM_SHA384_v2";   // handshake B, a joiner and its host
 
 static const char kNetNoiseSplitInfo[] = "AVPX split v2";

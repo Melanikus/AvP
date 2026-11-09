@@ -73,6 +73,16 @@
 					"to": "uint64_t const epoch = 0;"
 				}
 			]
+		},
+		{
+			"name": "pqIK: a handshake message may be 4 fragments only (A1 needs 5)",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "size_t const kNetV2MostFragments = 5;",
+					"to": "size_t const kNetV2MostFragments = 4;"
+				}
+			]
 		}
 	]
 }

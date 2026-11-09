@@ -70,6 +70,7 @@ struct Vectors
 	std::string region;
 	NetRelayStaticKeys relay;
 	Bytes eP384Private, eP384Public, ekSeed, ekPublic, m, skemCiphertext, skemSecret;
+	Bytes playerP384Private, playerP384Public, playerKemSeed, playerKemPublic;   // pqIK: the player's static keys
 	Bytes a1, a2, a3, sessionId, transcript;
 	Bytes keyGameToRelay, keyRelayToGame, ivGameToRelay, ivRelayToGame;
 	std::vector<Bytes> h, ck;
@@ -82,13 +83,20 @@ static bool ReadVectors(const JsonValue &all, Vectors *v)
 	const JsonValue *const relay = a ? a->Member("relayStatic") : NULL;
 	const JsonValue *const game = a ? a->Member("gameEphemeral") : NULL;
 	const JsonValue *const skem = a ? a->Member("skem") : NULL;
+	const JsonValue *const player = a ? a->Member("player") : NULL;
 	const JsonValue *const split = a ? a->Member("split") : NULL;
 	const JsonValue *const steps = a ? a->Member("steps") : NULL;
 
-	if (!a || !region || !relay || !game || !skem || !split || !steps || steps->kind != kJsonList || steps->items.size() != kNetHandshakeASteps)
+	if (!a || !region || !relay || !game || !skem || !player || !split || !steps || steps->kind != kJsonList ||
+		steps->items.size() != kNetHandshakeASteps)
 	{
 		return false;
 	}
+
+	v->playerP384Private = HexOf(player, "p384Private");
+	v->playerP384Public = HexOf(player, "p384Public");
+	v->playerKemSeed = HexOf(player, "mlkemSeed");
+	v->playerKemPublic = HexOf(player, "mlkemPublic");
 
 	v->region = region->text;
 	Bytes const relayP384 = HexOf(relay, "p384Public"), relayKem = HexOf(relay, "mlkemPublic");
@@ -128,6 +136,38 @@ static bool ReadVectors(const JsonValue &all, Vectors *v)
 		v->a3.size() == kNetHandshakeA3Bytes;
 }
 
+// The file's player (pqIK): their static P-384 key from its number, their ML-KEM key pair from its seed, and their two public halves as
+// A1's s sends them. Made once, in main, and borrowed by every handshake below, as the game's own identity is.
+static NetEcdhKey *gPlayerKey = NULL;
+static uint8_t gPlayerStatics[kNetHandshakeAStaticBytes];
+static uint8_t gPlayerKemPrivate[kNetPqKemPrivateBytes];
+static NetHandshakeAPlayer gPlayer;
+
+static bool MakePlayer(const Vectors &v)
+{
+	uint8_t kemPublic[kNetPqKemPublicBytes];
+
+	if (v.playerP384Public.size() != kNetCryptoP384PublicBytes || v.playerP384Private.size() != kNetCryptoP384ScalarBytes ||
+		v.playerKemSeed.size() != kNetV2TestKemSeedBytes)
+	{
+		return false;
+	}
+
+	gPlayerKey = NetCrypto_EcdhFromPrivate(v.playerP384Private.data(), v.playerP384Public.data());
+
+	if (!gPlayerKey || !NetV2Test_KemPairFromSeed(v.playerKemSeed.data(), kemPublic, gPlayerKemPrivate))
+	{
+		return false;
+	}
+
+	memcpy(gPlayerStatics, v.playerP384Public.data(), kNetCryptoP384PublicBytes);
+	memcpy(gPlayerStatics + kNetCryptoP384PublicBytes, kemPublic, kNetPqKemPublicBytes);
+	gPlayer.p384 = gPlayerKey;
+	gPlayer.statics = gPlayerStatics;
+	gPlayer.kemPrivate = gPlayerKemPrivate;
+	return Same(v.playerKemPublic, kemPublic, sizeof(kemPublic));
+}
+
 // The file's own draws: e's P-384 key from its number, e's ML-KEM key from its seed, and the encapsulation from its m
 static bool FileDraws(const Vectors &v, NetHandshakeADraws *d)
 {
@@ -148,7 +188,7 @@ static bool FileDraws(const Vectors &v, NetHandshakeADraws *d)
 static bool FileA1(const Vectors &v, NetHandshakeA *hs)
 {
 	NetHandshakeADraws d;
-	return FileDraws(v, &d) && NetHandshakeA_WriteA1(hs, v.region.c_str(), &v.relay, &d, NULL) == kNetHandshakeAOk;
+	return FileDraws(v, &d) && NetHandshakeA_WriteA1(hs, v.region.c_str(), &v.relay, &gPlayer, &d, NULL) == kNetHandshakeAOk;
 }
 
 // ----- The relay's own bytes
@@ -166,9 +206,9 @@ static void TheVectors(const Vectors &v)
 	NetHandshakeATrace trace;
 	memset(&hs, 0, sizeof(hs));
 	memset(&trace, 0, sizeof(trace));
-	int const wrote = drawn ? NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &d, &trace) : -1;
+	int const wrote = drawn ? NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &gPlayer, &d, &trace) : -1;
 	ACheck(wrote == kNetHandshakeAOk, "A1 is made");
-	ACheck(wrote == kNetHandshakeAOk && Same(v.a1, hs.a1, sizeof(hs.a1)), "A1 is the relay's own, byte for byte (3,249 bytes)");
+	ACheck(wrote == kNetHandshakeAOk && Same(v.a1, hs.a1, sizeof(hs.a1)), "A1 is the relay's own, byte for byte (4,930 bytes)");
 	ACheck(AllZero(&d, sizeof(d)), "and the draws given are wiped, e's key handed over");
 
 	uint8_t a3[kNetHandshakeA3Bytes];
@@ -198,9 +238,9 @@ static void TheVectors(const Vectors &v)
 	}
 
 	ACheck(trace.count == kNetHandshakeASteps && stepsRight == static_cast<int>(kNetHandshakeASteps),
-		std::to_string(stepsRight) + " of the 16 steps' h and ck are the relay's, in order");
-	ACheck(AllZero(&hs.noise, sizeof(hs.noise)) && hs.e == NULL && AllZero(hs.ekPrivate, sizeof(hs.ekPrivate)),
-		"the handshake's chain, e's keys and its ML-KEM private key are wiped once it's done");
+		std::to_string(stepsRight) + " of the 21 steps' h and ck are the relay's, in order");
+	ACheck(AllZero(&hs.noise, sizeof(hs.noise)) && hs.e == NULL && AllZero(hs.ekPrivate, sizeof(hs.ekPrivate)) &&
+		AllZero(&hs.player, sizeof(hs.player)), "the handshake's chain, e's keys, its ML-KEM private key and its hold on the player are wiped once it's done");
 	NetCrypto_Wipe(&trace, sizeof(trace));
 	NetHandshakeA_WipeKeys(&keys);
 }
@@ -244,7 +284,7 @@ static void EveryChangedA2(const Vectors &v)
 		}
 	}
 
-	ACheck(refused == all, std::to_string(refused) + " of A2's 1,689 bytes, each with a bit changed, are refused");
+	ACheck(refused == all, std::to_string(refused) + " of A2's 3,257 bytes, each with a bit changed, are refused");
 	ACheck(rightReason == all, std::to_string(rightReason) + " of them for the reason they must be: the first 97 as a key that isn't one, the rest at the seal");
 	ACheck(wiped == all, "and every time, A3, the keys and the handshake's chain are left wiped");
 }
@@ -290,7 +330,7 @@ static void TheRefusals(const Vectors &v)
 		NetHandshakeADraws d;
 		memset(&hs, 0, sizeof(hs));
 		bool const drawn = FileDraws(v, &d);
-		ACheck(drawn && NetHandshakeA_WriteA1(&hs, region, &v.relay, &d, NULL) == kNetHandshakeABadState && AllZero(&d, sizeof(d)),
+		ACheck(drawn && NetHandshakeA_WriteA1(&hs, region, &v.relay, &gPlayer, &d, NULL) == kNetHandshakeABadState && AllZero(&d, sizeof(d)),
 			std::string("the region \"") + region + "\" is refused, and the draws wiped");
 	}
 
@@ -304,13 +344,71 @@ static void TheRefusals(const Vectors &v)
 		broken.p384[50] ^= 0x01;
 		memset(&hs, 0, sizeof(hs));
 		bool const drawn = FileDraws(v, &d);
-		ACheck(drawn && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &broken, &d, NULL) == kNetHandshakeABadKey && hs.e == NULL,
+		ACheck(drawn && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &broken, &gPlayer, &d, NULL) == kNetHandshakeABadKey && hs.e == NULL,
 			"a relay P-384 key that isn't on the curve is refused at A1 (a key that isn't one), e's key destroyed");
 	}
 
 	// No draws at all
 	memset(&hs, 0, sizeof(hs));
-	ACheck(NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, NULL, NULL) == kNetHandshakeABadState, "A1 with no draws: refused");
+	ACheck(NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &gPlayer, NULL, NULL) == kNetHandshakeABadState, "A1 with no draws: refused");
+}
+
+// ----- The player (pqIK): proved by both static keys, and only borrowed
+
+static void ThePlayer(const Vectors &v)
+{
+	uint8_t a3[kNetHandshakeA3Bytes];
+	NetHandshakeAKeys keys;
+
+	// The player's P-384 key, with another ML-KEM private key: A1 is the very same (ss holds, and s is the same public halves), but A2's
+	// second encapsulation, to the player's static ML-KEM key, opens to another secret, so A2's seal fails. That's the post-quantum half
+	// of the player's proof: someone who broke ECDH alone could make A1, but never read A2 or make A3.
+	{
+		uint8_t seed[kNetV2TestKemSeedBytes];
+		uint8_t otherPublic[kNetPqKemPublicBytes];
+		uint8_t otherPrivate[kNetPqKemPrivateBytes];
+		memset(seed, 0x6b, sizeof(seed));
+		bool const made = NetV2Test_KemPairFromSeed(seed, otherPublic, otherPrivate);
+		NetHandshakeAPlayer half = gPlayer;
+		half.kemPrivate = otherPrivate;
+		NetHandshakeA hs;
+		NetHandshakeADraws d;
+		memset(&hs, 0, sizeof(hs));
+		bool const wrote = made && FileDraws(v, &d) && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &half, &d, NULL) == kNetHandshakeAOk;
+		ACheck(wrote && Same(v.a1, hs.a1, sizeof(hs.a1)), "with another ML-KEM private key, A1 is the very same");
+		ACheck(wrote && NetHandshakeA_ReadA2(&hs, v.a2.data(), v.a2.size(), a3, &keys, NULL) == kNetHandshakeATag && AllZero(a3, sizeof(a3)),
+			"but the relay's A2 doesn't open (8): only the holder of the player's static ML-KEM key goes on");
+		NetCrypto_Wipe(otherPrivate, sizeof(otherPrivate));
+	}
+
+	// No player, or one with a part missing: this game's mistake, refused before anything is made
+	{
+		NetHandshakeAPlayer const missing[] = {
+			{ NULL, gPlayer.statics, gPlayer.kemPrivate },
+			{ gPlayer.p384, NULL, gPlayer.kemPrivate },
+			{ gPlayer.p384, gPlayer.statics, NULL } };
+		bool refused = true;
+
+		for (const NetHandshakeAPlayer &p : missing)
+		{
+			NetHandshakeA hs;
+			NetHandshakeADraws d;
+			memset(&hs, 0, sizeof(hs));
+			refused = refused && FileDraws(v, &d) && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &p, &d, NULL) == kNetHandshakeABadState &&
+				AllZero(&d, sizeof(d));
+		}
+
+		NetHandshakeA hs;
+		NetHandshakeADraws d;
+		memset(&hs, 0, sizeof(hs));
+		refused = refused && FileDraws(v, &d) && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, NULL, &d, NULL) == kNetHandshakeABadState;
+		ACheck(refused, "no player, or a player with no P-384 key, no public halves or no ML-KEM key: refused (101), and the draws wiped");
+	}
+
+	// Borrowed, never freed: after every handshake above, the player's own key still works
+	uint8_t agreed[kNetCryptoP384ScalarBytes];
+	ACheck(NetCrypto_EcdhAgree(gPlayerKey, v.relay.p384, agreed), "the player's static key still works after the handshakes: it was only borrowed");
+	NetCrypto_Wipe(agreed, sizeof(agreed));
 }
 
 // ----- The sealed control channel (net_sealed_control.h), under the file's handshake A keys
@@ -534,7 +632,7 @@ static std::vector<Bytes> HexList(const JsonValue *object, const char *name)
 static bool FileSession(const Vectors &v, const Bytes &id, NetRelayV2Session *s, uint32_t now)
 {
 	NetHandshakeADraws d;
-	return FileDraws(v, &d) && s->Start(v.region.c_str(), &v.relay, kControl, id.data(), &d, now);
+	return FileDraws(v, &d) && s->Start(v.region.c_str(), &v.relay, &gPlayer, kControl, id.data(), &d, now);
 }
 
 static void TheSession(const JsonValue &all, const Vectors &v)
@@ -543,7 +641,7 @@ static void TheSession(const JsonValue &all, const Vectors &v)
 	Bytes const id = HexOf(d, "id"), cookie = HexOf(d, "cookie");
 	std::vector<Bytes> const a1 = HexList(d, "a1"), a2 = HexList(d, "a2"), a3 = HexList(d, "a3");
 
-	if (id.size() != kNetV2IdBytes || cookie.size() != kNetV2CookieBytes || a1.size() != 3 || a2.size() != 2 || a3.size() != 1)
+	if (id.size() != kNetV2IdBytes || cookie.size() != kNetV2CookieBytes || a1.size() != kNetRelayV2A1Fragments || a2.size() != kNetRelayV2A2Fragments || a3.size() != 1)
 	{
 		ACheck(false, "the file's handshake datagrams, for the session");
 		return;
@@ -565,17 +663,18 @@ static void TheSession(const JsonValue &all, const Vectors &v)
 
 		s.Hear(kControl, answer.data(), answer.size(), 100);
 		size_t const second = s.TakeSends(sent, kNetRelayV2MostSends);
-		bool a1Right = second == 3;
+		bool a1Right = second == kNetRelayV2A1Fragments;
 
-		for (size_t i = 0; i < 3 && a1Right; i++)
+		for (size_t i = 0; i < kNetRelayV2A1Fragments && a1Right; i++)
 		{
 			a1Right = sent[i].toPort == kControl && Same(a1[i], sent[i].bytes, sent[i].size);
 		}
 
-		ACheck(a1Right, "A0' brings A1 at once: its 3 datagrams, with the cookie, are the relay's own byte for byte");
+		ACheck(a1Right, "A0' brings A1 at once: its 5 datagrams, with the cookie, are the relay's own byte for byte");
 
 		s.Hear(kControl, a2[1].data(), a2[1].size(), 200);
-		ACheck(!s.Ready() && s.TakeSends(sent, kNetRelayV2MostSends) == 0, "A2's second datagram alone: nothing yet");
+		s.Hear(kControl, a2[2].data(), a2[2].size(), 205);
+		ACheck(!s.Ready() && s.TakeSends(sent, kNetRelayV2MostSends) == 0, "A2's second and third datagrams alone: nothing yet");
 		s.Hear(kControl, a2[0].data(), a2[0].size(), 210);
 		size_t const third = s.TakeSends(sent, kNetRelayV2MostSends);
 		ACheck(s.Ready() && third == 1 && Same(a3[0], sent[0].bytes, sent[0].size), "the whole of A2, last datagram first: ready, and A3's datagram is the relay's own");
@@ -633,7 +732,7 @@ static void TheSession(const JsonValue &all, const Vectors &v)
 		size_t const none = s.TakeSends(sent, kNetRelayV2MostSends);
 		s.Tick(2500);
 		size_t const again = s.TakeSends(sent, kNetRelayV2MostSends);
-		ACheck(none == 0 && again == 3 && Same(a1[0], sent[0].bytes, sent[0].size), "A1 goes again, all 3 datagrams, the same bytes, 0.5 s after A0'");
+		ACheck(none == 0 && again == kNetRelayV2A1Fragments && Same(a1[0], sent[0].bytes, sent[0].size), "A1 goes again, all 5 datagrams, the same bytes, 0.5 s after A0'");
 		s.Tick(9499);
 		ACheck(!s.Failed(), "A1's own count: not given up at 7.5 s from the start");
 		s.Tick(9500);
@@ -747,7 +846,7 @@ static void TheRealDraws(const Vectors &v)
 
 	NetHandshakeA hs;
 	memset(&hs, 0, sizeof(hs));
-	ACheck(drawn && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &one, NULL) == kNetHandshakeAOk && !Same(v.a1, hs.a1, sizeof(hs.a1)),
+	ACheck(drawn && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &gPlayer, &one, NULL) == kNetHandshakeAOk && !Same(v.a1, hs.a1, sizeof(hs.a1)),
 		"an A1 from them is made, and isn't the file's");
 	NetHandshakeA_Wipe(&hs);
 	NetHandshakeA_WipeDraws(&two);
@@ -769,18 +868,25 @@ int main()
 	bool const read = !text.empty() && reader.ReadAll(&all) && all.kind == kJsonObject && ReadVectors(all, &v);
 	ACheck(read, "tests/vectors/crypto-v2.json: handshake A read");
 	ACheck(NetPq_Available(), "this test has the real post-quantum half (net_pq_native.cpp)");
+	bool const player = read && MakePlayer(v);
+	ACheck(player, "the file's player: their P-384 key from its number, their ML-KEM key from its seed, the file's public halves");
 
-	if (read)
+	if (read && player)
 	{
 		TheVectors(v);
 		EveryChangedA2(v);
 		TheRefusals(v);
+		ThePlayer(v);
 		TheSealedChannel(all, v);
 		TheSession(all, v);
 		TheRealDraws(v);
 	}
 
 	ThePicker();
+
+	// The player is the test's own, as an identity is the game's: freed here, once, at the end
+	NetCrypto_EcdhFree(gPlayerKey);
+	NetCrypto_Wipe(gPlayerKemPrivate, sizeof(gPlayerKemPrivate));
 
 	if (aChecksFailed > 0)
 	{
