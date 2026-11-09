@@ -4,12 +4,15 @@
 // WHY. Handshake A proves the relay to the game, but only if the game holds the relay's real static public keys: whoever holds the
 // private halves of the keys the game uses is "the relay" to it. Until there's a signed directory of the relays' keys (a later card), the
 // game fetches them from the list server (GET /v1/relay-keys, relay_list.cpp) and holds them to a fingerprint a tester types into the
-// -dev settings: RelayKey=<region>:<32 hex digits>. Keys whose fingerprint isn't that one, or keys for a region with no fingerprint given,
+// -dev settings: RelayKey=<region>:<96 hex digits>. Keys whose fingerprint isn't that one, or keys for a region with no fingerprint given,
 // are never used: nothing is sent to that relay, and there's no going back to version 1.
 //
-// THE FINGERPRINT is the first 16 bytes of SHA-384 over "AVPX relay keys v2" (its 18 letters, with no 0 after them), then the P-384 key's
-// 97 bytes, then the ML-KEM-1024 key's 1,568: 1,683 bytes in all. It's written as 32 hex digits in small letters. The relay server's own
-// test is held to the same vector: fc352802066e547c261e37fe63f11486 for crypto-v2.json's handshakeA.relayStatic (Primary, 2026-11-09).
+// THE FINGERPRINT is the whole of SHA-384 (48 bytes) over "AVPX relay keys v2" (its 18 letters, with no 0 after them), then the P-384
+// key's 97 bytes, then the ML-KEM-1024 key's 1,568: 1,683 bytes in all. It's written as 96 hex digits in small letters. It's all 48 bytes,
+// not a short piece of them, because a machine compares it (PO's ruling, 2026-11-09: every comparison a machine makes uses the full
+// digest, and only what people read is short). For crypto-v2.json's handshakeA.relayStatic it's
+// fc352802066e547c261e37fe63f114863debbc76b5b29575ab69af80c72eeb91dd9a9dddd8b38218b21df00b4bea5a54; its first 32 digits are the vector the
+// relay server's test was first held to (Primary, 2026-11-09).
 //
 // It's game-free: tests/net_relay_keys_test.cpp tries every case.
 #ifndef NET_RELAY_KEYS_H
@@ -20,17 +23,15 @@
 #include <string.h>
 
 #include "net_crypto.h"
-#include "net_identity.h"      // NetIdentity_FingerprintFromHex: the one rule for 32 hex digits
 #include "net_handshake_a.h"   // NetRelayStaticKeys
 #include "relay_list_text.h"   // RelayList_IsRegion and kRelayListRegionLetters: the one rule for a region
 
 char const kNetRelayKeysWords[] = "AVPX relay keys v2";
-size_t const kNetRelayKeysFingerprintBytes = 16;
+size_t const kNetRelayKeysFingerprintBytes = kNetCryptoHashBytes;                  // all 48 bytes of SHA-384
+size_t const kNetRelayKeysFingerprintHexLetters = 2 * kNetRelayKeysFingerprintBytes;   // 96
 
-// The most letters the setting can have: a region's 16, the colon, and 32 hex digits
-size_t const kNetRelayKeysMostSettingLetters = kRelayListRegionLetters + 1 + 2 * kNetRelayKeysFingerprintBytes;
-
-static_assert(kNetRelayKeysFingerprintBytes == kNetIdentityFingerprintBytes, "a relay's fingerprint is written the way an identity's is");
+// The most letters the setting can have: a region's 16, the colon, and 96 hex digits
+size_t const kNetRelayKeysMostSettingLetters = kRelayListRegionLetters + 1 + kNetRelayKeysFingerprintHexLetters;
 
 // The fingerprint of a relay's keys. False (with out wiped) only if SHA-384 itself failed.
 inline bool NetRelayKeys_Fingerprint(const NetRelayStaticKeys *keys, uint8_t out[kNetRelayKeysFingerprintBytes])
@@ -40,15 +41,13 @@ inline bool NetRelayKeys_Fingerprint(const NetRelayStaticKeys *keys, uint8_t out
 		{ keys->p384, kNetCryptoP384PublicBytes },
 		{ keys->kem, kNetPqKemPublicBytes },
 	};
-	uint8_t whole[kNetCryptoHashBytes];
 
-	if (!NetCrypto_Sha384(pieces, 3, whole))
+	if (!NetCrypto_Sha384(pieces, 3, out))
 	{
 		NetCrypto_Wipe(out, kNetRelayKeysFingerprintBytes);
 		return false;
 	}
 
-	memcpy(out, whole, kNetRelayKeysFingerprintBytes);
 	return true;
 }
 
@@ -73,9 +72,48 @@ inline bool NetRelayKeys_AreThese(const NetRelayStaticKeys *keys, const uint8_t 
 	return differ == 0;
 }
 
-// The -dev setting, "<region>:<32 hex digits>", such as "newyork:fc352802066e547c261e37fe63f11486". The region is the list's kind (1 to
-// 16 small letters, digits and -), and the digits are small letters with nothing after them. False, with region "" and fingerprint all 0,
-// for anything else: a setting the game can't be sure of is no setting.
+// A fingerprint from its text: exactly 96 hex digits in small letters, and nothing after them. Only then is out written, so a text that's
+// refused leaves out all 0.
+inline bool NetRelayKeys_FingerprintFromHex(const char *text, uint8_t out[kNetRelayKeysFingerprintBytes])
+{
+	memset(out, 0, kNetRelayKeysFingerprintBytes);
+
+	if (!text)
+	{
+		return false;
+	}
+
+	// The loop stops at the first letter that isn't a hex digit, so it never reads past a shorter text's end
+	for (size_t i = 0; i < kNetRelayKeysFingerprintHexLetters; i++)
+	{
+		char const c = text[i];
+
+		if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+		{
+			return false;
+		}
+	}
+
+	if (text[kNetRelayKeysFingerprintHexLetters] != '\0')
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < kNetRelayKeysFingerprintBytes; i++)
+	{
+		char const high = text[2 * i];
+		char const low = text[2 * i + 1];
+		int const h = high <= '9' ? high - '0' : high - 'a' + 10;
+		int const l = low <= '9' ? low - '0' : low - 'a' + 10;
+		out[i] = static_cast<uint8_t>((h << 4) | l);
+	}
+
+	return true;
+}
+
+// The -dev setting, "<region>:<96 hex digits>". The region is the list's kind (1 to 16 small letters, digits and -), and the digits are
+// small letters with nothing after them. False, with region "" and fingerprint all 0, for anything else: a setting the game can't be sure
+// of is no setting.
 inline bool NetRelayKeys_ReadSetting(const char *setting, char region[kRelayListRegionLetters + 1], uint8_t fingerprint[kNetRelayKeysFingerprintBytes])
 {
 	region[0] = '\0';
@@ -113,7 +151,7 @@ inline bool NetRelayKeys_ReadSetting(const char *setting, char region[kRelayList
 	named[regionLetters] = '\0';
 	uint8_t read[kNetRelayKeysFingerprintBytes];
 
-	if (!RelayList_IsRegion(named) || !NetIdentity_FingerprintFromHex(colon + 1, read))
+	if (!RelayList_IsRegion(named) || !NetRelayKeys_FingerprintFromHex(colon + 1, read))
 	{
 		return false;
 	}
