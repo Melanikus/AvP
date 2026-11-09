@@ -412,7 +412,9 @@ int OnlineScreens_SecondsLeft(uint32_t startedAt, uint32_t now, uint32_t mostMs)
 	return (int)((mostMs - gone + 999) / 1000);
 }
 
-static const char *const kWords[kOnlineWordsCount] =
+// One line for each of OnlineWords, in its order. The list's size is counted from its lines, so a line missing or extra stops the build
+// (the static_assert below) instead of leaving a word empty.
+static const char *const kWords[] =
 {
 	"Looking for games on this network",                          // kOnlineWordsLookingHere
 	"Asking the list of games",                                   // kOnlineWordsLookingList
@@ -436,11 +438,16 @@ static const char *const kWords[kOnlineWordsCount] =
 	"The host said no",                                           // kOnlineWordsSaidNo
 	"The host didn't answer in time",                             // kOnlineWordsNoAnswer
 	"Enter or Esc goes back to the list",                         // kOnlineWordsBackToList
+	"Couldn't join",                                              // kOnlineWordsCouldNotJoin
+	"that game has gone",                                         // kOnlineWordsGameHasGone
+	"No games from the list",                                     // kOnlineWordsListFailed
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
 	"Your game's room on the relay has gone"                      // kOnlineWordsRelayGone
 };
+
+static_assert(sizeof(kWords) / sizeof(kWords[0]) == kOnlineWordsCount, "kWords needs one line for each of OnlineWords, in its order");
 
 const char *OnlineScreens_Words(OnlineWords which)
 {

@@ -178,6 +178,9 @@ enum OnlineWords
 	kOnlineWordsSaidNo,
 	kOnlineWordsNoAnswer,
 	kOnlineWordsBackToList,
+	kOnlineWordsCouldNotJoin,         //     the start of a failed join's line, before the networking code's own words
+	kOnlineWordsGameHasGone,          //     why a game that's gone can't be joined
+	kOnlineWordsListFailed,           // J1 and J2: the start of the line when the list of games didn't answer, before the list code's words
 	kOnlineWordsRelayFinding,         // H2
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,

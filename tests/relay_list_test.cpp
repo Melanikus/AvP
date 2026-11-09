@@ -822,12 +822,14 @@ static void TestTheMenus()
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	Check(menus.size() > 100000, "menus.cpp was found and read, from the top of the repository");
 
-	// The page of games found is set up again each time its list changes. Asking the list there would ask again for every answer, for
-	// as long as the page is open, so it has to be in the part that runs only when the page is first opened.
+	// The page of games found asks the list when it's first opened, and then only when its search says it's time (every 5 s, and 12 times
+	// at most while nothing is found: online_screens.h, checked by online_screens_test). Never on each answer, or one answer would bring the
+	// next, for as long as the page is open.
 	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(firstOpen, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 1,
-		"the page of games found asks the list once each time it's opened, and nowhere else");
+	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 2,
+		"the page of games found asks the list when it's opened and when its search says it's time, and nowhere else");
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
@@ -852,6 +854,11 @@ static void TestTheMenus()
 	size_t const unset = menus.find("Net_SetRelayJoinWaitHook(NULL);");
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
+
+	// A join goes to the game on its row, found by its relay code or its address (online_screens_page.h). Never by the row's number: each
+	// search empties the list of games found and fills it again, so by the time Enter is pressed, a row's number can be another game's.
+	Check(Has(menus, "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);") && !Has(menus, "int s = AvPMenus.CurrentlySelectedElement;"),
+		"a join goes to the game on its row, found by its code or its address, never by the row's number");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it

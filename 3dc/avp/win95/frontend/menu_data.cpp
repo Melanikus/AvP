@@ -15,6 +15,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   both sound pages have a Room echo row (REVERB-TOGGLE-1). Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
 //   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -36,6 +38,7 @@
 #include "mp_config.h"
 #include "detaillevels.h"
 #include "MusicPlayer.h"
+#include "online_screens_page.h"
 
 #define MPLAYER_SUPPORT 0
 
@@ -1142,16 +1145,21 @@ AVPMENU AvPMenusData[]=
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
 static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_COOP_HOSTQUITS + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
+// The page of games found: one row for each game the online-play screens show (online_screens_page.h), which keep them steady while the
+// page refreshes and draw them as a table. With none, one row for the search, whose words the screens draw; its own help line is left
+// blank, so it can't say something else.
 extern void MakeSelectSessionMenu(void)
 {
 	int i;
+	int const rows = OnlinePage_RowCount();
+	int const room = (int)(sizeof(AvPMenu_MultiplayerSelectSession) / sizeof(AvPMenu_MultiplayerSelectSession[0])) - 1;
 
-	if (NumberOfSessionsFound)
+	if (rows > 0)
 	{
-		for (i = 0; i < NumberOfSessionsFound; i++)
+		for (i = 0; i < rows && i < room; i++)
 		{
 			AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_LISTCHOICE;
-			AvPMenu_MultiplayerSelectSession[i].TextPtr = SessionData[i].Name;
+			AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_RowName(i);
 			AvPMenu_MultiplayerSelectSession[i].MenuToGoTo = AVPMENU_MULTIPLAYER_JOINING;
 			AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_SELECTSESSION_HELP;
 		}
@@ -1161,7 +1169,7 @@ extern void MakeSelectSessionMenu(void)
 		AvPMenu_MultiplayerSelectSession[0].ElementID = AVPMENU_ELEMENT_GOTOMENU;
 		AvPMenu_MultiplayerSelectSession[0].TextDescription = TEXTSTRING_MULTIPLAYER_NOSESSIONSFOUND;
 		AvPMenu_MultiplayerSelectSession[0].MenuToGoTo = AVPMENU_MULTIPLAYERJOINGAME;
-		AvPMenu_MultiplayerSelectSession[0].HelpString = TEXTSTRING_MULTIPLAYER_NOSESSIONSFOUND_HELP;
+		AvPMenu_MultiplayerSelectSession[0].HelpString = TEXTSTRING_BLANK;
 		i = 1;
 	}
 

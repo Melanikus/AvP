@@ -33,10 +33,13 @@
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   -dev -onlinescreens shows every online-play screen at the menus, with made-up games, for pictures (online_screens_page.h)
 
 #include "3dc.h"
 #include "build_identity.h"
 #include "mark_key.h"
+#include "online_screens_page.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
@@ -328,6 +331,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
 		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
 		RelayAuto_ReadCommandLine(command_line, DevMode != 0);
+
+		// -dev -onlinescreens: every online-play screen, once, at the menus, with made-up games and no network, for pictures. A word only,
+		// with no value after it.
+		if (CommandLineHasWord(command_line, "-onlinescreens"))
+		{
+			if (DevMode)
+			{
+				OnlineDemo_TurnOn();
+				LogString("online screens: every screen will be shown at the menus, F2 for each picture (-dev -onlinescreens)");
+			}
+			else
+			{
+				LogString("online screens: -onlinescreens needs -dev, so it's left out");
+			}
+		}
 
 		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
 		// for one with a number after its '=', a word that starts with its name (CommandLineFindSwitch).
