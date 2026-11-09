@@ -1753,6 +1753,26 @@
 					"to": "\t\t\tif (false && Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: Hudson's film answer isn't yes outside a run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool Hudson_FilmGoesOn()\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn true;\n\t}\n",
+					"to": "bool Hudson_FilmGoesOn()\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run's network start chooses the roll number twice",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tnetGameData.coopDifficulty = Hudson_Difficulty();\n\t\tCampaign_ChooseRollNumber();\n",
+					"to": "\t\tnetGameData.coopDifficulty = Hudson_Difficulty();\n\t\tCampaign_ChooseRollNumber();\n\t\tCampaign_ChooseRollNumber();\n"
+				}
+			]
 		}
 	]
 }

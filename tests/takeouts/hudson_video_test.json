@@ -733,6 +733,16 @@
 					"to": "\t\t;\n\t}"
 				}
 			]
+		},
+		{
+			"name": "a film whose folder isn't there says the disk won't say how much room it has",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "\telse if (!TheFolderIsThere())\n\t{\n\t\tHudsonVideoWriter_StopBecause(\"start\", \"couldn't make the file, because its folder isn't there, so there's no film, and the run goes on\");\n\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
