@@ -425,6 +425,146 @@
 			]
 		},
 		{
+			"name": "ANY and the rest of 0.0.0.0/8 can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0x00000000u, 8))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the broadcast address is taken for one set aside",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (address == 0xFFFFFFFFu)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a multicast address can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0xE0000000u, 4))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an address set aside can be a relay",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (in(0xF0000000u, 4))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "this machine's own address is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!developer && in(0x7F000000u, 8))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "this machine's own address is refused even with -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!developer && in(0x7F000000u, 8))",
+					"to": "if (in(0x7F000000u, 8))"
+				}
+			]
+		},
+		{
+			"name": "10/8 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0x0A000000u, 8) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "172.16/12 is taken as only 172.16/16",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xAC100000u, 12)",
+					"to": "in(0xAC100000u, 16)"
+				}
+			]
+		},
+		{
+			"name": "192.168/16 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xC0A80000u, 16) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "169.254/16 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "in(0xA9FE0000u, 16) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a carrier's own 100.64/10 is a relay without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || in(0x64400000u, 10)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay name is looked up for any kind of address, not IPv4 only",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "hints.ai_family = AF_INET;",
+					"to": "hints.ai_family = AF_UNSPEC;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the address rule is not asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "RelayList_AddressRefusal(ntohl(address), shared->developer)",
+					"to": "kRelayAddressUsable"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay whose address is refused is kept",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (why != kRelayAddressUsable)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: a call to the list that is not HTTPS",
 			"changes": [
 				{

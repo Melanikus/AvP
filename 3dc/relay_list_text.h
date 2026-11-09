@@ -66,7 +66,28 @@ struct RelayListRelay
 	char region[kRelayListRegionLetters + 1];
 	char host[kRelayListHostLetters + 1];
 	int port;
+	uint32_t address;   // the host's IPv4 address, as ENetAddress.host keeps it (network byte order), looked up by the list's thread
 };
+
+// Why the address a relay's name looked up to isn't used. A relay is somewhere out on the internet, so an address that can't be one isn't
+// sent anything: a wrong or hostile name could otherwise aim the game's messages at this network's own devices, or at many at once.
+enum RelayAddressRefusal
+{
+	kRelayAddressUsable,
+	kRelayAddressThisNetwork,   // 0.0.0.0/8, "this network", which holds ANY: never a machine to send to
+	kRelayAddressBroadcast,     // 255.255.255.255: everyone on this network at once
+	kRelayAddressMulticast,     // 224.0.0.0/4: many machines at once
+	kRelayAddressReserved,      // 240.0.0.0/4: set aside, never used on the internet
+	kRelayAddressPrivate,       // 10/8, 172.16/12, 192.168/16, 169.254/16 and 100.64/10: inside a home's or a carrier's network
+	kRelayAddressLoopback       // 127/8: this machine itself
+};
+
+// The rule for an address, given with its first number in the highest byte (192.168.0.1 is 0xC0A80001). Private and loopback addresses
+// are refused unless developer is true (-dev), so that a relay on this machine or this network can be tested.
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer);
+
+// The words for a refusal of an address, for the log: never the address itself
+const char *RelayList_AddressWords(RelayAddressRefusal why);
 
 // What a host puts on the list. The texts are the game's own, already fitted (RelayList_FitText).
 struct RelayListListing

@@ -824,6 +824,84 @@ static void TestTheMenus()
 	Check(Has(menus, "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())"), "and an answer from the list sets the page up again");
 }
 
+// An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it
+static uint32_t Address(unsigned a, unsigned b, unsigned c, unsigned d)
+{
+	return (static_cast<uint32_t>(a) << 24) | (static_cast<uint32_t>(b) << 16) | (static_cast<uint32_t>(c) << 8) | static_cast<uint32_t>(d);
+}
+
+static void TestAddresses()
+{
+	puts("15. the address a relay's name looks up to");
+
+	struct Case
+	{
+		uint32_t address;
+		RelayAddressRefusal played;      // without -dev
+		RelayAddressRefusal developer;   // with -dev
+		const char *what;
+	};
+
+	Case const cases[] = {
+		{ Address(8, 8, 8, 8), kRelayAddressUsable, kRelayAddressUsable, "an address out on the internet is used" },
+		{ Address(223, 255, 255, 255), kRelayAddressUsable, kRelayAddressUsable, "and so is the last one before the multicast block" },
+		{ Address(0, 0, 0, 0), kRelayAddressThisNetwork, kRelayAddressThisNetwork, "ANY, 0.0.0.0, is refused, -dev or not" },
+		{ Address(0, 1, 2, 3), kRelayAddressThisNetwork, kRelayAddressThisNetwork, "and all of 0.0.0.0/8" },
+		{ Address(1, 0, 0, 0), kRelayAddressUsable, kRelayAddressUsable, "but not 1.0.0.0, just past it" },
+		{ Address(255, 255, 255, 255), kRelayAddressBroadcast, kRelayAddressBroadcast, "the broadcast address is refused, -dev or not" },
+		{ Address(224, 0, 0, 1), kRelayAddressMulticast, kRelayAddressMulticast, "a multicast address is refused, -dev or not" },
+		{ Address(239, 255, 255, 255), kRelayAddressMulticast, kRelayAddressMulticast, "up to the last of them" },
+		{ Address(240, 0, 0, 1), kRelayAddressReserved, kRelayAddressReserved, "an address set aside is refused, -dev or not" },
+		{ Address(255, 255, 255, 254), kRelayAddressReserved, kRelayAddressReserved, "up to the one before broadcast" },
+		{ Address(127, 0, 0, 1), kRelayAddressLoopback, kRelayAddressUsable, "this machine's own address only with -dev" },
+		{ Address(10, 1, 2, 3), kRelayAddressPrivate, kRelayAddressUsable, "10/8 only with -dev" },
+		{ Address(172, 16, 0, 1), kRelayAddressPrivate, kRelayAddressUsable, "172.16/12 only with -dev" },
+		{ Address(172, 31, 255, 255), kRelayAddressPrivate, kRelayAddressUsable, "up to its last" },
+		{ Address(172, 15, 255, 255), kRelayAddressUsable, kRelayAddressUsable, "but not 172.15.255.255, just before it" },
+		{ Address(172, 32, 0, 0), kRelayAddressUsable, kRelayAddressUsable, "nor 172.32.0.0, just after it" },
+		{ Address(192, 168, 1, 1), kRelayAddressPrivate, kRelayAddressUsable, "192.168/16 only with -dev" },
+		{ Address(192, 169, 0, 1), kRelayAddressUsable, kRelayAddressUsable, "but not 192.169.0.1" },
+		{ Address(169, 254, 1, 1), kRelayAddressPrivate, kRelayAddressUsable, "169.254/16 only with -dev" },
+		{ Address(100, 64, 0, 1), kRelayAddressPrivate, kRelayAddressUsable, "100.64/10, a carrier's own, only with -dev" },
+		{ Address(100, 127, 255, 255), kRelayAddressPrivate, kRelayAddressUsable, "up to its last" },
+		{ Address(100, 63, 255, 255), kRelayAddressUsable, kRelayAddressUsable, "but not 100.63.255.255, just before it" },
+		{ Address(100, 128, 0, 0), kRelayAddressUsable, kRelayAddressUsable, "nor 100.128.0.0, just after it" },
+	};
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+	{
+		bool const right = RelayList_AddressRefusal(cases[i].address, false) == cases[i].played &&
+			RelayList_AddressRefusal(cases[i].address, true) == cases[i].developer;
+		Check(right, cases[i].what);
+	}
+
+	bool allHaveWords = true;
+	bool allDiffer = true;
+
+	for (int a = kRelayAddressUsable; a <= kRelayAddressLoopback; a++)
+	{
+		const char *const words = RelayList_AddressWords(static_cast<RelayAddressRefusal>(a));
+		allHaveWords = allHaveWords && words && words[0] && strstr(words, "no words") == NULL;
+
+		for (int b = kRelayAddressUsable; b < a; b++)
+		{
+			allDiffer = allDiffer && strcmp(words, RelayList_AddressWords(static_cast<RelayAddressRefusal>(b))) != 0;
+		}
+	}
+
+	Check(allHaveWords && allDiffer, "each refusal of an address has words of its own");
+
+	// Where the names are looked up: on the list's own thread, IPv4 only, each address held to the rule before the relay is kept
+	std::string const source = ReadSource("3dc/relay_list.cpp");
+	std::string const thread = SourceSlice(source, "// ---- The list's thread", "// Makes the store and starts the thread", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(thread, "getaddrinfo(name, NULL, &hints, &found)") && Has(thread, "hints.ai_family = AF_INET;"),
+		"a relay's name is looked up on the list's own thread, IPv4 only");
+	Check(Has(thread, "RelayList_AddressRefusal(ntohl(address), shared->developer)") && Has(thread, "if (why != kRelayAddressUsable)"),
+		"and a relay whose address the rule refuses is left out");
+	Check(CountOf(source, "getaddrinfo(") == 1 && !Has(source, "enet_address_set_host") && !Has(source, "gethostbyname"),
+		"and nowhere else in relay_list.cpp looks a name up");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -840,6 +918,7 @@ int main()
 	TestModeWords();
 	TestTheCalls();
 	TestTheMenus();
+	TestAddresses();
 
 	if (checksFailed)
 	{

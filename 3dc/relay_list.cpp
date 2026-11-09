@@ -13,6 +13,10 @@
 // The game's log isn't written from two threads at once, so the list's thread never writes to it. It leaves its news in the store, and
 // the main thread writes it, the next time it calls in here.
 //
+// The relays: their names are looked up on this file's thread too, as soon as the list names them, so the game's own thread never waits for
+// the network's name service. An address that can't be a relay's (RelayList_AddressRefusal: this network, everyone at once, many machines
+// at once, set aside, or, outside -dev, private or this machine) leaves its relay out.
+//
 // HTTPS: WinHTTP, Windows' own. TLS 1.2 or newer. Windows checks the list's certificate, and a certificate it doesn't accept ends the call:
 // nothing here can turn that check off. Redirects, cookies and sign-ins are all turned off, since the list never needs them, and a redirect
 // could send the game somewhere else. Each step has 5 seconds.
@@ -25,6 +29,7 @@
 #include "coop_lobby.h"
 #include "relay_list.h"
 
+#include <ws2tcpip.h>
 #include <winhttp.h>
 #include <string.h>
 #include <wchar.h>
@@ -32,6 +37,9 @@
 
 // WinHTTP's library, which comes with Windows
 #pragma comment(lib, "winhttp.lib")
+
+// -dev, the developer tools (d3d_render.cpp, set from the command line before the menus start)
+extern int DevMode;
 
 // RelayList_ModeWords has the game styles in the order of NETGAME_TYPE. If that order ever changes, this stops the build.
 static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStanding == 2 && NGT_PredatorTag == 3 && NGT_Coop == 4 &&
@@ -101,6 +109,7 @@ namespace
 
 		wchar_t server[256];             // the list's name and port, set before the thread starts, and never changed
 		INTERNET_PORT port;
+		bool developer;                  // -dev: a relay on this machine or this network may be used, for a test
 
 		// The host's game. listingNumber goes up each time the listing changes, a newer pass included.
 		bool hostWanted;
@@ -467,6 +476,37 @@ namespace
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	// Looks a relay's name up, as ENet does: IPv4 only. The first address the name service gives, in network byte order, as ENetAddress.host
+	// keeps it. False if the name gives none.
+	bool LookUp(const char *name, uint32_t *address)
+	{
+		addrinfo hints;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_DGRAM;
+
+		addrinfo *found = NULL;
+
+		if (getaddrinfo(name, NULL, &hints, &found) != 0 || !found)
+		{
+			return false;
+		}
+
+		bool got = false;
+
+		for (const addrinfo *a = found; a && !got; a = a->ai_next)
+		{
+			if (a->ai_family == AF_INET && a->ai_addr && a->ai_addrlen >= sizeof(sockaddr_in))
+			{
+				*address = reinterpret_cast<const sockaddr_in *>(a->ai_addr)->sin_addr.s_addr;
+				got = true;
+			}
+		}
+
+		freeaddrinfo(found);
+		return got;
+	}
+
 	void ReadTheRelays(void)
 	{
 		Answer const a = Call(L"GET", L"/v1/relays", NULL, relaysAnswer, sizeof(relaysAnswer));
@@ -492,9 +532,36 @@ namespace
 			return;
 		}
 
+		// Each relay's name is looked up here, on this thread, so the game's own thread never waits for the network's name service. A
+		// relay whose name gives no address, or an address that can't be a relay's (RelayList_AddressRefusal), is left out.
+		int kept = 0;
+
+		for (int i = 0; i < count; i++)
+		{
+			uint32_t address = 0;
+
+			if (!LookUp(relaysRead[i].host, &address))
+			{
+				Tell("Relay list: a relay's name gave no address, so that relay is left out");
+				continue;
+			}
+
+			RelayAddressRefusal const why = RelayList_AddressRefusal(ntohl(address), shared->developer);
+
+			if (why != kRelayAddressUsable)
+			{
+				Tell(RelayList_AddressWords(why));
+				continue;
+			}
+
+			relaysRead[kept] = relaysRead[i];
+			relaysRead[kept].address = address;
+			kept++;
+		}
+
 		EnterCriticalSection(&shared->lock);
-		memcpy(shared->relays, relaysRead, sizeof(RelayListRelay) * static_cast<size_t>(count));
-		shared->relayCount = count;
+		memcpy(shared->relays, relaysRead, sizeof(RelayListRelay) * static_cast<size_t>(kept));
+		shared->relayCount = kept;
 		shared->relaysKnown = true;
 		LeaveCriticalSection(&shared->lock);
 	}
@@ -605,6 +672,17 @@ namespace
 		}
 
 		made->port = static_cast<INTERNET_PORT>(Relay_ListPort());
+		made->developer = DevMode != 0;
+
+		// The name service is Windows' sockets', which have to be started on this thread's behalf too. ENet starts them as well. Each start
+		// is counted by Windows, and this one is kept for as long as the game runs, as the thread is.
+		WSADATA sockets;
+
+		if (WSAStartup(MAKEWORD(2, 2), &sockets) != 0)
+		{
+			LogString("Relay list: couldn't start, so hosts aren't listed and the list can't be read");
+			return false;
+		}
 
 		if (!made->wake)
 		{

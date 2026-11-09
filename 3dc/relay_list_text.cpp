@@ -1041,6 +1041,64 @@ bool RelayList_IsRegion(const char *region)
 	return n >= 1;
 }
 
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer)
+{
+	// Whether address is in the block that starts at first and has its leading `prefix` bits in common with it
+	auto const in = [address](uint32_t first, int prefix)
+	{
+		uint32_t const mask = 0xFFFFFFFFu << (32 - prefix);
+		return (address & mask) == (first & mask);
+	};
+
+	if (in(0x00000000u, 8))
+	{
+		return kRelayAddressThisNetwork;
+	}
+
+	if (address == 0xFFFFFFFFu)
+	{
+		return kRelayAddressBroadcast;
+	}
+
+	if (in(0xE0000000u, 4))
+	{
+		return kRelayAddressMulticast;
+	}
+
+	if (in(0xF0000000u, 4))
+	{
+		return kRelayAddressReserved;
+	}
+
+	if (!developer && in(0x7F000000u, 8))
+	{
+		return kRelayAddressLoopback;
+	}
+
+	if (!developer && (in(0x0A000000u, 8) || in(0xAC100000u, 12) || in(0xC0A80000u, 16) || in(0xA9FE0000u, 16) || in(0x64400000u, 10)))
+	{
+		return kRelayAddressPrivate;
+	}
+
+	return kRelayAddressUsable;
+}
+
+const char *RelayList_AddressWords(RelayAddressRefusal why)
+{
+	switch (why)
+	{
+		case kRelayAddressUsable: return "the relay's address can be used";
+		case kRelayAddressThisNetwork: return "the relay's name looked up to an address that means this network, not a machine";
+		case kRelayAddressBroadcast: return "the relay's name looked up to the address for everyone on this network";
+		case kRelayAddressMulticast: return "the relay's name looked up to an address for many machines at once";
+		case kRelayAddressReserved: return "the relay's name looked up to an address that's never used on the internet";
+		case kRelayAddressPrivate: return "the relay's name looked up to an address inside a private network, which only -dev allows";
+		case kRelayAddressLoopback: return "the relay's name looked up to this machine's own address, which only -dev allows";
+	}
+
+	return "the relay's address was refused for a reason with no words";
+}
+
 bool RelayList_IsRelayHost(const char *host)
 {
 	if (!host || strlen(host) > kRelayListHostLetters || !Relay_IsServerName(host))

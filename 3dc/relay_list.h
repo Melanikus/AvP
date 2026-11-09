@@ -51,6 +51,8 @@ void RelayList_HostRoomClosed(void);
 void RelayList_FindRelays(void);
 
 // The relays from the last good answer, into relays, which has room for kRelayListMostRelays. False while there's been no good answer.
+// Each one's name has been looked up already, on the list's own thread, so the game's thread never waits for that: only the relays whose
+// name gave an address that can be a relay's are here (RelayList_AddressRefusal), each with its address.
 bool RelayList_Relays(RelayListRelay *relays, int *count);
 
 // ---- Finding games. The menus call these.
