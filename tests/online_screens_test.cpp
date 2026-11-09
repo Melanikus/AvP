@@ -541,24 +541,43 @@ static void TestWords()
 	OnlineScreens_RoomGoneWords(NULL, words, sizeof(words));
 	Check(strcmp(words, "Your game's room on the relay has gone") == 0, "and with no reason, only that it's gone");
 
-	// The line kept up in play, on both copies of a game through a relay
-	OnlineScreens_PlayLineWords(true, "virginia", 41, words, sizeof(words));
-	Check(strcmp(words, "Hosting through virginia, 41 ms") == 0, "in play, the host's line names its relay and its round trip");
+	// The line kept up in play, on both copies of a game through a relay, in the owner's words, each time saying what it measures
+	char line[160];
 
-	OnlineScreens_PlayLineWords(false, "virginia", 63, words, sizeof(words));
-	Check(strcmp(words, "Joined through virginia, 63 ms") == 0, "and a joiner's names the game's relay and its round trip to the host");
+	OnlineScreens_PlayLineWords(true, "nyc3", 41, -1, line, sizeof(line));
+	Check(strcmp(line, "HOST, Relay: nyc3, 41 ms (round trip, host to server)") == 0, "in play, the host's line names its relay and its round trip");
 
-	OnlineScreens_PlayLineWords(false, "virginia", -1, words, sizeof(words));
-	Check(strcmp(words, "Joined through virginia") == 0, "until a round trip is measured, the line leaves the time out");
+	OnlineScreens_PlayLineWords(false, "nyc3", 63, -1, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: nyc3, 63 ms (round trip, client to host through server)") == 0,
+		"and a joiner's names the game's relay and its round trip to the host");
 
-	OnlineScreens_PlayLineWords(true, "paris", 2000000000, words, sizeof(words));
-	Check(strcmp(words, "Hosting through paris, 9999 ms") == 0, "a round trip past 9999 ms is shown as 9999, in play too");
+	OnlineScreens_PlayLineWords(false, "nyc3", 290, 146, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server), 146 ms round trip to server") == 0,
+		"a joiner's own round trip to the server follows, when the games page measured one");
 
-	OnlineScreens_PlayLineWords(true, "", 12, words, sizeof(words));
-	Check(strcmp(words, "Hosting through a relay, 12 ms") == 0, "a region that isn't known is said as a relay");
+	OnlineScreens_PlayLineWords(true, "nyc3", 41, 146, line, sizeof(line));
+	Check(strcmp(line, "HOST, Relay: nyc3, 41 ms (round trip, host to server)") == 0, "but a host has no such time, so none is said");
 
-	OnlineScreens_PlayLineWords(false, longRegion.c_str(), 7, words, sizeof(words));
-	Check(strlen(words) == strlen("Joined through , 7 ms") + kRelayListRegionLetters, "in play too, a region is cut to 16 letters");
+	OnlineScreens_PlayLineWords(false, "nyc3", -1, 146, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: nyc3") == 0, "until a round trip is measured, the line leaves the times out");
+
+	OnlineScreens_PlayLineWords(true, "paris", 2000000000, -1, line, sizeof(line));
+	Check(strcmp(line, "HOST, Relay: paris, 9999 ms (round trip, host to server)") == 0, "a round trip past 9999 ms is shown as 9999, in play too");
+
+	OnlineScreens_PlayLineWords(false, "paris", 12, 2000000000, line, sizeof(line));
+	Check(strcmp(line, "CLIENT, Relay: paris, 12 ms (round trip, client to host through server), 9999 ms round trip to server") == 0,
+		"and so is a joiner's time to the server");
+
+	OnlineScreens_PlayLineWords(true, "", 12, -1, line, sizeof(line));
+	Check(strcmp(line, "HOST, Relay: a relay, 12 ms (round trip, host to server)") == 0, "a region that isn't known is said as a relay");
+
+	OnlineScreens_PlayLineWords(false, longRegion.c_str(), 7, -1, line, sizeof(line));
+	Check(strlen(line) == strlen("CLIENT, Relay: , 7 ms (round trip, client to host through server)") + kRelayListRegionLetters,
+		"in play too, a region is cut to 16 letters");
+
+	char small[20];
+	OnlineScreens_PlayLineWords(false, "nyc3", 290, 146, small, sizeof(small));
+	Check(small[sizeof(small) - 1] == '\0' && strlen(small) == sizeof(small) - 1, "a line too long for its room is cut, and still ends with a 0");
 }
 
 int main()

@@ -623,6 +623,26 @@
 					"to": "piece.corner[2].y = Pixel(atY - aheadY * length * 0.60);"
 				}
 			]
+		},
+		{
+			"name": "the joiner's own time to the server is never said",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "else if (serverMs < 0)",
+					"to": "else if (true)"
+				}
+			]
+		},
+		{
+			"name": "the host's line doesn't say what its time measures",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"%s %s, %d ms (round trip, host to server)\"",
+					"to": "\"%s %s, %d ms\""
+				}
+			]
 		}
 	]
 }

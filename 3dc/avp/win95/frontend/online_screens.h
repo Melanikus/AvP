@@ -183,8 +183,8 @@ enum OnlineWords
 	kOnlineWordsListFailed,           // J1 and J2: the start of the line when the list of games didn't answer, before the list code's words
 	kOnlineWordsHostBusy,             // J5: the host was answering someone else
 	kOnlineWordsEscToAnswer,          // H1: in play, after the asking line, how the host gets to the answer
-	kOnlineWordsHostingThrough,       // the line kept up in play: a host's start
-	kOnlineWordsJoinedThrough,        //     and a joiner's
+	kOnlineWordsHostingThrough,       // the line kept up in play: a host's start, "HOST, Relay:"
+	kOnlineWordsJoinedThrough,        //     and a joiner's, "CLIENT, Relay:"
 	kOnlineWordsARelay,               //     in place of a region that isn't known
 	kOnlineWordsRelayFinding,         // H2
 	kOnlineWordsRelayListed,
@@ -212,10 +212,15 @@ void OnlineScreens_SayNoWords(const char *safeName, char *words, size_t size);
 void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size_t size);
 void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 
-// The line kept on the screen for as long as a game is played through a relay (the user: "I want the Hudsons showing server name and
-// ping"): "Hosting through virginia, 41 ms" on the host, "Joined through virginia, 63 ms" on a joiner. The region comes made safe already,
-// and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet) leaves the time out, and above 9999
-// is 9999. words always ends with a 0.
-void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size);
+// The line kept on the screen for as long as a game is played through a relay, in the owner's words (2026-11-09), each time saying what
+// it measures:
+//   the host:   "HOST, Relay: nyc3, 145 ms (round trip, host to server)", ms being its keep's time to the relay server and back;
+//   a joiner:   "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)", ms being ENet's time to the host and back,
+//               through the server, then ", 146 ms round trip to server" when serverMs isn't below 0: its own time to the server and
+//               back, as the games page measured it before the join.
+// The region comes made safe already, and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet)
+// leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
+// Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, and serverMs.
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, int serverMs, char *words, size_t size);
 
 #endif
