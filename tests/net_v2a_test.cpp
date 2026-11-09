@@ -72,7 +72,7 @@ struct Vectors
 	Bytes eP384Private, eP384Public, ekSeed, ekPublic, m, skemCiphertext, skemSecret;
 	Bytes playerP384Private, playerP384Public, playerKemSeed, playerKemPublic;   // pqIK: the player's static keys
 	Bytes a1, a2, a3, sessionId, transcript;
-	Bytes keyGameToRelay, keyRelayToGame, ivGameToRelay, ivRelayToGame;
+	Bytes secretGameToRelay, secretRelayToGame, ivGameToRelay, ivRelayToGame;   // Split: 48-byte secrets since the relay's 2b8dcd6
 	std::vector<Bytes> h, ck;
 };
 
@@ -120,8 +120,8 @@ static bool ReadVectors(const JsonValue &all, Vectors *v)
 	v->a3 = HexOf(a, "a3");
 	v->sessionId = HexOf(a, "sessionId");
 	v->transcript = HexOf(a, "transcript");
-	v->keyGameToRelay = HexOf(split, "keyGameToRelay");
-	v->keyRelayToGame = HexOf(split, "keyRelayToGame");
+	v->secretGameToRelay = HexOf(split, "secretGameToRelay");
+	v->secretRelayToGame = HexOf(split, "secretRelayToGame");
 	v->ivGameToRelay = HexOf(split, "ivGameToRelay");
 	v->ivRelayToGame = HexOf(split, "ivRelayToGame");
 
@@ -217,11 +217,11 @@ static void TheVectors(const Vectors &v)
 	ACheck(read == kNetHandshakeAOk, "the relay's A2 is read");
 	ACheck(read == kNetHandshakeAOk && Same(v.a3, a3, sizeof(a3)), "A3 is the relay's own, byte for byte");
 	ACheck(read == kNetHandshakeAOk && Same(v.sessionId, keys.sessionId, sizeof(keys.sessionId)), "the session id is the one A2 sealed");
-	ACheck(read == kNetHandshakeAOk && Same(v.keyGameToRelay, keys.split.initiatorToResponderKey, kNetCryptoAesKeyBytes) &&
-		Same(v.keyRelayToGame, keys.split.responderToInitiatorKey, kNetCryptoAesKeyBytes) &&
+	ACheck(read == kNetHandshakeAOk && Same(v.secretGameToRelay, keys.split.initiatorToResponderSecret, kNetNoiseSecretBytes) &&
+		Same(v.secretRelayToGame, keys.split.responderToInitiatorSecret, kNetNoiseSecretBytes) &&
 		Same(v.ivGameToRelay, keys.split.initiatorToResponderIv, kNetCryptoNonceBytes) &&
 		Same(v.ivRelayToGame, keys.split.responderToInitiatorIv, kNetCryptoNonceBytes),
-		"Split's two keys and two IVs are the relay's, the game being the initiator");
+		"Split's two secrets and two IVs are the relay's, the game being the initiator");
 	ACheck(read == kNetHandshakeAOk && Same(v.transcript, keys.transcript, sizeof(keys.transcript)), "the transcript is h after A3, the relay's");
 
 	int stepsRight = 0;
@@ -418,8 +418,8 @@ static NetHandshakeAKeys FileKeys(const Vectors &v)
 {
 	NetHandshakeAKeys keys;
 	memset(&keys, 0, sizeof(keys));
-	memcpy(keys.split.initiatorToResponderKey, v.keyGameToRelay.data(), kNetCryptoAesKeyBytes);
-	memcpy(keys.split.responderToInitiatorKey, v.keyRelayToGame.data(), kNetCryptoAesKeyBytes);
+	memcpy(keys.split.initiatorToResponderSecret, v.secretGameToRelay.data(), kNetNoiseSecretBytes);
+	memcpy(keys.split.responderToInitiatorSecret, v.secretRelayToGame.data(), kNetNoiseSecretBytes);
 	memcpy(keys.split.initiatorToResponderIv, v.ivGameToRelay.data(), kNetCryptoNonceBytes);
 	memcpy(keys.split.responderToInitiatorIv, v.ivRelayToGame.data(), kNetCryptoNonceBytes);
 	memcpy(keys.sessionId, v.sessionId.data(), kNetHandshakeSessionIdBytes);
@@ -437,7 +437,8 @@ static void RelaySide(NetSealedControl *c)
 
 static void TheSealedChannel(const JsonValue &all, const Vectors &v)
 {
-	if (v.keyGameToRelay.size() != kNetCryptoAesKeyBytes || v.ivGameToRelay.size() != kNetCryptoNonceBytes ||
+	if (v.secretGameToRelay.size() != kNetNoiseSecretBytes || v.secretRelayToGame.size() != kNetNoiseSecretBytes ||
+		v.ivGameToRelay.size() != kNetCryptoNonceBytes || v.ivRelayToGame.size() != kNetCryptoNonceBytes ||
 		v.sessionId.size() != kNetHandshakeSessionIdBytes)
 	{
 		ACheck(false, "the file's split and session id, for the sealed channel");
