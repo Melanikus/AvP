@@ -150,6 +150,9 @@
     <ClCompile Include="..\..\3dc\net_crypto_cng.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\net_identity_store.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_pq_native.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -936,6 +939,9 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
@@ -1373,6 +1379,15 @@
     <ClInclude Include="..\..\3dc\net_identity.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_identity_file.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_identity_store.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_identity_run.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_b.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1686,6 +1701,12 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h">

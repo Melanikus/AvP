@@ -321,6 +321,34 @@ NetEcdhKey *NetCrypto_EcdhFromPrivate(const uint8_t privateKey[kNetCryptoP384Sca
 	return kept;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (#21): see net_crypto.h. A key BCryptGenerateKeyPair made can be exported this way; the
+// blob is X, Y and then d, and only d is given back.
+bool NetCrypto_EcdhExportPrivate(NetEcdhKey *key, uint8_t privateOut[kNetCryptoP384ScalarBytes])
+{
+	if (!privateOut)
+	{
+		return false;
+	}
+
+	EccPrivateBlob blob;
+	ULONG got = 0;
+	bool const ok = key && key->key &&
+		NT_SUCCESS(BCryptExportKey(key->key, NULL, BCRYPT_ECCPRIVATE_BLOB, reinterpret_cast<PUCHAR>(&blob), sizeof(blob), &got, 0)) &&
+		got == sizeof(blob) && blob.header.dwMagic == BCRYPT_ECDH_PRIVATE_P384_MAGIC && blob.header.cbKey == kNetCryptoP384ScalarBytes;
+
+	if (ok)
+	{
+		memcpy(privateOut, blob.xyd + 2 * kNetCryptoP384ScalarBytes, kNetCryptoP384ScalarBytes);
+	}
+	else
+	{
+		NetCrypto_Wipe(privateOut, kNetCryptoP384ScalarBytes);
+	}
+
+	NetCrypto_Wipe(&blob, sizeof(blob));
+	return ok;
+}
+
 bool NetCrypto_EcdhAgree(NetEcdhKey *mine, const uint8_t theirs[kNetCryptoP384PublicBytes], uint8_t secretOut[kNetCryptoP384ScalarBytes])
 {
 	if (!secretOut)

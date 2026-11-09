@@ -578,7 +578,7 @@ static void TestWords()
 	bool allHaveWords = true;
 	bool allDiffer = true;
 
-	for (int a = kRelayListAccepted; a <= kRelayListBadFingerprint; a++)
+	for (int a = kRelayListAccepted; a <= kRelayListNotOurKey; a++)
 	{
 		const char *const words = RelayList_RefusalWords(static_cast<RelayListRefusal>(a));
 		allHaveWords = allHaveWords && words && words[0] && strstr(words, "no words") == NULL;
@@ -1196,6 +1196,276 @@ static void TestAddresses()
 		"and nowhere else in relay_list.cpp looks a name up");
 }
 
+// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+
+static void TestAccessCodes()
+{
+	puts("16. the access code made from a fingerprint");
+
+	// The same examples are in the server's own test of its approve command, so both sides make the same code from the same fingerprint.
+	// They were worked out a second way, with whole-number arithmetic rather than bit by bit (Fourth's access-code.js, 2026-11-09).
+	struct Example
+	{
+		const char *fingerprint;
+		const char *code;
+		const char *what;
+	};
+
+	Example const examples[] = {
+		{ "00000000000000000000000000000000", "2222-2222-2222-2222", "all 0 is the alphabet's first letter, 16 times" },
+		{ "ffffffffffffffffffffffffffffffff", "ZZZZ-ZZZZ-ZZZZ-ZZZZ", "all 1s is its last" },
+		{ "000102030405060708090a0b0c0d0e0f", "222J-62S6-2N52-G42B", "a fingerprint counting up" },
+		{ "0123456789abcdef0123456789abcdef", "26KN-CTWB-PH8Y-Y2B5", "another" },
+		{ "f0e1d2c3b4a5968778695a4b3c2d1e0f", "Y5JX-7JXN-NQDA-GY5B", "and one counting down" },
+		{ "80000000000000000000000000000000", "J222-2222-2222-2222", "the highest bit of the first byte is the first letter's highest" },
+		{ "00000000000000000001000000000000", "2222-2222-2222-2223", "the 80th bit is the last letter's lowest" },
+		{ "0000000000000000000000ffffffffff", "2222-2222-2222-2222", "bits past the 80th make no difference" },
+		{ "08421084210842108421000000000000", "3333-3333-3333-3333", "and each letter is exactly 5 bits" }
+	};
+
+	for (size_t i = 0; i < sizeof(examples) / sizeof(examples[0]); i++)
+	{
+		uint8_t fingerprint[kNetIdentityFingerprintBytes];
+		char code[kRelayAccessCodeTextBytes];
+		memset(code, 'x', sizeof(code));
+		bool const read = NetIdentity_FingerprintFromHex(examples[i].fingerprint, fingerprint);
+		RelayAccess_Code(fingerprint, code);
+		Check(read && strcmp(code, examples[i].code) == 0, examples[i].what);
+
+		if (read && strcmp(code, examples[i].code) != 0)
+		{
+			printf("          it made %.20s, not %s\n", code, examples[i].code);
+		}
+	}
+}
+
+static void TestAccessNames()
+{
+	puts("17. the name an access request is sent with");
+
+	Check(RelayAccess_NameRefusal("Melanikus") == kRelayAccessNameGood && RelayAccess_NameRefusal("A") == kRelayAccessNameGood &&
+		RelayAccess_NameRefusal("Dwayne Hicks") == kRelayAccessNameGood, "a plain name can be sent, with spaces inside it");
+	Check(RelayAccess_NameRefusal("ABCDEFGHIJKLMNO") == kRelayAccessNameGood, "and one of 15 letters");
+	Check(RelayAccess_NameRefusal("ABCDEFGHIJKLMNOP") == kRelayAccessNameTooLong, "but not one of 16");
+	Check(RelayAccess_NameRefusal("") == kRelayAccessNameEmpty && RelayAccess_NameRefusal(NULL) == kRelayAccessNameEmpty, "nor an empty one");
+	Check(RelayAccess_NameRefusal(" Ripley") == kRelayAccessNameSpaceAtAnEnd && RelayAccess_NameRefusal("Ripley ") == kRelayAccessNameSpaceAtAnEnd,
+		"nor one with a space first or last");
+	Check(RelayAccess_NameRefusal("Bishop\"") == kRelayAccessNameBadLetter && RelayAccess_NameRefusal("C:\\Bishop") == kRelayAccessNameBadLetter,
+		"nor one with a \" or a \\, which would need escaping");
+	Check(RelayAccess_NameRefusal("Bis\thop") == kRelayAccessNameBadLetter && RelayAccess_NameRefusal("Bis\x7Fhop") == kRelayAccessNameBadLetter &&
+		RelayAccess_NameRefusal("Jos\xE9") == kRelayAccessNameBadLetter && RelayAccess_NameRefusal("\x1B[2J") == kRelayAccessNameBadLetter,
+		"nor one with a tab, a delete, a letter outside ASCII, or a terminal's escape");
+
+	bool everyOtherSignGoes = true;
+
+	for (int c = 0x20; c <= 0x7E; c++)
+	{
+		char name[4] = { 'a', static_cast<char>(c), 'b', '\0' };
+		bool const allowed = c != '"' && c != '\\';
+		everyOtherSignGoes = everyOtherSignGoes && ((RelayAccess_NameRefusal(name) == kRelayAccessNameGood) == allowed);
+	}
+
+	Check(everyOtherSignGoes, "every other printable character can be in a name, and those two can't");
+
+	char name[kRelayAccessNameMostBytes + 1];
+	RelayAccess_NameFromProfile("Melanikus", 16, name);
+	Check(strcmp(name, "Melanikus") == 0, "a profile's name is the name to start from");
+	RelayAccess_NameFromProfile("  Ripley  ", 16, name);
+	Check(strcmp(name, "Ripley") == 0, "with the spaces at its ends taken off");
+	RelayAccess_NameFromProfile("Jos\xE9 \"Hicks\"", 16, name);
+	Check(strcmp(name, "Jos Hicks") == 0, "and the letters a name can't have left out");
+	RelayAccess_NameFromProfile("ABCDEFGHIJKLMNOPQRST", 32, name);
+	Check(strcmp(name, "ABCDEFGHIJKLMNO") == 0, "cut to 15 letters");
+	RelayAccess_NameFromProfile("ABCDEFGHIJKLMN P", 32, name);
+	Check(strcmp(name, "ABCDEFGHIJKLMN") == 0 && RelayAccess_NameRefusal(name) == kRelayAccessNameGood,
+		"and with a space the cut leaves at the end taken off too");
+	RelayAccess_NameFromProfile("ABCDEFGH", 4, name);
+	Check(strcmp(name, "ABCD") == 0, "a profile's name is read no further than its room, ended or not");
+	RelayAccess_NameFromProfile("\xE9\xE9\"\\", 16, name);
+	Check(name[0] == '\0', "a name with nothing left is empty, for the player to type one");
+	RelayAccess_NameFromProfile(NULL, 16, name);
+	Check(name[0] == '\0', "and so is no name at all");
+
+	// The page's words for each reason are access_page_test's to check (AccessPage_NameText)
+}
+
+// A made-up identity's public halves: 04, then byte i is (i * 37 + 11) & 255, the same as access-code.js
+static void MadeUpStatics(uint8_t statics[kNetIdentityStaticBytes])
+{
+	statics[0] = 0x04;
+
+	for (size_t i = 1; i < kNetIdentityStaticBytes; i++)
+	{
+		statics[i] = static_cast<uint8_t>((i * 37 + 11) & 255);
+	}
+}
+
+static void TestAccessBody()
+{
+	puts("18. the body of an access request");
+
+	uint8_t statics[kNetIdentityStaticBytes];
+	MadeUpStatics(statics);
+	char body[kRelayAccessMostBodyBytes + 1];
+	Check(RelayList_AccessBody("Melanikus", statics, body, sizeof(body)), "a request with a good name and an identity's key is written");
+
+	std::string const text = body;
+	std::string const start = "{\"v\":1,\"name\":\"Melanikus\",\"key\":\"";
+	Check(text.compare(0, start.size(), start) == 0 && text.size() == start.size() + kRelayAccessKeyLetters + 2 &&
+		text.compare(text.size() - 2, 2, "\"}") == 0, "it's {\"v\":1,\"name\":\"...\",\"key\":\"...\"}, and the key is exactly 2,220 letters");
+
+	std::string const key = text.size() > start.size() + 2 ? text.substr(start.size(), text.size() - start.size() - 2) : std::string();
+	Check(key.compare(0, 12, "BDBVep/E6Q4z") == 0 && key.size() >= 12 && key.compare(key.size() - 12, 12, "Y4it0vccQWaL") == 0 &&
+		key.find('=') == std::string::npos, "it starts and ends as standard base64 does it, with no = at the end");
+
+	// Read back here, a letter at a time, to the bytes it was made from
+	static const char kLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	bool readsBack = key.size() == kRelayAccessKeyLetters;
+
+	for (size_t i = 0; readsBack && i + 4 <= key.size(); i += 4)
+	{
+		uint32_t three = 0;
+
+		for (size_t j = 0; j < 4; j++)
+		{
+			const char *const at = strchr(kLetters, key[i + j]);
+			readsBack = readsBack && at != NULL && *at != '\0';
+			three = three * 64 + (at ? static_cast<uint32_t>(at - kLetters) : 0);
+		}
+
+		size_t const byte = i / 4 * 3;
+		readsBack = readsBack && statics[byte] == ((three >> 16) & 255) && statics[byte + 1] == ((three >> 8) & 255) &&
+			statics[byte + 2] == (three & 255);
+	}
+
+	Check(readsBack, "and it reads back to the identity's public halves, every byte");
+
+	Check(!RelayList_AccessBody("Bishop\"", statics, body, sizeof(body)) && body[0] == '\0', "a name that breaks the rule isn't sent");
+	Check(!RelayList_AccessBody("", statics, body, sizeof(body)) && body[0] == '\0', "nor an empty one");
+
+	uint8_t none[kNetIdentityStaticBytes] = {};
+	Check(!RelayList_AccessBody("Melanikus", none, body, sizeof(body)) && body[0] == '\0' &&
+		!RelayList_AccessBody("Melanikus", NULL, body, sizeof(body)), "nor an identity that was never made");
+
+	size_t const needed = text.size() + 1;
+	Check(!RelayList_AccessBody("Melanikus", statics, body, needed - 1) && body[0] == '\0', "a body with a byte too little room isn't written");
+	Check(RelayList_AccessBody("Melanikus", statics, body, needed), "and one with exactly its room is");
+	Check(needed - 1 > kRelayListMostBodyBytes && needed - 1 <= kRelayAccessMostBodyBytes,
+		"it's bigger than the 1 KB the list's other calls take, and within the 4 KB this one does");
+}
+
+// Reads an access answer, and gives back the refusal; answer is left alone unless it was read
+static RelayListRefusal Access(int status, const std::string &body, const uint8_t *ours, RelayAccessAnswer *answer)
+{
+	return RelayList_ReadAccess(status, body.data(), body.size(), ours, answer);
+}
+
+static void TestAccessAnswers()
+{
+	puts("19. the answer to an access request");
+
+	const char *const ourHex = "0123456789abcdef0123456789abcdef";
+	uint8_t ours[kNetIdentityFingerprintBytes];
+	NetIdentity_FingerprintFromHex(ourHex, ours);
+	std::string const fp = std::string("\"fp\":\"") + ourHex + "\"";
+
+	RelayAccessAnswer answer = kRelayAccessClosed;
+	bool allFour = Access(200, "{\"v\":1," + fp + ",\"state\":\"waiting\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessWaiting;
+	allFour = allFour && Access(200, "{\"v\":1," + fp + ",\"state\":\"approved\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessApproved;
+	allFour = allFour && Access(200, "{\"v\":1," + fp + ",\"state\":\"refused\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessRefused;
+	allFour = allFour && Access(200, "{\"v\":1," + fp + ",\"state\":\"revoked\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessRevoked;
+	Check(allFour, "each of the four states is read, about this PC's own key");
+
+	Check(Access(200, " {\n \"state\" : \"approved\" , " + fp + ", \"v\":1 }\n", ours, &answer) == kRelayListAccepted && answer == kRelayAccessApproved,
+		"with the fields in any order, and spaces between them");
+
+	bool allErrors = Access(400, "{\"v\":1,\"error\":\"name\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessBadName;
+	allErrors = allErrors && Access(400, "{\"v\":1,\"error\":\"key\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessBadKey;
+	allErrors = allErrors && Access(400, "{\"v\":1,\"error\":\"shape\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessBadShape;
+	allErrors = allErrors && Access(429, "{\"v\":1,\"error\":\"busy\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessBusy;
+	allErrors = allErrors && Access(503, "{\"v\":1,\"error\":\"closed\"}", ours, &answer) == kRelayListAccepted && answer == kRelayAccessClosed;
+	Check(allErrors, "and each error, with its own status");
+
+	// From here on every answer is refused, and answer has to be left as it was
+	RelayAccessAnswer const untouched = static_cast<RelayAccessAnswer>(99);
+
+	struct Bad
+	{
+		int status;
+		std::string body;
+		RelayListRefusal why;
+		const char *what;
+	};
+
+	std::string const waiting = "{\"v\":1," + fp + ",\"state\":\"waiting\"}";
+	Bad const bad[] = {
+		{ 201, waiting, kRelayListBadStatus, "a status other than 200, 400, 429 and 503 is refused: 201" },
+		{ 404, "{\"v\":1,\"error\":\"name\"}", kRelayListBadStatus, "404" },
+		{ 500, "{\"v\":1,\"error\":\"closed\"}", kRelayListBadStatus, "and 500" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"busy\"}", kRelayListBadWord, "an error's word as a state is refused" },
+		{ 429, "{\"v\":1,\"error\":\"name\"}", kRelayListBadWord, "and an error's word with another error's status" },
+		{ 503, "{\"v\":1,\"error\":\"busy\"}", kRelayListBadWord, "busy is 429's, not 503's" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"Waiting\"}", kRelayListBadWord, "a word in other letters is another word" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"approvedx\"}", kRelayListBadWord, "a word longer than any of the protocol's is refused" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"\"}", kRelayListBadWord, "and an empty one" },
+		{ 200, "{\"v\":1,\"fp\":\"0123456789abcdef0123456789abcdee\",\"state\":\"approved\"}", kRelayListNotOurKey,
+			"an approval for another key isn't taken for this PC's" },
+		{ 200, "{\"v\":1,\"fp\":\"0123456789ABCDEF0123456789ABCDEF\",\"state\":\"waiting\"}", kRelayListBadFingerprint,
+			"a fingerprint in capital letters isn't one" },
+		{ 200, "{\"v\":2," + fp + ",\"state\":\"waiting\"}", kRelayListBadNumber, "a version other than 1 is refused" },
+		{ 200, "{" + fp + ",\"state\":\"waiting\"}", kRelayListFieldMissing, "and an answer without one" },
+		{ 200, "{\"v\":1,\"state\":\"waiting\"}", kRelayListFieldMissing, "a state without its fingerprint is refused" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"waiting\",\"queue\":3}", kRelayListUnknownField, "and one with a field the protocol hasn't" },
+		{ 200, "{\"v\":1," + fp + ",\"state\":\"waiting\",\"state\":\"approved\"}", kRelayListFieldTwice, "and one with a field twice" },
+		{ 200, "{\"v\":1,\"error\":\"busy\"}", kRelayListUnknownField, "a 200 with an error is refused" },
+		{ 400, "{\"v\":1," + fp + ",\"state\":\"approved\"}", kRelayListUnknownField, "and a 400 with a state" },
+		{ 200, waiting + "{}", kRelayListMoreAfterTheEnd, "anything after the answer is refused" },
+		{ 200, "[" + waiting + "]", kRelayListNotAnObject, "an answer that isn't an object is refused" },
+		{ 200, "", kRelayListEndsTooSoon, "and an empty one" },
+		{ 200, waiting.substr(0, waiting.size() - 1), kRelayListEndsTooSoon, "and one that stops before its end" },
+		{ 200, std::string("{\"v\":1,\0", 8) + fp + ",\"state\":\"waiting\"}", kRelayListHasAZero, "and one with a 0 byte in it" },
+		{ 200, waiting + std::string(kRelayAccessMostAnswerBytes + 1 - waiting.size(), ' '), kRelayListTooBig,
+			"and one a byte bigger than any honest answer, even if it's only spaces" }
+	};
+
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+	{
+		answer = untouched;
+		RelayListRefusal const why = Access(bad[i].status, bad[i].body, ours, &answer);
+		Check(why == bad[i].why && answer == untouched, bad[i].what);
+
+		if (why != bad[i].why)
+		{
+			printf("          it said: %s\n", RelayList_RefusalWords(why));
+		}
+	}
+
+	answer = untouched;
+	std::string const spaced = waiting + std::string(kRelayAccessMostAnswerBytes - waiting.size(), ' ');
+	Check(Access(200, spaced, ours, &answer) == kRelayListAccepted && answer == kRelayAccessWaiting, "an answer of exactly 512 bytes is read");
+
+	answer = untouched;
+	Check(Access(200, waiting, NULL, &answer) == kRelayListNotOurKey && answer == untouched, "and none is taken without this PC's own key to hold it to");
+	Check(RelayList_ReadAccess(200, NULL, 10, ours, &answer) == kRelayListEndsTooSoon && answer == untouched &&
+		RelayList_ReadAccess(200, waiting.data(), waiting.size(), ours, NULL) == kRelayListEndsTooSoon, "nor with no answer, or nowhere to put it");
+
+	bool allHaveWords = true;
+	bool allDiffer = true;
+
+	for (int a = kRelayAccessWaiting; a <= kRelayAccessClosed; a++)
+	{
+		const char *const words = RelayAccess_AnswerWords(static_cast<RelayAccessAnswer>(a));
+		allHaveWords = allHaveWords && words && words[0] && strstr(words, "no words") == NULL;
+
+		for (int b = kRelayAccessWaiting; b < a; b++)
+		{
+			allDiffer = allDiffer && strcmp(words, RelayAccess_AnswerWords(static_cast<RelayAccessAnswer>(b))) != 0;
+		}
+	}
+
+	Check(allHaveWords && allDiffer, "each answer has words of its own, for the log");
+}
+
 // Added 2026-11-09 by Melanikus for the AvP port: VERSION 1'S LIST, WITHOUT THE V2 DRAFT (networking.h, Net_V2DraftOn). Only a v2 draft's
 // games and listings carry the host's fingerprint. A copy without the draft, which is every player's, reads and writes the list exactly as
 // version 1 does.
@@ -1477,6 +1747,10 @@ int main()
 	TestTheCalls();
 	TestTheMenus();
 	TestAddresses();
+	TestAccessCodes();
+	TestAccessNames();
+	TestAccessBody();
+	TestAccessAnswers();
 	TestVersionOne();
 	TestRelayKeys();
 	TestTheTestServer();

@@ -8,6 +8,7 @@
 //   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
 //   (AVPMENU_ELEMENT_FINDAGAIN)
 //   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
+//   the Online access pages and their rows (server #24), only with -dev for now
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
@@ -139,7 +140,9 @@ enum AVPMENU_ID
 	AVPMENU_COOP_OUT,          // one plain sentence, for a player the co-op game has ended for, and why
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
-	AVPMENU_COOP_HOSTQUITS     // a host is asked if they mean to end the game for everyone
+	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
+	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
+	AVPMENU_ONLINE_ACCESS_NEW  // the question before a new identity is made
 };
 
 enum AVPMENU_FONT_ID
@@ -227,6 +230,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
+	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };
 

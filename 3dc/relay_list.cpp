@@ -298,6 +298,16 @@ namespace
 		int count;
 		const char *why;
 
+		// Asking for online access: a request wanted, with its body and the fingerprint its answer must be about, and an answer waiting
+		// for the main thread (added 2026-11-09, server #24)
+		bool accessWanted;
+		char accessBody[kRelayAccessMostBodyBytes + 1];
+		uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
+		bool accessReady;
+		bool accessAnswered;
+		RelayAccessAnswer accessAnswer;
+		const char *accessWhy;
+
 		// News for the main thread to write in the log: the last kMostNews pieces, each a fixed text of the game's own, kept in turn round
 		// the ring. newsNumber is how many pieces there have ever been, so piece n is at news[n % kMostNews].
 		// Modified 2026-11-09 by Melanikus for the AvP port: each piece is a copy of its text, kept with its end, not a pointer to it, so the
@@ -908,6 +918,33 @@ namespace
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	// The answer to an access request: read as hostile (relay_list_text.h), about this PC's own fingerprint, and kept only if all of it is
+	// right. Added 2026-11-09 by Melanikus for the AvP port (server #24).
+	char accessAnswerText[kRelayAccessMostAnswerBytes];
+
+	void AskForAccess(const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+	{
+		Answer const a = Call(L"POST", L"/v1/access-requests", body, accessAnswerText, sizeof(accessAnswerText));
+		RelayAccessAnswer answer = kRelayAccessWaiting;
+		const char *why = a.why;
+
+		if (a.worked)
+		{
+			RelayListRefusal const refusal = RelayList_ReadAccess(static_cast<int>(a.status), accessAnswerText, a.bytes, fingerprint, &answer);
+			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+		}
+
+		// Only fixed words go in the log: what the answer was, or why there was none
+		Tell(why ? why : RelayAccess_AnswerWords(answer));
+
+		EnterCriticalSection(&shared->lock);
+		shared->accessAnswered = (why == NULL);
+		shared->accessAnswer = answer;
+		shared->accessWhy = why;
+		shared->accessReady = true;
+		LeaveCriticalSection(&shared->lock);
+	}
+
 	DWORD WINAPI ListThread(void *)
 	{
 		bool tryAgainLater = false;
@@ -945,6 +982,12 @@ namespace
 			char keysRegion[kRelayListRegionLetters + 1];
 			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
 			int const keysAsking = shared->keysAsked;
+			bool const access = shared->accessWanted;
+			shared->accessWanted = false;
+			char accessBody[kRelayAccessMostBodyBytes + 1];
+			uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
+			memcpy(accessBody, shared->accessBody, sizeof(accessBody));
+			memcpy(accessFingerprint, shared->accessFingerprint, sizeof(accessFingerprint));
 			LeaveCriticalSection(&shared->lock);
 
 			// The game that ended comes off the list, if it's the one on it
@@ -1001,6 +1044,11 @@ namespace
 			if (keys)
 			{
 				ReadTheRelayKeys(keysRegion, keysAsking);
+			}
+
+			if (access)
+			{
+				AskForAccess(accessBody, accessFingerprint);
 			}
 		}
 	}
@@ -1565,4 +1613,60 @@ bool RelayList_WhyIsNoConnection(const char *why)
 	// The very words this file hands out, compared as the same words (each is one of the constants above), so no rewording elsewhere
 	// can make it say something else
 	return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;
+}
+
+// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+
+bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	// Without -dev, nothing: the page isn't there, and this says no too, so no other way can reach the server either
+	if (!DevMode || !fingerprint)
+	{
+		return false;
+	}
+
+	// The body is made here, on the game's thread, so a name or key that can't be sent is refused before anything starts
+	char body[kRelayAccessMostBodyBytes + 1];
+
+	if (!RelayList_AccessBody(name, statics, body, sizeof(body)) || !Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	memcpy(shared->accessBody, body, sizeof(body));
+	memcpy(shared->accessFingerprint, fingerprint, kNetIdentityFingerprintBytes);
+	shared->accessWanted = true;
+	LeaveCriticalSection(&shared->lock);
+
+	Wake();
+	return true;
+}
+
+bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why)
+{
+	*answered = false;
+	*answer = kRelayAccessWaiting;
+	*why = NULL;
+
+	if (!shared)
+	{
+		return false;
+	}
+
+	WriteTheNews();
+
+	EnterCriticalSection(&shared->lock);
+	bool const ready = shared->accessReady;
+
+	if (ready)
+	{
+		shared->accessReady = false;
+		*answered = shared->accessAnswered;
+		*answer = shared->accessAnswer;
+		*why = shared->accessWhy;
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return ready;
 }

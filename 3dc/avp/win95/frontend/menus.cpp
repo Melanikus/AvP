@@ -52,6 +52,7 @@
 //   the page of games found is the online-play screens' (online_screens_page.h): a table of each game's name, level, players, region and
 //   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
 //   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
+//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, only with -dev
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
 //   Bobblen's avp-forever (ec6446f), rewritten
@@ -100,6 +101,10 @@
 #include "relay_auto.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
+#include "access_page.h"
+
+// -dev (d3d_render.cpp): the Online access row and pages are there only with it
+extern int DevMode;
 #include "credits_roll.h"
 
 #if defined(_MSC_VER)
@@ -1304,6 +1309,11 @@ extern void AvP_UpdateMenus(void)
 			CountTheRowsOnThisPage();
 		}
 	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	{
+		// The server's answer comes on the list's own thread, and the page shows it as it comes
+		AccessPage_Frame(AvPMenus.MenuElements);
+	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 	{
@@ -1934,6 +1944,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
+			// The Online access row is on this page only with -dev (the owner's ruling, 2026-11-09: nothing a release game does may reach
+			// a server yet). It's set before the page's rows are counted.
+			MenuData_ShowOnlineAccessRow(DevMode != 0);
+
 			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
 			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
 			RelayList_FindRelays();
@@ -1955,6 +1969,27 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				{
 					SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
 				}
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_ONLINE_ACCESS:
+		{
+			// Only with -dev. Without it nothing leads here, and if anything ever did, it goes straight back.
+			if (!AccessPage_Opened(AvPMenus.MenuElements))
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_ONLINE_ACCESS_NEW:
+		{
+			if (!AccessPage_QuestionOpened())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
 				return;
 			}
 			break;
@@ -2159,6 +2194,16 @@ static void RenderMenu(void)
 	if (gamesPage)
 	{
 		OnlinePage_DrawTop();
+	}
+
+	// The Online access pages: what Request access does, then the code and the server's answer, above and under the rows
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
+	{
+		AccessPage_DrawTop(y + AvPMenus.MenuHeight);
+	}
+	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	{
+		AccessPage_DrawQuestion();
 	}
 
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
@@ -3811,6 +3856,16 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_ONLINE_ACCESS:
+		{
+			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
+
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AccessPage_Pressed(elementPtr->MaxValue, &page))
+			{
+				SetupNewMenu(page);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_COOP_START:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -4439,6 +4494,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
 		case AVPMENU_ELEMENT_CUSTOMMAP_START:
 		case AVPMENU_ELEMENT_COOP_START:
+		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		case AVPMENU_ELEMENT_JOINLOBBIED:
 		case AVPMENU_ELEMENT_CONNECTIONCHOICE :
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
