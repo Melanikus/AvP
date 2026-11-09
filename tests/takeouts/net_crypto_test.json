@@ -1,0 +1,143 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "CNG's agreed secret isn't turned round",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "secretOut[i] = raw[kNetCryptoP384ScalarBytes - 1 - i];",
+					"to": "secretOut[i] = raw[i];"
+				}
+			]
+		},
+		{
+			"name": "a public key needn't start with 04",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "if (!wire || wire[0] != 0x04)",
+					"to": "if (!wire)"
+				}
+			]
+		},
+		{
+			"name": "any signature checks",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "static_cast<ULONG>(kNetCryptoEcdsaBytes), 0) == 0;",
+					"to": "static_cast<ULONG>(kNetCryptoEcdsaBytes), 0) == 0 || true;"
+				}
+			]
+		},
+		{
+			"name": "a tag that fails still opens",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "ok = NT_SUCCESS(status) && done == size;",
+					"to": "ok = true;"
+				}
+			]
+		},
+		{
+			"name": "a refused opening leaves its plaintext",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "\t\t\tif (size > 0 && out)\n\t\t\t{\n\t\t\t\tNetCrypto_Wipe(out, size);\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "HMAC is plain SHA-384",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "hmac ? BCRYPT_ALG_HANDLE_HMAC_FLAG : 0",
+					"to": "0"
+				}
+			]
+		},
+		{
+			"name": "HKDF's blocks all have the same number",
+			"changes": [
+				{
+					"file": "3dc/net_crypto.h",
+					"from": "\t\tdone += take;\n\t\tnumber++;\n",
+					"to": "\t\tdone += take;\n"
+				}
+			]
+		},
+		{
+			"name": "HKDF gives more than it can",
+			"changes": [
+				{
+					"file": "3dc/net_crypto.h",
+					"from": "if (!out || outSize > kNetCryptoMostHkdfBytes || !prk || prkSize == 0)",
+					"to": "if (!out || !prk || prkSize == 0)"
+				},
+				{
+					"file": "3dc/net_crypto.h",
+					"from": "if (!out || outSize > kNetCryptoMostHkdfBytes)\n",
+					"to": "if (!out)\n"
+				}
+			]
+		},
+		{
+			"name": "the post-quantum stand-in says it is there",
+			"changes": [
+				{
+					"file": "3dc/net_pq_none.cpp",
+					"from": "bool NetPq_Available()\n{\n\treturn false;",
+					"to": "bool NetPq_Available()\n{\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "the stand-in's refused secret isn't wiped",
+			"changes": [
+				{
+					"file": "3dc/net_pq_none.cpp",
+					"from": "\tNetCrypto_Wipe(ciphertextOut, ciphertextOut ? kNetPqKemCiphertextBytes : 0);\n\tNetCrypto_Wipe(secretOut, secretOut ? kNetPqKemSecretBytes : 0);\n",
+					"to": "\tNetCrypto_Wipe(ciphertextOut, ciphertextOut ? kNetPqKemCiphertextBytes : 0);\n"
+				}
+			]
+		},
+		{
+			"name": "an opened word isn't mixed into h",
+			"changes": [
+				{
+					"file": "3dc/net_noise.h",
+					"from": "\ts->n++;\n\tmemcpy(s->h, next, sizeof(next));\n\t*written = textSize;",
+					"to": "\ts->n++;\n\t*written = textSize;"
+				}
+			]
+		},
+		{
+			"name": "both directions get the same key",
+			"changes": [
+				{
+					"file": "3dc/net_noise.h",
+					"from": "memcpy(out->responderToInitiatorKey, all + kNetCryptoAesKeyBytes, kNetCryptoAesKeyBytes);",
+					"to": "memcpy(out->responderToInitiatorKey, all, kNetCryptoAesKeyBytes);"
+				}
+			]
+		},
+		{
+			"name": "epoch 0 isn't the split's own key",
+			"changes": [
+				{
+					"file": "3dc/net_noise.h",
+					"from": "\tif (epoch == 0)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		}
+	]
+}
