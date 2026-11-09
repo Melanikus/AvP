@@ -795,6 +795,126 @@
 			]
 		},
 		{
+			"name": "SOURCE: the page of games found asks again by the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tif (!askNow)\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tif (!askNow && !HasCome(Now(), pageStateSince + 5000))\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page's Refresh row does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tOnlinePage_FindAgain();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Refresh asks again while a fetch is going",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "if (pageState == kPageList || pageState == kPageCantConnect || pageState == kPageCantFetch)\n\t{\n\t\taskNow = true;",
+					"to": "if (true)\n\t{\n\t\taskNow = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a certificate that isn't accepted counts as connected",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCantStart;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer too big counts as no connection",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kTooBig;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page doesn't ask the list code which failure it was",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "listCantConnect = why != NULL && RelayList_WhyIsNoConnection(why);",
+					"to": "listCantConnect = why != NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every failure of the list shows as a failure to fetch",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "pageState = listCantConnect ? kPageCantConnect : kPageCantFetch;",
+					"to": "pageState = kPageCantFetch;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join remembers the menu's row number, not the game the search showed on it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tint const row = ShownRowOf(menuRow);\n\n\tif (row >= 0)\n\t{\n\t\tjoinedKey",
+					"to": "\tint const row = menuRow;\n\n\tif (row >= 0)\n\t{\n\t\tjoinedKey"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait opens a frame inside the menus' own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tif (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no frame is opened for the menus after the wait",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();\n\t\tDrawMainMenusBackdrop();",
+					"to": "\t\tjoinDrewFrames = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame is opened for the menus after a wait that drew none",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tif (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;",
+					"to": "\tif (true)\n\t{\n\t\tjoinDrewFrames = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus don't say when the join's wait is over",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\tOnlinePage_JoinWaitOver();\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the list's news goes in the log without its name in front",
 			"changes": [
 				{

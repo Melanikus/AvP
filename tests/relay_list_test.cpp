@@ -909,14 +909,38 @@ static void TestTheMenus()
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	Check(menus.size() > 100000, "menus.cpp was found and read, from the top of the repository");
 
-	// The page of games found asks the list when it's first opened, and then only when its search says it's time (every 5 s, and 12 times
-	// at most while nothing is found: online_screens.h, checked by online_screens_test). Never on each answer, or one answer would bring the
-	// next, for as long as the page is open.
+	// The page of games found asks the list when it's first opened, and then only when the player asks again: Refresh on the list, or
+	// Enter on a failure (the user's design: online_screens_page.h). Never on each answer, or one answer would bring the next, for as long
+	// as the page is open, and never by itself on a timer.
 	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 2,
-		"the page of games found asks the list when it's opened and when its search says it's time, and nowhere else");
+		"the page of games found asks the list when it's opened and when the player asks again, and nowhere else");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	Check(page.size() > 20000, "online_screens_page.cpp was found and read");
+	std::string const timeToAsk = SourceSlice(page, "bool OnlinePage_TimeToAskAgain(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const findAgain = SourceSlice(page, "void OnlinePage_FindAgain(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(timeToAsk, "if (!askNow)\n\t{\n\t\treturn false;\n\t}") && !Has(timeToAsk, "Now()") && Has(findAgain, "askNow = true;") &&
+		CountOf(page, "askNow = true;") == 1, "it's time to ask again only when Refresh or Enter has asked for it, never by the clock");
+	Check(Has(findAgain, "if (pageState == kPageList || pageState == kPageCantConnect || pageState == kPageCantFetch)\n\t{\n\t\taskNow = true;"),
+		"and only from the list or a failure, never while a fetch is going: one at a time");
+	std::string const refresh = SourceSlice(menus, "\t\tcase AVPMENU_ELEMENT_FINDAGAIN:\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(refresh, "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)\n\t\t\t{\n\t\t\t\tOnlinePage_FindAgain();"),
+		"and the page's Refresh row asks for it when it's chosen");
+
+	// "Couldn't connect" and "connected, but couldn't fetch its open sessions" are told apart by the list code's own reason (the user's
+	// design): no connection is the four reasons a call gives before any answer has come, compared as the very words relay_list.cpp hands
+	// out. An answer that came and was too big, a no, or one the hostile reader refused, is a failure to fetch.
+	std::string const list = ReadSource("3dc/relay_list.cpp");
+	std::string const noConnection = SourceSlice(list, "bool RelayList_WhyIsNoConnection(const char *why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(noConnection, "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;"),
+		"no connection to the list's server is: it couldn't be reached, took too long, its certificate wasn't accepted, or the call couldn't start");
+	Check(!Has(noConnection, "kTooBig") && !Has(noConnection, "kSaidNo") && !Has(noConnection, "strcmp") && !Has(noConnection, "strstr"),
+		"an answer that came isn't one of them, and nothing is compared by its letters");
+	Check(Has(page, "listCantConnect = why != NULL && RelayList_WhyIsNoConnection(why);") &&
+		Has(page, "pageState = listCantConnect ? kPageCantConnect : kPageCantFetch;"), "and the page shows which of the two it was by that");
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
@@ -942,10 +966,32 @@ static void TestTheMenus()
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
 
+	// The wait is called from inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL, in the
+	// first footage's log). So the wait's drawing closes the menus' frame once, before its first frame of its own, and a new one is opened
+	// for the menus' loop to finish once the wait is over, however it ended.
+	std::string const joining = SourceSlice(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const closesTheMenus = joining.find("if (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}");
+	size_t const opensItsOwn = joining.find("ThisFramesRenderingHasBegun();");
+	Check(closesTheMenus != std::string::npos && opensItsOwn != std::string::npos && closesTheMenus < opensItsOwn,
+		"the join's wait closes the menus' open frame, once, before it opens one of its own");
+	std::string const waitOver = SourceSlice(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();"),
+		"and once it's over, a new frame is opened for the menus, only if the wait drew any");
+	size_t const over = menus.find("OnlinePage_JoinWaitOver();");
+	Check(unset != std::string::npos && over != std::string::npos && unset < over && over < menus.find("if (joined != NET_FAIL)", unset) &&
+		CountOf(menus, "OnlinePage_JoinWaitOver();") == 1, "which the menus ask for straight after the join, before what it did is looked at");
+
 	// A join goes to the game on its row, found by its relay code or its address (online_screens_page.h). Never by the row's number: each
 	// search empties the list of games found and fills it again, so by the time Enter is pressed, a row's number can be another game's.
 	Check(Has(menus, "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);") && !Has(menus, "int s = AvPMenus.CurrentlySelectedElement;"),
 		"a join goes to the game on its row, found by its code or its address, never by the row's number");
+
+	// The menu's rows start with the Search box and Refresh, and the search hides some games, so a menu row is turned into the game the
+	// search showed on it, the same way, both for the join and for the game the page selects again when the join ends
+	std::string const sessionForRow = SourceSlice(page, "int OnlinePage_SessionForRow(int menuRow)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const joiningRow = SourceSlice(page, "void OnlinePage_Joining(int menuRow)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(sessionForRow, "int const row = ShownRowOf(menuRow);") && Has(joiningRow, "int const row = ShownRowOf(menuRow);") &&
+		Has(joiningRow, "joinedKey = shownRows[row].key;"), "and the game remembered for the join's end is the same one, by the same rows");
 
 	// A player asking to join: the host's two answer rows come in front of the page's own, and the selection moves down with the row it
 	// was on, so it's never on "Let NAME in" by itself: Enter pressed by chance can't let anyone in
