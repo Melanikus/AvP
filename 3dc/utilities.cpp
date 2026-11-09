@@ -141,11 +141,6 @@ bool SaveFolder_UseTheSecondCopy()
 	return true;
 }
 
-bool SaveFolder_IsTheSecondCopy()
-{
-	return saveFolderIsTheSecondCopy;
-}
-
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one
