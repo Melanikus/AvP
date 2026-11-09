@@ -131,11 +131,12 @@ Version 110 - 109, and a search's question as big as its answer, so an answer is
 Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's answer about the map, and a byte in a game's description
 Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in a game's description
 Version 113 - 112, and whether a marine player's shoulder lamp is on, in a spare bit after landingNoise in a player's state, for the mode that plays like single player
+Version 114 - 113, and a joiner asks the host first: its request to join (its "let me in", with its name) is held until the host answers yes, or closes it with no, busy or no answer
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 113; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 114; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -224,6 +225,21 @@ const char *Net_RelayJoinFailedWhy();
 typedef bool (*NetRelayJoinWaitHook)(void);
 void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook);
 
+// Where a join through a relay has got to, for the menu's wait hook to say (Fourth's online screens): reaching the relay (asking it, and
+// its cookie round), or the relay introducing the two ends (their hellos, until READY). None when no join is under way.
+int const kNetRelayJoinStepNone = 0;
+int const kNetRelayJoinStepReaching = 1;
+int const kNetRelayJoinStepIntroducing = 2;
+int Net_RelayJoinStep();
+
+// The joiner's round trip to each relay, for the games page's ping column (PROTOCOL.md: 3 echoes to each relay the list names, the lowest
+// kept; a game's estimate is this and its hostMs). Net_TimeRelaysForJoining goes each frame the page is up, and starts once the list has
+// named its relays; Net_ForgetRelayTimes, when the page opens, so they're timed again. Net_JoinerMsToRelay gives a region's time in ms, or
+// -1 until it's timed, or if its relay didn't answer.
+void Net_TimeRelaysForJoining();
+void Net_ForgetRelayTimes();
+int Net_JoinerMsToRelay(const char *region);
+
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
 // nothing is ever written past it. Only on the game's main thread, like the list of sessions.
@@ -232,5 +248,65 @@ bool Net_AddRelaySession(const RelayListGame &game);
 
 // Where a game from the relays' list is on the list of sessions, by its region and its code's 8 letters; -1 if it isn't there
 int Net_FindRelaySession(const char *region, const char *code);
+
+// THE REQUEST TO JOIN (version 114; networking.cpp says how it works). Every joiner asks the host first, and a person at the host answers.
+// The host's side: the oldest request waiting, if there is one, with the joiner's name (as the joiner gave it: hostile, so the screen makes it
+// safe to draw) and who it is; and the answer, which does nothing if that request has gone. A test's host lets everyone in without asking.
+uint32_t const kNetJoinAnswerWithinMs = 30000;   // unanswered this long, a request counts as no answer
+struct NetJoinWho
+{
+	int connection;
+	unsigned int connectID;
+};
+bool Net_JoinRequestWaiting(char *nameOut, size_t nameRoom, NetJoinWho *who);
+void Net_AnswerJoinRequest(NetJoinWho who, bool yes);
+void Net_LetEveryJoinerIn(bool yes);
+
+// Why a host closed a joiner's connection before letting it in: ENet's disconnect carries one of these, as kCoopRemovedByTheHost (coop_lobby.h)
+unsigned int const kNetJoinRefusedNo = 0x4A4E4F2Eu;         // "JNO.": the host said no
+unsigned int const kNetJoinRefusedBusy = 0x4A425359u;       // "JBSY": the host was answering another joiner
+unsigned int const kNetJoinRefusedNoAnswer = 0x4A4E4141u;   // "JNAA": nobody answered in time
+
+// The joiner's side: where its request has got to
+int const kNetJoinAnswerNone = 0;       // no request: not joining, or not yet connected
+int const kNetJoinAnswerWaiting = 1;
+int const kNetJoinAnswerYes = 2;        // let in: the host gave it its player ID
+int const kNetJoinAnswerNo = 3;
+int const kNetJoinAnswerBusy = 4;
+int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
+int Net_JoinAnswerNow();
+
+// THE RELAY ON THE SCREEN. Added 2026-11-09 by Melanikus for the AvP port, for Fourth's online screens: the host's news about its relay,
+// and the line in play saying which relay the game goes through and how far away it is. Both are read only: asking changes nothing, so a
+// screen can ask every frame. A region is the list's text, so the screen makes it safe (OnlineScreens_SafeName) before drawing it.
+size_t const kNetRelayRegionLetters = 16;   // relay_list_text.h's kRelayListRegionLetters (networking.cpp checks they're the same)
+
+// What a host going through a relay is doing, for a line on the host's screen each time it changes
+int const kNetRelayHostNone = 0;       // not hosting through a relay
+int const kNetRelayHostFinding = 1;    // timing the relays the list named, to open the game's room on the nearest
+int const kNetRelayHostListed = 2;     // the room is open, and the game is going on the list: region and ms say through which relay, and how far
+int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be looked up: the game is open on this network only
+int const kNetRelayHostRoomGone = 4;   // the room on the relay has gone (why says why), so the game is open on this network instead
+struct NetRelayHostState
+{
+	unsigned int changes;                     // goes up by one each time what changes, so the screen shows each change once
+	int what;                                 // one of kNetRelayHost...
+	char region[kNetRelayRegionLetters + 1];  // for Listed: the relay's region; "" otherwise
+	int ms;                                   // for Listed: the host's round trip to that relay, from its echoes; 0 otherwise
+	const char *why;                          // for RoomGone: why, in the game's own fixed words (NetRelay_WhyText); NULL otherwise
+};
+void Net_RelayHostStateNow(NetRelayHostState *state);
+
+// The relay this game is playing through now, and how far away it is, for the line kept on the screen in play
+struct NetRelayPlayState
+{
+	bool throughRelay;                        // false: not playing through a relay, so no line, and the rest is empty
+	bool isHost;
+	char region[kNetRelayRegionLetters + 1];  // the relay's region
+	int ms;   // -1 while nothing is measured. The host: its round trip to its relay, from the last keep and its answer (one every 15 s), or
+	          // from its echoes until the first. A joiner: ENet's round trip to the host, which goes through the relay, so it's what the player
+	          // feels. That's -1 until ENet has timed its first acknowledgement, so ENet's starting guess (500 ms) is never shown.
+};
+void Net_RelayPlayStateNow(NetRelayPlayState *state);
 
 #endif // #ifndef _NETWORKING_
