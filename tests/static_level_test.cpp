@@ -259,7 +259,7 @@ static void CheckAQuad()
 	StaticVertex const &second = data.vertices[1];
 	Check(second.x == 100.0f + 1000.0f && second.y == 2000.0f && second.z == 3000.0f, "a corner is the point plus the shape's place");
 	Check(data.vertices[2].y == 100.0f + 2000.0f, "with y not turned over");
-	Check(second.u == 30.0f * (1.0f / 256.0f) && second.v == 40.0f * (1.0f / 128.0f), "texture coordinates are the game's sum");
+	Check(second.u == (30.0f + 0.5f) * (1.0f / 256.0f) && second.v == (40.0f + 0.5f) * (1.0f / 128.0f), "texture coordinates are the game's sum, at the middle of the texels they name (#148)");
 	Check(second.nx == 0.0f && second.ny == 0.1f && second.nz == 1.0f, "each corner asks for its own normal");
 	Check(second.tx == 1.0f && second.ty == 0.0f && second.tz == 0.0f && second.flip == -1.0f, "the tangent is copied, flip and all");
 
