@@ -475,3 +475,120 @@ jobs:
           if [ "$looked" -eq 0 ]; then echo "::error::No C or C++ files were found to look in"; exit 1; fi
           echo "Looked in $looked C and C++ files. Lines written this way: $found"
           if [ "$found" -gt 0 ]; then echo "CODING-STANDARD.md, rule 1, says why, and how to write it instead"; exit 1; fi
+
+  # relay-probe (tools/relay-probe/relay_probe.cpp): the game's own relay code, 3dc/net_relay.h, run against the real relay end to end, with
+  # no game and no player. It opens a room, joins it from a second socket, passes made-up game packets both ways, waits for the room's
+  # first keep, and closes it. Then the relay's own counts are checked from its side: above all "0 not a message", which says the relay
+  # read every message the game's code wrote. Added 2026-11-09 by Melanikus for the AvP port.
+  #
+  # The relay is AVPx Dedicated Server's Java server, from one pinned commit of its repository, built with the one JDK that repository
+  # pins and checks (java/tools/get-jdk.sh: Adoptium's signature, its sha256 and its version, before anything in it runs). It runs on this
+  # machine only, on 127.0.0.1, as a relay alone (no list, so no certificate), with settings made for this run and a pass key made at
+  # random now, thrown away with the machine.
+  relay-probe:
+    name: Relay probe
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04   # pinned: the relay's own workflow builds and runs it on this machine (java.yml)
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The relay's repository is public, so no token is needed or given. The commit is its java branch's 2e3eb82, which writes the
+      # relay's counts as it stops. Move the pin only to a commit whose own java.yml has run green.
+      - name: Check out the relay, at a pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Melanikus/AVPx-Dedicated-Server
+          ref: '2e3eb82262cca82af9ed302b267c20d546f5d810'
+          path: avpx-server
+          persist-credentials: false
+
+      - name: Fetch the JDK the relay pins, and check it
+        shell: bash
+        run: sh avpx-server/java/tools/get-jdk.sh "$RUNNER_TEMP/jdk"
+
+      # Its build runs its own tests too. They never use the relay's ports here (its live tests are off, and use 37500-37502).
+      - name: Build the relay
+        shell: bash
+        run: JAVA_HOME="$RUNNER_TEMP/jdk" sh avpx-server/java/build.sh
+
+      # Every warning fails it. -funsigned-char reads char as the game does (/J). _GLIBCXX_ASSERTIONS is the standard library's own
+      # bounds checks, as _MSVC_STL_HARDENING is for the game's tests, and the address and undefined-behaviour sanitizers stop it at the
+      # first memory mistake.
+      - name: Build relay-probe
+        shell: bash
+        run: |
+          g++ --version | head -n 1
+          flags="-std=c++17 -O1 -g -funsigned-char -Wall -Wextra -Werror -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -I3dc"
+          g++ $flags -c tools/relay-probe/relay_probe.cpp -o "$RUNNER_TEMP/relay_probe.o"
+          g++ $flags -c 3dc/relay_list_text.cpp -o "$RUNNER_TEMP/relay_list_text.o"
+          g++ -fsanitize=address,undefined "$RUNNER_TEMP/relay_probe.o" "$RUNNER_TEMP/relay_list_text.o" -o "$RUNNER_TEMP/relay_probe"
+
+      # One step from the relay's start to its stop, so nothing it started outlives the step
+      - name: Start the relay on 127.0.0.1, run relay-probe against it, and check the relay's counts
+        shell: bash
+        run: |
+          set -u
+          work="$RUNNER_TEMP/relay"
+          mkdir -p "$work"
+
+          # The relay's settings, for this run only. The server reads exactly this file (its Main.java), and it needs only to read it.
+          key=$(openssl rand -hex 32)
+          echo "::add-mask::$key"
+          printf '{"region":"local","passKey":"%s","relayAddress":"127.0.0.1"}\n' "$key" > "$work/settings.json"
+          sudo install -d -m 0755 /etc/avpx
+          sudo install -m 0644 "$work/settings.json" /etc/avpx/settings.json
+          rm -f "$work/settings.json"
+
+          "$RUNNER_TEMP/jdk/bin/java" -jar avpx-server/java/build/avpx-server.jar > "$work/relay.log" 2>&1 &
+          relay=$!
+
+          # It says it's listening once every port is open and its thread has started. 30 s at most.
+          listening=0
+          for i in $(seq 1 60); do
+            if grep -q "relay: listening on UDP 27500 for control" "$work/relay.log"; then listening=1; break; fi
+            if ! kill -0 "$relay" 2>/dev/null; then break; fi
+            sleep 0.5
+          done
+
+          probed=1
+          if [ "$listening" = 1 ]; then
+            timeout 120 "$RUNNER_TEMP/relay_probe" -dev localhost && probed=0 || probed=$?
+          else
+            echo "::error::The relay didn't say it was listening within 30 s"
+          fi
+
+          # SIGTERM runs the relay's stop: every port closed, and its counts written. Its log names no address and no code.
+          kill "$relay" 2>/dev/null || true
+          wait "$relay" || true
+          echo "---- The relay's log"
+          cat "$work/relay.log"
+          echo "----"
+
+          # The relay's counts, from its side. It writes them once a minute and as it stops, so the run's may be split over two lines:
+          # they're added up.
+          grep "relay: in the last " "$work/relay.log" > "$work/counts.txt" || true
+          counted() { grep -o "[0-9]\+ $1" "$work/counts.txt" | awk '{ sum += $1 } END { print sum + 0 }'; }
+          wrong=0
+          want() {
+            got=$(counted "$1")
+            if [ "$got" = "$2" ]; then echo "The relay counted $got $1, as it should"; else echo "::error::The relay counted $got $1, not $2"; wrong=1; fi
+          }
+          if [ ! -s "$work/counts.txt" ]; then echo "::error::The relay wrote no counts"; wrong=1; fi
+          want "games opened" 1
+          want "closed, " 1
+          want "ended unkept" 0
+          want "joiners ready" 1
+          want "refusals" 0
+          want "echoes" 3
+          want "joiners to hosts" 10
+          want "hosts to joiners" 10
+          want "too big" 0
+          want "over a limit" 0
+          want "not a message" 0
+
+          if [ "$probed" != 0 ]; then echo "::error::relay-probe failed (exit code $probed): its lines above say which step, and why"; exit 1; fi
+          if [ "$wrong" != 0 ]; then exit 1; fi
+          echo "relay-probe passed, and the relay's own counts agree"
