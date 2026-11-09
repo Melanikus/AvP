@@ -515,6 +515,26 @@ int AvP_MainMenus(void)
 		SetupNewMenu(AVPMENU_USERPROFILESELECT);
 	}
 
+	// -dev -findgames, once: the player's own way to the page of games found, Multiplayer, then Join Game, then Find Games, each page set
+	// up as pressing it would, so the search is the one a player gets. With no profile chosen yet, the first one, as the profile page
+	// would start on, so the player's name for joining is that profile's.
+	if (OnlinePage_GoStraightToFindGames())
+	{
+		if (UserProfileNumber == -1)
+		{
+			ExamineSavedUserProfiles();
+			UserProfileNumber = 0;
+			UserProfilePtr = GetFirstUserProfile();
+			GetSettingsFromUserProfile();
+		}
+
+		AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+		SetupNewMenu(AVPMENU_MULTIPLAYER);
+		SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);
+		SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
+		LogString("online screens: this copy went straight to the page of games found (-dev -findgames)");
+	}
+
 	CheatMode_Active = CHEATMODE_NONACTIVE;
 
 	// Whatever was played has ended and been dealt with above, so nothing is being played now

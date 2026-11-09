@@ -38,6 +38,7 @@
 //   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer; the relay's news on
 //   the host, and on both copies the relay and its round trip, kept up at the top right while the game goes through a relay
 //   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
+//   -dev -findgames: at the first menus, straight to the page of games found, the player's own way (online_screens_page.h)
 
 #include "3dc.h"
 #include "window_slot.h"
@@ -349,6 +350,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			else
 			{
 				LogString("online screens: -onlinescreens needs -dev, so it's left out");
+			}
+		}
+
+		// -dev -findgames: at the first menus, straight to the page of games found by the player's own way, and it stays there, so a test
+		// shows the listed games with nobody at the keyboard. A word only, with no value after it.
+		if (CommandLineHasWord(command_line, "-findgames"))
+		{
+			if (DevMode)
+			{
+				OnlinePage_FindGamesAtStart();
+				LogString("online screens: this copy goes straight to the page of games found at the menus (-dev -findgames)");
+			}
+			else
+			{
+				LogString("online screens: -findgames needs -dev, so it's left out");
 			}
 		}
 
