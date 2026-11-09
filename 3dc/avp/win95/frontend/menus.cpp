@@ -84,6 +84,7 @@
 #include "profile_checks.h"
 #include "address_box.h"
 #include "relay_list.h"
+#include "relay_auto.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
 
@@ -424,6 +425,54 @@ static void StartTheCoopCampaign(void)
 	}
 }
 
+// -dev -relayhost and -dev -askjoiners (relay_auto.h): the copy hosts by itself as the menus start, once, so the online screens can be
+// filmed with nobody at the game. Added 2026-11-09 by Melanikus for the AvP port. It does what the host page's Start row does
+// (AVPMENU_ELEMENT_STARTMPGAME), with the multiplayer pages' answers fixed: the first profile, a deathmatch on the first level of the
+// multiplayer list, a marine, and fixed names. Nothing but the word comes from the command line. Unlike the Start row it doesn't save the
+// settings as the "previous game", so nobody's own choices are changed. False if it didn't host: then the menus go on as they always do.
+static bool HostByItselfThroughTheRelay(void)
+{
+	if (!RelayAuto_HostsByItselfNow())
+	{
+		return false;
+	}
+
+	// Nobody is here to choose a profile, so it's the first, as a new player's would be
+	if (UserProfileNumber == -1)
+	{
+		ExamineSavedUserProfiles();
+		UserProfileNumber = 0;
+		UserProfilePtr = GetFirstUserProfile();
+		GetSettingsFromUserProfile();
+	}
+
+	SetDefaultMultiplayerConfig();
+	netGameData.skirmishMode = FALSE;   // the game's "skirmish" is against the computer, with no network at all
+	netGameData.gameType = NGT_Individual;
+	netGameData.levelNumber = 0;        // the first level of the multiplayer list
+	netGameData.coopCampaign = kCampaignNone;
+	netGameData.coopCampaignLevel = 0;
+	MP_Species = 0;                     // a marine
+	strcpy(MP_PlayerName, "Host");
+	strcpy(MP_SessionName, "Relay test");
+
+	// The list's relays first, as the multiplayer page asks for them, so the game opens through the nearest
+	LogString(RelayAuto_WaitForRelays() ? "relay auto: the list's relays have come, so this copy hosts through the nearest"
+		: "relay auto: no relay came from the list in time, so this copy hosts on this network only");
+
+	if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) == NET_FAIL)
+	{
+		LogString("relay auto: this copy couldn't host, so it waits at the menus");
+		return false;
+	}
+
+	LogString("relay auto: this copy hosts a deathmatch on the first level of the multiplayer list, and it's loading");
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+	SetLevelToLoadForThisNetworkGame();
+	SetBriefingTextForMultiplayer();
+	return true;
+}
+
 int AvP_MainMenus(void)
 {
 	if (Coop_LevelChangeIsDue())
@@ -539,6 +588,10 @@ int AvP_MainMenus(void)
 
 	// Whatever was played has ended and been dealt with above, so nothing is being played now
 	CustomMaps_SetPlaying(false);
+
+	// -dev -relayhost or -dev -askjoiners: host by itself, once, instead of waiting for someone at the menus. Then the menus' loop below
+	// doesn't run, and the game starts as if the host page's Start row had been chosen (HostByItselfThroughTheRelay).
+	HostByItselfThroughTheRelay();
 
 	TimeStampedMessage("starting general menus");
 
