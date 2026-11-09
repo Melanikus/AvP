@@ -619,7 +619,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tif (got >= room)\n\t\t\t{\n\t\t\t\ta.why = kTooBig;\n\t\t\t\tCloseAll(request, connection, session);\n\t\t\t\treturn a;\n\t\t\t}\n\n",
+					"from": "\t\t\tif (got >= room)\n\t\t\t{\n\t\t\t\ta.why = kTooBig;\n\t\t\t\tCloseAll(StillOpen(check, request), connection, session);\n\t\t\t\treturn a;\n\t\t\t}\n\n",
 					"to": ""
 				}
 			]
@@ -1066,6 +1066,81 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\telse if (!DevMode)\n\t\t{\n\t\t\tLogString(\"Relay list: the settings' RelayServerName is for tests only, with -dev, so it's ignored\");\n\t\t}\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the listing's body goes out with the request's headers, before the pin's check",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, bodyBytes, context)",
+					"to": "static_cast<DWORD>(-1), const_cast<char *>(body), bodyBytes, bodyBytes, context)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the body is written before the pin is known to have matched",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tDWORD written = 0;\n\t\tbool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t// The pin's check closed the call before anything of it went: the request is gone already\n",
+					"to": "\t\tDWORD written = 0;\n\t\tbool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));\n\t\t// The pin's check closed the call before anything of it went: the request is gone already\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a body only partly written still counts as sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": " && written == bodyBytes));",
+					"to": "));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: StillOpen gives back a request the pin's check closed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\treturn check.closed ? NULL : request;\n",
+					"to": "\t\treturn request;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a call closes its request even after the pin's check closed it",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tCloseAll(StillOpen(check, request), connection, session);\n\t\ta.worked = true;\n",
+					"to": "\t\tCloseAll(request, connection, session);\n\t\ta.worked = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call the pin's check closed while the answer was awaited is read on",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;\n\t\t\tCloseAll(NULL, connection, session);\n\t\t\treturn a;\n\t\t}\n\n\t\tif (!answered)\n",
+					"to": "\t\tif (!answered)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the answer is awaited on a request the pin's check closed",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL)",
+					"to": "bodyWent && WinHttpReceiveResponse(request, NULL)"
 				}
 			]
 		}

@@ -794,6 +794,26 @@ static void TestTheCalls()
 	size_t const firstRead = call.find("WinHttpReceiveResponse(");
 	Check(closedSaid != std::string::npos && unreadSaid != std::string::npos && firstRead != std::string::npos && firstSend < closedSaid &&
 		closedSaid < unreadSaid && unreadSaid < firstRead, "a call the check closed says so, and a pinned call whose check never ran has nothing of its answer read");
+	// Added 2026-11-09 by Melanikus for the AvP port (Primary's read of the pin): the request goes out with its headers alone, and its body
+	// (a listing's pass and owner token) is written only once the pin's check has passed, and all of it or the call fails
+	size_t const bodyWritten = call.find("bool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));");
+	Check(CountOf(call, "WinHttpSendRequest(") == 2 && CountOf(call, "WINHTTP_NO_REQUEST_DATA, 0, ") == 2 && !Has(call, "const_cast<char *>(body)"),
+		"the request goes out with its headers alone: neither way of sending it carries the body");
+	Check(bodyWritten != std::string::npos && unreadSaid < bodyWritten && bodyWritten < firstRead && CountOf(call, "WinHttpWriteData(") == 1,
+		"the body is written once, whole, only after the pin's check has passed, and before the answer is waited for");
+	// and a request the pin's check closed is never used again, nor closed a second time: after the send, every close is of NULL or of what
+	// StillOpen gives, and a call the check closed at any send ends before anything more is done with its request
+	std::string const stillOpen = SourceSlice(source, "HINTERNET StillOpen(const PinCheck &check, HINTERNET request)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(stillOpen, "return check.closed ? NULL : request;"), "StillOpen gives nothing to close for a request the pin's check closed");
+	std::string const afterTheSend = firstSend != std::string::npos ? call.substr(firstSend) : std::string();
+	size_t const closes = CountOf(afterTheSend, "CloseAll(");
+	size_t const safeCloses = CountOf(afterTheSend, "CloseAll(NULL, connection, session);") +
+		CountOf(afterTheSend, "CloseAll(StillOpen(check, request), connection, session);");
+	Check(closes >= 9 && closes == safeCloses, "after the send, every one of the call's 9 or more closes leaves out a request the check closed");
+	size_t const closedAgain = firstRead != std::string::npos ? call.find("if (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;", firstRead) : std::string::npos;
+	size_t const notAnswered = call.find("if (!answered)");
+	Check(Has(call, "bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL)") && closedAgain != std::string::npos &&
+		notAnswered != std::string::npos && closedAgain < notAnswered, "a call the check closed while the answer was awaited ends there, unread");
 	Check(Has(call, "WINHTTP_DISABLE_REDIRECTS") && Has(call, "WINHTTP_DISABLE_COOKIES") && Has(call, "WINHTTP_DISABLE_AUTHENTICATION"),
 		"redirects, cookies and signing in are off");
 	Check(Has(call, "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000)"), "each step has 5 seconds");

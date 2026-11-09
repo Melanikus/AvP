@@ -399,6 +399,13 @@ namespace
 		}
 	}
 
+	// Added 2026-11-09 by Melanikus for the AvP port: the call's request, or NULL once the pin's check has closed it, so a request that's
+	// been closed is never closed again (CloseAll does nothing with NULL)
+	HINTERNET StillOpen(const PinCheck &check, HINTERNET request)
+	{
+		return check.closed ? NULL : request;
+	}
+
 	// One HTTPS call to the list. body is sent if there is one. What comes back goes into answer, which has room for room bytes: an
 	// answer longer than that is refused as too big, without the rest being read.
 	Answer Call(const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)
@@ -467,10 +474,13 @@ namespace
 			}
 		}
 
+		// Modified 2026-11-09 by Melanikus for the AvP port (Primary's read of the pin): the request goes out with its headers alone. A body,
+		// which for a listing holds the room's pass and its owner's token, is written only after the pin's check has passed (below), so a
+		// certificate nobody checked can never be sent one. The headers say how long the body will be, but not what's in it.
 		DWORD_PTR const context = reinterpret_cast<DWORD_PTR>(&check);
 		DWORD const bodyBytes = body ? static_cast<DWORD>(strlen(body)) : 0;
 		BOOL const sent = body
-			? WinHttpSendRequest(request, L"Content-Type: application/json\r\n", static_cast<DWORD>(-1), const_cast<char *>(body), bodyBytes, bodyBytes, context)
+			? WinHttpSendRequest(request, L"Content-Type: application/json\r\n", static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, bodyBytes, context)
 			: WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, context);
 
 		// The pin's check closed the call before anything of it went: the request is gone already
@@ -481,18 +491,33 @@ namespace
 			return a;
 		}
 
-		// A pinned call whose check never ran: what came back isn't used (the check is what stands in for Windows' own)
+		// A pinned call whose check never ran: nothing more is sent, and what came back isn't used (the check is what stands in for
+		// Windows' own)
 		if (shared->pinned && !check.matched)
 		{
 			a.why = kPinUnread;
-			CloseAll(request, connection, session);
+			CloseAll(StillOpen(check, request), connection, session);
 			return a;
 		}
 
-		if (!sent || !WinHttpReceiveResponse(request, NULL))
+		// Only now, with the pin matched (or no pin at all), does the body go, all of it or the call fails
+		DWORD written = 0;
+		bool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));
+		bool const answered = bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL);
+
+		// WinHTTP sends a call again only for a redirect or a sign-in, which are both off. If it ever did, the check ran again, and may have
+		// closed the call: then nothing more is done with the request, and it isn't closed a second time.
+		if (check.closed)
+		{
+			a.why = kNotPinned;
+			CloseAll(NULL, connection, session);
+			return a;
+		}
+
+		if (!answered)
 		{
 			a.why = WhyItFailed(GetLastError());
-			CloseAll(request, connection, session);
+			CloseAll(StillOpen(check, request), connection, session);
 			return a;
 		}
 
@@ -503,7 +528,7 @@ namespace
 			WINHTTP_NO_HEADER_INDEX))
 		{
 			a.why = kCantReach;
-			CloseAll(request, connection, session);
+			CloseAll(StillOpen(check, request), connection, session);
 			return a;
 		}
 
@@ -517,7 +542,7 @@ namespace
 			if (!WinHttpQueryDataAvailable(request, &available))
 			{
 				a.why = WhyItFailed(GetLastError());
-				CloseAll(request, connection, session);
+				CloseAll(StillOpen(check, request), connection, session);
 				return a;
 			}
 
@@ -529,7 +554,7 @@ namespace
 			if (got >= room)
 			{
 				a.why = kTooBig;
-				CloseAll(request, connection, session);
+				CloseAll(StillOpen(check, request), connection, session);
 				return a;
 			}
 
@@ -539,7 +564,7 @@ namespace
 			if (!WinHttpReadData(request, answer + got, wanted, &read))
 			{
 				a.why = WhyItFailed(GetLastError());
-				CloseAll(request, connection, session);
+				CloseAll(StillOpen(check, request), connection, session);
 				return a;
 			}
 
@@ -551,7 +576,7 @@ namespace
 			got += read;
 		}
 
-		CloseAll(request, connection, session);
+		CloseAll(StillOpen(check, request), connection, session);
 		a.worked = true;
 		a.status = status;
 		a.why = NULL;
