@@ -363,6 +363,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a joiner's ended handshake keeps its check code",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "\t\tNetCrypto_Wipe(id, sizeof(id));\n\t\tNetCrypto_Wipe(code, sizeof(code));\n\t\tmemset(&drops, 0, sizeof(drops));",
+					"to": "\t\tNetCrypto_Wipe(id, sizeof(id));\n\t\tmemset(&drops, 0, sizeof(drops));"
+				}
+			]
+		},
+		{
+			"name": "a host's ended handshake keeps its check code",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "\t\tNetCrypto_Wipe(code, sizeof(code));\n\t\tNetCrypto_Wipe(regionName, sizeof(regionName));",
+					"to": "\t\tNetCrypto_Wipe(regionName, sizeof(regionName));"
+				}
+			]
+		},
+		{
+			"name": "a host's ended handshake keeps the joiner's fingerprint",
+			"changes": [
+				{
+					"file": "3dc/net_peer_v2.h",
+					"from": "\t\tNetCrypto_Wipe(joinerFingerprint, sizeof(joinerFingerprint));\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

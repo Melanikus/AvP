@@ -5,11 +5,13 @@
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   says when the weapon goes without a flare's light, now that LIGHTING can keep lights in the game's own sum
+//   in a Hudson run with a marine, the camera follows him
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
 #include "gamedef.h"
 #include "strategy_def.h"
+#include "hudson.h"
 #include "dynblock.h"
 #include "bh_types.h"
 #include "view.h"
@@ -601,6 +603,13 @@ void UpdateCamera(void)
 	// update the two globals
 	Global_VDB_Ptr->VDB_World = dptr_s->ObWorld; // world space location
 	Global_VDB_Ptr->VDB_Mat = dptr_s->ObMat;	 // local -> world orientation matrix
+
+	// A run with a marine sees what he sees. Everything from here on reads the camera, so which rooms are drawn and which lights are chosen follow him as well. His eye height comes from the player's, a little further down, and
+	// both are the same marine standing up.
+	if (HudsonMarineIsOn)
+	{
+		Hudson_PointTheCamera(&Global_VDB_Ptr->VDB_World, &Global_VDB_Ptr->VDB_Mat);
+	}
 
 	// world position
 /*

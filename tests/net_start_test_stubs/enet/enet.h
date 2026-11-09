@@ -87,6 +87,7 @@ struct ENetHost
 	size_t receivedDataLength;
 	ENetInterceptCallback intercept;
 	ENetSendCallback sendHook;            // patch 007: set by networking.cpp once a game uses a relay
+	ENetAddress address;                  // where the host's socket is: Hudson's branch, a run's one relay beyond this machine (networking.cpp)
 };
 
 struct ENetEvent
@@ -128,5 +129,7 @@ void enet_socket_destroy(ENetSocket socket);
 int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32 timeout);
 int enet_socket_receive(ENetSocket socket, ENetAddress *address, ENetBuffer *buffers, size_t bufferCount);
 int enet_socket_send(ENetSocket socket, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount);
+int enet_socket_connect(ENetSocket socket, const ENetAddress *address);
+int enet_socket_get_address(ENetSocket socket, ENetAddress *address);
 
 #endif

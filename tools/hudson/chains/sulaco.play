@@ -1,0 +1,4 @@
+# What Hudson does to play sulaco on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 2951 934 15652 | switch03
+walk 14488 6453 101583 | missionareaswitch

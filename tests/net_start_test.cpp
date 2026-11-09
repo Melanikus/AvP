@@ -132,6 +132,15 @@ void RelayList_HostRoomClosed(void)
 	roomsUnlisted++;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): the fingerprint a host hands the list for its listing, which
+// only a v2 draft's host does (TestTheV2Draft)
+static int identitiesListed = 0;
+
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	identitiesListed += fingerprint ? 1 : 0;
+}
+
 void Con_PrintDebugMessage(const std::string &)
 {
 }
@@ -414,6 +423,8 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	theHost.socket = 77;
 	theHost.intercept = NULL;
 	theHost.sendHook = NULL;   // patch 007's hook: none until the game sets one (added 2026-11-09 by Melanikus for the AvP port)
+	theHost.address.host = address ? address->host : ENET_HOST_ANY;
+	theHost.address.port = address ? address->port : 0;
 
 	if (address)
 	{
@@ -748,6 +759,36 @@ int enet_socket_bind(ENetSocket, const ENetAddress *address)
 	}
 
 	socketsBoundTo.push_back(*address);
+	return 0;
+}
+
+// Hudson's branch, a run's one relay beyond this machine (networking.cpp, LoopbackOnlyAddress): this machine's address towards it, found by
+// connecting a UDP socket to it, which sends nothing, and asking the socket where it is. A test says which address that gives; 0: none.
+static enet_uint32 routeTowardsTheRelay = 0;
+static int socketsConnected = 0;
+static ENetAddress lastSocketConnectedTo;
+
+int enet_socket_connect(ENetSocket, const ENetAddress *address)
+{
+	socketsConnected++;
+
+	if (address)
+	{
+		lastSocketConnectedTo = *address;
+	}
+
+	return routeTowardsTheRelay != 0 ? 0 : -1;
+}
+
+int enet_socket_get_address(ENetSocket, ENetAddress *address)
+{
+	if (!address || routeTowardsTheRelay == 0)
+	{
+		return -1;
+	}
+
+	address->host = routeTowardsTheRelay;
+	address->port = 50000;
 	return 0;
 }
 
@@ -1102,17 +1143,25 @@ static void TestHostingThroughTheRelay()
 	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "+ relayRegion"), "SOURCE: no line the game writes holds the list's region: the words are the game's own (Fourth's cold read, finding 3)");
 }
 
+// Words into one of a listing's fields, cut to its room, and always ended with a 0, whatever is handed in
+template <size_t N> static void PutWords(char (&field)[N], const char *words)
+{
+	_snprintf(field, N - 1, "%s", words ? words : "");
+	field[N - 1] = '\0';
+}
+
 // Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list goes on the list of sessions (Net_AddRelaySession), as
 // one found on this network does, with the same checks; and never past the end of the list
+// Modified 2026-11-09 by Melanikus for the AvP port: each field is filled cut to its own room (PutWords), never by strcpy
 static RelayListGame AGameOnTheList(const char *code)
 {
 	RelayListGame game;
 	memset(&game, 0, sizeof(game));
-	strcpy(game.region, "virginia");
-	strcpy(game.code, code);
-	strcpy(game.name, "Hunt");
-	strcpy(game.level, "Genshd1");
-	strcpy(game.mode, "Cooperative");
+	PutWords(game.region, "virginia");
+	PutWords(game.code, code);
+	PutWords(game.name, "Hunt");
+	PutWords(game.level, "Genshd1");
+	PutWords(game.mode, "Cooperative");
 	game.players = 1;
 	game.maxPlayers = 4;
 	game.version = Net_OurVersion();
@@ -1526,6 +1575,125 @@ static void TestTheRelayOnTheScreen()
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
 	datagramsWaiting.clear();
+}
+
+// Hudson's branch, server #14's run through a relay on another machine (2026-11-09). A run with net= uses only this machine's own address,
+// or, given one relay beyond it by name, that relay at the one address its name gave. Its sockets then go on this machine's address towards
+// that relay, never on 0.0.0.0, and each drops whatever comes from anywhere else before ENet reads it.
+extern bool NetLoopbackOnly;
+bool Net_AllowOneRemoteRelay(const char *name);
+uint32_t Net_RemoteRelayAddress();
+
+static void TestARunsOneRelayBeyondThisMachine()
+{
+	printf("A Hudson run with net=, and its one relay beyond this machine\n");
+	enet_uint32 const kThisMachine = 0x0100007F;   // 127.0.0.1, as ENet keeps it
+	enet_uint32 const kRoute = 0x0A01A8C0;         // 192.168.1.10: this machine's address towards the relay
+	enet_uint32 const kElsewhere = 0x0B0C0B0A;     // a machine that isn't the relay
+	enet_uint32 const kMovedTo = 0x0E0C0B0A;       // where the relay's name might point later
+	NetLoopbackOnly = true;
+	relayNamed = true;
+	routeTowardsTheRelay = kRoute;
+	datagramsWaiting.clear();
+	Check(Net_AllowOneRemoteRelay(""), "to start, no relay beyond this machine");
+
+	int const sentBefore = datagramsSent;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentBefore && theHost.intercept == NULL,
+		"given none, a run's host is on this machine's own address, and the list's relay elsewhere is sent nothing");
+	EndTheGame();
+
+	Check(Net_AllowOneRemoteRelay("other.example"), "given another relay, by its name");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentBefore && Net_RemoteRelayAddress() == 0,
+		"the list's relay, which has another name, is still left out, and no address is let through");
+	EndTheGame();
+
+	Check(!Net_AllowOneRemoteRelay("not a name") && !Net_AllowOneRemoteRelay(NULL), "what isn't a server's name is refused");
+
+	Check(Net_AllowOneRemoteRelay("relay.example"), "given the list's relay, by its name");
+	int const connectsBefore = socketsConnected;
+	int const openBefore = socketsOpen;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kRoute && hostsBoundTo.back().port == 23513,
+		"the host's socket goes on this machine's address towards that relay, never on 0.0.0.0, at the game's port");
+	Check(socketsConnected == connectsBefore + 1 && lastSocketConnectedTo.host == kRelayHost && socketsOpen == openBefore,
+		"which it found by connecting a socket to the relay, a thing that sends nothing, and that socket is closed again");
+	Check(Net_RemoteRelayAddress() == kRelayHost, "the one address let through is the one the relay's name gave");
+	Check(datagramsSent == sentBefore + 1 && datagramsSentTo.back().host == kRelayHost, "and the relay is timed, as one on this machine would be");
+	uint8_t stranger[40];
+	memset(stranger, 0x22, sizeof(stranger));
+	TellTheHost(kElsewhere, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "a packet from anywhere but the relay is dropped before ENet reads it");
+
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	TellTheHost(kRelayHost, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept(&theHost, NULL) == 0, "with its room open, a joiner's packet, through its port on the relay, is ENet's to read");
+	TellTheHost(kElsewhere, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept(&theHost, NULL) == 1, "and one from elsewhere still isn't");
+
+	// The room lost: the game falls back to this network as always, but its socket is still on the way to the relay, so it still hears
+	// the relay alone
+	enetClock += kNetRelayKeptWithinMs;
+	Net_ServiceNetwork();
+	TellTheHost(kElsewhere, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "its room lost, the host still drops whatever isn't the relay's");
+	EndTheGame();
+
+	// The relay's name giving another address later: that one is left out
+	relayAddressNamed = kMovedTo;
+	int const sentMoved = datagramsSent;
+	Check(HostAGame() == NET_OK && datagramsSent == sentMoved && Net_RemoteRelayAddress() == kRelayHost,
+		"the relay's name giving another address later: that one is sent nothing, and the first stays the only one let through");
+	TellTheHost(kMovedTo, kNetRelayDefaultControlPort, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "and what comes from the new one is dropped");
+	EndTheGame();
+	relayAddressNamed = kRelayHost;
+
+	// A joiner through it: on the same address, on any free port, hearing the relay alone
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	Check(Net_ConnectToSession(0, playerName) == NET_OK && hostsBoundTo.back().host == kRoute && hostsBoundTo.back().port == 0,
+		"a joiner through it: its socket is on the same address, on any free port");
+	TellTheHost(kElsewhere, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "and it drops whatever isn't the relay's too");
+	EndTheGame();
+	datagramsWaiting.clear();
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: given the relay by its address (-dev's test server, relay_list.h), the run knows it by
+	// that address, whatever name the list gives it. The test's relay is at 10.11.12.13 (kRelayHost, as ENet keeps it).
+	Check(Net_AllowOneRemoteRelay("10.11.12.13"), "given the relay by its address");
+	int const sentByAddress = datagramsSent;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kRoute && datagramsSent == sentByAddress + 1 && datagramsSentTo.back().host == kRelayHost &&
+		Net_RemoteRelayAddress() == kRelayHost, "the list's relay at that address is the one, whatever its name");
+	EndTheGame();
+	Check(Net_AllowOneRemoteRelay("10.11.12.14"), "given another address");
+	int const sentElsewhere = datagramsSent;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentElsewhere && Net_RemoteRelayAddress() == 0,
+		"the list's relay, at another, is left out, and nothing is let through");
+	EndTheGame();
+
+	// No way towards the relay found: this machine's own address, as before, so the relay just can't be reached
+	Check(Net_AllowOneRemoteRelay("relay.example"), "given the relay again");
+	routeTowardsTheRelay = 0;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine, "with no way towards it found, the host stays on this machine's own address");
+	EndTheGame();
+
+	Net_AllowOneRemoteRelay("");
+	routeTowardsTheRelay = 0;
+	NetLoopbackOnly = false;
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
@@ -3583,6 +3751,13 @@ static void TestTheV2Draft()
 
 	// When it's on, and what the log says
 	Check(Net_V2DraftOn() && Net_OurVersion() == kNetV2DraftVersion, "with -dev, -netv2 and a build that knows its commit, the draft is on, at version 115");
+
+	// On: a host through the relay hands the list its identity's fingerprint, for its listing
+	relayNamed = true;
+	int const identitiesBeforeOn = identitiesListed;
+	Check(HostAGame() == NET_OK && identitiesListed == identitiesBeforeOn + 1, "with the draft on, a game hosted through the relay hands the list its fingerprint");
+	EndTheGame();
+	relayNamed = false;
 	RestartTheNetworkForTheDraft();
 	Check(LogHas("net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit"),
 		"and the log says so when the network starts");
@@ -3655,7 +3830,9 @@ static void TestTheV2Draft()
 	NetV2DraftAsked = false;
 	relayNamed = true;
 	size_t const sentBeforeHosting = datagramsSentBytes.size();
+	int const identitiesBeforeOff = identitiesListed;
 	Check(HostAGame() == NET_OK && theHost.sendHook == NULL, "with the draft off, a game hosted through the relay sends ENet's datagrams itself, unsealed, as version 1 does");
+	Check(identitiesListed == identitiesBeforeOff, "and hands the list no fingerprint: version 1's listing has none");
 	HostThroughTheRelayUntilItsRoomIsOpen();
 	uint8_t game[48];
 	memset(game, 0x47, sizeof(game));
@@ -3765,6 +3942,7 @@ int main()
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
 	TestTheRelayOnTheScreen();
+	TestARunsOneRelayBeyondThisMachine();
 	TestTimingTheRelaysForJoining();
 	TestTheStartLimitIsAsked();
 	TestTheRequestToJoin();

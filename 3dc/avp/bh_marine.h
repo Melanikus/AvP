@@ -1,5 +1,6 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   CreateMarineBot can be called from other files
+//   CreateMarineBot, Marine_GuardAndFace and Marine_GuardThisSpot can be called from other files
+//   so can Marine_TakesNoNoticeOfTheSquad and Marine_WhatHeAndHisSquadSuspect, for a test
 /*--------------Patrick 14/2/97----------------
   Header file for marine support functions
   ---------------------------------------------*/
@@ -387,6 +388,11 @@
 	void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data);
 	void MarineBehaviour(STRATEGYBLOCK *sbPtr);
 	STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon);
+	void Marine_GuardAndFace(STRATEGYBLOCK *sbPtr, const VECTORCH *point);
+	void Marine_GuardThisSpot(STRATEGYBLOCK *sbPtr, const VECTORCH *spot, AIMODULE *module);
+	void Marine_Hurry(STRATEGYBLOCK *sbPtr);
+	void Marine_TakesNoNoticeOfTheSquad(STRATEGYBLOCK *sbPtr);
+	void Marine_WhatHeAndHisSquadSuspect(const STRATEGYBLOCK *sbPtr, int *hisTime, VECTORCH *hisPoint, int *squadTime, VECTORCH *squadPoint);
 	void MakeMarineNear(STRATEGYBLOCK *sbPtr);
 	void MakeMarineFar(STRATEGYBLOCK *sbPtr);
 	void MarineIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple, int wounds,SECTION_DATA *Section, VECTORCH *incoming);

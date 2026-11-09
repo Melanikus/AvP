@@ -1024,6 +1024,26 @@
 					"to": "xenoStatusPointer->Target = FindSBWithName(xenoStatusPointer->Target_SBname);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: an empty slot keeps its load request, as 1999's line did",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif(!save_slot->SlotUsed)\n\t{\n\t\tLogString(\"save: there's no save in that slot, so nothing is loaded\");\n\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;\n\t}\n",
+					"to": "\tif(!save_slot->SlotUsed) return;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an empty slot says so but keeps its load request",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;\n\t}\n\n\t///make sure",
+					"to": "\t\treturn;\n\t}\n\n\t///make sure"
+				}
+			]
 		}
 	]
 }

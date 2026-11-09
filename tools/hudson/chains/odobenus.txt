@@ -1,0 +1,23 @@
+# level: odobenus   end started by: walk
+# campaign: Marine 4
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DoorAirlok
+where Docktube | Docktube01
+walk airlock1
+# opens DoorLok2 shuts DoorAirlok
+where DoorAirlok | Airlock | DoorLok2 | Railing02
+walk airlock2
+# opens Door03, Doorrr
+where DomeTop05
+press switch18A
+# opens DoorGarden shuts DoorFlat
+where Switch05
+press Switch06
+where Switch03
+press Switch04
+# opens DoorGard01 shuts DoorGarden
+where gardenn
+press switch3A
+where DoorFinal | Object12 | tip
+walk areaswich
+end endmish

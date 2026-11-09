@@ -10,6 +10,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   declarations written so the security scanner can read this file (CODING-STANDARD.md, rule 1)
 //   in a campaign, everyone plays its species, as each machine starts the game
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a Hudson run can find one of the game's own levels by its exact name, and a siege is on the level its run named
 #include "3dc.h"		 
 #include "inline.h"
 #include "module.h"
@@ -22,6 +24,7 @@
 #include "mp_config.h"
 #include "pldnet.h"
 #include "logString.h"
+#include "hudson.h"
 
 static enum AVP_ENVIRONMENT_ID MarineEpisodes[] =
 {
@@ -5156,6 +5159,40 @@ void SetLevelToLoadForPredator(int episode)
 {
 	SetBuiltInLevelName(RifNamesForEnvironments[PredatorEpisodes[episode]]);
 }
+// Which of the marine's levels has this name, or -1 if none does. The name came from a Hudson run's command line, so it's only ever compared with this list.
+int MarineEpisodeNamed(const char *name)
+{
+	for (int episode = 0; MarineEpisodes[episode] != AVP_ENVIRONMENT_END_OF_LIST; episode++)
+	{
+		if (strcmp(RifNamesForEnvironments[MarineEpisodes[episode]], name) == 0)
+		{
+			return episode;
+		}
+	}
+
+	return -1;
+}
+
+// Which of the game's own levels has exactly this name, for any player and any kind of game, or -1 if none does. It's only ever compared with the game's own lists, and it's the list's name that gets loaded and not this one,
+// so nothing from a Hudson run's command line ever gets near a path. A level that's been commented out of its list isn't one of them.
+int BuiltInEnvironmentNamed(const char *name)
+{
+	const AVP_ENVIRONMENT_ID *const lists[] = { MarineEpisodes, PredatorEpisodes, AlienEpisodes, MultiplayerEpisodes, CooperativeEpisodes };
+
+	for (size_t list = 0; list < sizeof(lists) / sizeof(lists[0]); list++)
+	{
+		for (int episode = 0; lists[list][episode] != AVP_ENVIRONMENT_END_OF_LIST; episode++)
+		{
+			if (strcmp(RifNamesForEnvironments[lists[list][episode]], name) == 0)
+			{
+				return (int)lists[list][episode];
+			}
+		}
+	}
+
+	return -1;
+}
+
 // The list for a campaign, or NULL for a number that isn't one.
 static const AVP_ENVIRONMENT_ID *ListForCampaign(int campaign)
 {
@@ -5196,6 +5233,25 @@ int Campaign_Environment(int campaign, int place)
 	}
 
 	return (int)ListForCampaign(campaign)[place];
+}
+
+// For a Hudson run with net= and coopend=: which of the three campaigns a level is on, and where
+bool Campaign_FindEnvironment(int environment, int *campaign, int *place)
+{
+	for (int which = kCampaignMarine; which <= kCampaignAlien; which++)
+	{
+		for (int at = 0; at < Campaign_LevelCount(which); at++)
+		{
+			if (Campaign_Environment(which, at) == environment)
+			{
+				*campaign = which;
+				*place = at;
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 void Campaign_SetFromLevelRow(void)
@@ -5255,7 +5311,8 @@ void SetLevelToLoadForCampaign(void)
 		return;
 	}
 
-	int const environment = Campaign_Environment(netGameData.coopCampaign, netGameData.coopCampaignLevel);
+	// A Hudson siege is on the level its run named, on either machine, whichever campaign it's playing like
+	int const environment = Hudson_IsASiege() ? Hudson_Environment() : Campaign_Environment(netGameData.coopCampaign, netGameData.coopCampaignLevel);
 
 	// The numbers were checked as they arrived, so this is only for a mistake of ours
 	if (environment >= 0)
@@ -5281,6 +5338,20 @@ static void SetCustomLevelName(const char *name)
 		LogErrorString(std::string("custom level name too long, truncated: ") + name);
 	}
 	LevelName[sizeof(LevelName) - 1] = '\0';
+}
+
+// Which multiplayer level this is, or -1 if it isn't one: a Hudson run with net= names its level the way any other run does.
+int MultiplayerEpisodeForEnvironment(int environment)
+{
+	for (int episode = 0; episode < MAX_NO_OF_MULTIPLAYER_EPISODES; episode++)
+	{
+		if ((int)MultiplayerEpisodes[episode] == environment)
+		{
+			return episode;
+		}
+	}
+
+	return -1;
 }
 
 // The numbers in level_lists.h have to be the real lengths of these lists. Each list has its end marker as well.

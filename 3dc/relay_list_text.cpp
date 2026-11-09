@@ -1304,3 +1304,182 @@ bool RelayList_IsRelayHost(const char *host)
 
 	return false;
 }
+
+// Added 2026-11-09 by Melanikus for the AvP port: see relay_list_text.h, "Reaching a test server"
+RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder)
+{
+	if (!text || !hostOrder || !text[0])
+	{
+		return kRelayIPv4NoText;
+	}
+
+	uint32_t address = 0;
+	size_t at = 0;
+
+	for (int part = 0; part < 4; part++)
+	{
+		// One to three digits, and a leading zero only for 0 itself. A fourth digit stops the reading, so nothing longer is ever added up.
+		size_t digits = 0;
+		uint32_t value = 0;
+
+		while (text[at + digits] >= '0' && text[at + digits] <= '9' && digits < 4)
+		{
+			value = value * 10 + static_cast<uint32_t>(text[at + digits] - '0');
+			digits++;
+		}
+
+		if (digits == 0)
+		{
+			return kRelayIPv4NotANumber;
+		}
+
+		if (digits > 3 || value > 255)
+		{
+			return kRelayIPv4TooBig;
+		}
+
+		if (digits > 1 && text[at] == '0')
+		{
+			return kRelayIPv4LeadingZero;
+		}
+
+		address = (address << 8) | value;
+		at += digits;
+
+		// A dot between the parts, and the end of the text after the last. Anything else there isn't part of an address.
+		char const after = text[at];
+
+		if (part < 3 && after == '\0')
+		{
+			return kRelayIPv4WrongShape;
+		}
+
+		if (part == 3 && after == '.')
+		{
+			return kRelayIPv4WrongShape;
+		}
+
+		if (part < 3 ? after != '.' : after != '\0')
+		{
+			return kRelayIPv4NotANumber;
+		}
+
+		at++;
+	}
+
+	*hostOrder = address;
+	return kRelayIPv4Read;
+}
+
+bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder)
+{
+	return RelayList_IPv4Refusal(text, hostOrder) == kRelayIPv4Read;
+}
+
+// A pin's hex digit, small letter or capital (the pass reader's HexValue, above, takes small letters, as the list writes them)
+static int PinDigitValue(char c)
+{
+	if (c >= '0' && c <= '9')
+	{
+		return c - '0';
+	}
+
+	if (c >= 'a' && c <= 'f')
+	{
+		return c - 'a' + 10;
+	}
+
+	if (c >= 'A' && c <= 'F')
+	{
+		return c - 'A' + 10;
+	}
+
+	return -1;
+}
+
+RelayPinRefusal RelayList_PinRefusal(const char *text, uint8_t pin[kRelayListPinBytes])
+{
+	if (!text || !pin || !text[0])
+	{
+		return kRelayPinNoText;
+	}
+
+	if (strlen(text) != 2 * static_cast<size_t>(kRelayListPinBytes))
+	{
+		return kRelayPinWrongLength;
+	}
+
+	uint8_t read[kRelayListPinBytes];
+
+	for (int i = 0; i < kRelayListPinBytes; i++)
+	{
+		int const high = PinDigitValue(text[2 * i]);
+		int const low = PinDigitValue(text[2 * i + 1]);
+
+		if (high < 0 || low < 0)
+		{
+			return kRelayPinNotHex;
+		}
+
+		read[i] = static_cast<uint8_t>(high * 16 + low);
+	}
+
+	memcpy(pin, read, sizeof(read));
+	return kRelayPinRead;
+}
+
+bool RelayList_ReadPin(const char *text, uint8_t pin[kRelayListPinBytes])
+{
+	return RelayList_PinRefusal(text, pin) == kRelayPinRead;
+}
+
+bool RelayList_PinMatches(const uint8_t digest[kRelayListPinBytes], const uint8_t pin[kRelayListPinBytes])
+{
+	if (!digest || !pin)
+	{
+		return false;
+	}
+
+	// Every byte is compared, whatever the first difference, so the time taken says nothing about where it was
+	uint8_t difference = 0;
+
+	for (int i = 0; i < kRelayListPinBytes; i++)
+	{
+		difference = static_cast<uint8_t>(difference | (digest[i] ^ pin[i]));
+	}
+
+	return difference == 0;
+}
+
+RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name)
+{
+	if (!name || !name[0])
+	{
+		return kRelayShownNameNoText;
+	}
+
+	size_t const length = strlen(name);
+
+	if (length > static_cast<size_t>(kRelayListShownNameLetters))
+	{
+		return kRelayShownNameTooLong;
+	}
+
+	for (size_t i = 0; i < length; i++)
+	{
+		char const c = name[i];
+		bool const letterOrDigit = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+
+		if (!letterOrDigit && c != ' ' && c != '\'' && c != '(' && c != ')' && c != '-' && c != '.' && c != ',')
+		{
+			return kRelayShownNameBadCharacter;
+		}
+	}
+
+	return kRelayShownNameGood;
+}
+
+bool RelayList_IsShownName(const char *name)
+{
+	return RelayList_ShownNameRefusal(name) == kRelayShownNameGood;
+}

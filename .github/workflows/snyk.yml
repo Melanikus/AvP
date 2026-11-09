@@ -240,6 +240,14 @@ jobs:
       # no source to collect fails, because a library we can't read is a blind spot. The only folders passed over are the
       # ones named here, which aren't libraries we compile: Microsoft's D3DX is a binary package, the two vcpkg-cmake ones
       # are build helpers, and the last two are vcpkg's own working folders.
+      #
+      # Every file is copied, the ones a library doesn't build (its examples and tests) included, so all of it is scanned.
+      # A link (a symbolic link or a junction) isn't copied, because its files are already there, where it points:
+      # mldsa-native's examples, for one, are links to the library's own sources and to its test random numbers, and
+      # copying through them failed (#174, run 42564776267). Each link is written down with where it points, so nothing
+      # leaves the scan without a line saying so. One that points outside its own library's source, or that can't be read,
+      # fails the step: what it points at wouldn't be scanned at all. Get-ChildItem doesn't walk into links unless it's
+      # told to, so nothing behind one is copied twice. Changed 2026-11-09 by Melanikus for the AvP port.
       - name: Collect each library's patched source
         shell: pwsh
         run: |
@@ -257,8 +265,42 @@ jobs:
               $failed = $true
             }
             foreach ($d in $folders) {
-              Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
-              "$($port.Name)/$($d.Name)"
+              $top = $d.FullName.TrimEnd('\', '/')
+              $copied = 0
+              $links = 0
+              foreach ($item in @(Get-ChildItem -LiteralPath $top -Recurse -Force)) {
+                $relative = $item.FullName.Substring($top.Length + 1)
+                # A hard link is a file like any other, so only these two are links here
+                if ($item.LinkType -in @('SymbolicLink', 'Junction')) {
+                  # Where it points: a junction's target is a whole path, a symbolic link's is often one from the link's own folder
+                  $target = @($item.Target)[0]
+                  $resolved = ''
+                  if ($target) {
+                    $fromHere = if ([System.IO.Path]::IsPathRooted($target)) { $target } else { Join-Path (Split-Path -Parent $item.FullName) $target }
+                    $resolved = [System.IO.Path]::GetFullPath($fromHere).TrimEnd('\', '/')
+                  }
+                  # Inside means the source's own top folder or anything under it, compared as Windows compares names
+                  $inside = $resolved -and ($resolved.Equals($top, [System.StringComparison]::OrdinalIgnoreCase) -or $resolved.StartsWith($top + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))
+                  if (-not $inside -or -not (Test-Path -LiteralPath $resolved)) {
+                    Write-Output "::error::$($port.Name): $relative is a link to '$target', which isn't inside its own source, so what it points at wouldn't be scanned"
+                    $failed = $true
+                  } else {
+                    $where = if ($resolved.Length -gt $top.Length) { $resolved.Substring($top.Length + 1) } else { 'the top of its own source' }
+                    Write-Output "::notice::$($port.Name): $relative is a $($item.LinkType) to $where, which is scanned where it is"
+                  }
+                  $links++
+                  continue
+                }
+                $to = Join-Path $out (Join-Path $port.Name (Join-Path $d.Name $relative))
+                if ($item.PSIsContainer) {
+                  New-Item -ItemType Directory -Force $to | Out-Null
+                } else {
+                  New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+                  Copy-Item -LiteralPath $item.FullName -Destination $to
+                  $copied++
+                }
+              }
+              "$($port.Name)/$($d.Name): $copied files copied, $links links written down"
             }
           }
           if ($failed) { exit 1 }

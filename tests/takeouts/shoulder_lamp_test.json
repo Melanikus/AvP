@@ -881,8 +881,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tif (isARealLight)\n\t{\n\t\treturn;\n\t}",
-					"to": "\tif (isARealLight)\n\t{\n\t}"
+					"from": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t\treturn;\n\t}",
+					"to": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t}"
 				}
 			]
 		},

@@ -360,8 +360,11 @@ public:
 		sealed.End(kNetSealedGameFine);
 		outbox.Clear();
 		NetV2_AssemblyClear(&assembly);
-		memset(id, 0, sizeof(id));
-		memset(code, 0, sizeof(code));
+
+		// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): what came of the handshake is wiped with NetCrypto_Wipe, which the
+		// compiler must keep. A plain memset of memory that's never read again may be left out by an optimising compiler.
+		NetCrypto_Wipe(id, sizeof(id));
+		NetCrypto_Wipe(code, sizeof(code));
 		memset(&drops, 0, sizeof(drops));
 		step = kNothing;
 		why = kNetHandshakeBFine;
@@ -666,12 +669,15 @@ public:
 		sealed.End(kNetSealedGameFine);
 		outbox.Clear();
 		NetV2_AssemblyClear(&assembly);
-		memset(id, 0, sizeof(id));
-		memset(code, 0, sizeof(code));
-		memset(regionName, 0, sizeof(regionName));
-		memset(joinerFingerprint, 0, sizeof(joinerFingerprint));
-		memset(b1Kept, 0, sizeof(b1Kept));
-		memset(b3Kept, 0, sizeof(b3Kept));
+
+		// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): what came of the handshake is wiped with NetCrypto_Wipe, which the
+		// compiler must keep. A plain memset of memory that's never read again may be left out by an optimising compiler.
+		NetCrypto_Wipe(id, sizeof(id));
+		NetCrypto_Wipe(code, sizeof(code));
+		NetCrypto_Wipe(regionName, sizeof(regionName));
+		NetCrypto_Wipe(joinerFingerprint, sizeof(joinerFingerprint));
+		NetCrypto_Wipe(b1Kept, sizeof(b1Kept));
+		NetCrypto_Wipe(b3Kept, sizeof(b3Kept));
 		memset(&drops, 0, sizeof(drops));
 		me = NULL;
 		port = 0;

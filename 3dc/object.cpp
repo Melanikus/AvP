@@ -134,9 +134,17 @@ void DeallocateObjectBlock(DISPLAYBLOCK *dblockptr)
  An active object must ALWAYS be deallocated by "DestroyActiveObject()".
 */
 
+// A test run can make the game behave as if every block has gone, to show nothing crashes when they do
+bool HudsonTest_NoDisplayBlocks = false;
+
 DISPLAYBLOCK* CreateActiveObject(void)
 {
 	DISPLAYBLOCK *dblockptr;
+
+	if (HudsonTest_NoDisplayBlocks)
+	{
+		return NULL;
+	}
 
 	dblockptr = AllocateObjectBlock();
 
@@ -404,8 +412,16 @@ void DeallocateLightBlock(LIGHTBLOCK *lptr)
 
 */
 
+// A test run can make the game behave as if every light has gone, to show nothing crashes when they do
+bool HudsonTest_NoLightBlocks = false;
+
 LIGHTBLOCK* AddLightBlock(DISPLAYBLOCK *dptr, LIGHTBLOCK *lptr_to_add)
 {
+	if (HudsonTest_NoLightBlocks)
+	{
+		return NULL;
+	}
+
 	LIGHTBLOCK **larrayptr;
 	LIGHTBLOCK **freelarrayptr;
 	LIGHTBLOCK *lptr = 0;

@@ -62,7 +62,6 @@ char const *GetSaveFolderProblem();
 // copy), a fixed name, so two copies don't share a log, settings or saved games. It has to come before anything asks for the folder, the
 // log first of all, and gives back false, changing nothing, if it comes too late. (Added 2026-11-08 by Melanikus for the AvP port.)
 bool SaveFolder_UseTheSecondCopy();
-bool SaveFolder_IsTheSecondCopy();
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);
 

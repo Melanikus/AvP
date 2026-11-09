@@ -68,6 +68,7 @@ extern ATTACK_DATA Alien_Attacks[];
 extern ATTACK_DATA Wristblade_Attacks[];
 extern ATTACK_DATA PredStaff_Attacks[];
 extern int SBIsEnvironment(STRATEGYBLOCK *sbPtr);
+extern int HudsonWayOfDying; // hudson.cpp
 
 /* From HModel.c! */
 extern void QNormalise(QUAT *q);
@@ -2457,6 +2458,11 @@ DEATH_DATA *GetDeathSequence(HMODELCONTROLLER *controller,SECTION *TemplateRoot,
         int use_burning;
         int use_crouching;
 		int use_electrical;
+
+		// A test run can ask for one way of dying, to look at it on every machine. A real game never does.
+		if (HudsonWayOfDying >= 0) {
+			return GetThisDeath_FromCode(controller,FirstDeath,HudsonWayOfDying);
+		}
 
         use_priority_wounds=priority_wounds;
         use_wound_flags=wound_flags;

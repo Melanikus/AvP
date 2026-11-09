@@ -2914,6 +2914,86 @@
 					"to": "relayEndToEndJoinFailed = true ? RelayEndToEndJoin("
 				}
 			]
+		},
+		{
+			"name": "a run given a relay beyond this machine still puts its sockets on 127.0.0.1",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\taddress->host = remoteRelayRoute;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the relay's name may point anywhere later",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a relay by any name is let through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
+					"to": ": false)"
+				}
+			]
+		},
+		{
+			"name": "a lost room leaves the host on the way to the relay hearing anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
+					"to": "host->intercept = NULL;"
+				}
+			]
+		},
+		{
+			"name": "a run's host on the way to the relay hears anyone when no relay is used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a run given the relay by address knows it by name only",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "givenAnAddress ? relay.address != givenAsENetKeepsIt : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a draft's host doesn't hand the list its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();\n\t\tRelayList_HostIdentity(runIdentity.fingerprint);",
+					"to": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
+		},
+		{
+			"name": "a host without the draft hands the list a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();",
+					"to": "\tif (true)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
 		}
 	]
 }

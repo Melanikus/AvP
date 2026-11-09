@@ -1,0 +1,16 @@
+# level: sulaco_p   end started by: kill
+# campaign: Predator 11
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# In a network game, door fusdoor01 stays shut: only killing several NPCs together opens it.
+# In a network game, door fusdoor stays shut: only killing marine "officer" opens it.
+where frontwin01 | finaldoor | frontvie02
+walk END OF MISSION AREA SWITCH
+# opens fusdoor02 shuts fusdoor03, hangdoor01, hang2door
+missing officer | a network game leaves out this marine
+# opens fusdoor
+where coolroom03
+press switch06
+missing XENOBORG | a network game leaves out this xenoborg
+# opens fusdoor01
+missing XENOBORG02 | a network game leaves out this xenoborg
+end END OF MISSION

@@ -1523,6 +1523,24 @@ static void TestPeers()
 
 		BCheck(later == 0 && joiner.Ready(), "once the host's first sealed datagram has come, the joiner sends B5 no more, and stays ready");
 		BCheck(host.Drops().notOurs == 0 && host.Drops().sealedEarly == 0 && joiner.Drops().notOurs == 0, "and nothing was dropped on the way");
+
+		// Added 2026-11-09 by Melanikus for the AvP port (Snyk Code): ending a handshake wipes what came of it, the check code and the
+		// joiner's fingerprint among them, on both sides
+		joiner.Reset();
+		host.Reset();
+		bool wiped = !joiner.Ready() && !host.Ready() && host.Port() == 0;
+
+		for (size_t i = 0; i < kNetHandshakeBCheckCodeBytes; i++)
+		{
+			wiped = wiped && joiner.CheckCode()[i] == 0 && host.CheckCode()[i] == 0;
+		}
+
+		for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
+		{
+			wiped = wiped && host.JoinerFingerprint()[i] == 0;
+		}
+
+		BCheck(wiped, "ending the handshakes wipes their check codes, and the joiner's fingerprint the host kept");
 	}
 
 	// The joiner's sends when nothing answers: at 0, 0.5, 1.5 and 3.5 s, then it gives up at 7.5 s

@@ -1,0 +1,119 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "fail() comes back instead of ending the game",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "\texit(EXIT_FAILURE);\n}",
+					"to": "\treturn;\n}"
+				}
+			]
+		},
+		{
+			"name": "fail() ends the game without writing to the log",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "LogErrorString(std::string(\"the game stopped itself: \") + words);",
+					"to": "/* nothing in the log */"
+				}
+			]
+		},
+		{
+			"name": "fail() keeps the message's own line break at the end",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "while (length > 0 && (words[length - 1] == '\\n' || words[length - 1] == '\\r'))",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: fail() ends the game as if all were well",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "exit(EXIT_FAILURE);",
+					"to": "exit(0);"
+				}
+			]
+		},
+		{
+			"name": "a missing format is used as it is",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "if (!format)\n\t{\n\t\tformat = \"something went wrong, and its message is missing\";",
+					"to": "if (false)\n\t{\n\t\tformat = \"something went wrong, and its message is missing\";"
+				}
+			]
+		},
+		{
+			"name": "no room at all is written to anyway",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "if (!words || size == 0)\n\t{\n\t\treturn 0;",
+					"to": "if (!words)\n\t{\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "a message too long says the length it would have had",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "return (size_t)wanted < size ? (size_t)wanted : size - 1;",
+					"to": "return (size_t)wanted;"
+				}
+			]
+		},
+		{
+			"name": "the message isn't put together from its values",
+			"changes": [
+				{
+					"file": "3dc/fail.cpp",
+					"from": "int const wanted = vsnprintf(words, size, format, arguments);",
+					"to": "int const wanted = snprintf(words, size, \"%s\", format);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a list's message asks for one more value than its call gives",
+			"changes": [
+				{
+					"file": "3dc/win95/list_tem.cpp",
+					"from": "\"%s: Tried to delete a nonexistent List entry\\n\";",
+					"to": "\"%s: Tried to delete a nonexistent List entry %d\\n\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shared object's message asks for a value its call doesn't give",
+			"changes": [
+				{
+					"file": "3dc/avp/support/refobj.cpp",
+					"from": "\"Failure in R_AddRef()\\n\";",
+					"to": "\"Failure in R_AddRef() %s\\n\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a release build reads the list's checks",
+			"changes": [
+				{
+					"file": "3dc/win95/list_tem.hpp",
+					"from": "#ifdef NDEBUG\n\t#define fail if (0)",
+					"to": "#ifdef NDEBUG\n\t#define fail_not_used if (0)"
+				}
+			]
+		}
+	]
+}

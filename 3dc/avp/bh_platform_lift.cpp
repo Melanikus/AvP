@@ -9,6 +9,9 @@
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   in the same-as-single-player mode, the host says where each lift's car is, and every other machine's car follows it
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   how long since the host spoke is counted by the machine's own clock, so a long frame or a pause no longer leaves a joiner's car
+//   behind the host's (#90)
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -297,7 +300,7 @@ void InitialisePlatformLift(void* bhdata, STRATEGYBLOCK *sbPtr)
 	platformliftdata->syncHeight = toolsData->position.vy;
 	platformliftdata->syncState = PLBS_AtRest;
 	platformliftdata->syncEnd = 0;
-	platformliftdata->syncAge = 0;
+	platformliftdata->syncHeardAt = 0;
 	platformliftdata->syncMessages = 0;
 	
 	if(toolsData->travel<0)
@@ -719,7 +722,7 @@ void PlatformLift_TakeTheHostsCar(STRATEGYBLOCK *sbPtr, int height, int state, i
 	lift->syncHeight = height;
 	lift->syncState = state;
 	lift->syncEnd = end;
-	lift->syncAge = 0;
+	lift->syncHeardAt = timeGetTime();
 	lift->syncHeard = TRUE;
 	lift->syncMessages++;
 	lift->state = (PLATFORMLIFT_STATES)state;
@@ -736,10 +739,12 @@ static void Lift_FollowTheHostsCar(STRATEGYBLOCK *sbPtr)
 	BOOL const moving = lift->syncState == PLBS_GoingUp || lift->syncState == PLBS_GoingDown;
 	int const endHeight = lift->syncEnd == 0 ? lift->upHeight : lift->downHeight;
 
-	lift->syncAge += NormalFrameTime;
-
-	int const msSince = (int)(((long long)lift->syncAge * 1000) >> ONE_FIXED_SHIFT);
+	// How long since the host said where its car was, by this machine's own clock: the host's car went on moving all that time, however
+	// long this machine's frames were, or if it stood still (net_checks.h, NetLiftMsSince). #90.
+	int const msSince = NetLiftMsSince(timeGetTime(), lift->syncHeardAt);
 	int const hostHeight = NetLiftHostHeightNow(lift->syncHeight, moving != FALSE, endHeight, PLATFORMLIFT_SPEED, msSince);
+
+	// But how far this car may move in one frame stays in game time, the time everything on it moves by, so a rider is carried with it
 	int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), NormalFrameTime);
 	BOOL const someoneOnIt = ActivatedByPlayer(dynPtr) ? TRUE : FALSE;
 	int const height = NetLiftFollowStep(dynPtr->Position.vy, hostHeight, mostThisFrame, someoneOnIt != FALSE, MAXIMUM_STEP_HEIGHT);

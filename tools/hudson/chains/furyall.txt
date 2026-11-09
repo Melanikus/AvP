@@ -1,0 +1,23 @@
+# level: furyall   end started by: walk
+# campaign: Predator 4
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens ROOM
+where collarb
+press startswc01
+# opens doorrt
+where topmain
+press rtswitch
+# opens pipdoors
+where opscon
+press fanswitch
+# opens wastedoor
+where power
+press powswch
+# opens enddoor
+where endroom
+press endswch01
+where exit01 | exit3 | outside
+walk shipswitch
+where outside
+walk properendingvolumeswitch
+end completestrategy

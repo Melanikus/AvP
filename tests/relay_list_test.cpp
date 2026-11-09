@@ -822,6 +822,8 @@ static bool Has(const std::string &text, const char *piece)
 	return text.find(piece) != std::string::npos;
 }
 
+static size_t CountOf(const std::string &text, const char *piece);   // below
+
 static void TestTheCalls()
 {
 	puts("13. how relay_list.cpp makes its calls (read, not run: it needs the network)");
@@ -833,7 +835,49 @@ static void TestTheCalls()
 	Check(Has(call, "WINHTTP_FLAG_SECURE)"), "every call is HTTPS");
 	Check(Has(call, "WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;") && !Has(source, "TLS1_1") && !Has(source, "PROTOCOL_TLS1 ") &&
 		!Has(source, "PROTOCOL_SSL") && !Has(source, "PROTOCOL_ALL"), "with TLS 1.2 or newer, and nothing older named anywhere");
-	Check(!Has(source, "SECURITY_FLAG_IGNORE") && !Has(source, "WINHTTP_OPTION_SECURITY_FLAGS"), "and nothing turns the certificate check off");
+	// Modified 2026-11-09 by Melanikus for the AvP port: the certificate check is turned off nowhere but on -dev's pinned path, and there only
+	// for an unknown issuer and another name, and only once the pin's own check is in place for the call (relay_list.h, RelayListPin)
+	std::string const passLine = "\t\tif (shared->pinned)\n\t\t{\n\t\t\tDWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID;\n";
+	size_t const pinnedBlock = call.find(passLine);
+	size_t const callback = call.find("WinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0)");
+	size_t const passed = call.find("WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass))");
+	size_t const firstSend = call.find("WinHttpSendRequest(");
+	Check(CountOf(source, "SECURITY_FLAG_IGNORE") == 2 && CountOf(source, "WINHTTP_OPTION_SECURITY_FLAGS") == 1 && pinnedBlock != std::string::npos,
+		"nothing turns the certificate check off but -dev's pinned path, and there only for an unknown issuer and another name");
+	Check(callback != std::string::npos && passed != std::string::npos && firstSend != std::string::npos && pinnedBlock < callback && callback < passed &&
+		passed < firstSend, "and there the pin's check is in place before that, and both before the call's first byte");
+	std::string const pinCheck = SourceSlice(source, "void CALLBACK CheckThePin(", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(pinCheck, "status != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST") && Has(pinCheck, "WINHTTP_OPTION_SERVER_CERT_CONTEXT") &&
+		Has(pinCheck, "Sha256(certificate->pbCertEncoded, certificate->cbCertEncoded, digest)") && Has(pinCheck, "RelayList_PinMatches(digest, check->pin)") &&
+		Has(pinCheck, "CertFreeCertificateContext(certificate);"),
+		"the pin's check reads the list's certificate just before the first byte, compares its SHA-256 with the pin, and gives it back");
+	Check(Has(pinCheck, "if (!check->matched)\n\t\t{\n\t\t\tcheck->closed = true;\n\t\t\tWinHttpCloseHandle(request);"),
+		"and a certificate that isn't the pinned one, or none it could read, closes the call there, unsent");
+	size_t const closedSaid = call.find("if (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;");
+	size_t const unreadSaid = call.find("if (shared->pinned && !check.matched)\n\t\t{\n\t\t\ta.why = kPinUnread;");
+	size_t const firstRead = call.find("WinHttpReceiveResponse(");
+	Check(closedSaid != std::string::npos && unreadSaid != std::string::npos && firstRead != std::string::npos && firstSend < closedSaid &&
+		closedSaid < unreadSaid && unreadSaid < firstRead, "a call the check closed says so, and a pinned call whose check never ran has nothing of its answer read");
+	// Added 2026-11-09 by Melanikus for the AvP port (Primary's read of the pin): the request goes out with its headers alone, and its body
+	// (a listing's pass and owner token) is written only once the pin's check has passed, and all of it or the call fails
+	size_t const bodyWritten = call.find("bool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));");
+	Check(CountOf(call, "WinHttpSendRequest(") == 2 && CountOf(call, "WINHTTP_NO_REQUEST_DATA, 0, ") == 2 && !Has(call, "const_cast<char *>(body)"),
+		"the request goes out with its headers alone: neither way of sending it carries the body");
+	Check(bodyWritten != std::string::npos && unreadSaid < bodyWritten && bodyWritten < firstRead && CountOf(call, "WinHttpWriteData(") == 1,
+		"the body is written once, whole, only after the pin's check has passed, and before the answer is waited for");
+	// and a request the pin's check closed is never used again, nor closed a second time: after the send, every close is of NULL or of what
+	// StillOpen gives, and a call the check closed at any send ends before anything more is done with its request
+	std::string const stillOpen = SourceSlice(source, "HINTERNET StillOpen(const PinCheck &check, HINTERNET request)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(stillOpen, "return check.closed ? NULL : request;"), "StillOpen gives nothing to close for a request the pin's check closed");
+	std::string const afterTheSend = firstSend != std::string::npos ? call.substr(firstSend) : std::string();
+	size_t const closes = CountOf(afterTheSend, "CloseAll(");
+	size_t const safeCloses = CountOf(afterTheSend, "CloseAll(NULL, connection, session);") +
+		CountOf(afterTheSend, "CloseAll(StillOpen(check, request), connection, session);");
+	Check(closes >= 9 && closes == safeCloses, "after the send, every one of the call's 9 or more closes leaves out a request the check closed");
+	size_t const closedAgain = firstRead != std::string::npos ? call.find("if (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;", firstRead) : std::string::npos;
+	size_t const notAnswered = call.find("if (!answered)");
+	Check(Has(call, "bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL)") && closedAgain != std::string::npos &&
+		notAnswered != std::string::npos && closedAgain < notAnswered, "a call the check closed while the answer was awaited ends there, unread");
 	Check(Has(call, "WINHTTP_DISABLE_REDIRECTS") && Has(call, "WINHTTP_DISABLE_COOKIES") && Has(call, "WINHTTP_DISABLE_AUTHENTICATION"),
 		"redirects, cookies and signing in are off");
 	Check(Has(call, "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000)"), "each step has 5 seconds");
@@ -870,6 +914,26 @@ static void TestTheCalls()
 	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(serverName, "if (!DevMode)") && Has(serverName, "memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));"),
 		"without -dev, the list's name is the game's own, whatever the settings say");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: -dev's test server reached with nothing changed on the tester's computer (relay_list.h)
+	Check(Has(serverName, "(!OnlyDigitsAndDots(setting.c_str()) || IsUsableAddress(setting.c_str()))"),
+		"with -dev, digits and dots in RelayServer must be one plain address a server can have");
+	std::string const pinSetting = SourceSlice(source, "const PinSetting &ThePinSetting(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const pinDev = pinSetting.find("else if (!DevMode)");
+	size_t const pinRead = pinSetting.find("else if (RelayList_ReadPin(setting.c_str(), pinSetting.pin))");
+	Check(pinDev != std::string::npos && pinRead != std::string::npos && pinDev < pinRead && Has(pinSetting, "pinSetting.refused = true;"),
+		"RelayListPin is read only with -dev, and one that's set but isn't a pin is refused");
+	std::string const starting = SourceSlice(source, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(starting, "if (!name[0] || PinRefused())"), "and then there's no list at all, so a test meant to be pinned is never called unpinned");
+	std::string const relaysRead = SourceSlice(source, "void ReadTheRelays(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(relaysRead, "if (shared->atAnAddress && shared->pinned)\n\t\t\t{\n\t\t\t\taddress = shared->serverAddress;") &&
+		Has(relaysRead, "RelayList_AddressRefusal(ntohl(address), shared->developer)"),
+		"a test server at an address, with a pin: its relays are taken to be at that address, no name looked up, and the address still checked");
+	std::string const shownName = SourceSlice(source, "const char *Relay_ServerShownName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const shownDev = shownName.find("else if (!DevMode)");
+	size_t const shownRead = shownName.find("RelayList_IsShownName(setting.c_str())");
+	Check(shownDev != std::string::npos && shownRead != std::string::npos && shownDev < shownRead,
+		"the name people see for the server is read only with -dev, and only if it's one");
 	std::string const listPort = SourceSlice(source, "int Relay_ListPort(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
 		"and the list's port is the settings' only with -dev");
@@ -940,14 +1004,38 @@ static void TestTheMenus()
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	Check(menus.size() > 100000, "menus.cpp was found and read, from the top of the repository");
 
-	// The page of games found asks the list when it's first opened, and then only when its search says it's time (every 5 s, and 12 times
-	// at most while nothing is found: online_screens.h, checked by online_screens_test). Never on each answer, or one answer would bring the
-	// next, for as long as the page is open.
+	// The page of games found asks the list when it's first opened, and then only when the player asks again: Refresh on the list, or
+	// Enter on a failure (the user's design: online_screens_page.h). Never on each answer, or one answer would bring the next, for as long
+	// as the page is open, and never by itself on a timer.
 	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 2,
-		"the page of games found asks the list when it's opened and when its search says it's time, and nowhere else");
+		"the page of games found asks the list when it's opened and when the player asks again, and nowhere else");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	Check(page.size() > 20000, "online_screens_page.cpp was found and read");
+	std::string const timeToAsk = SourceSlice(page, "bool OnlinePage_TimeToAskAgain(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const findAgain = SourceSlice(page, "void OnlinePage_FindAgain(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(timeToAsk, "if (!askNow)\n\t{\n\t\treturn false;\n\t}") && !Has(timeToAsk, "Now()") && Has(findAgain, "askNow = true;") &&
+		CountOf(page, "askNow = true;") == 1, "it's time to ask again only when Refresh or Enter has asked for it, never by the clock");
+	Check(Has(findAgain, "if (pageState == kPageList || pageState == kPageCantConnect || pageState == kPageCantFetch)\n\t{\n\t\taskNow = true;"),
+		"and only from the list or a failure, never while a fetch is going: one at a time");
+	std::string const refresh = SourceSlice(menus, "\t\tcase AVPMENU_ELEMENT_FINDAGAIN:\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(refresh, "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)\n\t\t\t{\n\t\t\t\tOnlinePage_FindAgain();"),
+		"and the page's Refresh row asks for it when it's chosen");
+
+	// "Couldn't connect" and "connected, but couldn't fetch its open sessions" are told apart by the list code's own reason (the user's
+	// design): no connection is the four reasons a call gives before any answer has come, compared as the very words relay_list.cpp hands
+	// out. An answer that came and was too big, a no, or one the hostile reader refused, is a failure to fetch.
+	std::string const list = ReadSource("3dc/relay_list.cpp");
+	std::string const noConnection = SourceSlice(list, "bool RelayList_WhyIsNoConnection(const char *why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(noConnection, "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;"),
+		"no connection to the list's server is: it couldn't be reached, took too long, its certificate wasn't accepted, or the call couldn't start");
+	Check(!Has(noConnection, "kTooBig") && !Has(noConnection, "kSaidNo") && !Has(noConnection, "strcmp") && !Has(noConnection, "strstr"),
+		"an answer that came isn't one of them, and nothing is compared by its letters");
+	Check(Has(page, "listCantConnect = why != NULL && RelayList_WhyIsNoConnection(why);") &&
+		Has(page, "pageState = listCantConnect ? kPageCantConnect : kPageCantFetch;"), "and the page shows which of the two it was by that");
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
@@ -973,16 +1061,61 @@ static void TestTheMenus()
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
 
+	// The wait is called from inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL, in the
+	// first footage's log). So the wait's drawing closes the menus' frame once, before its first frame of its own, and a new one is opened
+	// for the menus' loop to finish once the wait is over, however it ended.
+	std::string const joining = SourceSlice(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const closesTheMenus = joining.find("if (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}");
+	size_t const opensItsOwn = joining.find("ThisFramesRenderingHasBegun();");
+	Check(closesTheMenus != std::string::npos && opensItsOwn != std::string::npos && closesTheMenus < opensItsOwn,
+		"the join's wait closes the menus' open frame, once, before it opens one of its own");
+	std::string const waitOver = SourceSlice(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();"),
+		"and once it's over, a new frame is opened for the menus, only if the wait drew any");
+	size_t const over = menus.find("OnlinePage_JoinWaitOver();");
+	Check(unset != std::string::npos && over != std::string::npos && unset < over && over < menus.find("if (joined != NET_FAIL)", unset) &&
+		CountOf(menus, "OnlinePage_JoinWaitOver();") == 1, "which the menus ask for straight after the join, before what it did is looked at");
+
 	// A join goes to the game on its row, found by its relay code or its address (online_screens_page.h). Never by the row's number: each
 	// search empties the list of games found and fills it again, so by the time Enter is pressed, a row's number can be another game's.
 	Check(Has(menus, "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);") && !Has(menus, "int s = AvPMenus.CurrentlySelectedElement;"),
 		"a join goes to the game on its row, found by its code or its address, never by the row's number");
+
+	// The menu's rows start with the Search box and Refresh, and the search hides some games, so a menu row is turned into the game the
+	// search showed on it, the same way, both for the join and for the game the page selects again when the join ends
+	std::string const sessionForRow = SourceSlice(page, "int OnlinePage_SessionForRow(int menuRow)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const joiningRow = SourceSlice(page, "void OnlinePage_Joining(int menuRow)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(sessionForRow, "int const row = ShownRowOf(menuRow);") && Has(joiningRow, "int const row = ShownRowOf(menuRow);") &&
+		Has(joiningRow, "joinedKey = shownRows[row].key;"), "and the game remembered for the join's end is the same one, by the same rows");
 
 	// A player asking to join: the host's two answer rows come in front of the page's own, and the selection moves down with the row it
 	// was on, so it's never on "Let NAME in" by itself: Enter pressed by chance can't let anyone in
 	std::string const answers = SourceSlice(menus, "static void UpdateTheAnswerRows(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(answers, "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);") && Has(answers, "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;"),
 		"the host's answer rows never take the selection when they come, and only the first lets the player in");
+
+	// The Join page's first row is Find Games, not 1999's "Find Local Servers". Its help says only what a player's search does: it looks on
+	// this network. The online list is asked only with -dev, and a release game reaches no server, so the help never promises it (the
+	// owner's ruling). The words are the game's own (language.cpp, after everything language.txt holds), so a player's language file isn't
+	// touched.
+	std::string const pages = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const joinPage = SourceSlice(pages, "static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=", "\n};\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(joinPage, "{TEXTSTRING_MULTIPLAYER_FINDGAMES},") && Has(joinPage, "TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP}") && !Has(joinPage, "FINDLOCAL"),
+		"the Join page's first row is Find Games, with its own help, and nothing of the old local-servers words");
+	std::string const words = ReadSource("3dc/avp/language.cpp");
+	Check(Has(words, "\t\"Find Games\",\n\t\"Press ENTER to look for games on this network.\",\n") && !Has(words, "online list of games\""),
+		"and its help says only this network: nothing a player's game can't reach");
+
+	// -dev -findgames: only with -dev, and then the player's own way to the page of games found, one page after another
+	std::string const startUp = ReadSource("3dc/avp/win95/winmain.cpp");
+	std::string const findGamesWord = SourceSlice(startUp, "if (CommandLineHasWord(command_line, \"-findgames\"))", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(findGamesWord, "if (DevMode)\n\t\t\t{\n\t\t\t\tOnlinePage_FindGamesAtStart();"), "-findgames does anything only with -dev");
+	std::string const findGames = SourceSlice(menus, "if (OnlinePage_GoStraightToFindGames())", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const toMultiplayer = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYER);");
+	size_t const toJoin = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);");
+	size_t const toFind = findGames.find("SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);");
+	Check(toMultiplayer != std::string::npos && toJoin != std::string::npos && toFind != std::string::npos && toMultiplayer < toJoin && toJoin < toFind,
+		"and it goes Multiplayer, then Join Game, then Find Games, each page set up as pressing it would");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it
@@ -1236,6 +1369,84 @@ static void TestRelayKeys()
 		"and a region asked about that can't be one is refused before anything is read");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: -dev's test server reached with nothing changed on the tester's computer (relay_list.h):
+// its address written plainly, the pin of its certificate, and the name people see for it
+static void TestTheTestServer()
+{
+	puts("16. a test server by its address, its certificate's pin, and the name people see");
+
+	// The address, written plainly. Each refusal says why, and writes nothing.
+	uint32_t address = 0x12345678u;
+	Check(RelayList_IPv4Refusal("203.0.113.9", &address) == kRelayIPv4Read && address == 0xCB007109u, "an address written plainly is read, first number highest");
+	Check(RelayList_ReadIPv4("0.0.0.0", &address) && address == 0 && RelayList_ReadIPv4("255.255.255.255", &address) && address == 0xFFFFFFFFu,
+		"the lowest and the highest are read (whether a server can have one is RelayList_AddressRefusal's)");
+	address = 7;
+	Check(RelayList_IPv4Refusal("203.0.113.09", &address) == kRelayIPv4LeadingZero && RelayList_IPv4Refusal("010.1.1.1", &address) == kRelayIPv4LeadingZero,
+		"a leading zero is refused for being one, as some readers take it as octal");
+	Check(RelayList_IPv4Refusal("256.1.1.1", &address) == kRelayIPv4TooBig && RelayList_IPv4Refusal("1.1.1.1000", &address) == kRelayIPv4TooBig &&
+		RelayList_IPv4Refusal("1.1.1.99999999999", &address) == kRelayIPv4TooBig, "a number past 255, or of four digits or more, is too big");
+	Check(RelayList_IPv4Refusal("1.1.1", &address) == kRelayIPv4WrongShape && RelayList_IPv4Refusal("1.1.1.1.1", &address) == kRelayIPv4WrongShape &&
+		RelayList_IPv4Refusal("1.1.1.1.", &address) == kRelayIPv4WrongShape, "three numbers, five, or a dot after the last, is the wrong shape");
+	Check(RelayList_IPv4Refusal(" 1.1.1.1", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("1.1.1.1 ", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal("1.1.1.1\n", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("1..1.1", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal(".1.1.1.1", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("+1.1.1.1", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal("0x1.1.1.1", &address) == kRelayIPv4NotANumber, "a space, a newline, an empty number, a sign or hex is not a number");
+	Check(RelayList_IPv4Refusal("", &address) == kRelayIPv4NoText && RelayList_IPv4Refusal(NULL, &address) == kRelayIPv4NoText &&
+		RelayList_IPv4Refusal("1.1.1.1", NULL) == kRelayIPv4NoText, "nothing at all, or nowhere to put it, is no text");
+	Check(address == 7, "and no refusal wrote anything");
+
+	// The pin
+	char const *const nyc3 = "7f1096882c32876dbc4606b871b2c06bfdc504f9af483e4314a439403ece6767";
+	uint8_t pin[kRelayListPinBytes];
+	memset(pin, 0xAA, sizeof(pin));
+	Check(RelayList_PinRefusal(nyc3, pin) == kRelayPinRead && pin[0] == 0x7f && pin[1] == 0x10 && pin[31] == 0x67, "a pin of 64 hex digits is read, in order");
+	uint8_t upper[kRelayListPinBytes];
+	Check(RelayList_ReadPin("7F1096882C32876DBC4606B871B2C06BFDC504F9AF483E4314A439403ECE6767", upper) && memcmp(pin, upper, sizeof(pin)) == 0,
+		"capitals read the same");
+	uint8_t untouched[kRelayListPinBytes];
+	memset(untouched, 0x5A, sizeof(untouched));
+	std::string const shortPin(nyc3, 63);
+	std::string const longPin = std::string(nyc3) + "0";
+	std::string colons;
+	for (int i = 0; i < 32; i++)
+	{
+		colons += std::string(nyc3 + 2 * i, 2) + (i < 31 ? ":" : "");
+	}
+	Check(RelayList_PinRefusal(shortPin.c_str(), untouched) == kRelayPinWrongLength && RelayList_PinRefusal(longPin.c_str(), untouched) == kRelayPinWrongLength &&
+		RelayList_PinRefusal(colons.c_str(), untouched) == kRelayPinWrongLength,
+		"63 or 65 digits, or the pin written with colons as some tools print it, is the wrong length: the settings take the digits alone");
+	std::string spaced = nyc3;
+	spaced[10] = ' ';
+	std::string notHex = nyc3;
+	notHex[63] = 'g';
+	Check(RelayList_PinRefusal(spaced.c_str(), untouched) == kRelayPinNotHex && RelayList_PinRefusal(notHex.c_str(), untouched) == kRelayPinNotHex,
+		"a space or a letter that isn't hex, at the right length, is not hex");
+	Check(RelayList_PinRefusal("", untouched) == kRelayPinNoText && RelayList_PinRefusal(NULL, untouched) == kRelayPinNoText &&
+		RelayList_PinRefusal(nyc3, NULL) == kRelayPinNoText, "nothing at all, or nowhere to put it, is no text");
+	Check(untouched[0] == 0x5A && untouched[31] == 0x5A, "and no refusal wrote anything, not even the part it had read");
+
+	uint8_t digest[kRelayListPinBytes];
+	memcpy(digest, pin, sizeof(digest));
+	Check(RelayList_PinMatches(digest, pin), "the pinned certificate's SHA-256 matches its pin");
+	digest[17] ^= 0x01;
+	Check(!RelayList_PinMatches(digest, pin), "one bit different in the middle, and it doesn't");
+	digest[17] ^= 0x01;
+	digest[31] ^= 0x80;
+	Check(!RelayList_PinMatches(digest, pin), "nor one in the last byte, which a compare that stopped early would reach last");
+	Check(!RelayList_PinMatches(NULL, pin) && !RelayList_PinMatches(digest, NULL), "nor does a missing one");
+
+	// The name people see
+	Check(RelayList_ShownNameRefusal("New York (Mel's server)") == kRelayShownNameGood && RelayList_IsShownName("A") && RelayList_IsShownName("nyc3, test-1."),
+		"the name people see: letters, digits, spaces and ' ( ) - . ,");
+	Check(RelayList_IsShownName(std::string(32, 'x').c_str()) && RelayList_ShownNameRefusal(std::string(33, 'x').c_str()) == kRelayShownNameTooLong,
+		"up to 32 of them, and 33 is too long");
+	Check(RelayList_ShownNameRefusal("") == kRelayShownNameNoText && RelayList_ShownNameRefusal(NULL) == kRelayShownNameNoText, "none is no text");
+	Check(RelayList_ShownNameRefusal("New York\n") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("a\"b") == kRelayShownNameBadCharacter &&
+		RelayList_ShownNameRefusal("a%s") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("a/b") == kRelayShownNameBadCharacter &&
+		RelayList_ShownNameRefusal("a\tb") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("caf\xc3\xa9") == kRelayShownNameBadCharacter,
+		"and anything else is a bad character: a newline, a quote, a %, a slash, a tab, a letter beyond ASCII");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -1255,6 +1466,7 @@ int main()
 	TestAddresses();
 	TestVersionOne();
 	TestRelayKeys();
+	TestTheTestServer();
 
 	if (checksFailed)
 	{
