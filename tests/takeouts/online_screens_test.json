@@ -913,6 +913,36 @@
 					"to": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tms);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the relay's news is shown while a join request is answered, over the check code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tif (held)\n\t{\n\t\tnewsAt = Now();\n\t\treturn false;\n\t}",
+					"to": "\tif (held && false)\n\t{\n\t\tnewsAt = Now();\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the co-op host page never holds the relay's news back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))",
+					"to": "OnlineHost_NewsLine(relayNews, sizeof(relayNews), false))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relay's news is drawn at y 56 again, over the check code at 58",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "RenderSmallMenuText(relayNews, MENU_CENTREX, 40,",
+					"to": "RenderSmallMenuText(relayNews, MENU_CENTREX, answering ? 56 : 40,"
+				}
+			]
 		}
 	]
 }

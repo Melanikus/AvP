@@ -780,6 +780,18 @@ static void TestTheCheckCode()
 		Has(menus, "if (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,") &&
 		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)"), "and it's shown under the asking line, with what it's for");
 
+	// And nothing covers it. The relay's news on the co-op host page waits while a join request's rows are up, its 8 s starting again, and
+	// is shown once they've gone, where the asking line was (Secondary's second dry run of the weekend, R1-4: it was drawn at y 56, over
+	// the code at 58). Added 2026-11-09 by Melanikus for the AvP port.
+	std::string const news = Between(page, "bool OnlineHost_NewsLine(char *line, size_t size, bool held)", "\n}\n");
+	size_t const heldAt = news.find("\tif (held)\n\t{\n\t\tnewsAt = Now();\n\t\treturn false;\n\t}");
+	size_t const shownAt = news.find("Put(line, size, newsLine);");
+	Check(heldAt != std::string::npos && shownAt != std::string::npos && heldAt < shownAt,
+		"the relay's news waits while a join request is answered, its 8 s starting again, before anything is shown");
+	Check(Has(menus, "bool const answering = answerRowsShown && AvPMenus.MenuElements == answerRows;") &&
+		Has(menus, "OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))\n\t{\n\t\tRenderSmallMenuText(relayNews, MENU_CENTREX, 40,"),
+		"so the co-op host page holds it back while it answers, and never draws it over the check code");
+
 	std::string const ended = Between(page, "bool OnlinePage_JoinEnded(void)", "\n}\n");
 	Check(Has(ended, "case kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));"),
 		"a host that's another test build of the v2 draft is said so, not taken for a join that just failed");

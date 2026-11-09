@@ -114,8 +114,11 @@ void OnlineHost_Answer(bool yes);
 //   "Larger text", 2026-11-09). A line too wide for the picture goes on two, split before its bracket.
 void OnlinePlay_Frame(void);
 
-// The relay's latest news for the co-op lobby page, where the host waits before play: true for 8 s after it came, with its words
-bool OnlineHost_NewsLine(char *line, size_t size);
+// The relay's latest news for the co-op lobby page, where the host waits before play: true for 8 s after it came, with its words.
+// held: a join request's rows are up. Then it's false, and the 8 s start again, so news that came meanwhile is shown in full once they've
+// gone. The request's check code is drawn just there, and it's what the host must read then (CRYPTO.md section 8). Modified 2026-11-09
+// by Melanikus for the AvP port: the news used to be drawn over it.
+bool OnlineHost_NewsLine(char *line, size_t size, bool held);
 
 // ---- -dev -findgames: the page of games found with nobody at the keyboard
 

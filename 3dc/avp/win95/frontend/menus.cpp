@@ -2227,12 +2227,15 @@ static void RenderMenu(void)
 		}
 	}
 
-	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes
+	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes. Modified
+	// 2026-11-09 by Melanikus for the AvP port: while a join request's rows are up it waits, and is shown once they've gone, so it never
+	// covers the check code drawn above them (it used to be drawn at y 56, over the code at 58)
 	char relayNews[128];
+	bool const answering = answerRowsShown && AvPMenus.MenuElements == answerRows;
 
-	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews)))
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))
 	{
-		RenderSmallMenuText(relayNews, MENU_CENTREX, (answerRowsShown && AvPMenus.MenuElements == answerRows) ? 56 : 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		RenderSmallMenuText(relayNews, MENU_CENTREX, 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
