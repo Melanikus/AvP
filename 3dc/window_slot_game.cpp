@@ -21,6 +21,14 @@ bool WindowSlot_IsOn(void)
 	return turnedOn;
 }
 
+// win_proj.cpp's: true while the game's window is the one in front (Windows' WM_ACTIVATEAPP says when that changes)
+extern bool bActive;
+
+bool WindowSlot_IsBehind(void)
+{
+	return turnedOn && !bActive;
+}
+
 bool WindowSlot_ForThisScreen(unsigned long windowStyle, const int *modeWidths, const int *modeHeights, int count, WindowSlot *slot)
 {
 	if (!turnedOn || !slot)

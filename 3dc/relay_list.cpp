@@ -1076,3 +1076,11 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
 	LeaveCriticalSection(&shared->lock);
 	return ready;
 }
+
+// Modified 2026-11-09 by Melanikus for the AvP port: see relay_list.h (the page of games found's failure screen)
+bool RelayList_WhyIsNoConnection(const char *why)
+{
+	// The very words this file hands out, compared as the same words (each is one of the constants above), so no rewording elsewhere
+	// can make it say something else
+	return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;
+}

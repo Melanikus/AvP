@@ -42,9 +42,11 @@ static const uint32_t kSettleMs = 1500;
 // How long a failed join's line stays up
 static const uint32_t kFailedLineMs = 8000;
 
-// Where things go on the page, in the menus' 640 by 480
-static const int kHeadingsTop = 116;
-static const int kFirstRowTop = 136;
+// Where things go on the page, in the menus' 640 by 480: the Search box and the Refresh row under the title, then the table
+static const int kSearchTop = 100;
+static const int kRefreshTop = 130;
+static const int kHeadingsTop = 170;
+static const int kFirstRowTop = 190;
 static const int kRowStep = 18;
 static const int kTailX = 320, kTailY = 215, kTailSize = 34;
 static const int kWordsTop = 270;
@@ -69,11 +71,37 @@ static const Column kColumns[5] =
 
 static OnlineRow shownRows[kOnlineMostRows];
 static int shownCount = 0;
-static OnlineSearch search;
+
+// What the page is showing (the user's design): the tail while the open sessions are fetched, the count once connected, a failure that
+// stays until Enter tries again, or the list itself, with its Search box and Refresh row
+enum PageState
+{
+	kPageFetching,
+	kPageConnected,
+	kPageCantConnect,
+	kPageCantFetch,
+	kPageList
+};
+
+static PageState pageState = kPageFetching;
+static uint32_t pageStateSince = 0;
 static bool askNow = false;
-static bool settling = false;
-static uint32_t settleAt = 0;
-static uint32_t openedAt = 0;
+static bool listAnswered = false;
+static bool listCantConnect = false;
+static int connectedSessions = 0;
+
+// "Connected: N sessions open" stays this long before the list comes
+static const uint32_t kConnectedShownMs = 1500;
+
+// The Search box's own buffer, which the menus' text field types into: 20 letters and its 0. What it holds is made safe before it's used.
+static char searchBox[kOnlineSearchLetters + 1];
+
+// The rows of shownRows the search lets through, in their order. On the list, the menu's rows are the Search box, the Refresh row, then these.
+static int visibleRows[kOnlineMostRows];
+static int visibleCount = 0;
+static const int kFirstGameElement = 2;
+
+static void TwoLines(const char *first, const char *second, bool tail);
 
 // Each relay game's hostMs, by its code, from the list's last answer
 struct RelayTime
@@ -89,7 +117,7 @@ static char failedLine[96];
 static uint32_t failedAt = 0;
 static bool failedShown = false;
 
-// The list's last answer failed, and why, in the list code's words: shown until a good answer comes
+// The list's last answer failed, and why, in the list code's own words: shown, dim, under the failure
 static char listFailedLine[96];
 static bool listFailed = false;
 
@@ -269,48 +297,53 @@ static void UpdateAndAdd(const OnlineRow *live, int liveCount)
 	}
 }
 
-static int GamesShown(void)
+// ---- The games page
+
+// The server's name, as this game dialled it: the list's host name from the game's own settings (Relay_ServerName), or "this network"
+// when there's no list. Never a name a server sent (AVP Tao 3).
+static void ServerName(char *name, size_t size)
 {
-	int games = 0;
-
-	for (int i = 0; i < shownCount; i++)
+	if (ThereIsAList())
 	{
-		games += shownRows[i].gone ? 0 : 1;
+		OnlineScreens_SafeName(Relay_ServerName(), kRelayListHostLetters, name, size);
 	}
-
-	return games;
+	else
+	{
+		Put(name, size, OnlineScreens_Words(kOnlineWordsThisNetwork));
+	}
 }
 
-// ---- The games page
+static void StartFetching(void)
+{
+	pageState = kPageFetching;
+	pageStateSince = Now();
+	listAnswered = false;
+	listFailed = false;
+	listCantConnect = false;
+}
 
 void OnlinePage_Opened(void)
 {
-	uint32_t const now = Now();
-
 	// A failed join's line stays: the menus come back here after a join that ended, and the line says why. It goes by itself in a few
 	// seconds. So does the game last joined, which the selection goes back to once it's found again.
 	shownCount = 0;
+	visibleCount = 0;
 	askNow = false;
-	listFailed = false;
-	openedAt = now;
-	settling = true;
-	settleAt = now + kSettleMs;
-	OnlineSearch_Start(&search, now);
+	searchBox[0] = '\0';
+	StartFetching();
 	Net_ForgetRelayTimes();
 }
 
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why)
 {
-	// A failed answer's words are the list code's own, fixed; they're made safe all the same, as anything drawn here is
+	listAnswered = true;
 	listFailed = why != NULL;
 
-	if (why)
-	{
-		char safe[64];
-		OnlineScreens_SafeName(why, sizeof(safe), safe, sizeof(safe));
-		_snprintf(listFailedLine, sizeof(listFailedLine) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsListFailed), safe);
-		listFailedLine[sizeof(listFailedLine) - 1] = '\0';
-	}
+	// Which failure: no connection to the list's server, or one that didn't give its games. Told by the list code itself, from its own words.
+	listCantConnect = why != NULL && RelayList_WhyIsNoConnection(why);
+
+	// The list code's own fixed words for why, made safe all the same, as anything drawn here is
+	OnlineScreens_SafeName(why ? why : "", sizeof(listFailedLine), listFailedLine, sizeof(listFailedLine));
 
 	relayTimesKept = 0;
 
@@ -324,92 +357,192 @@ void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char
 
 bool OnlinePage_TimeToAskAgain(void)
 {
-	uint32_t const now = Now();
-	bool ask = askNow;
+	if (!askNow)
+	{
+		return false;
+	}
 
 	askNow = false;
-
-	if (!ask)
-	{
-		ask = OnlineSearch_Frame(&search, now, GamesShown() > 0) == kOnlineSearchAskAgain;
-	}
-
-	if (ask)
-	{
-		settling = true;
-		settleAt = now + kSettleMs;
-	}
-
-	return ask;
+	StartFetching();
+	return true;
 }
 
-bool OnlinePage_Frame(bool listChanged, int *selectedRow)
+void OnlinePage_FindAgain(void)
+{
+	// The Refresh row on the list, or Enter on a failure. Not while a fetch is going: one at a time.
+	if (pageState == kPageList || pageState == kPageCantConnect || pageState == kPageCantFetch)
+	{
+		askNow = true;
+	}
+}
+
+bool OnlinePage_ShowsTheList(void)
+{
+	return pageState == kPageList;
+}
+
+char *OnlinePage_SearchBox(void)
+{
+	return searchBox;
+}
+
+int OnlinePage_SearchLetters(void)
+{
+	return kOnlineSearchLetters;
+}
+
+// The rows the Search box lets through, in their order
+static void Filter(void)
+{
+	char search[kOnlineSearchLetters + 1];
+	OnlineScreens_SearchText(searchBox, sizeof(searchBox), search, sizeof(search));
+
+	visibleCount = 0;
+
+	for (int row = 0; row < shownCount && visibleCount < kOnlineMostRows; row++)
+	{
+		if (OnlineScreens_NameMatches(shownRows[row].name, search))
+		{
+			visibleRows[visibleCount++] = row;
+		}
+	}
+}
+
+static int VisibleIndexOf(const OnlineGameKey &key)
+{
+	for (int i = 0; i < visibleCount; i++)
+	{
+		if (OnlineScreens_SameGame(shownRows[visibleRows[i]].key, key))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 {
 	(void)listChanged;   // the rows are read from the list every frame: there are at most ten, and that keeps them right whatever changed
 
 	// The joiner's round trip to each relay, for the ping column. It starts by itself once the list has named the relays (Fifth's).
 	Net_TimeRelaysForJoining();
 
+	PageState const stateBefore = pageState;
 	OnlineRow before[kOnlineMostRows];
 	int const beforeCount = shownCount;
 	memcpy(before, shownRows, sizeof(OnlineRow) * (size_t)shownCount);
 
-	int const oldRow = *selectedRow;
+	OnlineRow visibleBefore[kOnlineMostRows];
+	int const visibleCountBefore = visibleCount;
+
+	for (int i = 0; i < visibleCount; i++)
+	{
+		visibleBefore[i] = shownRows[visibleRows[i]];
+	}
+
+	// The game the selection is on, when it's on one
+	int const oldElement = *selectedElement;
 	OnlineGameKey selected;
 	memset(&selected, 0, sizeof(selected));
-	bool const hadOne = oldRow >= 0 && oldRow < shownCount;
+	bool const onAGame = stateBefore == kPageList && oldElement >= kFirstGameElement && oldElement - kFirstGameElement < visibleCount;
 
-	if (hadOne)
+	if (onAGame)
 	{
-		selected = shownRows[oldRow].key;
+		selected = shownRows[visibleRows[oldElement - kFirstGameElement]].key;
 	}
 
 	OnlineRow live[kOnlineMostRows];
 	int const liveCount = LiveRows(live, kMostShown);
+	uint32_t const now = Now();
 
-	bool settledNow = false;
-
-	if (settling && HasCome(Now(), settleAt))
+	switch (pageState)
 	{
-		// The asks have had their time: a game that hasn't answered is marked gone, for one refresh
-		settling = false;
-		settledNow = true;
-		shownCount = OnlineScreens_MergeRows(before, beforeCount, live, liveCount, shownRows, kMostShown);
-	}
-	else
-	{
-		UpdateAndAdd(live, liveCount);
-	}
+		case kPageFetching:
+			UpdateAndAdd(live, liveCount);
 
-	int newRow = hadOne ? OnlineScreens_SelectAgain(selected, oldRow, shownRows, shownCount) : (shownCount > 0 ? 0 : -1);
-
-	// Back from a join that ended: the selection goes to the game that was joined, once it's on the page again. If it hasn't come back by
-	// the time the asks have had their time, it's gone, and the selection stays where it is.
-	if (joinedKeyKept)
-	{
-		for (int row = 0; row < shownCount; row++)
-		{
-			if (OnlineScreens_SameGame(shownRows[row].key, joinedKey))
+			// This network's answers have had their time, and the list has answered (when there's a list)
+			if (HasCome(now, pageStateSince + kSettleMs) && (!ThereIsAList() || listAnswered))
 			{
-				newRow = row;
-				joinedKeyKept = false;
-				break;
-			}
-		}
+				if (ThereIsAList() && listFailed)
+				{
+					pageState = listCantConnect ? kPageCantConnect : kPageCantFetch;
+				}
+				else
+				{
+					// A game that hasn't answered is marked gone, for once
+					shownCount = OnlineScreens_MergeRows(before, beforeCount, live, liveCount, shownRows, kMostShown);
+					connectedSessions = 0;
 
-		if (settledNow)
+					for (int row = 0; row < shownCount; row++)
+					{
+						connectedSessions += shownRows[row].gone ? 0 : 1;
+					}
+
+					pageState = kPageConnected;
+				}
+
+				pageStateSince = now;
+			}
+			break;
+
+		case kPageConnected:
+			UpdateAndAdd(live, liveCount);
+
+			if (HasCome(now, pageStateSince + kConnectedShownMs))
+			{
+				pageState = kPageList;
+				pageStateSince = now;
+			}
+			break;
+
+		case kPageList:
+			UpdateAndAdd(live, liveCount);
+			break;
+
+		default:
+			break;
+	}
+
+	Filter();
+
+	// Where the selection goes: on the fetching screen, its one row. Coming to the list: the game last joined, if it's there, or the first
+	// game, or Refresh when there's none. On the list: its game wherever it moved, or where it was, kept inside the rows.
+	int const lastElement = kFirstGameElement + visibleCount - 1;
+	int newElement = 0;
+
+	if (pageState == kPageList)
+	{
+		int const joined = joinedKeyKept ? VisibleIndexOf(joinedKey) : -1;
+
+		if (joined >= 0)
 		{
+			newElement = kFirstGameElement + joined;
 			joinedKeyKept = false;
 		}
+		else if (stateBefore != kPageList)
+		{
+			newElement = visibleCount > 0 ? kFirstGameElement : 1;
+			joinedKeyKept = false;
+		}
+		else if (onAGame)
+		{
+			int const found = VisibleIndexOf(selected);
+			newElement = found >= 0 ? kFirstGameElement + found : (oldElement < lastElement ? oldElement : (lastElement >= kFirstGameElement ? lastElement : 1));
+		}
+		else
+		{
+			newElement = oldElement < 0 ? 0 : (oldElement > 1 ? 1 : oldElement);
+		}
 	}
 
-	*selectedRow = newRow < 0 ? 0 : newRow;
+	*selectedElement = newElement;
 
-	bool changed = shownCount != beforeCount || *selectedRow != oldRow;
+	bool changed = pageState != stateBefore || visibleCount != visibleCountBefore || newElement != oldElement;
 
-	for (int i = 0; i < shownCount && !changed; i++)
+	for (int i = 0; i < visibleCount && !changed; i++)
 	{
-		changed = !SameRow(before[i], shownRows[i]);
+		changed = !SameRow(visibleBefore[i], shownRows[visibleRows[i]]);
 	}
 
 	return changed;
@@ -417,18 +550,27 @@ bool OnlinePage_Frame(bool listChanged, int *selectedRow)
 
 int OnlinePage_RowCount(void)
 {
-	return shownCount;
+	return pageState == kPageList ? visibleCount : 0;
 }
 
 char *OnlinePage_RowName(int row)
 {
 	static char none[1] = { 0 };
-	return (row >= 0 && row < shownCount) ? shownRows[row].name : none;
+	return (row >= 0 && row < visibleCount) ? shownRows[visibleRows[row]].name : none;
 }
 
-int OnlinePage_SessionForRow(int row)
+// The game on one of the menu's rows: its place in shownRows, or -1 for a row that isn't a game's
+static int ShownRowOf(int menuRow)
 {
-	if (row < 0 || row >= shownCount || shownRows[row].gone)
+	int const r = menuRow - kFirstGameElement;
+	return (pageState == kPageList && r >= 0 && r < visibleCount) ? visibleRows[r] : -1;
+}
+
+int OnlinePage_SessionForRow(int menuRow)
+{
+	int const row = ShownRowOf(menuRow);
+
+	if (row < 0 || shownRows[row].gone)
 	{
 		return -1;
 	}
@@ -444,21 +586,6 @@ int OnlinePage_SessionForRow(int row)
 	}
 
 	return -1;
-}
-
-bool OnlinePage_EnterWithNoGames(void)
-{
-	if (search.givenUp)
-	{
-		uint32_t const now = Now();
-
-		OnlineSearch_Start(&search, now);
-		openedAt = now;
-		askNow = true;
-		LogString("Relay list: the games page looks for games again");
-	}
-
-	return true;
 }
 
 void OnlinePage_JoinFailed(const char *why)
@@ -555,53 +682,84 @@ static void DrawOneRow(const OnlineRow &row, int y, int brightness)
 	DrawCell(row.gone ? "" : row.ping, 4, y, alpha);
 }
 
-// J1: the tail and what the search is doing, or that it's given up
-static void DrawLooking(const OnlineSearch &state, int stage)
+// J1, the fetching screen: the tail while it fetches, the count once connected, or a failure with how to try again
+static void DrawFetching(void)
 {
-	char line[96];
-	OnlineSearch_Words(&state, Now(), stage, line, sizeof(line));
+	char server[kRelayListHostLetters + 1];
+	char line[160];
 
-	if (!state.givenUp)
+	ServerName(server, sizeof(server));
+
+	switch (pageState)
 	{
-		DrawTail(kTailX, kTailY, kTailSize, ONE_FIXED);
-	}
+		case kPageFetching:
+			OnlineScreens_FetchingWords(server, line, sizeof(line));
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsEscBack), true);
+			break;
 
-	Words(line, MENU_CENTREX, kWordsTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-	Words(OnlineScreens_Words(kOnlineWordsEscBack), MENU_CENTREX, kWordsTop + 20, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		case kPageConnected:
+			OnlineScreens_ConnectedWords(connectedSessions, line, sizeof(line));
+			TwoLines(line, "", true);
+			break;
+
+		case kPageCantConnect:
+		case kPageCantFetch:
+			if (pageState == kPageCantConnect)
+			{
+				OnlineScreens_CantConnectWords(server, line, sizeof(line));
+			}
+			else
+			{
+				OnlineScreens_CantFetchWords(server, line, sizeof(line));
+			}
+
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsTryAgain), false);
+
+			// The list code's own reason, dim, under it
+			Words(listFailedLine, MENU_CENTREX, kWordsTop + 44, ONE_FIXED / 3, AVPMENUFORMAT_CENTREJUSTIFIED);
+			break;
+
+		default:
+			break;
+	}
 }
 
 void OnlinePage_DrawTop(void)
 {
-	if (shownCount > 0)
+	if (pageState != kPageList)
 	{
-		DrawHeadings();
-	}
-	else
-	{
-		// The first second and a half is this network's answers, then the list's, when there is one
-		DrawLooking(search, (ThereIsAList() && HasCome(Now(), openedAt + kSettleMs)) ? 1 : 0);
+		DrawFetching();
+		return;
 	}
 
-	// Under the rows, or under J1's words: a failed join's line for a few seconds, and the list's own failure until it answers well
-	int y = shownCount > 0 ? kFirstRowTop + shownCount * kRowStep + 14 : kWordsTop + 50;
+	DrawHeadings();
 
+	if (visibleCount == 0)
+	{
+		Words(OnlineScreens_Words(shownCount == 0 ? kOnlineWordsNoSessions : kOnlineWordsNoneMatch), MENU_CENTREX, kFirstRowTop, ONE_FIXED / 2,
+			AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
+	// A failed join's line, under the rows, for a few seconds
 	if (failedShown && !HasCome(Now(), failedAt + kFailedLineMs))
 	{
-		Words(failedLine, MENU_CENTREX, y, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		y += 20;
-	}
-
-	if (listFailed && ThereIsAList())
-	{
-		Words(listFailedLine, MENU_CENTREX, y, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		int const rows = visibleCount > 0 ? visibleCount : 1;
+		Words(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 }
 
-void OnlinePage_DrawRow(int row, int brightness)
+int OnlinePage_ControlTop(int element)
 {
-	if (row >= 0 && row < shownCount)
+	return element == 0 ? kSearchTop : kRefreshTop;
+}
+
+void OnlinePage_DrawRow(int element, int brightness)
+{
+	int const row = ShownRowOf(element);
+
+	if (row >= 0)
 	{
-		DrawOneRow(shownRows[row], kFirstRowTop + row * kRowStep, brightness);
+		DrawOneRow(shownRows[row], kFirstRowTop + (element - kFirstGameElement) * kRowStep, brightness);
 	}
 }
 
@@ -635,16 +793,41 @@ static void JoiningLine(int step, const char *region, char *line, size_t size)
 	line[size - 1] = '\0';
 }
 
+// Whether the join's wait has drawn frames of its own (OnlinePage_DrawJoining), so the menus' loop needs a new frame opened for it once the
+// wait is over (OnlinePage_JoinWaitOver)
+static bool joinDrewFrames = false;
+
 void OnlinePage_DrawJoining(const char *region)
 {
 	char line[96];
 	JoiningLine(Net_RelayJoinStep(), region, line, sizeof(line));
+
+	// The join's wait is called from inside the menus' own frame: the menus loop opened it, drew the page, and the player's Enter on a game
+	// started the join. A frame can't be opened inside another (Direct3D refuses, with D3DERR_INVALIDCALL: the first footage's log), so the
+	// menus' frame is closed first, once, and each frame of the wait is then a whole frame of its own.
+	if (!joinDrewFrames)
+	{
+		ThisFramesRenderingHasFinished();
+		joinDrewFrames = true;
+	}
 
 	ThisFramesRenderingHasBegun();
 	DrawMainMenusBackdrop();
 	DrawJoiningBody(line);
 	ThisFramesRenderingHasFinished();
 	FlipBuffers();
+}
+
+void OnlinePage_JoinWaitOver(void)
+{
+	// The menus' loop goes on to finish its frame and show it, but the wait closed that frame. So a new one is opened, with the menus'
+	// backdrop on it, for the loop to finish: otherwise what it shows is a picture nothing was drawn on.
+	if (joinDrewFrames)
+	{
+		joinDrewFrames = false;
+		ThisFramesRenderingHasBegun();
+		DrawMainMenusBackdrop();
+	}
 }
 
 // Two lines in the middle of the page, as every waiting and answering screen has them, with the tail above while something is waited for
@@ -672,15 +855,19 @@ static void SayOnThePage(const char *words)
 static uint32_t askedAt = 0;          // when this joiner's request began to wait, for its seconds
 static bool askTimed = false;
 
-void OnlinePage_Joining(int row)
+void OnlinePage_Joining(int menuRow)
 {
-	if (row >= 0 && row < shownCount)
+	// the menu's row, as the menus number them (the Search box and Refresh first), to the game the search showed on it
+	int const row = ShownRowOf(menuRow);
+
+	if (row >= 0)
 	{
 		joinedKey = shownRows[row].key;
 		joinedKeyKept = true;
 	}
 
 	askTimed = false;
+	joinDrewFrames = false;
 }
 
 bool OnlinePage_DrawAsking(void)
@@ -900,7 +1087,12 @@ static void RelayLineInPlay(void)
 	int const margin = MUL_FIXED(HUDScaleFactor, 12);
 	int const x = ScreenDescriptorBlock.SDB_Width - MUL_FIXED(HUDScaleFactor, width) - margin;
 
-	RenderString(line, x > 0 ? x : 0, margin, (int)RCOLOR_ARGB(255, 200, 200, 200));
+	// With -dev, the developers' tag is at the top right too (d3d_render.cpp), so the line goes under the most the tag can ever reach,
+	// whatever it says and whatever the window's size: the two never overlap (the owner saw the tag drawn over this line, in the first
+	// footage), and the line doesn't jump about as the tag's lines change.
+	int const y = ShadowStatus_Bottom() + margin;
+
+	RenderString(line, x > 0 ? x : 0, y, (int)RCOLOR_ARGB(255, 200, 200, 200));
 }
 
 void OnlinePlay_Frame(void)
@@ -950,12 +1142,12 @@ bool OnlineDemo_IsOn(void)
 // Every screen, in order. Each name is fixed words, for the log and the mark's line.
 static const char *const kDemoSteps[] =
 {
-	"J1 looking on this network",
-	"J1 asking the list of games",
-	"J1 no games yet",
-	"J1 no games found",
-	"J2 the list of games",
-	"J2 a game has gone",
+	"J1 fetching the open sessions",
+	"J1 connected",
+	"J1 could not connect",
+	"J1 connected but could not fetch",
+	"J2 the list, Search and Refresh",
+	"J2 the list searched",
 	"J3 reaching the relay",
 	"J3 the relay is introducing you",
 	"J4 asking the host",
@@ -1036,13 +1228,23 @@ static void DrawDemoList(bool showGone, int selectedRow, const char *line)
 	}
 }
 
+// The Search box and the Refresh row, drawn as the menus draw a text field and a row: the label to the left of the middle, what's typed
+// to the right
+static void DrawDemoControls(const char *typed)
+{
+	char text[kOnlineSearchLetters + 1];
+	Put(text, sizeof(text), typed);
+
+	RenderMenuText(GetTextString(TEXTSTRING_MULTIPLAYER_SEARCH), MENU_CENTREX - 9, kSearchTop, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_RIGHTJUSTIFIED);
+	RenderMenuText(text, MENU_CENTREX + 9, kSearchTop, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_LEFTJUSTIFIED);
+	RenderMenuText(GetTextString(TEXTSTRING_MULTIPLAYER_REFRESH), MENU_CENTREX, kRefreshTop, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
+}
+
 static void DrawDemoStep(int step)
 {
-	char line[96];
+	char line[160];
 	char *const gamesTitle = GetTextString(TEXTSTRING_MULTIPLAYER_SELECTSESSION);
 	char *const joiningTitle = GetTextString(TEXTSTRING_MULTIPLAYER_JOININGGAME);
-	OnlineSearch state;
-	uint32_t const now = Now();
 
 	// The page each screen is on: the games page, the joining page, or play (H1 and H2), which has no title
 	if (step < kDemoFirstJoining || (step >= kDemoFirstBackOnTheList && step < kDemoAsked))
@@ -1057,25 +1259,49 @@ static void DrawDemoStep(int step)
 	switch (step)
 	{
 		case 0:
+			OnlineScreens_FetchingWords("localhost", line, sizeof(line));
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsEscBack), true);
+			break;
 		case 1:
-			OnlineSearch_Start(&state, now);
-			DrawLooking(state, step);
+			OnlineScreens_ConnectedWords(kDemoGameCount - 1, line, sizeof(line));
+			TwoLines(line, "", true);
 			break;
 		case 2:
-			OnlineSearch_Start(&state, now - 2000);
-			state.tries = 3;
-			DrawLooking(state, 1);
+			OnlineScreens_CantConnectWords("localhost", line, sizeof(line));
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsTryAgain), false);
+			Words("the relay server couldn't be reached", MENU_CENTREX, kWordsTop + 44, ONE_FIXED / 3, AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		case 3:
-			OnlineSearch_Start(&state, now);
-			state.givenUp = true;
-			DrawLooking(state, 1);
+			OnlineScreens_CantFetchWords("localhost", line, sizeof(line));
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsTryAgain), false);
+			Words("the relay server said no", MENU_CENTREX, kWordsTop + 44, ONE_FIXED / 3, AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		case 4:
-		case 5:
-			// The first picture has the gone game still there; the second shows it gone
-			DrawDemoList(step == 5, 1, NULL);
+			// The list: the Search box and Refresh row as the menus draw them, then the games, one of them gone
+			DrawDemoControls("");
+			DrawDemoList(true, 1, NULL);
 			break;
+		case 5:
+		{
+			// The same list searched for "hi": only the games with it in their name
+			DrawDemoControls("hi");
+			DrawHeadings();
+			int shown = 0;
+
+			for (int g = 0; g < kDemoGameCount; g++)
+			{
+				OnlineRow row;
+				DemoRow(kDemoGames[g], &row);
+
+				if (OnlineScreens_NameMatches(row.name, "hi"))
+				{
+					DrawOneRow(row, kFirstRowTop + shown * kRowStep, shown == 0 ? BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT : BRIGHTNESS_OF_DARKENED_ELEMENT);
+					shown++;
+				}
+			}
+
+			break;
+		}
 		case 6:
 			JoiningLine(kNetRelayJoinStepReaching, "saopaulo", line, sizeof(line));
 			DrawJoiningBody(line);

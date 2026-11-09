@@ -38,6 +38,12 @@ bool WindowSlot_Work(int areaLeft, int areaTop, int areaWidth, int areaHeight, i
 void WindowSlot_TurnOn(bool secondCopy);
 bool WindowSlot_IsOn(void);
 
+// Whether this is a test copy (-dev -windowed) whose window isn't the one in front. A normal game stops while it's behind another window,
+// but a test copy keeps running (win_func.cpp), so a host and a joiner side by side both go on whichever has the focus. It takes no mouse
+// moves and no pad while it's behind (win_proj.cpp, di_func.cpp): those are the player's, for the copy in front. Keys already go only to
+// the window in front. Always false in a normal game.
+bool WindowSlot_IsBehind(void);
+
 // The test window, worked out now: from the main screen's work area, the frame a window of this style (GWL_STYLE) has round its picture,
 // and the screen's modes. False when -windowed isn't on, or Windows gives nothing usable: then the game's own size and place are used, as
 // before.

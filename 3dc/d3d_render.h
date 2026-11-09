@@ -111,6 +111,12 @@ static void D3D_OutputTriangles();
 
 void ThisFramesRenderingHasBegun();
 void ThisFramesRenderingHasFinished();
+
+// How far down the screen the -dev tag at the top right can reach, in pixels, with every line it can have: 0 when it isn't shown (no -dev,
+// or F7 turned it off). Anything else drawn at the top right goes below this, so the two never overlap.
+// Modified 2026-11-09 by Melanikus for the AvP port: so the relay's line in play sits under the tag (online_screens_page.cpp).
+int ShadowStatus_Bottom();
+
 extern void D3D_DrawSliderBar(int x, int y, int alpha);
 extern void D3D_DrawSlider(int x, int y, int alpha);
 extern void D3D_FadeDownScreen(int brightness, int colour);

@@ -13,49 +13,67 @@
 
 #include "relay_list_text.h"
 
-// ---- The games page: J1 while there's nothing to show, J2 once there is
+// ---- The games page (the user's design): J1, the tail while the open sessions are fetched from the server the game dialled, then
+// "Connected: N sessions open", then J2, the list, with a Search box and a Refresh row. A failure to connect, or to fetch, stays on J1,
+// and Enter tries again.
 
-// The page has just been opened (not set up again): the rows start empty, the search starts, and the relays are timed again
+// The page has just been opened (not set up again): the rows start empty, the fetching starts, and the relays are timed again
 void OnlinePage_Opened(void);
 
 // The relay server's list has answered with these games. The page keeps each one's hostMs, for its ping column. why is NULL for a good
-// answer, or the list code's own fixed words for one that failed (RelayList_FoundGames), which the page shows until a good one comes.
+// answer, or the list code's own fixed words for one that failed (RelayList_FoundGames), which J1's failure shows, dim.
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why);
 
-// Each frame of the page, before OnlinePage_Frame: whether it's time to ask the LAN and the list again (every 5 s, and 12 times at most
-// while nothing is found). menus.cpp does the asking, as it does when the page opens.
+// Each frame of the page, before OnlinePage_Frame: whether to fetch again, because Refresh was pressed or Enter on a failure. menus.cpp
+// does the asking, as it does when the page opens.
 bool OnlinePage_TimeToAskAgain(void);
 
+// Refresh on the list, or Enter on a failure (the menus' AVPMENU_ELEMENT_FINDAGAIN row): fetches again. Not while a fetch is going.
+void OnlinePage_FindAgain(void);
+
 // Each frame of the page. listChanged says the networking code's list of games may have changed. selectedRow is the menu's selected row
-// on the way in, and where the same game is on the way out. True when the rows have changed, so the menu's rows must be made again.
+// on the way in, and where it goes on the way out (the same game, if it's still there). True when the rows have changed, so the menu's
+// rows must be made again.
 bool OnlinePage_Frame(bool listChanged, int *selectedRow);
 
-// The rows the page shows, at most MAX_NO_OF_SESSIONS, and each one's name for the menu's own row (made safe already)
+// Whether the page is showing the list (J2), and so has its Search box and Refresh row; otherwise it's on J1
+bool OnlinePage_ShowsTheList(void);
+
+// The Search box's own buffer, for the menus' text field, and how many letters it takes (it has room for those and a 0)
+char *OnlinePage_SearchBox(void);
+int OnlinePage_SearchLetters(void);
+
+// The games the search lets through, and each one's name for the menu's own row (made safe already). The menu's rows are the Search box
+// (row 0), the Refresh row (1), then these.
 int OnlinePage_RowCount(void);
 char *OnlinePage_RowName(int row);
 
-// Where the game on a row is in the networking code's list right now, found by its relay code or its address, never by its row number:
-// the list is emptied and filled again by each search. -1 when the game has gone, or the row isn't one.
-int OnlinePage_SessionForRow(int row);
-
-// Enter on the page while it has no games: after the search has given up, it starts again. True when the page has taken the key.
-bool OnlinePage_EnterWithNoGames(void);
+// Where the game on one of the menu's rows is in the networking code's list right now, found by its relay code or its address, never by
+// its row number: the list is emptied and filled again by each search. -1 when the game has gone, or the row isn't a game's.
+int OnlinePage_SessionForRow(int menuRow);
 
 // A join failed, for these words (the networking code's own fixed words, or the page's), or was given up with Esc. The page shows a
 // line saying so for a few seconds.
 void OnlinePage_JoinFailed(const char *why);
 void OnlinePage_JoinGivenUp(void);
 
-// The page's drawing, each frame: the column headings, or J1's tail and words while there are no rows, and the failed join's line.
-// Then each row, as bright as the menu has it (BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT for the selected one).
+// The page's drawing, each frame: J1's tail and words, or on the list the column headings, "No open sessions" for an empty table, and a
+// failed join's line. Then each game's row of the menu, as bright as the menu has it (BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT for the
+// selected one). The Search box and the Refresh row are drawn by the menus themselves, each at OnlinePage_ControlTop of its row.
 void OnlinePage_DrawTop(void);
-void OnlinePage_DrawRow(int row, int brightness);
+void OnlinePage_DrawRow(int menuRow, int brightness);
+int OnlinePage_ControlTop(int menuRow);
 
 // ---- Joining through a relay: J3
 
 // One whole frame of the joining screen, drawn from inside the join's wait (menus.cpp's KeepTheWindowAliveWhileJoining, every 50 ms).
-// region is the game's relay region from SessionData, made safe here.
+// region is the game's relay region from SessionData, made safe here. The wait is called from inside the menus' own frame, so the
+// first of these closes that frame before drawing its own.
 void OnlinePage_DrawJoining(const char *region);
+
+// The join's wait is over, however it ended: if it drew frames of its own, a new frame is opened for the menus' loop to finish, as it
+// expects. menus.cpp calls it straight after the join, every time.
+void OnlinePage_JoinWaitOver(void);
 
 // ---- Asking the host: J4 and J5 (the request to join: networking.h, Fifth's)
 

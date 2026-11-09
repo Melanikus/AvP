@@ -3,7 +3,8 @@
 // WHAT IT'S FOR: two copies of the game side by side on one PC, a host and a joiner. Each window has to fit in its own half of the screen,
 // frame and all, so the two never overlap. Its picture has to be one of the screen's own modes, or the game falls back to 800 by 600 and the
 // windows overlap after all. And anything that can't be a screen is refused, rather than making a window of no size or one far off the
-// screen. Then, read and not run: the game only does this with -dev, and takes nothing from the command line but the word.
+// screen. Then, read and not run: the game only does this with -dev, and takes nothing from the command line but the word. A test copy keeps
+// running behind the other's window, and takes no mouse moves or pad while it's there.
 //
 // Nothing here uses Windows or the game.
 
@@ -194,6 +195,41 @@ static void TestTheGameUsesIt()
 	std::string const sizing = SourceSlice(window, "void ChangeWindowsSize(uint32_t width, uint32_t height)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(sizing.find("WindowSlot_Last(&slot)") != std::string::npos && sizing.find("WindowMode == WindowModeSubWindow") != std::string::npos,
 		"the window goes in its half each time the game sizes it, and only in a window");
+
+	// A test copy keeps running behind the other copy's window, so a host and a joiner side by side both go on (the first footage: a copy
+	// behind stopped for up to 53 s). A normal game still waits while it's behind, as it always has.
+	std::string const messages = ReadSource("3dc/win95/win_func.cpp");
+	std::string const loop = SourceSlice(messages, "void CheckForWindowsMessages(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const handled = loop.find("DispatchMessage(&msg);");
+	size_t const goesOn = loop.find("if (WindowSlot_IsOn())\n\t\t{\n\t\t\treturn;\n\t\t}");
+	size_t const waits = loop.find("if (!bActive)\n\t\t{\n\t\t\tResetFrameCounter();");
+	Check(handled != std::string::npos && goesOn != std::string::npos && waits != std::string::npos && handled < loop.find("WindowSlot_IsOn()") &&
+		goesOn < waits && loop.find("while (!bActive && bRunning);") != std::string::npos,
+		"a test copy behind another window keeps running once its messages are handled, and a normal game still waits");
+
+	std::string const game = ReadSource("3dc/window_slot_game.cpp");
+	Check(SourceSlice(game, "bool WindowSlot_IsBehind(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice).find("return turnedOn && !bActive;") != std::string::npos,
+		"behind means a test copy whose window isn't the one in front");
+
+	// But a copy behind takes nothing the player does: the mouse's raw moves and the pads reach every program, in front or not, and they're
+	// the player's, for the copy in front. (Keys only ever go to the window in front.)
+	std::string const rawInput = SourceSlice(window, "\t\tcase WM_INPUT:\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const leftAlone = rawInput.find("if (WindowSlot_IsBehind())\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}");
+	size_t const moved = rawInput.find("xPosRelative += raw.data.mouse.lLastX;");
+	Check(leftAlone != std::string::npos && moved != std::string::npos && leftAlone < moved, "a test copy behind takes no mouse moves");
+
+	std::string const pads = SourceSlice(ReadSource("win32/di_func.cpp"), "int UpdateControllerState()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(pads.find("bool const behind = WindowSlot_IsBehind();") != std::string::npos &&
+		pads.find("dwResult = behind ? ERROR_DEVICE_NOT_CONNECTED : XInputGetState(i, &g_Controllers[i].state);") != std::string::npos,
+		"nor any pad");
+
+	// The mouse's raw data is copied only when Windows says it fits its room, and read as a mouse's only when it's as big as one, so
+	// nothing is written past the room or read from beyond what Windows wrote (it was copied into 40 bytes whatever its size, with only an
+	// assert, which the released game doesn't have)
+	Check(rawInput.find("!= 0 || size > sizeof(raw) ||") != std::string::npos &&
+		rawInput.find("::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != size)") != std::string::npos &&
+		rawInput.find("size >= offsetof(RAWINPUT, data) + sizeof(RAWMOUSE)") != std::string::npos && rawInput.find("lpb") == std::string::npos,
+		"the mouse's data is only copied when it fits, and only read as much as Windows wrote");
 }
 
 int main()

@@ -4,6 +4,7 @@
 //   it was built in, with the name of whoever built it, into the game
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   with -dev -windowed, a test copy's window goes in its own half of the screen (window_slot.h), not the top left corner
+//   and a test copy behind the other copy's window takes no mouse moves; the mouse's raw data is only copied when it fits its room
 
 #ifdef _WIN32
 /****
@@ -125,24 +126,34 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
 		case WM_INPUT:
 		{
-			UINT dwSize = 0;
-			::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
-			assert(dwSize == 40);
+			// Windows sends the mouse's moves to this window even when it isn't in front (RIDEV_INPUTSINK, InitialiseRawInput below). A
+			// test copy behind the other copy's window keeps running (window_slot.h), so it leaves them alone: they're the player's, for
+			// the copy in front.
+			if (WindowSlot_IsBehind())
+			{
+				return 0;
+			}
 
-			static BYTE lpb[40];
-			::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
+			// Windows says first how big this message's data is. It's only copied when it fits in raw, and only used as a mouse's when
+			// it's as big as a mouse's, so nothing is ever written past raw or read from beyond what Windows wrote. (It used to be copied
+			// into 40 bytes whatever its size, with only an assert, which isn't in the game that's released, to say it was 40.)
+			RAWINPUT raw;
+			UINT size = 0;
 
-			RAWINPUT *raw = (RAWINPUT*)lpb;
+			if (::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER)) != 0 || size > sizeof(raw) ||
+				::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != size)
+			{
+				return 0;
+			}
 
-			if (raw->header.dwType == RIM_TYPEMOUSE)
+			if (raw.header.dwType == RIM_TYPEMOUSE && size >= offsetof(RAWINPUT, data) + sizeof(RAWMOUSE))
 			{
 				mouseMoved = true;
-				xPosRelative += raw->data.mouse.lLastX;
-				yPosRelative += raw->data.mouse.lLastY;
+				xPosRelative += raw.data.mouse.lLastX;
+				yPosRelative += raw.data.mouse.lLastY;
 			}
 
 			return 0;
-			break;
 		}
 
 		// 21/11/97 DHM: Added processing of WM_CHAR messages:

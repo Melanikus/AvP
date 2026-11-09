@@ -74,4 +74,10 @@ void RelayList_FindGames(void);
 // no games, and why says why in words for the page, fixed words of the game's own, never the list's. False while there's no new answer.
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 
+// Modified 2026-11-09 by Melanikus for the AvP port: for the page of games found's failure screen. Whether a why from RelayList_FoundGames
+// means the game never got a connection to the list's server (it couldn't be reached, took too long, its certificate wasn't accepted, or
+// the call couldn't start), rather than that it connected and couldn't fetch the games (an answer too big, a no, or an answer refused).
+// It compares the why with this file's own words, never what anybody sent; NULL and "no relay server is set" are neither, so false.
+bool RelayList_WhyIsNoConnection(const char *why);
+
 #endif

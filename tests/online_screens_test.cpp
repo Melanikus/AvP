@@ -4,10 +4,10 @@
 // WHAT IT'S FOR: the games page shows names that come from other people's computers, so they're hostile (AVP Tao 3). This checks that a name
 // can only ever be drawn in the letters the game's fonts have, and never past its column. It checks the spinning tail stays in its box, turns
 // the right way at the same speed at any frame rate, and that each of its pieces is a shape the game can draw. And it checks the page keeps
-// the selected game while the list refreshes, that the search gives up after its tries, and that the waits count down right, even when the
-// clock wraps round.
+// the selected game while the list refreshes, that the Search box keeps only the letters the fonts have and finds names by them, that the
+// fetching screen names the server the game dialled, and that the waits count down right, even when the clock wraps round.
 //
-// Nothing here uses the network or the game.
+// Nothing here uses the network or the game. Where the game draws the screens is checked by reading its source (the last part).
 
 #include "online_screens.h"
 
@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -376,72 +377,77 @@ static void TestRows()
 	Check(OnlineScreens_SelectAgain(a.key, 0, rows, 0) == -1, "with no rows, nothing is selected");
 }
 
-// ---- The search
+// ---- The Search box and the fetching screen
 
 static void TestSearch()
 {
-	puts("Looking for games");
+	puts("The Search box");
 
-	OnlineSearch search;
-	OnlineSearch_Start(&search, 1000);
-	Check(search.tries == 1 && !search.givenUp, "the first ask is when the page opens");
-	Check(OnlineSearch_Frame(&search, 1000, false) == kOnlineSearchNothing && OnlineSearch_Frame(&search, 5999, false) == kOnlineSearchNothing,
-		"nothing more is asked for 5 seconds");
-	Check(OnlineSearch_Frame(&search, 6000, false) == kOnlineSearchAskAgain && search.tries == 2, "at 5 seconds it asks again");
+	char safe[64];
 
-	uint32_t now = 6000;
-	int asks = 2;
-	OnlineSearchNews news = kOnlineSearchNothing;
+	OnlineScreens_SearchText("Hicks", 40, safe, sizeof(safe));
+	Check(strcmp(safe, "Hicks") == 0, "what's typed is kept as it is when it's plain letters");
 
-	while (news != kOnlineSearchGivenUp && now < 1000000)
-	{
-		now += 100;
-		news = OnlineSearch_Frame(&search, now, false);
-		asks += news == kOnlineSearchAskAgain ? 1 : 0;
-	}
+	OnlineScreens_SearchText("abcdefghijklmnopqrstuvwxyz", 40, safe, sizeof(safe));
+	Check(strlen(safe) == kOnlineSearchLetters && strncmp(safe, "abcdefghijklmnopqrst", kOnlineSearchLetters) == 0, "a search is cut to its 20 letters");
 
-	Check(news == kOnlineSearchGivenUp && asks == kOnlineSearchMostTries, "with nothing found it asks 12 times in all, then gives up");
-	Check(now >= 1000 + (uint32_t)kOnlineSearchMostTries * kOnlineSearchEveryMs, "the 12 asks take a minute: never faster than one every 5 s");
-	Check(OnlineSearch_Frame(&search, now + 60000, false) == kOnlineSearchNothing, "once it's given up, it asks nothing more until Enter starts it again");
+	char const hostile[] = { 'H', 1, (char)200, 'x', 0 };
+	OnlineScreens_SearchText(hostile, sizeof(hostile), safe, sizeof(safe));
+	Check(strcmp(safe, "H??x") == 0, "a letter the fonts don't have becomes a question mark, as in a name");
 
-	OnlineSearch_Start(&search, 0);
-	int kept = 0;
+	OnlineScreens_SearchText("Hicks", 3, safe, sizeof(safe));
+	Check(strcmp(safe, "Hic") == 0, "and no more of it is read than it's given");
 
-	for (uint32_t t = 0; t <= 600000; t += 50)
-	{
-		kept += OnlineSearch_Frame(&search, t, true) == kOnlineSearchAskAgain ? 1 : 0;
-	}
+	OnlineScreens_SearchText("Hicks", 40, safe, 3);
+	Check(strcmp(safe, "Hi") == 0, "a room smaller than a search gets as much as fits, and its 0");
 
-	Check(kept == 120 && !search.givenUp, "while games are shown, the list is kept fresh every 5 s, for as long as the page is open");
+	safe[0] = 'Q';
+	OnlineScreens_SearchText("Hicks", 40, safe, 0);
+	Check(safe[0] == 'Q', "a room of no bytes isn't written at all, for a search");
 
-	OnlineSearch_Start(&search, 0);
-	OnlineSearch_Frame(&search, 5000, false);
-	OnlineSearch_Frame(&search, 10000, false);
-	OnlineSearch_Frame(&search, 15000, true);
-	Check(search.tries == 1, "when games come after a few empty asks, the count of tries starts again, so a page they leave gets all 12 again");
+	Check(OnlineScreens_NameMatches("Hicks's game", "hicks"), "a search finds its letters in a name, whatever the capitals");
+	Check(OnlineScreens_NameMatches("Hicks's game", "GAME"), "anywhere in the name, the end too");
+	Check(!OnlineScreens_NameMatches("Hicks's game", "Hudson"), "and not a name without them");
+	Check(OnlineScreens_NameMatches("Hicks's game", "") && OnlineScreens_NameMatches("Hicks's game", NULL), "an empty search takes every game");
+	Check(!OnlineScreens_NameMatches("Hi", "Hicks"), "a search longer than the name can't be in it");
+	Check(!OnlineScreens_NameMatches(NULL, "Hicks"), "no name has nothing in it");
+	Check(!OnlineScreens_NameMatches("a[c", "A{C"), "only A to Z count as capitals: [ and { stay different");
 
-	OnlineSearch_Start(&search, 0xFFFFF000u);
-	Check(OnlineSearch_Frame(&search, 0xFFFFFFFFu, false) == kOnlineSearchNothing, "near the clock's end, the ask isn't due before its 5 s");
-	Check(OnlineSearch_Frame(&search, 0xFFFFF000u + 5000u, false) == kOnlineSearchAskAgain, "and is due after them, once the clock has wrapped round to 0");
+	puts("The fetching screen");
 
-	char words[96];
-	OnlineSearch_Start(&search, 1000);
-	OnlineSearch_Words(&search, 1000, 0, words, sizeof(words));
-	Check(strcmp(words, "Looking for games on this network") == 0, "the first line says it's looking on this network");
-	OnlineSearch_Words(&search, 1000, 1, words, sizeof(words));
-	Check(strcmp(words, "Asking the list of games") == 0, "then that it's asking the list");
+	char words[160];
 
-	OnlineSearch_Frame(&search, 6000, false);
-	OnlineSearch_Frame(&search, 11000, false);
-	OnlineSearch_Words(&search, 13000, 1, words, sizeof(words));
-	Check(strcmp(words, "No games yet. Asking again in 3 s (3 of 12)") == 0, "between asks it says when it asks again, and which try that is");
+	OnlineScreens_FetchingWords("localhost", words, sizeof(words));
+	Check(strcmp(words, "Fetching localhost's open sessions") == 0, "while it fetches, it names the server the game dialled");
 
-	search.givenUp = true;
-	OnlineSearch_Words(&search, 13000, 1, words, sizeof(words));
-	Check(strcmp(words, "No games found. Enter looks again") == 0, "after the last try it says nothing was found, and how to look again");
+	OnlineScreens_ConnectedWords(3, words, sizeof(words));
+	Check(strcmp(words, "Connected: 3 sessions open") == 0, "once connected, how many sessions are open");
 
-	OnlineSearch_Words(&search, 13000, 1, words, 1);
-	Check(words[0] == '\0', "a room of one byte gets only the 0, for the search's line");
+	OnlineScreens_ConnectedWords(1, words, sizeof(words));
+	Check(strcmp(words, "Connected: 1 session open") == 0, "one session is a session");
+
+	OnlineScreens_ConnectedWords(0, words, sizeof(words));
+	Check(strcmp(words, "Connected: no sessions open") == 0, "and none is no sessions");
+
+	OnlineScreens_ConnectedWords(2000000000, words, sizeof(words));
+	Check(strcmp(words, "Connected: 999 sessions open") == 0, "a count past 999 is shown as 999");
+
+	OnlineScreens_CantConnectWords("virginia.relay.avpx.test", words, sizeof(words));
+	Check(strcmp(words, "Couldn't connect to virginia.relay.avpx.test") == 0, "a server that couldn't be reached is named in the failure");
+
+	OnlineScreens_CantFetchWords("localhost", words, sizeof(words));
+	Check(strcmp(words, "Connected to localhost, but couldn't fetch its open sessions") == 0, "and one reached that didn't give its sessions says so");
+
+	std::string const longServer(100, 's');
+	OnlineScreens_FetchingWords(longServer.c_str(), words, sizeof(words));
+	Check(strlen(words) == strlen("Fetching 's open sessions") + kRelayListHostLetters, "a server's name is cut to a host name's 63 letters");
+
+	OnlineScreens_FetchingWords(NULL, words, sizeof(words));
+	Check(strcmp(words, "Fetching 's open sessions") == 0, "no name at all is written as nothing");
+
+	words[0] = 'Q';
+	OnlineScreens_CantFetchWords("localhost", words, 0);
+	Check(words[0] == 'Q', "a room of no bytes isn't written at all, for the fetching screen");
 }
 
 // ---- Ping, waits and words
@@ -561,6 +567,75 @@ static void TestWords()
 	Check(strlen(words) == strlen("Joined through , 7 ms") + kRelayListRegionLetters, "in play too, a region is cut to 16 letters");
 }
 
+// ---- Where the game draws them (read, not run: the drawing needs the whole game)
+
+// A source file, as text, from the top of the repository, with its CRs taken out. The names are this file's own, never from outside.
+static std::string ReadSource(const char *name)
+{
+	FILE *file = fopen(name, "rb");
+	std::string text;
+
+	if (!file)
+	{
+		return text;
+	}
+
+	char block[4096];
+	size_t got = 0;
+
+	while ((got = fread(block, 1, sizeof(block), file)) > 0)
+	{
+		for (size_t i = 0; i < got; i++)
+		{
+			if (block[i] != '\r')
+			{
+				text += block[i];
+			}
+		}
+	}
+
+	fclose(file);
+	return text;
+}
+
+static void FailedSlice(const std::string &why)
+{
+	Check(false, why.c_str());
+}
+
+static bool Has(const std::string &text, const char *piece)
+{
+	return text.find(piece) != std::string::npos;
+}
+
+static void TestWhereTheyAreDrawn()
+{
+	puts("Where the game draws them, by reading");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const render = ReadSource("3dc/d3d_render.cpp");
+	Check(page.size() > 20000 && render.size() > 100000, "the page and the renderer were found and read, from the top of the repository");
+
+	// The relay's line in play is at the top right, and so is the -dev tag. The owner saw the tag drawn over the line (the first footage),
+	// so the line goes under the most the tag can ever reach: they never overlap, whatever the tag says and whatever the window's size.
+	std::string const playLine = SourceSlice(page, "static void RelayLineInPlay(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(playLine, "int const y = ShadowStatus_Bottom() + margin;") && Has(playLine, "RenderString(line, x > 0 ? x : 0, y, "),
+		"the relay's line in play is drawn under the -dev tag");
+
+	std::string const bottom = SourceSlice(render, "int ShadowStatus_Bottom()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(bottom, "if (!DevMode || !ShadowStatusOn)") &&
+		Has(bottom, "return sizes.margin / 2 + sizes.lineHeight * kShadowStatusMostLines + sizes.margin;"),
+		"the tag reaches as far down as its backing does with every line it can have, whenever it can be shown");
+
+	// (from its body: the renderer names it once before, to say it's there)
+	std::string const tag = SourceSlice(render, "static void ShadowStatus_Draw()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(tag, "if (!DevMode || !ShadowStatusOn || !viewRan)") && Has(tag, "enum { kMostLines = kShadowStatusMostLines,") &&
+		Has(tag, "ShadowStatusSizes const sizes = ShadowStatus_Sizes();") &&
+		Has(tag, "DrawQuad(rightX - widest - margin, margin / 2, widest + margin * 2 - margin / 2, lineHeight * numLines + margin, ") &&
+		Has(tag, "DrawStatusLine(lines[i], rightX, margin + i * lineHeight, scale);"),
+		"and the tag itself has no more lines than that, at the same sizes, from the same top");
+}
+
 int main()
 {
 	TestTheTail();
@@ -571,6 +646,7 @@ int main()
 	TestSearch();
 	TestPingAndWaits();
 	TestWords();
+	TestWhereTheyAreDrawn();
 
 	if (checksFailed)
 	{

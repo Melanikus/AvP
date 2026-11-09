@@ -1,5 +1,7 @@
 // Interface  functions (written in C++) for
 // Direct3D immediate mode system
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a test copy (-dev -windowed) behind the other copy's window reads no pads: they're the player's, for the copy in front
 
 #define DIRECTINPUT_VERSION 0x0800
 
@@ -20,6 +22,7 @@
 #include "onscreenKeyboard.h"
 #include "iofocus.h"
 #include "showcmds.h"
+#include "window_slot.h"
 
 // #define USE_DIMOUSE
 
@@ -1228,10 +1231,15 @@ int UpdateControllerState()
 {
     DWORD dwResult;
 	int numConnected = 0;
+
+	// XInput gives a pad's state to any program that asks, in front or not. A test copy behind the other copy's window (window_slot.h)
+	// counts every pad as not there, so only the copy in front moves with it.
+	bool const behind = WindowSlot_IsBehind();
+
     for (DWORD i = 0; i < MAX_CONTROLLERS; i++)
     {
         // Simply get the state of the controller from XInput.
-        dwResult = XInputGetState(i, &g_Controllers[i].state);
+        dwResult = behind ? ERROR_DEVICE_NOT_CONNECTED : XInputGetState(i, &g_Controllers[i].state);
 
         if (dwResult == ERROR_SUCCESS)
 		{

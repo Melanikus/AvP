@@ -7319,6 +7319,37 @@ static void DrawStatusLine(const char *text, int rightX, int y, int scale)
 	}
 }
 
+// The tag's sizes. Half the HUD's own size is still easy to read in a video, and hides less.
+// Modified 2026-11-09 by Melanikus for the AvP port: the sizes and the most lines are worked out here, once, so ShadowStatus_Bottom below
+// reaches as far as the tag itself does, and the relay's line in play (online_screens_page.cpp) can sit under it.
+enum { kShadowStatusMostLines = 15 };
+
+struct ShadowStatusSizes
+{
+	int scale, lineHeight, margin;
+};
+
+static ShadowStatusSizes ShadowStatus_Sizes()
+{
+	ShadowStatusSizes sizes;
+	sizes.scale = (HUDScaleFactor / 2 > ONE_FIXED) ? HUDScaleFactor / 2 : ONE_FIXED;
+	sizes.lineHeight = MUL_FIXED(sizes.scale, HUD_FONT_HEIGHT + 3);
+	sizes.margin = MUL_FIXED(sizes.scale, 6);
+	return sizes;
+}
+
+int ShadowStatus_Bottom()
+{
+	if (!DevMode || !ShadowStatusOn)
+	{
+		return 0;
+	}
+
+	// the dark backing's bottom edge (ShadowStatus_Draw) when the tag has every line it can have, so it's the same whatever it says now
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	return sizes.margin / 2 + sizes.lineHeight * kShadowStatusMostLines + sizes.margin;
+}
+
 // The tag on the top right of the screen, which says how this build is running, so that a moment in a video can be matched to the log. It's only
 // a few more polygons on the list the display already uses, so it can't hold anything up. It's only there while a level is being shown.
 static void ShadowStatus_Draw()
@@ -7333,7 +7364,7 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 15, kLineLength = 48 };
+	enum { kMostLines = kShadowStatusMostLines, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
@@ -7400,10 +7431,10 @@ static void ShadowStatus_Draw()
 		}
 	}
 
-	// half the HUD's own size is still easy to read in a video, and hides less
-	int const scale = (HUDScaleFactor / 2 > ONE_FIXED) ? HUDScaleFactor / 2 : ONE_FIXED;
-	int const lineHeight = MUL_FIXED(scale, HUD_FONT_HEIGHT + 3);
-	int const margin = MUL_FIXED(scale, 6);
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	int const scale = sizes.scale;
+	int const lineHeight = sizes.lineHeight;
+	int const margin = sizes.margin;
 	int const rightX = ScreenDescriptorBlock.SDB_Width - margin;
 
 	int widest = 0;

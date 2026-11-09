@@ -1834,7 +1834,16 @@ static void RenderMenu(void)
 
 		if (gamesPage)
 		{
-			OnlinePage_DrawRow(e, elementPtr->Brightness);
+			// A game's row is drawn by the page, in its table. On the list, the Search box and the Refresh row are the menus' own rows, each
+			// drawn at its place above the table. On the fetching screen, its one row draws nothing: the page draws the words.
+			if (elementPtr->ElementID == AVPMENU_ELEMENT_LISTCHOICE)
+			{
+				OnlinePage_DrawRow(e, elementPtr->Brightness);
+			}
+			else if (OnlinePage_ShowsTheList())
+			{
+				RenderMenuElement(elementPtr, e, OnlinePage_ControlTop(e));
+			}
 		}
 		else if (!askingPage)
 		{
@@ -3095,17 +3104,18 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 	{
 		default:
 		GLOBALASSERT("UNKNOWN MENU ELEMENT"==0);
+		case AVPMENU_ELEMENT_FINDAGAIN:
+		{
+			// The page of games found's Refresh row, and Enter on its failure screen: the open sessions are fetched again
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				OnlinePage_FindAgain();
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_GOTOMENU:
 		case AVPMENU_ELEMENT_GOTOMENU_GFX:
 		{
-			// The page of games found, with no games: its one row is the search's, and Enter looks again once the search has given up.
-			// Esc still goes back.
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION &&
-				OnlinePage_RowCount() == 0 && OnlinePage_EnterWithNoGames())
-			{
-				break;
-			}
-
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
 				// Check to see if we are on one of the menus for entering multiplayer name
@@ -3705,10 +3715,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					// The page remembers this game, to select it again if the join ends and the menus come back to the page
 					OnlinePage_Joining(AvPMenus.CurrentlySelectedElement);
 
-					// Only while this join waits: the hook is taken off again straight after, whatever happened
+					// Only while this join waits: the hook is taken off again straight after, whatever happened. The wait's frames close
+					// this loop's frame, so the page opens a new one for it afterwards.
 					Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);
 					NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);
 					Net_SetRelayJoinWaitHook(NULL);
+					OnlinePage_JoinWaitOver();
 
 					if (joined != NET_FAIL) {
 						SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
@@ -4032,6 +4044,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 	{
 		default:
 		GLOBALASSERT("UNKNOWN MENU ELEMENT"==0);
+		case AVPMENU_ELEMENT_FINDAGAIN:
 		case AVPMENU_ELEMENT_GOTOMENU:
 		case AVPMENU_ELEMENT_QUITGAME:
 		case AVPMENU_ELEMENT_STARTMPGAME:

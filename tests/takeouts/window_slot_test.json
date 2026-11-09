@@ -144,6 +144,76 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a test copy behind another window stops",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "\t\tif (WindowSlot_IsOn())\n\t\t{\n\t\t\treturn;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a test copy goes on before its window's messages are handled",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "\tdo\n\t{\n\t\twhile (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))",
+					"to": "\tif (WindowSlot_IsOn())\n\t{\n\t\treturn;\n\t}\n\n\tdo\n\t{\n\t\twhile (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: behind is any test copy, in front or not",
+			"changes": [
+				{
+					"file": "3dc/window_slot_game.cpp",
+					"from": "return turnedOn && !bActive;",
+					"to": "return turnedOn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a test copy behind takes the mouse moves",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\t\t\tif (WindowSlot_IsBehind())\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a test copy behind reads the pads",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "dwResult = behind ? ERROR_DEVICE_NOT_CONNECTED : XInputGetState(i, &g_Controllers[i].state);",
+					"to": "dwResult = XInputGetState(i, &g_Controllers[i].state);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mouse's data is copied whatever its size",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": " != 0 || size > sizeof(raw) ||",
+					"to": " != 0 ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mouse's data is used even when Windows wrote less of it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (raw.header.dwType == RIM_TYPEMOUSE && size >= offsetof(RAWINPUT, data) + sizeof(RAWMOUSE))",
+					"to": "if (raw.header.dwType == RIM_TYPEMOUSE)"
+				}
+			]
 		}
 	]
 }
