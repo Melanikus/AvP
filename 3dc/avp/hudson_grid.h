@@ -1,7 +1,9 @@
 // A 3D grid of a whole level, for finding a marine's way through it. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // WHY. Hudson's first map was made by feeling about with rays, a stride at a time, which only works in rooms the game has loaded and costs a lot of rays. This one is worked
-// out once, from the level's own polygons. Tried on the stock levels with no game running, it found 93.6% of the steps on the marine route lists (AvP-docs, engine/pathfinding-study).
+// out once, from the level's own polygons. It was tried on 2026-11-05 with no game running, as a copy written in JavaScript, on copies of the stock level files: of the 1,344
+// steps on the marine route lists of the 15 marine levels that have them, it found a way for 1,258, which is 93.6%, and for 1,275, 94.9%, once a lift counted as a way he
+// waits at. The same study's floor-polygon map found 92.2%, at a fraction of the memory: about 9.8 MB a level for this grid on average, and 35 MB at worst.
 //
 // WHAT THE GRID IS. Seen from above, the level is cut into columns 300 mm square. Each column keeps a list of the heights where polygons pass through it, and between those
 // is empty air. So a whole level's empty space costs nothing, but it's still truly 3D: one column can hold a floor, the floor above it, and the one above that. One place he can stand is

@@ -1,3 +1,5 @@
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the comment on what a run is for no longer points at a plan kept outside the repository (#151), and says where runs are asked for and read
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   watch=alien, holdfire=, alienat=, standat= and watchfrom= film the way an alien takes to reach him, with a camera beside it or at his eyes
 //   net= is refused on hudson-revive until its network code is written into main's
@@ -30,8 +32,8 @@
 // Hudson: a marine the camera follows, so that the game can be measured with nobody at the keyboard. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // WHAT IT'S FOR: someone playing can't do the same thing twice, and can't stand in forty rooms every time the code changes. So a run starts a level by itself, does what it was asked, writes what it found,
-// and ends with a number a script can read. The plan is AvP-docs\engine\hudson-plan.md. So far this file holds the start of that: a run that loads a level, plays some frames with nobody touching anything,
-// and shuts down the normal way. Hudson himself comes next.
+// and ends with a number a script can read. A run is asked for in words on the command line, after -dev -hudson: hudson_plan.h shows them and says what each one does. The
+// scripts that start runs and read what they wrote are in tools/hudson.
 //
 // A RUN MUSTN'T GET IN ANYONE'S WAY. The machine it runs on is someone's, and they may be working, or recording. So in a run the game makes no sound, leaves the mouse alone, doesn't take the focus, keeps going
 // without it, and doesn't change the Windows settings it changes for a player. It keeps all its files in a folder of its own, beside the game. It won't start unless the machine has been left alone for a while.

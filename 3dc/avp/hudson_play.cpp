@@ -173,8 +173,11 @@ static const DWORD kTheSecondPlansNoMoreOftenThan = 5000;
 static const int kPutBackFromALift = 8000;
 static const int kPutNoFurtherFromALift = 20000;
 
-// The lift test's lines (AvP-docs, game/lift-test-pass-rules.md): one for each body near a lift this often. Near is above its shaft with this much to spare on every side, and from this far
-// over its top stop to this far under its bottom one.
+// The lift test's lines: one for each body near a lift this often. Near is above its shaft with this much to spare on every side, and from this far over its top stop to this far
+// under its bottom one. They're what a reader of the two machines' logs needs for the lift test's rules, set on 2026-11-07: nobody falls down a shaft (no fall damage near a
+// lift, and no drop of more than a metre between two of these lines while off the car), nobody is moved by a cheat near a lift, he steps on only when the car is level with
+// his landing, and the car stops at the same heights on both machines. That reader isn't in the repository yet: tools/hudson/read-play-pair.js reads the other lift lines and
+// leaves these out.
 static const DWORD kSayWhereEachIsNearALiftEvery = 100;
 static const int kNearALiftAcross = 3000;
 static const int kNearALiftUpOrDown = 2000;
