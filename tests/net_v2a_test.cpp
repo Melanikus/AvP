@@ -20,6 +20,7 @@
 #include "net_pq.h"
 #include "net_handshake_a.h"
 #include "net_sealed_control.h"
+#include "net_relay_v2.h"
 #include "net_v2_test_keys.h"
 #include "json_reader.h"
 
@@ -499,6 +500,181 @@ static void TheSealedChannel(const JsonValue &all, const Vectors &v)
 	NetHandshakeA_WipeKeys(&keys);
 }
 
+// ----- The session (net_relay_v2.h): the cookie round, handshake A with its resends, the sealed channel, as the relay's own datagrams
+
+uint16_t const kControl = 27500;
+
+// A0', the relay's answer to our COOKIE_ASK: 'AVPR', 2, COOKIE, 0, 0, the id, the cookie, then zeros
+static Bytes CookieAnswer(const Bytes &id, const Bytes &cookie)
+{
+	Bytes answer(kNetV2CookieAnswerBytes, 0);
+	memcpy(answer.data(), kNetV2MagicRelay, 4);
+	answer[4] = kNetV2Version;
+	answer[5] = kNetV2KindCookie;
+	memcpy(answer.data() + 8, id.data(), kNetV2IdBytes);
+	memcpy(answer.data() + 16, cookie.data(), kNetV2CookieBytes);
+	return answer;
+}
+
+static std::vector<Bytes> HexList(const JsonValue *object, const char *name)
+{
+	std::vector<Bytes> out;
+	const JsonValue *const list = object ? object->Member(name) : NULL;
+
+	for (size_t i = 0; list && list->kind == kJsonList && i < list->items.size(); i++)
+	{
+		Bytes b;
+		out.push_back(list->items[i].kind == kJsonText && FromHex(list->items[i].text, &b) ? b : Bytes());
+	}
+
+	return out;
+}
+
+// A session started from the file's draws and id, at now
+static bool FileSession(const Vectors &v, const Bytes &id, NetRelayV2Session *s, uint32_t now)
+{
+	NetHandshakeADraws d;
+	return FileDraws(v, &d) && s->Start(v.region.c_str(), &v.relay, kControl, id.data(), &d, now);
+}
+
+static void TheSession(const JsonValue &all, const Vectors &v)
+{
+	const JsonValue *const d = all.Member("handshakeDatagrams");
+	Bytes const id = HexOf(d, "id"), cookie = HexOf(d, "cookie");
+	std::vector<Bytes> const a1 = HexList(d, "a1"), a2 = HexList(d, "a2"), a3 = HexList(d, "a3");
+
+	if (id.size() != kNetV2IdBytes || cookie.size() != kNetV2CookieBytes || a1.size() != 3 || a2.size() != 2 || a3.size() != 1)
+	{
+		ACheck(false, "the file's handshake datagrams, for the session");
+		return;
+	}
+
+	Bytes const answer = CookieAnswer(id, cookie);
+	NetRelayV2Send sent[kNetRelayV2MostSends];
+	NetRelayV2Opened got[kNetRelayV2MostOpened];
+
+	// The whole exchange, every byte the relay's
+	{
+		NetRelayV2Session s;
+		uint8_t ask[kNetV2DatagramBytes];
+		NetV2_CookieAsk(id.data(), ask);
+		bool const started = FileSession(v, id, &s, 0);
+		size_t const first = s.TakeSends(sent, kNetRelayV2MostSends);
+		ACheck(started && first == 1 && sent[0].toPort == kControl && sent[0].size == kNetV2DatagramBytes && memcmp(sent[0].bytes, ask, sizeof(ask)) == 0,
+			"the session's first send is A0, the COOKIE_ASK for its id, to the control port");
+
+		s.Hear(kControl, answer.data(), answer.size(), 100);
+		size_t const second = s.TakeSends(sent, kNetRelayV2MostSends);
+		bool a1Right = second == 3;
+
+		for (size_t i = 0; i < 3 && a1Right; i++)
+		{
+			a1Right = sent[i].toPort == kControl && Same(a1[i], sent[i].bytes, sent[i].size);
+		}
+
+		ACheck(a1Right, "A0' brings A1 at once: its 3 datagrams, with the cookie, are the relay's own byte for byte");
+
+		s.Hear(kControl, a2[1].data(), a2[1].size(), 200);
+		ACheck(!s.Ready() && s.TakeSends(sent, kNetRelayV2MostSends) == 0, "A2's second datagram alone: nothing yet");
+		s.Hear(kControl, a2[0].data(), a2[0].size(), 210);
+		size_t const third = s.TakeSends(sent, kNetRelayV2MostSends);
+		ACheck(s.Ready() && third == 1 && Same(a3[0], sent[0].bytes, sent[0].size), "the whole of A2, last datagram first: ready, and A3's datagram is the relay's own");
+
+		// The first sealed message: the game's, at counter 0, as the file has it
+		const JsonValue *const sealed = all.Member("sealed");
+		const JsonValue *const game0 = sealed && sealed->kind == kJsonList && !sealed->items.empty() ? &sealed->items[0] : NULL;
+		Bytes const message0 = HexOf(game0, "message"), sealed0 = HexOf(game0, "sealed");
+		bool const sealedRight = message0.size() == kNetSealedControlMessageBytes && s.Seal(message0.data(), kControl, 300) &&
+			s.TakeSends(sent, kNetRelayV2MostSends) == 1 && Same(sealed0, sent[0].bytes, sent[0].size);
+		ACheck(sealedRight, "a version 1 message sealed by the session is the file's game message at counter 0");
+
+		// The relay's, from a joiner's port: opened, and given with the port it came from
+		const JsonValue *const relay0 = sealed && sealed->items.size() > 1 ? &sealed->items[1] : NULL;
+		Bytes const relayMessage = HexOf(relay0, "message"), relaySealed = HexOf(relay0, "sealed");
+		s.Hear(27503, relaySealed.data(), relaySealed.size(), 310);
+		size_t const opened = s.TakeOpened(got, kNetRelayV2MostOpened);
+		ACheck(opened == 1 && got[0].fromPort == 27503 && Same(relayMessage, got[0].message, sizeof(got[0].message)),
+			"the relay's sealed message, from a joiner's port, is opened, with its port");
+		s.Hear(27503, relaySealed.data(), relaySealed.size(), 320);
+		ACheck(s.TakeOpened(got, kNetRelayV2MostOpened) == 0 && s.Drops().refused == 1, "the same again: refused, and counted");
+		s.Hear(kControl, a2[0].data(), a2[0].size(), 330);
+		ACheck(s.Ready() && s.Drops().notOurs == 1, "A2 sent again by the relay, once ready: dropped, and the session goes on");
+		s.Wipe();
+		ACheck(!s.Ready() && !s.Failed(), "wiped, it's nothing again");
+	}
+
+	// The timers: A0 again at 0.5, 1.5 and 3.5 s, and "the relay doesn't answer" at 7.5 s
+	{
+		NetRelayV2Session s;
+		FileSession(v, id, &s, 1000);
+		s.TakeSends(sent, kNetRelayV2MostSends);
+		uint32_t const at[] = { 1499, 1500, 2499, 2500, 4499, 4500, 6000, 8499 };
+		size_t const want[] = { 0, 1, 0, 1, 0, 1, 0, 0 };
+		bool right = true;
+
+		for (size_t i = 0; i < 8; i++)
+		{
+			s.Tick(at[i]);
+			right = right && s.TakeSends(sent, kNetRelayV2MostSends) == want[i];
+		}
+
+		ACheck(right && !s.Failed(), "A0 goes again at 0.5, 1.5 and 3.5 s, and only then");
+		s.Tick(8500);
+		ACheck(s.Failed() && s.Why() == kNetRelayV2NoAnswer, "at 7.5 s it gives up: the relay doesn't answer (7)");
+	}
+
+	// A1's own timers, counted from A0'
+	{
+		NetRelayV2Session s;
+		FileSession(v, id, &s, 0);
+		s.Hear(kControl, answer.data(), answer.size(), 2000);
+		s.TakeSends(sent, kNetRelayV2MostSends);
+		s.Tick(2499);
+		size_t const none = s.TakeSends(sent, kNetRelayV2MostSends);
+		s.Tick(2500);
+		size_t const again = s.TakeSends(sent, kNetRelayV2MostSends);
+		ACheck(none == 0 && again == 3 && Same(a1[0], sent[0].bytes, sent[0].size), "A1 goes again, all 3 datagrams, the same bytes, 0.5 s after A0'");
+		s.Tick(9499);
+		ACheck(!s.Failed(), "A1's own count: not given up at 7.5 s from the start");
+		s.Tick(9500);
+		ACheck(s.Failed() && s.Why() == kNetRelayV2NoAnswer, "but at 7.5 s from A1's first send");
+	}
+
+	// What isn't the relay's answer
+	{
+		NetRelayV2Session s;
+		FileSession(v, id, &s, 0);
+		s.TakeSends(sent, kNetRelayV2MostSends);
+		s.Hear(27501, answer.data(), answer.size(), 10);
+		Bytes otherId = id;
+		otherId[0] ^= 0x01;
+		Bytes const otherAnswer = CookieAnswer(otherId, cookie);
+		s.Hear(kControl, otherAnswer.data(), otherAnswer.size(), 20);
+		ACheck(s.TakeSends(sent, kNetRelayV2MostSends) == 0 && s.Drops().notFromControl == 1 && s.Drops().notOurs == 1,
+			"A0' from another port, or for another handshake: dropped, counted, and no A1");
+
+		s.Hear(kControl, answer.data(), answer.size(), 30);
+		s.TakeSends(sent, kNetRelayV2MostSends);
+		Bytes cookied = a2[0];
+		cookied[16] = 1;
+		s.Hear(kControl, cookied.data(), cookied.size(), 40);
+		ACheck(s.Failed() && s.Why() == kNetRelayV2BadCookie, "an A2 datagram with a cookie that isn't 16 zeros ends it (5)");
+	}
+
+	{
+		NetRelayV2Session s;
+		FileSession(v, id, &s, 0);
+		s.Hear(kControl, answer.data(), answer.size(), 10);
+		Bytes changed = a2[1];
+		// The second datagram carries A2's last 525 bytes at 36 to 560; the sealed session id is A2's last 24, so 537 to 560. 540 is in it.
+		changed[540] ^= 0x01;
+		s.Hear(kControl, a2[0].data(), a2[0].size(), 20);
+		s.Hear(kControl, changed.data(), changed.size(), 30);
+		ACheck(s.Failed() && s.Why() == kNetHandshakeATag, "an A2 whose seal doesn't open ends it for good (8)");
+		ACheck(!s.Seal(changed.data(), kControl, 40), "and nothing can be sealed then");
+	}
+}
+
 // ----- The game's real draws
 
 static void TheRealDraws(const Vectors &v)
@@ -540,6 +716,7 @@ int main()
 		EveryChangedA2(v);
 		TheRefusals(v);
 		TheSealedChannel(all, v);
+		TheSession(all, v);
 		TheRealDraws(v);
 	}
 

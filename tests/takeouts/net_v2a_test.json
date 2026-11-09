@@ -153,6 +153,36 @@
 					"to": "NetV2_ReplayTake(&c->window, counter); uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes], tag[kNetCryptoTagBytes];"
 				}
 			]
+		},
+		{
+			"name": "an A2 datagram with a cookie that isn't 16 zeros is taken",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (memcmp(f.cookie, kNoCookie, kNetV2CookieBytes) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "A0 and A1 never go again",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (resends < 3 && since >= kNetRelayV2ResendAtMs[resends])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the session never gives up on a relay that doesn't answer",
+			"changes": [
+				{
+					"file": "3dc/net_relay_v2.h",
+					"from": "if (since >= kNetRelayV2GiveUpMs)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }
