@@ -213,6 +213,66 @@
 					"to": "if (NetV2_ReadCookie(data, size, askIds[relay][k], cookie))"
 				}
 			]
+		},
+		{
+			"name": "pqIK: ss is left out of A1's chain (the player's static P-384 key proves nothing)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixKey(&hs->noise, ss, sizeof(ss), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "pqIK: se is left out of A2's chain",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixKey(&hs->noise, se, sizeof(se), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "pqIK: A2's second encapsulation isn't hashed",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, toStatic, kNetPqKemCiphertextBytes, trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "pqIK: A2's second encapsulation is opened with e's ML-KEM key, not the player's static one",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && NetPq_KemDecapsulate(hs->player.kemPrivate, toStatic, skem);",
+					"to": "ok = ok && NetPq_KemDecapsulate(hs->ekPrivate, toStatic, skem);"
+				}
+			]
+		},
+		{
+			"name": "pqIK: a player with no ML-KEM private key is taken",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "|| !player->statics || !player->kemPrivate",
+					"to": "|| !player->statics"
+				}
+			]
+		},
+		{
+			"name": "pqIK: the handshake frees the player's static key, which it only borrows",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "\tNetCrypto_EcdhFree(hs->e);\n\tNetCrypto_Wipe(hs, sizeof(*hs));",
+					"to": "\tNetCrypto_EcdhFree(hs->e);\n\tNetCrypto_EcdhFree(hs->player.p384);\n\tNetCrypto_Wipe(hs, sizeof(*hs));"
+				}
+			]
 		}
 	]
 }

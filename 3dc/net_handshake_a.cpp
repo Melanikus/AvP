@@ -134,8 +134,8 @@ void NetHandshakeA_WipeKeys(NetHandshakeAKeys *keys)
 	}
 }
 
-int NetHandshakeA_WriteA1(NetHandshakeA *hs, const char *region, const NetRelayStaticKeys *relay, NetHandshakeADraws *draws,
-	NetHandshakeATrace *trace)
+int NetHandshakeA_WriteA1(NetHandshakeA *hs, const char *region, const NetRelayStaticKeys *relay, const NetHandshakeAPlayer *player,
+	NetHandshakeADraws *draws, NetHandshakeATrace *trace)
 {
 	if (!hs)
 	{
@@ -145,17 +145,19 @@ int NetHandshakeA_WriteA1(NetHandshakeA *hs, const char *region, const NetRelayS
 
 	NetHandshakeA_Wipe(hs);
 
-	if (!draws || !draws->e || !relay || !NetHandshakeA_RegionIsGood(region))
+	if (!draws || !draws->e || !relay || !player || !player->p384 || !player->statics || !player->kemPrivate
+		|| !NetHandshakeA_RegionIsGood(region))
 	{
 		NetHandshakeA_WipeDraws(draws);
 		hs->step = kStepRefused;
 		return kNetHandshakeABadState;
 	}
 
-	// The draws move into the handshake: e's private keys stay here until A2 is read
+	// The draws move into the handshake: e's private keys stay here until A2 is read. The player is borrowed, for A2's se and skem.
 	hs->e = draws->e;
 	draws->e = NULL;
 	memcpy(hs->ekPrivate, draws->ekPrivate, sizeof(hs->ekPrivate));
+	hs->player = *player;
 
 	// The prologue: the region's name, then one 0 byte (5.1 point 4)
 	uint8_t prologue[kNetHandshakeMostRegionLetters + 1] = {};
@@ -163,6 +165,7 @@ int NetHandshakeA_WriteA1(NetHandshakeA *hs, const char *region, const NetRelayS
 	memcpy(prologue, region, letters);
 
 	uint8_t es[kNetCryptoP384ScalarBytes];
+	uint8_t ss[kNetCryptoP384ScalarBytes];
 	uint8_t *const at = hs->a1;
 	size_t written = 0;
 	int why = kNetHandshakeACrypto;
@@ -190,22 +193,49 @@ int NetHandshakeA_WriteA1(NetHandshakeA *hs, const char *region, const NetRelayS
 	ok = ok && MixHash(&hs->noise, draws->skemCiphertext, sizeof(draws->skemCiphertext), trace);     // 8: skem's ciphertext
 	ok = ok && MixKey(&hs->noise, draws->skemSecret, sizeof(draws->skemSecret), trace);              // 9: skem's secret
 
-	// A1: e's two keys, skem's ciphertext, then an empty EncryptAndHash's tag
+	// A1: e's two keys and skem's ciphertext as they are, then s sealed, then the last tag
+	size_t const sAt = kNetCryptoP384PublicBytes + kNetPqKemPublicBytes + kNetPqKemCiphertextBytes;
+	size_t const sealedStaticsBytes = kNetHandshakeAStaticBytes + kNetCryptoTagBytes;
+	size_t const tagAt = sAt + sealedStaticsBytes;
+
 	if (ok)
 	{
 		memcpy(at, draws->ePublic, kNetCryptoP384PublicBytes);
 		memcpy(at + kNetCryptoP384PublicBytes, draws->ekPublic, kNetPqKemPublicBytes);
 		memcpy(at + kNetCryptoP384PublicBytes + kNetPqKemPublicBytes, draws->skemCiphertext, kNetPqKemCiphertextBytes);
-		size_t const tagAt = kNetCryptoP384PublicBytes + kNetPqKemPublicBytes + kNetPqKemCiphertextBytes;
+
+		// s: the player's two static public keys, sealed under the key skem made, at nonce 0 (5.1 point 21)
+		ok = NetNoise_EncryptAndHash(&hs->noise, player->statics, kNetHandshakeAStaticBytes, at + sAt, sealedStaticsBytes, &written)
+			&& written == sealedStaticsBytes;
+
+		if (ok)
+		{
+			Trace(trace, &hs->noise);                                                                // 10: s
+		}
+	}
+
+	// ss: ECDH of the player's static key and the relay's static one. Only the holder of the player's static P-384 key can make the tag
+	// after it.
+	if (ok && !NetCrypto_EcdhAgree(player->p384, relay->p384, ss))
+	{
+		ok = false;
+		why = kNetHandshakeABadKey;
+	}
+
+	ok = ok && MixKey(&hs->noise, ss, sizeof(ss), trace);                                            // 11: ss
+
+	if (ok)
+	{
 		ok = NetNoise_EncryptAndHash(&hs->noise, kNothing, 0, at + tagAt, kNetHandshakeA1Bytes - tagAt, &written) && written == kNetCryptoTagBytes;
 
 		if (ok)
 		{
-			Trace(trace, &hs->noise);                                                                // 10: A1's tag
+			Trace(trace, &hs->noise);                                                                // 12: A1's tag
 		}
 	}
 
 	NetCrypto_Wipe(es, sizeof(es));
+	NetCrypto_Wipe(ss, sizeof(ss));
 	NetHandshakeA_WipeDraws(draws);
 
 	if (!ok)
@@ -243,18 +273,22 @@ int NetHandshakeA_ReadA2(NetHandshakeA *hs, const uint8_t *a2, size_t size, uint
 		return kNetHandshakeAWrongSize;
 	}
 
-	// A2: the relay's ephemeral P-384 key, the ciphertext to the game's ephemeral ML-KEM key, then the session id sealed with its tag
+	// A2: the relay's ephemeral P-384 key, the ciphertext to the game's ephemeral ML-KEM key, the one to the player's static ML-KEM key,
+	// then the session id sealed with its tag
 	const uint8_t *const re = a2;
 	const uint8_t *const ciphertext = a2 + kNetCryptoP384PublicBytes;
-	const uint8_t *const sealedId = ciphertext + kNetPqKemCiphertextBytes;
+	const uint8_t *const toStatic = ciphertext + kNetPqKemCiphertextBytes;
+	const uint8_t *const sealedId = toStatic + kNetPqKemCiphertextBytes;
 	size_t const sealedIdBytes = kNetHandshakeSessionIdBytes + kNetCryptoTagBytes;
 
 	uint8_t ee[kNetCryptoP384ScalarBytes];
+	uint8_t se[kNetCryptoP384ScalarBytes];
 	uint8_t ekem[kNetPqKemSecretBytes];
+	uint8_t skem[kNetPqKemSecretBytes];
 	uint8_t sessionId[kNetHandshakeSessionIdBytes];
 	size_t written = 0;
 	int why = kNetHandshakeACrypto;
-	bool ok = MixHash(&hs->noise, re, kNetCryptoP384PublicBytes, trace);                             // 11: e, the relay's P-384 key
+	bool ok = MixHash(&hs->noise, re, kNetCryptoP384PublicBytes, trace);                             // 13: e, the relay's P-384 key
 
 	// ee: ECDH of the two ephemeral keys. A key that isn't on the curve, or gives 0, ends it.
 	if (ok && !NetCrypto_EcdhAgree(hs->e, re, ee))
@@ -263,13 +297,27 @@ int NetHandshakeA_ReadA2(NetHandshakeA *hs, const uint8_t *a2, size_t size, uint
 		why = kNetHandshakeABadKey;
 	}
 
-	ok = ok && MixKey(&hs->noise, ee, sizeof(ee), trace);                                            // 12: ee
-	ok = ok && MixHash(&hs->noise, ciphertext, kNetPqKemCiphertextBytes, trace);                     // 13: ekem's ciphertext
+	ok = ok && MixKey(&hs->noise, ee, sizeof(ee), trace);                                            // 14: ee
+
+	// se: ECDH of the player's static key and the relay's ephemeral one (the same relay key ee just took)
+	if (ok && !NetCrypto_EcdhAgree(hs->player.p384, re, se))
+	{
+		ok = false;
+		why = kNetHandshakeABadKey;
+	}
+
+	ok = ok && MixKey(&hs->noise, se, sizeof(se), trace);                                            // 15: se
+	ok = ok && MixHash(&hs->noise, ciphertext, kNetPqKemCiphertextBytes, trace);                     // 16: ekem's ciphertext
 
 	// ekem's secret: decapsulation never fails on a changed ciphertext (FIPS 203's implicit rejection: another secret, and the seal next
 	// fails); it fails only for a private key that fails FIPS 203's own check, which would be this game's
 	ok = ok && NetPq_KemDecapsulate(hs->ekPrivate, ciphertext, ekem);
-	ok = ok && MixKey(&hs->noise, ekem, sizeof(ekem), trace);                                        // 14: ekem's secret
+	ok = ok && MixKey(&hs->noise, ekem, sizeof(ekem), trace);                                        // 17: ekem's secret
+
+	// skem, to the player's static ML-KEM key: only its holder opens it to the secret the relay mixed in, so only they can go on
+	ok = ok && MixHash(&hs->noise, toStatic, kNetPqKemCiphertextBytes, trace);                       // 18: skem's ciphertext
+	ok = ok && NetPq_KemDecapsulate(hs->player.kemPrivate, toStatic, skem);
+	ok = ok && MixKey(&hs->noise, skem, sizeof(skem), trace);                                        // 19: skem's secret
 
 	// The session id, sealed: only the holder of both of the relay's static keys can make a seal that opens
 	if (ok && (!NetNoise_DecryptAndHash(&hs->noise, sealedId, sealedIdBytes, sessionId, sizeof(sessionId), &written) || written != sizeof(sessionId)))
@@ -280,7 +328,7 @@ int NetHandshakeA_ReadA2(NetHandshakeA *hs, const uint8_t *a2, size_t size, uint
 
 	if (ok)
 	{
-		Trace(trace, &hs->noise);                                                                    // 15: A2's seal opened
+		Trace(trace, &hs->noise);                                                                    // 20: A2's seal opened
 	}
 
 	// A3: an empty EncryptAndHash, the game's key confirmation
@@ -288,7 +336,7 @@ int NetHandshakeA_ReadA2(NetHandshakeA *hs, const uint8_t *a2, size_t size, uint
 
 	if (ok)
 	{
-		Trace(trace, &hs->noise);                                                                    // 16: A3; h is now the transcript
+		Trace(trace, &hs->noise);                                                                    // 21: A3; h is now the transcript
 	}
 
 	ok = ok && NetNoise_Split(&hs->noise, &keysOut->split);
@@ -300,7 +348,9 @@ int NetHandshakeA_ReadA2(NetHandshakeA *hs, const uint8_t *a2, size_t size, uint
 	}
 
 	NetCrypto_Wipe(ee, sizeof(ee));
+	NetCrypto_Wipe(se, sizeof(se));
 	NetCrypto_Wipe(ekem, sizeof(ekem));
+	NetCrypto_Wipe(skem, sizeof(skem));
 	NetCrypto_Wipe(sessionId, sizeof(sessionId));
 	NetHandshakeA_Wipe(hs);
 

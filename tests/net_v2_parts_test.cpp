@@ -84,7 +84,7 @@ static void TheDatagrams(const JsonValue &all)
 		size_t count;
 	};
 
-	Message const messages[3] = { { "a1", kNetV2KindA1, cookie.data(), 3 }, { "a2", kNetV2KindA2, kNoCookie, 2 }, { "a3", kNetV2KindA3, cookie.data(), 1 } };
+	Message const messages[3] = { { "a1", kNetV2KindA1, cookie.data(), 5 }, { "a2", kNetV2KindA2, kNoCookie, 3 }, { "a3", kNetV2KindA3, cookie.data(), 1 } };
 
 	for (const Message &m : messages)
 	{
@@ -274,7 +274,7 @@ static void TheFragmentRules()
 
 	Change const changes[] = {
 		{ 0, 'X', "another magic" }, { 4, 3, "version 3" }, { 4, 1, "version 1" }, { 6, 3, "fragment 3 of 3" }, { 6, 4, "fragment 4 of 3" },
-		{ 7, 0, "a count of 0" }, { 7, 5, "a count of 5" }, { 7, 2, "a count of 2 for 3,249 bytes" }, { 7, 4, "a count of 4 for 3,249 bytes" },
+		{ 7, 0, "a count of 0" }, { 7, 5, "a count of 5" }, { 7, 6, "a count of 6, past the most" }, { 7, 2, "a count of 2 for 3,249 bytes" }, { 7, 4, "a count of 4 for 3,249 bytes" },
 		{ 32, 0x31, "a length past the most (0x1231, 4,657)" }, { 33, 0xFF, "a length of 65,000 or so" }, { 34, 0x00, "fragment 2 starting at 0" },
 		{ 35, 0x00, "fragment 2 starting at 0x48 (72)" },
 	};
@@ -299,11 +299,11 @@ static void TheFragmentRules()
 	uint8_t out[kNetV2DatagramBytes];
 	std::vector<uint8_t> tooLong(kNetV2MostMessageBytes + 1, 0x11);
 	PartsCheck(!NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), tooLong.size(), 0, out) && AllZero(out, sizeof(out)),
-		"a message of 4,657 bytes isn't cut, and nothing is left in the datagram");
+		"a message of 5,821 bytes isn't cut, and nothing is left in the datagram");
 	PartsCheck(!NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, message.data(), message.size(), 3, out),
 		"nor fragment 3 of a message that has 3");
-	PartsCheck(NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), kNetV2MostMessageBytes, 3, out),
-		"4,656 bytes, the most, is 4 fragments");
+	PartsCheck(NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), kNetV2MostMessageBytes, 4, out),
+		"5,820 bytes, the most, is 5 fragments (pqIK's A1 needs 5)");
 
 	// Putting together: a fragment that doesn't belong changes nothing
 	uint8_t d0[kNetV2DatagramBytes], d1[kNetV2DatagramBytes], other[kNetV2DatagramBytes];

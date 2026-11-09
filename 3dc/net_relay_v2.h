@@ -5,9 +5,9 @@
 //
 //      A0, COOKIE_ASK, 1,200 bytes ----------> the relay's control port
 //      A0', COOKIE, 64 bytes <---------------- (proof the game is at its address, as in version 1)
-//      A1, 3 datagrams, with the cookie ------>
-//      A2, 2 datagrams <---------------------- the relay is proved: only the holder of its static keys can make one that opens
-//      A3, 1 datagram, with the cookie ------> the game's key confirmation
+//      A1, 5 datagrams, with the cookie ------> the player's identity, sealed (pqIK: the relay answers only an approved player)
+//      A2, 3 datagrams <---------------------- the relay is proved: only the holder of its static keys can make one that opens
+//      A3, 1 datagram, with the cookie ------> the game's key confirmation, and the player's proof (only they could open A2)
 //      ... from then on, every version 1 message (HOST_OPEN, JOIN, the hellos, ...) goes sealed, 104 bytes, both ways
 //
 // Like net_relay.h's machines, this one is told the time and what arrived, and says what to send. It never sends or reads anything
@@ -36,10 +36,10 @@
 #include "net_handshake_a.h"
 #include "net_sealed_control.h"
 
-size_t const kNetRelayV2MostSends = 8;        // what can wait to be sent at once: A1's 3 datagrams, and sealed messages
+size_t const kNetRelayV2MostSends = 8;        // what can wait to be sent at once: A1's 5 datagrams, and sealed messages
 size_t const kNetRelayV2MostOpened = 8;       // sealed messages opened and not yet taken
-size_t const kNetRelayV2A1Fragments = 3;      // A1's 3,249 bytes
-size_t const kNetRelayV2A2Fragments = 2;      // A2's 1,689 bytes
+size_t const kNetRelayV2A1Fragments = 5;      // A1's 4,930 bytes (pqIK)
+size_t const kNetRelayV2A2Fragments = 3;      // A2's 3,257 bytes
 uint32_t const kNetRelayV2GiveUpMs = 7500;
 static const uint32_t kNetRelayV2ResendAtMs[3] = { 500, 1500, 3500 };
 
@@ -85,14 +85,16 @@ public:
 		Wipe();
 	}
 
-	// Starts a session with the relay at controlPort, whose static keys are relay (checked against its fingerprint), in region. id is the
+	// Starts a session with the relay at controlPort, whose static keys are relay (checked against its fingerprint), in region, as the
+	// player (the game's identity, approved by the server's owner; borrowed, so it must outlive the session's handshake). id is the
 	// handshake's 8 random bytes, and draws its keys (both drawn by the game). The draws are taken over. False if any of it isn't good.
-	bool Start(const char *region, const NetRelayStaticKeys *relayKeys, uint16_t controlPort, const uint8_t id[kNetV2IdBytes],
-		NetHandshakeADraws *draws, uint32_t now)
+	bool Start(const char *region, const NetRelayStaticKeys *relayKeys, const NetHandshakeAPlayer *me, uint16_t controlPort,
+		const uint8_t id[kNetV2IdBytes], NetHandshakeADraws *draws, uint32_t now)
 	{
 		Wipe();
 
-		if (!region || !NetHandshakeA_RegionIsGood(region) || !relayKeys || controlPort == 0 || !id || !draws || !draws->e)
+		if (!region || !NetHandshakeA_RegionIsGood(region) || !relayKeys || !me || !me->p384 || !me->statics || !me->kemPrivate
+			|| controlPort == 0 || !id || !draws || !draws->e)
 		{
 			NetHandshakeA_WipeDraws(draws);
 			step = kFailed;
@@ -102,6 +104,7 @@ public:
 
 		memcpy(regionName, region, strlen(region) + 1);
 		relay = *relayKeys;
+		player = *me;
 		port = controlPort;
 		memcpy(handshakeId, id, sizeof(handshakeId));
 		drawn = *draws;
@@ -313,7 +316,7 @@ private:
 			return;
 		}
 
-		int const written = NetHandshakeA_WriteA1(&handshake, regionName, &relay, &drawn, NULL);
+		int const written = NetHandshakeA_WriteA1(&handshake, regionName, &relay, &player, &drawn, NULL);
 
 		if (written != kNetHandshakeAOk)
 		{
@@ -440,6 +443,7 @@ private:
 	int why;
 	char regionName[kNetHandshakeMostRegionLetters + 1];
 	NetRelayStaticKeys relay;
+	NetHandshakeAPlayer player;   // borrowed from the game's identity, which must outlive the session's handshake
 	uint16_t port;
 	uint8_t handshakeId[kNetV2IdBytes];
 	uint8_t cookie[kNetV2CookieBytes];
