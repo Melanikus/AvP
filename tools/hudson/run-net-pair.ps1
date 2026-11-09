@@ -53,6 +53,8 @@ param(
     [switch]$Drain,
     [string]$ThirdFolder = '',
     [switch]$Typed,
+    [switch]$Relay,              # server #14: the host hosts through the relay on this machine, and the joiner joins through it
+    [int]$RelayListPort = 8443,  # the relays' list's HTTPS port on this machine
     [switch]$NoFilm,
     [int]$CoopEnd = 0,
     [int]$HostDieAt = 0,
@@ -168,6 +170,7 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($kind) { $words += @('-HostileKind', $kind) }
     if ($kind -eq 'flood') { $words += @('-NetSecondPartner', "`"$joinFull`"") }
     if ($Typed) { $words += '-Typed' }
+    if ($Relay) { $words += @('-Relay', '-RelayListPort', $RelayListPort) }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 
@@ -194,7 +197,8 @@ function Get-SocketsOffThisMachine
         {
             $seenSockets["$($game.Path) $socket"] = $true
 
-            if ($socket -notmatch '^(udp|tcp) 127\.0\.0\.1:')
+            # ::1 is this machine's own IPv6 address: the relays' list is HTTPS to localhost, which Windows may try there first
+            if ($socket -notmatch '^(udp|tcp) (127\.0\.0\.1|::1):')
             {
                 $outside += "$($game.Path) $socket"
             }

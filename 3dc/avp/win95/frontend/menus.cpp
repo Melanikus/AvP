@@ -90,6 +90,7 @@
 #include "profile_checks.h"
 #include "address_box.h"
 #include "relay_list.h"
+#include "relay_auto.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -468,6 +469,14 @@ static void StartNetworkGameForHudsonRun(void)
 
 	if (Hudson_NetIsHost())
 	{
+		// -dev -relayhost (server #14, relay_auto.h): the list's relays first, so the game opens through the relay. If none come in time,
+		// it hosts on this machine only, as a run always did, and the log says so.
+		if (RelayAuto_Mode() == kRelayAutoHost)
+		{
+			Hudson_NetSay(RelayAuto_WaitForRelays() ? "the host has the list's relays, so it hosts through the relay"
+				: "the host has no relay from the list, so it hosts on this machine only");
+		}
+
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, level) == NET_FAIL)
 		{
 			Hudson_NetStopBecause("the host couldn't open its port on this machine");
@@ -482,8 +491,30 @@ static void StartNetworkGameForHudsonRun(void)
 		int const mostTries = 20;
 		bool connected = false;
 
+		// -dev -relayjoin (server #14, relay_auto.h): the list's first game of this version, joined through its relay, the way a player
+		// picks one on the page of games found. Nothing else is tried: a run that asked for the relay and can't reach it stops, and says why.
+		if (RelayAuto_Mode() == kRelayAutoJoin)
+		{
+			int const session = RelayAuto_FindAGame();
+
+			if (session < 0)
+			{
+				Hudson_NetStopBecause("no game of this version came from the relays' list");
+				return;
+			}
+
+			Hudson_NetSay("the joiner has the list's game, and it's joining through the relay");
+			connected = RelayAuto_Join(session, MP_PlayerName);
+
+			if (!connected)
+			{
+				Hudson_NetStopBecause("the join through the relay failed");
+				return;
+			}
+		}
+
 		// typed=yes: the way a player does who has typed an address. The address is this machine's own, and that's the only place it can go: the first independent read of this code found this page did nothing.
-		if (Hudson_NetIsTyped())
+		if (Hudson_NetIsTyped() && !connected)
 		{
 			DWORD const startedLooking = GetTickCount();
 			bool found = false;

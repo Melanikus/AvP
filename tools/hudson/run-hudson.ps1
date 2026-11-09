@@ -190,7 +190,9 @@ param(
     [switch]$Hostile,
     [string]$HostileKind = '',
     [switch]$Typed,
-    [int]$CoopEnd = 0
+    [int]$CoopEnd = 0,
+    [switch]$Relay,             # server #14: host or join through the relay on this machine (-relayhost or -relayjoin, by -Net)
+    [int]$RelayListPort = 8443  # and the relays' list's HTTPS port on this machine
 )
 $ErrorActionPreference = 'Stop'
 
@@ -214,6 +216,8 @@ if (-not (Test-Path -LiteralPath $settings)) { Stop-Here "there's no $settings" 
 if (-not (Test-Path -LiteralPath $exePath)) { Stop-Here "there's no $Exe in $folder" }
 
 if ($Net -and -not $WhileInUse) { Stop-Here "-Net is two games at once on one machine, so it needs -TimingsDontMatter and -WhileInUse" }
+if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for a network run's host or joiner, so it needs -Net host or -Net join" }
+if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 
 $partner = ''
@@ -297,6 +301,7 @@ if ($Vision) { $arguments += " vision=$Vision" }
 if ($Break) { $arguments += " break=$Break" }
 if ($NoFilm) { $arguments += " film=no" }
 if ($Net) { $arguments += " net=$Net" }
+if ($Relay) { $arguments += $(if ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }) }
 if ($Lamp) { $arguments += " lamp=$Lamp" }
 if ($LampKind) { $arguments += " lampkind=$LampKind" }
 if ($LampAt) { $arguments += " lampat=$LampAt" }
@@ -372,6 +377,10 @@ if ($refusal) { Stop-Here "the run's folder can't be cleared: $refusal" }
 $saves = Join-Path $folder 'HudsonRun\My Games\Aliens versus Predator'
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
+
+# -Relay: the relays' list on this machine, as the game reads it only with -dev, which a run always has. Added to this run's own copy, so
+# no other run has it.
+if ($Relay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', 'RelayServer = localhost', "RelayListPort = $RelayListPort") }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru

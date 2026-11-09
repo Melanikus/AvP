@@ -1768,7 +1768,7 @@ static void TestTourAndSharedMachine()
 		Check(Has(hudsonFile, "\"net=%s net_stage=%s\\n\""), "the result says how far it got");
 		Check(Has(menusFile, "if (Hudson_NetIsOn())\n\t{\n\t\tStartNetworkGameForHudsonRun();"), "the menus' part goes this way");
 		Check(Has(menusFile, "Hudson_NetStopBecause(\"the client connected, and the host never told it who it is\");"), "a join that stops says where");
-		Check(Has(pairScript, "if ($socket -notmatch '^(udp|tcp) 127\\.0\\.0\\.1:')"), "the pair script looks at what each game really has open");
+		Check(Has(pairScript, "if ($socket -notmatch '^(udp|tcp) (127\\.0\\.0\\.1|::1):')"), "the pair script looks at what each game really has open (this machine is 127.0.0.1, or ::1 for the relays' list's HTTPS)");
 		Check(Has(pairScript, "exit 110") && Has(pairScript, "Stop-TheGames\n    $lines += @($offTheMachine"), "and ends both if anything is off this machine");
 		Check(Has(pairScript, "Get-Process -Name 'claude'"), "and won't start with nobody here");
 		Check(ComesBefore(pairScript, "$rulesBefore = @(Get-FirewallRulesForThese)", "$hostRun = Start-OneRun") && Has(pairScript, "$rulesAfter = @(Get-FirewallRulesForThese)"), "and compares the firewall's rules before and after");
