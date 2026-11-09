@@ -96,6 +96,9 @@ namespace
 	// The pieces of news from the list's thread the store keeps until the main thread writes them (Tell)
 	const int kMostNews = 16;
 
+	// The most letters a piece of news keeps. Each is one of the game's own fixed texts, and the longest is about 100 letters.
+	const size_t kMostNewsLetters = 256;
+
 	// Words for the log and the page. Fixed words of the game's own: what a server says is never shown or written down.
 	const char *const kNoServer = "no relay server is set";
 	const char *const kCantReach = "the relay server couldn't be reached";
@@ -146,7 +149,9 @@ namespace
 
 		// News for the main thread to write in the log: the last kMostNews pieces, each a fixed text of the game's own, kept in turn round
 		// the ring. newsNumber is how many pieces there have ever been, so piece n is at news[n % kMostNews].
-		const char *news[kMostNews];
+		// Modified 2026-11-09 by Melanikus for the AvP port: each piece is a copy of its text, kept with its end, not a pointer to it, so the
+		// main thread never follows a pointer the list's thread handed it, and never reads past a piece's own room (Snyk Code).
+		char news[kMostNews][kMostNewsLetters + 1];
 		int newsNumber;
 	};
 
@@ -156,10 +161,20 @@ namespace
 	// ---- The list's thread
 
 	// Leaves a piece of news for the main thread. If more than kMostNews come between two of its looks, the oldest go, and it says how many.
+	// Modified 2026-11-09 by Melanikus for the AvP port: it keeps a copy of the text, at most kMostNewsLetters of it, and ends the copy.
+	// No text is no news.
 	void Tell(const char *news)
 	{
+		if (!news)
+		{
+			return;
+		}
+
+		size_t const letters = strnlen(news, kMostNewsLetters);
 		EnterCriticalSection(&shared->lock);
-		shared->news[shared->newsNumber % kMostNews] = news;
+		char *const kept = shared->news[shared->newsNumber % kMostNews];
+		memcpy(kept, news, letters);
+		kept[letters] = 0;
 		shared->newsNumber++;
 		LeaveCriticalSection(&shared->lock);
 	}
@@ -737,7 +752,7 @@ namespace
 			return;
 		}
 
-		const char *news[kMostNews];
+		char news[kMostNews][kMostNewsLetters + 1];
 
 		EnterCriticalSection(&shared->lock);
 		int const number = shared->newsNumber;
@@ -752,12 +767,13 @@ namespace
 			newsWritten = oldestKept;
 		}
 
+		// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): each piece is a copy, kept with its end (Tell). It's ended again here
+		// at the last place of its room, so even a piece that had somehow lost its end could never be read past its room.
 		for (; newsWritten < number; newsWritten++)
 		{
-			if (const char *const piece = news[newsWritten % kMostNews])
-			{
-				LogString(std::string("Relay list: ") + piece);
-			}
+			char *const piece = news[newsWritten % kMostNews];
+			piece[kMostNewsLetters] = 0;
+			LogString(std::string("Relay list: ") + piece);
 		}
 	}
 
