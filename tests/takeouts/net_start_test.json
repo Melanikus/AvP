@@ -2278,6 +2278,26 @@
 					"to": "sstream << \"A player is joining\";"
 				}
 			]
+		},
+		{
+			"name": "a LAN game's players aren't kept for the games page",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tSessionData[NumberOfSessionsFound].players = session.nPlayers;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a relay game's level isn't kept for the games page",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tstrncpy(entry.levelName, levelName, sizeof(entry.levelName) - 1);\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

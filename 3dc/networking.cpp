@@ -679,6 +679,14 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.Name[sizeof(entry.Name) - 1] = 0;
 	entry.AllowedToJoin = shownPlayers < shownMost;
 
+	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns, as for a LAN game (Net_AddSession): the level's name cut to
+	// fit and ended, the style, and the counts as the name shows them
+	strncpy(entry.levelName, levelName, sizeof(entry.levelName) - 1);
+	entry.levelName[sizeof(entry.levelName) - 1] = 0;
+	entry.gameStyle = gameStyle;
+	entry.players = static_cast<uint8_t>(shownPlayers);
+	entry.maxPlayers = static_cast<uint8_t>(shownMost);
+
 	if (version != kMultiplayerVersion)
 	{
 		float const shownVersion = 1.0f + version / 100.0f;
@@ -900,6 +908,15 @@ static void Net_AddSession(SessionDescription &session)
 	// bounded: a long session name used to overflow Name (40 bytes) into host/port
 	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
 	name[nameSize - 1] = '\0';
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns (Fourth's online screens): the level's name, the game's
+	// style and its players, as the host said them. The name ends already (above); the page makes it safe and checks the numbers before it
+	// uses them (menus.h).
+	static_assert(sizeof(SessionData[0].levelName) == kLevelNameSize, "a LAN game's level name fits the games page's column exactly");
+	memcpy(SessionData[NumberOfSessionsFound].levelName, session.levelName, kLevelNameSize);
+	SessionData[NumberOfSessionsFound].gameStyle = session.gameStyle;
+	SessionData[NumberOfSessionsFound].players = session.nPlayers;
+	SessionData[NumberOfSessionsFound].maxPlayers = session.maxPlayers;
 
 	SessionData[NumberOfSessionsFound].Guid	= session.guidInstance;
 
