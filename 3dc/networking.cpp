@@ -76,6 +76,7 @@
 #include "net_search_log.h"
 #include "net_relay.h"
 #include "net_identity.h"
+#include "net_identity_run.h"
 #include "net_peer_v2.h"
 #include "relay_shared.h"
 #include "relay_list.h"
@@ -257,8 +258,10 @@ static_assert(kNetRelayRegionLetters == static_cast<size_t>(kRelayListRegionLett
 //     there): a datagram from any other port starts nothing.
 //   - Nothing from a joiner's port reaches ENet but a sealed datagram that opened.
 // Over this network (a LAN game), nothing changes.
-static NetIdentity runIdentity;                                    // this run's identity, made the first time a relay is used
-static NetPeerJoiner relayEndToEndJoiner;                          // a joiner's one handshake, with its host
+static NetIdentity runIdentity;                                    // this run's identity, made ready the first time a relay is used
+static bool runIdentityLookedFor = false;                          // whether the kept identity has been looked for since the network started
+static NetIdentityStoreResult runIdentityKept = kNetIdentityStoreNoFile;   // and what that found (net_identity_run.h)
+static NetPeerJoiner relayEndToEndJoiner;                         // a joiner's one handshake, with its host
 static uint16_t relayEndToEndPort = 0;                             // and its port on the relay, once it has one; 0 for none
 static NetPeerHostSide relayEndToEndHosts[kNetRelayMostJoiners];   // a host's handshakes, one for each joiner's port
 static bool relaySealing = false;                                  // this game's ENet sends through RelaySealedSend (set by the relay's use)
@@ -267,10 +270,49 @@ static uint32_t relayEndToEndDropped = 0;                          // ENet's dat
 static_assert(kNetRelayCheckCodeBytes == kNetHandshakeBCheckCodeBytes, "networking.h's check code is as long as net_handshake_b.h's");
 static NetPeerStartLimit relayEndToEndStarts;                      // how many handshakes a host starts, per named port and per second (Primary's finding 1)
 
-// This run's identity, made once, from the operating system's randomness (net_identity.h). False if it couldn't be made.
+// This run's identity, made ready once (net_identity_run.h). Modified 2026-11-09 by Melanikus for the AvP port (#21): the one kept from
+// earlier runs, sealed by Windows for this user (net_identity_store.h); on the first run, a new one, made from the operating system's
+// randomness and kept. A kept one that can't be used is never replaced here: only the player's yes does that (Net_MakeNewIdentity), so
+// friends and an approval never see a new fingerprint the player didn't choose. False if there's none, and then nothing goes through a
+// relay. The log says what was found, in the store's own fixed words: never a fingerprint, never anything from the file.
 static bool RelayIdentityReady()
 {
-	return runIdentity.made || NetIdentity_Make(&runIdentity);
+	if (runIdentity.made)
+	{
+		return true;
+	}
+
+	if (runIdentityLookedFor)
+	{
+		return false;
+	}
+
+	runIdentityLookedFor = true;
+	const char *why = NULL;
+	runIdentityKept = NetIdentityStore_Load(&runIdentity, &why);
+
+	if (runIdentityKept == kNetIdentityStoreLoaded)
+	{
+		LogString("net: this player's identity is the one kept from earlier runs");
+		return true;
+	}
+
+	LogString(std::string("net: the kept identity: ") + NetIdentityStore_Words(runIdentityKept) + (why ? std::string(" (") + why + ")" : std::string()));
+
+	if (runIdentityKept != kNetIdentityStoreNoFile)
+	{
+		LogString("net: so there's no identity this run until the player chooses to make a new one, and nothing goes through a relay");
+		return false;
+	}
+
+	if (!NetIdentityStore_MakeAndKeep(&runIdentity))
+	{
+		LogString("net: a new identity couldn't be made and kept, so there's none this run, and nothing goes through a relay");
+		return false;
+	}
+
+	LogString("net: a new identity was made for this player and kept");
+	return true;
 }
 
 // Primary's first condition: the relay's own messages, as version 1 reads them, go through this one function, which version 2's sealed
@@ -1917,8 +1959,11 @@ void Net_Deinitialise()
 	Net_Disconnect();
 
 	// This run's identity ends with the network (protocol version 2, added 2026-11-09 by Melanikus for the AvP port): its key destroyed
-	// inside the operating system's cryptography, and every byte of the rest wiped
+	// inside the operating system's cryptography, and every byte of the rest wiped. Modified 2026-11-09 by Melanikus for the AvP port (#21):
+	// the kept one is looked for again the next time the network starts.
 	NetIdentity_Free(&runIdentity);
+	runIdentityLookedFor = false;
+	runIdentityKept = kNetIdentityStoreNoFile;
 
 	enet_deinitialize();
 
@@ -2818,6 +2863,55 @@ bool Net_JoinRequestCheckCode(NetJoinWho who, char out[kNetRelayCheckCodeBytes])
 
 	NetPeerHostSide *const side = RelayEndToEndSide(asking->address.port, false, enet_time_get());
 	return side && side->Ready() && CopyCheckCode(side->CheckCode(), out);
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (#21): this run's identity, for the access page (net_identity_run.h)
+NetIdentityStoreResult Net_KeptIdentityResult(void)
+{
+	RelayIdentityReady();
+	return runIdentityKept;
+}
+
+bool Net_OurIdentity(uint8_t statics[kNetIdentityStaticBytes], uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	if (!statics || !fingerprint)
+	{
+		return false;
+	}
+
+	if (!RelayIdentityReady())
+	{
+		memset(statics, 0, kNetIdentityStaticBytes);
+		memset(fingerprint, 0, kNetIdentityFingerprintBytes);
+		return false;
+	}
+
+	memcpy(statics, runIdentity.statics, kNetIdentityStaticBytes);
+	memcpy(fingerprint, runIdentity.fingerprint, kNetIdentityFingerprintBytes);
+	return true;
+}
+
+bool Net_MakeNewIdentity(void)
+{
+	// Not while a network game is open: its handshakes and sealed datagrams belong to the identity they began with
+	if (host)
+	{
+		LogString("net: a new identity isn't made while a network game is open");
+		return false;
+	}
+
+	NetIdentity_Free(&runIdentity);
+	runIdentityLookedFor = true;
+
+	if (!NetIdentityStore_MakeAndKeep(&runIdentity))
+	{
+		LogString("net: the new identity the player asked for couldn't be made and kept, so there's none this run");
+		return false;
+	}
+
+	runIdentityKept = kNetIdentityStoreLoaded;
+	LogString("net: a new identity was made for this player, as they asked, and kept in place of any kept before");
+	return true;
 }
 
 void Net_AnswerJoinRequest(NetJoinWho who, bool yes)

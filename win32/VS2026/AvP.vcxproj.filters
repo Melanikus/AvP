@@ -1334,6 +1334,9 @@
     <ClInclude Include="..\..\3dc\net_identity_store.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_identity_run.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_b.h">
       <Filter>Header Files</Filter>
     </ClInclude>
