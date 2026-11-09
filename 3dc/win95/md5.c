@@ -21,9 +21,13 @@
  * 
  * md5_buffer added by Steven Fuller
  * Still in the public domain.
+ *
+ * Modified 2026-11-09 by Melanikus for the AvP port: MD5Update copies the caller's bytes with memcpy_s, told how
+ * much room is left in the 64-byte block each time, so a count too big for the block is refused at run time and
+ * nothing is ever written past it. The counts were always right; now the copy itself checks them too.
  */
 
-#include <string.h>		/* for memcpy() */
+#include <string.h>		/* for memcpy() and memcpy_s() */
 
 #include "md5.h"
 
@@ -86,11 +90,13 @@ MD5Update(struct MD5Context *ctx, md5byte const *buf, unsigned len)
 
 	t = 64 - (t & 0x3f);	/* Space available in ctx->in (at least 1) */
 	if (t > len) {
-		memcpy((md5byte *)ctx->in + 64 - t, buf, len);
+		/* The block has t bytes of room left, and len is less than t here */
+		memcpy_s((md5byte *)ctx->in + 64 - t, t, buf, len);
 		return;
 	}
 	/* First chunk is an odd size */
-	memcpy((md5byte *)ctx->in + 64 - t, buf, t);
+	/* The block has t bytes of room left, and exactly t are copied, which fills it */
+	memcpy_s((md5byte *)ctx->in + 64 - t, t, buf, t);
 	byteSwap(ctx->in, 16);
 	MD5Transform(ctx->buf, ctx->in);
 	buf += t;
@@ -98,7 +104,7 @@ MD5Update(struct MD5Context *ctx, md5byte const *buf, unsigned len)
 
 	/* Process data in 64-byte chunks */
 	while (len >= 64) {
-		memcpy(ctx->in, buf, 64);
+		memcpy_s(ctx->in, sizeof(ctx->in), buf, 64);
 		byteSwap(ctx->in, 16);
 		MD5Transform(ctx->buf, ctx->in);
 		buf += 64;
@@ -106,7 +112,8 @@ MD5Update(struct MD5Context *ctx, md5byte const *buf, unsigned len)
 	}
 
 	/* Handle any remaining bytes of data. */
-	memcpy(ctx->in, buf, len);
+	/* Fewer than 64 bytes are left here, and the block is empty */
+	memcpy_s(ctx->in, sizeof(ctx->in), buf, len);
 }
 
 /*
