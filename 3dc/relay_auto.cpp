@@ -40,7 +40,8 @@ void RelayAuto_ReadCommandLine(const char *commandLine, bool developer)
 
 	if (mode == kRelayAutoHost)
 	{
-		LogString("relay auto: this copy hosts through the relay (-dev -relayhost)");
+		LogString("relay auto: this copy hosts through the relay (-dev -relayhost), and as a test's host it lets every joiner in without asking");
+		Net_LetEveryJoinerIn(true);
 	}
 	else if (mode == kRelayAutoJoin)
 	{

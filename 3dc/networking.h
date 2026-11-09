@@ -130,11 +130,12 @@ Version 110 - 109, and a search's question as big as its answer, so an answer is
 Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's answer about the map, and a byte in a game's description
 Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in a game's description
 Version 113 - 112, and whether a marine player's shoulder lamp is on, in a spare bit after landingNoise in a player's state, for the mode that plays like single player
+Version 114 - 113, and a joiner asks the host first: its request to join (its "let me in", with its name) is held until the host answers yes, or closes it with no, busy or no answer
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 113; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 114; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -246,5 +247,32 @@ bool Net_AddRelaySession(const RelayListGame &game);
 
 // Where a game from the relays' list is on the list of sessions, by its region and its code's 8 letters; -1 if it isn't there
 int Net_FindRelaySession(const char *region, const char *code);
+
+// THE REQUEST TO JOIN (version 114; networking.cpp says how it works). Every joiner asks the host first, and a person at the host answers.
+// The host's side: the oldest request waiting, if there is one, with the joiner's name (as the joiner gave it: hostile, so the screen makes it
+// safe to draw) and who it is; and the answer, which does nothing if that request has gone. A test's host lets everyone in without asking.
+uint32_t const kNetJoinAnswerWithinMs = 30000;   // unanswered this long, a request counts as no answer
+struct NetJoinWho
+{
+	int connection;
+	unsigned int connectID;
+};
+bool Net_JoinRequestWaiting(char *nameOut, size_t nameRoom, NetJoinWho *who);
+void Net_AnswerJoinRequest(NetJoinWho who, bool yes);
+void Net_LetEveryJoinerIn(bool yes);
+
+// Why a host closed a joiner's connection before letting it in: ENet's disconnect carries one of these, as kCoopRemovedByTheHost (coop_lobby.h)
+unsigned int const kNetJoinRefusedNo = 0x4A4E4F2Eu;         // "JNO.": the host said no
+unsigned int const kNetJoinRefusedBusy = 0x4A425359u;       // "JBSY": the host was answering another joiner
+unsigned int const kNetJoinRefusedNoAnswer = 0x4A4E4141u;   // "JNAA": nobody answered in time
+
+// The joiner's side: where its request has got to
+int const kNetJoinAnswerNone = 0;       // no request: not joining, or not yet connected
+int const kNetJoinAnswerWaiting = 1;
+int const kNetJoinAnswerYes = 2;        // let in: the host gave it its player ID
+int const kNetJoinAnswerNo = 3;
+int const kNetJoinAnswerBusy = 4;
+int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
+int Net_JoinAnswerNow();
 
 #endif // #ifndef _NETWORKING_

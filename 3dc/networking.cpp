@@ -149,6 +149,28 @@ static const unsigned int kMostMillisecondsSilentInTheLobby = 30000;
 static CoopRemovedList removedPlayers;
 static bool removedByTheHost = false;
 
+// Further down, beside LetClientIn: the host's side of the request to join (version 114)
+static void ForgetTheJoinRequest();
+static ENetPeer *JoinRequestPeer();
+static void LookAfterTheJoinRequest(unsigned int now);
+
+// Modified 2026-11-09 by Melanikus for the AvP port: the joiner's side of the request to join (network version 114). Waiting from when its
+// "let me in" goes, until the host gives it its player ID (yes), or closes the connection with a reason (no, busy, no answer). If neither
+// comes, it counts as no answer a little after the host's own limit.
+static int joinAnswer = kNetJoinAnswerNone;
+static enet_uint32 joinAskedAt = 0;
+static const enet_uint32 kJoinAnswerSpareMs = 5000;   // past the host's kNetJoinAnswerWithinMs, for the time the answer takes to come
+
+int Net_JoinAnswerNow()
+{
+	if (joinAnswer == kNetJoinAnswerWaiting && enet_time_get() - joinAskedAt >= kNetJoinAnswerWithinMs + kJoinAnswerSpareMs)
+	{
+		joinAnswer = kNetJoinAnswerNoAnswer;
+	}
+
+	return joinAnswer;
+}
+
 static unsigned int lastHeardFrom[kMostClients + 1];
 
 // How many bytes one client may send in a second, on top of how many messages. A real game sends a tenth of this. A host keeps what it's passing on until the other machines say they have it, for as long as the patience, so this also limits how much one client can make it keep.
@@ -1528,6 +1550,10 @@ void Net_Disconnect()
 {
 	OutputDebugString("Net_Disconnect\n");
 
+	// A host's held request to join goes with its game. A joiner's answer stays, for its screen to say why it's back (Net_JoinAnswerNow):
+	// the next join starts it again.
+	ForgetTheJoinRequest();
+
 	// This also runs from the console's disconnect command, in a game that isn't on any network
 	if (host)
 	{
@@ -1848,6 +1874,7 @@ static void LogOlderVersionsToldNo()
 static void ForgetConnectionsNotLetIn()
 {
 	unsigned int const now = enet_time_get();
+	LookAfterTheJoinRequest(now);
 
 	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
 	{
@@ -1881,7 +1908,9 @@ static void ForgetConnectionsNotLetIn()
 			continue;
 		}
 
-		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn)
+		// One whose request to join the host is answering isn't dropped for that: its own limit is LookAfterTheJoinRequest's
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn
+			&& peer != JoinRequestPeer())
 		{
 			LogDroppedMessage("a connection didn't say who it is in time");
 			enet_peer_disconnect_now(peer, 0);
@@ -2080,6 +2109,146 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 	netSession.nPlayers++;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: THE REQUEST TO JOIN (network version 114). Every joiner asks the host first, however
+// it came (a search on this network, a typed address, or the relay), and a person at the host answers, from the in-game menu (Fourth's
+// online screens). The joiner's request is its "let me in" with its name (NET_CREATEPLAYERORGROUP), as before; now the host holds it.
+//   - What needs no question is answered at once, as LetClientIn always did: another version, somebody the host took out, or a full game.
+//   - One request is held at a time: a joiner who asks meanwhile is told the host is busy.
+//   - Until the answer, nothing is made for the joiner and nothing is sent to it, and the limit on saying who it is (kMostMillisecondsToBeLetIn)
+//     doesn't drop it.
+//   - Yes lets it in, through LetClientIn, which checks it all again. No, busy and no answer close its connection with a reason of their
+//     own (networking.h), so the joiner's screen can say which. Unanswered for kNetJoinAnswerWithinMs counts as no answer.
+//   - A test's host lets every joiner in without asking (Net_LetEveryJoinerIn: -dev -relayhost, and Hudson's runs).
+// The request is kept by its connection's place and ENet's own number for that connection (connectID), so an answer can never reach
+// somebody else who gets the same place later.
+static bool letEveryJoinerIn = false;
+static bool joinRequestHeld = false;
+static size_t joinRequestConnection = 0;
+static enet_uint32 joinRequestConnectID = 0;
+static enet_uint32 joinRequestSince = 0;
+static PlayerDetails joinRequestDetails;
+
+static void ForgetTheJoinRequest()
+{
+	joinRequestHeld = false;
+	memset(&joinRequestDetails, 0, sizeof(joinRequestDetails));
+}
+
+// The connection whose request is held, while it's still that joiner's and still not let in; NULL otherwise
+static ENetPeer *JoinRequestPeer()
+{
+	if (!joinRequestHeld || !host || joinRequestConnection >= host->peerCount)
+	{
+		return NULL;
+	}
+
+	ENetPeer *const peer = &host->peers[joinRequestConnection];
+	return peer->state == ENET_PEER_STATE_CONNECTED && peer->connectID == joinRequestConnectID && IDOfConnection(peer) == 0 ? peer : NULL;
+}
+
+// A joiner's "let me in", with its details: held for the host to answer, or answered at once when no question is needed
+static void HoldOrLetIn(ENetPeer *peer, const uint8_t *details)
+{
+	PlayerDetails player;
+	memcpy(&player, details, sizeof(player));
+	player.name[kPlayerNameSize - 1] = '\0';
+
+	bool const noQuestion = letEveryJoinerIn || player.version != kMultiplayerVersion || netSession.nPlayers >= netSession.maxPlayers
+		|| (!PeerIsThroughRelay(peer) && CoopRemoved_Has(removedPlayers, peer->address.host));
+
+	if (noQuestion)
+	{
+		LetClientIn(peer, details);
+		return;
+	}
+
+	if (JoinRequestPeer() == peer)
+	{
+		LogDroppedMessage("a joiner asked to be let in again while the host was still answering");
+		return;
+	}
+
+	if (JoinRequestPeer() != NULL)
+	{
+		LogDroppedMessage("a joiner asked while the host was answering another, and was told the host is busy");
+		enet_peer_disconnect(peer, kNetJoinRefusedBusy);
+		return;
+	}
+
+	joinRequestHeld = true;
+	joinRequestConnection = (size_t)(peer - host->peers);
+	joinRequestConnectID = peer->connectID;
+	joinRequestSince = enet_time_get();
+	joinRequestDetails = player;
+	LogString("net: a joiner asks to be let in (connection " + std::to_string(joinRequestConnection + 1) + "), and the host is asked");
+}
+
+// Each time the network is served, on a host: a request whose joiner has gone goes too, and one unanswered too long is told so
+static void LookAfterTheJoinRequest(unsigned int now)
+{
+	if (!joinRequestHeld)
+	{
+		return;
+	}
+
+	ENetPeer *const asking = JoinRequestPeer();
+
+	if (!asking)
+	{
+		ForgetTheJoinRequest();
+	}
+	else if (now - joinRequestSince >= kNetJoinAnswerWithinMs)
+	{
+		LogString("net: nobody answered a joiner's request in time, so it was told no answer came");
+		enet_peer_disconnect(asking, kNetJoinRefusedNoAnswer);
+		ForgetTheJoinRequest();
+	}
+}
+
+bool Net_JoinRequestWaiting(char *nameOut, size_t nameRoom, NetJoinWho *who)
+{
+	if (!JoinRequestPeer() || !nameOut || nameRoom == 0 || !who)
+	{
+		return false;
+	}
+
+	strncpy(nameOut, joinRequestDetails.name, nameRoom - 1);
+	nameOut[nameRoom - 1] = '\0';
+	who->connection = (int)joinRequestConnection;
+	who->connectID = joinRequestConnectID;
+	return true;
+}
+
+void Net_AnswerJoinRequest(NetJoinWho who, bool yes)
+{
+	ENetPeer *const asking = JoinRequestPeer();
+
+	// An answer to a request that's gone, or to somebody else's, does nothing
+	if (!asking || who.connection != (int)joinRequestConnection || who.connectID != joinRequestConnectID)
+	{
+		return;
+	}
+
+	PlayerDetails const details = joinRequestDetails;
+	ForgetTheJoinRequest();
+
+	if (yes)
+	{
+		LogString("net: the host let the joiner in");
+		LetClientIn(asking, (const uint8_t *)&details);
+	}
+	else
+	{
+		LogString("net: the host said no to the joiner");
+		enet_peer_disconnect(asking, kNetJoinRefusedNo);
+	}
+}
+
+void Net_LetEveryJoinerIn(bool yes)
+{
+	letEveryJoinerIn = yes;
+}
+
 // To every client that's been let in, but not to one that has only connected, nor to the one given here. ENet frees a packet once everyone it was sent to has had it, so one that went to nobody has to be freed here.
 static void SendToClients(ENetPacket *packet, const ENetPeer *except)
 {
@@ -2126,7 +2295,7 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 		}
 		else
 		{
-			LetClientIn(from, data + sizeof(MessageHeader));
+			HoldOrLetIn(from, data + sizeof(MessageHeader));
 		}
 
 		return false;
@@ -2245,6 +2414,7 @@ static bool ClientHearsFromHost(const uint8_t *data, size_t size)
 		AvPNetID = id;
 		thisClientPlayer.ID = id;
 		hostPlayerID = header.fromID;
+		joinAnswer = kNetJoinAnswerYes;
 	}
 
 	return false;
@@ -2365,6 +2535,12 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					{
 						ServerPeer = NULL;
 						removedByTheHost = eEvent.data == kCoopRemovedByTheHost;
+
+						// A request to join that was never answered yes: the host's reason says which answer it was (version 114)
+						if (joinAnswer == kNetJoinAnswerWaiting)
+						{
+							joinAnswer = eEvent.data == kNetJoinRefusedNo ? kNetJoinAnswerNo : eEvent.data == kNetJoinRefusedBusy ? kNetJoinAnswerBusy : kNetJoinAnswerNoAnswer;
+						}
 					}
 
 					break;
@@ -2487,6 +2663,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	AvPNetID = 0;
 	hostPlayerID = 0;
 	removedByTheHost = false;
+	joinAnswer = kNetJoinAnswerNone;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -2594,6 +2771,10 @@ static bool Net_CreatePlayer(char *playerName)
 		}
 		else {
 			Con_PrintMessage("Net_CreatePlayer - sent create player system message!");
+
+			// The request to join has gone: now the host's answer is waited for (version 114)
+			joinAnswer = kNetJoinAnswerWaiting;
+			joinAskedAt = enet_time_get();
 		}
 	}
 	return true;

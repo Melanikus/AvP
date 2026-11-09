@@ -729,8 +729,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "player.name[kPlayerNameSize - 1] = '\\0';",
-					"to": ""
+					"from": "memcpy(&player, details, sizeof(PlayerDetails));\n\n\t// Nothing says this name ends\n\tplayer.name[kPlayerNameSize - 1] = '\\0';",
+					"to": "memcpy(&player, details, sizeof(PlayerDetails));"
 				}
 			]
 		},
@@ -1259,8 +1259,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 113;",
-					"to": "const int kMultiplayerVersion = 112;"
+					"from": "const int kMultiplayerVersion = 114;",
+					"to": "const int kMultiplayerVersion = 113;"
 				}
 			]
 		},
@@ -2356,6 +2356,126 @@
 					"file": "3dc/net_relay.h",
 					"from": "if (relay >= count || !hasTime[relay] || !ms)",
 					"to": "if (relay >= count || !ms)"
+				}
+			]
+		},
+		{
+			"name": "a test's host asks every joiner anyway",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const noQuestion = letEveryJoinerIn || player.version",
+					"to": "bool const noQuestion = player.version"
+				}
+			]
+		},
+		{
+			"name": "a second joiner meanwhile is left waiting, not told the host is busy",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tenet_peer_disconnect(peer, kNetJoinRefusedBusy);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's no leaves the joiner connected",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tenet_peer_disconnect(asking, kNetJoinRefusedNo);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a request is never given up on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (now - joinRequestSince >= kNetJoinAnswerWithinMs)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a joiner the host is answering is dropped at the limit for saying who it is",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\t\t\t&& peer != JoinRequestPeer())",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a new joiner in the same place takes over the last one's request",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer->connectID == joinRequestConnectID && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an answer for somebody else is taken",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " || who.connectID != joinRequestConnectID",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner never hears its yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tjoinAnswer = kNetJoinAnswerYes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner never waits for the answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tjoinAnswer = kNetJoinAnswerWaiting;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's no reads as no answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "joinAnswer = eEvent.data == kNetJoinRefusedNo ? kNetJoinAnswerNo : ",
+					"to": "joinAnswer = "
+				}
+			]
+		},
+		{
+			"name": "a joiner waits for ever",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (joinAnswer == kNetJoinAnswerWaiting && enet_time_get() - joinAskedAt >= kNetJoinAnswerWithinMs + kJoinAnswerSpareMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a held request's name with no end stays that way",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tmemcpy(&player, details, sizeof(player));\n\tplayer.name[kPlayerNameSize - 1] = '\\0';\n",
+					"to": "\tmemcpy(&player, details, sizeof(player));\n"
 				}
 			]
 		}

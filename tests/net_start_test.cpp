@@ -625,9 +625,13 @@ void enet_peer_reset(ENetPeer *peer)
 	peer->state = ENET_PEER_STATE_DISCONNECTED;
 }
 
-void enet_peer_disconnect(ENetPeer *, enet_uint32)
+// The reason the game last gave when it closed a connection gently (the request to join's, networking.h)
+static enet_uint32 lastDisconnectData = 0;
+
+void enet_peer_disconnect(ENetPeer *, enet_uint32 data)
 {
 	closedGently++;
+	lastDisconnectData = data;
 }
 
 void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32)
@@ -2019,6 +2023,148 @@ static void HostWithClients(int clients)
 	sentMessages.clear();
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port: the request to join (network version 114). A host that asks holds a joiner's "let me
+// in" until it's answered. Yes lets it in; no, a second joiner meanwhile, and no answer in time each close the connection with their own
+// reason; a joiner that leaves takes its request with it; and what needs no question, another version, isn't asked about. Then the
+// joiner's side: waiting, then yes, the host's no, or no answer at all.
+static void TestTheRequestToJoin()
+{
+	printf("The request to join\n");
+	Net_LetEveryJoinerIn(false);
+	char name[kPlayerNameSize];
+	NetJoinWho who = {};
+
+	HostWithClients(0);
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "with nobody asking, there's no request");
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Ripley"));
+	Check(playersInGame.empty() && IDOf(1) == 0 && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0 && who.connection == 1,
+		"a joiner asks: it isn't let in yet, and the host has its request, with its name");
+
+	int const gentleBefore = closedGently;
+	Connects(2);
+	TakeEverything();
+	Hears(2, AskingToJoin("Hicks"));
+	Check(closedGently == gentleBefore + 1 && lastDisconnectData == kNetJoinRefusedBusy && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0,
+		"a second joiner meanwhile is told the host is busy, and the first is still the one waiting");
+
+	enetClock += 20000;
+	Net_ServiceNetwork();
+	Check(peers[1].state == ENET_PEER_STATE_CONNECTED && Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"20 s on, past the limit on saying who it is, a joiner the host is answering is still waiting");
+
+	NetJoinWho const somebodyElse = { who.connection, who.connectID + 1 };
+	Net_AnswerJoinRequest(somebodyElse, true);
+	Check(playersInGame.empty() && Net_JoinRequestWaiting(name, sizeof(name), &who), "an answer for somebody else does nothing");
+
+	Net_AnswerJoinRequest(who, true);
+	Check(playersInGame.size() == 1 && IDOf(1) != 0 && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"the host says yes: the joiner is let in, as before, and the request has gone");
+	EndTheGame();
+
+	// A name that never ends: the host's screen still gets one that does
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	{
+		std::vector<uint8_t> noEnd = AskingToJoin("Drake");
+
+		if (noEnd.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+		{
+			memset(((PlayerDetails *)(noEnd.data() + sizeof(MessageHeader)))->name, 'D', kPlayerNameSize);
+		}
+
+		Hears(1, noEnd);
+	}
+	{
+		char wide[kPlayerNameSize * 4];
+		memset(wide, 'X', sizeof(wide));
+		Check(Net_JoinRequestWaiting(wide, sizeof(wide), &who) && strlen(wide) == kPlayerNameSize - 1 && wide[0] == 'D',
+			"a request whose name never ends still hands over a name that ends, however much room it's given");
+	}
+	EndTheGame();
+
+	// No
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Bishop"));
+	Net_JoinRequestWaiting(name, sizeof(name), &who);
+	Net_AnswerJoinRequest(who, false);
+	Check(playersInGame.empty() && IDOf(1) == 0 && lastDisconnectData == kNetJoinRefusedNo && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"the host says no: nothing is made for the joiner, its connection is closed with the host's no, and the request has gone");
+	Net_AnswerJoinRequest(who, true);
+	Check(playersInGame.empty(), "a second answer to a request that's gone does nothing");
+	EndTheGame();
+
+	// No answer in time
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Vasquez"));
+	enetClock += kNetJoinAnswerWithinMs;
+	Net_ServiceNetwork();
+	Check(playersInGame.empty() && lastDisconnectData == kNetJoinRefusedNoAnswer && !Net_JoinRequestWaiting(name, sizeof(name), &who),
+		"unanswered for 30 s, the joiner is told no answer came, and the request has gone");
+	EndTheGame();
+
+	// The joiner who asked leaves, and somebody new comes to the same place
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("Gorman"));
+	Closes(1);
+	TakeEverything();
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "a joiner who leaves while waiting takes its request with it");
+	peers[1].connectID = 7;
+	Connects(1);
+	TakeEverything();
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who), "and the next one in that place, who hasn't asked, has no request of the first one's");
+	peers[1].connectID = 0;
+	EndTheGame();
+
+	// What needs no question isn't asked: another version
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	std::vector<uint8_t> older = AskingToJoin("Apone");
+
+	if (older.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+	{
+		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+	}
+
+	Hears(1, older);
+	Check(!Net_JoinRequestWaiting(name, sizeof(name), &who) && playersInGame.empty(), "a joiner of another version isn't asked about: it's told no at once, as before");
+	EndTheGame();
+
+	// The joiner's side
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a joiner, once its request has gone, waits for the host's answer");
+	NetID const given = 9;
+	Hears(0, AMessage(1, NET_SETPLAYERID, 1, &given, sizeof(given)));
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerYes, "and the host giving it its player ID is the yes");
+	EndTheGame();
+
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "(joining again)");
+	{
+		ENetEvent const closed = { ENET_EVENT_TYPE_DISCONNECT, &peers[0], NULL, kNetJoinRefusedNo };
+		peers[0].state = ENET_PEER_STATE_DISCONNECTED;
+		eventsWaiting.push_back(closed);
+		TakeEverything();
+	}
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNo, "the host closing the connection with its no is the no");
+	EndTheGame();
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNo, "and the answer stays once the game is left, for the screen to say why");
+
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a new join starts waiting again");
+	enetClock += kNetJoinAnswerWithinMs + 5000;
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerNoAnswer, "and with no answer at all, past the host's own limit, it's no answer");
+	EndTheGame();
+
+	Net_LetEveryJoinerIn(true);
+}
+
 static void TestConnectionsThatHoldAPlace()
 {
 	HostWithClients(1);
@@ -3039,7 +3185,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 113;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 114;"), "and an older game can tell this one isn't what it speaks");
 
 	// The log lines a tester's log needs from pldnet.cpp. A message left out for want of room says so from every place it can be left out.
 	Check(Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tNoteSendBufferFull(numBytesReqd);") && !Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tLOCALASSERT(1 == 0);"), "SOURCE: a message left out of a full frame is in the log, from every room check");
@@ -3096,6 +3242,10 @@ static void TestNoHeaderLeftAnything()
 
 int main()
 {
+	// The tests written before the request to join (version 114) let their joiners in at once, as a test's host does. TestTheRequestToJoin
+	// is the one that asks.
+	Net_LetEveryJoinerIn(true);
+
 	TestStartingTheGame();
 	TestNobodyToSendTo();
 	TestSendingWithNoGame();
@@ -3110,6 +3260,7 @@ int main()
 	TestRelayGamesOnTheList();
 	TestJoiningThroughTheRelay();
 	TestTimingTheRelaysForJoining();
+	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
 	TestSkirmish();
