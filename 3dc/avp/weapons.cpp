@@ -2269,12 +2269,18 @@ void GetDirectionOfAttack(STRATEGYBLOCK *sbPtr,VECTORCH *WorldVector,VECTORCH *O
 
 }
 
+extern void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition);
+extern bool Hudson_SiegeTurnsAwayHit(STRATEGYBLOCK const *player, DAMAGE_PROFILE const *damage, int multiple);
+
 void CauseDamageToObject(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,VECTORCH *incoming)
 {
 	int use_multiple;
 
 	GLOBALASSERT(sbPtr);
 	GLOBALASSERT(damage);
+
+	// A test run notes what hit what. Outside one this does nothing.
+	Hudson_NoteDamage(sbPtr, damage->Id);
 
 	use_multiple = multiple;
 
@@ -2323,6 +2329,12 @@ void CauseDamageToObject(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multi
 		if(psPtr->invulnerabilityTimer>0)
 		{
 			//player is still invulnerable
+			return;
+		}
+
+		// A test run's siege: its players can't be hurt even while they fire, which ends the protection above. Outside one this is always false.
+		if (Hudson_SiegeTurnsAwayHit(sbPtr, damage, multiple))
+		{
 			return;
 		}
 	}
@@ -6225,6 +6237,9 @@ DISPLAYBLOCK *CauseDamageToHModel(HMODELCONTROLLER *HMC_Ptr, STRATEGYBLOCK *sbPt
 
 	frag=NULL;
 
+	// A test run notes what hit what. Outside one this does nothing.
+	Hudson_NoteDamage(sbPtr, damage->Id);
+
 	if ((FromHost==0)&&(sbPtr->I_SBtype==I_BehaviourNetGhost)) {
 		DamageNetworkGhost(sbPtr, damage, multiple,this_section_data,incoming);
 		return(NULL);
@@ -6245,6 +6260,12 @@ DISPLAYBLOCK *CauseDamageToHModel(HMODELCONTROLLER *HMC_Ptr, STRATEGYBLOCK *sbPt
 		if(psPtr->invulnerabilityTimer>0)
 		{
 			//player is still invulnerable
+			return(NULL);
+		}
+
+		// A test run's siege: its players can't be hurt even while they fire, which ends the protection above. Outside one this is always false.
+		if (Hudson_SiegeTurnsAwayHit(sbPtr, damage, multiple))
+		{
 			return(NULL);
 		}
 	}

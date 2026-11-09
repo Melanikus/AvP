@@ -1,9 +1,15 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a game pad doesn't reach a Hudson run
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the console's key is the key under Esc on every keyboard layout, by its place, as 1999's was (console_key.h)
 // Interface  functions (written in C++) for
 // Direct3D immediate mode system
 
 #define DIRECTINPUT_VERSION 0x0800
 
 #include "logString.h"
+#include "hudson.h"
 #include <dinput.h>
 #include <XInput.h> // XInput API
 #include "io.h"
@@ -149,6 +155,15 @@ unsigned char DebouncedKeyboardInput[MAX_NUMBER_OF_INPUT_KEYS];
 static unsigned char LastFramesKeyboardInput[MAX_NUMBER_OF_INPUT_KEYS];
 
 static unsigned char IngameKeyboardInput[256];
+
+// The key under Esc, held down: the console's key, found by its place on the keyboard (console_key.h), not by what the layout calls it.
+// win_proj.cpp sets it. Added 2026-11-09 by Melanikus for the AvP port.
+static bool consoleKeyDown = false;
+
+extern void IngameKeyboardInput_ConsoleKey(bool down)
+{
+	consoleKeyDown = down;
+}
 
 // mouse - 5 buttons?
 unsigned char MouseButtons[5] = {0};
@@ -458,8 +473,9 @@ void DirectReadKeyboard(void)
 	}
 
 
-//	if (IngameKeyboardInput[/*249*/'~'])
-	if (IngameKeyboardInput[0xDF])
+	// The console's key is the key under Esc, by its place, as 1999's DIK_GRAVE was: not VK_OEM_8, which is that key only on a UK
+	// keyboard (console_key.h)
+	if (consoleKeyDown)
 	{
 		KeyboardInput[KEY_GRAVE] = TRUE;
 		GotAnyKey = true;
@@ -1313,7 +1329,8 @@ void ReadJoysticks(void)
 	GotJoystick = 0;//= ReadJoystick();
 
 	// check XInput pads
-	GotXPad = UpdateControllerState();
+	// A pad can be read whether the game has the focus or not, and a run isn't anyone playing
+	GotXPad = HudsonRunIsOn ? 0 : UpdateControllerState();
 
 	memset(&GamePadButtons[0], 0, NUMPADBUTTONS);
 
@@ -1608,6 +1625,8 @@ extern void IngameKeyboardInput_ClearBuffer(void)
 	{
 		IngameKeyboardInput[i] = 0;
 	}
+
+	consoleKeyDown = false;
 
 	for (int i = 0; i < 5; i++)
 	{

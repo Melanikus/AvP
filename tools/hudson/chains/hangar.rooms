@@ -1,0 +1,83 @@
+# Rooms of hangar, read from the level file by a script. Nobody has walked them. This level was worked out as above, and rooms that can see each other counted as joined.
+join Hangar | Hangar01 | file
+join Hangar | Hangar03 | file
+join Hangar | Hangar04 | file
+join Hangar | hang n01 bot | file
+join Hangar | hang n2 bot | file
+join Hangar | Hangartop01 | file
+join Hangar | hang n01 botA | file
+join Hangar | hang n01 botAA | file
+join Hangar | DoorBig | sees
+join Hangar | Base | sees
+join Hangar | Hangar02 | sees
+join Hangar | Hangar05 | sees
+join Hangar | Hangar03top | sees
+join Hangar | airlock | sees
+join Hangar | hang no1 top01 | sees
+join Hangar | hang n2 top01 | sees
+join Hangar | Outside 05 | sees
+join Hangar | Outside 01 | sees
+join Hangar | Outside 03 | sees
+join Hangar | Outside 04 | sees
+join Hangar | Outside 02 | sees
+join Hangar | hanger04top01 | sees
+join Hangar | Hangar05top01 | sees
+join Hangar | top01 | sees
+join Hangar | top02 | sees
+join Hangar | skybox | sees
+join Hangar | airlockA | sees
+join Hangar | Hangar05B | sees
+join Hangar | Hangar05C | sees
+join DoorBig | Base | file
+join DoorBig | Hangar02 | file
+join Hangar01 | Hangar03 | file
+join Hangar01 | top02 | file
+join Hangar01 | Hangartop01 | file
+join Hangar02 | Hangar04 | file
+join Hangar02 | Hangar03 | file
+join Hangar02 | top01 | file
+join Hangar02 | hanger04top01 | file
+join Hangar03 | Hangar03top | file
+join Hangar03 | Hangar04 | file
+join Hangar04 | airlock | file
+join Hangar04 | hang n2 bot | file
+join Hangar04 | hanger04top01 | file
+join Hangar05 | hang n01 bot | file
+join Hangar05 | hang n2 bot | file
+join Hangar05 | Hangar05B | file
+join Hangar05 | Hangar05C | file
+join Hangar05 | hang no1 top01 | file
+join Hangar03top | top01 | file
+join Hangar03top | top02 | file
+join Hangar03top | Hangartop01 | file
+join Hangar03top | hanger04top01 | file
+join airlock | Outside 01 | file
+join airlock | airlockA | file
+join hang n01 bot | hang no1 top01 | file
+join hang n01 bot | Hangar05B | file
+join hang n01 bot | hang n01 botA | file
+join hang n01 bot | hang n01 botAA | file
+join hang n01 bot | Hangartop01 | file
+join hang no1 top01 | Hangar05top01 | file
+join hang no1 top01 | Hangartop01 | file
+join hang n2 bot | hang n2 top01 | file
+join hang n2 bot | hanger04top01 | file
+join hang n2 bot | Hangar05C | file
+join hang n2 bot | Hangar05B | file
+join hang n2 top01 | Hangar05top01 | file
+join hang n2 top01 | hanger04top01 | file
+join hang n2 top01 | Hangartop01 | file
+join Outside 05 | Outside 03 | file
+join Outside 01 | Outside 04 | file
+join Outside 01 | Outside 03 | file
+join Outside 01 | airlockA | file
+join Outside 01 | Outside 02 | touching
+join Outside 02 | skybox | touching
+join Hangartop01 | top02 | file
+join Hangartop01 | hanger04top01 | file
+join hanger04top01 | top01 | file
+join Hangar05top01 | Hangar05B | file
+join Hangar05top01 | Hangar05C | file
+join Hangar05B | Hangar05C | file
+join Hangar05B | hang n01 botA | file
+join hang n01 botA | hang n01 botAA | file

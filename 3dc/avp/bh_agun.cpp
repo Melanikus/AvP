@@ -3,6 +3,7 @@
 //   a network game that plays the same as single player has the level's sentry guns, on the host
 //   when this dies on the host, its death target reaches the other machines
 //   a sentry gun only shoots players on other machines who are its enemies, not everything they throw and leave behind
+//   in a Hudson siege only, a test rule: a sentry gun only takes targets in front of it, towards the canyon
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the other machines' copies of a destroyed sentry gun stop on the same animation as the real one
 //   a sentry gun's block starts cleared, and the pointers to its pan and tilt are set as soon as it's made, not on its first turn
@@ -57,6 +58,7 @@
 #include "bh_far.h"
 #include "targeting.h"
 #include "dxlog.h"
+#include "logString.h"
 #include "los.h"
 #include "psndplat.h"
 #include "bh_dummy.h"
@@ -666,6 +668,37 @@ void AGun_UpdateTargetTrackPos(STRATEGYBLOCK *sbPtr) {
 
 }
 
+// A TEST RULE, NOT THE GAME'S, and only while a Hudson siege runs (siege= on the command line). The siege makes its sentry guns
+// facing straight ahead, which is +z, towards the canyon the enemies come from, with the players and the friendly marines behind
+// them. A gun that turned round to shoot something made beside or behind the players shot through them: the minigunner was
+// killed that way twice. So in a siege a gun only takes a target that is ahead of it in z, and no more than 60 degrees to either
+// side. The first time this passes over a target, the log says so.
+static bool Autogun_SiegeAllowsTarget(STRATEGYBLOCK *gun, STRATEGYBLOCK *target)
+{
+	extern bool Hudson_IsASiege();
+
+	if (!Hudson_IsASiege() || !gun->DynPtr || !target->DynPtr)
+	{
+		return true;
+	}
+
+	int const ahead = target->DynPtr->Position.vz - gun->DynPtr->Position.vz;
+	int const aside = abs(target->DynPtr->Position.vx - gun->DynPtr->Position.vx);
+
+	// The tangent of 60 degrees is about 1.732, so "within 60 degrees" is "no further aside than 1.732 times as far ahead",
+	// worked in whole numbers. Big enough numbers that a level's size can't overflow them.
+	bool const inFront = ahead > 0 && (long long)aside * 1000 <= (long long)ahead * 1732;
+	static bool saidSo = false;
+
+	if (!inFront && !saidSo)
+	{
+		saidSo = true;
+		LogString("siege: a sentry gun passed over a target beside or behind it. In a siege the guns only shoot towards the canyon: a test rule, not the game's");
+	}
+
+	return inFront;
+}
+
 int Autogun_TargetFilter(STRATEGYBLOCK *candidate) {
 
 	/* Reject NULLs and far targets. */
@@ -792,7 +825,7 @@ STRATEGYBLOCK *Autogun_GetNewTarget(STRATEGYBLOCK *sbPtr) {
 		candidate=ActiveStBlockList[a];
 		if (candidate!=sbPtr) {
 			if (candidate->DynPtr) {
-				if (Autogun_TargetFilter(candidate)) {
+				if (Autogun_TargetFilter(candidate) && Autogun_SiegeAllowsTarget(sbPtr, candidate)) {
 					VECTORCH offset;
 					int dist;
 
@@ -882,7 +915,7 @@ void AutoGunBehaveFun(STRATEGYBLOCK* sbPtr)
 	}
 
 	if (agunStatusPointer->Target) {
-		if (!(Autogun_TargetFilter(agunStatusPointer->Target))) {
+		if (!(Autogun_TargetFilter(agunStatusPointer->Target)) || !Autogun_SiegeAllowsTarget(sbPtr, agunStatusPointer->Target)) {
 			agunStatusPointer->Target=NULL;
 		}
 	}

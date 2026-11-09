@@ -290,48 +290,6 @@ int OnlineScreens_SelectAgain(const OnlineGameKey &selected, int selectedRow, co
 	return Between(selectedRow, 0, count - 1);
 }
 
-// ---- Looking for games, and keeping the list fresh
-
-// Whether the clock has reached a moment. The clock wraps round to 0 after about 49 days, so this looks at how far apart the two are,
-// which is right as long as they're less than 24 days apart.
-static bool HasCome(uint32_t now, uint32_t moment)
-{
-	return (uint32_t)(now - moment) < 0x80000000u;
-}
-
-void OnlineSearch_Start(OnlineSearch *search, uint32_t now)
-{
-	search->tries = 1;
-	search->nextAskAt = now + kOnlineSearchEveryMs;
-	search->givenUp = false;
-}
-
-OnlineSearchNews OnlineSearch_Frame(OnlineSearch *search, uint32_t now, bool gamesShown)
-{
-	if (search->givenUp || !HasCome(now, search->nextAskAt))
-	{
-		return kOnlineSearchNothing;
-	}
-
-	if (gamesShown)
-	{
-		// Games are on the page: keep them fresh for as long as the page is open, and if they all go, start counting the tries again
-		search->tries = 1;
-	}
-	else if (search->tries >= kOnlineSearchMostTries)
-	{
-		search->givenUp = true;
-		return kOnlineSearchGivenUp;
-	}
-	else
-	{
-		search->tries++;
-	}
-
-	search->nextAskAt = now + kOnlineSearchEveryMs;
-	return kOnlineSearchAskAgain;
-}
-
 // Copies words into a buffer of size characters, always ending it with a 0
 static void Put(char *words, size_t size, const char *what)
 {
@@ -340,33 +298,127 @@ static void Put(char *words, size_t size, const char *what)
 		return;
 	}
 
-	_snprintf(words, size - 1, "%s", what);
+	_snprintf(words, size - 1, "%s", what ? what : "");
 	words[size - 1] = '\0';
 }
 
-void OnlineSearch_Words(const OnlineSearch *search, uint32_t now, int stage, char *words, size_t size)
+// ---- The list page's Search box
+
+void OnlineScreens_SearchText(const char *typed, size_t typedBytes, char *safe, size_t size)
 {
 	if (size == 0)
 	{
 		return;
 	}
 
-	if (search->givenUp)
+	// Made safe into room for the search's letters, then into the caller's room, which may be smaller still
+	char letters[kOnlineSearchLetters + 1];
+	OnlineScreens_SafeName(typed, typedBytes, letters, sizeof(letters));
+	Put(safe, size, letters);
+}
+
+// A letter as a small one, for comparing without caring about capitals: only A to Z change, so nothing else can be made to match
+static char Small(char letter)
+{
+	return (letter >= 'A' && letter <= 'Z') ? (char)(letter - 'A' + 'a') : letter;
+}
+
+bool OnlineScreens_NameMatches(const char *safeName, const char *safeSearch)
+{
+	if (!safeSearch || safeSearch[0] == '\0')
 	{
-		Put(words, size, OnlineScreens_Words(kOnlineWordsNothingFound));
+		return true;
+	}
+
+	if (!safeName)
+	{
+		return false;
+	}
+
+	// Both are short (a row's 39 letters, a search's 20), so trying each place in the name is quick
+	for (size_t start = 0; safeName[start] != '\0'; start++)
+	{
+		size_t i = 0;
+
+		while (safeSearch[i] != '\0' && safeName[start + i] != '\0' && Small(safeName[start + i]) == Small(safeSearch[i]))
+		{
+			i++;
+		}
+
+		if (safeSearch[i] == '\0')
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// ---- The fetching screen
+
+// The server's name as it goes into a line: never more than a host name's letters, and "" for none
+struct ServerName
+{
+	char letters[kRelayListHostLetters + 1];
+
+	explicit ServerName(const char *safeServer)
+	{
+		Put(letters, sizeof(letters), safeServer);
+	}
+};
+
+void OnlineScreens_FetchingWords(const char *safeServer, char *words, size_t size)
+{
+	if (size == 0)
+	{
 		return;
 	}
 
-	if (search->tries <= 1)
+	_snprintf(words, size - 1, "Fetching %s's open sessions", ServerName(safeServer).letters);
+	words[size - 1] = '\0';
+}
+
+void OnlineScreens_ConnectedWords(int sessions, char *words, size_t size)
+{
+	if (size == 0)
 	{
-		Put(words, size, OnlineScreens_Words(stage == 0 ? kOnlineWordsLookingHere : kOnlineWordsLookingList));
 		return;
 	}
 
-	int const seconds = OnlineScreens_SecondsLeft(search->nextAskAt - kOnlineSearchEveryMs, now, kOnlineSearchEveryMs);
+	if (sessions <= 0)
+	{
+		Put(words, size, "Connected: no sessions open");
+	}
+	else if (sessions == 1)
+	{
+		Put(words, size, "Connected: 1 session open");
+	}
+	else
+	{
+		_snprintf(words, size - 1, "Connected: %d sessions open", Between(sessions, 2, 999));
+		words[size - 1] = '\0';
+	}
+}
 
-	_snprintf(words, size - 1, "%s. Asking again in %d s (%d of %d)", OnlineScreens_Words(kOnlineWordsNothingYet), seconds, search->tries,
-		(int)kOnlineSearchMostTries);
+void OnlineScreens_CantConnectWords(const char *safeServer, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	_snprintf(words, size - 1, "Couldn't connect to %s", ServerName(safeServer).letters);
+	words[size - 1] = '\0';
+}
+
+void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	_snprintf(words, size - 1, "Connected to %s, but couldn't fetch its open sessions", ServerName(safeServer).letters);
 	words[size - 1] = '\0';
 }
 
@@ -416,11 +468,10 @@ int OnlineScreens_SecondsLeft(uint32_t startedAt, uint32_t now, uint32_t mostMs)
 // (the static_assert below) instead of leaving a word empty.
 static const char *const kWords[] =
 {
-	"Looking for games on this network",                          // kOnlineWordsLookingHere
-	"Asking the list of games",                                   // kOnlineWordsLookingList
-	"No games yet",                                               // kOnlineWordsNothingYet
-	"No games found. Enter looks again",                          // kOnlineWordsNothingFound
 	"Esc goes back",                                              // kOnlineWordsEscBack
+	"Enter tries again, Esc goes back",                           // kOnlineWordsTryAgain
+	"No open sessions",                                           // kOnlineWordsNoSessions
+	"No open sessions with that in their name",                   // kOnlineWordsNoneMatch
 	"Game",                                                       // kOnlineWordsColumnGame
 	"Level",                                                      // kOnlineWordsColumnLevel
 	"Players",                                                    // kOnlineWordsColumnPlayers
@@ -440,11 +491,10 @@ static const char *const kWords[] =
 	"Enter or Esc goes back to the list",                         // kOnlineWordsBackToList
 	"Couldn't join",                                              // kOnlineWordsCouldNotJoin
 	"that game has gone",                                         // kOnlineWordsGameHasGone
-	"No games from the list",                                     // kOnlineWordsListFailed
 	"The host is answering someone else. Try again in a moment",  // kOnlineWordsHostBusy
 	"Esc to answer",                                              // kOnlineWordsEscToAnswer
-	"Hosting through",                                            // kOnlineWordsHostingThrough
-	"Joined through",                                             // kOnlineWordsJoinedThrough
+	"HOST, Relay:",                                               // kOnlineWordsHostingThrough
+	"CLIENT, Relay:",                                             // kOnlineWordsJoinedThrough
 	"a relay",                                                    // kOnlineWordsARelay
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
@@ -543,25 +593,39 @@ void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size
 	words[size - 1] = '\0';
 }
 
-void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size)
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, int serverMs, char *words, size_t size)
 {
 	if (size == 0)
 	{
 		return;
 	}
 
-	char place[kRelayListRegionLetters + 1];
+	// The server's shown name or its region: room for the longer, a shown name's 32 letters
+	char place[kRelayListShownNameLetters + 1];
 	Put(place, sizeof(place), (safeRegion && safeRegion[0] != '\0') ? safeRegion : OnlineScreens_Words(kOnlineWordsARelay));
 
 	OnlineWords const start = isHost ? kOnlineWordsHostingThrough : kOnlineWordsJoinedThrough;
 
+	// Each time says what it measures (the owner, 2026-11-09): the host's is to the relay server and back; a joiner's goes to the host and
+	// back, through the server, and its own time to the server and back, measured on the games page, follows when it has one
 	if (ms < 0)
 	{
 		_snprintf(words, size - 1, "%s %s", OnlineScreens_Words(start), place);
 	}
+	else if (isHost)
+	{
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, host to server)", OnlineScreens_Words(start), place,
+			Between(ms, 0, kRelayListMostHostMs));
+	}
+	else if (serverMs < 0)
+	{
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, client to host through server)", OnlineScreens_Words(start), place,
+			Between(ms, 0, kRelayListMostHostMs));
+	}
 	else
 	{
-		_snprintf(words, size - 1, "%s %s, %d ms", OnlineScreens_Words(start), place, Between(ms, 0, kRelayListMostHostMs));
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, client to host through server), %d ms round trip to server",
+			OnlineScreens_Words(start), place, Between(ms, 0, kRelayListMostHostMs), Between(serverMs, 0, kRelayListMostHostMs));
 	}
 
 	words[size - 1] = '\0';

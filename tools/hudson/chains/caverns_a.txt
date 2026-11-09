@@ -1,0 +1,8 @@
+# level: caverns_a   end started by: kill
+# campaign: Alien 9
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DR-ALENT, DR-CAVERNH
+where DR-ALENT | ALSTRT-01
+walk Vswichdoor 1 open
+missing PREDATOR | a network game leaves out this predator
+end V END OF LEVEL

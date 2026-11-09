@@ -1,5 +1,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the checks added since: names, chat lines, a client's budget, typed addresses, who has asked lately, and a sound's address
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   how long ago a joiner heard about a lift car, by its own clock, and that bh_platform_lift.cpp counts it that way (#90)
 // The test of the checks on what arrives from other players' machines. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // WHAT IT TESTS
@@ -15,6 +17,10 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "3dc.h"
 #include "equipment.h"
@@ -40,6 +46,40 @@ static void Check(bool passed, char const * what)
 	{
 		checksFailed++;
 	}
+}
+
+// A file of the game's source, by its place from the top of the repository, with Windows' line ends taken out. /FC in this test's settings
+// makes __FILE__ the whole path of this file, so the others can be found from it.
+static std::string ReadSourceFile(const char *name)
+{
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+
+	std::string text = all.str(), plain;
+
+	for (char const c : text)
+	{
+		if (c != '\r')
+		{
+			plain += c;
+		}
+	}
+
+	return plain;
+}
+
+static bool Has(const std::string &text, const char *what)
+{
+	return text.find(what) != std::string::npos;
 }
 
 // With friendly fire off, whose weapons can't hurt you
@@ -85,6 +125,31 @@ static void TestLiftSync()
 	Check(NetLiftHostHeightNow(-1000, true, 2000, 5000, 400) == 1000, "and one going down towards its bottom");
 	Check(NetLiftHostHeightNow(1000, true, -3000, 5000, 60000) == -3000, "and it stops at its end");
 	Check(NetLiftHostHeightNow(1000, true, -3000, 5000, -50) == 1000, "a time before the message counts as none");
+
+	// How long ago the host's message was heard, by this machine's own clock in ms (#90)
+	Check(NetLiftMsSince(1500, 1000) == 500 && NetLiftMsSince(1000, 1000) == 0, "the time since the host spoke is the clock now take away the clock then");
+	Check(NetLiftMsSince(200, 0xFFFFFF00u) == 456, "and it stays right when the clock goes back to 0, every 49.7 days");
+	Check(NetLiftMsSince(1000 + 100000, 1000) == kNetLiftLongestMsSince && kNetLiftLongestMsSince == 60000, "and it's never counted as more than a minute");
+
+	// The pair test's car (#90): the host's car going up at 5 m a second, heard about at 1000 ms. The joiner's frames went on for 634 ms,
+	// then it stood still for 476 ms. Its frame times, added up, came to about 634 + 33 = 667 ms, because the frame after a pause is
+	// counted as an ordinary one, so its car was put 3.3 m up while the host's was 5.5 m up. By the clock it's 1110 ms, and 5.5 m.
+	int const heardAt = 1000;
+	int const now = heardAt + 634 + 476;
+
+	Check(NetLiftHostHeightNow(0, true, -10000, 5000, NetLiftMsSince(now, heardAt)) == -5550, "after a pause, the host's car is still put where it is, 5.5 m up");
+	Check(NetLiftHostHeightNow(0, true, -10000, 5000, 634 + 33) == -3335, "where adding up frame times left it 2.2 m short");
+
+	// The game's own lines: the age is taken by the clock, from when the host's message came, and the car's step in a frame stays in game time
+	std::string const lift = ReadSourceFile("3dc/avp/bh_platform_lift.cpp");
+	std::string const liftHeader = ReadSourceFile("3dc/avp/bh_platform_lift.h");
+
+	Check(!lift.empty() && !liftHeader.empty(), "SOURCE: the lift's files can be read");
+	Check(Has(lift, "\tlift->syncHeardAt = timeGetTime();\n\tlift->syncHeard = TRUE;"), "SOURCE: a host's message about a car notes the clock when it came");
+	Check(Has(lift, "\tint const msSince = NetLiftMsSince(timeGetTime(), lift->syncHeardAt);\n"), "SOURCE: and the car follows it by the clock since then");
+	Check(!Has(lift, "syncAge") && !Has(liftHeader, "syncAge"), "SOURCE: and not by frame times added up, as before");
+	Check(Has(lift, "int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), NormalFrameTime);"),
+		"SOURCE: but how far the car may move in a frame stays in game time, which a rider on it moves by");
 
 	Check(NetLiftFollowStep(0, 2000, 100, false, 450) == 2000, "with nobody on it and more than a step away, the car goes straight there");
 	Check(NetLiftFollowStep(0, 2000, 100, true, 450) == 100, "with someone on it, it travels, however far");

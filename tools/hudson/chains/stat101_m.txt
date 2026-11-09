@@ -1,0 +1,6 @@
+# level: stat101_m   end started by: walk
+# campaign: Marine 10
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+where lokdrM01 | bigM01 | lok02 | lok2b | lok2c | lok2e
+walk end
+end endmess

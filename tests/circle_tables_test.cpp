@@ -88,6 +88,45 @@ static void TestTheStepsPastTheEnd()
 	Check(GetCos(-4096) == cosine[0], "a whole turn back reads no turn");
 }
 
+// MUL_FIXED as the game does it (mathline.cpp): the product, shifted down 16, which drops what's left over, never rounding up
+static int MulFixedAsTheGameDoes(int a, int b)
+{
+	return (int)((((long long)a * b) >> 16) & 0xFFFFFFFF);
+}
+
+// The xenoborg, with its own numbers: a lead from Bobblen's avp-forever says a xenoborg's attack can break the picture and leave the
+// screen black (#96, XENO-BLACKOUT-1). It turns to face what it attacks with NPCOrientateToVector, at NPC_TURNRATE >> XENO_FOOT_TURN_RATE,
+// 128 steps a second. Its turn this frame is MUL_FIXED(NormalFrameTime, 128), which comes to nothing on a frame shorter than 512, 7.8 ms,
+// so above 128 frames a second. Turning left, it then asks for step 4096 - 0. Before the tables wrapped, that read past both tables. If
+// the program keeps tables.cpp's order, cosine[4096] read the start of ArcCosTable, and the "turn" scaled the xenoborg by about 2,000 each
+// frame, which would draw it across the whole screen. This checks those numbers are still the game's, and that the step they come to now
+// reads as no turn.
+static void TestTheXenoborgsTurn()
+{
+	std::string const ais = ReadSourceFile("3dc/avp/bh_ais.cpp");
+	std::string const aisHeader = ReadSourceFile("3dc/avp/bh_ais.h");
+	std::string const xeno = ReadSourceFile("3dc/avp/bh_xeno.cpp");
+	std::string const xenoHeader = ReadSourceFile("3dc/avp/bh_xeno.h");
+	std::string const maths = ReadSourceFile("3dc/mathline.cpp");
+
+	Check(!ais.empty() && !aisHeader.empty() && !xeno.empty() && !xenoHeader.empty() && !maths.empty(), "SOURCE: the xenoborg's files could be read");
+	Check(Has(xeno, "NPCOrientateToVector(sbPtr, &orientationDirn,(NPC_TURNRATE>>XENO_FOOT_TURN_RATE),NULL);"), "SOURCE: a xenoborg turns to face what it attacks at its foot turn rate");
+	Check(Has(aisHeader, "#define NPC_TURNRATE\t\t\t\t(4096)") && Has(xenoHeader, "#define XENO_FOOT_TURN_RATE\t\t\t(5)"), "SOURCE: which is 4096 >> 5, 128 steps a second");
+	Check(Has(ais, "maxTurnThisFrame = MUL_FIXED(NormalFrameTime,turnspeed);") && Has(ais, "turnThisFrame = (4096-maxTurnThisFrame);"), "SOURCE: its turn this frame is that times the frame, and a turn left asks for 4096 take away it");
+	Check(Has(maths, "return (((__int64)a * b) >> ONE_FIXED_SHIFT) & 0xFFFFFFFF;"), "SOURCE: and MUL_FIXED drops what's left over, as the copy above does");
+
+	int const footTurn = 4096 >> 5;
+	int const frameAt129 = 65536 / 129;
+	int const frameAt127 = 65536 / 127;
+
+	Check(MulFixedAsTheGameDoes(frameAt129, footTurn) == 0, "at 129 frames a second the xenoborg's turn this frame comes to nothing");
+	Check(MulFixedAsTheGameDoes(frameAt127, footTurn) == 1, "at 127 it doesn't, so 128 frames a second is where it starts");
+
+	int const turnLeft = 4096 - MulFixedAsTheGameDoes(frameAt129, footTurn);
+
+	Check(turnLeft == 4096 && GetSin(turnLeft) == 0 && GetCos(turnLeft) == 65536, "and the step it then asks for reads as no turn, not memory past the tables");
+}
+
 static void TestTheFrameTime()
 {
 	Check(FrameTime_NeverNothing(0) == 1, "a frame that came to nothing counts as the shortest there is");
@@ -117,6 +156,7 @@ int main()
 
 	TestTheStepsOnTheCircle();
 	TestTheStepsPastTheEnd();
+	TestTheXenoborgsTurn();
 	TestTheFrameTime();
 	TestTheRealGame();
 

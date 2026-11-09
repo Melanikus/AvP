@@ -1,0 +1,27 @@
+# level: fall   end started by: walk
+# campaign: Predator 1
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens gate02
+where 1st03
+press switch01
+# opens gate03
+where tjunct05
+press switch02
+# opens watergate
+where watergateb
+press switch04
+# opens gate05
+where roadbend04 | roads06
+press switch10
+# opens gate07
+where gpost01
+press switch12
+# opens watgate01
+where watergate1
+press switch07
+# opens airlock01, airlock02
+where well08
+press switch14
+where airlock03
+walk completeareaswitch
+end missioncomplete

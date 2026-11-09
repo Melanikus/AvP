@@ -103,42 +103,33 @@ enum { kOnlineMostRows = 16 };
 // rows are written, the games there now first. Gives back how many there are.
 int OnlineScreens_MergeRows(const OnlineRow *before, int beforeCount, const OnlineRow *now, int nowCount, OnlineRow *out, int mostOut);
 
-// Where the selected game is after a refresh: the row with the same game, or, when it's gone, the same row number as before, kept inside
-// the rows there are. -1 when there are no rows.
+// Where the selection goes when the rows have changed: the row with the selected game, wherever it moved, or, when that game isn't there
+// any more, the same row number as before, kept inside the rows there are. -1 when there are no rows. The games page uses it while the
+// list is shown, as answers change the rows, and when the list comes back after a Refresh, for the game the selection was last on
+// (online_screens_page.cpp, OnlinePage_Frame).
 int OnlineScreens_SelectAgain(const OnlineGameKey &selected, int selectedRow, const OnlineRow *rows, int count);
 
-// ---- Looking for games (J1), and keeping the list fresh (J2)
+// ---- The list page's Search box (J2)
 
-enum
-{
-	kOnlineSearchEveryMs = 5000,   // the list is asked again this often: it allows one ask a second from an address (PROTOCOL.md section 5)
-	kOnlineSearchMostTries = 12    // and while nothing is found, only this many times, a minute, before the page stops and says so
-};
+// What the player types to show only some games. It's hostile all the same: only the letters the fonts have count (SafeName), and at
+// most this many. It filters the games already fetched, on this PC, and is never sent anywhere.
+enum { kOnlineSearchLetters = 20 };
 
-enum OnlineSearchNews
-{
-	kOnlineSearchNothing,          // nothing to do this frame
-	kOnlineSearchAskAgain,         // time to ask the LAN and the list again
-	kOnlineSearchGivenUp           // nothing was found in all the tries: the page says so, and waits for Enter to start again
-};
+// The Search box's text as it's used: made safe, and cut to its 20 letters. typedBytes is the most of typed that's read.
+void OnlineScreens_SearchText(const char *typed, size_t typedBytes, char *safe, size_t size);
 
-struct OnlineSearch
-{
-	int tries;                     // asks so far, counting the first
-	uint32_t nextAskAt;            // the clock (GetTickCount) at the next ask
-	bool givenUp;
-};
+// Whether a game's name (made safe already) has the search in it, as capitals or not. An empty search, or none, takes every game.
+bool OnlineScreens_NameMatches(const char *safeName, const char *safeSearch);
 
-// The first ask, when the page opens, or when Enter starts the search again
-void OnlineSearch_Start(OnlineSearch *search, uint32_t now);
+// ---- The fetching screen (J1): the tail, while the games are fetched from the server the game dialled
 
-// Each frame of the page. gamesShown says whether the page has any game to show. While it has, the list is asked again every 5 s for as
-// long as the page is open; while it hasn't, only up to the most tries. The clock wrapping round, after 49 days, is handled.
-OnlineSearchNews OnlineSearch_Frame(OnlineSearch *search, uint32_t now, bool gamesShown);
-
-// The J1 line for the search as it is, in words of size characters, always ended with a 0. stage says what's being asked first: 0 this
-// network, 1 the list of games.
-void OnlineSearch_Words(const OnlineSearch *search, uint32_t now, int stage, char *words, size_t size);
+// "Fetching localhost's open sessions"; "Connected: 3 sessions open" (and "1 session", and "no sessions"); "Couldn't connect to localhost";
+// "Connected to localhost, but couldn't fetch its open sessions". The server's name is the one this game dialled (Relay_ServerName, or
+// "this network"), never one a server sent, and comes made safe already; it's cut to a host name's 63 letters. words always ends with a 0.
+void OnlineScreens_FetchingWords(const char *safeServer, char *words, size_t size);
+void OnlineScreens_ConnectedWords(int sessions, char *words, size_t size);
+void OnlineScreens_CantConnectWords(const char *safeServer, char *words, size_t size);
+void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t size);
 
 // ---- The ping column
 
@@ -158,11 +149,10 @@ int OnlineScreens_SecondsLeft(uint32_t startedAt, uint32_t now, uint32_t mostMs)
 // the functions below, after OnlineScreens_SafeName.
 enum OnlineWords
 {
-	kOnlineWordsLookingHere,          // J1: the first ask, of this network
-	kOnlineWordsLookingList,          //     and of the list of games
-	kOnlineWordsNothingYet,           //     the start of the line between asks (OnlineSearch_Words adds the rest)
-	kOnlineWordsNothingFound,         //     after all the tries
-	kOnlineWordsEscBack,              //     and the line under it
+	kOnlineWordsEscBack,              // J1: under the fetching line
+	kOnlineWordsTryAgain,             //     under a failure
+	kOnlineWordsNoSessions,           // J2: an empty table
+	kOnlineWordsNoneMatch,            //     a table the search has emptied
 	kOnlineWordsColumnGame,           // J2's column headings
 	kOnlineWordsColumnLevel,
 	kOnlineWordsColumnPlayers,
@@ -182,11 +172,10 @@ enum OnlineWords
 	kOnlineWordsBackToList,
 	kOnlineWordsCouldNotJoin,         //     the start of a failed join's line, before the networking code's own words
 	kOnlineWordsGameHasGone,          //     why a game that's gone can't be joined
-	kOnlineWordsListFailed,           // J1 and J2: the start of the line when the list of games didn't answer, before the list code's words
 	kOnlineWordsHostBusy,             // J5: the host was answering someone else
 	kOnlineWordsEscToAnswer,          // H1: in play, after the asking line, how the host gets to the answer
-	kOnlineWordsHostingThrough,       // the line kept up in play: a host's start
-	kOnlineWordsJoinedThrough,        //     and a joiner's
+	kOnlineWordsHostingThrough,       // the line kept up in play: a host's start, "HOST, Relay:"
+	kOnlineWordsJoinedThrough,        //     and a joiner's, "CLIENT, Relay:"
 	kOnlineWordsARelay,               //     in place of a region that isn't known
 	kOnlineWordsRelayFinding,         // H2
 	kOnlineWordsRelayListed,
@@ -217,11 +206,17 @@ void OnlineScreens_SayNoWords(const char *safeName, char *words, size_t size);
 void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size_t size);
 void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 
-// The line kept on the screen for as long as a game is played through a relay (the user: "I want the Hudsons showing server name and
-// ping"): "Hosting through virginia, 41 ms" on the host, "Joined through virginia, 63 ms" on a joiner. The region comes made safe already,
-// and is cut to a region's 16 letters; with none it says "a relay". ms below 0 (nothing measured yet) leaves the time out, and above 9999
-// is 9999. words always ends with a 0.
-void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size);
+// The line kept on the screen for as long as a game is played through a relay, in the owner's words (2026-11-09), each time saying what
+// it measures:
+//   the host:   "HOST, Relay: nyc3, 145 ms (round trip, host to server)", ms being its keep's time to the relay server and back;
+//   a joiner:   "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)", ms being ENet's time to the host and back,
+//               through the server, then ", 146 ms round trip to server" when serverMs isn't below 0: its own time to the server and
+//               back, as the games page measured it before the join.
+// safeRegion is the name people see for the server ("NY Mel's Server", Relay_ServerShownName) when it has one, otherwise the relay's
+// region. It comes made safe already, and is cut to a shown name's 32 letters; with none it says "a relay". ms below 0 (nothing measured
+// yet) leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
+// Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, serverMs, and the server's shown name.
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, int serverMs, char *words, size_t size);
 
 // THE CHECK CODE (protocol version 2, CRYPTO.md section 8: "always shown on the join screen"). Added 2026-11-09 by Melanikus for the AvP
 // port. Through a relay, the joiner and its host each work out the same 6 digits from their handshake (networking.h's
