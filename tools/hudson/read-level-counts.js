@@ -17,8 +17,16 @@ const roles = ['single', 'skirmish', 'host', 'joiner'];
 
 const args = process.argv.slice(2);
 const fromAt = args.indexOf('--from');
+
+if (fromAt >= 0 && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$/.test(args[fromAt + 1] || '')) {
+  console.log('--from needs a run folder\x27s name after it, its date and time, like 2026-11-09-142410.');
+  process.exit(2);
+}
+
 const from = fromAt >= 0 ? args[fromAt + 1] : '';
-const folders = args.filter((word, i) => i !== fromAt && i !== fromAt + 1);
+// Every word but --from and the name after it. Without --from, every word is a folder: fromAt is -1 then, so it mustn't be used to
+// leave out "the word after it", which would be the first folder.
+const folders = args.filter((word, i) => fromAt < 0 || (i !== fromAt && i !== fromAt + 1));
 
 if (folders.length === 0) {
   console.log('Give it at least one folder that holds run folders.');
@@ -51,9 +59,14 @@ const levels = {};
 let runsRead = 0;
 let runsWithoutCounts = 0;
 
-for (const folder of folders.map((given) => runsFolder(given, 'each folder of runs'))) {
+for (const given of folders) {
+  // Checked, and made again from its checked parts, on a line of its own, as the other tools do it (run-folders.js)
+  const folder = runsFolder(given, 'each folder of runs');
   // Only the folders run-hudson.ps1 made, by their own names
-  for (const name of fs.readdirSync(folder).filter(isRunName).map((found) => path.basename(found)).sort()) {
+  const names = fs.readdirSync(folder).filter(isRunName).sort();
+
+  for (const found of names) {
+    const name = path.basename(found);
     const runFile = path.join(folder, name, 'run.txt');
     const logFile = path.join(folder, name, 'avp_log.txt');
 
