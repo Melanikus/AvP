@@ -59,6 +59,9 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the tag on the top right, which says how the shadows and the lighting are set, is off until it's asked for (F7, or -dev
 //   -statuson), so it no longer covers the game and the relay's line in play; F7 says in the log each time it shows or hides it
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a run of Hudson playing a level on foot draws the way he means to walk and where he's been as real shapes in the level, with walls
+//   hiding them (only in such a run: a normal game draws none of it)
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -124,6 +127,8 @@
 #endif
 #include "static_frame.h"
 #include "hudson_vision.h"
+#include "hudson_play.h"
+#include "hudson_play_ribbon.h"
 #include "surface_static.h"
 #include "static_level.h"
 #include "normal_lines.h"
@@ -541,6 +546,83 @@ void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
 static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
 
+// Draws Hudson on foot's ribbon: see hudson_play_ribbon.h. It goes through the same sum as the level's own polygons (TranslatePointIntoViewspace), so it lands exactly where the
+// level is, and the depth buffer can compare the two. That's what makes a wall hide it. The main pixel shader wants a texture and there's none, so a plain one does for this. Everything
+// this changes on the card is put back afterwards, because it's in the middle of the frame, and it only happens on a run of his.
+static void DrawHudsonPlayRibbon()
+{
+	static std::vector<HudsonPlayRibbonCorner> corners;
+	static std::vector<D3DLVERTEX> vertices;
+
+	HudsonPlay_RibbonCorners(corners);
+
+	if (corners.empty())
+	{
+		return;
+	}
+
+	vertices.resize(corners.size());
+
+	for (size_t i = 0; i < corners.size(); i++)
+	{
+		VECTORCH place;
+
+		place.vx = corners[i].x;
+		place.vy = corners[i].y;
+		place.vz = corners[i].z;
+		TranslatePointIntoViewspace(&place);
+
+		vertices[i].x = (float)place.vx;
+		vertices[i].y = (float)-place.vy;
+		vertices[i].z = (float)place.vz;
+		vertices[i].color = RGBA_MAKE(corners[i].red, corners[i].green, corners[i].blue, 255);
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+
+	// This is what makes a wall hide it. Turning it off would paint it over the wall.
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	// It can be looked at from any side
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(vertices.size() / 3), &vertices[0], sizeof(D3DLVERTEX));
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 static bool ExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorDrawing);
@@ -648,6 +730,12 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && NormalLinesOn)
 	{
 		DrawNormalLines();
+	}
+
+	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
+	if (toyFinalFlush && HudsonPlay_RibbonIsOn())
+	{
+		DrawHudsonPlayRibbon();
 	}
 
 	// render any particles

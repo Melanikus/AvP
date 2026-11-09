@@ -4,6 +4,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   walking and crouching always slow the player down, and TurnSpeedAdjust only decides whether turning slows too (walk_speeds.h).
 //   Found through Bobblen's avp-forever (commit 2b70546)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a Hudson run can press the player's keys, to play a level on foot (it does nothing unless a Hudson play run is on)
 /*-------------- Patrick 15/10/96 ------------------
 	Source file for Player Movement ...
 ----------------------------------------------------*/
@@ -298,6 +300,7 @@ void ExecuteFreeMovement(STRATEGYBLOCK* sbPtr)
 	ReadPlayerGameInput(sbPtr);
 	Hudson_GunInput(sbPtr->SBdataptr);
 	Hudson_NetInput(sbPtr->SBdataptr);
+	Hudson_PlayInput(sbPtr->SBdataptr);
  
 	/* KJL 11:07:42 10/09/98 - Bonus Abilities */
 	switch (AvP.PlayerType)
