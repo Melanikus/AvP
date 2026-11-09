@@ -26,11 +26,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Hudson is the team's private test bot, and its code never ships. This comes first, because it takes seconds, and a hook left behind
-      # should fail the pull request that brings it.
-      - name: Refuse any of Hudson
+      # Hudson is the team's test bot. Since 2026-11-09 it's in the game (the owner: "Hudson goes into avpx_main"), and this proves a player's
+      # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. It comes first, before anything is
+      # built, so that a way in left awake fails the pull request that brings it. Until 2026-11-09 this was check-no-hudson.ps1.
+      - name: Refuse any way a player's game could run Hudson
         shell: pwsh
-        run: ./tools/check-no-hudson.ps1
+        run: ./tools/check-hudson-asleep.ps1
 
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
@@ -418,9 +419,9 @@ jobs:
           fetch-depth: 0   # the check compares with an older commit
           persist-credentials: false
 
-      - name: Refuse any of Hudson
+      - name: Refuse any way a player's game could run Hudson
         shell: pwsh
-        run: ./tools/check-no-hudson.ps1
+        run: ./tools/check-hudson-asleep.ps1
 
       - name: Test the new-function check
         shell: pwsh
