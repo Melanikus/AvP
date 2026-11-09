@@ -2,6 +2,7 @@
 // Written 2026-11-08 by Melanikus for the AvP port.
 // Modified 2026-11-08 by Melanikus for the AvP port: PROTOCOL.md 7014de1, a relay in each region: a message's pass, the rule that every field
 // a kind of message doesn't use is 0, and the echoes a host times the relays with (NetRelayPicker).
+// Modified 2026-11-08 by Melanikus for the AvP port: a pass time is at most 2^53 - 1, as the relay reads it (its shared test vectors).
 //
 // WHY THERE'S A RELAY. Many players can't be reached from the internet at all: their provider puts many homes behind one address
 // (carrier-grade NAT), and no setting on their own router changes that. So a game can go through a relay, a server everyone can reach.
@@ -133,7 +134,8 @@ int const kNetRelayNotType = 4;          // a kind of message there isn't
 int const kNetRelayNotZero = 5;          // a reserved or padding byte isn't 0
 int const kNetRelayNotCode = 6;          // a code that's neither 8 code letters nor all 0
 int const kNetRelayNotUnused = 7;        // a field its kind of message doesn't use isn't 0
-int const kNetRelayNotKinds = 8;
+int const kNetRelayNotPassTime = 8;      // a pass time past kNetRelayMostPassTime
+int const kNetRelayNotKinds = 9;
 
 inline const char *NetRelay_NotAMessageWhy(int why)
 {
@@ -147,6 +149,7 @@ inline const char *NetRelay_NotAMessageWhy(int why)
 		case kNetRelayNotZero: return "a reserved or padding byte isn't 0";
 		case kNetRelayNotCode: return "its code isn't 8 code letters, nor all 0";
 		case kNetRelayNotUnused: return "a field its kind of message doesn't use isn't 0";
+		case kNetRelayNotPassTime: return "its pass time is past the most the list takes";
 		default: return "no such reason";
 	}
 }
@@ -199,9 +202,16 @@ size_t const kNetRelayAtPass = 36;
 size_t const kNetRelayAtPassTime = 52;
 size_t const kNetRelayAtPadding = 60;
 
+// The latest pass time there can be: 2^53 - 1 seconds. The list's pass time is a JSON number, and that's the most a JSON number holds
+// exactly (PROTOCOL.md, section 4), so a later one could never be listed. The relay refuses a message with one, so the game does too, and
+// the two read the same bytes the same way (the relay's test vectors, tests/vectors/relay-v1.json, have one of each).
+uint64_t const kNetRelayMostPassTime = 9007199254740991ull;
+
 // Reads a relay message out of a packet. Gives back kNetRelayIsAMessage and fills out, or why the packet isn't one, and then out is left as
 // it was. The layout: 0-3 AVPR, 4 the version, 5 the kind, 6-7 zero, 8-23 the secret, 24-31 the code, 32-33 the port and 34-35 the number
-// (both low byte first), 36-51 the pass, 52-59 the pass time (low byte first), 60-63 zero. A field its kind doesn't use has to be 0.
+// (both low byte first), 36-51 the pass, 52-59 the pass time (low byte first), 60-63 zero. A field its kind doesn't use has to be 0, and a
+// pass time can't be past kNetRelayMostPassTime. The rules are looked at in this order, the relay's own, so a packet that breaks two of
+// them gets the same reason from both.
 inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 {
 	if (!data || size != kNetRelayMessageBytes)
@@ -263,6 +273,18 @@ inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 		return kNetRelayNotCode;
 	}
 
+	uint64_t passTime = 0;
+
+	for (size_t i = 0; i < 8; i++)
+	{
+		passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * i);
+	}
+
+	if (passTime > kNetRelayMostPassTime)
+	{
+		return kNetRelayNotPassTime;
+	}
+
 	if (out)
 	{
 		out->type = data[5];
@@ -271,12 +293,7 @@ inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 		out->port = static_cast<uint16_t>(data[kNetRelayAtPort] | (data[kNetRelayAtPort + 1] << 8));
 		out->number = static_cast<uint16_t>(data[kNetRelayAtNumber] | (data[kNetRelayAtNumber + 1] << 8));
 		memcpy(out->pass, data + kNetRelayAtPass, kNetRelayPassBytes);
-		out->passTime = 0;
-
-		for (size_t i = 0; i < 8; i++)
-		{
-			out->passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * i);
-		}
+		out->passTime = passTime;
 	}
 
 	return kNetRelayIsAMessage;

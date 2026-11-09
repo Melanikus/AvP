@@ -203,6 +203,9 @@ uint32_t const kRelayJoinMostMs = kNetRelayGiveUpAskingMs + kNetRelayWaitForRead
 size_t const kRelayJoinMostTurns = kRelayJoinMostMs / kRelayWaitMs + 100;   // and the most times it waits, so it ends even if the clock stood still
 int const kRelayMostHostMs = 9999;             // the most round trip the list takes (PROTOCOL.md, section 4)
 
+// A pass time the relay's message can bring is one the list's writer can send on: both are the most a JSON number holds exactly
+static_assert(kNetRelayMostPassTime == kRelayListMostPassTime, "net_relay.h reads pass times up to the most relay_list_text.h can list");
+
 // One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
 // own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
 // service. This checks the two that must never be sent to again, in case the list's rule ever changes: "any address" (0.0.0.0) and

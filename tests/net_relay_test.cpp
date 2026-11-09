@@ -2,6 +2,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port: PROTOCOL.md 7014de1 (the pass, the rule that a field a kind doesn't use is 0, and the
 // echoes that pick a relay); and two checks GitHub's run of dc83d6ee found wrong in this test, not in the code: the host's hellos were
 // counted with its 15 s keep, which falls due at the same moment, and 64 bytes of A's fail the magic before the version.
+// Modified 2026-11-08 by Melanikus for the AvP port: the relay's shared test vectors (tests/vectors/relay-v1.json), and a pass time's limit.
 //
 // WHAT IT TESTS
 //
@@ -11,6 +12,11 @@
 // each does with a message that's wrong in some way (another room's token, another joiner's ticket, an echo's bytes it never sent, a port
 // that can't be a joiner's, the wrong sender).
 //
+// And the relay's own test vectors: a file of exact bytes its repository makes from its own code (tests/vectors/relay-v1.json, copied
+// byte for byte, with its sha256 checked by the gate). Every message in it has to read here to the fields it lists, and every packet it
+// lists as refused has to be refused here for the same reason. So the game and the relay can't each pass their own tests and still read
+// the same bytes differently.
+//
 // WHAT IT DOESN'T TEST
 //
 // The glue in networking.cpp that sends these from the game's own socket (tests/net_start_test.cpp tries some of it), and the relay itself
@@ -18,6 +24,11 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "net_relay.h"
 
@@ -138,8 +149,15 @@ static void TheMessages()
 		"the pass time is 8 bytes at 52, low byte first, and 60-63 are 0");
 	Check(NetRelay_Read(kept.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.number == 0x0102 && memcmp(m.pass, kPass, 16) == 0 && m.passTime == kPassTime,
 		"and they read back");
-	Bytes const farTime = Make(kNetRelayHostKept, kToken, NULL, 0, 0, kPass, 0x0102030405060708ull);
-	Check(NetRelay_Read(farTime.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.passTime == 0x0102030405060708ull, "all 8 bytes of a pass time are its");
+	Bytes const farTime = Make(kNetRelayHostKept, kToken, NULL, 0, 0, kPass, 0x001F030405060708ull);
+	Check(NetRelay_Read(farTime.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.passTime == 0x001F030405060708ull, "each byte of a pass time is its own");
+	Bytes const latest = Make(kNetRelayHostKept, kToken, NULL, 0, 0, kPass, kNetRelayMostPassTime);
+	Check(NetRelay_Read(latest.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.passTime == 9007199254740991ull,
+		"the latest pass time there can be, 2^53 - 1, is read");
+	Bytes const tooLate = Make(kNetRelayHostKept, kToken, NULL, 0, 0, kPass, kNetRelayMostPassTime + 1);
+	Bytes const allOnes = Make(kNetRelayHostOpened, kToken, kCode, 0, 0, kPass, 0xFFFFFFFFFFFFFFFFull);
+	Check(NetRelay_Read(tooLate.b, kNetRelayMessageBytes, &m) == kNetRelayNotPassTime && NetRelay_Read(allOnes.b, kNetRelayMessageBytes, &m) == kNetRelayNotPassTime,
+		"one second later, or every bit set, is refused: the list could never take it, and the relay refuses it too");
 
 	bool everyKind = true;
 
@@ -213,6 +231,7 @@ static void TheMessages()
 		"a packet that isn't a message leaves what it was to be read into as it was");
 
 	Check(strcmp(NetRelay_NotAMessageWhy(kNetRelayNotUnused), "a field its kind of message doesn't use isn't 0") == 0
+		&& strcmp(NetRelay_NotAMessageWhy(kNetRelayNotPassTime), "its pass time is past the most the list takes") == 0
 		&& strcmp(NetRelay_NotAMessageWhy(99), "no such reason") == 0, "each reason has its words, and a number that isn't one says so");
 
 	// Codes and secrets
@@ -603,6 +622,563 @@ static void TheJoiner()
 	Check(!idle.Hear(kControl, cookie.b, 64, 0), "a joiner that never started hears nothing: it isn't using a relay");
 }
 
+// ---- The relay's test vectors (tests/vectors/relay-v1.json)
+//
+// The file is JSON. Only as much of JSON as the file uses is read here: objects, lists, texts (with \" and \\ the only escapes), whole
+// numbers from 0 up, true, false and null. Anything else in it fails the reading, and so the test, as a damaged file should.
+
+int const kJsonNothing = 0;     // null
+int const kJsonTrueFalse = 1;
+int const kJsonNumber = 2;
+int const kJsonText = 3;
+int const kJsonList = 4;
+int const kJsonObject = 5;
+
+struct JsonValue
+{
+	int kind = kJsonNothing;
+	bool truth = false;
+	uint64_t number = 0;
+	std::string text;
+	std::vector<JsonValue> items;     // a list's values, in order
+	std::vector<std::string> names;   // an object's names, in the file's order...
+	std::vector<JsonValue> values;    // ...and the value each one has
+
+	// An object's value with this name, or NULL if it has none
+	const JsonValue *Member(const char *name) const
+	{
+		for (size_t i = 0; i < names.size(); i++)
+		{
+			if (names[i] == name)
+			{
+				return &values[i];
+			}
+		}
+
+		return NULL;
+	}
+};
+
+class JsonReader
+{
+public:
+	explicit JsonReader(const std::string &all) : text(all), at(0)
+	{
+	}
+
+	// Reads the whole text as one value, with nothing after it but spaces and line ends. False if it isn't that.
+	bool ReadAll(JsonValue *out)
+	{
+		if (!Value(out, 0))
+		{
+			return false;
+		}
+
+		Spaces();
+		return at == text.size();
+	}
+
+private:
+	// How deep lists and objects can be inside each other. The file goes 4 deep; this stops a damaged one from going on and on.
+	static size_t const kMostDepth = 16;
+
+	const std::string &text;
+	size_t at;   // how far it has read
+
+	void Spaces()
+	{
+		while (at < text.size() && (text[at] == ' ' || text[at] == '\n' || text[at] == '\r' || text[at] == '\t'))
+		{
+			at++;
+		}
+	}
+
+	// Takes this one letter, after any spaces. False, taking nothing, if the next letter is another.
+	bool Take(char c)
+	{
+		Spaces();
+
+		if (at < text.size() && text[at] == c)
+		{
+			at++;
+			return true;
+		}
+
+		return false;
+	}
+
+	// Takes this word if it's next
+	bool Word(const char *word)
+	{
+		size_t const n = strlen(word);
+
+		if (text.compare(at, n, word) == 0)
+		{
+			at += n;
+			return true;
+		}
+
+		return false;
+	}
+
+	bool Text(std::string *out)
+	{
+		if (!Take('"'))
+		{
+			return false;
+		}
+
+		out->clear();
+
+		while (at < text.size())
+		{
+			char const c = text[at++];
+
+			if (c == '"')
+			{
+				return true;
+			}
+
+			// A line end or other control letter can't be inside a JSON text
+			if (static_cast<unsigned char>(c) < 0x20)
+			{
+				return false;
+			}
+
+			if (c == '\\')
+			{
+				if (at >= text.size() || (text[at] != '"' && text[at] != '\\'))
+				{
+					return false;
+				}
+
+				*out += text[at++];
+			}
+			else
+			{
+				*out += c;
+			}
+		}
+
+		return false;   // the text never ended
+	}
+
+	bool Number(uint64_t *out)
+	{
+		size_t const first = at;
+		uint64_t n = 0;
+
+		while (at < text.size() && text[at] >= '0' && text[at] <= '9')
+		{
+			uint64_t const digit = static_cast<uint64_t>(text[at] - '0');
+
+			// One more digit would need more than 64 bits
+			if (n > (UINT64_MAX - digit) / 10)
+			{
+				return false;
+			}
+
+			n = n * 10 + digit;
+			at++;
+		}
+
+		// No digits at all, or a 0 in front of others, which JSON doesn't allow. A "-", "." or "e" after the digits isn't taken, and then
+		// whatever reads next fails on it.
+		if (at == first || (text[first] == '0' && at - first > 1))
+		{
+			return false;
+		}
+
+		*out = n;
+		return true;
+	}
+
+	bool Value(JsonValue *out, size_t depth)
+	{
+		Spaces();
+
+		if (at >= text.size() || depth > kMostDepth)
+		{
+			return false;
+		}
+
+		char const c = text[at];
+
+		if (c == '{')
+		{
+			at++;
+			out->kind = kJsonObject;
+
+			if (Take('}'))
+			{
+				return true;
+			}
+
+			do
+			{
+				std::string name;
+				JsonValue value;
+
+				// A name given twice would leave which value counts to whoever reads it, so that's refused too
+				if (!Text(&name) || out->Member(name.c_str()) || !Take(':') || !Value(&value, depth + 1))
+				{
+					return false;
+				}
+
+				out->names.push_back(name);
+				out->values.push_back(value);
+			} while (Take(','));
+
+			return Take('}');
+		}
+
+		if (c == '[')
+		{
+			at++;
+			out->kind = kJsonList;
+
+			if (Take(']'))
+			{
+				return true;
+			}
+
+			do
+			{
+				JsonValue item;
+
+				if (!Value(&item, depth + 1))
+				{
+					return false;
+				}
+
+				out->items.push_back(item);
+			} while (Take(','));
+
+			return Take(']');
+		}
+
+		if (c == '"')
+		{
+			out->kind = kJsonText;
+			return Text(&out->text);
+		}
+
+		if (c >= '0' && c <= '9')
+		{
+			out->kind = kJsonNumber;
+			return Number(&out->number);
+		}
+
+		if (Word("true"))
+		{
+			out->kind = kJsonTrueFalse;
+			out->truth = true;
+			return true;
+		}
+
+		if (Word("false"))
+		{
+			out->kind = kJsonTrueFalse;
+			return true;
+		}
+
+		if (Word("null"))
+		{
+			out->kind = kJsonNothing;
+			return true;
+		}
+
+		return false;
+	}
+};
+
+// A whole file of this repository, byte for byte, found from this test's own place: /FC in its settings makes __FILE__ the whole path of
+// this file. Empty if it can't be read.
+static std::string ReadRepositoryFile(const char *name)
+{
+	std::string const here = __FILE__;
+	size_t const tests = here.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((here.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	return all.str();
+}
+
+static int HexDigit(char c)
+{
+	if (c >= '0' && c <= '9')
+	{
+		return c - '0';
+	}
+
+	if (c >= 'a' && c <= 'f')
+	{
+		return c - 'a' + 10;
+	}
+
+	return -1;   // not a hex digit, or a capital one, which the file never writes
+}
+
+// Bytes from hex digits, two to a byte. False for an odd count, or anything that isn't a hex digit.
+static bool FromHex(const std::string &hex, std::vector<uint8_t> *out)
+{
+	out->clear();
+
+	if (hex.size() % 2 != 0)
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < hex.size(); i += 2)
+	{
+		int const high = HexDigit(hex[i]);
+		int const low = HexDigit(hex[i + 1]);
+
+		if (high < 0 || low < 0)
+		{
+			return false;
+		}
+
+		out->push_back(static_cast<uint8_t>(high * 16 + low));
+	}
+
+	return true;
+}
+
+// A field of n bytes as the file gives it: "" for one its kind doesn't use, which is all 0, or exactly n bytes in hex
+static bool FieldBytes(const JsonValue *field, size_t n, uint8_t *out)
+{
+	if (!field || field->kind != kJsonText)
+	{
+		return false;
+	}
+
+	if (field->text.empty())
+	{
+		memset(out, 0, n);
+		return true;
+	}
+
+	std::vector<uint8_t> bytes;
+
+	if (!FromHex(field->text, &bytes) || bytes.size() != n)
+	{
+		return false;
+	}
+
+	memcpy(out, bytes.data(), n);
+	return true;
+}
+
+// The code as the file gives it: "" for none, which is all 0, or its 8 letters as they are
+static bool FieldCode(const JsonValue *field, char *out)
+{
+	if (!field || field->kind != kJsonText || (!field->text.empty() && field->text.size() != kNetRelayCodeLetters))
+	{
+		return false;
+	}
+
+	memset(out, 0, kNetRelayCodeLetters);
+	memcpy(out, field->text.data(), field->text.size());
+	return true;
+}
+
+static bool FieldNumber(const JsonValue *field, uint64_t most, uint64_t *out)
+{
+	if (!field || field->kind != kJsonNumber || field->number > most)
+	{
+		return false;
+	}
+
+	*out = field->number;
+	return true;
+}
+
+// The message a vector's "fields" describe. False if one of its 7 fields is missing, there's one more, or a number is too big for its field.
+static bool FromFields(const JsonValue *fields, NetRelayMessage *m)
+{
+	uint64_t type = 0, port = 0, number = 0, passTime = 0;
+
+	if (!fields || fields->kind != kJsonObject || fields->names.size() != 7 || !FieldNumber(fields->Member("type"), 255, &type)
+		|| !FieldNumber(fields->Member("port"), 65535, &port) || !FieldNumber(fields->Member("number"), 65535, &number)
+		|| !FieldNumber(fields->Member("passTime"), UINT64_MAX, &passTime))
+	{
+		return false;
+	}
+
+	*m = NetRelay_Message(static_cast<int>(type));
+	m->port = static_cast<uint16_t>(port);
+	m->number = static_cast<uint16_t>(number);
+	m->passTime = passTime;
+	return FieldBytes(fields->Member("secret"), kNetRelaySecretBytes, m->secret) && FieldCode(fields->Member("code"), m->code)
+		&& FieldBytes(fields->Member("pass"), kNetRelayPassBytes, m->pass);
+}
+
+static bool SameMessage(const NetRelayMessage &a, const NetRelayMessage &b)
+{
+	return a.type == b.type && memcmp(a.secret, b.secret, kNetRelaySecretBytes) == 0 && memcmp(a.code, b.code, kNetRelayCodeLetters) == 0
+		&& a.port == b.port && a.number == b.number && memcmp(a.pass, b.pass, kNetRelayPassBytes) == 0 && a.passTime == b.passTime;
+}
+
+// The file's word for why some bytes aren't a message, as NetRelay_Read's reason. -1 for a word this test doesn't know, which fails it:
+// a new word means the relay has a rule the game doesn't.
+static int ReasonForWord(const std::string &why)
+{
+	static const struct
+	{
+		const char *word;
+		int reason;
+	} kWords[] = {
+		{ "size", kNetRelayNotMessageSize }, { "magic", kNetRelayNotMagic }, { "version", kNetRelayNotVersion }, { "type", kNetRelayNotType },
+		{ "zero", kNetRelayNotZero }, { "code", kNetRelayNotCode }, { "unused", kNetRelayNotUnused }, { "passtime", kNetRelayNotPassTime },
+	};
+
+	for (const auto &w : kWords)
+	{
+		if (why == w.word)
+		{
+			return w.reason;
+		}
+	}
+
+	return -1;
+}
+
+// A vector's text field, or NULL if it hasn't one
+static const JsonValue *TextMember(const JsonValue &vector, const char *name)
+{
+	const JsonValue *const field = vector.Member(name);
+	return field && field->kind == kJsonText ? field : NULL;
+}
+
+static void TheSharedVectors()
+{
+	printf("The relay's own test vectors (tests/vectors/relay-v1.json)\n");
+
+	std::string const all = ReadRepositoryFile("tests/vectors/relay-v1.json");
+	JsonValue file;
+	JsonReader reader(all);
+	bool const readable = !all.empty() && reader.ReadAll(&file) && file.kind == kJsonObject;
+	Check(readable, "the file is there, and is JSON this test can read");
+
+	if (!readable)
+	{
+		return;
+	}
+
+	const JsonValue *const protocol = TextMember(file, "protocol");
+	Check(protocol && protocol->text == "PROTOCOL.md as at 7014de1", "it was made for PROTOCOL.md as at 7014de1, the one net_relay.h follows");
+
+	const JsonValue *const messages = file.Member("messages");
+	const JsonValue *const refused = file.Member("refused");
+	bool const lists = messages && messages->kind == kJsonList && refused && refused->kind == kJsonList;
+	Check(lists && messages->items.size() == 24 && refused->items.size() == 81, "it has its 24 messages and its 81 refused packets");
+
+	if (!lists)
+	{
+		return;
+	}
+
+	// Each message: read, it gives the fields the file lists; what was read, written again, gives the same bytes; and the file's fields
+	// alone, written, give them too
+	size_t readRight = 0, writtenRight = 0, madeRight = 0;
+	bool kindSeen[kNetRelayMostType + 1] = {};
+
+	for (const JsonValue &vector : messages->items)
+	{
+		const JsonValue *const name = TextMember(vector, "name");
+		const JsonValue *const hex = TextMember(vector, "hex");
+		std::vector<uint8_t> bytes;
+		NetRelayMessage expected = NetRelay_Message(0);
+		NetRelayMessage got = NetRelay_Message(0);
+		bool const usable = name && hex && FromHex(hex->text, &bytes) && FromFields(vector.Member("fields"), &expected);
+		bool const reads = usable && NetRelay_Read(bytes.data(), bytes.size(), &got) == kNetRelayIsAMessage && SameMessage(got, expected);
+		bool writes = false, made = false;
+
+		if (reads)
+		{
+			uint8_t again[kNetRelayMessageBytes];
+			NetRelay_Write(got, again);
+			writes = memcmp(again, bytes.data(), kNetRelayMessageBytes) == 0;
+			kindSeen[got.type] = true;
+		}
+
+		if (usable && bytes.size() == kNetRelayMessageBytes)
+		{
+			uint8_t fresh[kNetRelayMessageBytes];
+			NetRelay_Write(expected, fresh);
+			made = memcmp(fresh, bytes.data(), kNetRelayMessageBytes) == 0;
+		}
+
+		readRight += reads ? 1 : 0;
+		writtenRight += writes ? 1 : 0;
+		madeRight += made ? 1 : 0;
+
+		if (!reads || !writes || !made)
+		{
+			printf("    wrong here: %s\n", name ? name->text.c_str() : "(a message with no name)");
+		}
+	}
+
+	Check(readRight == messages->items.size(), "every message reads to the fields the file lists for it");
+	Check(writtenRight == messages->items.size(), "every message read, then written again, is the same 64 bytes");
+	Check(madeRight == messages->items.size(), "and the file's fields alone, written, make those same 64 bytes");
+
+	bool everyKind = true;
+
+	for (int type = 1; type <= kNetRelayMostType; type++)
+	{
+		everyKind = everyKind && kindSeen[type];
+	}
+
+	Check(everyKind, "all 15 kinds of message are among them");
+
+	// Each refused packet: refused, and for the reason the file gives
+	size_t refusedRight = 0;
+	bool reasonSeen[kNetRelayNotKinds] = {};
+
+	for (const JsonValue &vector : refused->items)
+	{
+		const JsonValue *const name = TextMember(vector, "name");
+		const JsonValue *const hex = TextMember(vector, "hex");
+		const JsonValue *const why = TextMember(vector, "why");
+		std::vector<uint8_t> bytes;
+		NetRelayMessage untouched = NetRelay_Message(0);
+		int const reason = why ? ReasonForWord(why->text) : -1;
+		bool const right = name && hex && FromHex(hex->text, &bytes) && reason > 0 && NetRelay_Read(bytes.data(), bytes.size(), &untouched) == reason;
+
+		if (right)
+		{
+			refusedRight++;
+			reasonSeen[reason] = true;
+		}
+		else
+		{
+			printf("    wrong here: %s\n", name ? name->text.c_str() : "(a refused packet with no name)");
+		}
+	}
+
+	Check(refusedRight == refused->items.size(), "every packet the file lists as refused is refused here, each for the same reason");
+
+	bool everyReason = true;
+
+	for (int reason = 1; reason < kNetRelayNotKinds; reason++)
+	{
+		everyReason = everyReason && reasonSeen[reason];
+	}
+
+	Check(everyReason, "and each reason NetRelay_Read can give is among them, the pass time's too");
+
+	// The file's passes aren't tried here: the game never makes or checks one, it only hands the relay's on to the list. The relay's and
+	// the list's own tests try them.
+}
+
 static void TheTimeWrapping()
 {
 	printf("The time going past 2^32 ms\n");
@@ -621,6 +1197,7 @@ static void TheTimeWrapping()
 int main()
 {
 	TheMessages();
+	TheSharedVectors();
 	PickingARelay();
 	TheHost();
 	TheJoiner();

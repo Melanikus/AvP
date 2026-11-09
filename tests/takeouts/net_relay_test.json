@@ -5,6 +5,16 @@
 	],
 	"rows": [
 		{
+			"name": "a pass time past 2^53 - 1 is read as one",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "if (passTime > kNetRelayMostPassTime)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
 			"name": "a packet of any size is read as a message",
 			"changes": [
 				{
@@ -149,8 +159,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_relay.h",
-					"from": "out->passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * i);",
-					"to": "out->passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * (7 - i));"
+					"from": "passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * i);",
+					"to": "passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * (7 - i));"
 				}
 			]
 		},
@@ -169,8 +179,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_relay.h",
-					"from": "for (size_t i = 0; i < 8; i++)\n\t\t{\n\t\t\tout->passTime",
-					"to": "for (size_t i = 0; i < 4; i++)\n\t\t{\n\t\t\tout->passTime"
+					"from": "for (size_t i = 0; i < 8; i++)\n\t{\n\t\tpassTime",
+					"to": "for (size_t i = 0; i < 4; i++)\n\t{\n\t\tpassTime"
 				}
 			]
 		},
