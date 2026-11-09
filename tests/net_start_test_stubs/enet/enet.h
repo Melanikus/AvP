@@ -47,6 +47,10 @@ struct ENetEvent;
 #define ENET_CALLBACK
 typedef int (ENET_CALLBACK *ENetInterceptCallback)(ENetHost *host, ENetEvent *event);
 
+// Modified 2026-11-09 by Melanikus for the AvP port: our ENet's patch 007, the hook every datagram the host sends goes through (protocol
+// version 2 seals them there)
+typedef int (ENET_CALLBACK *ENetSendCallback)(ENetHost *host, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount);
+
 // The parts of the real one that networking.cpp uses
 struct ENetPeer
 {
@@ -82,6 +86,7 @@ struct ENetHost
 	uint8_t *receivedData;
 	size_t receivedDataLength;
 	ENetInterceptCallback intercept;
+	ENetSendCallback sendHook;            // patch 007: set by networking.cpp once a game uses a relay
 };
 
 struct ENetEvent

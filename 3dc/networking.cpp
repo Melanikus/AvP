@@ -2079,18 +2079,6 @@ void Net_Disconnect()
 	// The ENet host owned this, and has just freed it
 	ServerPeer = NULL;
 
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner's handshake goes with its game, its keys wiped, once
-	// the goodbyes above have gone sealed (a host's went in RelayHostLeave), and the log says how many of the game's datagrams couldn't be
-	// sealed and were dropped
-	if (relayEndToEndPort != 0 && relayEndToEndDropped > 0)
-	{
-		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
-	}
-
-	relayEndToEndDropped = 0;
-	RelayEndToEndForget();
-	relaySealing = false;
-
 	sessionCheckTimer = 0;
 
 	// A host's search counts for the whole game, before the port closes (net_search_log.h)
@@ -2107,6 +2095,18 @@ void Net_Disconnect()
 
 	// The game has closed, and the list was only for this game
 	CoopRemoved_Forget(removedPlayers);
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner's handshake goes with its game, its keys wiped, once
+	// the goodbyes above have gone sealed (a host's went in RelayHostLeave), and the log says how many of the game's datagrams couldn't be
+	// sealed and were dropped
+	if (relayEndToEndPort != 0 && relayEndToEndDropped > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
+	}
+
+	relayEndToEndDropped = 0;
+	RelayEndToEndForget();
+	relaySealing = false;
 }
 
 static NetID IDOfConnection(const ENetPeer *peer);
@@ -3048,16 +3048,16 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						LogString("net: the host's connection closed");
 					}
 
-					NetID const id = IDOfConnection(eEvent.peer);
-
-					eEvent.peer->data = NULL;
-
 					// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner through the relay has gone, so its
 					// handshake ends and its keys go
 					if (AvP.Network == I_Host && PeerIsThroughRelay(eEvent.peer))
 					{
 						RelayEndToEndJoinerLeft(eEvent.peer->address.port);
 					}
+
+					NetID const id = IDOfConnection(eEvent.peer);
+
+					eEvent.peer->data = NULL;
 
 					if (AvP.Network == I_Host)
 					{
@@ -3304,8 +3304,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	{
 		Con_PrintError("Net_ConnectToSession - failed to connect to server!");
 
-		// There's no game, so nothing should stay open: the handshake's keys go too (protocol version 2)
-		RelayEndToEndForget();
+		RelayEndToEndForget();   // the handshake's keys go too (protocol version 2, added 2026-11-09 by Melanikus for the AvP port)
+
+		// There's no game, so nothing should stay open
 		enet_host_destroy(host);
 		host = NULL;
 		ServerPeer = NULL;

@@ -10,6 +10,14 @@
 #include <sstream>
 #include <string>
 
+// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the test now builds the game's real cryptography too
+// (net_crypto_cng.cpp, pq_key_exchange.cpp), which needs Windows' own headers. So GUID and IsEqualGUID are Windows' own now, from the
+// smallest windows.h (no COM, no multimedia, no min and max), and the stand-ins below that share a name with a Windows function are
+// renamed after it, so the game's calls reach the stand-ins and nothing clashes.
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+
 #define _console_h_
 #define _ConfigFile_h_
 #define LOGSTRING_H
@@ -17,19 +25,7 @@ void LogString(const std::string &logString);
 
 typedef uint32_t NetID;
 
-typedef struct _GUID
-{
-	unsigned long Data1;
-	unsigned short Data2;
-	unsigned short Data3;
-	unsigned char Data4[8];
-} GUID;
-
-inline bool IsEqualGUID(const GUID &a, const GUID &b)
-{
-	return memcmp(&a, &b, sizeof(GUID)) == 0;
-}
-
+// Not in the smallest windows.h: the stand-in's own
 inline long CoCreateGuid(GUID *guid)
 {
 	memset(guid, 0, sizeof(GUID));
@@ -44,13 +40,18 @@ inline uint32_t timeGetTime()
 	return fakeTime;
 }
 
-inline void Sleep(unsigned long)
+inline void NetStartTestSleep(unsigned long)
 {
 }
 
-inline void OutputDebugString(const char *)
+inline void NetStartTestOutputDebugString(const char *)
 {
 }
+
+#undef Sleep
+#define Sleep NetStartTestSleep
+#undef OutputDebugString
+#define OutputDebugString NetStartTestOutputDebugString
 
 // console.h
 typedef void (*funcPointer)(void);
@@ -119,6 +120,7 @@ typedef struct
 	uint16_t gameStyle;
 	uint8_t players;
 	uint8_t maxPlayers;
+	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // added 2026-11-09 by Melanikus for the AvP port: as menus.h has it (protocol version 2)
 } SESSION_DESC;
 
 #define MAX_NO_OF_SESSIONS 10

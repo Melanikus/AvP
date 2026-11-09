@@ -13,6 +13,7 @@
 #include "networking.h"
 #include "net_checks.h"
 #include "net_relay.h"
+#include "net_peer_v2.h"
 #include "relay_list.h"
 
 #include <algorithm>
@@ -399,6 +400,7 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	theHost.olderConnectsRefused = 0;
 	theHost.socket = 77;
 	theHost.intercept = NULL;
+	theHost.sendHook = NULL;   // patch 007's hook: none until the game sets one (added 2026-11-09 by Melanikus for the AvP port)
 
 	if (address)
 	{
@@ -759,6 +761,42 @@ static std::deque<WaitingDatagram> datagramsWaiting;
 // The last thing the game sent from that socket, byte for byte
 static std::vector<uint8_t> lastDatagramSent;
 
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay, as far as handshake B goes. A joiner runs
+// B over its port on the relay before ENet connects, so a join through the relay needs a host that answers: this is the real host's side
+// of B (net_peer_v2.h), with an identity of its own, whose fingerprint the test's games on the list carry. Whatever the game sends to that
+// port as a handshake datagram it reads, and its answers arrive from that port, as through a real relay.
+static NetIdentity scriptedHostIdentity;
+static NetPeerHostSide scriptedHostSide;
+static uint16_t const kScriptedHostPort = 27501;
+
+static void ScriptedHostAnswers(const ENetAddress *to, const uint8_t *bytes, size_t size)
+{
+	if (!to || to->host != kRelayHost || to->port != kScriptedHostPort || size < 4 || memcmp(bytes, "AVPE", 4) != 0 || !scriptedHostIdentity.made)
+	{
+		return;
+	}
+
+	if (scriptedHostSide.Port() == 0)
+	{
+		scriptedHostSide.Start("virginia", kScriptedHostPort, &scriptedHostIdentity, enetClock);
+	}
+
+	static uint8_t opened[kNetSealedGameMostBytes];
+	size_t written = 0;
+	scriptedHostSide.Hear(bytes, size, opened, sizeof(opened), &written, enetClock);
+	NetPeerSend sends[kNetPeerMostSends];
+	size_t const count = scriptedHostSide.TakeSends(sends, kNetPeerMostSends);
+
+	for (size_t i = 0; i < count; i++)
+	{
+		WaitingDatagram answer;
+		answer.bytes.assign(sends[i].bytes, sends[i].bytes + sends[i].size);
+		answer.from.host = kRelayHost;
+		answer.from.port = kScriptedHostPort;
+		datagramsWaiting.push_back(answer);
+	}
+}
+
 int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32)
 {
 	if (socket == ENET_SOCKET_NULL)
@@ -794,8 +832,12 @@ int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *b
 		return -1;
 	}
 
-	// A relay message (net_relay.h) has no game header to look at: its kind is where a header's gap is
-	if (buffers && buffers->data && buffers->dataLength >= sizeof(MessageHeader)
+	// A relay message (net_relay.h) has no game header to look at: its kind is where a header's gap is. Nor has a handshake datagram or a
+	// sealed one (protocol version 2, 'AVPE' and 'AVPG'), modified 2026-11-09 by Melanikus for the AvP port.
+	bool const endToEnd = buffers && buffers->data && buffers->dataLength >= 4
+		&& (memcmp(buffers->data, "AVPE", 4) == 0 || memcmp(buffers->data, "AVPG", 4) == 0);
+
+	if (buffers && buffers->data && buffers->dataLength >= sizeof(MessageHeader) && !endToEnd
 		&& NetRelay_Read((const uint8_t *)buffers->data, buffers->dataLength, NULL) != kNetRelayIsAMessage)
 	{
 		LookAtTheGapInAHeader(buffers->data);
@@ -806,6 +848,7 @@ int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *b
 		uint8_t const *const bytes = (uint8_t const *)buffers->data;
 
 		lastDatagramSent.assign(bytes, bytes + buffers->dataLength);
+		ScriptedHostAnswers(address, bytes, buffers->dataLength);
 	}
 
 	datagramsSent++;
@@ -888,6 +931,7 @@ static void EndTheGame()
 {
 	Net_Disconnect();
 	AvP.Network = I_No_Network;
+	scriptedHostSide.Reset();   // the host behind the relay's handshake goes with the game too (protocol version 2)
 }
 
 // Modified 2026-11-08 by Melanikus for the AvP port: hosting through a relay (net_relay.h, PROTOCOL.md 7014de1), with the list naming one.
@@ -964,7 +1008,9 @@ static void TestHostingThroughTheRelay()
 	uint8_t gamePacket[40];
 	memset(gamePacket, 0x11, sizeof(gamePacket));
 	TellTheHost(kRelayHost, 27501, gamePacket, sizeof(gamePacket));
-	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's packet, through its port on the relay, is the game's: ENet reads it");
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a plain datagram from a joiner's port is never ENet's now;
+	// only a sealed one that opens is
+	Check(theHost.intercept(&theHost, NULL) == 1, "a plain packet from a joiner's port on the relay is dropped before ENet reads it: only a sealed one that opens is the game's");
 	TellTheHost(0x0200007F, 27501, gamePacket, sizeof(gamePacket));
 	Check(theHost.intercept(&theHost, NULL) == 1, "and anything from anywhere but the relay is dropped");
 
@@ -1055,6 +1101,8 @@ static RelayListGame AGameOnTheList(const char *code)
 	game.players = 1;
 	game.maxPlayers = 4;
 	game.version = kMultiplayerVersion;
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay's fingerprint, as a listing carries it
+	memcpy(game.fingerprint, scriptedHostIdentity.fingerprint, sizeof(game.fingerprint));
 	return game;
 }
 
@@ -1192,7 +1240,21 @@ static void TestJoiningThroughTheRelay()
 	TellTheHost(0x0200007F, 27501, notTheRelays, sizeof(notTheRelays));
 	Check(theHost.intercept(&theHost, NULL) == 1, "a packet from anywhere but the relay is dropped before ENet reads it");
 	TellTheHost(kRelayHost, 27501, notTheRelays, sizeof(notTheRelays));
-	Check(theHost.intercept(&theHost, NULL) == 0, "while the game's own, from its port on the relay, are ENet's to read");
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a plain one from its port too; the game's own come sealed
+	Check(theHost.intercept(&theHost, NULL) == 1, "and so is a plain one from its port on the relay: the game's own come sealed");
+	{
+		// The host behind the relay has the keys too (B5 went), so what it seals opens here, and ENet reads the opened bytes
+		uint8_t plain[40];
+		memset(plain, 0x5C, sizeof(plain));
+		static uint8_t sealed[kNetSealedGameMostBytes];
+		size_t sealedSize = 0;
+		bool const sealedIt = scriptedHostSide.Ready() && scriptedHostSide.Seal(plain, sizeof(plain), sealed, sizeof(sealed), &sealedSize, enetClock);
+		TellTheHost(kRelayHost, 27501, sealed, sealedSize);
+		Check(sealedIt && theHost.intercept(&theHost, NULL) == 0 && theHost.receivedDataLength == sizeof(plain) && memcmp(theHost.receivedData, plain, sizeof(plain)) == 0,
+			"handshake B ran with the host the list named, and a game datagram it sealed opens here, for ENet to read as it was");
+		TellTheHost(kRelayHost, 27501, sealed, sealedSize);
+		Check(theHost.intercept(&theHost, NULL) == 1, "the same sealed datagram again is dropped: none is taken twice");
+	}
 	EndTheGame();
 
 	// The relay says no
@@ -3453,6 +3515,9 @@ int main()
 	// The tests written before the request to join (version 114) let their joiners in at once, as a test's host does. TestTheRequestToJoin
 	// is the one that asks.
 	Net_LetEveryJoinerIn(true);
+
+	// The host behind the relay's identity (protocol version 2), made once, as the game makes one each run
+	Check(NetIdentity_Make(&scriptedHostIdentity), "the host behind the test's relay has an identity, for handshake B");
 
 	TestStartingTheGame();
 	TestNobodyToSendTo();
