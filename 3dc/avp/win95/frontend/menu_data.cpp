@@ -17,7 +17,8 @@
 //   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
-//   the Join page's first row is "Find Games": its search asks this network and the online list of games (language.cpp's words)
+//   the Join page's first row is "Find Games": its search looks on this network, and with -dev asks the online list of games too
+//   (language.cpp's words, which promise a player only this network)
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
