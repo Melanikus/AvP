@@ -13,12 +13,18 @@
 //   the PIXELGLOW, PIXELCURVE and PIXELLEVEL commands, which change how a lamp's light looks per pixel
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   only a host can restart a network game
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the NEWDYNAMICCOLLISIONS command, which says whether a slide along a wall goes on at any frame rate (#180)
 #include "3dc.h"
 #include "console_command.hpp"
 #include "build_identity.h"
 #include "strutil.h"
 #include "fmvCutscenes.h"
 #include "view_switches.h"
+#include "new_dynamic_collisions.h"
+#include "logString.h"
+
+extern void NewOnScreenMessage(char *messagePtr);
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "3dc.h"
@@ -324,6 +330,27 @@ static void CompleteLevel(void)
 	AvP.LevelCompleted = 1;
 }
 
+// NEWDYNAMICCOLLISIONS, the console command: see new_dynamic_collisions.h. It's a player's setting, not a cheat, and it's there in a
+// network game too. It only changes how the things this machine moves meet walls: its own player, and on a host the NPCs and objects
+// it runs. Off only makes them snag more, and on, the fair way, is where every run starts. It isn't kept in the settings.
+static void NewDynamicCollisionsCommand(char *words)
+{
+	char const *said = NewDynamicCollisions_FromWords(words, &NewDynamicCollisionsOn) ? NewDynamicCollisions_Words(NewDynamicCollisionsOn)
+		: kNewDynamicCollisionsRefused;
+
+	static char message[100];
+	_snprintf(message, sizeof(message) - 1, "%s", said);
+	message[sizeof(message) - 1] = 0;
+
+	// There's no HUD to show it on until a level has started.
+	if (AvP.MainLoopRunning)
+	{
+		NewOnScreenMessage(message);
+	}
+
+	LogString(message);
+}
+
 void CreateGameSpecificConsoleCommands(void)
 {
 	ShowDebuggingText.FPS = 0;
@@ -378,6 +405,14 @@ void CreateGameSpecificConsoleCommands(void)
 		"SHADOWAMBIENT",
 		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
 		ShadowAmbientCommand
+	);
+
+	// A player's setting too, there for everyone and on by default, so that a player can switch it off to compare. See new_dynamic_collisions.h.
+	ConsoleCommand::Make
+	(
+		"NEWDYNAMICCOLLISIONS",
+		"WHETHER A SLIDE ALONG A WALL GOES ON AT ANY FRAME RATE: ON OR OFF. OFF MEETS WALLS AS IN 1999. ON ITS OWN, SWITCHES IT",
+		NewDynamicCollisionsCommand
 	);
 
 	// Only do anything with -dev, and they say so without it. See view_switches.h.
