@@ -22,6 +22,7 @@
 #include "3dc.h"
 #include "dynblock.h"
 #include "gamedef.h"
+#include "strategy_def.h"
 #include "env_info.h"
 #include "equipment.h"
 #include "vision.h"
@@ -383,6 +384,25 @@ static void TestCountingRefusals()
 	Save_StartCountingRefusals();
 }
 
+// A target found by a name from the save is kept only with a place in the world
+static void TestTargets()
+{
+	STRATEGYBLOCK withPlace, withoutPlace;
+	DYNAMICSBLOCK dynamics;
+	memset(&withPlace, 0, sizeof(withPlace));
+	memset(&withoutPlace, 0, sizeof(withoutPlace));
+	memset(&dynamics, 0, sizeof(dynamics));
+	withPlace.DynPtr = &dynamics;
+
+	Save_StartCountingRefusals();
+	Check(Save_TargetWithAPlace(&withPlace) == &withPlace, "a target with a place in the world is kept");
+	Check(Save_TargetWithAPlace(0) == 0, "no target stays no target");
+	CheckNothingRefused("and neither counts as refused");
+	Check(Save_TargetWithAPlace(&withoutPlace) == 0, "a target with no place in the world, such as a placed sound, isn't kept");
+	CheckRefusedBy("a target with no place in the world", 1, "and it counts as refused");
+	Save_StartCountingRefusals();
+}
+
 // Reads a file of the game as text. /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it.
 static std::string ReadSourceFile(char const *name)
 {
@@ -466,6 +486,16 @@ static void TestTheLoadersAsk()
 	Check(Has(ReadSourceFile("3dc/avp/bh_binary_switch.cpp"), "if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))"), "a switch's sequence has to be its own");
 	Check(Has(ReadSourceFile("3dc/avp/bh_link_switch.cpp"), "if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))"), "and a linked switch's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_light.cpp"), "if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))"), "and a light's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_weapon.cpp"), "behav->Target = Save_TargetWithAPlace(behav->Target);"),
+		"a saved disc's target has to have a place in the world to home on");
+	Check(Has(ReadSourceFile("3dc/avp/bh_alien.cpp"), "alienStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(alienStatusPointer->Target_SBname));"),
+		"and an alien's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_marine.cpp"), "marineStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(marineStatusPointer->Target_SBname));"),
+		"and a marine's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_predator.cpp"), "predatorStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(predatorStatusPointer->Target_SBname));"),
+		"and a predator's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_xeno.cpp"), "xenoStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(xenoStatusPointer->Target_SBname));"),
+		"and a xenoborg's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_lift_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "a lift door's frame has to be real");
 	Check(Has(ReadSourceFile("3dc/avp/bh_switch_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a switch door's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_types.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a proximity door's");
@@ -489,6 +519,7 @@ int main()
 	TestRanges();
 	TestDynamics();
 	TestCountingRefusals();
+	TestTargets();
 	TestTheLoadersAsk();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");

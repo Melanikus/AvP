@@ -10,6 +10,7 @@
 #include "3dc.h"
 #include "dynblock.h"
 #include "gamedef.h"
+#include "strategy_def.h"
 #include "env_info.h"
 #include "equipment.h"
 #include "vision.h"
@@ -314,4 +315,15 @@ void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
 	live->PrevOrientEuler.EulerX &= wrap360;
 	live->PrevOrientEuler.EulerY &= wrap360;
 	live->PrevOrientEuler.EulerZ &= wrap360;
+}
+
+struct strategyblock *Save_TargetWithAPlace(struct strategyblock *found)
+{
+	if (found && !found->DynPtr)
+	{
+		Save_NoteRefused("a target with no place in the world");
+		return 0;
+	}
+
+	return found;
 }
