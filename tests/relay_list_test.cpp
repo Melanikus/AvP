@@ -859,6 +859,12 @@ static void TestTheMenus()
 	// search empties the list of games found and fills it again, so by the time Enter is pressed, a row's number can be another game's.
 	Check(Has(menus, "int const s = OnlinePage_SessionForRow(AvPMenus.CurrentlySelectedElement);") && !Has(menus, "int s = AvPMenus.CurrentlySelectedElement;"),
 		"a join goes to the game on its row, found by its code or its address, never by the row's number");
+
+	// A player asking to join: the host's two answer rows come in front of the page's own, and the selection moves down with the row it
+	// was on, so it's never on "Let NAME in" by itself: Enter pressed by chance can't let anyone in
+	std::string const answers = SourceSlice(menus, "static void UpdateTheAnswerRows(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(answers, "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);") && Has(answers, "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;"),
+		"the host's answer rows never take the selection when they come, and only the first lets the player in");
 }
 
 // An IPv4 address with its first number in the highest byte, as RelayList_AddressRefusal takes it

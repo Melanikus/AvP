@@ -4,7 +4,7 @@
 // Nothing in here draws, reads a file or touches the network. It only works things out, so tests/online_screens_test.cpp can check all of it
 // without the game. online_screens_page.cpp is the part that draws, with the game's own fonts and pictures.
 //
-// The screens, by the names the plan gives them (AvP-docs/game/online-play-screens.md):
+// The screens, by the short names the code and its comments use for them (docs/online-play.md says what a player sees on each):
 //   J1 looking for games, J2 the list of games, J3 joining through a relay, J4 asking the host, J5 the host's answer: the joiner's.
 //   H1 someone asks to join, H2 the relay's news: the host's.
 //
@@ -181,6 +181,8 @@ enum OnlineWords
 	kOnlineWordsCouldNotJoin,         //     the start of a failed join's line, before the networking code's own words
 	kOnlineWordsGameHasGone,          //     why a game that's gone can't be joined
 	kOnlineWordsListFailed,           // J1 and J2: the start of the line when the list of games didn't answer, before the list code's words
+	kOnlineWordsHostBusy,             // J5: the host was answering someone else
+	kOnlineWordsEscToAnswer,          // H1: in play, after the asking line, how the host gets to the answer
 	kOnlineWordsRelayFinding,         // H2
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,

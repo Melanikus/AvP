@@ -705,6 +705,26 @@
 			]
 		},
 		{
+			"name": "SOURCE: the host's answer rows take the selection when they come",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);",
+					"to": "int const selected = ours ? AvPMenus.CurrentlySelectedElement : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both answer rows let the player in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "answerRows[answer].MaxValue = answer == 0 ? 1 : 0;",
+					"to": "answerRows[answer].MaxValue = 1;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: a join goes to the row number, not its game",
 			"changes": [
 				{

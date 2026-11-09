@@ -4,8 +4,9 @@
 // online_screens.h has the sums and the fixed words, and its test checks them. This file is the part that needs the game: it draws them,
 // and it reads the networking code's list of games found (SessionData). menus.cpp calls it, from the games page and the join's wait.
 //
-// The screens (AvP-docs/game/online-play-screens.md): J1 looking for games, J2 the list, J3 joining through a relay, and the made-up run
-// of every screen that -dev -onlinescreens shows for pictures. J4, J5 and the host's H1 come with the request to join (Fifth's side).
+// The screens, by online_screens.h's short names: J1 looking for games, J2 the list, J3 joining through a relay, J4 and J5 asking the host
+// and its answer, the host's H1, and the made-up run of every screen that -dev -onlinescreens shows for pictures. H2, the relay's news on
+// the host's screen in play, is in that run only for now: the game itself says it in the log (the "net:" lines).
 
 #ifndef ONLINE_SCREENS_PAGE_H
 #define ONLINE_SCREENS_PAGE_H
@@ -55,6 +56,32 @@ void OnlinePage_DrawRow(int row, int brightness);
 // One whole frame of the joining screen, drawn from inside the join's wait (menus.cpp's KeepTheWindowAliveWhileJoining, every 50 ms).
 // region is the game's relay region from SessionData, made safe here.
 void OnlinePage_DrawJoining(const char *region);
+
+// ---- Asking the host: J4 and J5 (the request to join: networking.h, Fifth's)
+
+// The joiner is about to join the game on this row. The page remembers which game it was, so that when the join ends and the page opens
+// again, the selection goes back to that game.
+void OnlinePage_Joining(int row);
+
+// The joining page, each frame: J4 while the request waits (the tail, its seconds and Esc), and "The host let you in" once the host has
+// said yes and the game is on its way. False when there's no request, and the page shows its own row as before.
+bool OnlinePage_DrawAsking(void);
+
+// The joining page's connection has ended before the game was joined. True when that was the request's own end: the host said no, was
+// answering someone else, didn't answer in time, or the player gave up with Esc while it waited. The games page then says which, and the
+// menus go back to it.
+bool OnlinePage_JoinEnded(void);
+
+// ---- The host's side: H1
+
+// The request waiting at this host, if there is one: its joiner's name made safe to draw, and how many seconds are left to answer it.
+bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft);
+
+// The host's answer, from the menu's row. An answer for a request that's gone does nothing (Net_AnswerJoinRequest).
+void OnlineHost_Answer(bool yes);
+
+// Each frame of play, from the game's loop: while a request waits, a line on the screen every 5 s says who asks and how to answer
+void OnlineHost_InPlayFrame(void);
 
 // ---- -dev -onlinescreens: every screen, with made-up games and no network, for pictures
 

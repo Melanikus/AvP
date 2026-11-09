@@ -35,6 +35,7 @@
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   -dev -onlinescreens shows every online-play screen at the menus, with made-up games, for pictures (online_screens_page.h)
+//   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer
 
 #include "3dc.h"
 #include "build_identity.h"
@@ -950,6 +951,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 							// A tester's mark: noted now, and its picture taken when this frame is drawn
 							Mark_ReadKey();
+
+							// A player asking to join this host: a line on the screen says who, and that Esc gets to the answer
+							OnlineHost_InPlayFrame();
 
 							FlushTextprintBuffer();
 

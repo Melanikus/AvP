@@ -92,6 +92,10 @@ static bool failedShown = false;
 static char listFailedLine[96];
 static bool listFailed = false;
 
+// The game last joined, to select again when the page opens after the join ends
+static OnlineGameKey joinedKey;
+static bool joinedKeyKept = false;
+
 static uint32_t Now(void)
 {
 	return (uint32_t)GetTickCount();
@@ -282,9 +286,10 @@ void OnlinePage_Opened(void)
 {
 	uint32_t const now = Now();
 
+	// A failed join's line stays: the menus come back here after a join that ended, and the line says why. It goes by itself in a few
+	// seconds. So does the game last joined, which the selection goes back to once it's found again.
 	shownCount = 0;
 	askNow = false;
-	failedShown = false;
 	listFailed = false;
 	openedAt = now;
 	settling = true;
@@ -361,10 +366,13 @@ bool OnlinePage_Frame(bool listChanged, int *selectedRow)
 	OnlineRow live[kOnlineMostRows];
 	int const liveCount = LiveRows(live, kMostShown);
 
+	bool settledNow = false;
+
 	if (settling && HasCome(Now(), settleAt))
 	{
 		// The asks have had their time: a game that hasn't answered is marked gone, for one refresh
 		settling = false;
+		settledNow = true;
 		shownCount = OnlineScreens_MergeRows(before, beforeCount, live, liveCount, shownRows, kMostShown);
 	}
 	else
@@ -372,7 +380,28 @@ bool OnlinePage_Frame(bool listChanged, int *selectedRow)
 		UpdateAndAdd(live, liveCount);
 	}
 
-	int const newRow = hadOne ? OnlineScreens_SelectAgain(selected, oldRow, shownRows, shownCount) : (shownCount > 0 ? 0 : -1);
+	int newRow = hadOne ? OnlineScreens_SelectAgain(selected, oldRow, shownRows, shownCount) : (shownCount > 0 ? 0 : -1);
+
+	// Back from a join that ended: the selection goes to the game that was joined, once it's on the page again. If it hasn't come back by
+	// the time the asks have had their time, it's gone, and the selection stays where it is.
+	if (joinedKeyKept)
+	{
+		for (int row = 0; row < shownCount; row++)
+		{
+			if (OnlineScreens_SameGame(shownRows[row].key, joinedKey))
+			{
+				newRow = row;
+				joinedKeyKept = false;
+				break;
+			}
+		}
+
+		if (settledNow)
+		{
+			joinedKeyKept = false;
+		}
+	}
+
 	*selectedRow = newRow < 0 ? 0 : newRow;
 
 	bool changed = shownCount != beforeCount || *selectedRow != oldRow;
@@ -617,6 +646,165 @@ void OnlinePage_DrawJoining(const char *region)
 	FlipBuffers();
 }
 
+// Two lines in the middle of the page, as every waiting and answering screen has them, with the tail above while something is waited for
+static void TwoLines(const char *first, const char *second, bool tail)
+{
+	if (tail)
+	{
+		DrawTail(kTailX, kTailY, kTailSize, ONE_FIXED);
+	}
+
+	Words(first, MENU_CENTREX, kWordsTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	Words(second, MENU_CENTREX, kWordsTop + 20, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+}
+
+// The failed join's line on the games page, in the page's own fixed words
+static void SayOnThePage(const char *words)
+{
+	Put(failedLine, sizeof(failedLine), words);
+	failedAt = Now();
+	failedShown = true;
+}
+
+// ---- Asking the host: J4 and J5
+
+static uint32_t askedAt = 0;          // when this joiner's request began to wait, for its seconds
+static bool askTimed = false;
+
+void OnlinePage_Joining(int row)
+{
+	if (row >= 0 && row < shownCount)
+	{
+		joinedKey = shownRows[row].key;
+		joinedKeyKept = true;
+	}
+
+	askTimed = false;
+}
+
+bool OnlinePage_DrawAsking(void)
+{
+	int const answer = Net_JoinAnswerNow();
+
+	if (answer == kNetJoinAnswerWaiting)
+	{
+		if (!askTimed)
+		{
+			askTimed = true;
+			askedAt = Now();
+		}
+
+		char line[96];
+		OnlineScreens_WordsWithSeconds(kOnlineWordsAsking, OnlineScreens_SecondsLeft(askedAt, Now(), kNetJoinAnswerWithinMs), line, sizeof(line));
+		TwoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);
+		return true;
+	}
+
+	if (answer == kNetJoinAnswerYes)
+	{
+		TwoLines(OnlineScreens_Words(kOnlineWordsLetIn), "", false);
+		return true;
+	}
+
+	return false;
+}
+
+bool OnlinePage_JoinEnded(void)
+{
+	askTimed = false;
+
+	switch (Net_JoinAnswerNow())
+	{
+		case kNetJoinAnswerNo:
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsSaidNo));
+			return true;
+		case kNetJoinAnswerBusy:
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsHostBusy));
+			return true;
+		case kNetJoinAnswerNoAnswer:
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));
+			return true;
+		case kNetJoinAnswerWaiting:
+			// The host's no, busy and no answer all come as answers (networking.h), so a request still waiting when the join ends was Esc
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsGaveUp));
+			return true;
+		default:
+			return false;
+	}
+}
+
+// ---- The host's side: H1
+
+static NetJoinWho askingWho;
+static bool hostIsAsked = false;
+static uint32_t hostAskedAt = 0;
+static uint32_t nextInPlayLineAt = 0;
+
+bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft)
+{
+	char raw[64];
+	NetJoinWho who;
+
+	if (!Net_JoinRequestWaiting(raw, sizeof(raw), &who))
+	{
+		hostIsAsked = false;
+		return false;
+	}
+
+	// A new request, or another joiner's: its seconds start now
+	if (!hostIsAsked || who.connection != askingWho.connection || who.connectID != askingWho.connectID)
+	{
+		hostIsAsked = true;
+		askingWho = who;
+		hostAskedAt = Now();
+		nextInPlayLineAt = hostAskedAt;
+		LogString("online screens: a player asks to join this game");
+	}
+
+	// The name is the joiner's own words: only the letters the font has are drawn
+	OnlineScreens_SafeName(raw, sizeof(raw), safeName, size);
+	*secondsLeft = OnlineScreens_SecondsLeft(hostAskedAt, Now(), kNetJoinAnswerWithinMs);
+	return true;
+}
+
+void OnlineHost_Answer(bool yes)
+{
+	if (!hostIsAsked)
+	{
+		return;
+	}
+
+	Net_AnswerJoinRequest(askingWho, yes);
+	hostIsAsked = false;
+
+	// No name in the log: who asked is the player's business, and the log is made to be sent to us
+	LogString(yes ? "online screens: the host let the player in" : "online screens: the host said no to the player");
+}
+
+extern void NewOnScreenMessage(char *messagePtr);
+
+void OnlineHost_InPlayFrame(void)
+{
+	char name[kOnlineRowLetters];
+	int seconds = 0;
+
+	if (!OnlineHost_AskWaiting(name, sizeof(name), &seconds) || !HasCome(Now(), nextInPlayLineAt))
+	{
+		return;
+	}
+
+	nextInPlayLineAt = Now() + 5000;
+
+	// The screen keeps the words it's given, so they're kept here, for as long as the game runs
+	static char shown[128];
+	char asking[96];
+
+	OnlineScreens_AskingWords(name, seconds, asking, sizeof(asking));
+	_snprintf(shown, sizeof(shown) - 1, "%s. %s", asking, OnlineScreens_Words(kOnlineWordsEscToAnswer));
+	shown[sizeof(shown) - 1] = '\0';
+	NewOnScreenMessage(shown);
+}
+
 // ---- -dev -onlinescreens
 
 static bool demoIsOn = false;
@@ -642,18 +830,23 @@ static const char *const kDemoSteps[] =
 	"J2 a game has gone",
 	"J3 reaching the relay",
 	"J3 the relay is introducing you",
-	"J3 you gave up joining",
 	"J4 asking the host",
 	"J5 the host let you in",
-	"J5 the host said no",
-	"J5 the host did not answer",
-	"J5 could not join",
+	"J5 back on the list: you gave up joining",
+	"J5 back on the list: the host said no",
+	"J5 back on the list: the host was busy",
+	"J5 back on the list: the host did not answer",
+	"J5 back on the list: could not join",
 	"H1 someone asks to join",
 	"H2 finding the nearest relay",
 	"H2 your game is on the list",
 	"H2 no relay answered",
 	"H2 the room on the relay has gone"
 };
+
+// Where the run's screens fall in that list. The four H2 screens are the last.
+static const int kDemoFirstJoining = 6, kDemoFirstBackOnTheList = 10, kDemoAsked = 15, kDemoFirstNews = 16;
+static_assert(sizeof(kDemoSteps) / sizeof(kDemoSteps[0]) == kDemoFirstNews + 4, "kDemoSteps and the places of its screens must agree");
 
 static const int kDemoStepCount = (int)(sizeof(kDemoSteps) / sizeof(kDemoSteps[0]));
 
@@ -694,16 +887,23 @@ static void DemoRow(const DemoGame &game, OnlineRow *row)
 	row->session = -1;
 }
 
-// Two lines in the middle of the page, as every waiting and answering screen has them
-static void DemoLines(const char *first, const char *second, bool tail)
+// The made-up games as the list shows them, one of them selected, and a line under them as a join that ended leaves it
+static void DrawDemoList(bool showGone, int selectedRow, const char *line)
 {
-	if (tail)
+	DrawHeadings();
+
+	for (int g = 0; g < kDemoGameCount; g++)
 	{
-		DrawTail(kTailX, kTailY, kTailSize, ONE_FIXED);
+		OnlineRow row;
+		DemoRow(kDemoGames[g], &row);
+		row.gone = row.gone && showGone;
+		DrawOneRow(row, kFirstRowTop + g * kRowStep, g == selectedRow ? BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT : BRIGHTNESS_OF_DARKENED_ELEMENT);
 	}
 
-	Words(first, MENU_CENTREX, kWordsTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-	Words(second, MENU_CENTREX, kWordsTop + 20, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	if (line)
+	{
+		Words(line, MENU_CENTREX, kFirstRowTop + kDemoGameCount * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
 }
 
 static void DrawDemoStep(int step)
@@ -714,11 +914,12 @@ static void DrawDemoStep(int step)
 	OnlineSearch state;
 	uint32_t const now = Now();
 
-	if (step <= 5)
+	// The page each screen is on: the games page, the joining page, or play (H1 and H2), which has no title
+	if (step < kDemoFirstJoining || (step >= kDemoFirstBackOnTheList && step < kDemoAsked))
 	{
 		RenderMenuText(gamesTitle, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
-	else if (step <= 13)
+	else if (step < kDemoFirstBackOnTheList)
 	{
 		RenderMenuText(joiningTitle, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
@@ -742,20 +943,9 @@ static void DrawDemoStep(int step)
 			break;
 		case 4:
 		case 5:
-		{
-			DrawHeadings();
-
-			for (int g = 0; g < kDemoGameCount; g++)
-			{
-				// The first picture has the gone game still there; the second shows it gone
-				OnlineRow row;
-				DemoRow(kDemoGames[g], &row);
-				row.gone = row.gone && step == 5;
-				DrawOneRow(row, kFirstRowTop + g * kRowStep, g == 1 ? BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT : BRIGHTNESS_OF_DARKENED_ELEMENT);
-			}
-
+			// The first picture has the gone game still there; the second shows it gone
+			DrawDemoList(step == 5, 1, NULL);
 			break;
-		}
 		case 6:
 			JoiningLine(kNetRelayJoinStepReaching, "saopaulo", line, sizeof(line));
 			DrawJoiningBody(line);
@@ -765,43 +955,48 @@ static void DrawDemoStep(int step)
 			DrawJoiningBody(line);
 			break;
 		case 8:
-			DemoLines(OnlineScreens_Words(kOnlineWordsGaveUp), OnlineScreens_Words(kOnlineWordsBackToList), false);
+			OnlineScreens_WordsWithSeconds(kOnlineWordsAsking, 25, line, sizeof(line));
+			TwoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);
 			break;
 		case 9:
-			OnlineScreens_WordsWithSeconds(kOnlineWordsAsking, 25, line, sizeof(line));
-			DemoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);
+			TwoLines(OnlineScreens_Words(kOnlineWordsLetIn), "", false);
 			break;
 		case 10:
-			DemoLines(OnlineScreens_Words(kOnlineWordsLetIn), "", false);
+			DrawDemoList(false, 0, OnlineScreens_Words(kOnlineWordsGaveUp));
 			break;
 		case 11:
-			DemoLines(OnlineScreens_Words(kOnlineWordsSaidNo), OnlineScreens_Words(kOnlineWordsBackToList), false);
+			DrawDemoList(false, 0, OnlineScreens_Words(kOnlineWordsSaidNo));
 			break;
 		case 12:
-			DemoLines(OnlineScreens_Words(kOnlineWordsNoAnswer), OnlineScreens_Words(kOnlineWordsBackToList), false);
+			DrawDemoList(false, 0, OnlineScreens_Words(kOnlineWordsHostBusy));
 			break;
 		case 13:
-			_snprintf(line, sizeof(line) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsCouldNotJoin), "that game is full");
-			line[sizeof(line) - 1] = '\0';
-			DemoLines(line, OnlineScreens_Words(kOnlineWordsBackToList), false);
+			DrawDemoList(false, 0, OnlineScreens_Words(kOnlineWordsNoAnswer));
 			break;
 		case 14:
+			_snprintf(line, sizeof(line) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsCouldNotJoin), "that game is full");
+			line[sizeof(line) - 1] = '\0';
+			DrawDemoList(false, 3, line);
+			break;
+		case kDemoAsked:
 		{
-			// As the host sees it in play: the line at the top, and the two rows the in-game menu gains
+			// As the host sees it with the in-game menu open: who asks at the top, and the two rows in front of the menu's own. The
+			// selection stays on the row it was on, so a key pressed by chance can't let anyone in.
 			char letIn[96], sayNo[96];
 			OnlineScreens_AskingWords("Ripley", 25, line, sizeof(line));
 			OnlineScreens_LetInWords("Ripley", letIn, sizeof(letIn));
 			OnlineScreens_SayNoWords("Ripley", sayNo, sizeof(sayNo));
 			Words(line, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-			RenderMenuText(letIn, MENU_CENTREX, 200, BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
-			RenderMenuText(sayNo, MENU_CENTREX, 230, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderMenuText(letIn, MENU_CENTREX, 170, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderMenuText(sayNo, MENU_CENTREX, 200, BRIGHTNESS_OF_DARKENED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderMenuText(GetTextString(TEXTSTRING_INGAMEMENU_RESUMEGAME), MENU_CENTREX, 230, BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		}
 		default:
 		{
 			// H2: the relay's news, as a line at the top of the screen in play
 			static const OnlineWords kNews[4] = { kOnlineWordsRelayFinding, kOnlineWordsRelayListed, kOnlineWordsRelayNone, kOnlineWordsRelayGone };
-			int const news = step - 15;
+			int const news = step - kDemoFirstNews;
 			Words(OnlineScreens_Words(kNews[news >= 0 && news < 4 ? news : 0]), 30, 40, ONE_FIXED, AVPMENUFORMAT_LEFTJUSTIFIED);
 			break;
 		}

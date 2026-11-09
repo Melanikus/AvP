@@ -729,8 +729,96 @@ extern int InGameMenusAreRunning(void)
 	return (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS);
 }
 
+// THE HOST'S ANSWER TO A PLAYER ASKING TO JOIN (online_screens_page.h's H1). While a player waits to be let in, the page the host is on (the
+// in-game menus, or the co-op lobby) shows two rows in front of its own, "Let NAME in" and "Say no to NAME", with a line at the top saying who
+// asks. The rows are a copy of the page's own with the two in front, made again each frame, so a page that changes its own rows (the lobby's,
+// as players come and go) stays right. The selection stays on the row it was on, so a key pressed by chance can't let anyone in.
+static AVPMENU_ELEMENT answerRows[2 + 31 + 1];
+static bool answerRowsShown = false;
+static char letInRow[96], sayNoRow[96], askingLine[96];
+
+static bool ThePageAnswersRequests(enum AVPMENU_ID page)
+{
+	return page == AVPMENU_INNETGAME || page == AVPMENU_INCOOPGAME || page == AVPMENU_COOP_HOST;
+}
+
+static void UpdateTheAnswerRows(void)
+{
+	char name[kOnlineRowLetters];
+	int seconds = 0;
+	AVPMENU_ELEMENT *const own = AvPMenusData[AvPMenus.CurrentMenu].MenuElements;
+	bool const ours = answerRowsShown && AvPMenus.MenuElements == answerRows;
+	bool const waiting = ThePageAnswersRequests(AvPMenus.CurrentMenu) && OnlineHost_AskWaiting(name, sizeof(name), &seconds);
+
+	if (!waiting)
+	{
+		// Answered, or gone: the page's own rows again, with the same row selected
+		if (ours)
+		{
+			int const selected = AvPMenus.CurrentlySelectedElement - 2;
+			AvPMenus.MenuElements = own;
+			CountTheRowsOnThisPage();
+			AvPMenus.CurrentlySelectedElement = selected < 0 ? 0 : selected;
+		}
+
+		answerRowsShown = false;
+		return;
+	}
+
+	OnlineScreens_LetInWords(name, letInRow, sizeof(letInRow));
+	OnlineScreens_SayNoWords(name, sayNoRow, sizeof(sayNoRow));
+	OnlineScreens_AskingWords(name, seconds, askingLine, sizeof(askingLine));
+
+	// Each row keeps how bright it was last frame, so the copy made again doesn't flicker
+	int const room = (int)(sizeof(answerRows) / sizeof(answerRows[0]));
+	int brightness[sizeof(answerRows) / sizeof(answerRows[0])];
+
+	for (int row = 0; row < room; row++)
+	{
+		brightness[row] = ours ? answerRows[row].Brightness : BRIGHTNESS_OF_DARKENED_ELEMENT;
+	}
+
+	memset(answerRows, 0, sizeof(answerRows));
+
+	for (int answer = 0; answer < 2; answer++)
+	{
+		answerRows[answer].ElementID = AVPMENU_ELEMENT_JOINANSWER;
+		answerRows[answer].TextPtr = answer == 0 ? letInRow : sayNoRow;
+		answerRows[answer].MaxValue = answer == 0 ? 1 : 0;
+		answerRows[answer].HelpString = TEXTSTRING_BLANK;
+	}
+
+	int rows = 2;
+
+	for (AVPMENU_ELEMENT const *element = own; element->ElementID != AVPMENU_ELEMENT_ENDOFMENU && rows < room - 1; element++)
+	{
+		answerRows[rows++] = *element;
+	}
+
+	answerRows[rows].ElementID = AVPMENU_ELEMENT_ENDOFMENU;
+
+	int const selected = AvPMenus.CurrentlySelectedElement + (ours ? 0 : 2);
+
+	AvPMenus.MenuElements = answerRows;
+	CountTheRowsOnThisPage();
+	AvPMenus.CurrentlySelectedElement = selected < AvPMenus.NumberOfElementsInMenu ? selected : AvPMenus.NumberOfElementsInMenu - 1;
+
+	if (ours)
+	{
+		for (int row = 0; row < AvPMenus.NumberOfElementsInMenu && row < room; row++)
+		{
+			answerRows[row].Brightness = brightness[row];
+		}
+	}
+
+	answerRowsShown = true;
+}
+
 extern void AvP_UpdateMenus(void)
 {
+	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
+	UpdateTheAnswerRows();
+
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
 	{
 		switch (CoopMenu_EveryFrame(AvPMenus.CurrentMenu == AVPMENU_COOP_HOST))
@@ -851,6 +939,14 @@ extern void AvP_UpdateMenus(void)
 			retval = Net_ConnectingToSession();
 			if (retval == NET_FAIL)
 			{
+				// The request to join's own end: the host said no, was answering someone else or didn't answer, or Esc while it waited.
+				// Back to the games page, which says which, with that game selected again.
+				if (!Net_WasRemovedByTheHost() && OnlinePage_JoinEnded())
+				{
+					SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
+					return;
+				}
+
 				// player has aborted, go back a menu. Someone the host removed is told so.
 				SetupNewMenu(Net_WasRemovedByTheHost() ? AVPMENU_COOP_OUT : AVPMENU_MULTIPLAYER);
 				return;
@@ -1615,6 +1711,16 @@ static void RenderMenu(void)
 		OnlinePage_DrawTop();
 	}
 
+	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
+	// instead of the page's own row
+	bool const askingPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING && OnlinePage_DrawAsking();
+
+	// A player asking to join this host: who, and how long is left, above the two answer rows (UpdateTheAnswerRows)
+	if (answerRowsShown && AvPMenus.MenuElements == answerRows)
+	{
+		RenderSmallMenuText(askingLine, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
 		int targetBrightness;
@@ -1649,7 +1755,7 @@ static void RenderMenu(void)
 		{
 			OnlinePage_DrawRow(e, elementPtr->Brightness);
 		}
-		else
+		else if (!askingPage)
 		{
 			RenderMenuElement(elementPtr,e,y);
 		}
@@ -3475,6 +3581,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_JOINANSWER:
+		{
+			// The host's answer to the player waiting to join: let in, or no. The two rows go once it's answered (UpdateTheAnswerRows).
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				OnlineHost_Answer(elementPtr->MaxValue == 1);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -3505,6 +3620,9 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					// The joining screen names the game's region. The region came from the list, and is made safe again where it's drawn.
 					memcpy(joiningRegion, SessionData[s].relayRegion, sizeof(joiningRegion));
 					joiningRegion[sizeof(joiningRegion) - 1] = '\0';
+
+					// The page remembers this game, to select it again if the join ends and the menus come back to the page
+					OnlinePage_Joining(AvPMenus.CurrentlySelectedElement);
 
 					// Only while this join waits: the hook is taken off again straight after, whatever happened
 					Net_SetRelayJoinWaitHook(KeepTheWindowAliveWhileJoining);
@@ -4185,6 +4303,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		}
 		case AVPMENU_ELEMENT_COOP_PLAYER:
 		case AVPMENU_ELEMENT_COOP_REMOVE:
+		case AVPMENU_ELEMENT_JOINANSWER:
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);

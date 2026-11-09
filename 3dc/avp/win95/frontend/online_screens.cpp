@@ -441,6 +441,8 @@ static const char *const kWords[] =
 	"Couldn't join",                                              // kOnlineWordsCouldNotJoin
 	"that game has gone",                                         // kOnlineWordsGameHasGone
 	"No games from the list",                                     // kOnlineWordsListFailed
+	"The host is answering someone else. Try again in a moment",  // kOnlineWordsHostBusy
+	"Esc to answer",                                              // kOnlineWordsEscToAnswer
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
