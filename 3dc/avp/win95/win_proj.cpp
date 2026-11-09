@@ -130,11 +130,18 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 			assert(dwSize == 40);
 
 			static BYTE lpb[40];
-			::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
+
+			// Modified 2026-11-09 by Melanikus for the AvP port: the read is only done when what Windows has fits the room for it
+			if (dwSize > sizeof(lpb) || ::GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) == (UINT)-1)
+			{
+				return 0;
+			}
 
 			RAWINPUT *raw = (RAWINPUT*)lpb;
 
-			if (raw->header.dwType == RIM_TYPEMOUSE)
+			// Modified 2026-11-09 by Melanikus for the AvP port: the mouse is read even while another window is in front (RIDEV_INPUTSINK,
+			// below), and a network game goes on then (win_func.cpp). A mouse moved in that other window must not turn the player here.
+			if (raw->header.dwType == RIM_TYPEMOUSE && bActive)
 			{
 				mouseMoved = true;
 				xPosRelative += raw->data.mouse.lLastX;
