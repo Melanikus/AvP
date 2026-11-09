@@ -1,0 +1,138 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the stars are moved out all the way to the farthest the camera draws, where rounding can cut them off",
+			"changes": [
+				{
+					"file": "3dc/particle_depth.h",
+					"from": "const float kParticleAtTheBackShare = 0.99f;",
+					"to": "const float kParticleAtTheBackShare = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "the stars stay at their own 65 metres, in front of any cliff further away",
+			"changes": [
+				{
+					"file": "3dc/particle_depth.h",
+					"from": "return (farthest * kParticleAtTheBackShare) / distance;",
+					"to": "return 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "a corner the card won't draw, nearer than the nearest or behind the camera, is moved too",
+			"changes": [
+				{
+					"file": "3dc/particle_depth.h",
+					"from": "if (!(distance >= nearest))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a corner that isn't a number gets past the check that keeps corners the card won't draw where they are",
+			"changes": [
+				{
+					"file": "3dc/particle_depth.h",
+					"from": "if (!(distance >= nearest))",
+					"to": "if (distance < nearest)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the particles' drawing moves nothing, so the stars stay at their own distance",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "float const outToTheBack = particleDescPtr->IsDrawnAtBack ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;",
+					"to": "float const outToTheBack = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the particles drawn in front are moved to the back, instead of the ones drawn at the back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "float const outToTheBack = particleDescPtr->IsDrawnAtBack ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;",
+					"to": "float const outToTheBack = particleDescPtr->IsDrawnInFront ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a star's corner isn't moved across with its depth, so it slides off its pixel sideways",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "particleVertex[pVb].x = vertices->x * outToTheBack;",
+					"to": "particleVertex[pVb].x = vertices->x;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a star's corner isn't moved up with its depth, so it slides off its pixel up or down",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "particleVertex[pVb].y = -vertices->y * outToTheBack;",
+					"to": "particleVertex[pVb].y = -vertices->y;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a star's depth isn't moved, so it stays in front of far cliffs",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "particleVertex[pVb].z = vertices->z * outToTheBack;",
+					"to": "particleVertex[pVb].z = vertices->z;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the camera's farthest changes, and the numbers the test checks the stars with are no longer the game's",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "const float zFar  = 1000000.0f;",
+					"to": "const float zFar  = 2000000.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: some particles collected in a frame never reach the drawing that moves the stars",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tD3D_Particle_Output(&particleBucket[i][j].particle, &particleBucket[i][j].vertices[0]);",
+					"to": "\t\t\t// D3D_Particle_Output(&particleBucket[i][j].particle, &particleBucket[i][j].vertices[0]);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the star isn't marked drawn at the back",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "\t\t//IsDrawnAtBack:1;\n\t\t1,\n\t},\n\t/* PARTICLE_FLECHETTE */",
+					"to": "\t\t//IsDrawnAtBack:1;\n\t\t0,\n\t},\n\t/* PARTICLE_FLECHETTE */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the starry sky is drawn as something other than stars",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "particle.ParticleID = PARTICLE_STAR;",
+					"to": "particle.ParticleID = PARTICLE_FLARESMOKE;"
+				}
+			]
+		}
+	]
+}

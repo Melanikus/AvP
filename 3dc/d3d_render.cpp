@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
+//   away (#176, particle_depth.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a polygon's corners are put in the middle of the texels they name, as the 1999 Direct3D code had them, so a smoothly filtered
 //   edge no longer takes colour from the texture's other edge (#148, texel_centre.h); the same for particles, which share one sheet
@@ -98,6 +101,7 @@
 #include "showcmds.h"
 #include "frustum.h"
 #include "texel_centre.h"
+#include "particle_depth.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
 #include "pixel_look.h"
@@ -2239,24 +2243,14 @@ static void D3D_Particle_Output(PARTICLE *particlePtr, PARTICLEVERTEX *renderVer
 	{
 		PARTICLEVERTEX *vertices = &renderVerticesPtr[i];
 
-		float zvalue;
+		// A particle drawn at the back (the stars) is moved out along its own line from the eye, behind everything the level draws, as 1999
+		// drew it: see particle_depth.h (#176). It covers the same pixels. Every other particle stays where it is. The only particle drawn in
+		// front, the light flare, doesn't come through here: it's a corona, drawn by DrawCoronas.
+		float const outToTheBack = particleDescPtr->IsDrawnAtBack ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;
 
-		if (particleDescPtr->IsDrawnInFront)
-		{
-			zvalue = 0.0f;
-		}
-		else if (particleDescPtr->IsDrawnAtBack)
-		{
-			zvalue = 1.0f;
-		}
-		else
-		{
-			zvalue = (float)vertices->z;
-		}
-
-		particleVertex[pVb].x = vertices->x;
-		particleVertex[pVb].y = -vertices->y;
-		particleVertex[pVb].z = vertices->z;
+		particleVertex[pVb].x = vertices->x * outToTheBack;
+		particleVertex[pVb].y = -vertices->y * outToTheBack;
+		particleVertex[pVb].z = vertices->z * outToTheBack;
 
 		particleVertex[pVb].colour = colour;
 
