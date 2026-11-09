@@ -7,6 +7,7 @@
 //   the level's still polygons are built and sent to the graphics card once a level has loaded
 //   -keptsnap and -keptsnapfar
 //   -shadowshoot
+//   with -dev -hudson, a run starts a level with nobody at the keyboard: see hudson.cpp
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
@@ -38,11 +39,16 @@
 //   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer; the relay's news on
 //   the host, and on both copies the relay and its round trip, kept up at the top right while the game goes through a relay
 //   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
+//   -dev -findgames: at the first menus, straight to the page of games found, the player's own way (online_screens_page.h)
+//   the tag on the top right is off until it's asked for: -dev -statuson starts with it on; -statusoff still means off, and says so
+//   the log lines for -dev and for a developer switch asked for without it start "developer tools:", not "shadows:", as the switches
+//   aren't all about the shadows, and the comment over them says what -dev turns on now; G is the shoulder lamp, not a shadow key (#122)
 
 #include "3dc.h"
 #include "window_slot.h"
 #include "build_identity.h"
 #include "mark_key.h"
+#include "hudson.h"
 #include "online_screens_page.h"
 #include "texture_relief.h"
 #include "view_settings.h"
@@ -165,7 +171,7 @@ extern texID_t AAFontImageNumber;
 void exit_break_point_function()
 {
 	#if debug
-	if (WindowMode == WindowModeSubWindow)
+	if (WindowMode == WindowModeSubWindow && !HudsonRunIsOn)
 	{
 		__debugbreak();
 	}
@@ -210,6 +216,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 {
 	StopGameIfNewFails();
 
+	// before anything that uses the save folder, which the log does: a run keeps its files somewhere else
+	Hudson_ReadCommandLine(lpCmdLine);
+
 	// -dev -secondcopy: a second copy of the game on this machine, for trying two players on one PC, keeps its files in a folder of its own,
 	// by a fixed name, so the two don't share a log. It's decided first of all, because the log, opened just below, is in that folder. Only
 	// whether the two words are there is read from the command line: no part of it becomes part of a path.
@@ -235,6 +244,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LogString("-secondcopy came after the save folder was first used, so this copy keeps its files in the usual folder");
 	}
 
+	{
+		int const hudsonStop = Hudson_CheckBeforeStarting();
+
+		if (hudsonStop)
+		{
+			return hudsonStop;
+		}
+	}
+
 	char *command_line = lpCmdLine;
 
 #ifdef _ALLOC_CONSOLE
@@ -244,7 +262,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	skOff = startupStickyKeys;
 
-	if ((skOff.dwFlags & SKF_STICKYKEYSON) == 0)
+	// a run isn't anyone playing, so it has no business changing how the keyboard works for whoever's machine this is
+	if ((skOff.dwFlags & SKF_STICKYKEYSON) == 0 && !HudsonRunIsOn)
 	{
 		// Disable the hotkey and the confirmation
 		skOff.dwFlags &= ~SKF_HOTKEYACTIVE;
@@ -261,8 +280,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	Config_Load();
 	ViewSettings_Load();
 
-	Music_Init(); //load list of music tracks assigned to levels , from a text file
-	LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
+	if (HudsonRunIsOn)
+	{
+		Hudson_SetVideoSettings();
+	}
+	else
+	{
+		Music_Init(); //load list of music tracks assigned to levels , from a text file. A run makes no sound, and without this the music never starts
+		LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
+	}
 
 	SetFastRandom();
 
@@ -324,13 +350,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	{
-		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, L, H, F7 and F8, the shoot tool, the flicker
-		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		// -dev turns on the developer tools. A tester has no need of them, and shouldn't be able to reach them by accident, so without it
+		// they're off. They are:
+		// - the shadows' tools: the tag; J, or the key chosen for it on the rendering page, F7 and F8; the shoot tool's F9, F10 and F5; the
+		//   flicker number and the full report (d3d_render.cpp, where DevMode is);
+		// - every switch below that's read through devSwitch or devNumber: Hudson's -hudson, and the shadows' and the still polygons' alike;
+		// - the test words that check it where they're read: -relayhost and -relayjoin (relay_auto.h), the relay list's own settings
+		//   (relay_list.cpp), -onlinescreens, -findgames, -windowed and -secondcopy.
+		// Their log lines start "developer tools:", because they aren't all about the shadows (#122).
 		extern int DevMode;
 		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
 		if (DevMode)
 		{
-			LogString("shadows: the developer tools are on (-dev)");
+			LogString("developer tools: on (-dev)");
 		}
 
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -netv2, protocol version 2's draft, for tests only (networking.h). Only
@@ -356,6 +388,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 		}
 
+		// -dev -findgames: at the first menus, straight to the page of games found by the player's own way, and it stays there, so a test
+		// shows the listed games with nobody at the keyboard. A word only, with no value after it.
+		if (CommandLineHasWord(command_line, "-findgames"))
+		{
+			if (DevMode)
+			{
+				OnlinePage_FindGamesAtStart();
+				LogString("online screens: this copy goes straight to the page of games found at the menus (-dev -findgames)");
+			}
+			else
+			{
+				LogString("online screens: -findgames needs -dev, so it's left out");
+			}
+		}
+
 		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
 		// for one with a number after its '=', a word that starts with its name (CommandLineFindSwitch).
 		auto const devSwitch = [&](const char *name)
@@ -366,7 +413,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 			if (!DevMode)
 			{
-				LogString(std::string("shadows: ") + name + " needs -dev, so it's off");
+				LogString(std::string("developer tools: ") + name + " needs -dev, so it's off");
 			}
 			return DevMode != 0;
 		};
@@ -376,6 +423,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			return devSwitch(name) ? CommandLineFindSwitch(command_line, name) : 0;
 		};
+
+		// A run is decided at the very start of the game, by Hudson_ReadCommandLine. This only adds the line in the log that says why -hudson did nothing without -dev.
+		devSwitch("-hudson");
 
 		extern int ToyShadowsMode;
 		// -shadowsoff, not -noshadows, because the level name switch -n used to take any word starting with -n. It reads only the
@@ -407,10 +457,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ShadowShootOn = 1;
 			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
 		}
+		// The tag on the top right (ShadowStatus_Draw in d3d_render.cpp) is off until it's asked for, because it covers the game, and the
+		// relay's line in play, at the top right. F7 shows and hides it in play, and -dev -statuson starts with it on, for a film that needs it.
+		// -statusoff was how to hide it when it started on. It still means off, even with -statuson, so a launch line that says it gets
+		// what it asked for, and the log says it isn't needed any more.
 		extern int ShadowStatusOn;
+		if (devSwitch("-statuson"))
+		{
+			ShadowStatusOn = 1;
+			LogString("tag: shown on the top right from the start (-dev -statuson); F7 hides it");
+		}
 		if (CommandLineHasWord(command_line, "-statusoff"))
 		{
 			ShadowStatusOn = 0;
+			LogString("tag: off (-statusoff), as it is anyway until F7 or -dev -statuson asks for it");
 		}
 		extern int ShadowsFullReport;
 		if (devSwitch("-shadowreport"))
@@ -674,6 +734,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		UseMouseCentreing = FALSE;
 	}
 
+	// a run is always in a window, and always leaves the mouse where it is: it's someone else's
+	if (HudsonRunIsOn)
+	{
+		WindowMode = WindowModeSubWindow;
+		UseMouseCentreing = FALSE;
+	}
+
 	if (UseMouseCentreing)
 	{
 		InitCentreMouseThread();
@@ -769,6 +836,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 
 		std::string error = "Failed to initialise Direct3D backend.\n" + GetLastErrorMessage();
+		Hudson_StopIfTheGameWantsToAsk(error.c_str());
 		MessageBox(hWndMain, error.c_str(), "Couldn't create render device!", MB_OK | MB_ICONSTOP);
 		CloseDebugConsole();
 		exit(-1);
@@ -806,6 +874,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	----------------------------------------------------------*/
 	SoundSys_Start();
 	Music_Start();
+
+	// A run makes no sound. This is the same as the sound being switched off: nothing gets played, and nothing else changes.
+	if (HudsonRunIsOn)
+	{
+		SoundSys_SwitchOff();
+	}
 
 	// get rid of the mouse cursor
 	SetCursor(NULL);
@@ -892,7 +966,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// (Not if the next level was called for while this one was still loading. Without this, he'd stay here alone.)
 		AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;
 
-		ScanImagesForFMVs();
+		// a video on a wall in a level could make a sound, and it plays in real time
+		if (!HudsonRunIsOn)
+		{
+			ScanImagesForFMVs();
+		}
 
 		ResetFrameCounter();
 		Game_Has_Loaded();
@@ -1023,6 +1101,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 					FlipBuffers();
 					FrameCounterHandler();
+
+					if (HudsonRunIsOn)
+					{
+						Hudson_EndOfFrame();
+					}
 					
 					PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
 
@@ -1169,5 +1252,5 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	CloseDebugConsole();
 
-	return 0;
+	return Hudson_LastThingBeforeExit();   // 0 in a normal game
 }

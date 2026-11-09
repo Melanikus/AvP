@@ -38,6 +38,9 @@ int Campaign_LevelCount(int campaign);
 // The level at this place in a campaign, or -1 if there's no such place.
 int Campaign_Environment(int campaign, int place);
 
+// Which campaign and place a level is, for a level on one of the three lists. False if it isn't on any. Only a Hudson run asks.
+bool Campaign_FindEnvironment(int environment, int *campaign, int *place);
+
 // Loads the level netGameData says the campaign has got to.
 void SetLevelToLoadForCampaign(void);
 

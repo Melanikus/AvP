@@ -195,16 +195,6 @@
 			]
 		},
 		{
-			"name": "a typed code in small letters isn't made capital",
-			"changes": [
-				{
-					"file": "3dc/net_relay.h",
-					"from": "c = static_cast<char>(c - 'a' + 'A');",
-					"to": "c = static_cast<char>(c);"
-				}
-			]
-		},
-		{
 			"name": "REFUSED's reason is kept whatever it is",
 			"changes": [
 				{

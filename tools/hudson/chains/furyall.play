@@ -1,0 +1,9 @@
+# What Hudson does to play furyall on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 2132 14216 8812 | startswc01
+press -52799 -1638 87675 | rtswitch
+press 35265 13948 9741 | fanswitch
+press 75791 35769 26887 | powswch
+press 219321 35769 -8183 | endswch01
+walk 244713 37523 -21821 | shipswitch
+walk 244713 37523 -33720 | properendingvolumeswitch

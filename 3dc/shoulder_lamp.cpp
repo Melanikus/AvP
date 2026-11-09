@@ -6,6 +6,7 @@
 static bool lampIsOn = false;
 static bool lampIsAskedFor = false;
 static long framesDrawn = 0;
+static long framesAsARealLight = 0;
 static bool playerCouldHaveALamp = false;
 static bool realLightIsWanted = false;
 static bool beamsAreWanted = true;
@@ -100,6 +101,13 @@ bool ShoulderLamp_BeamsAreWanted()
 const float *ShoulderLamp_PlaceFromEyes()
 {
 	return placeFromEyes;
+}
+
+void ShoulderLamp_SetPlaceFromEyes(float across, float up, float ahead)
+{
+	placeFromEyes[0] = across;
+	placeFromEyes[1] = up;
+	placeFromEyes[2] = ahead;
 }
 
 static double DotProductOf(const double *a, const double *b)
@@ -315,6 +323,16 @@ float ShoulderLamp_AimAcross()
 float ShoulderLamp_AimDown()
 {
 	return (float)aimDown;
+}
+
+void ShoulderLamp_NoteARealLightFrame()
+{
+	framesAsARealLight++;
+}
+
+long ShoulderLamp_FramesAsARealLight()
+{
+	return framesAsARealLight;
 }
 
 unsigned char ShoulderLamp_KeyFromProfile(unsigned char stored, unsigned char neverSet, unsigned char defaultKey, bool defaultIsTaken, unsigned char noKey)

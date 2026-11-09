@@ -1,0 +1,53 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the gun's aim leaves the sight's 4/3 on (the port's old line)",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "\t\t(((GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY))*3)/4;\n",
+					"to": "\t\t/*((*/(GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY)/*)*3)/4*/;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Predator's triangle leaves the sight's 4/3 on (the port's old line)",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\tcentreY = MUL_FIXED((((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);\n",
+					"to": "\t\tcentreY = MUL_FIXED((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY, z);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sight's point loses the 1999 stretch",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "targetView.vy*4,",
+					"to": "targetView.vy,"
+				},
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "(targetView.vz*3)",
+					"to": "(targetView.vz)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the projection's width stops following the screen's shape",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tfloat xScale = originalYScale / aspect;\n",
+					"to": "\tfloat xScale = originalYScale;\n"
+				}
+			]
+		}
+	]
+}

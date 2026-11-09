@@ -854,6 +854,56 @@
 					"to": "\treturn howMany;"
 				}
 			]
+		},
+		{
+			"name": "the time since the host spoke is never cut to a minute",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return since > (unsigned int)kNetLiftLongestMsSince ? kNetLiftLongestMsSince : (int)since;",
+					"to": "return (int)since;"
+				}
+			]
+		},
+		{
+			"name": "the time since the host spoke goes wrong when the clock goes back to 0",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\tunsigned int const since = now - heardAt;\n",
+					"to": "\tunsigned int const since = now > heardAt ? now - heardAt : 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the car follows the host by frame times again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "\tint const msSince = NetLiftMsSince(timeGetTime(), lift->syncHeardAt);\n",
+					"to": "\tint const msSince = (int)(((long long)NormalFrameTime * 1000) >> ONE_FIXED_SHIFT);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the clock is not noted when the host speaks",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "\tlift->syncHeardAt = timeGetTime();\n",
+					"to": "\tlift->syncHeardAt = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the car may move as far as real time lets it in a frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), NormalFrameTime);",
+					"to": "int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), RealFrameTime);"
+				}
+			]
 		}
 	]
 }

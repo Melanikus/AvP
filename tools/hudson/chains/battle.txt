@@ -1,0 +1,9 @@
+# level: battle   end started by: kill
+# campaign: Predator 6
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+where FINISH-02
+destroy Facehugger01 trigger
+where FINISH-02
+destroy Facehugger02 trigger
+missing queen | a network game leaves out this queen
+end Vendof level

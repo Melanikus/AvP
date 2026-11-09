@@ -3,7 +3,8 @@
 // WHAT IT'S FOR: two copies of the game side by side on one PC, a host and a joiner. Each window has to fit in its own half of the screen,
 // frame and all, so the two never overlap. Its picture has to be one of the screen's own modes, or the game falls back to 800 by 600 and the
 // windows overlap after all. And anything that can't be a screen is refused, rather than making a window of no size or one far off the
-// screen. Then, read and not run: the game only does this with -dev, and takes nothing from the command line but the word.
+// screen. Then, read and not run: the game only does this with -dev, and takes nothing from the command line but the word. (A copy that keeps
+// running behind the other's window, and takes no mouse or pad there, is every network game's rule now: net_start_test checks it.)
 //
 // Nothing here uses Windows or the game.
 

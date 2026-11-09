@@ -1,4 +1,12 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a run doesn't take the focus, keeps going without it, and has nobody to show a message to
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a run's window can't be activated, and sizing it doesn't take the focus
+//   nothing a person does with the keyboard or the mouse reaches a run
+//   holding a run's window by its title bar, or a menu on it, can't stop its frames
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a run's window goes on the second screen by the game's own doing, with a part of it for each game
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
@@ -21,6 +29,7 @@ Project specific (or potentially project specific) windows functionality
 extern unsigned char KeyboardInput[256];
 
 #include "3dc.h"
+#include "hudson.h"
 #include "inline.h"
 #include "psndplat.h"
 #include "onscreenKeyboard.h"
@@ -105,6 +114,33 @@ bool mouseMoved = false;
 int inpcalls = 0;
 
 // What someone does with the keyboard, the mouse's buttons or its wheel, or the mouse passing over the window, which the game would hide the pointer for.
+static bool IsSomeonesHand(UINT message)
+{
+	switch (message)
+	{
+		case WM_MOUSEWHEEL:
+		case WM_CHAR:
+		case WM_KEYDOWN:
+		case WM_KEYUP:
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
+		case WM_LBUTTONDOWN:
+		case WM_LBUTTONUP:
+		case WM_RBUTTONDOWN:
+		case WM_RBUTTONUP:
+		case WM_MBUTTONDOWN:
+		case WM_MBUTTONUP:
+		case WM_XBUTTONDOWN:
+		case WM_XBUTTONUP:
+		case WM_SETCURSOR:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+// What someone does with the keyboard, the mouse's buttons or its wheel, or the mouse passing over the window, which the game would hide the pointer for.
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	PAINTSTRUCT ps;
@@ -113,6 +149,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
 	if (message == RWM_MOUSEWHEEL) {
 		message = WM_MOUSEWHEEL;
+	}
+
+	// Nobody's playing a run. What it shows must not depend on someone's hand, even if the window is under the mouse
+	if (HudsonRunIsOn && IsSomeonesHand(message)) {
+		return ::DefWindowProc(hWnd, message, wParam, lParam);
 	}
 
 	switch (message)
@@ -365,7 +406,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 				bActive = true;
 			}
 			else {
-				bActive = false;
+				// the game stops while it hasn't got the focus, and a run mostly won't have it
+				bActive = HudsonRunIsOn;
 			}
 
 			IngameKeyboardInput_ClearBuffer();
@@ -379,6 +421,32 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
 		case WM_ACTIVATE:
 			return 0;
+
+		// Holding a window by its title bar, or a menu on it, keeps the game's thread inside Windows, and no frame can start
+		// until it's let go. Nobody's playing a run, and it may be running on someone's desk, so a run's window can't do either.
+		case WM_SYSCOMMAND:
+			if (HudsonRunIsOn)
+			{
+				switch (wParam & 0xFFF0)
+				{
+					case SC_MOVE:
+					case SC_SIZE:
+					case SC_KEYMENU:
+					case SC_MOUSEMENU:
+						return 0;
+
+					default:
+						break;
+				}
+			}
+			break;
+
+		case WM_CONTEXTMENU:
+			if (HudsonRunIsOn)
+			{
+				return 0;
+			}
+			break;
 
 		case WM_CREATE:
 			break;
@@ -465,6 +533,7 @@ bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinInitMode)
 
 	if (!RegisterClassEx(&wcex))
 	{
+		Hudson_StopIfTheGameWantsToAsk("Could not register Window");
 		::MessageBox(NULL, "Could not register Window", "Error!", MB_ICONEXCLAMATION | MB_OK);
 		return false;
 	}
@@ -480,13 +549,17 @@ bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinInitMode)
 
 		::AdjustWindowRect(&clientRect, ::GetWindowLongPtr(hWndMain, GWL_STYLE), FALSE);
 
+		// A run's window starts where it's going to stay, so that it never covers the main screen, even while the game loads. In a normal game these are left as they are.
 		int startLeft = clientRect.left;
 		int startTop = clientRect.top;
 		int startWidth = clientRect.right - clientRect.left;
 		int startHeight = clientRect.bottom - clientRect.top;
 
+		Hudson_PlaceTheWindow(&startLeft, &startTop, &startWidth, &startHeight);
+
+		// A run's window can't be activated, so nobody loses their keyboard to it, and it stays off the taskbar. In a normal game this is the plain 0 that CreateWindow itself passes.
 		hWndMain = ::CreateWindowEx(
-			0,
+			Hudson_StaysOutOfTheWay() ? WS_EX_NOACTIVATE : 0,
 			className,
 			GetWindowTitle(),
 			0,
@@ -527,15 +600,18 @@ bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinInitMode)
 	if (!hWndMain)
 	{
 		::UnregisterClass(wcex.lpszClassName, wcex.hInstance);
+		Hudson_StopIfTheGameWantsToAsk("Could not create Window");
 		::MessageBox(NULL, "Could not create Window", "Error!", MB_ICONEXCLAMATION | MB_OK);
 		return false;
 	}
 
 	// Set the window up to be displayed 
-	::ShowWindow(hWndMain, nCmdShow);
+	// a run doesn't take the focus from whoever's using the machine
+	::ShowWindow(hWndMain, Hudson_StaysOutOfTheWay() ? SW_SHOWNOACTIVATE : (HudsonRunIsOn ? SW_SHOW : nCmdShow));
 	// Update once (i.e. send WM_PAINT message to the window procedure)
 	::UpdateWindow(hWndMain);
 
+	Hudson_BringTheWindowForward();
 
 // Grab ALL mouse messages for our window.
 // Note this will only work if the window is
@@ -573,21 +649,25 @@ void ChangeWindowsSize(uint32_t width, uint32_t height)
 		}
 	}
 
+	// Sizing a window also makes it the active one and brings it to the front, unless it's told not to. That took the focus on a run's first launch. A run leaves whatever's in use alone.
+	UINT const howToSize = SWP_SHOWWINDOW | (Hudson_StaysOutOfTheWay() ? (SWP_NOACTIVATE | SWP_NOZORDER) : 0);
+
 	int left = 0;
 	int top = 0;
 	int wide = newWindowSize.right - newWindowSize.left;
 	int tall = newWindowSize.bottom - newWindowSize.top;
 
-	// -dev -windowed: a test copy's window goes in its own half of the screen, so two copies side by side never overlap (window_slot.h)
+	// A Hudson run places its own window (windowslot=, Hudson_PlaceTheWindow). Otherwise -dev -windowed puts a test copy's window in its own
+	// half of the screen, so two copies side by side never overlap (window_slot.h).
 	WindowSlot slot;
 
-	if (WindowMode == WindowModeSubWindow && WindowSlot_Last(&slot))
+	if (WindowMode == WindowModeSubWindow && !Hudson_PlaceTheWindow(&left, &top, &wide, &tall) && WindowSlot_Last(&slot))
 	{
 		left = slot.left;
 		top = slot.top;
 	}
 
-	if (::SetWindowPos(hWndMain, 0, left, top, wide, tall, SWP_SHOWWINDOW) == 0)
+	if (::SetWindowPos(hWndMain, 0, left, top, wide, tall, howToSize) == 0)
 	{
 		LastError = ::HRESULT_FROM_WIN32(::GetLastError());
 		LogDxError(LastError, __LINE__, kThisFile);
@@ -617,7 +697,11 @@ void InitialiseRawInput()
 	Rid[0].dwFlags = RIDEV_INPUTSINK;   
 	Rid[0].hwndTarget = hWndMain;
 
-	::RegisterRawInputDevices(Rid, 1, sizeof(Rid[0]));
+	// This is what reads the mouse even when the window hasn't got the focus. A run doesn't listen, because the mouse belongs to whoever is at the machine
+	if (!HudsonRunIsOn)
+	{
+		::RegisterRawInputDevices(Rid, 1, sizeof(Rid[0]));
+	}
 #endif
 }
 

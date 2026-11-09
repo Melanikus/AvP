@@ -140,7 +140,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/win_proj.cpp",
-					"from": "if (WindowMode == WindowModeSubWindow && WindowSlot_Last(&slot))",
+					"from": "if (WindowMode == WindowModeSubWindow && !Hudson_PlaceTheWindow(&left, &top, &wide, &tall) && WindowSlot_Last(&slot))",
 					"to": "if (false)"
 				}
 			]

@@ -195,7 +195,7 @@ static void TestTheGamesCode()
 	Check(Has(finding, "SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where, saveFolderIsTheSecondCopy)"), "and the folder is made by the part this test tries for real");
 
 	// The second copy: asked for too late, once the folder has been found, it changes nothing, because everything since went in that folder
-	std::string const useIt = Between(code, "bool SaveFolder_UseTheSecondCopy()", "bool SaveFolder_IsTheSecondCopy()");
+	std::string const useIt = Between(code, "bool SaveFolder_UseTheSecondCopy()", "char *GetSaveFolderPath()");
 	Check(Has(useIt, "if (saveFolder[0] != 0 || noSaveFolder)") && Has(useIt, "return false;"), "the second copy asked for too late changes nothing");
 
 	// Its two names are fixed in save_folder.h: nothing from the command line, or from anywhere else, becomes part of the path

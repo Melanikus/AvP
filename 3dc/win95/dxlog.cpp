@@ -1,8 +1,12 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a failed assert in a run says so and ends it, because nobody is there to press a key
 #include "3dc.h"
 
 #if debug
 
 #include "ourasert.h"
+#include "hudson.h"
 #include "dxlog.h"
 #include "debuglog.h"
 
@@ -86,6 +90,8 @@ int GlobalAssertFired(char * Filename, int LineNum,char * Condition)
 	if (!dxlog) 
 		dxlog = lfopen(LOGFILE_NAME);
 
+	Hudson_StopIfAnAssertFailed(Filename, LineNum, Condition);
+
 	lfprintf(dxlog, "Line %d of %s:\nGAF: %s\n", LineNum, Filename, Condition);
 	lfclose(dxlog);
 	closed_once = true;
@@ -105,6 +111,8 @@ int LocalAssertFired(char * Filename, int LineNum,char * Condition)
 
 	if (!dxlog)
 		dxlog = lfopen(LOGFILE_NAME);
+
+	Hudson_StopIfAnAssertFailed(Filename, LineNum, Condition);
 
 	lfprintf(dxlog, "Line %d of %s:\nLAF: %s\n", LineNum, Filename, Condition);
 	lfclose(dxlog);

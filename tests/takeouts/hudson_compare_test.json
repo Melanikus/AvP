@@ -1,0 +1,298 @@
+{
+	"copy": [
+		"tests",
+		"tools"
+	],
+	"rows": [
+		{
+			"name": "rows are rounded, not cut off",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "[int][Math]::Floor(([int64]$first.Width * $step + 3) / 4) * 4",
+					"to": "[int](([int64]$first.Width * $step + 3) / 4) * 4"
+				}
+			]
+		},
+		{
+			"name": "rows have no filling",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "[int][Math]::Floor(([int64]$first.Width * $step + 3) / 4) * 4",
+					"to": "[int]$first.Width * $step"
+				}
+			]
+		},
+		{
+			"name": "a different width is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if ($first.Width -ne $second.Width -or ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "a different height is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "$first.Height -ne $second.Height -or ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a different depth is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": " -or $first.BytesPerPixel -ne $second.BytesPerPixel)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "only one colour is looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "[int]$colours = [Math]::Min($first.BytesPerPixel, 3)",
+					"to": "[int]$colours = 1"
+				}
+			]
+		},
+		{
+			"name": "one level of difference counts",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "$pixelCountsAsDifferentPast = 2",
+					"to": "$pixelCountsAsDifferentPast = 0"
+				}
+			]
+		},
+		{
+			"name": "same always passes",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "'same' { return ($result.Different / $result.Pixels) -le $sameAllowsThisShare }",
+					"to": "'same' { return $true }"
+				}
+			]
+		},
+		{
+			"name": "close always passes",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "'close' { return $result.Average -le $closeAllowsAverage -and ($result.VeryDifferent / $result.Pixels) -le $closeAllowsThisShareFarOff }",
+					"to": "'close' { return $true }"
+				}
+			]
+		},
+		{
+			"name": "different always passes",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "'different' { return ($result.Different / $result.Pixels) -ge $differentNeedsThisShare }",
+					"to": "'different' { return $true }"
+				}
+			]
+		},
+		{
+			"name": "needs-light gets a verdict",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "'needs-light' { return $true }",
+					"to": "'needs-light' { return ($result.Different / $result.Pixels) -ge $differentNeedsThisShare }"
+				}
+			]
+		},
+		{
+			"name": "needs-light says it has a verdict",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if ($pair[2] -eq 'needs-light') { 'no verdict' } elseif ($good)",
+					"to": "if ($good)"
+				}
+			]
+		},
+		{
+			"name": "normals against relief is not looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "    @('normals', 'relief', 'different'),\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "relief against its flip is not looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "    @('relief', 'relief-flip', 'different'),\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "depth 0 is not looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "    @('normals', 'relief-depth0', 'close'),\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "relief twice is not looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "    @('relief', 'relief-again', 'same'),\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "normals twice is not looked at",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "    @('normals', 'normals-again', 'same'),\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a missing picture is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if (-not (Test-Path -LiteralPath $path -PathType Leaf))",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "a picture that cannot be read ends some other way",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "Write-Host \"compare-pictures: $view-$name.png can't be read\"\n                    exit 2",
+					"to": "exit 1"
+				}
+			]
+		},
+		{
+			"name": "no folder is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if (-not (Test-Path -LiteralPath $pictures -PathType Container))",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "a wrong line does not change the exit code",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if (-not $good) { $anyWrong = $true }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "two runs ignore the limit",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "$pixelCountsAsDifferentPast = $Limit",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "two runs read one folder twice",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "$second = Read-Picture (Join-Path $SecondRun \"pictures\\$name\")",
+					"to": "$second = Read-Picture (Join-Path $FirstRun \"pictures\\$name\")"
+				}
+			]
+		},
+		{
+			"name": "a picture only in the second is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": " + @($secondNames | Where-Object { $firstNames -notcontains $_ })",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a picture only in the first is not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "@($firstNames | Where-Object { $secondNames -notcontains $_ }) + ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "two runs with no pictures are not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if ($firstNames.Count -eq 0)",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "two runs with no folder are not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "if (-not (Test-Path -LiteralPath $folder -PathType Container))",
+					"to": "if ($false)"
+				}
+			]
+		},
+		{
+			"name": "two runs of different sizes are not noticed",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "can't be compared: they aren't the same size or depth\"\n            exit 2\n        }\n\n        Write-Host (\"  {0,-34}",
+					"to": "can't be compared: they aren't the same size or depth\"\n            exit 0\n        }\n\n        Write-Host (\"  {0,-34}"
+				}
+			]
+		},
+		{
+			"name": "a picture from two runs that cannot be read ends some other way",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "Write-Host \"compare-pictures: $name can't be read\"\n            exit 2",
+					"to": "exit 1"
+				}
+			]
+		}
+	]
+}

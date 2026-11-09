@@ -1,12 +1,16 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a Hudson run can press the player's keys, to try a gun
 //   in a game that plays as single player a dead player is out until the next level, rather than coming back
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   walking and crouching always slow the player down, and TurnSpeedAdjust only decides whether turning slows too (walk_speeds.h).
 //   Found through Bobblen's avp-forever (commit 2b70546)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a Hudson run can press the player's keys, to play a level on foot (it does nothing unless a Hudson play run is on)
 /*-------------- Patrick 15/10/96 ------------------
 	Source file for Player Movement ...
 ----------------------------------------------------*/
 #include "3dc.h"
+#include "hudson.h"
 #include "inline.h"
 #include "module.h"
 #include "io.h"
@@ -294,6 +298,9 @@ void ExecuteFreeMovement(STRATEGYBLOCK* sbPtr)
 	Call the (platform dependant) game input reading fn.
 	------------------------------------------------------*/ 
 	ReadPlayerGameInput(sbPtr);
+	Hudson_GunInput(sbPtr->SBdataptr);
+	Hudson_NetInput(sbPtr->SBdataptr);
+	Hudson_PlayInput(sbPtr->SBdataptr);
  
 	/* KJL 11:07:42 10/09/98 - Bonus Abilities */
 	switch (AvP.PlayerType)
@@ -1173,7 +1180,7 @@ static void CorpseMovement(STRATEGYBLOCK *sbPtr)
 			deathFadeLevel = 0;
 			/* KJL 15:44:10 03/11/97 - game over, quit main loop */
 			/* restart level instead -Richard*/
-		  	if (DebouncedGotAnyKey)
+		  	if (DebouncedGotAnyKey || Hudson_PressesAKeyAfterHeDied())
 			{
 			  	AvP.RestartLevel = 1;
 			}
@@ -1204,6 +1211,7 @@ static void NetPlayerDeadProcessing(STRATEGYBLOCK *sbPtr)
 
 	/* call the read input function so that we can still respawn/quit, etc */
 	ReadPlayerGameInput(sbPtr);
+	Hudson_NetWhileDead(sbPtr->SBdataptr);
 
 	// A game that plays as single player has no coming back: he's out until the next level
 	if (SameAsSinglePlayer())

@@ -1,0 +1,119 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the screenshot key stops the roll",
+			"changes": [
+				{
+					"file": "3dc/credits_roll.h",
+					"from": "if (justPressed[key] && key != leaveOut)",
+					"to": "if (justPressed[key])"
+				}
+			]
+		},
+		{
+			"name": "the last key is never looked at",
+			"changes": [
+				{
+					"file": "3dc/credits_roll.h",
+					"from": "for (int key = 0; key < count; key++)",
+					"to": "for (int key = 0; key < count - 1; key++)"
+				}
+			]
+		},
+		{
+			"name": "a key past the list is read",
+			"changes": [
+				{
+					"file": "3dc/credits_roll.h",
+					"from": "for (int key = 0; key < count; key++)",
+					"to": "for (int key = 0; key <= count; key++)"
+				}
+			]
+		},
+		{
+			"name": "no list is read as one",
+			"changes": [
+				{
+					"file": "3dc/credits_roll.h",
+					"from": "\tif (!justPressed)\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "nothing stops the roll",
+			"changes": [
+				{
+					"file": "3dc/credits_roll.h",
+					"from": "\t\t\treturn true;\n",
+					"to": "\t\t\treturn false;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the roll is skipped with the video on again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "void DoCredits(void)\n{\n",
+					"to": "void DoCredits(void)\n{\n\textern bool MenuBackgroundFMV;\n\tif (MenuBackgroundFMV) {\n\t\treturn;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the roll stops only when the any-key flag turns on, as before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "while (!FinishedCredits && !CreditsRoll_AKeyWasJustPressed(DebouncedKeyboardInput, MAX_NUMBER_OF_INPUT_KEYS, KEY_F8));",
+					"to": "while (!DebouncedGotAnyKey && !FinishedCredits);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screenshot key stops the roll",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "MAX_NUMBER_OF_INPUT_KEYS, KEY_F8));",
+					"to": "MAX_NUMBER_OF_INPUT_KEYS, -1));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the roll reads no keys each frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tDirectReadKeyboard();\n\n\t\tThisFramesRenderingHasBegun();\n\n\t\tDrawMainMenusBackdrop();\n\n\t\tFinishedCredits",
+					"to": "\t\tThisFramesRenderingHasBegun();\n\n\t\tDrawMainMenusBackdrop();\n\n\t\tFinishedCredits"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keyboard is read from DirectInput again",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "void DirectReadKeyboard(void)\n{\n#if 0\n",
+					"to": "void DirectReadKeyboard(void)\n{\n#if 1\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: F8 counts as any key",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\t\t//\t   GotAnyKey = true;\n",
+					"to": "\t\tGotAnyKey = true;\n"
+				}
+			]
+		}
+	]
+}

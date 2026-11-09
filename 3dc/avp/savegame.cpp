@@ -606,7 +606,16 @@ void LoadSavedGame()
 
 	//make sure the slot is being used
 	ScanSaveSlots();
-	if(!save_slot->SlotUsed) return;
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (#86): an empty slot ends the request. The 1999 code returned and kept it, so a
+	// quick load (or the console's LOAD) from an empty slot stayed waiting: the save folder was read again every frame, and the next
+	// save made in that slot was loaded the moment it was made, unasked. Every other way out of here, and out of SaveGame, ends its request.
+	if(!save_slot->SlotUsed)
+	{
+		LogString("save: there's no save in that slot, so nothing is loaded");
+		LoadGameRequest = SAVELOAD_REQUEST_NONE;
+		return;
+	}
 
 	///make sure we're on the right level etc.
 	if(!ValidateLevelForLoadGameRequest(save_slot))

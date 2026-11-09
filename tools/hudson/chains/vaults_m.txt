@@ -1,0 +1,23 @@
+# level: vaults_m   end started by: kill
+# campaign: Marine 8
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# In a network game, door DR-LFTCON2 stays shut: only killing predator "PREDATOR 01" opens it.
+# In a network game, door DR-ALNLCK2 stays shut: only killing predator "PREDATOR 01" opens it.
+# opens DR-FINAL 
+where FINAL-new
+walk V trigger PREDATOR
+# opens DR-ALNLCK2
+missing PREDATOR 01 | a network game leaves out this predator
+# opens DR-ALOCK01 shuts DR-ALOCK03
+where ALOCK-01
+press NEWSWITCH
+# on the host only, in Co-op. A network game gives a placed alien a new name today (bh_alien.cpp), so this name finds it only once that is changed.
+where VEKONC-01
+kill KILLER ALIEN03
+# on the host only, in Co-op. A network game gives a placed alien a new name today (bh_alien.cpp), so this name finds it only once that is changed.
+where VEKOND-01
+kill KILLER ALIEN02
+# on the host only, in Co-op. A network game gives a placed alien a new name today (bh_alien.cpp), so this name finds it only once that is changed.
+where VEKONB-03
+kill KILLER ALIEN04
+end V COMPLETED MISSION

@@ -13,6 +13,9 @@
 //
 // This test sets up groups like those and checks that there's room for what's shared out.
 //
+// Added 2026-11-09 (#161): and how high each place stands, from the floor under it and the ceiling over it, four-cornered ones included
+// (CheckTheHeights, near the end).
+//
 // HOW IT RUNS
 //
 // pfarlocs.cpp is included below, because the function that makes the room can only be reached from inside that file. That
@@ -182,6 +185,120 @@ static void CheckEveryRoomItsOwnGroup()
 	FarCheck(SharesFit(4), "every share fits");
 }
 
+// ---- Added 2026-11-09 by Melanikus for the AvP port (#161): how high a far location stands, from its room's floors and ceilings
+// (GetFarLocHeight). The spot goes 10 above the highest corner of the floor under it, and it's refused if the lowest corner of the
+// ceiling over it leaves less than FAR_BB_HEIGHT (a crouched alien) between them. The 1999 code read a four-cornered polygon's 4th
+// corner but took its 3rd corner's height, for floors and ceilings both.
+//
+// The room's polygons come from these, in place of the game's shape reader (plat_shp.cpp, which isn't in this test): the four calls
+// GetFarLocHeight makes, over a list the test sets.
+static struct ColPolyTag roomPolygons[4];
+static int roomPolygonCount = 0;
+static int roomPolygonAt = -1;
+
+int SetupPolygonAccessFromShapeIndex(int)
+{
+	roomPolygonAt = -1;
+	return roomPolygonCount;
+}
+
+void AccessNextPolygon(void)
+{
+	roomPolygonAt++;
+}
+
+void GetPolygonVertices(struct ColPolyTag *polyPtr)
+{
+	if (roomPolygonAt >= 0 && roomPolygonAt < roomPolygonCount)
+	{
+		polyPtr->NumberOfVertices = roomPolygons[roomPolygonAt].NumberOfVertices;
+		memcpy(polyPtr->PolyPoint, roomPolygons[roomPolygonAt].PolyPoint, sizeof(polyPtr->PolyPoint));
+	}
+}
+
+void GetPolygonNormal(struct ColPolyTag *polyPtr)
+{
+	if (roomPolygonAt >= 0 && roomPolygonAt < roomPolygonCount)
+	{
+		polyPtr->PolyNormal = roomPolygons[roomPolygonAt].PolyNormal;
+	}
+}
+
+// IsXZinPoly needs it, and mathline.cpp isn't in this test: the same sum, a times b, then divided by c, through 64 bits
+int WideMulNarrowDiv(int a, int b, int c)
+{
+	return static_cast<int>((static_cast<long long>(a) * b) / c);
+}
+
+// A flat square, 1000 either side of the room's middle, at this height (the game's y grows downwards), with one corner moved up or
+// down. A floor faces up and a ceiling faces down.
+static struct ColPolyTag Square(int height, bool ceiling, int cornerMoved, int movedBy)
+{
+	struct ColPolyTag square;
+	memset(&square, 0, sizeof(square));
+	int const xs[4] = { -1000, 1000, 1000, -1000 };
+	int const zs[4] = { -1000, -1000, 1000, 1000 };
+	square.NumberOfVertices = 4;
+
+	for (int i = 0; i < 4; i++)
+	{
+		square.PolyPoint[i].vx = xs[i];
+		square.PolyPoint[i].vy = height + (i == cornerMoved ? movedBy : 0);
+		square.PolyPoint[i].vz = zs[i];
+	}
+
+	square.PolyNormal.vy = ceiling ? 65536 : -65536;
+	return square;
+}
+
+// The spot in the room's middle, over this floor and under this ceiling: whether it's kept, and its height
+static FARVALIDATEDLOCATION SpotBetween(struct ColPolyTag const &floor, struct ColPolyTag const &ceiling)
+{
+	static MODULEMAPBLOCK map;
+	static MODULE room;
+	memset(&map, 0, sizeof(map));
+	memset(&room, 0, sizeof(room));
+	room.m_mapptr = &map;
+	room.m_miny = -10000;   // the room's top
+	room.m_maxy = 10000;    // and its bottom
+
+	roomPolygons[0] = floor;
+	roomPolygons[1] = ceiling;
+	roomPolygonCount = 2;
+
+	FARVALIDATEDLOCATION spot;
+	memset(&spot, 0, sizeof(spot));
+	spot.valid = 1;
+	GetFarLocHeight(&spot, &room);
+	return spot;
+}
+
+static void CheckTheHeights()
+{
+	printf("How high a far location stands (#161):\n");
+
+	// A floor at 0 and a ceiling 5000 above it: plenty of room
+	FARVALIDATEDLOCATION spot = SpotBetween(Square(0, false, -1, 0), Square(-5000, true, -1, 0));
+	FarCheck(spot.valid == 1 && spot.position.vy == -10, "over a flat floor, the spot is 10 above it");
+
+	spot = SpotBetween(Square(0, false, 3, -300), Square(-5000, true, -1, 0));
+	FarCheck(spot.valid == 1 && spot.position.vy == -310, "over a floor rising 300 at its 4th corner, it's 10 above that corner, not inside the floor");
+	spot = SpotBetween(Square(0, false, 2, -300), Square(-5000, true, -1, 0));
+	FarCheck(spot.valid == 1 && spot.position.vy == -310, "and the same when it's the 3rd corner that rises");
+	spot = SpotBetween(Square(0, false, 3, 300), Square(-5000, true, -1, 0));
+	FarCheck(spot.valid == 1 && spot.position.vy == -10, "a 4th corner lower than the rest changes nothing");
+
+	// FAR_BB_HEIGHT between floor and ceiling, a crouched alien: 2100 is room enough, 1900 isn't
+	spot = SpotBetween(Square(0, false, -1, 0), Square(-2100, true, -1, 0));
+	FarCheck(FAR_BB_HEIGHT == 2000 && spot.valid == 1, "2100 between a flat floor and a flat ceiling is room enough");
+	spot = SpotBetween(Square(0, false, -1, 0), Square(-2100, true, 3, 200));
+	FarCheck(spot.valid == 0, "but under a ceiling that comes down 200 at its 4th corner, there's only 1900, and the spot is refused");
+	spot = SpotBetween(Square(0, false, 3, -200), Square(-2100, true, -1, 0));
+	FarCheck(spot.valid == 0, "and over a floor that rises 200 at its 4th corner, the same");
+	spot = SpotBetween(Square(0, false, -1, 0), Square(-2100, true, 2, 200));
+	FarCheck(spot.valid == 0, "as it always was when it's the 3rd corner that comes down");
+}
+
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -189,6 +306,7 @@ int main()
 	CheckAnOrdinaryLevel();
 	CheckARoomInTwoGroups();
 	CheckEveryRoomItsOwnGroup();
+	CheckTheHeights();
 
 	if (checksFailed)
 	{
