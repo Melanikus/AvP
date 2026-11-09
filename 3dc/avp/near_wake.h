@@ -4,8 +4,10 @@
 // WHY: a level puts some NPCs to sleep and wakes each one with a walk-in box. That's a space in the level which, when a player walks
 // into it, sets off a switch, and the switch wakes the NPC. A player who comes another way, or a box that doesn't fire, leaves them asleep.
 // Aliens wake anyway when touched or shot, but a facehugger only wakes when shot, and a dormant predator or a sentry gun never does: in the
-// user's co-op game a facehugger in a locker stayed asleep for good. Third's survey of the 63 stock levels (AvP-docs, npc-asleep-report.md)
-// found 218 NPCs placed asleep: 173 woken by a walk-in box, 25 by a chain of events that isn't one, and 20 by nothing, meant to wake by touch.
+// user's co-op game a facehugger in a locker stayed asleep for good. Third read the 63 stock level files on 2026-11-08, with no game running,
+// and found 218 NPCs placed asleep (their record has AVPGENFLAG_GENERATORINACTIVE, which object_setup.cpp reads for aliens, praetorians,
+// predaliens, predators, facehuggers and sentry guns, and never for a marine): 173
+// woken by a walk-in box, 25 by a chain of events that isn't one, and 20 by nothing, meant to wake by touch.
 //
 // WHAT IT DOES: a walk-in box is also set off when a player comes near enough to one of the sleeping NPCs it wakes. Near enough is nearer
 // than the box itself is to that NPC. So a player who comes the way the level means still sets it off at the box, and one who comes another
@@ -200,7 +202,7 @@ static inline int NearWakeSleepers_NearOne(NearWakeSleepers const &sleepers, Nea
 }
 
 // What one of a box's targets does, besides waking the sleeper a player came near. near_wake.cpp sorts each target into one of these.
-// Third's table of the stock levels' boxes (AvP-docs, box-targets.md) has 139 that wake sleepers: 112 do nothing else, 1 only opens the way
+// Third's count of the walk-in boxes in the same 63 files, read the same way, found 139 that wake sleepers: 112 do nothing else, 1 only opens the way
 // (Sulaco's locker door, a track 1.4 m from hugger1, asked on), and 26 do something else, such as a self-destruct and an objective (Vaults_M)
 // or shutting a door (Invasion_P's quantum alien).
 enum NearWakeJob

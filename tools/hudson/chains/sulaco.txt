@@ -1,0 +1,9 @@
+# level: sulaco   end started by: walk
+# campaign: Marine 5
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens umbdoor01
+where umb03
+press switch03
+where frontvie02
+walk missionareaswitch
+end missioncompletestrategy

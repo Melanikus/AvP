@@ -1,10 +1,9 @@
 // The rendering page of the menus, and the settings it keeps. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // WHAT THE PLAYER GETS: five lines in the menus: how the world is lit, whether things cast shadows, whether maps are worked out for textures with none, whether marines' lamps cast shadows, and whether other
-// marines' lamps show their beam in the air. A new player gets the
-// game as it has always looked. All the new drawing is off, so none of it runs in a frame, and the pictures and prisms it needs aren't made. Loading a level still does a little for it,
-// working out each shape's normals, so that it can be turned on during a level. What they choose is kept in AliensVsPredator.cfg, not in their profile, because it belongs to this
-// computer and this graphics card, not to who's playing.
+// marines' lamps show their beam in the air. A new player starts with the lighting per pixel and the shadows on, and a settings file from an earlier build gets them switched on
+// once, the first time this build starts: view_settings_start.h says how, and why. Maps for textures with none start off. What they choose is kept in AliensVsPredator.cfg, not in
+// their profile, because it belongs to this computer and this graphics card, not to who's playing.
 //
 // THE FILE CAN SAY ANYTHING: it's a text file anyone can edit, so only the exact words count. Anything else is treated as if it wasn't there, the log says so, and what it said is
 // never repeated there.
@@ -20,6 +19,8 @@
 //
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the HUD size line, its slider and its word in the settings file (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   a new player starts with the lighting per pixel and the shadows on, and a file from an earlier build gets them switched on once, which its new VideoSettingsVersion
+//   line remembers (the user's ruling for beta.1). A Rendering line that isn't a choice is now taken as PERPIXEL, the new start
 
 #include "3dc.h"
 #include "module.h"
@@ -33,6 +34,7 @@
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+#include "view_settings_start.h"
 #include "shoulder_lamp.h"
 #include "hud_scale.h"
 
@@ -59,6 +61,7 @@ static const char kAutoGenerate[] = "AutoGenerateMaps";
 static const char kLampsReal[] = "LampsCastShadows";
 static const char kLampBeams[] = "LampBeams";
 static const char kHUDSizeSetting[] = "HUDSize";
+static const char kVersionSetting[] = "VideoSettingsVersion";
 
 // The HUD size the player chose, a percentage of the usual size, and where the page's slider shows it, from 0 to kHUDSizeSliderPlaces
 static int hudSize = kHUDSizeUsual;
@@ -152,9 +155,13 @@ static void TheControlsInUse(unsigned char controls[kControlsInASet * 2])
 void ViewSettings_Load()
 {
 	// Asking for a setting that isn't there puts it there, with this as its value. That has to happen, because setting one later only changes one that's already there.
-	std::string const rendering = Config_GetString(kHeading, kRendering, Lighting_Word(kLightingGouraud));
-	bool const shadows = Config_GetBool(kHeading, kShadows, false);
+	// The Rendering line is asked for with nothing as its value, so that a new file, which has no line, can be told from one that has: see view_settings_start.h.
+	std::string const rendering = Config_GetString(kHeading, kRendering, "");
+	bool shadows = Config_GetBool(kHeading, kShadows, true);
 	bool const autoGenerate = Config_GetBool(kHeading, kAutoGenerate, false);
+
+	// Which of this build's one-time changes the file has had. A file from before the line has had none. Read as a word, for the same reason as the keys below.
+	std::string const versionWord = Config_GetString(kHeading, kVersionSetting, "0");
 
 	// On unless the player has said otherwise. It only counts where lamps can be real lights, so it changes nothing on the view that draws as the original game did. Anything
 	// but true or false in the file is put right by Config_GetBool, which says so in the log.
@@ -163,13 +170,52 @@ void ViewSettings_Load()
 	// The same for the beams: on unless the player has said otherwise, and it only counts with lights per pixel. With Gouraud lights a beam is a lamp's only light.
 	bool const lampBeams = Config_GetBool(kHeading, kLampBeams, true);
 
-	int choice = kLightingGouraud;
+	bool const fileHadRendering = !rendering.empty();
+	int choice = kLightingPerPixel;
 
-	if (!Lighting_FromSavedWord(rendering.c_str(), &choice))
+	if (fileHadRendering && !Lighting_FromSavedWord(rendering.c_str(), &choice))
 	{
-		LogErrorString("the settings file's Rendering line isn't one of GOURAUD, PERPIXEL, NORMALS or RELIEF, so it's GOURAUD");
-		choice = kLightingGouraud;
-		Config_SetString(kHeading, kRendering, Lighting_Word(kLightingGouraud));
+		LogErrorString("the settings file's Rendering line isn't one of GOURAUD, PERPIXEL, NORMALS or RELIEF, so it's PERPIXEL");
+		choice = kLightingPerPixel;
+		Config_SetString(kHeading, kRendering, Lighting_Word(choice));
+	}
+
+	int version = 0;
+
+	// A version line that isn't a plain number has been changed by hand. Only a build with the line writes it, so the file has been through this before, and nothing is switched on.
+	if (!ViewSettings_VersionFromSavedWord(versionWord.c_str(), &version))
+	{
+		LogErrorString(std::string("the settings file's ") + kVersionSetting + " line isn't a number from 0 to 9999, so it's taken as " + std::to_string(kViewSettingsVersion)
+			+ " and nothing is switched on");
+		version = kViewSettingsVersion;
+		Config_SetString(kHeading, kVersionSetting, std::to_string(kViewSettingsVersion));
+	}
+
+	// A new file starts with the lighting per pixel and the shadows on, and a file from an earlier build has them switched on, once. See view_settings_start.h.
+	ViewSettingsStart const start = ViewSettings_LightsAtStart(fileHadRendering, version, &choice, &shadows);
+
+	if (start == kViewSettingsNewFile)
+	{
+		LogString("settings: a new settings file, so the lighting starts per pixel and the shadows start on");
+	}
+	else if (start == kViewSettingsSwitchedOn)
+	{
+		LogString("settings: a file from an earlier build (settings version " + std::to_string(version)
+			+ "), so the lighting per pixel and the shadows are switched on, this once. From now on they stay as the player chooses");
+	}
+
+	// The file says what the game starts with, and that it has had this build's change. That's saved at once, so a game that stops before it
+	// gets to its own save doesn't switch them on again next time.
+	if (start != kViewSettingsAsSaved || !fileHadRendering)
+	{
+		Config_SetString(kHeading, kRendering, Lighting_Word(choice));
+		Config_SetBool(kHeading, kShadows, shadows);
+	}
+
+	if (version < kViewSettingsVersion)
+	{
+		Config_SetString(kHeading, kVersionSetting, std::to_string(kViewSettingsVersion));
+		Config_Save();
 	}
 
 	// Everything off is the game as it has always been drawn, from the very first frame. See view_switches.h.

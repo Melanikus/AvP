@@ -73,7 +73,11 @@ Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, insid
 ## 3. Co-op in five lines
 1. **The host** chooses **Co-op campaign** on the Multiplayer page, picks the campaign, the level and the difficulty, and
    presses **Start** when everyone's in. Everyone plays the campaign's species. The host's page says who'll be left behind.
-2. **Each joiner** types the host's IP address to join. There's no list of games yet.
+2. **Each joiner** chooses **Join Existing Game**, then **Find Games**, which lists the games on the same network (two PCs at home,
+   say). Or **Open IP Address**, to type the host's address: the only way over the internet. **The host lets each joiner in:** the
+   host sees "*name* asks to join", and chooses **Let *name* in** or **Say no to *name*** at the top of the in-game menu (Esc), or of
+   the Co-op campaign page. A request nobody answers in 30 seconds counts as no. Everyone needs the same beta: one beta can't play
+   with another.
 3. **The host forwards UDP ports 23513 and 23514** on their router to their PC: 23513 is the game, and 23514 is how a joiner finds
    it. A joiner needs nothing. There's no automatic forwarding (UPnP). The game's port, 23513, can be changed with
    `PortNumber` under `[Networking]` in `AliensVsPredator.cfg`, in `Documents\My Games\Aliens versus Predator`, and it has to
@@ -102,7 +106,8 @@ pieces. If a game stalls only over a VPN, try without it.
   at most once a second, and keeps the newest 20 pictures. Tell us the mark's number when you describe what you saw.
   If you've given F2 to one of your controls, F2 does that instead and marks nothing.
 - **The M5 guns:**
-  - **As a marine:** open the console (the key under Esc, left of 1) and type `GIVEALLWEAPONS`, in capitals. It gives every marine
+  - **As a marine:** open the console and type `GIVEALLWEAPONS`, in capitals. (On a UK keyboard the console is the key under Esc;
+    on others it may be another key, or none, so tell us which key works for you.) It gives every marine
     gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest. In single player and the co-op campaign it's the only
     way to get the sniper rifle for now, since no level places one yet. Other multiplayer games leave the sniper rifle out.
   - **In other multiplayer games,** a marine can also pick the shotgun, revolver or M79 class.

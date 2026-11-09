@@ -1,0 +1,228 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a frame of exactly 33 ms counts as slow",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (frameMs > kNetSlowFrameMs)",
+					"to": "if (frameMs >= kNetSlowFrameMs)"
+				}
+			]
+		},
+		{
+			"name": "the slowest frame isn't kept",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (frameMs > watch->slowestMs)\n\t{\n\t\twatch->slowestMs = frameMs;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a frame's time below nothing becomes a huge number",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "return frameTime <= 0 ? 0 : (unsigned int)(((unsigned long long)frameTime * 1000) >> 16);",
+					"to": "return (unsigned int)(((unsigned long long)frameTime * 1000) >> 16);"
+				}
+			]
+		},
+		{
+			"name": "a long frame's time goes round",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "(unsigned int)(((unsigned long long)frameTime * 1000) >> 16)",
+					"to": "(unsigned int)(((unsigned int)frameTime * 1000) >> 16)"
+				}
+			]
+		},
+		{
+			"name": "a figure's first news counts as a wait from nothing",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (!hadNews || waited <= kNetFigureWaitMs)",
+					"to": "if (waited <= kNetFigureWaitMs)"
+				}
+			]
+		},
+		{
+			"name": "news exactly 100 ms later counts as a wait",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (!hadNews || waited <= kNetFigureWaitMs)",
+					"to": "if (!hadNews || waited < kNetFigureWaitMs)"
+				}
+			]
+		},
+		{
+			"name": "the time of the last news isn't kept",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "\tnews->lastMs = nowMs;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a short wait is counted",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (waitedMs <= kNetFigureWaitMs)\n\t{\n\t\treturn;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the longest wait isn't kept",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (waitedMs > watch->longestMs)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the biggest jump isn't kept",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "if (jumpMm > watch->biggestJumpMm)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a jump's metres are cut short instead of rounded",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "unsigned int const jump = (watch.jumpAfterLongestMm + 50) / 100;",
+					"to": "unsigned int const jump = watch.jumpAfterLongestMm / 100;"
+				}
+			]
+		},
+		{
+			"name": "an NPC's wait is said as a player's",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "watch.longestWasAPlayer ? \"a player's\" : \"an NPC's\"",
+					"to": "\"a player's\""
+				}
+			]
+		},
+		{
+			"name": "a line runs past a small room's end",
+			"changes": [
+				{
+					"file": "3dc/net_watch.h",
+					"from": "\tint const used = _snprintf(words, size - 1, \"net: frames: %u in the last %u s, the slowest %u ms, %u slower than %u ms\", watch.frames, seconds, watch.slowestMs, watch.slow, kNetSlowFrameMs);\n\twords[(used < 0 || (size_t)used >= size) ? size - 1 : (size_t)used] = '\\0';",
+					"to": "\tint const used = _snprintf(words, size - 1, \"net: frames: %u in the last %u s, the slowest %u ms, %u slower than %u ms\", watch.frames, seconds, watch.slowestMs, watch.slow, kNetSlowFrameMs);\n\t(void)used;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame's time is never counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetFrameWatch_Note(&netFrames, NetFrameWatch_Milliseconds(frameTime));",
+					"to": "(void)frameTime;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the figures' line never goes in the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tNetFigureWatch_Line(netFigures, seconds, words, sizeof(words));\n\t\tLogString(words);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the counts never start again, so the lines add up for ever",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogString(words);\n\t\tnetFrames = NetFrameWatch();\n\t\tnetFigures = NetFigureWatch();\n",
+					"to": "\t\tLogString(words);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no frame tells the report its time",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tNet_NoteFrame(RealFrameTime);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's news is never noted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "\t\tGhost_NewsCame(ghostData, &dynPtr->Position);\n//\t\tdynPtr->Position = dynPtr->PrevPosition = *position;",
+					"to": "//\t\tdynPtr->Position = dynPtr->PrevPosition = *position;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an NPC's news is never noted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\tGhost_NewsCame(ghostData, &dynPtr->Position);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a long wait never reaches the report",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "Net_NoteFigureWait(waitedMs, (unsigned int)Approximate3dMagnitude(&moved), aPlayer);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the frame's news is never done with, so every frame looks like news",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "\t\t\t\t\tghostData->newsThisFrame = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every news of a frame moves where the ghost was, so the jump is only the last message's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.h",
+					"from": "\tif (!ghostData->newsThisFrame)\n\t{\n\t\tghostData->placeBeforeNews = *drawnAt;\n\t\tghostData->newsThisFrame = 1;\n\t}",
+					"to": "\tghostData->placeBeforeNews = *drawnAt;\n\tghostData->newsThisFrame = 1;"
+				}
+			]
+		}
+	]
+}

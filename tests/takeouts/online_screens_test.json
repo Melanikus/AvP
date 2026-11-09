@@ -235,96 +235,6 @@
 			]
 		},
 		{
-			"name": "the selection keeps its row number, not its game",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "if (OnlineScreens_SameGame(selected, rows[i].key))",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "the selection can be past the last row",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "return Between(selectedRow, 0, count - 1);",
-					"to": "return selectedRow;"
-				}
-			]
-		},
-		{
-			"name": "the search never gives up",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "else if (search->tries >= kOnlineSearchMostTries)",
-					"to": "else if (false)"
-				}
-			]
-		},
-		{
-			"name": "the search asks every frame",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "if (search->givenUp || !HasCome(now, search->nextAskAt))",
-					"to": "if (search->givenUp)"
-				}
-			]
-		},
-		{
-			"name": "the clock wrapping round makes the next ask due at once",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "return (uint32_t)(now - moment) < 0x80000000u;",
-					"to": "return now >= moment;"
-				}
-			]
-		},
-		{
-			"name": "the count of tries never starts again",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "\t\tsearch->tries = 1;\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "the search gives up while games are shown",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "if (gamesShown)",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "the seconds to the next ask are counted from the wrong moment",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "OnlineScreens_SecondsLeft(search->nextAskAt - kOnlineSearchEveryMs, now, kOnlineSearchEveryMs)",
-					"to": "OnlineScreens_SecondsLeft(search->nextAskAt, now, kOnlineSearchEveryMs)"
-				}
-			]
-		},
-		{
-			"name": "the first ask names the list instead of this network",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "stage == 0 ? kOnlineWordsLookingHere : kOnlineWordsLookingList",
-					"to": "kOnlineWordsLookingList"
-				}
-			]
-		},
-		{
 			"name": "a game on this network gets a ping",
 			"changes": [
 				{
@@ -495,11 +405,11 @@
 			]
 		},
 		{
-			"name": "a region is never cut in play",
+			"name": "a name is never cut in play",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "char place[kRelayListRegionLetters + 1];",
+					"from": "char place[kRelayListShownNameLetters + 1];",
 					"to": "char place[64];"
 				}
 			]
@@ -621,6 +531,296 @@
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
 					"from": "piece.corner[2].y = Pixel(atY + aheadY * length * 0.60);",
 					"to": "piece.corner[2].y = Pixel(atY - aheadY * length * 0.60);"
+				}
+			]
+		},
+		{
+			"name": "the joiner's own time to the server is never said",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "else if (serverMs < 0)",
+					"to": "else if (true)"
+				}
+			]
+		},
+		{
+			"name": "the host's line doesn't say what its time measures",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"%s %s, %d ms (round trip, host to server)\"",
+					"to": "\"%s %s, %d ms\""
+				}
+			]
+		},
+		{
+			"name": "a search keeps letters the fonts lack",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "OnlineScreens_SafeName(typed, typedBytes, letters, sizeof(letters));",
+					"to": "{ size_t n = 0; while (typed && n < typedBytes && n < kOnlineSearchLetters && typed[n]) { letters[n] = typed[n]; n++; } letters[n] = '\\0'; }"
+				}
+			]
+		},
+		{
+			"name": "a search is never cut to its 20 letters",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char letters[kOnlineSearchLetters + 1];",
+					"to": "char letters[64];"
+				}
+			]
+		},
+		{
+			"name": "a search cares about capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Small(safeName[start + i]) == Small(safeSearch[i])",
+					"to": "safeName[start + i] == safeSearch[i]"
+				}
+			]
+		},
+		{
+			"name": "more than A to Z count as capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "(letter >= 'A' && letter <= 'Z')",
+					"to": "(letter >= 'A' && letter <= '_')"
+				}
+			]
+		},
+		{
+			"name": "an empty search takes no game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\t\treturn true;\n\t}\n\n\tif (!safeName)",
+					"to": "\t\treturn false;\n\t}\n\n\tif (!safeName)"
+				}
+			]
+		},
+		{
+			"name": "no name has everything in it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\tif (!safeName)\n\t{\n\t\treturn false;",
+					"to": "\tif (!safeName)\n\t{\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "only the start of a name is looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "for (size_t start = 0; safeName[start] != '\\0'; start++)",
+					"to": "for (size_t start = 0; safeName[start] != '\\0' && start < 1; start++)"
+				}
+			]
+		},
+		{
+			"name": "the fetching line names no server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"Fetching %s's open sessions\", ServerName(safeServer).letters",
+					"to": "\"Fetching %s's open sessions\", \"\""
+				}
+			]
+		},
+		{
+			"name": "one session is called sessions",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "else if (sessions == 1)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "no sessions is called two",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (sessions <= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the sessions' count isn't capped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "Between(sessions, 2, 999)",
+					"to": "Between(sessions, 2, 2000000000)"
+				}
+			]
+		},
+		{
+			"name": "a failure to connect names no server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"Couldn't connect to %s\", ServerName(safeServer).letters",
+					"to": "\"Couldn't connect to %s\", \"\""
+				}
+			]
+		},
+		{
+			"name": "a failure to fetch says it never connected",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"Connected to %s, but couldn't fetch its open sessions\"",
+					"to": "\"Couldn't connect to %s\""
+				}
+			]
+		},
+		{
+			"name": "a server's name is never cut",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char letters[kRelayListHostLetters + 1];",
+					"to": "char letters[128];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relay line in play is drawn at the top, under the tag",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "int const top = ShadowStatus_Bottom() + margin;",
+					"to": "int const top = margin;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a split line's second half is drawn from the very top, over the tag",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "LineAtTheTopRight(bracket + 1, top + lineHeight, margin);",
+					"to": "LineAtTheTopRight(bracket + 1, margin + lineHeight, margin);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag's room leaves out its last line",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return sizes.margin / 2 + sizes.lineHeight * kShadowStatusMostLines + sizes.margin;",
+					"to": "return sizes.margin / 2 + sizes.lineHeight * (kShadowStatusMostLines - 1) + sizes.margin;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag's room is said without -dev too",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (!DevMode || !ShadowStatusOn)\n\t{\n\t\treturn 0;",
+					"to": "\tif (!ShadowStatusOn)\n\t{\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag has more lines than its room",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "enum { kMostLines = kShadowStatusMostLines, kLineLength = 48 };",
+					"to": "enum { kMostLines = kShadowStatusMostLines + 1, kLineLength = 48 };"
+				}
+			]
+		},
+		{
+			"name": "SelectAgain never looks for the game, so a Refresh puts the selection on its old row number, whatever game is there now",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (OnlineScreens_SameGame(selected, rows[i].key))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SelectAgain gives back a row past the last one, or before the first, when the selected game has gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "return Between(selectedRow, 0, count - 1);",
+					"to": "return selectedRow;"
+				}
+			]
+		},
+		{
+			"name": "with no rows, or none to read, the first row is still selected",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!rows || count <= 0)\n\t{\n\t\treturn -1;",
+					"to": "if (!rows || count <= 0)\n\t{\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: after a Refresh, the selection goes to the first game, not back to the one it was on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "int const again = lastGameKept ? OnlineScreens_SelectAgain(lastGame, lastGameRow, visible, visibleCount) : (visibleCount > 0 ? 0 : -1);",
+					"to": "int const again = visibleCount > 0 ? 0 : -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page never keeps the game the selection is on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tlastGame = selected;\n\t\tlastGameRow = oldElement - kFirstGameElement;\n\t\tlastGameKept = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a page just opened goes back to a game from before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tlastGameKept = false;\n\tStartFetching();",
+					"to": "\tStartFetching();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: while the list is shown, the selection keeps its row number instead of following its game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "int const again = OnlineScreens_SelectAgain(selected, oldElement - kFirstGameElement, visible, visibleCount);",
+					"to": "int const again = oldElement - kFirstGameElement;"
+				}
+			]
+		},
+		{
+			"name": "the play line's round trip isn't capped, for a joiner with no time to the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tBetween(ms, 0, kRelayListMostHostMs));",
+					"to": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tms);"
 				}
 			]
 		}

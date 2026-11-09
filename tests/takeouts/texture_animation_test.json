@@ -1,0 +1,189 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the place between two frames drops each part's fraction again, in whole texels",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "place = (long long)firstFrame[i] * stillToGo + (long long)secondFrame[i] * alpha;",
+					"to": "place = (((long long)firstFrame[i] * stillToGo) >> 16) + (((long long)secondFrame[i] * alpha) >> 16);"
+				}
+			]
+		},
+		{
+			"name": "the places between frames are in whole texels, not 16.16",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "out[i] = (int)place;",
+					"to": "out[i] = (int)(place >> 16);"
+				}
+			]
+		},
+		{
+			"name": "an animation that steps shows its places in whole texels",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "long long place = (long long)firstFrame[i] * 65536;",
+					"to": "long long place = (long long)firstFrame[i];"
+				}
+			]
+		},
+		{
+			"name": "the second frame is left out of the sum",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": " + (long long)secondFrame[i] * alpha;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "an animation that steps slides between its frames",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (interpolate)\n\t\t{",
+					"to": "if (true)\n\t\t{"
+				}
+			]
+		},
+		{
+			"name": "a moment before the first frame is used as it is",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (alpha < 0)\n\t{\n\t\talpha = 0;",
+					"to": "if (false)\n\t{\n\t\talpha = 0;"
+				}
+			]
+		},
+		{
+			"name": "a moment after the second frame is used as it is",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (alpha > 65536)\n\t{\n\t\talpha = 65536;",
+					"to": "if (false)\n\t{\n\t\talpha = 65536;"
+				}
+			]
+		},
+		{
+			"name": "only three corners' numbers are worked out",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "for (int i = 0; i < corners * 2; i++)",
+					"to": "for (int i = 0; i < 6; i++)"
+				}
+			]
+		},
+		{
+			"name": "a place too far out fits",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (texels[i] < -kTextureAnimationFurthestTexel || texels[i] > kTextureAnimationFurthestTexel)",
+					"to": "if (texels[i] < -kTextureAnimationFurthestTexel)"
+				}
+			]
+		},
+		{
+			"name": "a place too far out the other way fits",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (texels[i] < -kTextureAnimationFurthestTexel || texels[i] > kTextureAnimationFurthestTexel)",
+					"to": "if (texels[i] > kTextureAnimationFurthestTexel)"
+				}
+			]
+		},
+		{
+			"name": "the furthest place there can be is refused",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "texels[i] > kTextureAnimationFurthestTexel)",
+					"to": "texels[i] >= kTextureAnimationFurthestTexel)"
+				}
+			]
+		},
+		{
+			"name": "the furthest place there can be is too far to fit in 16.16 with room for the clipping",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.h",
+					"from": "static const int kTextureAnimationFurthestTexel = 16383;",
+					"to": "static const int kTextureAnimationFurthestTexel = 32767;"
+				}
+			]
+		},
+		{
+			"name": "the last place in a list isn't read",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "for (long long i = 0; i < count; i++)",
+					"to": "for (long long i = 0; i + 1 < count; i++)"
+				}
+			]
+		},
+		{
+			"name": "no list, or a count below nothing, fits",
+			"changes": [
+				{
+					"file": "3dc/texture_animation.cpp",
+					"from": "if (!texels || count < 0)\n\t{\n\t\treturn false;",
+					"to": "if (!texels || count < 0)\n\t{\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: CreateTxAnimUVArray goes back to the old sum",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "TextureAnimation_Corners(txaf0->txf_uvdata, txaf1->txf_uvdata, txaf0->txf_numuvs, Alpha, (txah->txa_flags & txa_flag_interpolate_uvs) != 0, uv_array);",
+					"to": "for (i = 0; i < txaf0->txf_numuvs * 2; i++) { uv_array[i] = MUL_FIXED(txaf0->txf_uvdata[i], OneMinusAlpha) + MUL_FIXED(txaf1->txf_uvdata[i], Alpha); }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an animated polygon's corners are read as whole texels",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return (polygon->PolyFlags & iflag_txanim) ? 65536.0f : 1.0f;",
+					"to": "return 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cloaked polygons' drawing reads them as whole texels",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "// an animated polygon's corners are in 16.16 (see CornerNumbersPerTexel)\n\tfloat RecipW = 1.0f / ((float)texWidth * CornerNumbersPerTexel(inputPolyPtr));",
+					"to": "// an animated polygon's corners are in 16.16 (see CornerNumbersPerTexel)\n\tfloat RecipW = 1.0f / (float)texWidth;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader doesn't check the places",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (!TextureAnimation_PlacesFit(sequence->UVCoords, 2LL * animation->NumVerts * sequence->NumFrames))",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}

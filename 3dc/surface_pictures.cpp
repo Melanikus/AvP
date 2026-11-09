@@ -31,6 +31,7 @@ static IDirect3DTexture9 *colourTexture = 0;
 static IDirect3DSurface9 *normalSurface = 0;
 static IDirect3DSurface9 *colourSurface = 0;
 static bool picturesFailed = false;
+static const char *shaderUsedLast = "nothing yet";
 
 template <typename Thing>
 static void GiveBack(Thing *&thing)
@@ -225,6 +226,8 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
 
+	shaderUsedLast = withRelief ? "surfaceRelief.psh" : "surface.psh";
+
 
 	// The fixed buffer's own drawing doesn't set up the depth maps, so the walk goes the old way for now.
 	bool fromBuffer = useStatic && !march && SurfaceStatic_Ready();
@@ -372,6 +375,11 @@ void SurfacePictures_ShowNormals(LPDIRECT3DDEVICE9 device)
 IDirect3DTexture9 *SurfacePictures_Normal()
 {
 	return normalTexture;
+}
+
+const char *SurfacePictures_ShaderUsedLast()
+{
+	return shaderUsedLast;
 }
 
 IDirect3DTexture9 *SurfacePictures_Colour()

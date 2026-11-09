@@ -1,0 +1,5 @@
+# What Hudson does to play battle on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+destroy 575 -7424 -1058 | Facehugger01 trigger
+destroy 1143 -7424 -425 | Facehugger02 trigger
+kill -31506 8373 1202 | queen

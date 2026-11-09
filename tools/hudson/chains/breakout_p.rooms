@@ -1,0 +1,165 @@
+# Rooms of breakout_p, read from the level file by a script. Nobody has walked them. This level was worked out with rooms that touch counted as joined.
+door Mstor02 | lift
+door Mdock02 | lift
+door Mlift01 | lift
+door Mdock03 | lift
+door Mtrain01 | proximity
+door Mlift05 | lift
+door Mdock04 | lift
+door tunnel21 | lift
+door Mtunnel14 | lift
+door Mtunnel04 | lift
+door Mtunnel05 | lift
+door Mtrain03 | lift
+door Mhangar | lift
+door Mdoor55 | lift
+join tunnel09 | train02 | file
+join tunnel10 | train02 | file
+join Mtunnel01 | tunnelrm05 | file
+join Mtunnel01 | tunnel01 | file
+join tunnelduct | tunneldu01 | file
+join tunnelduct | tunnel01 | file
+join tunneldu01 | object56 | file
+join Mtunnel03 | tunnel01 | file
+join Mtunnel03 | tunnelrm10 | file
+join Mstor02 | lift08 | file
+join Mstor02 | dock06 | file
+join dock01 | dock04 | file
+join dock01 | dock06 | file
+join dock01 | colla01 | file
+join Mtrain04 | board06 | file
+join Mtrain04 | recept02 | file
+join control06 | Mlift04 | file
+join control06 | recept05 | file
+join control06 | board07 | touching
+join lift06 | Mlift03 | file
+join lift06 | Mlift04 | touching
+join lift08 | Mlift03 | file
+join Mdock02 | stor02 | file
+join Mdock02 | dock06 | file
+join recept04 | control04 | file
+join board03 | board04 | file
+join board03 | train03 | file
+join board03 | board05 | file
+join board01 | board06 | file
+join board01 | train03 | file
+join board01 | board07 | file
+join control04 | recept02 | file
+join dock04 | sill03 | touching
+join vent31 | tunneldu03 | file
+join vent31 | duct01 | file
+join tunnel01 | Mtrain03 | file
+join cargolif02 | lift03 | file
+join cargolif02 | cartrn05 | file
+join cargolif02 | cartrn06 | file
+join lift03 | dock12 | file
+join Mstor03 | dock08 | file
+join Mstor03 | lift04 | file
+join dock07 | dock08 | file
+join dock07 | umbilic03 | file
+join dock07 | dock12 | file
+join dock08 | Mdock03 | file
+join lift04 | Mlift01 | file
+join cartrn04 | crtrn02 | file
+join cartrn04 | crtrn03 | file
+join cartrn04 | outcar02 | touching
+join cartrn05 | crtrn02 | file
+join outcar02 | tuneel04 | file
+join outcar02 | outcar11 | file
+join outcar02 | outcar12 | file
+join outcar02 | tuneel06 | file
+join outcar08 | tuneel04 | file
+join outcar08 | outcar11 | file
+join outcar08 | outcar12 | file
+join outcar08 | tuneel06 | file
+join outcar11 | tuneel06 | file
+join outcar12 | tuneel06 | file
+join tunnel12 | tunnel17 | file
+join tunnel12 | tuneel04 | file
+join tunnel12 | tuneel05 | file
+join tunnel12 | tunnel21 | file
+join tunnel12 | tunnel19 | touching
+join tunnel12 | tunnel20 | touching
+join tunnel17 | board02 | file
+join tuneel04 | tuneel06 | file
+join tuneel05 | tunnel23 | file
+join Mdock03 | stor03 | file
+join Mtunnel10 | tunnelrm08 | file
+join Mtunnel10 | tunnel22 | file
+join Mtunnel11 | tunnel22 | file
+join Mtunnel11 | tunnelrm09 | file
+join lift09 | dock10 | file
+join lift09 | cartrn06 | file
+join lift09 | newbit04 | touching
+join Mstor04 | lift12 | file
+join Mstor04 | dock11 | file
+join dock09 | dock10 | file
+join dock09 | dock11 | file
+join Mtrain01 | recept06 | file
+join control02 | Mlift05 | file
+join control02 | recept01 | file
+join lift11 | Mlift05 | file
+join lift11 | Mlift02 | file
+join lift12 | Mlift02 | file
+join cartrn06 | crtrn03 | file
+join Mdock04 | stor04 | file
+join Mdock04 | dock11 | file
+join tunnel21 | board10 | file
+join recept01 | recept03 | touching
+join recept03 | control03 | file
+join control03 | recept06 | file
+join tunnel22 | Mtunnel14 | file
+join tunnel22 | duct02 | file
+join tunnel23 | Mtunnel14 | file
+join Mtunnel04 | tunnelrm01 | file
+join Mtunnel04 | tunnel07 | file
+join Mtunnel05 | tunnelrm02 | file
+join Mtunnel05 | tunnel07 | file
+join vent01 | tunnel06 | file
+join vent01 | vent24 | file
+join vent02 | tunnel11 | file
+join vent02 | vent24 | file
+join vent03 | vent04 | file
+join vent03 | tunnel25 | file
+join vent04 | tunnel06 | file
+join vent05 | vent06 | file
+join vent05 | tunnel11 | file
+join vent06 | tunnel13 | file
+join tunnel06 | tunnel07 | file
+join tunnel06 | vent25 | file
+join tunnel07 | tunnel11 | file
+join tunnel11 | vent19 | file
+join tunnel13 | vent19 | file
+join tunnel24 | vent25 | file
+join tunnel24 | vent22 | file
+join obsrm01 | x11 | file
+join obsrm01 | vent11 | file
+join obsrm01 | vent22 | file
+join vent11 | vent20 | file
+join vent19 | vent20 | file
+join tunneldu02 | tunnel25 | file
+join tunneldu02 | object56 | file
+join tunnel25 | vent25 | file
+join train02 | train03 | file
+join train02 | train04 | file
+join train02 | Mtrain03 | file
+join train04 | Tlift | file
+join train04 | train99 | file
+join Mtrain03 | train03 | file
+join train03 | train99 | file
+join Mhangar | Object01 | file
+join Mhangar | colla01 | file
+join duct01 | duct02 | file
+join exch01 | exch03 | file
+join exch01 | exch18 | file
+join exch02 | exch03 | file
+join exch02 | newbit02 | file
+join exch18 | x11 | file
+join train99 | Tlift | file
+join Mdoor55 | Object45 | file
+join newbit01 | newbitM01 | file
+join newbit01 | newbitM02 | file
+join newbit02 | newbit07 | file
+join newbit03 | newbitM01 | file
+join newbit03 | newbit07 | file
+join newbit04 | newbitM02 | file

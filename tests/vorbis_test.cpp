@@ -13,6 +13,10 @@
 // libvorbis, OpenAL and pthreads aren't there: the headers the player needs from them are small stand-ins in
 // tests/vorbis_test_stubs, and the functions are stand-ins below. So no music is played and no file is decoded: ov_read
 // below simply gives the answers each test lists. The program gives back a non-zero result if any check failed.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a track ends at the end of its file instead of starting again, and finishes once all of it has been heard, so a level's music
+//   goes on to its next track (#94, TRACKS-1); and asking for a track with none found reads nothing
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +48,8 @@ static int errorsPrinted = 0;
 static int threadLoops = 0;
 static int loopsAllowed = 0;
 static VorbisPlayback * playerInThread = 0;
+static uint32_t buffersFree = 1;          // what the sound output says about its buffers: 3 of 3 free means all of it has been heard
+static void * threadArgument = 0;          // the player a started music thread was given, so a test can run that thread itself
 
 // ---- Stand-ins for libvorbis
 
@@ -122,14 +128,20 @@ uint32_t AudioStream::GetNumFreeBuffers()
 		playerInThread->_isPlaying = false;
 	}
 
-	return 1;
+	return buffersFree;
 }
 
 // ---- Stand-ins for the rest of the game
 
 int musicVolume = 0;
 
-int pthread_create(pthread_t *, void *, void * (*)(void *), void *) { return 0; }   // the tests run the update loop themselves
+// The tests run the update loop themselves. This keeps what the loop would have been given, so a test can run it on the player
+// LoadVorbisTrack made.
+int pthread_create(pthread_t *, void *, void * (*)(void *), void * argument)
+{
+	threadArgument = argument;
+	return 0;
+}
 int pthread_join(pthread_t, void **) { return 0; }
 
 void LogErrorString(std::string const &, int, char const *) {}
@@ -154,6 +166,8 @@ static void Answers(std::initializer_list<long> list)
 	readCalls = seekCalls = writeCalls = errorsPrinted = 0;
 	threadLoops = loopsAllowed = 0;
 	playerInThread = 0;
+	buffersFree = 1;
+	threadArgument = 0;
 }
 
 // The player's update loop. VorbisPlayer.cpp doesn't declare it in its header, because only it starts the thread.
@@ -266,8 +280,9 @@ static void TestNoAudio()
 
 		Check(player.GetVorbisData(BufferBytes) == 0, "nothing is read");
 		Check(player._readFailed, "the file counts as failed, so the player doesn't read it for ever");
-		Check(readCalls == 2, "it reached the end twice");
-		Check(seekCalls == 1, "with one trip back to the start");
+		Check(readCalls == 1, "it reached the end once, with no audio before it");
+		Check(seekCalls == 0, "and never went back to the start");
+		Check(!player._reachedEnd, "an empty file isn't a track that has ended");
 	}
 
 	{
@@ -277,33 +292,142 @@ static void TestNoAudio()
 
 		Check(player.GetVorbisData(BufferBytes) == 0, "a file that is nothing but gaps gives nothing");
 		Check(player._readFailed, "and also counts as failed");
-		Check(seekCalls == 1, "after one trip back to the start");
+		Check(seekCalls == 0, "and it never went back to the start");
 	}
 }
 
+// #94: a track used to start again at the end of its file, so a level's music played its first track for ever
 static void TestShortTrack()
 {
 	puts("6. tracks that really do reach the end");
 
 	{
-		Answers({ 10000, 0, 10000, 0, 10000, 0, 10000 });
+		Answers({ 10000, 0, 10000 });
 		VorbisPlayback player;
 		player._audioData = new uint8_t[BufferBytes];
 
-		Check(player.GetVorbisData(BufferBytes) == BufferBytes, "a track shorter than the buffer loops to fill it");
+		// ov_read here gives counts and writes nothing, so whatever was in the buffer before stays, unless the player clears it
+		memset(player._audioData, 0xAB, BufferBytes);
+
+		Check(player.GetVorbisData(BufferBytes) == 10000, "a track shorter than the buffer gives only its own audio");
+		Check(player._reachedEnd, "and its end is remembered");
 		Check(!player._readFailed, "that is not a failure");
-		Check(seekCalls == 3, "it went back to the start 3 times");
+		Check(seekCalls == 0, "it never goes back to the start, so the track isn't played again");
+		Check(readCalls == 2, "and it stops reading at the end");
+
+		bool restIsSilence = true;
+		for (uint32_t i = 10000; i < BufferBytes; i++)
+		{
+			restIsSilence = restIsSilence && player._audioData[i] == 0;
+		}
+		Check(restIsSilence, "the rest of the buffer, after the end, is silence");
+		Check(player._audioData[9999] == 0xAB, "and the track's own part is left as it came");
 	}
 
 	{
-		Answers({ 0, 40000 });
+		Answers({ 40000, 0, 40000 });
 		VorbisPlayback player;
 		player._audioData = new uint8_t[BufferBytes];
 
-		Check(player.GetVorbisData(BufferBytes) == BufferBytes, "the end of the file right at the start of a call is fine");
-		Check(!player._readFailed, "and is not a failure");
-		Check(seekCalls == 1, "it went back to the start once");
+		Check(player.GetVorbisData(BufferBytes) == BufferBytes, "a full buffer first");
+		Check(!player._reachedEnd, "with the end not reached yet");
+		Check(player.GetVorbisData(BufferBytes) == 0, "the end of the file right at the start of the next call gives nothing more");
+		Check(player._reachedEnd && !player._readFailed, "and the track has ended, which is not a failure");
+		Check(seekCalls == 0, "and it never went back to the start");
 	}
+}
+
+// After the end, the music thread reads nothing more, lets what is queued play out, and says the track has finished only once all of
+// it has been heard: when all 3 of the sound output's buffers have come back
+static void TestTrackFinishes()
+{
+	puts("8. a track that has ended finishes");
+
+	{
+		Answers({ 40000, 40000, 10000, 0 });
+		VorbisPlayback player;
+		player._audioData = new uint8_t[BufferBytes];
+		player._audioStream = new AudioStream;
+
+		RunUpdateThread(player, 8);
+
+		Check(writeCalls == 3, "two full buffers and the last part of the track go to the sound output");
+		Check(readCalls == 4, "nothing is read after the end");
+		Check(seekCalls == 0, "and it never went back to the start");
+		Check(!player._finished, "with 1 buffer of 3 back, some of it hasn't been heard yet, so it hasn't finished");
+		Check(threadLoops == 8, "and the thread waits");
+
+		buffersFree = 3;
+		RunUpdateThread(player, 8);
+
+		Check(player._finished, "once all 3 buffers are back, all of it has been heard, and the track has finished");
+		Check(threadLoops == 1, "and the thread stops at once");
+		Check(writeCalls == 3, "with nothing more written");
+	}
+
+	{
+		Answers({ 40000, OV_EBADLINK });
+		VorbisPlayback player;
+		player._audioData = new uint8_t[BufferBytes];
+		player._audioStream = new AudioStream;
+		buffersFree = 3;
+
+		RunUpdateThread(player, 8);
+
+		Check(player._readFailed && player._finished, "a track that can't be read any more finishes too, once what was sent has been heard");
+		Check(readCalls == 2, "and it isn't read again");
+	}
+}
+
+// What VorbisPlayer.cpp keeps of ogg_tracks.txt: one file name a line, the first one track 1
+extern std::vector<std::string> TrackList;
+
+static void TestTrackList()
+{
+	puts("9. asking for a track");
+
+	Answers({ 40000 });
+	TrackList.clear();
+
+	LoadVorbisTrack(0);
+	LoadVorbisTrack(1);
+	Check(readCalls == 0 && errorsPrinted == 0, "with no tracks found, asking for track 0 or 1 opens nothing and reads nothing");
+	Check(!IsVorbisPlaying(), "and nothing is playing");
+
+	char const * const aTrack = "vorbis_test_track.tmp";
+	FILE * madeHere = fopen(aTrack, "wb");
+	Check(madeHere != 0, "the test can make its track file");
+	if (madeHere)
+	{
+		fclose(madeHere);
+	}
+
+	TrackList.push_back(aTrack);
+
+	LoadVorbisTrack(2);
+	Check(readCalls == 0, "with one track, asking for track 2 opens nothing");
+
+	LoadVorbisTrack(1);
+	Check(readCalls == 1 && IsVorbisPlaying(), "track 1 is the first name in the list, and it plays");
+	Check(threadArgument != 0, "its music thread was started");
+
+	// The track ends, and all of it is heard. Its music thread is run here, on the player LoadVorbisTrack made, for at most 8 trips,
+	// so a player that never finished would stop the test rather than hang it. The player is kept before Answers clears what was kept.
+	VorbisPlayback * playing = static_cast<VorbisPlayback *>(threadArgument);
+	Answers({ 0 });
+	buffersFree = 3;
+	if (playing)
+	{
+		playing->GetVorbisData(BufferBytes);
+		RunUpdateThread(*playing, 8);
+	}
+
+	Check(playing != 0 && playing->_reachedEnd && playing->_finished, "at the end of its file the track finishes");
+	Check(!IsVorbisPlaying(), "and then it isn't playing, so the game picks the level's next track (Music_Check, MusicPlayer.cpp)");
+
+	Vorbis_CloseSystem();
+	TrackList.clear();
+	Check(remove(aTrack) == 0, "the track's file was closed, so the test can remove it");
 }
 
 // Open needs a file that really exists, though ov_open_callbacks above never reads it. So the test makes an empty one of its
@@ -363,6 +487,8 @@ int main()
 	TestNoAudio();
 	TestShortTrack();
 	TestOpen();
+	TestTrackFinishes();
+	TestTrackList();
 
 	if (checksFailed)
 	{

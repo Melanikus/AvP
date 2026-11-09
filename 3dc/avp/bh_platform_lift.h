@@ -1,5 +1,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a lift keeps what the host last said about it, so a joiner's car follows the host's in a game that plays the same as single player
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   it keeps when it heard that by the machine's own clock, not by adding up frame times (#90)
 #include "track.h"
 /*------------------------------Patrick 14/3/97-----------------------------------
   Header for platform lift stuff
@@ -33,7 +35,7 @@ typedef struct platformlift_behaviour_type
 	int netMsgCount;
 
 	// The lift sync, in the mode that plays as single player (NETMESSAGE_LIFTSTATE). On the host: how long since it last sent, and
-	// the state it sent. On a joiner: whether the host has spoken yet, what it last said, and how long ago, which his car follows.
+	// the state it sent. On a joiner: whether the host has spoken yet, what it last said, and when it heard it, which his car follows.
 	// syncMessages is how many lift sync messages this machine has sent (the host) or had (a joiner) about this lift.
 	int syncSinceSent;
 	int syncLastSentState;
@@ -41,7 +43,7 @@ typedef struct platformlift_behaviour_type
 	int syncHeight;
 	int syncState;
 	int syncEnd;
-	int syncAge;
+	unsigned int syncHeardAt;   // when this machine had the host's last message, by timeGetTime, its own clock in ms: see NetLiftMsSince
 	int syncMessages;
 } PLATFORMLIFT_BEHAVIOUR_BLOCK;
 

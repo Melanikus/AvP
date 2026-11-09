@@ -1,0 +1,139 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the starting multiplier is the well-known 1103515245, not the game's own 1103515145",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "static const uint32_t kStartTimes = 1103515145u;",
+					"to": "static const uint32_t kStartTimes = 1103515245u;"
+				}
+			]
+		},
+		{
+			"name": "the starting step is one more",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "static const uint32_t kStartPlus = 12345u;",
+					"to": "static const uint32_t kStartPlus = 12346u;"
+				}
+			]
+		},
+		{
+			"name": "a draw reaches two places back, not three",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "static const int kReachBack = 3;",
+					"to": "static const int kReachBack = 2;"
+				}
+			]
+		},
+		{
+			"name": "a started ring's first draw is at its very first place",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "ring.at = kReachBack;",
+					"to": "ring.at = 0;"
+				}
+			]
+		},
+		{
+			"name": "a draw keeps its lowest bit",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "int const result = (int)(ring.numbers[ring.at] >> 1);",
+					"to": "int const result = (int)(ring.numbers[ring.at] & 0x7fffffff);"
+				}
+			]
+		},
+		{
+			"name": "the main generator throws away one draw fewer",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "Start(mainRing, number, 10 * 31);",
+					"to": "Start(mainRing, number, 10 * 31 - 1);"
+				}
+			]
+		},
+		{
+			"name": "the seeded generator throws away one draw more",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "Start(seededRing, (uint32_t)seed, 2 * 13);",
+					"to": "Start(seededRing, (uint32_t)seed, 2 * 13 + 1);"
+				}
+			]
+		},
+		{
+			"name": "starting the main generator doesn't start the seeded one from it",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "SetSeededFastRandom(Draw(mainRing));",
+					"to": "SetSeededFastRandom(0);"
+				}
+			]
+		},
+		{
+			"name": "the main ring holds 30 numbers, not 31",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "static RandomRing<31> mainRing = {};",
+					"to": "static RandomRing<30> mainRing = {};"
+				}
+			]
+		},
+		{
+			"name": "the seeded ring holds 12 numbers, not 13",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "static RandomRing<13> seededRing = {};",
+					"to": "static RandomRing<12> seededRing = {};"
+				}
+			]
+		},
+		{
+			"name": "the main generator draws without ever having been started",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "if (!mainRing.started)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the seeded generator draws without ever having been given a seed",
+			"changes": [
+				{
+					"file": "3dc/fast_random.cpp",
+					"from": "if (!seededRing.started)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game doesn't start the random numbers from the clock",
+			"changes": [
+				{
+					"file": "3dc/maths.cpp",
+					"from": "FastRandom_StartFrom(timeGetTime());",
+					"to": "FastRandom_StartFrom(0);"
+				}
+			]
+		}
+	]
+}

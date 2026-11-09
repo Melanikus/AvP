@@ -20,8 +20,9 @@
 //   7. sealed game datagrams (3dc/net_sealed_game.h, CRYPTO.md section 9) with the file's handshake B keys: each one exactly what the test
 //      seals by hand from section 9's layout; both directions, and never one's own back; the smallest and the largest; epoch 1 from
 //      counter 2^20; the replay window's edges; one bit changed in every byte; the 65,536th failed tag ending the session; 24 hours;
-//      20,000 junk datagrams. The relay's Java seals no game datagrams, so until Primary adds its own (sealedGame) to the file, the
-//      hand-sealed bytes here are the only reference;
+//      20,000 junk datagrams;
+//   7b. the relay's own sealed game datagrams (the file's sealedGame, from the relay's Java; modified 2026-11-09 by Melanikus for the AvP
+//      port): each is exactly what the test seals by hand, the other side opens it, and a new side seals the same at counters 0 and 1;
 //   8. a joiner and a host (3dc/net_peer_v2.h) over a pretend wire that loses what each test says: the whole join, then game datagrams
 //      both ways; the joiner's sends at exactly 0, 0.5, 1.5 and 3.5 s and its giving up at 7.5 s; B2, B4 and B5 lost once each, and the
 //      host's answers sent again byte for byte; a joiner that expected another host; another handshake's datagrams, a cookie that isn't
@@ -1357,6 +1358,71 @@ static void TestSealedGame(const Run &run)
 	host.End(kNetSealedGameFine);
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: THE RELAY'S OWN SEALED GAME DATAGRAMS (crypto-v2.json's sealedGame, which the relay
+// server's Java makes from the same handshake B's split, CRYPTO.md section 9). Until these came, the bytes this test sealed by hand were
+// section 9's only reference here. Now each of the relay's is held to them three ways:
+// - it's exactly what this test seals by hand;
+// - the other side's NetSealedGame opens it to its message;
+// - at counters 0 and 1, a new NetSealedGame seals the same bytes.
+// So the game and the relay agree on section 9, not only the game with itself.
+static void TestTheRelaysSealedGame(const Run &run)
+{
+	printf("\n7b. Sealed game datagrams against the relay's own (crypto-v2.json's sealedGame)\n");
+	const JsonValue *const cases = file.Member("sealedGame");
+	BCheck(cases && cases->kind == kJsonList && cases->items.size() == 6, "the file has the relay's 6 sealed game datagrams");
+
+	if (!cases || cases->kind != kJsonList)
+	{
+		return;
+	}
+
+	const NetNoiseSplit &split = run.joinerKeys.split;
+	uint32_t const now = 1000;
+	NetSealedGame joinerSeals, hostSeals, hostOpens, joinerOpens;
+	joinerSeals.Start(split, true, now);
+	hostSeals.Start(split, false, now);
+	hostOpens.Start(split, false, now);
+	joinerOpens.Start(split, true, now);
+
+	for (size_t i = 0; i < cases->items.size(); i++)
+	{
+		const JsonValue &c = cases->items[i];
+		const JsonValue *const from = TextMember(c, "from");
+		const JsonValue *const counter = c.Member("counter");
+		const JsonValue *const epoch = c.Member("epoch");
+		bool const fromJoiner = from && from->text == "joiner";
+		uint64_t const n = counter && counter->kind == kJsonNumber ? counter->number : ~0ull;
+		Bytes const message = Hex(c, "message");
+		Bytes const sealed = Hex(c, "sealed");
+		std::string const which = std::string(fromJoiner ? "the joiner's" : "the host's") + " at counter " + std::to_string(n);
+		BCheck(from && (fromJoiner || from->text == "host") && epoch && epoch->kind == kJsonNumber && epoch->number == (n >> 20),
+			which + ": its side is named, and its epoch is the counter's (2^20 to an epoch)");
+
+		Bytes const byHand = fromJoiner ? SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, n, message)
+			: SealByHand(split.responderToInitiatorKey, split.responderToInitiatorIv, n, message);
+		BCheck(!byHand.empty() && byHand == sealed, which + ": the relay's bytes are exactly what section 9 seals by hand");
+
+		Bytes text;
+		BCheck(Opens(fromJoiner ? &hostOpens : &joinerOpens, sealed, &text, now) && text == message, which + ": the other side opens it to its message");
+
+		if (n <= 1)
+		{
+			NetSealedGame &side = fromJoiner ? joinerSeals : hostSeals;
+			Bytes out(message.size() + kNetSealedGameOverheadBytes, 0xAA);
+			size_t written = 0;
+			uint8_t spare[1] = { 0 };
+			bool const made = side.Seal(message.empty() ? spare : message.data(), message.size(), out.data(), out.size(), &written, now)
+				&& written == out.size();
+			BCheck(made && out == sealed, which + ": and a new NetSealedGame seals the same bytes");
+		}
+	}
+
+	joinerSeals.End(kNetSealedGameFine);
+	hostSeals.End(kNetSealedGameFine);
+	hostOpens.End(kNetSealedGameFine);
+	joinerOpens.End(kNetSealedGameFine);
+}
+
 // ---- 8. A joiner and a host over a pretend wire
 
 static std::vector<Bytes> SendsOf(NetPeerJoiner *joiner)
@@ -1523,6 +1589,24 @@ static void TestPeers()
 
 		BCheck(later == 0 && joiner.Ready(), "once the host's first sealed datagram has come, the joiner sends B5 no more, and stays ready");
 		BCheck(host.Drops().notOurs == 0 && host.Drops().sealedEarly == 0 && joiner.Drops().notOurs == 0, "and nothing was dropped on the way");
+
+		// Added 2026-11-09 by Melanikus for the AvP port (Snyk Code): ending a handshake wipes what came of it, the check code and the
+		// joiner's fingerprint among them, on both sides
+		joiner.Reset();
+		host.Reset();
+		bool wiped = !joiner.Ready() && !host.Ready() && host.Port() == 0;
+
+		for (size_t i = 0; i < kNetHandshakeBCheckCodeBytes; i++)
+		{
+			wiped = wiped && joiner.CheckCode()[i] == 0 && host.CheckCode()[i] == 0;
+		}
+
+		for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
+		{
+			wiped = wiped && host.JoinerFingerprint()[i] == 0;
+		}
+
+		BCheck(wiped, "ending the handshakes wipes their check codes, and the joiner's fingerprint the host kept");
 	}
 
 	// The joiner's sends when nothing answers: at 0, 0.5, 1.5 and 3.5 s, then it gives up at 7.5 s
@@ -1822,6 +1906,7 @@ int main()
 			TestBrokenPromise(run);
 			TestEveryByte(run);
 			TestSealedGame(run);
+			TestTheRelaysSealedGame(run);
 		}
 
 		TestFresh();

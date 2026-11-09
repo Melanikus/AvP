@@ -1,0 +1,148 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a change of speed doesn't start the guess again",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "if (speedChanged)\n\t{\n\t\t*timer = -ONE_FIXED;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the sender's time isn't taken off the clock",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "*timer -= (senderTime - *lastSenderTime);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a sender's time that goes backwards is taken off as it is",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "if (senderTime >= (int)*lastSenderTime)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the sender's last time isn't kept",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "\t*lastSenderTime = senderTime;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the guess never runs out",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "if (*timer > kGhostGuessLongest)\n\t{\n\t\t*timer = kGhostGuessLongest;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a clock below nothing isn't held at nothing",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "if (*timer < 0)\n\t{\n\t\t*timer = 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "part of a frame's guess moves a whole frame",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "if (time != frameTime)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a stopped figure's clock doesn't start from nothing",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "*timerLast = *timer = 0;\n\t\treturn none;",
+					"to": "return none;"
+				}
+			]
+		},
+		{
+			"name": "the guess goes on for a second, not half of one",
+			"changes": [
+				{
+					"file": "3dc/ghost_guess.h",
+					"from": "static const int kGhostGuessLongest = ONE_FIXED / 2;",
+					"to": "static const int kGhostGuessLongest = ONE_FIXED;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game moves a player's figure at its last speed, without the guess",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "dynPtr->LinVelocity = GhostGuess_FrameSpeed(&ghostData->extrapTimer, &ghostData->extrapTimerLast, ghostData->velocity, NormalFrameTime, &stopped);",
+					"to": "dynPtr->LinVelocity = ghostData->velocity;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's change of speed never starts the guess again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Approximate3dMagnitude(&diff) > 1000, playerTimer);",
+					"to": "false, playerTimer);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game sends a full message every half second, not every quarter",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "TimeCounterForExtrapolation - TimeOfLastPlayerState > ONE_FIXED / 4)",
+					"to": "TimeCounterForExtrapolation - TimeOfLastPlayerState > ONE_FIXED / 2)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game sends 30 times a second, not 60",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static const int kSendsEachSecond = 60;",
+					"to": "static const int kSendsEachSecond = 30;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the marine runs faster than a message can say",
+			"changes": [
+				{
+					"file": "3dc/avp/pmove.cpp",
+					"from": "#define MARINE_MOVESCALE 15000",
+					"to": "#define MARINE_MOVESCALE 60000"
+				}
+			]
+		}
+	]
+}

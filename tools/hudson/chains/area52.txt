@@ -1,0 +1,17 @@
+# level: area52   end started by: walk
+# campaign: Predator 2
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens LFT1DR01
+where SEKONA02
+press lc-switc01
+# opens LFT1DR02
+where LFT01ENT
+press LiftbtUP
+where LFT1DR02 | LFT1SHFT-1
+walk V lift1 doorsa idiots switcy
+# opens LFT1DR03 shuts LFT1DR02
+where LFT1DR03 | LFT1SHFT-2 | LFT1SHFT-3
+walk V llift1 door idiots switch
+where HANGAR04 | HANGAR
+walk End of Level
+end VENDOFLEVELb

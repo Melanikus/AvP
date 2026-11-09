@@ -1,0 +1,528 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "nothing blocks him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if ((span.flags & kBlocks) && span.low < toHeight && span.high > fromHeight)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the top of a wall blocks him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "span.low < toHeight && span.high > fromHeight)",
+					"to": "span.low < toHeight)"
+				}
+			]
+		},
+		{
+			"name": "only the bottom of a wall blocks him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "span.low < toHeight && span.high > fromHeight)",
+					"to": "span.high > fromHeight)"
+				}
+			]
+		},
+		{
+			"name": "his square is one column wide",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "int const kColumnsInHisSquare = 1;",
+					"to": "int const kColumnsInHisSquare = 0;"
+				}
+			]
+		},
+		{
+			"name": "anything low stops him, even a step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + tall))",
+					"to": "if (InTheWay(ix, row, span.high + 1, span.high + tall))"
+				}
+			]
+		},
+		{
+			"name": "he never crawls",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight",
+					"to": "kHudsonGridMarineHeight"
+				}
+			]
+		},
+		{
+			"name": "he always crawls",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight",
+					"to": "kHudsonGridCrawlHeight"
+				}
+			]
+		},
+		{
+			"name": "a floor only counts if it blocks nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (!(span.flags & kIsFloor))",
+					"to": "if ((span.flags & kBlocks) && !(span.flags & kIsFloor) && false)"
+				}
+			]
+		},
+		{
+			"name": "any rise can be walked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (abs(rise) > kHudsonGridStepUp)",
+					"to": "if (abs(rise) > 100000)"
+				}
+			]
+		},
+		{
+			"name": "a steep slope can be climbed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (rise > kClimbingIsMoreThan && !placeFlat[(size_t)p])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no slope can be walked down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (rise > kClimbingIsMoreThan && !placeFlat[(size_t)p])",
+					"to": "if (!placeFlat[(size_t)p])"
+				}
+			]
+		},
+		{
+			"name": "a corner can be cut",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (way >= 4 && !(WalkableInto(ix + dx, iz, height) && WalkableInto(ix, iz + dz, height)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only straight moves",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "for (int way = 0; way < 8; way++)",
+					"to": "for (int way = 0; way < 4; way++)"
+				}
+			]
+		},
+		{
+			"name": "any drop will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (landing < 0 || height - placeHeight[(size_t)landing] >= kHudsonGridMostFall)",
+					"to": "if (landing < 0)"
+				}
+			]
+		},
+		{
+			"name": "a drop is counted as a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "moves.push_back((uint32_t)landing * 2 + 1);",
+					"to": "moves.push_back((uint32_t)landing * 2);"
+				}
+			]
+		},
+		{
+			"name": "no drops",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (landing < 0 || height",
+					"to": "if (true || height"
+				}
+			]
+		},
+		{
+			"name": "a drop lands next door",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "int const kColumnsOutForADrop = 2;",
+					"to": "int const kColumnsOutForADrop = 1;"
+				}
+			]
+		},
+		{
+			"name": "a drop isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "drops++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every patch counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "smallPatch[place] = size[(size_t)Find(parent, (int)place)] < kSmallPatch ? 1 : 0;",
+					"to": "smallPatch[place] = 0;"
+				}
+			]
+		},
+		{
+			"name": "a drop joins patches",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (moves[(size_t)m] & 1)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tint a = Find",
+					"to": "int a = Find"
+				}
+			]
+		},
+		{
+			"name": "nonsense corner counts get through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "bool good = polygon.corners >= 3 && polygon.corners <= kHudsonGridMostCorners;",
+					"to": "bool good = polygon.corners >= 3 && polygon.corners <= 100000;"
+				}
+			]
+		},
+		{
+			"name": "too few corners get through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "bool good = polygon.corners >= 3 && polygon.corners <= kHudsonGridMostCorners;",
+					"to": "bool good = polygon.corners <= kHudsonGridMostCorners;"
+				}
+			]
+		},
+		{
+			"name": "corners any distance away get through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "good = abs(polygon.x[c]) <= kHudsonGridMostCoordinate && abs(polygon.y[c]) <= kHudsonGridMostCoordinate && abs(polygon.z[c]) <= kHudsonGridMostCoordinate;",
+					"to": "good = true;"
+				}
+			]
+		},
+		{
+			"name": "a sky gets through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (!good || (hx - lx) * (hz - lz) > kHudsonGridMostPolygonArea)",
+					"to": "if (!good)"
+				}
+			]
+		},
+		{
+			"name": "a level any width gets through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (wide > kHudsonGridMostSide || deep > kHudsonGridMostSide)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a limit on polygons isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (polygons.size() > limitPolygons)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a limit on crossings isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (bits->size() >= limitBits)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a limit on places isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (placeHeight.size() >= limitPlaces)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a refusal leaves a map behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (!MakeMoves())\n\t\t{\n\t\t\tClear();",
+					"to": "if (!MakeMoves())\n\t\t{"
+				}
+			]
+		},
+		{
+			"name": "the walls aren't found, so the middle costs nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (walking < 8)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "near a wall costs nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "step *= 1.0f + (float)(kMiddleReachesInColumns - clear) / (float)kMiddleReachesInColumns;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a drop costs nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "step += (float)abs(rise) * kDropCosts;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a search does all its work at once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "for (int done = 0; done < placesAllowed; done++)",
+					"to": "for (int done = 0; done < 2000000000; done++)"
+				}
+			]
+		},
+		{
+			"name": "asked again, it starts looking again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (state != kHudsonGridSearching)\n\t{\n\t\treturn state;",
+					"to": "if (false)\n\t{\n\t\treturn state;"
+				}
+			]
+		},
+		{
+			"name": "no way means no way at all",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "MakeTheWay(nearestPlace, false);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the way keeps every place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (acrossSinceKept >= kWayPointEvery)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the way keeps only its ends",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (acrossSinceKept >= kWayPointEvery)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the way loses the edge of a drop",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (dx > 1 || dz > 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the last point isn't the goal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "last.x = goalAskedX;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the floor taken for a spot isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "*floorY = -placeHeight[(size_t)scored[0].second];",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a spot can be any height above its floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (above < -kHudsonGridSpotBelow || above > kHudsonGridSpotAbove)",
+					"to": "if (above < -kHudsonGridSpotBelow)"
+				}
+			]
+		},
+		{
+			"name": "a spot can be any distance away",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (across > kHudsonGridSpotReach)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "cells can run past the room they're given",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (written >= most)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "cells come from any height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (abs(placeHeight[(size_t)p] - height) > radius)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no drops are drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "cell->kind = kHudsonGridDrop;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a drop doesn't say where he lands",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "cell->link = (int)(move / 2);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a place past the end can be asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "if (!ready || number < 0 || (size_t)number >= placeHeight.size())",
+					"to": "if (!ready || number < 0)"
+				}
+			]
+		},
+		{
+			"name": "facing only reads the first three corners",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_grid.cpp",
+					"from": "for (int i = 0; i < polygon.corners; i++)\n\t{\n\t\tint const j = (i + 1) % polygon.corners;",
+					"to": "for (int i = 0; i < 2; i++)\n\t{\n\t\tint const j = (i + 1) % 3;"
+				}
+			]
+		},
+		{
+			"name": "a file has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_save.cpp",
+					"from": "if (bytes + length > most)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "reaching the limit doesn't say so",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_save.cpp",
+					"from": "fputs(\"# stopped here: the file reached its limit\\n\", file);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line too long isn't cut",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_save.cpp",
+					"from": "length = kHudsonNavSaveMostLine - 1;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a file that can't be made doesn't say why",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_save.cpp",
+					"from": "why = \"the disk said no\";\n\t}\n\n\treturn file != 0;",
+					"to": "}\n\n\treturn file != 0;"
+				}
+			]
+		}
+	]
+}

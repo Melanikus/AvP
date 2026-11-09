@@ -1,0 +1,21 @@
+# What Hudson does to play stat101 on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward here, as above, and a switch or object within 2 m of a room counted as reachable from it
+destroy -6442 989 5794 | liftor32
+destroy 5930 -18203 43981 | liftor24
+destroy 5930 -68860 42812 | liftor12
+destroy -5955 -68860 42812 | liftor10
+destroy -3032 -99838 24994 | liftor26
+destroy 15875 -88375 29657 | liftor28
+destroy -15873 -88343 35408 | liftor30
+destroy 1956 -99405 14370 | keybrd01
+destroy 26498 -87716 34632 | keybrd02
+destroy -26497 -87715 30730 | keybrd03
+destroy -5850 -115620 -12501 | liftor02
+destroy -5847 -142897 -13690 | liftor06
+destroy -101765 -254193 7279 | fakekeys04
+destroy -100401 -254312 7951 | fakekeys05
+destroy -99038 -254193 7279 | fakekeys06
+destroy -101765 -254193 -35438 | fakekeys25
+destroy -100401 -254312 -36109 | fakekeys26
+destroy -99038 -254193 -35438 | fakekeys27
+walk -79492 -247268 -14077 | endarea01

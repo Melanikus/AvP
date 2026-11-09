@@ -507,8 +507,26 @@ static void TestTheLoadersAsk()
 	Check(Has(savegame, "if(sbPtr && sbPtr != Player->ObStrategyBlock)"), "a save can't take the player's block away");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (#86): a load from an empty slot ends its request, so it doesn't wait (reading the save
+// folder every frame) for the next save made there and load that unasked, as the 1999 code did. LoadSavedGame needs the whole game, so
+// it's read as text.
+static void TestAnEmptySlot()
+{
+	std::string const saves = ReadSourceFile("3dc/avp/savegame.cpp");
+	size_t const start = saves.find("void LoadSavedGame()\n{");
+	size_t const end = start == std::string::npos ? std::string::npos : saves.find("\n}\n", start);
+	std::string const loading = end == std::string::npos ? std::string() : saves.substr(start, end - start);
+	size_t const scan = loading.find("\tScanSaveSlots();\n");
+	size_t const empty = loading.find("\tif(!save_slot->SlotUsed)\n\t{\n\t\tLogString(\"save: there's no save in that slot, so nothing is loaded\");\n"
+		"\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;\n\t}\n");
+	Check(scan != std::string::npos && empty != std::string::npos && scan < empty,
+		"a load from an empty slot ends its request, and says so, so it can't load the next save made there");
+	Check(!loading.empty() && !Has(loading, "if(!save_slot->SlotUsed) return;"), "and nothing leaves an empty slot keeping the request, as 1999's line did");
+}
+
 int main()
 {
+	TestAnEmptySlot();
 	TestSlotNumbers();
 	TestTableNumbers();
 	TestWeaponSwaps();
