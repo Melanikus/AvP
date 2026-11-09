@@ -5,6 +5,9 @@
 //   in the same-as-single-player mode, friendly fire off doesn't stop an NPC's flames hurting a Predator
 //   a ghost of an NPC the host runs has that kind's size
 //   falling hurts in a game that plays as single player, whatever the host's setting
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   NEWDYNAMICCOLLISIONS: the smallest move that counts shrinks with a short frame, so a slide along a wall goes on at any frame rate
+//   (issue #180, the owner's own exception to keeping the 1999 movement: see new_dynamic_collisions.h)
 
 /* KJL 12:42:43 29/12/98 - this is effectively Dynamics V4.0. If you think this code looks bad,
 you should have seen the previous versions. */
@@ -40,6 +43,7 @@ you should have seen the previous versions. */
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "logString.h"
+#include "new_dynamic_collisions.h"
 
 #define TELEPORT_IF_OUTSIDE_ENV 1	   
 #define MINIMUM_BOUNDINGBOX_EXTENT 25
@@ -68,6 +72,16 @@ extern DAMAGE_PROFILE FallingDamage;
 extern DAMAGE_PROFILE PredPistol_FlechetteDamage;
 
 int PrintDebuggingText(const char* t, ...);
+
+// NEWDYNAMICCOLLISIONS: 1, as every run of the game starts, or 0 for 1999's way. See new_dynamic_collisions.h.
+int NewDynamicCollisionsOn = 1;
+
+// How many millimetres of a move, or fewer, count as nothing this frame. Read where 1999 had 16.
+static int NothingUpTo(void)
+{
+	return NewDynamicCollisions_NothingUpTo(NormalFrameTime, NewDynamicCollisionsOn);
+}
+
 void PlayerPheromoneTrail(DYNAMICSBLOCK *dynPtr);
 
 #define AccessNextPolygon()\
@@ -1380,7 +1394,7 @@ static int MoveObject(STRATEGYBLOCK *sbPtr)
 				lowestBoundary = testValue;
 				testValue = (lowestBoundary+highestBoundary)/2;
 			}
-			if (MUL_FIXED(highestBoundary-lowestBoundary,dynPtr->DistanceLeftToMove)<=16)
+			if (MUL_FIXED(highestBoundary-lowestBoundary,dynPtr->DistanceLeftToMove)<=NothingUpTo())
 			{
 				InterferenceAt(highestBoundary,dynPtr);
 				break;
@@ -1707,7 +1721,7 @@ static int MoveObject(STRATEGYBLOCK *sbPtr)
 			}
 		}
 		dynPtr->DistanceLeftToMove = Magnitude(&dynPtr->Displacement);    
-		if (dynPtr->DistanceLeftToMove<=16)
+		if (dynPtr->DistanceLeftToMove<=NothingUpTo())
 		{
 			dynPtr->DistanceLeftToMove = 0;
 		}
@@ -1716,7 +1730,7 @@ static int MoveObject(STRATEGYBLOCK *sbPtr)
     else
     {
 		dynPtr->DistanceLeftToMove = Magnitude(&dynPtr->Displacement);    
-		if (dynPtr->DistanceLeftToMove<=16)
+		if (dynPtr->DistanceLeftToMove<=NothingUpTo())
 		{
 			dynPtr->DistanceLeftToMove = 0;
 		}

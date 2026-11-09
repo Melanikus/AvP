@@ -246,6 +246,8 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 screen=main windowsof=2", kHudsonRefusedWindowPartsOnMain);
 	Refused("-hudson level=a frames=1 screen=main windowslot=0", kHudsonRefusedWindowPartsOnMain);
 	Refused("-hudson level=a frames=1 screen=main windowsof=2 windowbig=1", kHudsonRefusedWindowPartsOnMain);
+	// windowbig= on its own: it's the main screen that refuses it, before windowbig= is asked whether there are two windows
+	Refused("-hudson level=a frames=1 screen=main windowbig=1", kHudsonRefusedWindowPartsOnMain);
 	Refused("-hudson level=a frames=1 windowsof=2 windowbig=2", kHudsonRefusedWindowBig);
 	Refused("-hudson level=a frames=1 windowsof=2 windowbig=-1", kHudsonRefusedWindowBig);
 	Refused("-hudson level=a frames=1 windowsof=2 windowbig=x", kHudsonRefusedWindowBig);
@@ -884,6 +886,8 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=10.1", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0.55", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0,5", kHudsonRefusedEveryNotASecond);
+	// ":" isn't a figure, though it counts as 10 in the reading's sum, which would make it 100 tenths: only the check of its shape refuses it
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=:", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=.5", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=5.", kHudsonRefusedEveryNotASecond);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=", kHudsonRefusedEveryNotASecond);
@@ -1300,6 +1304,7 @@ static void TestTheRealGame()
 		Check(Has(watchCode, "\tDieIfItIsTime();\n\tFollowTheNamedThing();"), "SOURCE: follow= is looked at every frame");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "if (lastSaid != 0 && now - lastSaid < 1000)"), "SOURCE: and said once a second");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, because a restart makes it again");
+		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "\n\tSTRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, never kept from the first");
 		Check(Has(watchCode, "if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)\n\t{\n\t\tWalkHim((PLAYER_STATUS *)playerStatus);"), "SOURCE: a walk is the player's own input");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;\n\t\tstatus->Mvt_MotionIncrement = ONE_FIXED;"), "SOURCE: facing walkto=, with the forward key, as a person walks: the request and the motion it sets");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "Hudson_FaceThePlace(status, to);"), "SOURCE: and he turns to walkto= every frame");
@@ -1323,6 +1328,7 @@ static void TestTheRealGame()
 		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(LONG frame)\n{", "\n}\n"), "while (togetherTried < plan.watchTogether - 1 && togetherTried < kHudsonMostTogether - 1 && now - togetherFirstAt >= (DWORD)(togetherTried + 1) * (DWORD)plan.watchEveryMs)"), "SOURCE: never more than there are names for, and each only once its turn has come");
 		Check(Has(watchCode, "if (plan.alienAtPlaces > 1)\n\t\t{\n\t\t\tspot.vx = plan.alienAtMore[i][0];\n\t\t\tspot.vy = plan.alienAtMore[i][1] - kAlienStartsAboveTheFloor;"), "SOURCE: the others go at alienat='s places when it names them, just above, as the first does");
 		Check(Has(watchCode, "\tif (plan.watchTogether > 1)\n\t{\n\t\tMakeTheOtherAliens(frame);\n\t}\n\n\tint const seconds"), "SOURCE: and the watch asks each frame whose turn it is");
+		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "togetherSaidHowMany = false;\n\t\tMakeTheOtherAliens(frame);"), "SOURCE: together= makes the others as soon as the first alien is made");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Every) { $arguments += \" every=$Every\" }"), "SOURCE: the script can ask for every=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysAim -ge 0) { $alienWaysSwitch += \" -alienwaysaim=$AlienWaysAim\" }"), "SOURCE: and the game's -alienwaysaim=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000))"), "SOURCE: only from 0 to 10000, and only with -AlienWays");
@@ -1413,9 +1419,11 @@ static void TestTheRealGame()
 
 	Check(Has(script, "lighting=$Lighting") && Has(script, "shadows=$Shadows") && Has(script, "record=$Record"), "the script passes on the mode and the recording");
 	Check(Has(script, "hold=$Hold"), "and how long a hold is");
+	Check(Has(script, "if ($Break) { $arguments += \" break=$Break\" }"), "SOURCE: the script passes on break=, so a run can break the prisms on purpose");
+	Check(Has(script, "if ($Bright) { $arguments += \" bright=yes\" }"), "SOURCE: and bright=yes, so a run can ask for the world fully lit");
 	Check(Has(hudson, "EndTheLevel(\"strategies aren't looked at or asked in a network game\", kHudsonExitNetworkGame);"), "strategies are refused in a network game");
 	Check(Has(hudson, "if ((plan.strategy[0] || plan.listStrategies) && WatchTheStrategy(frame))"), "a run with a strategy word goes that way, and no other run does");
-	Check(Has(hudson, "RequestState(target, 1, 0);"), "it's asked the way a switch asks");
+	Check(Has(Between(hudson, "static bool WatchTheStrategy(LONG frame)", "\n}\n"), "WatchEveryStrategy(0, false);\n\t\tRequestState(target, 1, 0);"), "it's asked the way a switch asks, as soon as every strategy is being watched");
 	Check(Has(script, "'scene' { $staticSwitches = ' -staticscene' }"), "-Static scene turns the route on");
 	Check(Has(script, "'compare' { $staticSwitches = ' -staticscene -staticcompare' }"), "and compare turns on both switches, because it needs the route");
 	Check(Has(script, "'drop' { $staticSwitches = ' -staticscene -staticcompare -staticcomparedrop' }"), "and drop breaks the new route on purpose, to prove the comparison finds holes");
@@ -1561,9 +1569,11 @@ static void TestTourAndSharedMachine()
 	Check(Has(watching, "VECTORCH const point = { place.vx + wantedX, place.vy, place.vz + wantedZ };"), "and it's from where he is now");
 	Check(Has(watching, "HeCantStayHere(marine, \"he never settled facing the way he was told\");"), "a room he won't settle in goes through the same door");
 	Check(ComesBefore(watching, "if (abs(place.vx - toldToFaceFrom.vx) > kStillIsWithin", "Marine_GuardAndFace(marine, &point);"), "he's only told again if he's somewhere new, because being told every frame stops him ever turning");
+	Check(Has(watching, "if (abs(place.vx - toldToFaceFrom.vx) > kStillIsWithin || abs(place.vz - toldToFaceFrom.vz) > kStillIsWithin)"), "SOURCE: somewhere new means moved either way, along x or along z");
 	Check(Has(hudson, "toldToFaceFrom = marine->DynPtr->Position;"), "and each view starts from where he stands");
 	Check(Has(watching, "GetTickCount() - settlingSince > (plan.rooms > 1 ? kMostMillisecondsToSettleOnATour : kMostMillisecondsToSettle)"), "a run that won't settle ends in seconds, not when frames= runs out");
 	Check(Has(watching, "SayWhySettlingIsTakingSoLong(marine, frame, stoodStill, facing);"), "and it says why as it goes");
+	Check(Has(watching, "SayWhySettlingIsTakingSoLong(marine, frame, stoodStill, facing);\n\t\t\tSayWhereHeIs(\"he won't settle\", frame, marine);"), "SOURCE: and when he never settles, it says why before it says where he is");
 	Check(Has(watching, "HeCantStayHere(marine, \"he moved while he was meant to hold still\");"), "and so does one he moves in");
 	Check(Has(watching, "else if (!MoveHimToTheNextRoom(marine))"), "when the views run out he goes to the next room");
 
@@ -1823,7 +1833,7 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("3dc/avp/win95/win_proj.cpp"), "::SetWindowPos(hWndMain, 0, left, top, wide, tall, howToSize)"), "which is what it uses to size it");
 	Check(Has(ReadSourceFile("win32/d3_func.cpp"), "Hudson_SayWhereTheWindowWent();"), "the log says where it went");
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($Look) { $words += @('-Look', $Look) }"), "and the pair passes it on");
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "aimedThisFrame = true;"), "a fight's own aim stops the look on that frame");
+	Check(Has(Between(ReadSourceFile("3dc/avp/hudson.cpp"), "static void Hudson_FaceThePlace(PLAYER_STATUS *status, VECTORCH const &middle)\n{", "\n}\n"), "aimedThisFrame = true;"), "a fight's own aim stops the look on that frame");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "Hudson_LookAtWhatMatters(status, me, other);"), "the look runs on each frame of a pair");
 	Check(ComesBefore(ReadSourceFile("3dc/avp/hudson.cpp"), "if (Hudson_SmokeTest(status, me, other, now))", "Hudson_Siege(status, me, other, now);"), "a siege waits for the smoke test");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if ((!nearest || distance < nearestDistance) && Hudson_WayIsClear(me, block))"), "a siege only fires at what he can really see");
@@ -2033,6 +2043,7 @@ static void TestTourAndSharedMachine()
 	Check(Has(hole, "target.isPartOfAModel || target.moduleNumber < 0"), "only a part of the level can be a hole, because models come and go");
 	Check(Has(hole, "iflag_transparent | iflag_ignore0 | iflag_notvis"), "and not one that can have gaps, can be seen through, or isn't drawn");
 	Check(Has(hole, "target.isMorphing ? kRayFoundADoor : kRayFoundAHole"), "or a door between two shapes, which the ray only sees one of");
+	Check(Has(looking, "if (target.isMorphing)\n\t\t{\n\t\t\tdoorsCompared++;"), "SOURCE: a ray that met a door between two shapes is held to the picture, and counted as a door");
 	Check(ComesBefore(Between(hudson, "void Hudson_TakePictureIfDue()", "pictureIsDue = false;"), "if (visionIsDue)", "LookAtThisFrame();"), "it looks when it's due, in the same place as a picture, after the frame is drawn");
 	Check(Has(hudson, "if (plan.vision && !visionTakenThisHold &&"), "once in each hold, and only if asked");
 	Check(Has(hudson, "pictureTakenThisHold = false;\n\t\t\tvisionTakenThisHold = false;"), "and it's due again in the next hold");
@@ -2207,6 +2218,8 @@ static void CheckBotFight()
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,2,3,4 killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=a,b,c killer=host", kHudsonRefusedKillWords);
 		Refused("-hudson level=hangar frames=5 machine=shared net=host coop=yes killkind=queen killat=1,,3 killer=host", kHudsonRefusedKillWords);
+		// A kind that isn't one is refused where it's read, with no other kill word given, so "all three or none" can't be what refuses it
+		Refused("-hudson level=hangar frames=5 killkind=nonsense", kHudsonRefusedKillWords);
 
 		std::string const killScript = ReadSourceFile("tools/hudson/run-hudson.ps1");
 		std::string const killPairScript = ReadSourceFile("tools/hudson/run-net-pair.ps1");

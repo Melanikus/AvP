@@ -43,6 +43,7 @@
 //   the tag on the top right is off until it's asked for: -dev -statuson starts with it on; -statusoff still means off, and says so
 //   the log lines for -dev and for a developer switch asked for without it start "developer tools:", not "shadows:", as the switches
 //   aren't all about the shadows, and the comment over them says what -dev turns on now; G is the shoulder lamp, not a shadow key (#122)
+//   the log says at the start that NEWDYNAMICCOLLISIONS is on, as every run starts (#180, new_dynamic_collisions.h)
 
 #include "3dc.h"
 #include "window_slot.h"
@@ -98,6 +99,7 @@
 #include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
+#include "new_dynamic_collisions.h"
 
 #if debug
 #define MainTextPrint 1
@@ -229,6 +231,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	ClearLog();
 	LogString(GetWindowTitle());
 	LogString(BuildIdentity_Lines());
+
+	// #180: how walls are met in this run. It always starts on, and only the console's NEWDYNAMICCOLLISIONS changes it, which logs again.
+	LogString(NewDynamicCollisions_Words(NewDynamicCollisionsOn));
 
 	if (secondCopy)
 	{
