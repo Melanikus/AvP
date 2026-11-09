@@ -216,4 +216,10 @@ extern PlayerDetails thisClientPlayer;
 // the game's own fixed sentences (NetRelay_WhyText, net_relay.h), never text from the network.
 const char *Net_RelayJoinFailedWhy();
 
+// A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
+// one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
+// nothing is ever written past it. Only on the game's main thread, like the list of sessions.
+struct RelayListGame;
+bool Net_AddRelaySession(const RelayListGame &game);
+
 #endif // #ifndef _NETWORKING_
