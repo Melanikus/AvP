@@ -8,7 +8,7 @@ Each copy needs its own folder, because a run keeps its log, its result and its 
 
 WHY IT WATCHES THE SOCKETS: the game's network code isn't safe yet to have open to other machines, so a run with net= only uses this machine's own address, 127.0.0.1. The game's code says so, and this checks what it really did. Once a second, it asks Windows what each game has open. If either has anything on another address, it ends both, and says so. That's exit code 110. A connection a game makes itself (the relays' list, with -Relay) counts by the machine at its far end, which has to be this one; the rule is Test-SocketIsOffThisMachine, below.
 
--RemoteRelay virginia.relay.avpx.test (server #14 through a relay on another machine): both games go through that one relay, and its list, at port 443, and through nothing else. The name is looked up once, before anything starts, and has to give exactly one IPv4 address; pair.txt records it, with this machine's address towards it. The watch then lets through exactly the games' UDP sockets on that address of this machine's and their HTTPS connections to that relay; anything else beyond this machine still ends both games. The games themselves use that relay alone, at that address, and drop whatever reaches their sockets from anywhere else (networking.cpp, Hudson's remoterelay= word).
+-RemoteRelay newyork.relay.avpx.test (server #14 through a relay on another machine): both games go through that one relay, and its list, at port 443, and through nothing else. The name is looked up once, before anything starts, and has to give exactly one IPv4 address; pair.txt records it, with this machine's address towards it. The watch then lets through exactly the games' UDP sockets on that address of this machine's and their HTTPS connections to that relay; anything else beyond this machine still ends both games. The games themselves use that relay alone, at that address, and drop whatever reaches their sockets from anywhere else (networking.cpp, Hudson's remoterelay= word).
 
 WHY SOMEONE SHOULD WATCH THE FIRST ONE: Windows can stop and ask whether to let a program on the network, and nothing here can see that question. Nothing should cause one, because of the above. This compares Windows' firewall rules for these two programs before and after, which shows a question that was answered, but only someone at the screen would see one that wasn't. A question appearing means stop and find out why.
 
@@ -57,6 +57,7 @@ param(
     [switch]$Uncapped,
     [switch]$NoFriendlyFire,
     [switch]$CoopWalk,
+    [switch]$Play,
     [switch]$Hostile,
     [switch]$Drain,
     [string]$ThirdFolder = '',
@@ -75,6 +76,8 @@ param(
     [switch]$LevelFilms,
     [ValidateSet('', 'yes', 'no')][string]$Look = '',
     [string]$Siege = '',
+    [int]$HostGun = 0,      # with -Play, the slot of the gun each Hudson is given and holds, from 1 to 14: 10 is the shotgun
+    [int]$JoinGun = 0,
     [int]$HostFilmSkip = 0,
     [int]$JoinFilmSkip = 0
 )
@@ -309,6 +312,10 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($word -eq 'host' -and $HostFilmSkip -gt 0) { $words += @('-FilmSkip', $HostFilmSkip) }
     if ($word -eq 'join' -and $JoinFilmSkip -gt 0) { $words += @('-FilmSkip', $JoinFilmSkip) }
     if ($CoopWalk) { $words += '-CoopWalk' }
+    # Two Hudsons playing a level: the host does its list, and the one who joins follows him
+    if ($Play) { $words += '-Play' }
+    if ($word -eq 'host' -and $HostGun -gt 0) { $words += @('-PlayGun', $HostGun) }
+    if ($word -eq 'join' -and $JoinGun -gt 0) { $words += @('-PlayGun', $JoinGun) }
     if ($Hostile) { $words += '-Hostile' }
     if ($kind) { $words += @('-HostileKind', $kind) }
     if ($kind -eq 'flood') { $words += @('-NetSecondPartner', "`"$joinFull`"") }
