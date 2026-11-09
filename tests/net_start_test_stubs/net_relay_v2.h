@@ -77,10 +77,11 @@ struct NetRelayV2StandIn
 	bool startRefused;
 	bool goReady;
 	int failWith;
-	// The picker's
+	// The picker's. Unless pickerSilent, the relay answers the cookie round at once, as if its answer had come.
 	int pickerStarts;
 	uint16_t pickerPort;
 	bool pickerAnswered;
+	bool pickerSilent;
 	uint32_t pickerMs;
 };
 
@@ -267,7 +268,7 @@ public:
 
 		netRelayV2StandIn.pickerStarts++;
 		netRelayV2StandIn.pickerPort = ports[0];
-		netRelayV2StandIn.pickerAnswered = false;
+		netRelayV2StandIn.pickerAnswered = !netRelayV2StandIn.pickerSilent;
 		port = ports[0];
 		started = true;
 		startedAt = now;

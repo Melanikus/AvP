@@ -917,12 +917,12 @@ static void RelayV2Forget()
 }
 
 // The session's words for why it ended, the game's own fixed words. Refusal 22 (a player the relay hasn't approved) gets no answer at all
-// from the relay, so it looks like 7: the words say what the player can do about it.
+// from the relay, so the game can't tell it from 7: the words say what the player can do, and never claim which it was (Primary's words).
 static const char *RelayV2WhyText(int why)
 {
 	switch (why)
 	{
-		case kNetRelayV2NoAnswer: return "the relay doesn't answer: if this player hasn't been approved yet, ask for access first";
+		case kNetRelayV2NoAnswer: return "the relay didn't answer (if you haven't been approved on this server yet, ask for access on the online page)";
 		case kNetRelayV2BadCookie: return "the relay's answer wasn't one it could have sent";
 		default: return "the handshake with the relay failed";
 	}
