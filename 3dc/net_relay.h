@@ -915,6 +915,27 @@ public:
 		}
 	}
 
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, agreed with Primary): whether the relay has said a joiner is
+	// coming on relayPort (NEW_JOINER), and that joiner's game hasn't connected yet. It's the one moment a host starts handshake B for a
+	// port (networking.cpp): a datagram from any other port of the relay starts nothing. It only reads.
+	bool NamedJoinerPort(uint16_t relayPort) const
+	{
+		if (relayPort == 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+		{
+			if (hellos[i].port == relayPort)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	// The game is over: HOST_CLOSE, so the relay ends the room at once
 	void Close()
 	{

@@ -75,6 +75,8 @@
 #include "net_stats.h"
 #include "net_search_log.h"
 #include "net_relay.h"
+#include "net_identity.h"
+#include "net_peer_v2.h"
 #include "relay_shared.h"
 #include "relay_list.h"
 #include <assert.h>
@@ -242,6 +244,362 @@ static_assert(kNetRelayMostPassTime == kRelayListMostPassTime, "net_relay.h read
 // A region the screen is given is the list's, so it fits in networking.h's room for one
 static_assert(kNetRelayRegionLetters == static_cast<size_t>(kRelayListRegionLetters), "networking.h's region is as long as relay_list_text.h's");
 
+// ---- PROTOCOL VERSION 2: THE HOST AND EACH JOINER SEAL THEIR GAME END TO END. Added 2026-11-09 by Melanikus for the AvP port.
+// (CRYPTO.md sections 8 and 9, in the AVPx-Dedicated-Server repository; net_peer_v2.h does the work, and this is where the game meets it.)
+// Through a relay, the host and each joiner run handshake B over the joiner's own port on the relay, and from then on every datagram ENet
+// sends between them is sealed, so the relay only passes on what it can neither read nor change. The joiner checks the host is the one
+// the list named (by the fingerprint the listing carries). The relay's own small messages ('AVPR') are as they were.
+// The rules, Primary's three among them (agreed 2026-11-09):
+//   - No game byte ever goes to the relay unsealed. Once a game has used a relay, ENet's every datagram to the relay's address goes
+//     through RelaySealedSend, which seals it or drops it; nothing else sends ENet's datagrams there.
+//   - A handshake that fails ends the join, with the player told why. There's no going back to plain datagrams.
+//   - A host starts a handshake only for a port the relay has named (NEW_JOINER, which the relay sends only once the joiner has said hello
+//     there): a datagram from any other port starts nothing.
+//   - Nothing from a joiner's port reaches ENet but a sealed datagram that opened.
+// Over this network (a LAN game), nothing changes.
+static NetIdentity runIdentity;                                    // this run's identity, made the first time a relay is used
+static NetPeerJoiner relayEndToEndJoiner;                          // a joiner's one handshake, with its host
+static uint16_t relayEndToEndPort = 0;                             // and its port on the relay, once it has one; 0 for none
+static NetPeerHostSide relayEndToEndHosts[kNetRelayMostJoiners];   // a host's handshakes, one for each joiner's port
+static bool relaySealing = false;                                  // this game's ENet sends through RelaySealedSend (set by the relay's use)
+static uint8_t relayOpened[kRelayMostPacketBytes];                 // a game datagram just opened, for ENet to read in its place
+static uint32_t relayEndToEndDropped = 0;                          // ENet's datagrams dropped on their way out because nothing could seal them
+
+// This run's identity, made once, from the operating system's randomness (net_identity.h). False if it couldn't be made.
+static bool RelayIdentityReady()
+{
+	return runIdentity.made || NetIdentity_Make(&runIdentity);
+}
+
+// Primary's first condition: the relay's own messages, as version 1 reads them, go through this one function, which version 2's sealed
+// control channel will replace. True if it was one of them.
+static bool RelayControlDatagram(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
+{
+	return relayHosting ? relayHost.Hear(fromPort, data, size, now) : relayJoiner.Hear(fromPort, data, size, now);
+}
+
+// A host's handshake for a joiner's port: the one there is, or, with mayStart, a new one if the relay has named that port (NEW_JOINER).
+// NULL otherwise. A side that failed, or that has no port, is free for a new one.
+static NetPeerHostSide *RelayEndToEndSide(uint16_t port, bool mayStart, uint32_t now)
+{
+	NetPeerHostSide *unused = NULL;
+
+	for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+	{
+		NetPeerHostSide &side = relayEndToEndHosts[i];
+
+		if (port != 0 && side.Port() == port && !side.Failed())
+		{
+			return &side;
+		}
+
+		if (!unused && (side.Port() == 0 || side.Failed()))
+		{
+			unused = &side;
+		}
+	}
+
+	if (!mayStart || !unused || !relayHost.NamedJoinerPort(port) || !RelayIdentityReady())
+	{
+		return NULL;
+	}
+
+	return unused->Start(relayRegion, port, &runIdentity, now) ? unused : NULL;
+}
+
+// Sends what a handshake wants sent, as it is (its datagrams are the handshake's own, 'AVPE'), to that joiner's port on the relay
+template <typename Peer>
+static void RelayEndToEndSendAll(ENetHost *from, Peer &peer, uint16_t port)
+{
+	NetPeerSend sends[kNetPeerMostSends];
+	size_t const count = peer.TakeSends(sends, kNetPeerMostSends);
+
+	for (size_t i = 0; i < count && from && port != 0; i++)
+	{
+		ENetAddress to = relayAddress;
+		to.port = port;
+		ENetBuffer buffer;
+		buffer.data = sends[i].bytes;
+		buffer.dataLength = sends[i].size;
+		enet_socket_send(from->socket, &to, &buffer, 1);
+	}
+}
+
+// A joiner through the relay has gone (its connection closed): its handshake ends, its keys wiped, and its place is free
+static void RelayEndToEndJoinerLeft(uint16_t port)
+{
+	for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+	{
+		if (port != 0 && relayEndToEndHosts[i].Port() == port)
+		{
+			relayEndToEndHosts[i].Reset();
+		}
+	}
+}
+
+// Every handshake is ended, its keys wiped: when a game through a relay ends, or the relay is given up
+static void RelayEndToEndForget()
+{
+	relayEndToEndJoiner.Reset();
+	relayEndToEndPort = 0;
+
+	for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+	{
+		relayEndToEndHosts[i].Reset();
+	}
+}
+
+// A datagram from a joiner's port on the relay, that wasn't the relay's own: a handshake datagram, or a sealed game datagram. 0 with an
+// opened game datagram put in its place, for ENet to read; 1 for anything else, which ENet never sees.
+static int RelayEndToEndHeard(ENetHost *on, uint32_t now)
+{
+	size_t opened = 0;
+	uint16_t const port = on->receivedAddress.port;
+
+	if (relayHosting)
+	{
+		NetPeerHostSide *const side = RelayEndToEndSide(port, true, now);
+
+		if (!side)
+		{
+			relayStrangersDropped++;
+			return 1;
+		}
+
+		side->Hear(on->receivedData, on->receivedDataLength, relayOpened, sizeof(relayOpened), &opened, now);
+		RelayEndToEndSendAll(on, *side, port);
+	}
+	else
+	{
+		if (relayEndToEndPort == 0 || port != relayEndToEndPort)
+		{
+			relayStrangersDropped++;
+			return 1;
+		}
+
+		relayEndToEndJoiner.Hear(on->receivedData, on->receivedDataLength, relayOpened, sizeof(relayOpened), &opened, now);
+	}
+
+	if (opened == 0)
+	{
+		return 1;
+	}
+
+	on->receivedData = relayOpened;
+	on->receivedDataLength = opened;
+	return 0;
+}
+
+// ENet's send hook (our ENet's patch 007): every datagram ENet sends comes here instead of going to the socket. One for anywhere but the
+// relay goes as it always did. One for the relay is sealed for the joiner's port it goes to, or, if nothing there can seal it yet, dropped
+// (ENet counts it lost, and sends again later). Answers as enet_socket_send does.
+static int ENET_CALLBACK RelaySealedSend(ENetHost *from, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount)
+{
+	if (!from || !address || (!buffers && bufferCount > 0))
+	{
+		return -1;
+	}
+
+	if (address->host != relayAddress.host)
+	{
+		return enet_socket_send(from->socket, address, buffers, bufferCount);
+	}
+
+	static uint8_t plain[kNetSealedGameMostTextBytes];
+	static uint8_t sealed[kNetSealedGameMostBytes];
+	size_t total = 0;
+
+	for (size_t i = 0; i < bufferCount; i++)
+	{
+		total += buffers[i].dataLength;
+	}
+
+	if (total > sizeof(plain))
+	{
+		relayEndToEndDropped++;
+		return static_cast<int>(total);
+	}
+
+	size_t at = 0;
+
+	for (size_t i = 0; i < bufferCount; i++)
+	{
+		memcpy(plain + at, buffers[i].data, buffers[i].dataLength);
+		at += buffers[i].dataLength;
+	}
+
+	uint32_t const now = enet_time_get();
+	size_t written = 0;
+	bool done = false;
+
+	if (relayHosting)
+	{
+		NetPeerHostSide *const side = RelayEndToEndSide(address->port, false, now);
+		done = side && side->Seal(plain, total, sealed, sizeof(sealed), &written, now);
+	}
+	else if (relayEndToEndPort != 0 && address->port == relayEndToEndPort)
+	{
+		done = relayEndToEndJoiner.Seal(plain, total, sealed, sizeof(sealed), &written, now);
+	}
+
+	NetCrypto_Wipe(plain, total);
+
+	if (!done || written == 0)
+	{
+		relayEndToEndDropped++;
+		return static_cast<int>(total);
+	}
+
+	ENetBuffer buffer;
+	buffer.data = sealed;
+	buffer.dataLength = written;
+	int const sent = enet_socket_send(from->socket, address, &buffer, 1);
+	return sent < 0 ? sent : static_cast<int>(total);
+}
+
+// Why a joiner's handshake B ended, in the game's own fixed words, for the player (CRYPTO.md section 16's numbers): never the host's words
+static const char *RelayEndToEndWhyText(int why)
+{
+	switch (why)
+	{
+		case kNetHandshakeBWrongHost: return "this isn't the host the list named";
+		case kNetPeerNoAnswer: return "the host doesn't answer";
+		case kNetSealedGameTooManyBad: return "the connection was attacked, and closed";
+		default: return "the host's game couldn't be checked";
+	}
+}
+
+// Set when a join's handshake B failed, for Net_RelayJoinFailedWhy; NULL otherwise
+static const char *relayEndToEndJoinFailed = NULL;
+
+// The joiner's handshake B with its host, over its port on the relay, after the relay's READY and before ENet sends a byte. NULL when the
+// keys are in; otherwise the game's own words for why not. While it waits, the window keeps answering and the player can give up (the
+// menu's hook), as in the relay's own handshake. The joiner's schedule gives up after 7.5 s (net_peer_v2.h); this loop ends a little past
+// that by the clock, and by its number of turns in case the clock stands still.
+static const char *RelayEndToEndJoin(const char *region, uint16_t port, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	if (!host || port == 0 || !RelayIdentityReady())
+	{
+		return RelayEndToEndWhyText(kNetHandshakeBBadStart);
+	}
+
+	uint32_t const started = enet_time_get();
+	relayEndToEndPort = port;
+	relaySealing = true;
+	host->sendHook = RelaySealedSend;
+
+	if (!relayEndToEndJoiner.Start(region, port, fingerprint, &runIdentity, started))
+	{
+		return RelayEndToEndWhyText(relayEndToEndJoiner.Why());
+	}
+
+	static uint8_t packet[kRelayMostPacketBytes];
+	uint32_t const mostMs = 9000;
+	size_t const mostTurns = mostMs / kRelayWaitMs + 100;
+
+	for (size_t turn = 0; turn < mostTurns && !relayEndToEndJoiner.Ready() && !relayEndToEndJoiner.Failed() && enet_time_get() - started < mostMs; turn++)
+	{
+		if (relayJoinWaitHook && !relayJoinWaitHook())
+		{
+			return NetRelay_WhyText(kNetRelayGivenUp);
+		}
+
+		RelayEndToEndSendAll(host, relayEndToEndJoiner, port);
+		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+
+		if (enet_socket_wait(host->socket, &condition, kRelayWaitMs) < 0)
+		{
+			break;
+		}
+
+		for (size_t i = 0; i < kRelayMostPacketsAWait && (condition & ENET_SOCKET_WAIT_RECEIVE); i++)
+		{
+			ENetAddress from;
+			ENetBuffer buffer;
+			buffer.data = packet;
+			buffer.dataLength = sizeof(packet);
+			int const got = enet_socket_receive(host->socket, &from, &buffer, 1);
+
+			if (got <= 0)
+			{
+				break;
+			}
+
+			uint32_t const now = enet_time_get();
+
+			// From anywhere but the relay: dropped. The relay's own (a READY sent again): its machine's. From another port: dropped.
+			if (from.host != relayAddress.host)
+			{
+				relayStrangersDropped++;
+				continue;
+			}
+
+			if (RelayControlDatagram(from.port, packet, static_cast<size_t>(got), now))
+			{
+				continue;
+			}
+
+			if (from.port != port)
+			{
+				relayStrangersDropped++;
+				continue;
+			}
+
+			// No game datagram comes before ENet has connected, so one that opens here is dropped with the rest
+			size_t opened = 0;
+			relayEndToEndJoiner.Hear(packet, static_cast<size_t>(got), relayOpened, sizeof(relayOpened), &opened, now);
+		}
+
+		relayEndToEndJoiner.Tick(enet_time_get());
+	}
+
+	// B5, the moment B4 has checked, before ENet's first datagram
+	RelayEndToEndSendAll(host, relayEndToEndJoiner, port);
+
+	if (relayEndToEndJoiner.Ready())
+	{
+		return NULL;
+	}
+
+	return relayEndToEndJoiner.Failed() ? RelayEndToEndWhyText(relayEndToEndJoiner.Why()) : RelayEndToEndWhyText(kNetPeerNoAnswer);
+}
+
+// Each frame, beside RelayHostFrame: the handshakes' resends and timers, and what they want sent. A host's side that has failed is ended,
+// so its keys go and its place is free.
+static void RelayEndToEndFrame()
+{
+	if (!host || !relaySealing)
+	{
+		return;
+	}
+
+	uint32_t const now = enet_time_get();
+
+	if (relayEndToEndPort != 0)
+	{
+		relayEndToEndJoiner.Tick(now);
+		RelayEndToEndSendAll(host, relayEndToEndJoiner, relayEndToEndPort);
+	}
+
+	for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+	{
+		NetPeerHostSide &side = relayEndToEndHosts[i];
+
+		if (side.Port() == 0)
+		{
+			continue;
+		}
+
+		side.Tick(now);
+		RelayEndToEndSendAll(host, side, side.Port());
+
+		if (side.Failed())
+		{
+			side.Reset();
+		}
+	}
+}
+
 // One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
 // own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
 // service. This checks the two that must never be sent to again, in case the list's rule ever changes: "any address" (0.0.0.0) and
@@ -338,7 +696,14 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 			return 1;
 		}
 
-		return relayHost.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+		// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the relay's own message, or else a joiner's, which is
+		// a handshake datagram or a sealed one; only a sealed one that opens reaches ENet, in its opened form
+		if (RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now))
+		{
+			return 1;
+		}
+
+		return RelayEndToEndHeard(on, now);
 	}
 
 	// A joiner through a relay hears from the relay alone, as a host does: the game's packets come from its port there, and anything from
@@ -350,8 +715,14 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 		return 1;
 	}
 
-	// And a READY sent again after its game has connected is the relay's, not the game's
-	return relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+	// And a READY sent again after its game has connected is the relay's, not the game's. Modified 2026-11-09 by Melanikus for the AvP port
+	// (protocol version 2): anything else from the relay is the host's, a handshake datagram or a sealed one, as on the host's side.
+	if (RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now))
+	{
+		return 1;
+	}
+
+	return RelayEndToEndHeard(on, now);
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the host's news about its relay has changed, for its screen to say once
@@ -425,10 +796,24 @@ static bool RelayHostStart()
 		return false;
 	}
 
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose fingerprint the listing carries and
+	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game is open on this network only.
+	if (!RelayIdentityReady())
+	{
+		Con_PrintError("net: this game's identity couldn't be made, so it's open on this network only");
+		RelayHostNews(kNetRelayHostNoRelay, NULL);
+		return false;
+	}
+
+	RelayEndToEndForget();
+	RelayList_HostIdentity(runIdentity.fingerprint);
+
 	relayHosting = true;
 	relayPicking = true;
 	host->duplicatePeers = kMostClients;
 	host->intercept = RelayIntercept;
+	host->sendHook = RelaySealedSend;
+	relaySealing = true;
 	RelaySendAll(host, relayPicker, relayCandidates, relayCandidateCount);
 	Con_PrintMessage("net: this game is finding the nearest relay");
 	RelayHostNews(kNetRelayHostFinding, NULL);
@@ -447,6 +832,10 @@ static void RelayHostGiveUp(const char *why)
 		host->intercept = NULL;
 		host->duplicatePeers = kMostConnectionsFromOneAddress;
 	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): every handshake ends, its keys wiped. The send hook stays, so
+	// anything ENet still has for the relay's address is dropped, never sent unsealed; a joiner there is lost, as the room is.
+	RelayEndToEndForget();
 
 	Con_PrintError(why);
 	OpenTheSearchPortForAHost();
@@ -567,6 +956,15 @@ static void RelayHostLeave()
 		LogString("net: while going through a relay, " + std::to_string(relayStrangersDropped) + " packet(s) from elsewhere were dropped");
 	}
 
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the handshakes end, their keys wiped
+	if (relayEndToEndDropped > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
+	}
+
+	relayEndToEndDropped = 0;
+	RelayEndToEndForget();
+
 	relayHosting = false;
 	relayPicking = false;
 	relayRoomListed = false;
@@ -652,7 +1050,9 @@ static uint16_t RelayHandshake(const char *code)
 
 const char *Net_RelayJoinFailedWhy()
 {
-	return NetRelay_WhyText(relayJoinFailedWhy);
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): when the relay's part went well and handshake B failed, B's
+	// own words
+	return relayEndToEndJoinFailed ? relayEndToEndJoinFailed : NetRelay_WhyText(relayJoinFailedWhy);
 }
 
 void Net_SetRelayJoinWaitHook(NetRelayJoinWaitHook hook)
@@ -882,6 +1282,7 @@ int Net_JoinerMsToRelay(const char *region)
 static uint16_t RelayJoin(const char *region, const char *code)
 {
 	relayJoinFailedWhy = kNetRelayNoRelay;
+	relayEndToEndJoinFailed = NULL;
 	RelayListRelay relays[kRelayListMostRelays];
 	int named = 0;
 
@@ -907,9 +1308,9 @@ static uint16_t RelayJoin(const char *region, const char *code)
 // names' lengths, a slot left, and the level, which has to be one this machine has, picked by its number, its name and its game style, as a
 // game found on this network is (GetLocalMultiplayerLevelIndex). Gives back whether it went on the list.
 static bool AddRelaySession(const char *code, const char *region, const char *name, int players, int maxPlayers, int version, uint16_t gameStyle,
-	uint16_t levelNumber, const char *levelName, uint8_t coopLobby)
+	uint16_t levelNumber, const char *levelName, uint8_t coopLobby, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
 {
-	if (!code || !NetRelay_CodeIsGood(code) || !region || !name || !levelName || !CoopLobby_StateIsReal(coopLobby))
+	if (!code || !NetRelay_CodeIsGood(code) || !fingerprint || !region || !name || !levelName || !CoopLobby_StateIsReal(coopLobby))
 	{
 		LogDroppedMessage("a game on the relays' list wasn't one this game can join");
 		return false;
@@ -957,6 +1358,8 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.Guid.Data3 = 1;
 	memcpy(entry.Guid.Data4, code, kNetRelayCodeLetters);
 	memcpy(entry.relayCode, code, kNetRelayCodeLetters);
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host's fingerprint, which handshake B checks the host by
+	memcpy(entry.relayFingerprint, fingerprint, sizeof(entry.relayFingerprint));
 	memcpy(entry.relayRegion, region, regionLetters);
 	entry.relayRegion[regionLetters] = 0;
 	entry.coopLobby = (char)coopLobby;
@@ -1016,7 +1419,7 @@ bool Net_AddRelaySession(const RelayListGame &game)
 	}
 
 	return AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
-		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby));
+		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.fingerprint);
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
@@ -1486,6 +1889,10 @@ void Net_Deinitialise()
 	// let everyone know we're disconnecting and destroy the host
 	Net_Disconnect();
 
+	// This run's identity ends with the network (protocol version 2, added 2026-11-09 by Melanikus for the AvP port): its key destroyed
+	// inside the operating system's cryptography, and every byte of the rest wiped
+	NetIdentity_Free(&runIdentity);
+
 	enet_deinitialize();
 
 	net_IsInitialised = false;
@@ -1671,6 +2078,18 @@ void Net_Disconnect()
 
 	// The ENet host owned this, and has just freed it
 	ServerPeer = NULL;
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner's handshake goes with its game, its keys wiped, once
+	// the goodbyes above have gone sealed (a host's went in RelayHostLeave), and the log says how many of the game's datagrams couldn't be
+	// sealed and were dropped
+	if (relayEndToEndPort != 0 && relayEndToEndDropped > 0)
+	{
+		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
+	}
+
+	relayEndToEndDropped = 0;
+	RelayEndToEndForget();
+	relaySealing = false;
 
 	sessionCheckTimer = 0;
 
@@ -2048,6 +2467,9 @@ void Net_KeepAnsweringWhileLoading()
 
 	// A long level load mustn't lose the room on the relay
 	RelayHostFrame();
+
+	// Nor a handshake its answers (protocol version 2, added 2026-11-09 by Melanikus for the AvP port)
+	RelayEndToEndFrame();
 }
 
 void Net_SayLongestGapWhileLoading()
@@ -2080,6 +2502,10 @@ void Net_ServiceNetwork()
 		// The relay's part of hosting, after ENet has handed over what came: the echoes, the room, the keep and the hellos. It does
 		// nothing unless this game is hosted through a relay.
 		RelayHostFrame();
+
+		// Protocol version 2's handshakes, on either side (added 2026-11-09 by Melanikus for the AvP port): their resends and timers.
+		// Nothing unless this game uses a relay.
+		RelayEndToEndFrame();
 
 		// also check for session data requests
 		if (AvP.Network == I_Host) {
@@ -2626,6 +3052,13 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 
 					eEvent.peer->data = NULL;
 
+					// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner through the relay has gone, so its
+					// handshake ends and its keys go
+					if (AvP.Network == I_Host && PeerIsThroughRelay(eEvent.peer))
+					{
+						RelayEndToEndJoinerLeft(eEvent.peer->address.port);
+					}
+
 					if (AvP.Network == I_Host)
 					{
 						// However it went, that player has gone. One that said so first has already left the game, and this changes nothing for them.
@@ -2802,6 +3235,19 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		ServerAddress = relayAddress;
 		ServerAddress.port = relayPort;
 
+		// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): handshake B with the host the list named, before ENet
+		// sends a byte. A failure ends the join: nothing is ever sent through the relay unsealed.
+		relayEndToEndJoinFailed = RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayFingerprint);
+
+		if (relayEndToEndJoinFailed)
+		{
+			Con_PrintError(std::string("Net_ConnectToSession - couldn't join through the relay: ") + relayEndToEndJoinFailed);
+			RelayEndToEndForget();
+			enet_host_destroy(host);
+			host = NULL;
+			return NET_FAIL;
+		}
+
 		// For the line in play saying which relay this game goes through (Net_RelayPlayStateNow)
 		relayJoinedThrough = true;
 		strncpy(relayJoinedRegion, SessionData[sessionNumber].relayRegion, kRelayListRegionLetters);
@@ -2823,7 +3269,34 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 	/* see if we actually connected */
 	/* Wait up to 3 seconds for the connection attempt to succeed. */
-	if ((enet_host_service(host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_CONNECT))
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): through a relay, the 3 seconds go in 50 ms slices, with the
+	// handshake's turn between them, so B5 goes again if it was lost (the host opens nothing until B5 has checked). It ends at the first
+	// event, as the one wait did, and by its number of turns too, in case the clock stands still.
+	bool connected = false;
+
+	if (SessionData[sessionNumber].throughRelay)
+	{
+		uint32_t const waitStarted = enet_time_get();
+
+		for (size_t turn = 0; turn < 3000 / kRelayWaitMs + 100 && enet_time_get() - waitStarted < 3000; turn++)
+		{
+			int const got = enet_host_service(host, &eEvent, kRelayWaitMs);
+
+			if (got != 0)
+			{
+				connected = got > 0 && eEvent.type == ENET_EVENT_TYPE_CONNECT;
+				break;
+			}
+
+			RelayEndToEndFrame();
+		}
+	}
+	else
+	{
+		connected = (enet_host_service(host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_CONNECT);
+	}
+
+	if (connected)
 	{
 		Con_PrintDebugMessage("Net_ConnectToSession - we connected to server!");
 	}
@@ -2831,7 +3304,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	{
 		Con_PrintError("Net_ConnectToSession - failed to connect to server!");
 
-		// There's no game, so nothing should stay open
+		// There's no game, so nothing should stay open: the handshake's keys go too (protocol version 2)
+		RelayEndToEndForget();
 		enet_host_destroy(host);
 		host = NULL;
 		ServerPeer = NULL;
