@@ -3434,6 +3434,16 @@
 					"to": "\n"
 				}
 			]
+		},
+		{
+			"name": "with the draft, anything from the relay that isn't the channel's or the end to end's reaches ENet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (!gameGoesOn || !endToEnd)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 1;\n\t\t}",
+					"to": "\t\tif (!gameGoesOn || !endToEnd)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 0;\n\t\t}"
+				}
+			]
 		}
 	]
 }

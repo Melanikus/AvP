@@ -1242,9 +1242,9 @@ static void TestHostingThroughTheRelay()
 	uint8_t gamePacket[40];
 	memset(gamePacket, 0x11, sizeof(gamePacket));
 	TellTheHost(kRelayHost, 27501, gamePacket, sizeof(gamePacket));
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a plain datagram from a joiner's port is never ENet's now;
-	// only a sealed one that opens is
-	Check(theHost.intercept(&theHost, NULL) == 1, "a plain packet from a joiner's port on the relay is dropped before ENet reads it: only a sealed one that opens is the game's");
+	// Modified 2026-11-09 by Melanikus for the AvP port (step 7): this test is version 1's (no draft, above), and version 1 seals nothing, so
+	// a joiner's packet through the relay is ENet's, as it always was. With the draft, the same packet is dropped (TestTheRelayChannel).
+	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's packet, through its port on the relay, is the game's: ENet reads it, as version 1 always did");
 	TellTheHost(0x0200007F, 27501, gamePacket, sizeof(gamePacket));
 	Check(theHost.intercept(&theHost, NULL) == 1, "and anything from anywhere but the relay is dropped");
 
@@ -4132,6 +4132,13 @@ static void TestTheRelayChannel()
 	TellTheHostPlain(kRelayHost, 27777, junk, sizeof(junk));
 	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore,
 		"anything from the relay that's neither the channel's ('AVPR') nor the end to end's ('AVPE', 'AVPG') is dropped");
+	// Added 2026-11-09 by Melanikus for the AvP port: the same from a joiner's port, as a game packet plain would come (version 1's
+	// TestHostingThroughTheRelay has ENet read it): with the draft, it never reaches ENet
+	uint8_t plainGame[40];
+	memset(plainGame, 0x11, sizeof(plainGame));
+	TellTheHostPlain(kRelayHost, 27501, plainGame, sizeof(plainGame));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore,
+		"with the draft, a plain packet from a joiner's port on the relay is dropped before ENet reads it: only a sealed one that opens is the game's");
 	TellTheHostPlain(0x04030201u, kNetRelayDefaultControlPort, sealedForTheHost, sizeof(sealedForTheHost));
 	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore, "and from anywhere but the relay, even an 'AVPR' is never heard");
 
