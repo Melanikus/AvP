@@ -3,6 +3,10 @@
 //
 // It lays textures on made-up polygons and checks the answer against what was laid. tests/build.ps1 compiles this with the real surface_tangent.cpp,
 // and the program gives back a non-zero result if any check failed. It uses no files and none of the game.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a texture laid as a mirror image over the same corners has to come back with V on the other side (flip -1). Nothing checked that: its
+//   take-out row, V always on one side, went unnoticed (#163), because a texture laid backwards by moving the corners turns the normal too
 
 #include <math.h>
 #include <stdio.h>
@@ -47,6 +51,15 @@ static void CheckByHand()
 
 	SurfaceTangent_Work(floorCorners, floorTexture, &tangent);
 	Check(Near(tangent.x, 1.0f) && Near(tangent.y, 0.0f) && Near(tangent.z, 0.0f), "a texture laid square: U runs along x");
+	Check(tangent.flip == 1.0f, "and V is on the side the normal gives it");
+
+	// The same corners, with the texture laid as its mirror image: V runs the other way across the very same polygon, so it comes back on
+	// the other side of U. Only here does the answer have to be -1: a texture laid backwards by moving the corners turns the normal round
+	// with it (CheckMadeUpPolygons), and V stays on the normal's side.
+	float const mirroredTexture[6] = { 0.0f, 256.0f,   256.0f, 256.0f,   0.0f, 0.0f };
+	SurfaceTangent_Work(floorCorners, mirroredTexture, &tangent);
+	Check(Near(tangent.x, 1.0f) && Near(tangent.y, 0.0f) && Near(tangent.z, 0.0f) && tangent.flip == -1.0f,
+		"the same texture as a mirror image: U still runs along x, and V comes back on the other side");
 
 	float const turnedTexture[6] = { 0.0f, 0.0f,   0.0f, 256.0f,   256.0f, 0.0f };
 	SurfaceTangent_Work(floorCorners, turnedTexture, &tangent);
@@ -137,7 +150,9 @@ static void CheckMadeUpPolygons()
 			v[axis] /= vLength;
 		}
 
-		// three places in the texture, a whole triangle's worth apart, and half the textures laid on backwards
+		// three places in the texture, a whole triangle's worth apart, and half the textures laid on backwards. Laid backwards here by moving
+		// the corners, which turns the polygon's normal round with V, so V always stays on the normal's side: the mirror image, where only the
+		// texture turns, is in CheckByHand.
 		float const reversed = (polygon & 1) ? -1.0f : 1.0f;
 		float const start[3] = { RandomBetween(-100000.0f, 100000.0f), RandomBetween(-100000.0f, 100000.0f), RandomBetween(-100000.0f, 100000.0f) };
 		float coordinates[6] = { RandomBetween(0.0f, 256.0f), RandomBetween(0.0f, 256.0f) };
