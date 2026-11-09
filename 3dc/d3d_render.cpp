@@ -55,6 +55,9 @@
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
 //   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the tag on the top right, which says how the shadows and the lighting are set, is off until it's asked for (F7, or -dev
+//   -statuson), so it no longer covers the game and the relay's line in play; F7 says in the log each time it shows or hides it
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -4062,7 +4065,7 @@ static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
 int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and J, F7, F8 and the shoot tool's keys do nothing
-int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
+int ShadowStatusOn = 0;     // the tag on the top right of the screen: off until F7 shows it, or -dev -statuson starts with it on
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
 static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
@@ -7321,6 +7324,8 @@ static void DrawStatusLine(const char *text, int rightX, int y, int scale)
 
 // The tag on the top right of the screen, which says how this build is running, so that a moment in a video can be matched to the log. It's only
 // a few more polygons on the list the display already uses, so it can't hold anything up. It's only there while a level is being shown.
+// It's off until it's asked for, with F7 in play or -dev -statuson at the start, because it covers the top right of the game, where the relay's
+// line in play is.
 static void ShadowStatus_Draw()
 {
 	const char *ToyShadows_RoomName();
@@ -8418,7 +8423,8 @@ static void ToyShadows_Draw()
 
 	KeepDeveloperToolsOutOfNetworkGames();
 
-	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like J.
+	// F8 saves the next frames as images, and F7 shows or hides the tag on the screen, which starts hidden, and says which in the log, so a
+	// film can be matched to it. Neither is used by the game. Not while typing, like J.
 	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
@@ -8429,6 +8435,7 @@ static void ToyShadows_Draw()
 		if (DebouncedKeyboardInput[KEY_F7])
 		{
 			ShadowStatusOn = !ShadowStatusOn;
+			LogString(ShadowStatusOn ? "tag: shown on the top right (F7)" : "tag: hidden (F7)");
 		}
 
 		// F9 shoots, F10 stops the polygon last shot from casting, and F5 undoes the newest stop. See shadow_shoot.cpp. The game leaves these three keys alone.
