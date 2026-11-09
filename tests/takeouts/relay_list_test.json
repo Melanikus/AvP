@@ -685,6 +685,26 @@
 			]
 		},
 		{
+			"name": "SOURCE: the join's wait doesn't keep the window answering",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tCheckForWindowsMessages();\n\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];",
+					"to": "\tDirectReadKeyboard();\n\treturn bRunning && !KeyboardInput[KEY_ESCAPE];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait hook is left on after the join",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\tNet_SetRelayJoinWaitHook(NULL);\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the list's thread writes to the game's log",
 			"changes": [
 				{
