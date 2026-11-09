@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the relay's static P-384 key isn't hashed (Noise's <- s pre-message left out)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, relay->p384, sizeof(relay->p384), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "the game's ephemeral ML-KEM key isn't hashed (only the P-384 half of e)",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, draws->ekPublic, sizeof(draws->ekPublic), trace);",
+					"to": "ok = ok && true;"
+				}
+			]
+		},
+		{
+			"name": "the prologue leaves out the 0 byte after the region's name",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "ok = ok && MixHash(&hs->noise, prologue, letters + 1, trace);",
+					"to": "ok = ok && MixHash(&hs->noise, prologue, letters, trace);"
+				}
+			]
+		},
+		{
+			"name": "A2's seal isn't checked: what it opens to, or not, is taken anyway",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (ok && (!NetNoise_DecryptAndHash(&hs->noise, sealedId, sealedIdBytes, sessionId, sizeof(sessionId), &written) || written != sizeof(sessionId)))",
+					"to": "if (ok && (NetNoise_DecryptAndHash(&hs->noise, sealedId, sealedIdBytes, sessionId, sizeof(sessionId), &written), false))"
+				}
+			]
+		},
+		{
+			"name": "an A2 key that isn't on the curve isn't refused as one",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (ok && !NetCrypto_EcdhAgree(hs->e, re, ee))",
+					"to": "if (ok && !NetCrypto_EcdhAgree(hs->e, re, ee) && false)"
+				}
+			]
+		},
+		{
+			"name": "the transcript is ck, not h",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "memcpy(keysOut->transcript, hs->noise.h, sizeof(keysOut->transcript));",
+					"to": "memcpy(keysOut->transcript, hs->noise.ck, sizeof(keysOut->transcript));"
+				}
+			]
+		},
+		{
+			"name": "an A2 longer than 1,689 bytes is taken",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "if (!a2 || size != kNetHandshakeA2Bytes)",
+					"to": "if (!a2 || size < kNetHandshakeA2Bytes)"
+				}
+			]
+		},
+		{
+			"name": "a region of no letters is taken",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "return letters >= 1;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the draws are left as they were, e's private ML-KEM key among them",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "NetCrypto_Wipe(draws, sizeof(*draws));",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "a finished handshake's chain and keys are left in memory",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_a.cpp",
+					"from": "NetCrypto_Wipe(hs, sizeof(*hs));",
+					"to": "(void)0;"
+				}
+			]
+		}
+	]
+}

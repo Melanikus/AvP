@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a byte that isn't 0 after a fragment's part is taken",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "if (datagram[i] != 0)",
+					"to": "if (datagram[i] != 0 && false)"
+				}
+			]
+		},
+		{
+			"name": "a count that doesn't fit the length is taken",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "|| count != NetV2_FragmentCount(length) ||",
+					"to": "||"
+				}
+			]
+		},
+		{
+			"name": "a fragment that comes again with other bytes is taken",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "return memcmp(a->message + f->start, f->part, f->partBytes) == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a fragment made by hand to claim more than 1,164 bytes is copied",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "f->partBytes > kNetV2PartBytes ||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a COOKIE answer for another handshake's id is taken",
+			"changes": [
+				{
+					"file": "3dc/net_v2_fragments.h",
+					"from": "memcmp(answer + 8, id, kNetV2IdBytes) != 0",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a counter in the window is taken twice",
+			"changes": [
+				{
+					"file": "3dc/net_v2_replay.h",
+					"from": "return r->highest - counter < kNetV2ReplayWindow && !NetV2_ReplayBit(r, counter);",
+					"to": "return r->highest - counter < kNetV2ReplayWindow;"
+				}
+			]
+		},
+		{
+			"name": "the key never changes epoch",
+			"changes": [
+				{
+					"file": "3dc/net_v2_direction.h",
+					"from": "uint64_t const epoch = counter >> kNetV2EpochShift;",
+					"to": "uint64_t const epoch = 0;"
+				}
+			]
+		}
+	]
+}
