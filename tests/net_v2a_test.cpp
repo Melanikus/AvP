@@ -764,10 +764,12 @@ static void TheSession(const JsonValue &all, const Vectors &v)
 		NetRelayV2Session s;
 		FileSession(v, id, &s, 0);
 		s.Hear(kControl, answer.data(), answer.size(), 10);
-		Bytes changed = a2[1];
-		// The second datagram carries A2's last 525 bytes at 36 to 560; the sealed session id is A2's last 24, so 537 to 560. 540 is in it.
-		changed[540] ^= 0x01;
+		// A2 is 3,257 bytes in 3 datagrams: the first two carry 1,164 bytes each, so the last carries A2's last 929 at 36 to 964. The sealed
+		// session id is A2's last 24 bytes (8, then its 16-byte tag), so 941 to 964 of the last datagram. 950 is in it.
+		Bytes changed = a2[kNetRelayV2A2Fragments - 1];
+		changed[950] ^= 0x01;
 		s.Hear(kControl, a2[0].data(), a2[0].size(), 20);
+		s.Hear(kControl, a2[1].data(), a2[1].size(), 25);
 		s.Hear(kControl, changed.data(), changed.size(), 30);
 		ACheck(s.Failed() && s.Why() == kNetHandshakeATag, "an A2 whose seal doesn't open ends it for good (8)");
 		ACheck(!s.Seal(changed.data(), kControl, 40), "and nothing can be sealed then");
