@@ -69,6 +69,12 @@ param(
     [string]$RemoteRelay = '',   # server #14 beyond this machine: the one relay both games may use, by its server's name. It means -Relay too
     [string]$RelayListPin = '',  # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name
     [string]$RelayServerName = '', # -RemoteRelay's server as the games show it, such as "New York (Mel's server)"
+    # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft, through the relay (relay-words.ps1).
+    # Both games get -NetV2 and -RelayKey; the joiner is the second copy (-secondcopy), so the two have their own online identity each,
+    # and are two players, not one.
+    [switch]$NetV2,               # -netv2 for both games. Needs -Relay (or -RemoteRelay) and -RelayKey
+    [string]$RelayKey = '',       # the relay's key line for both games' settings, "<region>:<the relay's id, 96 small hex digits>"
+    [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
 
     [ValidateRange(0, 600)][int]$HostSpareSeconds = 30,  # the host plays this much longer than the joiner, so the joiner ends first (0: the same)
     [switch]$NoFilm,
@@ -216,6 +222,24 @@ if ($CheckTheWatch)
         if ($said -cne $case[3]) { $wrong += "the words [$($case[0])] [$($case[1])] [$($case[2])]: refused with [$said], and it should be [$($case[3])]" }
     }
 
+    # -RelayKey and -LocalRelayPin (relay-words.ps1; added 2026-11-09 by Melanikus (Fifth) for the AvP port): the key's region at its 16
+    # letters and one past, the id one digit short and one long, capitals, a space for the colon, a final newline; the pin as -RelayListPin's
+    $key = 'local:' + ('d0' * 48)
+    $badKey = "-RelayKey is a region (1 to 16 small letters, digits and -), a colon, and the relay's id: 96 small hex digits, and nothing else"
+    $badLocalPin = "-LocalRelayPin is the SHA-256 of the list's certificate: 64 hex digits, and nothing else"
+    $v2Cases = @(
+        @('', '', ''), @($key, '', ''), @($key, $pin, ''), @(('nyc3:' + ('a' * 96)), '', ''), @((('r' * 16) + ':' + ('0' * 96)), '', ''),
+        @((('r' * 17) + ':' + ('0' * 96)), '', $badKey), @((':' + ('0' * 96)), '', $badKey), @(('local:' + ('0' * 95)), '', $badKey),
+        @(('local:' + ('0' * 97)), '', $badKey), @(('local:' + ('A' * 96)), '', $badKey), @(('Local:' + ('0' * 96)), '', $badKey),
+        @(('local ' + ('0' * 96)), '', $badKey), @(($key + "`n"), '', $badKey), @(('lo_cal:' + ('0' * 96)), '', $badKey),
+        @('', $pin.Substring(1), $badLocalPin), @('', ($pin + '0'), $badLocalPin), @('', (' ' + $pin.Substring(1)), $badLocalPin)
+    )
+    foreach ($case in $v2Cases)
+    {
+        $said = Get-HudsonV2WordsRefusal $case[0] $case[1]
+        if ($said -cne $case[2]) { $wrong += "the v2 words [$($case[0])] [$($case[1])]: refused with [$said], and it should be [$($case[2])]" }
+    }
+
     if ($wrong.Count -gt 0)
     {
         $wrong | ForEach-Object { Write-Host "run-net-pair: the watch is wrong: $_" }
@@ -274,6 +298,16 @@ $remoteRelayRoute = ''
 $relayWordsRefusal = Get-HudsonRelayWordsRefusal $RemoteRelay $RelayListPin $RelayServerName
 if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 
+# -NetV2, -RelayKey and -LocalRelayPin (added 2026-11-09 by Melanikus (Fifth) for the AvP port): to their shapes, and together. run-hudson.ps1
+# checks them again for each game.
+$v2WordsRefusal = Get-HudsonV2WordsRefusal $RelayKey $LocalRelayPin
+if ($v2WordsRefusal) { Stop-Here $v2WordsRefusal }
+if ($NetV2 -and -not ($Relay -or $RemoteRelay)) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay or -RemoteRelay" }
+if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the relay's key line, the games send the relay nothing" }
+if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
+if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
+if ($NetV2 -and $ThirdFolder) { Stop-Here "-NetV2 is two players, the host and the second copy, and -ThirdFolder would be a third copy with no folder of its own" }
+
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
 if ($RemoteRelay -and ($Hostile -or $Drain -or $ThirdFolder)) { Stop-Here "-Hostile, -Drain and -ThirdFolder send bad messages on purpose, so they never go through -RemoteRelay, beyond this machine" }
@@ -324,6 +358,8 @@ $lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames",
 if ($RemoteRelay) { $lines += @("remote_relay=$RemoteRelay", "remote_relay_address=$remoteRelayAddress", "remote_relay_route=$remoteRelayRoute") }
 if ($RelayListPin) { $lines += "remote_relay_list_pin=$RelayListPin" }
 if ($RelayServerName) { $lines += "remote_relay_server_name=$RelayServerName" }
+if ($NetV2) { $lines += @("net_v2=yes", "relay_key=$RelayKey") }   # public: the relay's id
+if ($LocalRelayPin) { $lines += "local_relay_list_pin=$LocalRelayPin" }
 
 function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]$outputName, [string]$kind = '')
 {
@@ -383,6 +419,10 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($RelayListPin) { $words += @('-RelayListPin', $RelayListPin) }
     # The name can hold spaces, and Start-Process joins its words with nothing but spaces, so it goes in quotes (its rule has no quote in it)
     if ($RelayServerName) { $words += @('-RelayServerName', "`"$RelayServerName`"") }
+    # Protocol version 2's draft for both, and the joiner as the second copy (added 2026-11-09 by Melanikus (Fifth) for the AvP port)
+    if ($NetV2) { $words += @('-NetV2', '-RelayKey', $RelayKey) }
+    if ($LocalRelayPin) { $words += @('-LocalRelayPin', $LocalRelayPin) }
+    if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 

@@ -1965,6 +1965,18 @@ static void TestTourAndSharedMachine()
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
 		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
 			"and each game is told the relay's name (remoterelay=), and has it as its relays' list, at HTTPS's own port");
+		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
+		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
+		// with the list on this machine pinned, it's reached by its address
+		Check(Has(oneRun, "if ($NetV2) { $relaySwitch += ' -netv2' }") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
+			&& ComesBefore(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }", "$arguments = \"-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson"),
+			"SOURCE: -NetV2 and -SecondCopy are the game's own switches, -netv2 and -secondcopy, before -hudson");
+		Check(Has(oneRun, "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }") && Has(oneRun, "@('RelayServer = 127.0.0.1', \"RelayListPort = $RelayListPort\", \"RelayListPin = $LocalRelayPin\")")
+			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
+			"SOURCE: the relay's key line goes in the run's settings, the pinned list on this machine by its address, and the second copy's files are read from its own folder");
+		Check(Has(oneRun, "if ($NetV2 -and -not $RelayKey) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
+			&& Has(pairScript, "$said = Get-HudsonV2WordsRefusal $case[0] $case[1]"),
+			"SOURCE: -NetV2 needs the key line, the pair's joiner is always the second copy, and -CheckTheWatch tries the v2 words' every refusal");
 		Check(Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen')\n    {\n        return $remoteAddress -notmatch $thisMachine\n    }\n\n    return $localAddress -notmatch $thisMachine"),
 			"a TCP connection the game made is judged by its far end, and UDP and a TCP listener by their own address (server #14: the relays' list's HTTPS shows :: while it's connecting)");
 		Check(Has(pairScript, "$noAddress = '^(0\\.0\\.0\\.0|::)$'") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)\n    {\n        return $false\n    }"),

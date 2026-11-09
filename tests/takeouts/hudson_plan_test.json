@@ -9715,6 +9715,56 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a -NetV2 run doesn't tell the game -netv2",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($NetV2) { $relaySwitch += ' -netv2' }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a -SecondCopy run doesn't tell the game -secondcopy",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a -NetV2 run's settings have no RelayKey",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the second copy's files are looked for in the first copy's folder",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'",
+					"to": "'HudsonRun\\My Games\\Aliens versus Predator'"
+				}
+			]
+		},
+		{
+			"name": "the pair's joiner isn't the second copy, so both games are one player",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "    if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

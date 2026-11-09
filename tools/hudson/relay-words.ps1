@@ -22,6 +22,17 @@ function Test-HudsonRelayAddress([string]$text)
     return $true
 }
 
+# Added 2026-11-09 by Melanikus (Fifth) for the AvP port: the two words of a run on protocol version 2's draft, each to its shape, or ''.
+#   -RelayKey <region>:<id>   the settings' RelayKey, as the game reads it (net_relay_keys.h): the region, 1 to 16 small letters, digits
+#                             and -, then a colon, then the relay's id, 96 small hex digits, and nothing else
+#   -LocalRelayPin <pin>      as -RelayListPin, for the list on this machine: 64 hex digits
+function Get-HudsonV2WordsRefusal([string]$relayKey, [string]$localPin)
+{
+    if ($relayKey -and $relayKey -cnotmatch '\A[a-z0-9-]{1,16}:[0-9a-f]{96}\z') { return "-RelayKey is a region (1 to 16 small letters, digits and -), a colon, and the relay's id: 96 small hex digits, and nothing else" }
+    if ($localPin -and $localPin -cnotmatch '\A[0-9a-fA-F]{64}\z') { return "-LocalRelayPin is the SHA-256 of the list's certificate: 64 hex digits, and nothing else" }
+    return ''
+}
+
 # Why these three words can't be used together as given, or '' if they can. Each reason is its own, so a test can tell them apart.
 function Get-HudsonRelayWordsRefusal([string]$remoteRelay, [string]$pin, [string]$serverName)
 {
