@@ -36,6 +36,9 @@
 //   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the Room echo row on the sound pages is saved when it changes, the same way the rendering page's rows are (REVERB-TOGGLE-1)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the multiplayer page asks the relay server's list where its relays are, and the page of games found asks it for its games as well
+//   as the LAN (relay_list.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -76,6 +79,7 @@
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
+#include "relay_list.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -1172,6 +1176,11 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				// save ip address (if it has been set)
 				SaveIPAddress(IP_Address_Name, IPAddressString);
 				Net_JoinGame();
+
+				// The relay server's games as well, once for each time the page is opened: the page is set up again each time its list
+				// changes, and asking then would ask again for every answer. A joiner needs the relays too, to reach a game's region.
+				RelayList_FindRelays();
+				RelayList_FindGames();
 			}
 			MakeSelectSessionMenu();
 			break;
@@ -1279,6 +1288,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
+			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
+			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
+			RelayList_FindRelays();
+
 			//skirmishMode must be false
 			netGameData.skirmishMode = FALSE;
 
