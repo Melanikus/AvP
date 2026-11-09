@@ -333,7 +333,7 @@
     <ClCompile Include="..\..\3dc\win95\enumsch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\win95\fail.cpp">
+    <ClCompile Include="..\..\3dc\fail.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\win95\hierarchy_chunk.cpp">
@@ -977,7 +977,7 @@
     <ClInclude Include="..\..\3dc\win95\environment_chunk.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\win95\fail.h">
+    <ClInclude Include="..\..\3dc\fail.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\win95\hash_tem.hpp">

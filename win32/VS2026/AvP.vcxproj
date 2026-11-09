@@ -534,7 +534,7 @@
     <ClCompile Include="..\..\3dc\win95\enumsch.cpp" />
     <ClCompile Include="..\..\3dc\win95\enum_chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\environment_chunk.cpp" />
-    <ClCompile Include="..\..\3dc\win95\fail.cpp" />
+    <ClCompile Include="..\..\3dc\fail.cpp" />
     <ClCompile Include="..\..\3dc\win95\hierarchy_chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\huffman.cpp" />
     <ClCompile Include="..\..\3dc\win95\io.cpp" />
@@ -790,7 +790,7 @@
     <ClInclude Include="..\..\3dc\win95\enumsch.hpp" />
     <ClInclude Include="..\..\3dc\win95\enum_chunk.hpp" />
     <ClInclude Include="..\..\3dc\win95\environment_chunk.hpp" />
-    <ClInclude Include="..\..\3dc\win95\fail.h" />
+    <ClInclude Include="..\..\3dc\fail.h" />
     <ClInclude Include="..\..\3dc\win95\hash_tem.hpp" />
     <ClInclude Include="..\..\3dc\win95\hierarchy_chunk.hpp" />
     <ClInclude Include="..\..\3dc\win95\huffman.hpp" />
