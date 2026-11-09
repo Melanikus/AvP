@@ -70,6 +70,10 @@ void Con_PrintMessage(const std::string &)
 // none unless a test says so, and what the game told the list.
 static bool relayNamed = false;
 static int roomsListed = 0, passesListed = 0, sessionsListed = 0, roomsUnlisted = 0;
+
+// The relay's address, as the list hands it over already looked up: a made-up one, so a test can see what goes to it
+static enet_uint32 const kRelayHost = 0x0D0C0B0A;
+static enet_uint32 relayAddressNamed = kRelayHost;
 static std::string regionListed;
 static int hostMsListed = -1;
 static uint64_t passTimeListed = 0;
@@ -85,6 +89,7 @@ bool RelayList_Relays(RelayListRelay *relays, int *count)
 	strcpy(relays[0].region, "virginia");
 	strcpy(relays[0].host, "relay.example");
 	relays[0].port = 27500;
+	relays[0].address = relayAddressNamed;
 	*count = 1;
 	return true;
 }
@@ -679,16 +684,6 @@ void enet_peer_timeout(ENetPeer *, enet_uint32, enet_uint32, enet_uint32)
 {
 }
 
-// The relay's name, looked up: always this made-up address, so a test can see what goes to it
-static enet_uint32 const kRelayHost = 0x0D0C0B0A;
-
-int enet_address_set_host(ENetAddress *address, const char *)
-{
-	address->host = kRelayHost;
-	address->port = 0;
-	return 0;
-}
-
 int enet_address_set_host_ip(ENetAddress *address, const char *)
 {
 	address->host = 0x0100007F;
@@ -1014,11 +1009,30 @@ static void TestHostingThroughTheRelay()
 		"and a second after the last, with no answer, the game is open on this network as it always was, and nothing asked a relay for a room");
 	EndTheGame();
 
+	// A relay listed with an address that must never be sent to, in case the list's own rule ever lets one through: hosting is as it
+	// always was, and nothing is sent to it
+	enet_uint32 const neverSentTo[] = { ENET_HOST_ANY, ENET_HOST_BROADCAST };
+
+	for (enet_uint32 const address : neverSentTo)
+	{
+		relayAddressNamed = address;
+		int const sentNever = datagramsSent;
+		Check(HostAGame() == NET_OK && datagramsSent == sentNever && theHost.intercept == NULL && theHost.duplicatePeers == 4,
+			address == ENET_HOST_ANY ? "a relay listed at 0.0.0.0: nothing is sent to it, and hosting is as it always was"
+				: "a relay listed at 255.255.255.255: nothing is sent to it, and hosting is as it always was");
+		EndTheGame();
+	}
+
+	relayAddressNamed = kRelayHost;
+
 	relayNamed = false;
 	int const sentAfter = datagramsSent;
 	Check(HostAGame() == NET_OK && datagramsSent == sentAfter && theHost.intercept == NULL && theHost.duplicatePeers == 4,
 		"with no relay named, hosting is as it always was: nothing goes to a relay, and 4 places from one address");
 	EndTheGame();
+
+	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "enet_address_set_host("),
+		"SOURCE: the game's own thread never looks a relay's name up: the list hands its address over (Fourth's cold read, finding 1)");
 
 	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "+ relayRegion"), "SOURCE: no line the game writes holds the list's region: the words are the game's own (Fourth's cold read, finding 3)");
 }

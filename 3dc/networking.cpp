@@ -203,24 +203,19 @@ uint32_t const kRelayJoinMostMs = kNetRelayGiveUpAskingMs + kNetRelayWaitForRead
 size_t const kRelayJoinMostTurns = kRelayJoinMostMs / kRelayWaitMs + 100;   // and the most times it waits, so it ends even if the clock stood still
 int const kRelayMostHostMs = 9999;             // the most round trip the list takes (PROTOCOL.md, section 4)
 
-// One relay from the list, looked up: its address, from its name, at its control port. False for a name that gives no address, or a port
-// that isn't one. Looking a name up asks the network's name service, so it's done only when a game starts or a join begins.
+// One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
+// own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
+// service. This checks the two that must never be sent to again, in case the list's rule ever changes: "any address" (0.0.0.0) and
+// "everyone on this network" (255.255.255.255). False for those, or for a port that isn't one.
 static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 {
-	if (relay.port < 1 || relay.port > 65535 || relay.host[0] == 0)
+	if (relay.port < 1 || relay.port > 65535 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
 	{
 		return false;
 	}
 
-	ENetAddress found;
-
-	if (enet_address_set_host(&found, relay.host) != 0 || found.host == ENET_HOST_ANY || found.host == ENET_HOST_BROADCAST)
-	{
-		return false;
-	}
-
-	found.port = static_cast<uint16_t>(relay.port);
-	*out = found;
+	out->host = relay.address;
+	out->port = static_cast<uint16_t>(relay.port);
 	return true;
 }
 
