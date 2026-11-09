@@ -1,0 +1,109 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the console's key is the one left of Enter, not the one under Esc",
+			"changes": [
+				{
+					"file": "3dc/win95/console_key.h",
+					"from": "uint32_t const kConsoleKeyScanCode = 0x29;",
+					"to": "uint32_t const kConsoleKeyScanCode = 0x28;"
+				}
+			]
+		},
+		{
+			"name": "an extended key with the same scan code is taken for it",
+			"changes": [
+				{
+					"file": "3dc/win95/console_key.h",
+					"from": "return scanCode == kConsoleKeyScanCode && !extended;",
+					"to": "return scanCode == kConsoleKeyScanCode;"
+				}
+			]
+		},
+		{
+			"name": "the scan code is read from the wrong bits",
+			"changes": [
+				{
+					"file": "3dc/win95/console_key.h",
+					"from": "uint32_t const scanCode = (keyData >> 16) & 0xFF;",
+					"to": "uint32_t const scanCode = (keyData >> 15) & 0xFF;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the key under Esc, pressed, is also given to the game as what the layout calls it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\t\t\t\tIngameKeyboardInput_ConsoleKey(true);\n\t\t\t\tbreak;\n",
+					"to": "\t\t\t\tIngameKeyboardInput_ConsoleKey(true);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console's key is never let go",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\t\t\t\tIngameKeyboardInput_ConsoleKey(false);\n",
+					"to": "\t\t\t\tIngameKeyboardInput_ConsoleKey(true);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the console's key types goes into the console",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\t\t\tif (!fromTheConsoleKey)\n\t\t\t{\n\t\t\t\tRE_ENTRANT_QUEUE_WinProc_AddMessage_WM_CHAR((char)wParam);\n\t\t\t}\n",
+					"to": "\t\t\tRE_ENTRANT_QUEUE_WinProc_AddMessage_WM_CHAR((char)wParam);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus' text boxes no longer get what the console's key types",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\t\t\t}\n\n\t\t\tKeyboardEntryQueue_Add((char)wParam);\n",
+					"to": "\t\t\t\tKeyboardEntryQueue_Add((char)wParam);\n\t\t\t}\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console opens on VK_OEM_8 again, the UK's name for the key",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\tif (consoleKeyDown)\n\t{\n\t\tKeyboardInput[KEY_GRAVE] = TRUE;",
+					"to": "\tif (IngameKeyboardInput[0xDF])\n\t{\n\t\tKeyboardInput[KEY_GRAVE] = TRUE;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the key the layout calls VK_OEM_3 is no longer KEY_APOSTROPHE",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\tif (IngameKeyboardInput[VK_OEM_3])\n\t{\n\t\tKeyboardInput[KEY_APOSTROPHE] = TRUE;\n\t\tGotAnyKey = true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: clearing the keys leaves the console's key held",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "\n\tconsoleKeyDown = false;\n",
+					"to": "\n"
+				}
+			]
+		}
+	]
+}

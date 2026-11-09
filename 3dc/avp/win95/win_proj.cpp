@@ -12,6 +12,7 @@
 //   it was built in, with the name of whoever built it, into the game
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   with -dev -windowed, a test copy's window goes in its own half of the screen (window_slot.h), not the top left corner
+//   the key under Esc is the console's on every keyboard layout, found by its scan code, as 1999's DIK_GRAVE was (console_key.h)
 
 #ifdef _WIN32
 /****
@@ -34,6 +35,7 @@ extern unsigned char KeyboardInput[256];
 #include "psndplat.h"
 #include "onscreenKeyboard.h"
 #include "window_slot.h"
+#include "console_key.h"
 
 #include "reentrant_queue.h"
 	// Added 21/11/97 by DHM: support for a queue of Windows
@@ -104,6 +106,7 @@ extern void KeyboardEntryQueue_Add(char c);
 extern void IngameKeyboardInput_KeyDown(unsigned char key);
 extern void IngameKeyboardInput_KeyUp(unsigned char key);
 extern void IngameKeyboardInput_ClearBuffer(void);
+extern void IngameKeyboardInput_ConsoleKey(bool down);   // di_func.cpp: the key under Esc, held or let go
 extern void Mouse_ButtonUp(unsigned char button);
 extern void Mouse_ButtonDown(unsigned char button);
 
@@ -196,13 +199,26 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 		// 21/11/97 DHM: Added processing of WM_CHAR messages:
 		case WM_CHAR:
 		{
+			// The key under Esc opens and closes the console (console_key.h), so in a level it can never type: what it would type isn't
+			// put in the console or the message line, which would get it each time they opened. 1999 did the same for ` alone
+			// (reentrant_queue.cpp), which is what that key types on a UK keyboard; on others it's ' or ^ or another. The menus' own text
+			// boxes still take it, where it's only a letter. Modified 2026-11-09 by Melanikus for the AvP port.
+			bool const fromTheConsoleKey = ConsoleKey_IsTheKeyUnderEsc((uint32_t)lParam);
+
 			if (IOFOCUS_Get() & IOFOCUS_NEWCONSOLE)
 			{
-				Con_AddTypedChar((char)wParam);
+				if (!fromTheConsoleKey)
+				{
+					Con_AddTypedChar((char)wParam);
+				}
 				break;
 			}
 
-			RE_ENTRANT_QUEUE_WinProc_AddMessage_WM_CHAR((char)wParam);
+			if (!fromTheConsoleKey)
+			{
+				RE_ENTRANT_QUEUE_WinProc_AddMessage_WM_CHAR((char)wParam);
+			}
+
 			KeyboardEntryQueue_Add((char)wParam);
 			break;
 		}
@@ -213,6 +229,14 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 		// it's intentional for this case to fall through to WM_SYSKEYDOWN
 		case WM_SYSKEYDOWN:
 		{
+			// The key under Esc is the console's, on every layout, found by its place (console_key.h). It goes to the console alone, never
+			// also as whatever key the layout calls it.
+			if (ConsoleKey_IsTheKeyUnderEsc((uint32_t)lParam))
+			{
+				IngameKeyboardInput_ConsoleKey(true);
+				break;
+			}
+
 			// handle left/right alt keys
 			if (wParam == VK_MENU)
 			{
@@ -285,6 +309,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
 		{
+			// The console's key let go, found the same way as when it went down
+			if (ConsoleKey_IsTheKeyUnderEsc((uint32_t)lParam))
+			{
+				IngameKeyboardInput_ConsoleKey(false);
+				break;
+			}
+
 			// handle left/right alt keys
 			if (wParam == VK_MENU)
 			{
