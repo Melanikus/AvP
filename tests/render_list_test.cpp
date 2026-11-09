@@ -1401,7 +1401,10 @@ static SourceFindings ReadTheWriters(std::string const &source)
 	found.writersRead = 0;
 	found.mainWritersRead = 0;
 
-	static char const * const lists[] = { "orthoList", "particleList", "decalList", "mainList", "weaponList" };
+	// The lists a writer can add to. coronaList shares the screen list's buffers (#178). The ones from firstMainList on share the main buffers,
+	// and anything adding to those has to make room first (below).
+	static char const * const lists[] = { "orthoList", "coronaList", "particleList", "decalList", "mainList", "weaponList" };
+	static size_t const firstMainList = 4;
 	static char const * const stores[] = { "orthoVertex[", "particleVertex[", "decalVertex[", "mainVertex[" };
 
 	for (size_t f = 0; f < functions.size(); f++)
@@ -1423,7 +1426,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 				adds++;
 				firstAdd = (at < firstAdd) ? at : firstAdd;
 
-				if (l >= 3)
+				if (l >= firstMainList)
 				{
 					firstMainAdd = (at < firstMainAdd) ? at : firstMainAdd;
 				}
@@ -1500,7 +1503,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			found.twoPartsUnchecked.push_back(function.name);
 		}
 
-		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") == 1)
+		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") + CountOf(body, "coronaList->AddItem(4,") == 1)
 		{
 			int const corners = CountOf(body, "orthoVBOffset++") + 4 * CountOf(body, "orthoVBOffset += 4");
 
@@ -1546,6 +1549,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			found.frameEndForgetsCasters = guard != std::string::npos && body.find("ToyForgetCasters();", guard) < body.find("frameIsOpen = false");
 			found.frameEndEmptiesTheLists = guard != std::string::npos
 				&& guard < body.find("particleList->Reset();") && guard < body.find("mainList->Reset();") && guard < body.find("orthoList->Reset();")
+				&& guard < body.find("coronaList->Reset();") && body.find("coronaList->Reset();") != std::string::npos
 				&& guard < body.find("decalList->Reset();") && guard < body.find("weaponList->Reset();")
 				&& body.find("weaponList->Reset();") != std::string::npos && body.find("decalList->Reset();") != std::string::npos
 				&& body.find("orthoList->Reset();") != std::string::npos && body.find("mainList->Reset();") != std::string::npos && body.find("particleList->Reset();") != std::string::npos;

@@ -10,6 +10,9 @@
 // the back" in particle.cpp's table, they reach D3D_Particle_Output, and that moves all three of each corner's numbers. The camera's
 // nearest, farthest and depth sum this test uses are read from d3d_render.cpp too, so the two can't drift apart.
 //
+// The coronas, all by reading: every corona goes on its own screen list, not the HUD's, and a frame draws that list after the particles
+// and before the gun, whose drawing clears the depth and covers it. The HUD comes after the gun, over everything.
+//
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this file on its own. The renderer itself brings most of the game with it, so the parts of it checked here are
@@ -175,11 +178,67 @@ static void TestTheGameUsesIt()
 		"and the starry sky is drawn as stars, collected with the other particles");
 }
 
+// The coronas (#178): the glow round a light, which 1999 drew as a light flare in front of the level but before the gun. They had gone on
+// the HUD's list, which is drawn last of all, so they showed through the gun and over the HUD.
+static void TestTheCoronas()
+{
+	puts("Where the game draws the coronas, by reading:");
+
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const particles = ReadSourceFile("3dc/avp/particle.cpp");
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
+	std::string const setup = ReadSourceFile("win32/d3_func.cpp");
+	Check(render.size() > 100000 && setup.size() > 50000, "the renderer and the graphics card's setup were found and read");
+
+	// What a corona is: a light flare, which 1999 drew in front of the level. A corona is a flat square on the screen, and the screen's
+	// projection puts its depth of 1 at the very front, so nothing the level draws can hide it.
+	std::string const flare = SourceSlice(particles, "/* PARTICLE_LIGHTFLARE */", "/* PARTICLE_", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(flare, "//IsDrawnInFront:1;\n\t\t1,\n\t\t//IsDrawnAtBack:1;\n\t\t0,"), "the light flare is marked drawn in front, as 1999 drew it");
+	std::string const lightFlare = SourceSlice(shapes, "void RenderLightFlare(VECTORCH *positionPtr, uint32_t colour)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(lightFlare, "particle.ParticleID = PARTICLE_LIGHTFLARE;") && Has(lightFlare, "AddCorona(&particle, &tempVector);"), "and a light's flare is drawn as a corona");
+	Check(Has(setup, "D3DXMatrixOrthoLH(&d3d.matOrtho, 2.0f, -2.0f, 1.0f, 10.0f);"), "the screen's projection runs its depth from 1, at the very front, to 10");
+
+	// Its own list, on the screen list's buffers, made, opened and let go of with the others
+	Check(Has(render, "\tcoronaList   = new RenderList(\"coronaList\",   50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);\n"),
+		"the coronas have a screen list of their own, on the screen list's buffers");
+	std::string const open = SourceSlice(render, "static bool LockExecuteBuffer()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(open, "\torthoList->Reset();\n\tcoronaList->Reset();\n"), "it's emptied with the screen list whenever the lists are opened");
+	std::string const letGo = SourceSlice(render, "void RenderListDeInit()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(letGo, "delete coronaList;\n\tcoronaList = 0;"), "and let go of with the other lists");
+
+	std::string const coronas = SourceSlice(render, "void DrawCoronas()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(coronas, "coronaList->AddCommand(kCommandZWriteDisable);") && Has(coronas, "if (!coronaList->AddItem(4, SpecialFXImageNumber,") &&
+		Has(coronas, "coronaList->CreateOrthoIndices(orthoIndex);") && Has(coronas, "coronaList->AddCommand(kCommandZWriteEnable);"),
+		"every corona goes on that list, with depth writes off round them as before");
+	Check(!coronas.empty() && !Has(coronas, "orthoList"), "and none on the HUD's list, which is drawn after the gun");
+	Check(Has(coronas, "orthoVertex[orthoVBOffset].z = 1.0f;"), "each corner is at the screen's depth of 1, the very front");
+
+	// The order a frame is drawn in
+	std::string const execute = SourceSlice(render, "static bool ExecuteBuffer()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const particlesDrawn = execute.find("particleList->Draw();");
+	size_t const coronasDrawn = execute.find("coronaList->Draw();");
+	size_t const depthCleared = execute.find("R_ClearZBuffer();");
+	size_t const gunDrawn = execute.find("weaponList->Draw();");
+	size_t const hudDrawn = execute.find("orthoList->Draw();");
+	Check(particlesDrawn != std::string::npos && coronasDrawn != std::string::npos && depthCleared != std::string::npos &&
+		gunDrawn != std::string::npos && hudDrawn != std::string::npos,
+		"a frame's drawing draws the particles, the coronas, the gun and the HUD");
+	Check(particlesDrawn < coronasDrawn && coronasDrawn < depthCleared && depthCleared < gunDrawn && gunDrawn < hudDrawn,
+		"in that order: the coronas after the particles, then the gun's depth is cleared and the gun covers them, and the HUD goes over all of it");
+	Check(execute.find("coronaList->Draw();", coronasDrawn + 1) == std::string::npos, "the coronas are drawn once a drawing, not twice");
+
+	std::string const coronaDraw = SourceSlice(execute, "if (coronaList->GetSize())", "coronaList->Draw();", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(coronaDraw, "d3d.effectSystem->SetActive(d3d.orthoEffect);") &&
+		Has(coronaDraw, "d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);"),
+		"with the screen's own shaders and projection, as the HUD's list is");
+}
+
 int main()
 {
 	TestTheStars();
 	TestWhatsLeftAlone();
 	TestTheGameUsesIt();
+	TestTheCoronas();
 
 	if (checksFailed)
 	{

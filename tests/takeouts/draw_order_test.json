@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"win32"
 	],
 	"rows": [
 		{
@@ -131,6 +132,101 @@
 					"file": "3dc/kshape.cpp",
 					"from": "particle.ParticleID = PARTICLE_STAR;",
 					"to": "particle.ParticleID = PARTICLE_FLARESMOKE;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas go back on the HUD's list, which is drawn after the gun",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!coronaList->AddItem(4, SpecialFXImageNumber,",
+					"to": "if (!orthoList->AddItem(4, SpecialFXImageNumber,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas are never drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\n\n\t\tcoronaList->Draw();\n",
+					"to": "\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas are drawn after the gun again, so they show through it",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\n\n\t\tcoronaList->Draw();\n",
+					"to": "\n\n"
+				},
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tweaponList->Draw();\n",
+					"to": "\t\tweaponList->Draw();\n\t\tcoronaList->Draw();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas are drawn with the world's projection instead of the screen's",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);\n\n\t\tcoronaList->Draw();",
+					"to": "d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matProjection);\n\n\t\tcoronaList->Draw();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas' list isn't emptied when the lists are opened, so it keeps the last frame's",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\n\torthoList->Reset();\n\tcoronaList->Reset();\n",
+					"to": "\n\torthoList->Reset();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas' list is put on the main buffers instead of the screen's",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "coronaList   = new RenderList(\"coronaList\",   50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);",
+					"to": "coronaList   = new RenderList(\"coronaList\",   50,  &d3d.mainVB,  &d3d.mainIB,  &d3d.mainDecl);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the coronas' list is never let go of",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tdelete coronaList;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the light flare isn't marked drawn in front",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "\t\t//IsDrawnInFront:1;\n\t\t1,\n\t\t//IsDrawnAtBack:1;\n\t\t0,",
+					"to": "\t\t//IsDrawnInFront:1;\n\t\t0,\n\t\t//IsDrawnAtBack:1;\n\t\t0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen's projection changes, so a corona's depth of 1 may no longer be the very front",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "D3DXMatrixOrthoLH(&d3d.matOrtho, 2.0f, -2.0f, 1.0f, 10.0f);",
+					"to": "D3DXMatrixOrthoLH(&d3d.matOrtho, 2.0f, -2.0f, 0.0f, 10.0f);"
 				}
 			]
 		}
