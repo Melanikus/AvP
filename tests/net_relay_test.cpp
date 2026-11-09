@@ -1,16 +1,20 @@
 // The test of the game's side of the relay (3dc/net_relay.h). Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port: PROTOCOL.md 7014de1 (the pass, the rule that a field a kind doesn't use is 0, and the
+// echoes that pick a relay); and two checks GitHub's run of dc83d6ee found wrong in this test, not in the code: the host's hellos were
+// counted with its 15 s keep, which falls due at the same moment, and 64 bytes of A's fail the magic before the version.
 //
 // WHAT IT TESTS
 //
-// The relay's messages: that each kind is written byte for byte as PROTOCOL.md says (AVPx-Dedicated-Server, d75a5bd), that reading gives
-// back what was written, and that anything that isn't exactly a message is refused, each with the reason NetRelay_Read gives for it. Then the
-// host's and the joiner's state machines: each step of a game's life, every time limit, and what each does with a message that's wrong in
-// some way (another room's token, another joiner's ticket, a port that can't be a joiner's, the wrong sender).
+// The relays' messages: that each kind is written byte for byte as PROTOCOL.md says (AVPx-Dedicated-Server, 7014de1), that reading gives
+// back what was written, and that anything that isn't exactly a message is refused, each with the reason NetRelay_Read gives for it. Then
+// the three state machines: picking a relay by its round trip, the host's room and the joiner's way in: each step, every time limit, and what
+// each does with a message that's wrong in some way (another room's token, another joiner's ticket, an echo's bytes it never sent, a port
+// that can't be a joiner's, the wrong sender).
 //
 // WHAT IT DOESN'T TEST
 //
-// The glue in networking.cpp that sends these from the game's own socket, and the relay itself (its own tests are in its repository). So this
-// shows the two ends do the right thing with what they're given, and nothing here sends a packet.
+// The glue in networking.cpp that sends these from the game's own socket (tests/net_start_test.cpp tries some of it), and the relay itself
+// (its own tests are in its repository). So nothing here sends a packet.
 
 #include <stdio.h>
 #include <string.h>
@@ -35,6 +39,9 @@ uint16_t const kJoinerPort = 27501;
 static const uint8_t kToken[kNetRelaySecretBytes] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE };
 static const uint8_t kOther[kNetRelaySecretBytes] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFF };
 static const uint8_t kCookie[kNetRelaySecretBytes] = { 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9 };
+static const uint8_t kPass[kNetRelayPassBytes] = { 7, 6, 5, 4, 3, 2, 1, 0xF0, 7, 6, 5, 4, 3, 2, 1, 0xF1 };
+static const uint8_t kNewerPass[kNetRelayPassBytes] = { 8, 6, 5, 4, 3, 2, 1, 0xF0, 7, 6, 5, 4, 3, 2, 1, 0xF1 };
+uint64_t const kPassTime = 0x69101800u;   // a time in November 2025, in seconds since 1970, with a different byte in each of its lowest four
 static const char kCode[] = "ABCD2345";
 static const char kOtherCode[] = "ABCD2346";
 
@@ -44,7 +51,7 @@ struct Bytes
 	uint8_t b[kNetRelayMessageBytes];
 };
 
-static Bytes Make(int type, const uint8_t *secret, const char *code, uint16_t port, uint16_t number)
+static Bytes Make(int type, const uint8_t *secret, const char *code, uint16_t port, uint16_t number, const uint8_t *pass = NULL, uint64_t passTime = 0)
 {
 	NetRelayMessage m = NetRelay_Message(type);
 
@@ -58,8 +65,14 @@ static Bytes Make(int type, const uint8_t *secret, const char *code, uint16_t po
 		memcpy(m.code, code, kNetRelayCodeLetters);
 	}
 
+	if (pass)
+	{
+		memcpy(m.pass, pass, kNetRelayPassBytes);
+	}
+
 	m.port = port;
 	m.number = number;
+	m.passTime = passTime;
 	Bytes out;
 	NetRelay_Write(m, out.b);
 	return out;
@@ -88,20 +101,45 @@ static size_t SendCount(End &end)
 	return end.TakeSends(sends, kNetRelayMostSends);
 }
 
+// How many of what an end wants sent are of this kind
+template <typename End>
+static size_t SendsOfKind(End &end, int type)
+{
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t const n = end.TakeSends(sends, kNetRelayMostSends);
+	size_t found = 0;
+
+	for (size_t i = 0; i < n; i++)
+	{
+		found += sends[i].bytes[5] == type ? 1 : 0;
+	}
+
+	return found;
+}
+
 static void TheMessages()
 {
-	printf("The relay's messages\n");
+	printf("The relays' messages\n");
 
-	Bytes const open = Make(kNetRelayJoinPort, kToken, kCode, 27501, 0x0102);
-	Check(open.b[0] == 'A' && open.b[1] == 'V' && open.b[2] == 'P' && open.b[3] == 'R' && open.b[4] == 1 && open.b[5] == kNetRelayJoinPort,
+	Bytes const joinPort = Make(kNetRelayJoinPort, kToken, kCode, 27501, 0);
+	Check(joinPort.b[0] == 'A' && joinPort.b[1] == 'V' && joinPort.b[2] == 'P' && joinPort.b[3] == 'R' && joinPort.b[4] == 1 && joinPort.b[5] == kNetRelayJoinPort,
 		"a message starts AVPR, then the version, 1, then its kind");
-	Check(open.b[32] == 0x6D && open.b[33] == 0x6B && open.b[34] == 0x02 && open.b[35] == 0x01, "its port and its number are written low byte first: 27501 is 6D 6B");
-	Check(memcmp(open.b + 8, kToken, 16) == 0 && memcmp(open.b + 24, kCode, 8) == 0 && open.b[6] == 0 && open.b[7] == 0 && NetRelay_AllZero(open.b + 36, 28),
+	Check(joinPort.b[32] == 0x6D && joinPort.b[33] == 0x6B, "its port is written low byte first: 27501 is 6D 6B");
+	Check(memcmp(joinPort.b + 8, kToken, 16) == 0 && memcmp(joinPort.b + 24, kCode, 8) == 0 && joinPort.b[6] == 0 && joinPort.b[7] == 0 && NetRelay_AllZero(joinPort.b + 34, 30),
 		"the secret is at 8, the code at 24, and the rest is 0");
 
 	NetRelayMessage m;
-	Check(NetRelay_Read(open.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.type == kNetRelayJoinPort && m.port == 27501 && m.number == 0x0102
-		&& memcmp(m.secret, kToken, 16) == 0 && memcmp(m.code, kCode, 8) == 0, "reading it gives back every field");
+	Check(NetRelay_Read(joinPort.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.type == kNetRelayJoinPort && m.port == 27501 && m.number == 0
+		&& memcmp(m.secret, kToken, 16) == 0 && memcmp(m.code, kCode, 8) == 0 && m.passTime == 0 && NetRelay_AllZero(m.pass, 16), "reading it gives back every field");
+
+	Bytes const kept = Make(kNetRelayHostKept, kToken, NULL, 0, 0x0102, kPass, kPassTime);
+	Check(kept.b[34] == 0x02 && kept.b[35] == 0x01 && memcmp(kept.b + 36, kPass, 16) == 0, "a count is written low byte first, and the pass is at 36");
+	Check(kept.b[52] == 0x00 && kept.b[53] == 0x18 && kept.b[54] == 0x10 && kept.b[55] == 0x69 && kept.b[56] == 0 && kept.b[59] == 0 && NetRelay_AllZero(kept.b + 60, 4),
+		"the pass time is 8 bytes at 52, low byte first, and 60-63 are 0");
+	Check(NetRelay_Read(kept.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.number == 0x0102 && memcmp(m.pass, kPass, 16) == 0 && m.passTime == kPassTime,
+		"and they read back");
+	Bytes const farTime = Make(kNetRelayHostKept, kToken, NULL, 0, 0, kPass, 0x0102030405060708ull);
+	Check(NetRelay_Read(farTime.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.passTime == 0x0102030405060708ull, "all 8 bytes of a pass time are its");
 
 	bool everyKind = true;
 
@@ -111,38 +149,56 @@ static void TheMessages()
 		everyKind = everyKind && NetRelay_Read(one.b, kNetRelayMessageBytes, &m) == kNetRelayIsAMessage && m.type == type;
 	}
 
-	Check(everyKind, "each of the 13 kinds is a message");
+	Check(everyKind, "each of the 15 kinds, with every field 0, is a message");
 
 	// What isn't one, and why
-	Check(NetRelay_Read(open.b, 63, &m) == kNetRelayNotMessageSize && NetRelay_Read(open.b, 0, &m) == kNetRelayNotMessageSize
+	Check(NetRelay_Read(joinPort.b, 63, &m) == kNetRelayNotMessageSize && NetRelay_Read(joinPort.b, 0, &m) == kNetRelayNotMessageSize
 		&& NetRelay_Read(NULL, 64, &m) == kNetRelayNotMessageSize, "63 bytes, none, or no packet at all: not exactly 64 bytes");
 	uint8_t longer[65];
-	memcpy(longer, open.b, 64);
+	memcpy(longer, joinPort.b, 64);
 	longer[64] = 0;
 	Check(NetRelay_Read(longer, 65, &m) == kNetRelayNotMessageSize, "65 bytes: not exactly 64");
 
-	Bytes bad = open;
+	Bytes bad = joinPort;
 	bad.b[3] = 'S';
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotMagic, "another magic: not AVPR");
-	bad = open;
+	bad = joinPort;
 	bad.b[4] = 2;
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotVersion, "version 2: another version");
-	bad = open;
+	bad = joinPort;
 	bad.b[5] = 0;
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotType, "kind 0: no such kind");
-	bad.b[5] = 14;
-	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotType, "kind 14: no such kind");
+	bad.b[5] = 16;
+	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotType, "kind 16: no such kind");
 	bad.b[5] = 255;
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotType, "kind 255: no such kind");
-	bad = open;
+	bad = joinPort;
 	bad.b[7] = 1;
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotZero, "a reserved byte that isn't 0");
-	bad = open;
-	bad.b[36] = 1;
-	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotZero, "the first padding byte not 0");
-	bad = open;
+	bad = kept;
+	bad.b[60] = 1;
+	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotZero, "the first padding byte not 0, even in a kind with a pass");
+	bad = joinPort;
 	bad.b[63] = 0x80;
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotZero, "the last padding byte not 0");
+
+	// A field a kind doesn't use (PROTOCOL.md's table)
+	Bytes const withNumber = Make(kNetRelayJoinPort, kToken, kCode, 27501, 1);
+	Check(NetRelay_Read(withNumber.b, 64, &m) == kNetRelayNotUnused, "JOIN_PORT with a number, which it doesn't have");
+	Bytes const withPass = Make(kNetRelayJoinPort, kToken, kCode, 27501, 0, kPass, 0);
+	Check(NetRelay_Read(withPass.b, 64, &m) == kNetRelayNotUnused, "JOIN_PORT with a pass");
+	Bytes const withPassTime = Make(kNetRelayHostKeep, kToken, NULL, 0, 0, NULL, 5);
+	Check(NetRelay_Read(withPassTime.b, 64, &m) == kNetRelayNotUnused, "HOST_KEEP with a pass time, and no pass");
+	Bytes const refusedWithSecret = Make(kNetRelayRefused, kToken, NULL, 0, 1);
+	Check(NetRelay_Read(refusedWithSecret.b, 64, &m) == kNetRelayNotUnused, "REFUSED with a secret, which it never has");
+	Bytes const cookieWithCode = Make(kNetRelayCookie, kCookie, kCode, 0, 0);
+	Check(NetRelay_Read(cookieWithCode.b, 64, &m) == kNetRelayNotUnused, "COOKIE with a code");
+	Bytes const helloWithPort = Make(kNetRelayJoinerHello, kToken, NULL, 27501, 0);
+	Check(NetRelay_Read(helloWithPort.b, 64, &m) == kNetRelayNotUnused, "JOINER_HELLO with a port, which only the host's hello has");
+	Bytes const echoWithPort = Make(kNetRelayEchoBack, kToken, NULL, 1, 2);
+	Check(NetRelay_Read(echoWithPort.b, 64, &m) == kNetRelayNotUnused, "ECHO_BACK with a port");
+	Bytes const echo = Make(kNetRelayEchoBack, kToken, NULL, 0, 2);
+	Check(NetRelay_Read(echo.b, 64, &m) == kNetRelayIsAMessage && m.number == 2, "but ECHO_BACK with its bytes and count is one");
 
 	bad = Make(kNetRelayJoin, NULL, "ABCD234O", 0, 0);
 	Check(NetRelay_Read(bad.b, 64, &m) == kNetRelayNotCode, "a code with O in it, which no code has");
@@ -156,25 +212,114 @@ static void TheMessages()
 	Check(NetRelay_Read(bad.b, 64, &untouched) == kNetRelayNotCode && untouched.port == 77 && untouched.type == kNetRelayCookie,
 		"a packet that isn't a message leaves what it was to be read into as it was");
 
-	Check(strcmp(NetRelay_NotAMessageWhy(kNetRelayNotMagic), "it doesn't start with AVPR") == 0 && strcmp(NetRelay_NotAMessageWhy(99), "no such reason") == 0,
-		"each reason has its words, and a number that isn't one says so");
+	Check(strcmp(NetRelay_NotAMessageWhy(kNetRelayNotUnused), "a field its kind of message doesn't use isn't 0") == 0
+		&& strcmp(NetRelay_NotAMessageWhy(99), "no such reason") == 0, "each reason has its words, and a number that isn't one says so");
 
 	// Codes and secrets
 	char code[8];
 	Check(NetRelay_CodeFromText("abcd-2345", code) && memcmp(code, kCode, 8) == 0, "a typed code in small letters with a dash is the code");
 	Check(NetRelay_CodeFromText(" ABCD 2345 ", code) && memcmp(code, kCode, 8) == 0, "and with spaces round it and in it");
-	char kept[8] = { 'K', 'K', 'K', 'K', 'K', 'K', 'K', 'K' };
-	Check(!NetRelay_CodeFromText("ABCD234", kept) && !NetRelay_CodeFromText("ABCD23456", kept) && !NetRelay_CodeFromText("ABCD2340", kept)
-		&& !NetRelay_CodeFromText("", kept) && !NetRelay_CodeFromText(NULL, kept) && kept[0] == 'K',
+	char kept8[8] = { 'K', 'K', 'K', 'K', 'K', 'K', 'K', 'K' };
+	Check(!NetRelay_CodeFromText("ABCD234", kept8) && !NetRelay_CodeFromText("ABCD23456", kept8) && !NetRelay_CodeFromText("ABCD2340", kept8)
+		&& !NetRelay_CodeFromText("", kept8) && !NetRelay_CodeFromText(NULL, kept8) && kept8[0] == 'K',
 		"7 letters, 9, a 0 in it, none, or no text at all: not a code, and nothing is written");
 
 	char hex[33];
 	NetRelay_SecretHex(kToken, hex);
-	Check(strcmp(hex, "0123456789abcdef1032547698badcfe") == 0, "a token as the list takes it: 32 hex digits, small letters");
+	Check(strcmp(hex, "0123456789abcdef1032547698badcfe") == 0, "16 bytes as the list writes them: 32 hex digits, small letters");
 	Check(NetRelay_SameSecret(kToken, kToken) && !NetRelay_SameSecret(kToken, kOther), "two secrets differing in the last bit aren't the same");
 
 	Check(NetRelay_RefusedWhy(2) == kNetRelayRefusedFull && NetRelay_RefusedWhy(0) == kNetRelayRefusedOther && NetRelay_RefusedWhy(5) == kNetRelayRefusedOther,
 		"REFUSED's reasons 1 to 4 are kept, and any other is \"a reason this version doesn't know\"");
+}
+
+// 16 bytes for each echo to each relay, all different
+static void EchoBytes(uint8_t *out, size_t relays)
+{
+	for (size_t i = 0; i < relays * kNetRelayEchoes * kNetRelaySecretBytes; i++)
+	{
+		out[i] = static_cast<uint8_t>(i * 7 + 3);
+	}
+}
+
+static const uint8_t *EchoOf(const uint8_t *random, size_t relay, size_t echo)
+{
+	return random + (relay * kNetRelayEchoes + echo) * kNetRelaySecretBytes;
+}
+
+static void PickingARelay()
+{
+	printf("Picking a relay\n");
+	uint16_t const ports[3] = { 27500, 27500, 27600 };
+	uint8_t random[3 * kNetRelayEchoes * kNetRelaySecretBytes];
+	EchoBytes(random, 3);
+
+	NetRelayPicker picker;
+	Check(!picker.Start(0, ports, random, 0) && SendCount(picker) == 0, "no relays to time: nothing starts, and nothing is sent");
+	Check(!picker.Start(kNetRelayMostRelays + 1, ports, random, 0), "nor more than 16");
+
+	Check(picker.Start(3, ports, random, 1000), "three relays to time");
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t const first = picker.TakeSends(sends, kNetRelayMostSends);
+	NetRelayMessage m;
+	Check(first == 3 && sends[0].relay == 0 && sends[1].relay == 1 && sends[2].relay == 2 && sends[2].port == 27600
+		&& NetRelay_Read(sends[0].bytes, 64, &m) == kNetRelayIsAMessage && m.type == kNetRelayEcho && m.number == 1 && memcmp(m.secret, EchoOf(random, 0, 0), 16) == 0,
+		"the first echo goes to each at once, to its control port, with its own 16 bytes and the count 1");
+
+	picker.Tick(1000 + kNetRelayEchoEveryMs - 1);
+	Check(SendCount(picker) == 0, "nothing more within 100 ms");
+	picker.Tick(1000 + kNetRelayEchoEveryMs);
+	Check(SendCount(picker) == 3, "then the second echo to each");
+	picker.Tick(1000 + 2 * kNetRelayEchoEveryMs);
+	Check(SendCount(picker) == 3, "then the third");
+	picker.Tick(1000 + 5 * kNetRelayEchoEveryMs);
+	Check(SendCount(picker) == 0, "and no more");
+
+	// Relay 0 answers its first echo after 80 ms and its second after 30; relay 2 its first after 40; relay 1 never
+	Bytes const back00 = Make(kNetRelayEchoBack, EchoOf(random, 0, 0), NULL, 0, 1);
+	Bytes const back01 = Make(kNetRelayEchoBack, EchoOf(random, 0, 1), NULL, 0, 2);
+	Bytes const back20 = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 1);
+	Check(picker.Hear(0, 27500, back00.b, 64, 1080), "relay 0's answer to its first echo");
+	Check(picker.Hear(0, 27500, back01.b, 64, 1130), "and to its second");
+	Check(picker.Hear(2, 27600, back20.b, 64, 1040), "relay 2's answer to its first");
+	Check(picker.Best() == 0 && picker.BestMs() == 30, "the lowest round trip counts: relay 0's 30 ms, its second echo's");
+
+	Check(picker.Hear(2, 27600, back00.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 1, "an answer with another relay's bytes doesn't count");
+	Bytes const wrongCount = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 2);
+	Check(picker.Hear(2, 27600, wrongCount.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 2, "nor one with its bytes and another echo's count");
+	Bytes const countPastSent = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 4);
+	Check(picker.Hear(2, 27600, countPastSent.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 3, "nor a count past the third");
+	Check(picker.Hear(2, 27600, back20.b, 64, 1041) && picker.UnusedMessages(kNetRelayWrongSecret) == 4 && picker.BestMs() == 30,
+		"an answer sent again doesn't count again: relay 2 doesn't get 1 ms for it");
+	Check(!picker.Hear(2, 27500, back20.b, 64, 1041), "from another port of that relay, it isn't the relay's at all");
+	Check(!picker.Hear(5, 27500, back00.b, 64, 1041), "nor from a relay that isn't one of the three");
+	Bytes const echoNotBack = Make(kNetRelayEcho, EchoOf(random, 1, 0), NULL, 0, 1);
+	Check(picker.Hear(1, 27500, echoNotBack.b, 64, 1050) && picker.UnusedMessages(kNetRelayNotForNow) == 1, "an ECHO, not an ECHO_BACK, is taken and not used");
+	uint8_t junk[64];
+	memset(junk, 'A', sizeof(junk));
+	Check(picker.Hear(1, 27500, junk, 64, 1050) && picker.NotMessages(kNetRelayNotMagic) == 1, "64 bytes that aren't a message are counted by why");
+
+	Check(!picker.Done(1000 + 2 * kNetRelayEchoEveryMs + kNetRelayEchoAnswerWithinMs - 1), "it isn't done until a second after the last echo");
+	Check(picker.Done(1000 + 2 * kNetRelayEchoEveryMs + kNetRelayEchoAnswerWithinMs), "and then it is");
+
+	NetRelayPicker late;
+	late.Start(1, ports, random, 0);
+	SendCount(late);
+	Check(late.Hear(0, 27500, back00.b, 64, kNetRelayEchoAnswerWithinMs + 1) && late.Best() == -1 && late.BestMs() == 0,
+		"an answer later than a second doesn't count, and with none, there's no relay to use");
+
+	NetRelayPicker many;
+	uint16_t manyPorts[kNetRelayMostRelays];
+	uint8_t manyRandom[kNetRelayMostRelays * kNetRelayEchoes * kNetRelaySecretBytes];
+
+	for (size_t i = 0; i < kNetRelayMostRelays; i++)
+	{
+		manyPorts[i] = 27500;
+	}
+
+	EchoBytes(manyRandom, kNetRelayMostRelays);
+	Check(many.Start(kNetRelayMostRelays, manyPorts, manyRandom, 0) && SendCount(many) == kNetRelayMostRelays && many.SendsDropped() == 0,
+		"16 relays: one echo each, every one sent");
 }
 
 // A host whose room is open, at time 0
@@ -182,7 +327,7 @@ static NetRelayHost &OpenHost(NetRelayHost &host)
 {
 	host.Start(kControl, 0);
 	SendCount(host);
-	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0);
+	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0, kPass, kPassTime);
 	host.Hear(kControl, opened.b, 64, 50);
 	return host;
 }
@@ -204,18 +349,24 @@ static void TheHost()
 	Check(host.Hear(kControl, cookie.b, 64, 1010) && OneSend(host, &port, &m) && m.type == kNetRelayHostOpen && memcmp(m.secret, kCookie, 16) == 0,
 		"given a cookie, it asks again with it");
 
-	Bytes const zeroToken = Make(kNetRelayHostOpened, NULL, kCode, 0, 0);
+	Bytes const zeroToken = Make(kNetRelayHostOpened, NULL, kCode, 0, 0, kPass, kPassTime);
 	Check(host.Hear(kControl, zeroToken.b, 64, 1020) && host.Asking() && host.UnusedMessages(kNetRelayWrongSecret) == 1,
 		"a room with a token of all 0 isn't one: it's taken, counted and not used");
-	Bytes const noCode = Make(kNetRelayHostOpened, kToken, NULL, 0, 0);
+	Bytes const noCode = Make(kNetRelayHostOpened, kToken, NULL, 0, 0, kPass, kPassTime);
 	Check(host.Hear(kControl, noCode.b, 64, 1020) && host.Asking() && host.UnusedMessages(kNetRelayWrongSecret) == 2, "nor one with no code");
+	Bytes const noPass = Make(kNetRelayHostOpened, kToken, kCode, 0, 0);
+	Check(host.Hear(kControl, noPass.b, 64, 1020) && host.Asking() && host.UnusedMessages(kNetRelayNoPass) == 1, "nor one with no pass, which every HOST_OPENED has");
+	Bytes const noPassTime = Make(kNetRelayHostOpened, kToken, kCode, 0, 0, kPass, 0);
+	Check(host.Hear(kControl, noPassTime.b, 64, 1020) && host.Asking() && host.UnusedMessages(kNetRelayNoPass) == 2, "nor one whose pass has no time");
 
-	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0);
-	Check(host.Hear(kControl, opened.b, 64, 1030) && host.Open(), "HOST_OPENED with a token and a code opens the room");
-	char tokenHex[33], codeText[9];
-	Check(host.Room(tokenHex, codeText) && strcmp(tokenHex, "0123456789abcdef1032547698badcfe") == 0 && strcmp(codeText, kCode) == 0,
-		"the room's token and code are given, for the list");
-	Check(host.Hear(kControl, opened.b, 64, 1040) && host.UnusedMessages(kNetRelayNotForNow) == 1 && host.Room(tokenHex, codeText) && strcmp(codeText, kCode) == 0,
+	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0, kPass, kPassTime);
+	Check(host.Hear(kControl, opened.b, 64, 1030) && host.Open() && host.PassesHeard() == 1, "HOST_OPENED with a token, a code and a pass opens the room");
+	char codeText[8];
+	uint8_t pass[16];
+	uint64_t passTime = 0;
+	Check(host.RoomForTheList(codeText, pass, &passTime) && memcmp(codeText, kCode, 8) == 0 && memcmp(pass, kPass, 16) == 0 && passTime == kPassTime,
+		"what the list is given: the code, the pass and its time (never the token)");
+	Check(host.Hear(kControl, opened.b, 64, 1040) && host.UnusedMessages(kNetRelayNotForNow) == 1 && host.PassesHeard() == 1,
 		"a second HOST_OPENED is taken and not used: the room stays the one it was");
 	Check(host.Hear(kControl, cookie.b, 64, 1040) && SendCount(host) == 0 && host.UnusedMessages(kNetRelayNotForNow) == 2,
 		"nor does a cookie make it ask again once the room is open");
@@ -227,19 +378,24 @@ static void TheHost()
 	Check(OneSend(host, &port, &m) && port == kControl && m.type == kNetRelayHostKeep && memcmp(m.secret, kToken, 16) == 0,
 		"after 15 s, HOST_KEEP with its token, to the control port");
 
-	Bytes const keptOther = Make(kNetRelayHostKept, kOther, NULL, 0, 3);
-	Check(host.Hear(kControl, keptOther.b, 64, 1030 + 16000) && host.Joiners() == 0 && host.UnusedMessages(kNetRelayWrongSecret) == 3,
-		"HOST_KEPT with another room's token is taken, counted and not used");
-	Bytes const kept = Make(kNetRelayHostKept, kToken, NULL, 0, 3);
-	Check(host.Hear(kControl, kept.b, 64, 1030 + 16000) && host.Joiners() == 3, "HOST_KEPT with its token says how many joiners there are");
-	Bytes const keptMany = Make(kNetRelayHostKept, kToken, NULL, 0, 60000);
+	Bytes const keptOther = Make(kNetRelayHostKept, kOther, NULL, 0, 3, kNewerPass, kPassTime + 15);
+	Check(host.Hear(kControl, keptOther.b, 64, 1030 + 16000) && host.Joiners() == 0 && host.UnusedMessages(kNetRelayWrongSecret) == 3 && host.PassesHeard() == 1,
+		"HOST_KEPT with another room's token is taken, counted and not used, pass and all");
+	Bytes const keptNoPass = Make(kNetRelayHostKept, kToken, NULL, 0, 3);
+	Check(host.Hear(kControl, keptNoPass.b, 64, 1030 + 16000) && host.Joiners() == 0 && host.UnusedMessages(kNetRelayNoPass) == 3,
+		"HOST_KEPT with no pass is taken and not used: every one has a fresh pass");
+	Bytes const kept = Make(kNetRelayHostKept, kToken, NULL, 0, 3, kNewerPass, kPassTime + 15);
+	Check(host.Hear(kControl, kept.b, 64, 1030 + 16000) && host.Joiners() == 3 && host.PassesHeard() == 2, "HOST_KEPT with its token says how many joiners there are");
+	Check(host.RoomForTheList(codeText, pass, &passTime) && memcmp(pass, kNewerPass, 16) == 0 && passTime == kPassTime + 15, "and gives the newer pass, for the list");
+	Bytes const keptMany = Make(kNetRelayHostKept, kToken, NULL, 0, 60000, kNewerPass, kPassTime + 30);
 	Check(host.Hear(kControl, keptMany.b, 64, 1030 + 16000) && host.Joiners() == static_cast<int>(kNetRelayMostJoiners), "a count past 8 is taken as 8");
 
 	host.Tick(1030 + 16000 + kNetRelayKeptWithinMs - 1);
 	SendCount(host);
 	Check(host.Open(), "a room kept within 45 s stays open");
 	host.Tick(1030 + 16000 + kNetRelayKeptWithinMs);
-	Check(!host.Open() && host.LostWhy() == kNetRelayNoKeep, "with no HOST_KEPT for 45 s, the room is lost, and says why");
+	Check(!host.Open() && host.LostWhy() == kNetRelayNoKeep && !host.RoomForTheList(codeText, pass, &passTime),
+		"with no HOST_KEPT for 45 s, the room is lost, says why, and there's nothing more for the list");
 
 	// The joiners' hellos
 	NetRelayHost joined;
@@ -269,7 +425,8 @@ static void TheHost()
 	unanswered.Hear(kControl, newJoiner.b, 64, 100);
 	SendCount(unanswered);
 	unanswered.Tick(100 + kNetRelayWaitForReadyMs);
-	Check(SendCount(unanswered) == 0 && unanswered.HellosWaiting() == 0, "hellos to a joiner who never connects stop after 15 s, as the relay frees its port");
+	Check(SendsOfKind(unanswered, kNetRelayHostHello) == 0 && unanswered.HellosWaiting() == 0,
+		"hellos to a joiner who never connects stop after 15 s, as the relay frees its port");
 
 	NetRelayHost full;
 	OpenHost(full);
@@ -309,11 +466,12 @@ static void TheHost()
 	silent.Tick(kNetRelayGiveUpAskingMs);
 	Check(!silent.Asking() && silent.LostWhy() == kNetRelayNoAnswer, "and gives up after 10 s, saying the relay didn't answer");
 
+	// 64 bytes of A: the second byte is already not AVPR's V
 	uint8_t junk[64];
 	memset(junk, 0x41, sizeof(junk));
 	NetRelayHost junked;
 	junked.Start(kControl, 0);
-	Check(junked.Hear(kControl, junk, 64, 1) && junked.NotMessages(kNetRelayNotVersion) == 1 && junked.Asking(),
+	Check(junked.Hear(kControl, junk, 64, 1) && junked.NotMessages(kNetRelayNotMagic) == 1 && junked.Asking(),
 		"64 bytes from the control port that aren't a message are taken, counted by why, and change nothing");
 	Check(junked.Hear(kControl, junk, 10, 1) && junked.NotMessages(kNetRelayNotMessageSize) == 1, "and so are 10 bytes");
 	Check(!junked.Hear(kJoinerPort, junk, 10, 1), "but anything from another port is the game's");
@@ -327,7 +485,7 @@ static void TheHost()
 	NetRelayHost neverOpened;
 	neverOpened.Close();
 	Check(SendCount(neverOpened) == 0 && neverOpened.LostWhy() == kNetRelayFine, "a host that never asked for a room sends nothing on closing");
-	Check(!neverOpened.Hear(kControl, opened.b, 64, 0), "and hears nothing: it isn't using the relay");
+	Check(!neverOpened.Hear(kControl, opened.b, 64, 0), "and hears nothing: it isn't using a relay");
 
 	// The sends' room
 	NetRelayHost flooded;
@@ -442,7 +600,7 @@ static void TheJoiner()
 		"a REFUSED once it has its port is taken and not used: it's waiting for READY now");
 
 	NetRelayJoiner idle;
-	Check(!idle.Hear(kControl, cookie.b, 64, 0), "a joiner that never started hears nothing: it isn't using the relay");
+	Check(!idle.Hear(kControl, cookie.b, 64, 0), "a joiner that never started hears nothing: it isn't using a relay");
 }
 
 static void TheTimeWrapping()
@@ -452,7 +610,7 @@ static void TheTimeWrapping()
 	NetRelayHost host;
 	host.Start(kControl, nearTheEnd);
 	SendCount(host);
-	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0);
+	Bytes const opened = Make(kNetRelayHostOpened, kToken, kCode, 0, 0, kPass, kPassTime);
 	host.Hear(kControl, opened.b, 64, nearTheEnd);
 	host.Tick(nearTheEnd + kNetRelayKeepEveryMs);   // past 2^32: the sum comes round to a small number
 	NetRelayMessage m;
@@ -463,6 +621,7 @@ static void TheTimeWrapping()
 int main()
 {
 	TheMessages();
+	PickingARelay();
 	TheHost();
 	TheJoiner();
 	TheTimeWrapping();
