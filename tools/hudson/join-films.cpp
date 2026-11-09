@@ -30,6 +30,7 @@
 #include <wincodec.h>
 #include <psapi.h>
 
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -663,6 +664,15 @@ static int TakeAPicture(const char *filmPath, long milliseconds, const char *out
 	if (!OpenAndRead(film, filmPath, "asked-for"))
 	{
 		return 2;
+	}
+
+	// milliseconds comes from the command line through JoinFilms_ReadSeconds, so it's at most an hour, and a film's time is in tenths of
+	// a microsecond. Both are checked here too, where they're multiplied and added, so the sum can never overflow whoever calls this.
+	if (milliseconds < 0 || milliseconds > kJoinFilmsMostMilliseconds || film.time < 0 ||
+		film.time > LLONG_MAX - (LONGLONG)kJoinFilmsMostMilliseconds * 10000)
+	{
+		printf("join-films: %ld ms into a film is outside what a film can hold\n", milliseconds);
+		return 1;
 	}
 
 	LONGLONG const wanted = film.time + (LONGLONG)milliseconds * 10000;

@@ -10,6 +10,9 @@
 // Reads back the number HudsonPlan_StampNumber wrote, from a film's picture, which its squeezing has blurred a little. False if what's there isn't ten of its figures.
 bool JoinFilms_ReadStampedNumber(const unsigned char *pixels, int pitch, int width, int height, unsigned long *number);
 
+// The most milliseconds JoinFilms_ReadSeconds gives: an hour, longer than any film a run makes
+const long kJoinFilmsMostMilliseconds = 3600000;
+
 // Reads a number of seconds, such as 7.4 or 85.967, as milliseconds. Zero if it's good, or else why it isn't, which is one of these.
 const char *JoinFilms_ReadSeconds(const char *text, long *milliseconds);
 extern const char *const kJoinFilmsSecondsMissing;

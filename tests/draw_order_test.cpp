@@ -168,7 +168,10 @@ static void TestTheGameUsesIt()
 		Has(output, "particleVertex[pVb].z = vertices->z * outToTheBack;"), "and all three of its numbers are moved together, so it stays on the same pixel");
 
 	std::string const drawn = SourceSlice(render, "void DrawParticles()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(drawn, "D3D_Particle_Output(&particleBucket[i][j].particle, &particleBucket[i][j].vertices[0]);"), "every particle collected in a frame goes through it");
+	// The call is looked for at the start of its own line, after its indent, so a line that only mentions it, such as one commented out, isn't
+	// taken for it (#181's take-out run found the looser check passed with the call commented out)
+	Check(Has(drawn, "\n\t\t\tD3D_Particle_Output(&particleBucket[i][j].particle, &particleBucket[i][j].vertices[0]);") &&
+		!Has(drawn, "// D3D_Particle_Output("), "every particle collected in a frame goes through it");
 
 	std::string const star = SourceSlice(particles, "/* PARTICLE_STAR */", "/* PARTICLE_", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(star, "//IsDrawnInFront:1;\n\t\t0,\n\t\t//IsDrawnAtBack:1;\n\t\t1,\n\t},"), "the star is marked drawn at the back, and not in front");

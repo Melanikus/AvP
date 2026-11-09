@@ -3,10 +3,25 @@
 // Written 2026-11-09 by Melanikus for the AvP port, moved unchanged from 3dc/avp/hudson_plan.cpp (written there 2026-11-07), with
 // the names changed to say where they now live.
 
+#include <limits.h>
 #include <string.h>
 
 #include "hudson_plan.h"
 #include "join_films_reads.h"
+
+// a * b + c, for numbers made from the command line: false, with nothing written, if the sum wouldn't fit in a long. The counts of figures
+// below already keep every number far smaller than that, but each step checks for itself, so no change to a count could make one overflow.
+// Added 2026-11-09 by Melanikus for the AvP port (a scanner's finding: command-line figures reached a multiplication with no check on it).
+static bool MultiplyAndAdd(long a, long b, long c, long *out)
+{
+	if (a < 0 || b < 0 || c < 0 || (b != 0 && a > (LONG_MAX - c) / b))
+	{
+		return false;
+	}
+
+	*out = a * b + c;
+	return true;
+}
 
 // How join-films reads a number of seconds from its command line, which comes from outside, so nothing in it is believed. A point, not a comma, comes before the thousandths, whatever the machine's language.
 const char *const kJoinFilmsSecondsMissing = "no seconds were given";
@@ -19,7 +34,7 @@ const char *JoinFilms_ReadSeconds(const char *text, long *milliseconds)
 {
 	static const int kMostFiguresBeforeThePoint = 4; // an hour is 3600 seconds
 	static const int kMostFiguresAfterThePoint = 3;  // thousandths of a second: a millisecond
-	static const long kMostMilliseconds = 3600000;   // an hour
+	static const long kMostMilliseconds = kJoinFilmsMostMilliseconds;   // an hour
 
 	if (!text || !milliseconds || !text[0])
 	{
@@ -43,7 +58,11 @@ const char *JoinFilms_ReadSeconds(const char *text, long *milliseconds)
 			return kJoinFilmsSecondsTooManyFigures;
 		}
 
-		whole = whole * 10 + (*at - '0');
+		if (!MultiplyAndAdd(whole, 10, *at - '0', &whole))
+		{
+			return kJoinFilmsSecondsTooManyFigures;
+		}
+
 		at++;
 	}
 
@@ -68,7 +87,11 @@ const char *JoinFilms_ReadSeconds(const char *text, long *milliseconds)
 				return kJoinFilmsSecondsTooManyFigures;
 			}
 
-			thousandths += (*at - '0') * worth;
+			if (!MultiplyAndAdd(*at - '0', worth, thousandths, &thousandths))
+			{
+				return kJoinFilmsSecondsTooManyFigures;
+			}
+
 			worth /= 10;
 			at++;
 		}
@@ -85,7 +108,12 @@ const char *JoinFilms_ReadSeconds(const char *text, long *milliseconds)
 		return kJoinFilmsSecondsNotANumber;
 	}
 
-	long const total = whole * 1000 + thousandths;
+	long total = 0;
+
+	if (!MultiplyAndAdd(whole, 1000, thousandths, &total))
+	{
+		return kJoinFilmsSecondsTooMany;
+	}
 
 	if (total > kMostMilliseconds)
 	{

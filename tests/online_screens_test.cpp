@@ -259,8 +259,9 @@ static void TestFitting()
 	{
 		for (int most = 0; most < 420; most += 7)
 		{
+			// Copied with the room it has, so a longer name than text holds would be cut short, never written past its end
 			std::string const original(length, 'm');
-			strcpy(text, original.c_str());
+			snprintf(text, sizeof(text), "%s", original.c_str());
 			OnlineScreens_FitToWidth(text, most, TenWide);
 			fits = fits && strlen(text) <= (size_t)length && WidthOf(text, TenWide) <= most;
 		}
