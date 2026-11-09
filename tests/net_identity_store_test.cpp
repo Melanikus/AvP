@@ -8,17 +8,24 @@
 // each way the file can go wrong: none there, a folder where the file should be, laid out wrong, sealed bytes changed (Windows refuses to
 // unseal them), sealed bytes that open to the wrong size, public halves changed (the private halves no longer belong to them), and a file
 // too big. Each gives its own answer, and none leaves half an identity behind. Then that private halves from another identity are refused,
-// and that keeping replaces a file whole, with nothing left beside it, or leaves the old one as it was. Last, it reads the store's source
-// for what it must never do: seal for the whole machine, or let Windows ask the player anything.
+// and that keeping replaces a file whole, with nothing left beside it, or leaves the old one as it was. Then whose the file is: a kept one
+// is this Windows user's, for them alone, and one owned by anyone else is refused (Primary's read, finding 3). Last, it reads the store's
+// source for what can't be run here: that it never seals for the whole machine or lets Windows ask the player anything, that a new file is
+// flushed to the disk before it's put in place (finding 1), and that it's kept in LocalAppData, not Documents (finding 2).
 //
 // HOW IT RUNS
 //
 // It uses Windows' own sealing (DPAPI, crypt32) and the game's real cryptography, so it's built and run on GitHub only, with the libraries
 // net_v2b_test uses (tests/net_identity_store_test.args). Its files have fixed names in the folder it runs in, and are deleted at the end.
-// The program gives back a non-zero result if anything failed.
+// It never touches the game's own file in LocalAppData: it uses only NetIdentityStore_LoadFrom and _KeepTo, with its own names. Giving a
+// file to the Administrators group needs an administrator, which GitHub's runner is. The program gives back a non-zero result if anything
+// failed.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port: wide paths, and Primary's three findings.
 
 #include <windows.h>
 #include <wincrypt.h>
+#include <aclapi.h>
 
 #include <fstream>
 #include <sstream>
@@ -47,16 +54,15 @@ static void FailedSlice(std::string const &why)
 	Check(false, why);
 }
 
-// The store's save folder, for this test: none, so the save folder's own file is never touched here
-char *GetSaveFolderPath()
+// The store asks whether this is the game's second copy, for the name of the game's own file, which this test never uses
+bool SaveFolder_IsTheSecondCopy()
 {
-	static char none[1] = { 0 };
-	return none;
+	return false;
 }
 
-static const char *const kKept = "net_identity_store_test.bin";
-static const char *const kMissing = "net_identity_store_test_missing.bin";
-static const char *const kFolder = "net_identity_store_test_folder";
+static const wchar_t *const kKept = L"net_identity_store_test.bin";
+static const wchar_t *const kMissing = L"net_identity_store_test_missing.bin";
+static const wchar_t *const kFolder = L"net_identity_store_test_folder";
 
 // The words the store seals with, as CRYPTO.md section 4.1 gives them: written out here, not taken from the store, so a change there shows
 static const char kWords[] = "AVPX identity v2";
@@ -103,13 +109,13 @@ static void Dirty(NetIdentity *id)
 	memset(id, 0xEE, sizeof(*id));
 }
 
-static std::vector<uint8_t> ReadAll(const char *path)
+static std::vector<uint8_t> ReadAll(const wchar_t *path)
 {
 	std::ifstream file(path, std::ios::binary);
 	return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
 
-static void WriteAll(const char *path, std::vector<uint8_t> const &bytes)
+static void WriteAll(const wchar_t *path, std::vector<uint8_t> const &bytes)
 {
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	file.write(reinterpret_cast<const char *>(bytes.data()), (std::streamsize)bytes.size());
@@ -146,7 +152,7 @@ static void TestKeepAndRead()
 
 	NetIdentity made;
 	Check(NetIdentity_Make(&made), "an identity is made");
-	DeleteFileA(kKept);
+	DeleteFileW(kKept);
 	Check(NetIdentityStore_KeepTo(kKept, &made), "and kept");
 
 	std::vector<uint8_t> const file = ReadAll(kKept);
@@ -180,7 +186,7 @@ static void TestTheSealing()
 
 	NetIdentity made;
 	NetIdentity_Make(&made);
-	DeleteFileA(kKept);
+	DeleteFileW(kKept);
 	NetIdentityStore_KeepTo(kKept, &made);
 	std::vector<uint8_t> const file = ReadAll(kKept);
 	NetIdentityFileView view;
@@ -223,19 +229,19 @@ static void TestFilesThatCantBeUsed()
 
 	NetIdentity made;
 	NetIdentity_Make(&made);
-	DeleteFileA(kKept);
+	DeleteFileW(kKept);
 	NetIdentityStore_KeepTo(kKept, &made);
 	std::vector<uint8_t> const good = ReadAll(kKept);
 
 	NetIdentity read;
 	const char *why = NULL;
 
-	DeleteFileA(kMissing);
+	DeleteFileW(kMissing);
 	Dirty(&read);
 	Check(NetIdentityStore_LoadFrom(kMissing, &read, &why) == kNetIdentityStoreNoFile && NothingLeft(read), "no file is no identity kept yet");
 
 	// A folder can't be opened as a file, but it's there: never taken for no file, which would make a new identity in its place
-	CreateDirectoryA(kFolder, NULL);
+	CreateDirectoryW(kFolder, NULL);
 	Dirty(&read);
 	Check(NetIdentityStore_LoadFrom(kFolder, &read, &why) == kNetIdentityStoreCantRead && NothingLeft(read),
 		"something there that can't be opened is a file that can't be read, never no file");
@@ -292,7 +298,7 @@ static void TestFilesThatCantBeUsed()
 		strcmp(why, NetIdentityFile_Words(kNetIdentityFileTooBig)) == 0, "a file bigger than any this game writes is refused");
 
 	Dirty(&read);
-	Check(NetIdentityStore_LoadFrom("", &read, &why) == kNetIdentityStoreCantRead && NothingLeft(read), "no path is no identity read");
+	Check(NetIdentityStore_LoadFrom(L"", &read, &why) == kNetIdentityStoreCantRead && NothingLeft(read), "no path is no identity read");
 
 	NetIdentity_Free(&made);
 }
@@ -367,14 +373,14 @@ static void TestReplacing()
 	NetIdentity second;
 	NetIdentity_Make(&first);
 	NetIdentity_Make(&second);
-	DeleteFileA(kKept);
+	DeleteFileW(kKept);
 	NetIdentityStore_KeepTo(kKept, &first);
 	Check(NetIdentityStore_KeepTo(kKept, &second), "a second identity is kept in place of the first");
 
 	NetIdentity read;
 	Check(NetIdentityStore_LoadFrom(kKept, &read, NULL) == kNetIdentityStoreLoaded &&
 		memcmp(read.fingerprint, second.fingerprint, kNetIdentityFingerprintBytes) == 0, "and it's the second that's read back");
-	Check(GetFileAttributesA((std::string(kKept) + ".new").c_str()) == INVALID_FILE_ATTRIBUTES, "with nothing left beside it");
+	Check(GetFileAttributesW((std::wstring(kKept) + L".new").c_str()) == INVALID_FILE_ATTRIBUTES, "with nothing left beside it");
 
 	NetIdentity none = {};
 	Check(!NetIdentityStore_KeepTo(kKept, &none), "an identity never made isn't kept");
@@ -383,13 +389,13 @@ static void TestReplacing()
 		memcmp(read.fingerprint, second.fingerprint, kNetIdentityFingerprintBytes) == 0, "and the file is left as it was");
 
 	// A file can't be put in a folder's place, so keeping there fails at the last step: what was written for it mustn't be left behind
-	CreateDirectoryA(kFolder, NULL);
-	std::string const folderNew = std::string(kFolder) + ".new";
-	DeleteFileA(folderNew.c_str());
+	CreateDirectoryW(kFolder, NULL);
+	std::wstring const folderNew = std::wstring(kFolder) + L".new";
+	DeleteFileW(folderNew.c_str());
 	bool const keptInFolder = NetIdentityStore_KeepTo(kFolder, &second);
-	DWORD const folderNow = GetFileAttributesA(kFolder);
+	DWORD const folderNow = GetFileAttributesW(kFolder);
 	Check(!keptInFolder && folderNow != INVALID_FILE_ATTRIBUTES && (folderNow & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
-		GetFileAttributesA(folderNew.c_str()) == INVALID_FILE_ATTRIBUTES,
+		GetFileAttributesW(folderNew.c_str()) == INVALID_FILE_ATTRIBUTES,
 		"keeping that can't put its file in place says no, leaves what was there, and leaves nothing beside it");
 
 	NetIdentity_Free(&read);
@@ -439,8 +445,117 @@ static void TestTheSource()
 	std::string const unseal = SourceSlice(store, "if (plain.pbData)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(unseal.find("SecureZeroMemory(plain.pbData, plain.cbData);") != std::string::npos && unseal.find("SecureZeroMemory") < unseal.find("LocalFree"),
 		"the unsealed private halves are wiped before Windows gets their memory back");
-	Check(store.find("MoveFileExA(fresh.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)") != std::string::npos,
+	Check(store.find("MoveFileExW(fresh.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)") != std::string::npos,
 		"a new file is put in place in one step, never written over the old one");
+
+	// Primary's read, finding 1: a power cut can't be tested, so the source is read for it. The new file's data is flushed to the disk
+	// itself, in the writer the keeping calls, before the keeping puts it in place.
+	std::string const writer = SourceSlice(store, "bool WriteWholeFile(const wchar_t *path, const uint8_t *bytes, size_t size)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const keeping = SourceSlice(store, "bool NetIdentityStore_KeepTo(const wchar_t *path, const NetIdentity *id)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const written = keeping.find("WriteWholeFile(fresh.c_str(), file, size) &&");
+	Check(writer.find("ok = ok && FlushFileBuffers(file) != FALSE;") != std::string::npos && writer.find("FlushFileBuffers") < writer.find("CloseHandle(file)") &&
+		written != std::string::npos && written < keeping.find("MoveFileExW("),
+		"the new file is made sure of on the disk itself, not only in Windows' cache, before it's put in place");
+
+	// Finding 2: never in Documents, which can roam to the player's other PCs, where a DPAPI seal won't open
+	Check(store.find("SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &local)") != std::string::npos &&
+		store.find("GetSaveFolderPath") == std::string::npos,
+		"the file is kept in this PC's own LocalAppData, never the save folder");
+	Check(store.find("SaveFolder_IsTheSecondCopy() ? kSecondCopyFileName : kFileName") != std::string::npos &&
+		store.find("L\"identity-v2-second-copy.bin\"") != std::string::npos, "and a second copy of the game on this PC keeps a file of its own");
+
+	// Finding 3: the owner is checked through the same handle the file is read through
+	std::string const reader = SourceSlice(store, "bool ReadWholeFile(const wchar_t *path,", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(reader.find("if (!OwnedByThisUser(file))") != std::string::npos && reader.find("OwnedByThisUser") < reader.find("ReadFile(file,") &&
+		store.find("GetSecurityInfo(file, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,") != std::string::npos,
+		"the file's owner is checked on the handle it's read through, before a byte of it is read");
+}
+
+// This Windows user's SID, from the test's own token
+static std::vector<BYTE> ThisUserSid(void)
+{
+	std::vector<BYTE> sid;
+	HANDLE token = NULL;
+
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+	{
+		return sid;
+	}
+
+	std::vector<BYTE> answer(sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE + 16);
+	DWORD got = 0;
+
+	if (GetTokenInformation(token, TokenUser, answer.data(), static_cast<DWORD>(answer.size()), &got))
+	{
+		PSID const user = reinterpret_cast<TOKEN_USER *>(answer.data())->User.Sid;
+		sid.assign(static_cast<BYTE *>(user), static_cast<BYTE *>(user) + GetLengthSid(user));
+	}
+
+	CloseHandle(token);
+	return sid;
+}
+
+static void TestWhoseFile()
+{
+	puts("Whose the file is (Primary's read, finding 3)");
+
+	NetIdentity made;
+	NetIdentity_Make(&made);
+	DeleteFileW(kKept);
+	NetIdentityStore_KeepTo(kKept, &made);
+
+	std::vector<BYTE> user = ThisUserSid();
+	PSID owner = NULL;
+	PACL list = NULL;
+	PSECURITY_DESCRIPTOR descriptor = NULL;
+	bool const asked = !user.empty() && GetNamedSecurityInfoW(kKept, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner,
+		NULL, &list, NULL, &descriptor) == ERROR_SUCCESS;
+	Check(asked && owner && EqualSid(owner, user.data()), "a kept file is owned by this Windows user");
+
+	SECURITY_DESCRIPTOR_CONTROL control = 0;
+	DWORD revision = 0;
+	bool onlyThisUser = false;
+
+	if (asked && list && list->AceCount == 1 && GetSecurityDescriptorControl(descriptor, &control, &revision))
+	{
+		void *entry = NULL;
+
+		if (GetAce(list, 0, &entry))
+		{
+			ACCESS_ALLOWED_ACE const *const allowed = static_cast<ACCESS_ALLOWED_ACE *>(entry);
+			onlyThisUser = allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE && EqualSid(const_cast<DWORD *>(&allowed->SidStart), user.data());
+		}
+	}
+
+	Check(onlyThisUser && (control & SE_DACL_PROTECTED) != 0, "and only this user may read or change it, with nothing added from the folder it's in");
+	LocalFree(descriptor);
+
+	// Given to the Administrators group, as a file someone else had put there would be: refused, though its keys hold together
+	SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
+	PSID administrators = NULL;
+	bool const madeSid = AllocateAndInitializeSid(&nt, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &administrators) != FALSE;
+	bool const given = madeSid && SetNamedSecurityInfoW(const_cast<wchar_t *>(kKept), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, administrators, NULL,
+		NULL, NULL) == ERROR_SUCCESS;
+	Check(given, "the test could give the file to the Administrators group (GitHub's runner is an administrator, so it can)");
+
+	NetIdentity read;
+	Dirty(&read);
+	const char *why = NULL;
+	Check(given && NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreRefused && NothingLeft(read) && why &&
+		strstr(why, "isn't owned by this Windows user") != NULL, "a file owned by anyone else is refused, even with keys that hold together");
+
+	if (administrators)
+	{
+		FreeSid(administrators);
+	}
+
+	// Back to this user, so the file can be deleted at the end like the others
+	if (!user.empty())
+	{
+		SetNamedSecurityInfoW(const_cast<wchar_t *>(kKept), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, user.data(), NULL, NULL, NULL);
+	}
+
+	NetIdentity_Free(&made);
 }
 
 int main()
@@ -450,12 +565,13 @@ int main()
 	TestFilesThatCantBeUsed();
 	TestHalvesFromAnother();
 	TestReplacing();
+	TestWhoseFile();
 	TestTheSource();
 
-	DeleteFileA(kKept);
-	DeleteFileA(kMissing);
-	DeleteFileA((std::string(kFolder) + ".new").c_str());
-	RemoveDirectoryA(kFolder);
+	DeleteFileW(kKept);
+	DeleteFileW(kMissing);
+	DeleteFileW((std::wstring(kFolder) + L".new").c_str());
+	RemoveDirectoryW(kFolder);
 
 	if (checksFailed)
 	{

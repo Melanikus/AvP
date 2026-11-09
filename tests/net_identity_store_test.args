@@ -11,3 +11,6 @@ vcpkg_installed/x86-windows/lib/mlkem_native.lib
 vcpkg_installed/x86-windows/lib/mldsa_native.lib
 bcrypt.lib
 crypt32.lib
+advapi32.lib
+shell32.lib
+ole32.lib

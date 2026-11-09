@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity_store.cpp",
-					"from": "size_t const got = fread(bytes, 1, room, file);",
-					"to": "size_t const got = fread(bytes, 1, room - 1, file);"
+					"from": "while (got < room)",
+					"to": "while (got < room - 1)"
 				}
 			]
 		},
@@ -109,7 +109,7 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity_store.cpp",
-					"from": "\t\tDeleteFileA(fresh.c_str());\n",
+					"from": "\t\tDeleteFileW(fresh.c_str());\n",
 					"to": ""
 				}
 			]
@@ -211,6 +211,66 @@
 					"file": "3dc/net_crypto_cng.cpp",
 					"from": "\telse\n\t{\n\t\tNetCrypto_Wipe(privateOut, kNetCryptoP384ScalarBytes);\n\t}\n\n\tNetCrypto_Wipe(&blob, sizeof(blob));",
 					"to": "\n\tNetCrypto_Wipe(&blob, sizeof(blob));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the new file is put in place without being flushed to the disk itself",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\tok = ok && FlushFileBuffers(file) != FALSE;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a file owned by someone else is read as this user's",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if (!OwnedByThisUser(file))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a kept file takes the folder's list of who may read it",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\t\t!SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED, SE_DACL_PROTECTED))",
+					"to": "\t\t\tfalse)"
+				}
+			]
+		},
+		{
+			"name": "a kept file may be read by everyone",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "!SetSecurityDescriptorDacl(&descriptor, TRUE, list, FALSE) ||",
+					"to": "!SetSecurityDescriptorDacl(&descriptor, TRUE, NULL, FALSE) ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the file is kept where Windows copies it to the player's other PCs",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &local)",
+					"to": "SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &local)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a second copy of the game shares the first copy's identity",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "SaveFolder_IsTheSecondCopy() ? kSecondCopyFileName : kFileName",
+					"to": "kFileName"
 				}
 			]
 		}
