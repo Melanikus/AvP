@@ -1,35 +1,42 @@
 // The game's side of the relay (AVPx Dedicated Server): the messages it sends and hears, and what a host and a joiner do with them.
 // Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port: PROTOCOL.md 7014de1, a relay in each region: a message's pass, the rule that every field
+// a kind of message doesn't use is 0, and the echoes a host times the relays with (NetRelayPicker).
 //
 // WHY THERE'S A RELAY. Many players can't be reached from the internet at all: their provider puts many homes behind one address
-// (carrier-grade NAT), and no setting on their own router changes that. So a game can go through the relay, a server everyone can reach.
-// The host opens a "room" there; each joiner gets a port of its own on the relay, and the relay passes the game's own packets between the
-// two, unread and unchanged. How the relay works, every message, field and limit: PROTOCOL.md in the AVPx-Dedicated-Server repository
-// (PROTOCOL.md at d75a5bd is what this follows). That file is the single source both sides read.
+// (carrier-grade NAT), and no setting on their own router changes that. So a game can go through a relay, a server everyone can reach.
+// There's a relay in each region of the world. The host opens a "room" on the one nearest it; each joiner gets a port of its own on that
+// relay, and the relay passes the game's own packets between the two, unread and unchanged. How it all works, every message, field and limit:
+// PROTOCOL.md in the AVPx-Dedicated-Server repository (at 7014de1, which this follows). That file is the single source both sides read.
 //
-// WHAT THIS FILE IS. Only the relay's own little messages, and two "state machines": the host's (NetRelayHost) and the joiner's
-// (NetRelayJoiner). A state machine here is a small object that is told the time and what arrived, and says what to send. It never sends or
-// reads anything itself. networking.cpp does that, from the game's own network socket, so the relay sees each player's game through the same
-// door in their router that the game itself uses. Nothing here knows about the game, so tests/net_relay_test.cpp can try every case.
+// WHAT THIS FILE IS. Only the relays' own little messages, and three "state machines": the one that picks a relay (NetRelayPicker), the
+// host's (NetRelayHost) and the joiner's (NetRelayJoiner). A state machine here is a small object that is told the time and what arrived,
+// and says what to send. It never sends or reads anything itself. networking.cpp does that, from the game's own network socket, so a relay
+// sees each player's game through the same door in their router that the game itself uses. Nothing here knows about the game, so
+// tests/net_relay_test.cpp can try every case.
 //
 // EVERYTHING THAT ARRIVES IS HOSTILE (AvP Tao #3). A relay message is exactly kNetRelayMessageBytes long, and every byte has to be what
-// PROTOCOL.md says, or it isn't one: NetRelay_Read says which rule it broke. A message is only listened to if it comes from where the relay
-// says such a message comes from (its control port), and one that names the room or the joiner has to carry the secret the relay gave it.
+// PROTOCOL.md says, or it isn't one: NetRelay_Read says which rule it broke. A message is only listened to if it comes from where a relay
+// sends such a message from (its control port), and one that names the room or the joiner has to carry the secret the relay gave it.
 // Every list here has a fixed size, and every wait a time limit.
 //
 // A GAME'S LIFE, as the host sees it:
 //
-//      HOST_OPEN ------------------> relay control port
+//      ECHO, 3 to each relay ------> each relay's control port, 100 ms apart
+//      ECHO_BACK <------------------ the same 16 bytes: how long the round trip took. The nearest relay is the one to use.
+//      HOST_OPEN ------------------> that relay's control port
 //      COOKIE <--------------------- (proof we really are at this address)
 //      HOST_OPEN, with the cookie ->
-//      HOST_OPENED <---------------- the room's token (our secret) and its code (8 letters, for the list and for typing)
+//      HOST_OPENED <---------------- the room's token (our secret), its code (8 letters, for the list and for typing) and a pass (the list's
+//                                    proof that the room is real)
 //      HOST_KEEP, every 15 s ------> (keeps the room, and our router's door to the relay, open)
+//      HOST_KEPT <------------------ a fresh pass, each time, for the list
 //      NEW_JOINER <----------------- a joiner is coming, on relay port P
 //      HOST_HELLO, to port P ------> every second, until that joiner's game connects through port P
 //      ... the game's own packets, through port P ...
 //      HOST_CLOSE -----------------> when the game ends
 //
-// and as a joiner sees it:
+// and as a joiner sees it, at the relay the list says the game is on:
 //
 //      JOIN, with the code --------> relay control port
 //      COOKIE <---------------------
@@ -47,9 +54,10 @@
 
 // THE MESSAGES (PROTOCOL.md, section 2)
 
-size_t const kNetRelayMessageBytes = 64;      // every message, either way, is exactly this long: the relay never answers with more than it was sent
-size_t const kNetRelaySecretBytes = 16;       // a token, a ticket or a cookie
+size_t const kNetRelayMessageBytes = 64;      // every message, either way, is exactly this long: a relay never answers with more than it was sent
+size_t const kNetRelaySecretBytes = 16;       // a token, a ticket, a cookie, or an echo's bytes
 size_t const kNetRelayCodeLetters = 8;        // a game's code
+size_t const kNetRelayPassBytes = 16;         // a pass
 uint8_t const kNetRelayVersion = 1;
 uint16_t const kNetRelayDefaultControlPort = 27500;
 
@@ -58,9 +66,9 @@ static const char kNetRelayCodeAlphabet[] = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 // The kinds of message (the "type" byte)
 int const kNetRelayHostOpen = 1;       // host to the control port: give me a room (with a cookie, or 0 the first time)
-int const kNetRelayHostOpened = 2;     // relay to host: the room's token and code
+int const kNetRelayHostOpened = 2;     // relay to host: the room's token and code, and a pass
 int const kNetRelayHostKeep = 3;       // host to the control port: I'm still here (token)
-int const kNetRelayHostKept = 4;       // relay to host: noted (token), and how many joiners the room has now
+int const kNetRelayHostKept = 4;       // relay to host: noted (token), how many joiners the room has now, and a fresh pass
 int const kNetRelayHostClose = 5;      // host to the control port: the room is done (token)
 int const kNetRelayJoin = 6;           // joiner to the control port: let me into this game (code; a cookie, or 0 the first time)
 int const kNetRelayJoinPort = 7;       // relay to joiner: your ticket, and your port on the relay
@@ -70,7 +78,9 @@ int const kNetRelayJoinerHello = 10;   // joiner to its port: here I am (ticket)
 int const kNetRelayReady = 11;         // relay, from that port, to the joiner: both ends are here, start the game (ticket, the port)
 int const kNetRelayRefused = 12;       // relay to whoever asked: no, and why (the number)
 int const kNetRelayCookie = 13;        // relay to whoever asked: the cookie, to ask again with
-int const kNetRelayMostType = 13;
+int const kNetRelayEcho = 14;          // anyone to the control port: answer at once (16 bytes of the asker's, and a count)
+int const kNetRelayEchoBack = 15;      // relay to the asker: the same 16 bytes and count, back
+int const kNetRelayMostType = 15;
 
 // One message, as its fields
 struct NetRelayMessage
@@ -80,7 +90,39 @@ struct NetRelayMessage
 	char code[kNetRelayCodeLetters];        // all 0 where it has none; NOT a string: no 0 at its end
 	uint16_t port;
 	uint16_t number;
+	uint8_t pass[kNetRelayPassBytes];       // all 0 but in HOST_OPENED and HOST_KEPT
+	uint64_t passTime;                      // when the pass was made, in whole seconds since 1970; 0 where there's no pass
 };
+
+// Which fields each kind of message uses: PROTOCOL.md's table, row for row. Every other field of a message is 0.
+int const kNetRelayUsesSecret = 1;
+int const kNetRelayUsesCode = 2;
+int const kNetRelayUsesPort = 4;
+int const kNetRelayUsesNumber = 8;
+int const kNetRelayUsesPass = 16;   // the pass and its time
+
+inline int NetRelay_Uses(int type)
+{
+	switch (type)
+	{
+		case kNetRelayHostOpen: return kNetRelayUsesSecret;
+		case kNetRelayHostOpened: return kNetRelayUsesSecret | kNetRelayUsesCode | kNetRelayUsesPass;
+		case kNetRelayHostKeep: return kNetRelayUsesSecret;
+		case kNetRelayHostKept: return kNetRelayUsesSecret | kNetRelayUsesNumber | kNetRelayUsesPass;
+		case kNetRelayHostClose: return kNetRelayUsesSecret;
+		case kNetRelayJoin: return kNetRelayUsesSecret | kNetRelayUsesCode;
+		case kNetRelayJoinPort: return kNetRelayUsesSecret | kNetRelayUsesCode | kNetRelayUsesPort;
+		case kNetRelayNewJoiner: return kNetRelayUsesSecret | kNetRelayUsesPort;
+		case kNetRelayHostHello: return kNetRelayUsesSecret | kNetRelayUsesPort;
+		case kNetRelayJoinerHello: return kNetRelayUsesSecret;
+		case kNetRelayReady: return kNetRelayUsesSecret | kNetRelayUsesPort;
+		case kNetRelayRefused: return kNetRelayUsesNumber;
+		case kNetRelayCookie: return kNetRelayUsesSecret;
+		case kNetRelayEcho: return kNetRelayUsesSecret | kNetRelayUsesNumber;
+		case kNetRelayEchoBack: return kNetRelayUsesSecret | kNetRelayUsesNumber;
+		default: return 0;
+	}
+}
 
 // Why some bytes aren't a relay message (NetRelay_Read). 0 means they are one.
 int const kNetRelayIsAMessage = 0;
@@ -88,9 +130,10 @@ int const kNetRelayNotMessageSize = 1;   // not exactly kNetRelayMessageBytes lo
 int const kNetRelayNotMagic = 2;         // doesn't start with AVPR
 int const kNetRelayNotVersion = 3;       // another version of these messages
 int const kNetRelayNotType = 4;          // a kind of message there isn't
-int const kNetRelayNotZero = 5;          // a byte that must be 0 isn't
+int const kNetRelayNotZero = 5;          // a reserved or padding byte isn't 0
 int const kNetRelayNotCode = 6;          // a code that's neither 8 code letters nor all 0
-int const kNetRelayNotKinds = 7;
+int const kNetRelayNotUnused = 7;        // a field its kind of message doesn't use isn't 0
+int const kNetRelayNotKinds = 8;
 
 inline const char *NetRelay_NotAMessageWhy(int why)
 {
@@ -101,8 +144,9 @@ inline const char *NetRelay_NotAMessageWhy(int why)
 		case kNetRelayNotMagic: return "it doesn't start with AVPR";
 		case kNetRelayNotVersion: return "another version of the relay's messages";
 		case kNetRelayNotType: return "a kind of message the relay doesn't have";
-		case kNetRelayNotZero: return "a byte that must be 0 isn't";
+		case kNetRelayNotZero: return "a reserved or padding byte isn't 0";
 		case kNetRelayNotCode: return "its code isn't 8 code letters, nor all 0";
+		case kNetRelayNotUnused: return "a field its kind of message doesn't use isn't 0";
 		default: return "no such reason";
 	}
 }
@@ -146,9 +190,18 @@ inline bool NetRelay_AllZero(const uint8_t *bytes, size_t n)
 	return true;
 }
 
-// Reads a relay message out of a packet. Gives back kNetRelayIsAMessage and fills out, or why the packet isn't one, and then out is left
-// as it was. The layout, byte by byte, is PROTOCOL.md's: 0-3 AVPR, 4 the version, 5 the type, 6-7 zero, 8-23 the secret, 24-31 the
-// code, 32-33 the port and 34-35 the number (both low byte first), 36-63 zero.
+// Where each field is in a message, byte by byte (PROTOCOL.md, section 2)
+size_t const kNetRelayAtSecret = 8;
+size_t const kNetRelayAtCode = 24;
+size_t const kNetRelayAtPort = 32;
+size_t const kNetRelayAtNumber = 34;
+size_t const kNetRelayAtPass = 36;
+size_t const kNetRelayAtPassTime = 52;
+size_t const kNetRelayAtPadding = 60;
+
+// Reads a relay message out of a packet. Gives back kNetRelayIsAMessage and fills out, or why the packet isn't one, and then out is left as
+// it was. The layout: 0-3 AVPR, 4 the version, 5 the kind, 6-7 zero, 8-23 the secret, 24-31 the code, 32-33 the port and 34-35 the number
+// (both low byte first), 36-51 the pass, 52-59 the pass time (low byte first), 60-63 zero. A field its kind doesn't use has to be 0.
 inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 {
 	if (!data || size != kNetRelayMessageBytes)
@@ -171,14 +224,41 @@ inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 		return kNetRelayNotType;
 	}
 
-	if (data[6] != 0 || data[7] != 0 || !NetRelay_AllZero(data + 36, kNetRelayMessageBytes - 36))
+	if (data[6] != 0 || data[7] != 0 || !NetRelay_AllZero(data + kNetRelayAtPadding, kNetRelayMessageBytes - kNetRelayAtPadding))
 	{
 		return kNetRelayNotZero;
 	}
 
-	const char *const code = reinterpret_cast<const char *>(data + 24);
+	int const uses = NetRelay_Uses(data[5]);
+	const char *const code = reinterpret_cast<const char *>(data + kNetRelayAtCode);
+	bool const codeIsZero = NetRelay_AllZero(data + kNetRelayAtCode, kNetRelayCodeLetters);
 
-	if (!NetRelay_AllZero(data + 24, kNetRelayCodeLetters) && !NetRelay_CodeIsGood(code))
+	if (!(uses & kNetRelayUsesSecret) && !NetRelay_AllZero(data + kNetRelayAtSecret, kNetRelaySecretBytes))
+	{
+		return kNetRelayNotUnused;
+	}
+
+	if (!(uses & kNetRelayUsesCode) && !codeIsZero)
+	{
+		return kNetRelayNotUnused;
+	}
+
+	if (!(uses & kNetRelayUsesPort) && (data[kNetRelayAtPort] != 0 || data[kNetRelayAtPort + 1] != 0))
+	{
+		return kNetRelayNotUnused;
+	}
+
+	if (!(uses & kNetRelayUsesNumber) && (data[kNetRelayAtNumber] != 0 || data[kNetRelayAtNumber + 1] != 0))
+	{
+		return kNetRelayNotUnused;
+	}
+
+	if (!(uses & kNetRelayUsesPass) && !NetRelay_AllZero(data + kNetRelayAtPass, kNetRelayAtPadding - kNetRelayAtPass))
+	{
+		return kNetRelayNotUnused;
+	}
+
+	if (!codeIsZero && !NetRelay_CodeIsGood(code))
 	{
 		return kNetRelayNotCode;
 	}
@@ -186,10 +266,17 @@ inline int NetRelay_Read(const uint8_t *data, size_t size, NetRelayMessage *out)
 	if (out)
 	{
 		out->type = data[5];
-		memcpy(out->secret, data + 8, kNetRelaySecretBytes);
+		memcpy(out->secret, data + kNetRelayAtSecret, kNetRelaySecretBytes);
 		memcpy(out->code, code, kNetRelayCodeLetters);
-		out->port = static_cast<uint16_t>(data[32] | (data[33] << 8));
-		out->number = static_cast<uint16_t>(data[34] | (data[35] << 8));
+		out->port = static_cast<uint16_t>(data[kNetRelayAtPort] | (data[kNetRelayAtPort + 1] << 8));
+		out->number = static_cast<uint16_t>(data[kNetRelayAtNumber] | (data[kNetRelayAtNumber + 1] << 8));
+		memcpy(out->pass, data + kNetRelayAtPass, kNetRelayPassBytes);
+		out->passTime = 0;
+
+		for (size_t i = 0; i < 8; i++)
+		{
+			out->passTime |= static_cast<uint64_t>(data[kNetRelayAtPassTime + i]) << (8 * i);
+		}
 	}
 
 	return kNetRelayIsAMessage;
@@ -205,12 +292,18 @@ inline void NetRelay_Write(const NetRelayMessage &m, uint8_t *out)
 	out[3] = 'R';
 	out[4] = kNetRelayVersion;
 	out[5] = static_cast<uint8_t>(m.type);
-	memcpy(out + 8, m.secret, kNetRelaySecretBytes);
-	memcpy(out + 24, m.code, kNetRelayCodeLetters);
-	out[32] = static_cast<uint8_t>(m.port & 0xFF);
-	out[33] = static_cast<uint8_t>(m.port >> 8);
-	out[34] = static_cast<uint8_t>(m.number & 0xFF);
-	out[35] = static_cast<uint8_t>(m.number >> 8);
+	memcpy(out + kNetRelayAtSecret, m.secret, kNetRelaySecretBytes);
+	memcpy(out + kNetRelayAtCode, m.code, kNetRelayCodeLetters);
+	out[kNetRelayAtPort] = static_cast<uint8_t>(m.port & 0xFF);
+	out[kNetRelayAtPort + 1] = static_cast<uint8_t>(m.port >> 8);
+	out[kNetRelayAtNumber] = static_cast<uint8_t>(m.number & 0xFF);
+	out[kNetRelayAtNumber + 1] = static_cast<uint8_t>(m.number >> 8);
+	memcpy(out + kNetRelayAtPass, m.pass, kNetRelayPassBytes);
+
+	for (size_t i = 0; i < 8; i++)
+	{
+		out[kNetRelayAtPassTime + i] = static_cast<uint8_t>((m.passTime >> (8 * i)) & 0xFF);
+	}
 }
 
 // A message with nothing in it but its kind
@@ -222,8 +315,8 @@ inline NetRelayMessage NetRelay_Message(int type)
 	return m;
 }
 
-// Whether two secrets are the same. Every byte is looked at whatever the first difference, so how long it takes says nothing of where they
-// differ.
+// Whether two secrets (or passes) are the same. Every byte is looked at whatever the first difference, so how long it takes says nothing of
+// where they differ.
 inline bool NetRelay_SameSecret(const uint8_t *a, const uint8_t *b)
 {
 	uint8_t differ = 0;
@@ -236,7 +329,7 @@ inline bool NetRelay_SameSecret(const uint8_t *a, const uint8_t *b)
 	return differ == 0;
 }
 
-// A token as the list's HTTPS calls take it: 32 hex digits, small letters, then a 0, so out holds 33
+// 16 bytes as 32 hex digits, small letters, then a 0, so out holds 33: how the list's calls write a pass
 inline void NetRelay_SecretHex(const uint8_t *secret, char *out)
 {
 	static const char digits[] = "0123456789abcdef";
@@ -288,7 +381,7 @@ inline bool NetRelay_CodeFromText(const char *text, char *out)
 	return true;
 }
 
-// WHY A ROOM WAS LOST, OR A JOIN FAILED. 1 to 4 are the relay's own reasons, as REFUSED gives them (PROTOCOL.md, section 2).
+// WHY A ROOM WAS LOST, OR A JOIN FAILED. 1 to 4 are a relay's own reasons, as REFUSED gives them (PROTOCOL.md, section 2).
 int const kNetRelayFine = 0;
 int const kNetRelayRefusedNoGame = 1;         // no game has that code
 int const kNetRelayRefusedFull = 2;           // the game is full
@@ -299,6 +392,7 @@ int const kNetRelayNoAnswer = 6;              // the relay didn't answer in time
 int const kNetRelayNoKeep = 7;                // the relay stopped answering the host's HOST_KEEP: its room has gone
 int const kNetRelayNoReady = 8;               // the host never said hello on the joiner's port in time
 int const kNetRelayClosed = 9;                // the host closed its room
+int const kNetRelayNoRelay = 10;              // no relay answered the echoes, or there's no relay for that game's region
 
 inline const char *NetRelay_WhyText(int why)
 {
@@ -314,6 +408,7 @@ inline const char *NetRelay_WhyText(int why)
 		case kNetRelayNoKeep: return "the relay stopped answering, so the room has gone";
 		case kNetRelayNoReady: return "the game's host didn't answer through the relay";
 		case kNetRelayClosed: return "the room was closed";
+		case kNetRelayNoRelay: return "no relay could be reached";
 		default: return "no such reason";
 	}
 }
@@ -323,33 +418,242 @@ inline int NetRelay_RefusedWhy(uint16_t number)
 	return number >= kNetRelayRefusedNoGame && number <= kNetRelayRefusedTooMany ? number : kNetRelayRefusedOther;
 }
 
-// WHAT A STATE MACHINE WANTS SENT: a message, to the relay's address, at one of its ports
+// WHAT A STATE MACHINE WANTS SENT: a message, to one of a relay's ports. relay says which relay, for the one that picks a relay
+// (NetRelayPicker); the host and the joiner each talk to one relay only, and give 0.
 struct NetRelaySend
 {
+	uint8_t relay;
 	uint16_t port;
 	uint8_t bytes[kNetRelayMessageBytes];
 };
 
 size_t const kNetRelayMostSends = 16;   // a state machine's sends wait here between TakeSends; past it, the newest are dropped, and counted
 
-// THE TIMES, in milliseconds (PROTOCOL.md, sections 1 and 5)
+// THE TIMES, in milliseconds (PROTOCOL.md, sections 1, 2 and 5)
 uint32_t const kNetRelayAskAgainMs = 1000;        // HOST_OPEN or JOIN, again, while the relay hasn't answered
 uint32_t const kNetRelayGiveUpAskingMs = 10000;   // and no answer at all after this: give up
 uint32_t const kNetRelayKeepEveryMs = 15000;      // the host's HOST_KEEP
-uint32_t const kNetRelayKeptWithinMs = 45000;     // the relay ends a room unkept this long, so with no HOST_KEPT for this long it's gone
+uint32_t const kNetRelayKeptWithinMs = 45000;     // a relay ends a room unkept this long, so with no HOST_KEPT for this long it's gone
 uint32_t const kNetRelayHostHelloEveryMs = 1000;  // the host's hello to a joiner's port, until that joiner's game connects
 uint32_t const kNetRelayJoinerHelloEveryMs = 500; // the joiner's hello, until READY
-uint32_t const kNetRelayWaitForReadyMs = 15000;   // the relay frees a joiner's port this long after JOIN_PORT if both haven't said hello
+uint32_t const kNetRelayWaitForReadyMs = 15000;   // a relay frees a joiner's port this long after JOIN_PORT if both haven't said hello
+uint32_t const kNetRelayEchoEveryMs = 100;        // the echoes to each relay, this far apart
+uint32_t const kNetRelayEchoAnswerWithinMs = 1000;// an echo answered later than this doesn't count
 
 size_t const kNetRelayMostJoiners = 8;            // a room's joiners (PROTOCOL.md, section 5), and so the host's hellos at once
+size_t const kNetRelayMostRelays = 16;            // the most relays the list names (PROTOCOL.md, section 5)
+size_t const kNetRelayEchoes = 3;                 // echoes to each relay
 
-// Why a message from the relay's control port was heard and then not used (each one is counted, by this reason, never with an address)
+// Why a message from a relay's control port was heard and then not used (each one is counted, by this reason, never with an address)
 int const kNetRelayUsed = 0;
 int const kNetRelayNotForNow = 1;      // a kind of message that isn't for this end, or not at this point of its life
-int const kNetRelayWrongSecret = 2;    // it names a room or a joiner, with a secret that isn't ours
+int const kNetRelayWrongSecret = 2;    // it names a room, a joiner or an echo, with a secret that isn't ours
 int const kNetRelayBadPort = 3;        // a port that can't be a joiner's: 0, or the control port itself
 int const kNetRelayNoRoom = 4;         // NEW_JOINER with the host's hellos already full
-int const kNetRelayUnusedKinds = 5;
+int const kNetRelayNoPass = 5;         // HOST_OPENED or HOST_KEPT without a pass, which every one has
+int const kNetRelayUnusedKinds = 6;
+
+// THE ONE THAT PICKS A RELAY, before the host opens its room (PROTOCOL.md, section 2, Round trips): kNetRelayEchoes echoes to each relay,
+// kNetRelayEchoEveryMs apart, each with 16 fresh random bytes; each relay's lowest round trip counts, a relay that doesn't answer within
+// kNetRelayEchoAnswerWithinMs is left out, and the one with the lowest time wins. Only an answer from that relay's control port, carrying
+// bytes this sent to that relay, counts: anything else is taken and counted.
+class NetRelayPicker
+{
+public:
+	NetRelayPicker() { Reset(); }
+
+	void Reset()
+	{
+		count = 0;
+		started = false;
+		startedAt = 0;
+		echoesSent = 0;
+		memset(echoSentAt, 0, sizeof(echoSentAt));
+		memset(controlPorts, 0, sizeof(controlPorts));
+		memset(randomBytes, 0, sizeof(randomBytes));
+		memset(answered, 0, sizeof(answered));
+		memset(bestMs, 0, sizeof(bestMs));
+		memset(hasTime, 0, sizeof(hasTime));
+		sendCount = 0;
+		sendsDropped = 0;
+		memset(notMessages, 0, sizeof(notMessages));
+		memset(unused, 0, sizeof(unused));
+	}
+
+	// Starts timing relayCount relays (at most kNetRelayMostRelays), each at its control port. random holds 16 fresh random bytes for each
+	// echo, kNetRelayEchoes of them to each relay, relay by relay. The first echo to each goes at once. False, and nothing sent, for none.
+	bool Start(size_t relayCount, const uint16_t *ports, const uint8_t *random, uint32_t now)
+	{
+		Reset();
+
+		if (relayCount == 0 || relayCount > kNetRelayMostRelays || !ports || !random)
+		{
+			return false;
+		}
+
+		count = relayCount;
+		memcpy(controlPorts, ports, count * sizeof(uint16_t));
+		memcpy(randomBytes, random, count * kNetRelayEchoes * kNetRelaySecretBytes);
+		started = true;
+		startedAt = now;
+		SendEchoes(now);
+		return true;
+	}
+
+	// A packet from relay number relay's address, from its port fromPort. True if it was that relay's message, from its control port.
+	bool Hear(size_t relay, uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
+	{
+		if (!started || relay >= count || fromPort != controlPorts[relay])
+		{
+			return false;
+		}
+
+		NetRelayMessage m;
+		int const why = NetRelay_Read(data, size, &m);
+
+		if (why != kNetRelayIsAMessage)
+		{
+			notMessages[why]++;
+			return true;
+		}
+
+		if (m.type != kNetRelayEchoBack)
+		{
+			return Unused(kNetRelayNotForNow);
+		}
+
+		// Its count says which echo it answers: 1 for the first. It has to be one sent already, not answered yet, with that echo's bytes.
+		if (m.number < 1 || m.number > echoesSent || answered[relay][m.number - 1]
+			|| !NetRelay_SameSecret(m.secret, randomBytes[relay][m.number - 1]))
+		{
+			return Unused(kNetRelayWrongSecret);
+		}
+
+		answered[relay][m.number - 1] = true;
+		uint32_t const took = now - echoSentAt[m.number - 1];
+
+		if (took <= kNetRelayEchoAnswerWithinMs && (!hasTime[relay] || took < bestMs[relay]))
+		{
+			bestMs[relay] = took;
+			hasTime[relay] = true;
+		}
+
+		return true;
+	}
+
+	// The time has moved on: the next echoes, when it's their time
+	void Tick(uint32_t now)
+	{
+		if (!started)
+		{
+			return;
+		}
+
+		while (echoesSent < kNetRelayEchoes && now - startedAt >= static_cast<uint32_t>(echoesSent) * kNetRelayEchoEveryMs)
+		{
+			SendEchoes(now);
+		}
+	}
+
+	// Every echo sent, and the last one's time to be answered gone by
+	bool Done(uint32_t now) const
+	{
+		return started && echoesSent == kNetRelayEchoes && now - echoSentAt[kNetRelayEchoes - 1] >= kNetRelayEchoAnswerWithinMs;
+	}
+
+	// The relay with the lowest round trip, or -1 if none answered in time; and that time, in ms
+	int Best() const
+	{
+		int best = -1;
+
+		for (size_t i = 0; i < count; i++)
+		{
+			if (hasTime[i] && (best < 0 || bestMs[i] < bestMs[best]))
+			{
+				best = static_cast<int>(i);
+			}
+		}
+
+		return best;
+	}
+
+	uint32_t BestMs() const
+	{
+		int const best = Best();
+		return best < 0 ? 0 : bestMs[best];
+	}
+
+	size_t TakeSends(NetRelaySend *out, size_t most)
+	{
+		size_t const n = sendCount < most ? sendCount : most;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			out[i] = sends[i];
+		}
+
+		for (size_t i = n; i < sendCount; i++)
+		{
+			sends[i - n] = sends[i];
+		}
+
+		sendCount -= n;
+		return n;
+	}
+
+	uint32_t NotMessages(int why) const { return why >= 0 && why < kNetRelayNotKinds ? notMessages[why] : 0; }
+	uint32_t UnusedMessages(int why) const { return why >= 0 && why < kNetRelayUnusedKinds ? unused[why] : 0; }
+	uint32_t SendsDropped() const { return sendsDropped; }
+
+private:
+	// One echo to every relay: the next of kNetRelayEchoes. Its round trip is timed from now.
+	void SendEchoes(uint32_t now)
+	{
+		echoSentAt[echoesSent] = now;
+
+		for (size_t i = 0; i < count; i++)
+		{
+			NetRelayMessage m = NetRelay_Message(kNetRelayEcho);
+			memcpy(m.secret, randomBytes[i][echoesSent], kNetRelaySecretBytes);
+			m.number = static_cast<uint16_t>(echoesSent + 1);
+
+			if (sendCount == kNetRelayMostSends)
+			{
+				sendsDropped++;
+				continue;
+			}
+
+			sends[sendCount].relay = static_cast<uint8_t>(i);
+			sends[sendCount].port = controlPorts[i];
+			NetRelay_Write(m, sends[sendCount].bytes);
+			sendCount++;
+		}
+
+		echoesSent++;
+	}
+
+	bool Unused(int why)
+	{
+		unused[why]++;
+		return true;
+	}
+
+	size_t count;
+	bool started;
+	uint32_t startedAt;
+	size_t echoesSent;
+	uint32_t echoSentAt[kNetRelayEchoes];
+	uint16_t controlPorts[kNetRelayMostRelays];
+	uint8_t randomBytes[kNetRelayMostRelays][kNetRelayEchoes][kNetRelaySecretBytes];
+	bool answered[kNetRelayMostRelays][kNetRelayEchoes];
+	uint32_t bestMs[kNetRelayMostRelays];
+	bool hasTime[kNetRelayMostRelays];
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t sendCount;
+	uint32_t sendsDropped;
+	uint32_t notMessages[kNetRelayNotKinds];
+	uint32_t unused[kNetRelayUnusedKinds];
+};
 
 // THE HOST. Start, then once a frame Hear each packet from the relay's address and Tick; take what to send with TakeSends.
 class NetRelayHost
@@ -364,6 +668,9 @@ public:
 		memset(token, 0, sizeof(token));
 		memset(cookie, 0, sizeof(cookie));
 		memset(code, 0, sizeof(code));
+		memset(pass, 0, sizeof(pass));
+		passTime = 0;
+		passesHeard = 0;
 		joiners = 0;
 		lostWhy = kNetRelayFine;
 		startedAt = askedAt = keptAt = keepAt = 0;
@@ -421,14 +728,20 @@ public:
 					return Unused(kNetRelayNotForNow);
 				}
 
-				// A room needs a real token and a real code
+				// A room needs a real token and a real code, and comes with a pass
 				if (NetRelay_AllZero(m.secret, kNetRelaySecretBytes) || !NetRelay_CodeIsGood(m.code))
 				{
 					return Unused(kNetRelayWrongSecret);
 				}
 
+				if (NetRelay_AllZero(m.pass, kNetRelayPassBytes) || m.passTime == 0)
+				{
+					return Unused(kNetRelayNoPass);
+				}
+
 				memcpy(token, m.secret, sizeof(token));
 				memcpy(code, m.code, sizeof(code));
+				KeepPass(m);
 				state = kOpen;
 				keptAt = keepAt = now;
 				return true;
@@ -444,8 +757,14 @@ public:
 					return Unused(kNetRelayWrongSecret);
 				}
 
+				if (NetRelay_AllZero(m.pass, kNetRelayPassBytes) || m.passTime == 0)
+				{
+					return Unused(kNetRelayNoPass);
+				}
+
 				keptAt = now;
 				joiners = m.number <= kNetRelayMostJoiners ? m.number : static_cast<int>(kNetRelayMostJoiners);
+				KeepPass(m);
 				return true;
 
 			case kNetRelayNewJoiner:
@@ -550,7 +869,7 @@ public:
 		}
 	}
 
-	// The game is over: HOST_CLOSE, so the relay ends the room and its list entry at once
+	// The game is over: HOST_CLOSE, so the relay ends the room at once
 	void Close()
 	{
 		if (state == kOpen)
@@ -589,34 +908,22 @@ public:
 	bool Asking() const { return state == kAsking; }
 	bool Open() const { return state == kOpen; }
 
-	// The room's token as 32 hex digits and its code as 8 letters with a 0 after, once it's open. False, with nothing written, before.
-	bool Room(char *tokenHex, char *codeText) const
+	// What the list is given, once the room is open: the code's 8 letters (no 0 after), the newest pass and its time. False, with nothing
+	// written, before. The room's token is never handed out: it's the host's proof to the relay alone.
+	bool RoomForTheList(char *codeOut, uint8_t *passOut, uint64_t *passTimeOut) const
 	{
 		if (state != kOpen)
 		{
 			return false;
 		}
 
-		NetRelay_SecretHex(token, tokenHex);
-		memcpy(codeText, code, kNetRelayCodeLetters);
-		codeText[kNetRelayCodeLetters] = 0;
-		return true;
-	}
-
-	// The same, as the relay gave them, for the list's calls: the token's 16 bytes, and the code's 8 letters with no 0 after. False, with
-	// nothing written, before it's open.
-	bool RoomSecret(uint8_t *tokenOut, char *codeOut) const
-	{
-		if (state != kOpen)
-		{
-			return false;
-		}
-
-		memcpy(tokenOut, token, kNetRelaySecretBytes);
 		memcpy(codeOut, code, kNetRelayCodeLetters);
+		memcpy(passOut, pass, kNetRelayPassBytes);
+		*passTimeOut = passTime;
 		return true;
 	}
 
+	uint32_t PassesHeard() const { return passesHeard; }   // goes up by one with each pass, so the list can be given each new one once
 	int Joiners() const { return joiners; }                // as the relay last counted them
 	int LostWhy() const { return lostWhy; }                // kNetRelayFine until the room is lost
 	size_t HellosWaiting() const
@@ -646,6 +953,13 @@ private:
 		uint32_t since;     // when NEW_JOINER came
 		uint32_t lastSent;
 	};
+
+	void KeepPass(const NetRelayMessage &m)
+	{
+		memcpy(pass, m.pass, sizeof(pass));
+		passTime = m.passTime;
+		passesHeard++;
+	}
 
 	void Ask(uint32_t now)
 	{
@@ -715,6 +1029,7 @@ private:
 			return;
 		}
 
+		sends[sendCount].relay = 0;
 		sends[sendCount].port = port;
 		NetRelay_Write(m, sends[sendCount].bytes);
 		sendCount++;
@@ -725,6 +1040,9 @@ private:
 	uint8_t token[kNetRelaySecretBytes];
 	uint8_t cookie[kNetRelaySecretBytes];
 	char code[kNetRelayCodeLetters];
+	uint8_t pass[kNetRelayPassBytes];
+	uint64_t passTime;
+	uint32_t passesHeard;
 	int joiners;
 	int lostWhy;
 	uint32_t startedAt, askedAt, keptAt, keepAt;
@@ -974,6 +1292,7 @@ private:
 			return;
 		}
 
+		sends[sendCount].relay = 0;
 		sends[sendCount].port = to;
 		NetRelay_Write(m, sends[sendCount].bytes);
 		sendCount++;
