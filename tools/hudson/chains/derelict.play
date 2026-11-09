@@ -1,0 +1,8 @@
+# What Hudson does to play derelict on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 34528 -274 -44682 | CORR-12
+press 29607 -274 -58748 | swch-COMM
+press -25757 3839 -127805 | swch-ALCK1
+walk -21959 3548 -136864 | V timer airlock area switch
+press -33749 -20606 -252946 | swch-VIEWD
+walk -121779 41049 -146055 | VENDOFLEVEL1

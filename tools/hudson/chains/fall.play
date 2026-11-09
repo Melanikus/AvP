@@ -1,0 +1,10 @@
+# What Hudson does to play fall on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 26790 15167 9781 | switch01
+press 113452 19063 94962 | switch02
+press 86603 11271 100769 | switch04
+press 209310 11271 145230 | switch10
+press 225482 11271 138216 | switch12
+press 215389 19063 58373 | switch07
+press 182229 -420 76063 | switch14
+walk 178930 -903 101707 | completeareaswitch

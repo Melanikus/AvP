@@ -1,0 +1,11 @@
+# level: nost03_m   end started by: walk
+# campaign: Marine 9
+# route: the chains, and what opens the doors on the way there. The rooms are joined by what they can see or not at all, so this level has not been walked from the file. The fewest steps found, worked out from the level file. No one has walked it.
+# This level could not be walked from the file. These steps come from the chains, and what opens the doors on the way. Their order is one that the chains allow.
+# Nothing in the file opens: MD-prxM-02, MD-secM-91, MD-secM-65. Someone has to say how a player gets past these.
+# today this only fires on the machine of whoever picks it up.
+where MD-comm-20
+pickup secpass01
+where desk | Mtomum02
+walk end
+end endofmission

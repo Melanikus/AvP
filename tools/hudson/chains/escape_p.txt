@@ -1,0 +1,11 @@
+# level: escape_p   end started by: kill
+# campaign: Predator 8
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# In a network game, door medlbdoor stays shut: only killing marine "g" or xenoborg "xenoborg" opens it.
+# In a network game, door airdoor04 stays shut: only killing marine "p" opens it.
+# opens airdoor04
+missing p | a network game leaves out this marine
+# on the host only, in Co-op. A network game gives a placed alien a new name today (bh_alien.cpp), so this name finds it only once that is changed.
+where hive01
+kill pretorian
+end endmissionstrategy

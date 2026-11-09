@@ -26,11 +26,19 @@ jobs:
         with:
           persist-credentials: false
 
-      # Hudson is the team's private test bot, and its code never ships. This comes first, because it takes seconds, and a hook left behind
-      # should fail the pull request that brings it.
-      - name: Refuse any of Hudson
+      # Hudson is the team's test bot. Since 2026-11-09 it's in the game (the owner: "Hudson goes into avpx_main"), and this proves a player's
+      # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. It comes first, before anything is
+      # built, so that a way in left awake fails the pull request that brings it. Until 2026-11-09 this was check-no-hudson.ps1.
+      - name: Refuse any way a player's game could run Hudson
         shell: pwsh
-        run: ./tools/check-no-hudson.ps1
+        run: ./tools/check-hudson-asleep.ps1
+
+      # The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release".
+      # The code that talks to our servers comes in as it's written, and runs only with -dev; this proves a player's game can reach none
+      # of them. Only the owner lifts it.
+      - name: Refuse any way a player's game could reach one of our servers
+        shell: pwsh
+        run: ./tools/check-servers-dev-only.ps1
 
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
@@ -44,6 +52,17 @@ jobs:
         uses: ./.github/actions/fetch-test-libraries
         with:
           ports: dxsdk-d3dx enet
+
+      # net_relay_test reads the relay's test vectors, a file the relay's repository makes from its own code (AVPx-Dedicated-Server,
+      # test-vectors/relay-v1.json at 26d0580). The copy here has to be that file byte for byte: a copy changed to suit the game's code would
+      # prove nothing. tests/vectors/README.md says how to take a newer one. Added 2026-11-08 by Melanikus for the AvP port.
+      - name: Check the relay's test vectors are the relay's own
+        shell: pwsh
+        run: |
+          $expected = 'c982ae7d94fcf8e0c71fe69180c01beae6fbd9aa6b5b998c010c2d3fdc5dc2f7'
+          $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/relay-v1.json).Hash.ToLowerInvariant()
+          if ($found -ne $expected) { throw "tests/vectors/relay-v1.json isn't the relay's file: its sha256 is $found, not $expected" }
+          "tests/vectors/relay-v1.json is the relay's file at 26d0580"
 
       - name: Build the tests
         shell: pwsh
@@ -407,9 +426,13 @@ jobs:
           fetch-depth: 0   # the check compares with an older commit
           persist-credentials: false
 
-      - name: Refuse any of Hudson
+      - name: Refuse any way a player's game could run Hudson
         shell: pwsh
-        run: ./tools/check-no-hudson.ps1
+        run: ./tools/check-hudson-asleep.ps1
+
+      - name: Refuse any way a player's game could reach one of our servers
+        shell: pwsh
+        run: ./tools/check-servers-dev-only.ps1
 
       - name: Test the new-function check
         shell: pwsh

@@ -1,0 +1,3 @@
+# The relay's test vectors: each file here is the relay repository's own, byte for byte, and the gate checks its sha256. So git never
+# changes their line ends.
+* -text

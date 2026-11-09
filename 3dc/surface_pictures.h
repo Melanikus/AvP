@@ -50,4 +50,7 @@ bool SurfacePictures_DrawWalls(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *dept
 IDirect3DTexture9 *SurfacePictures_Normal();
 IDirect3DTexture9 *SurfacePictures_Colour();
 
+// The pixel shader the last drawing of the pictures used, by the name of its file. It depends on the lighting: any lighting that uses maps goes through the relief one.
+const char *SurfacePictures_ShaderUsedLast();
+
 #endif

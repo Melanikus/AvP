@@ -1,0 +1,6 @@
+# What Hudson does to play escape on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+kill 3772 -18771 120335 | j
+kill 41698 -18448 86340 | o
+kill 140180 -18202 91802 | v
+walk 246861 -19168 175159 | endswitch

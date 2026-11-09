@@ -1,0 +1,6 @@
+# What Hudson does to play invasion_p on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 55216 -29452 26861 | AddSwitch2
+walk 49634 -17880 23871 | lift open the bottom door.
+press 46416 -17383 22104 | Addswitch4
+kill -8761 2952 8679 | Gorman. End of level switch

@@ -1,0 +1,6 @@
+/std:c++17 /EHsc /MD /J /W3 /FC /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc /I3dc/avp /Itools/hudson
+tests/hudson_plan_test.cpp
+3dc/avp/hudson_plan.cpp
+tools/hudson/join_films_reads.cpp

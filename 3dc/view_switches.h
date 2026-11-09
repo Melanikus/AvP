@@ -9,12 +9,16 @@
 // change. Only one thing is noted for each, so a key that's bound twice still changes things once a press. A batch file can easily leave a key bound twice.
 //
 // EVERYTHING OFF: with Gouraud and no shadows, the view itself goes to OFF, which is exactly how the game has always drawn. Turning either back on returns to the
-// view it left, as long as nothing else has moved it. A new player starts here: see view_settings.cpp, which keeps what they choose.
+// view it left, as long as nothing else has moved it. -shadowsoff starts here, and so does a card that can't draw the rest. A new player starts with the lighting per pixel and
+// the shadows on: see view_settings_start.h, and view_settings.cpp, which keeps what they choose.
 //
 // J, FOR DEVELOPERS: J picks what the shadow pass shows. LIGHTING and SHADOWS decide what its FINAL view draws, and the other views are for looking inside the pass, so
 // they show what they're named for. With everything off, FINAL and OFF would be the same thing, so J goes straight past FINAL.
 //
 // This file holds only the decisions, with nothing of the game in it, so that tests/view_switches_test.cpp can run them.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a new player starts with the lighting per pixel and the shadows on, not with everything off (view_settings_start.h)
 
 #ifndef VIEW_SWITCHES_H
 #define VIEW_SWITCHES_H
@@ -23,8 +27,8 @@
 
 enum LightingChoice
 {
-	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where a new player starts, and -shadowsoff
-	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where -reliefoff starts
+	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where -shadowsoff starts, and a card that can't draw the others
+	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where a new player starts, and where -reliefoff starts
 	kLightingNormals,   // lights are added per pixel, and each pixel's map tilts which way it faces
 	kLightingRelief,    // the same, and a ray marched through each pixel's height makes the surface stand out from its polygon. See Lighting_WordsOnScreen for when it can't
 	kLightingChoices

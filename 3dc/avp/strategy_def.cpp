@@ -136,9 +136,17 @@ void DeallocateStrategyBlock(STRATEGYBLOCK *sptr)
 }
 
 
+// A test run can make the game behave as if every block has gone, to show nothing crashes when they do
+bool HudsonTest_NoStrategyBlocks = false;
+
 STRATEGYBLOCK* CreateActiveStrategyBlock(void)
 {
 	STRATEGYBLOCK *sb;
+
+	if (HudsonTest_NoStrategyBlocks)
+	{
+		return NULL;
+	}
 
 	sb = AllocateStrategyBlock();
 
