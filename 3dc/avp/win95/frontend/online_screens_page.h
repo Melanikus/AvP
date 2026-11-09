@@ -80,8 +80,18 @@ bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft);
 // The host's answer, from the menu's row. An answer for a request that's gone does nothing (Net_AnswerJoinRequest).
 void OnlineHost_Answer(bool yes);
 
-// Each frame of play, from the game's loop: while a request waits, a line on the screen every 5 s says who asks and how to answer
-void OnlineHost_InPlayFrame(void);
+// ---- In play, on the host and on a joiner
+
+// Each frame of play, from the game's loop, once the HUD is drawn:
+// - on the host, while a player waits to be let in, a line every 5 s says who asks and how to answer (H1);
+// - on the host, the relay's news as it comes (H2): finding the nearest relay, on the list through which relay, no relay, the room gone;
+// - on both, for as long as the game is played through a relay, a line kept at the top right, in the HUD's font: "Hosting through
+//   virginia, 41 ms" or "Joined through virginia, 63 ms", its time refreshed from the measured round trip (the user: "I want the Hudsons
+//   showing server name and ping").
+void OnlinePlay_Frame(void);
+
+// The relay's latest news for the co-op lobby page, where the host waits before play: true for 8 s after it came, with its words
+bool OnlineHost_NewsLine(char *line, size_t size);
 
 // ---- -dev -onlinescreens: every screen, with made-up games and no network, for pictures
 

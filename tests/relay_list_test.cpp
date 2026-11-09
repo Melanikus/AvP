@@ -802,7 +802,9 @@ static void TestTheCalls()
 	// and before the game shuts down, and that never starts the list (below).
 	std::string const winmain = ReadSource("3dc/avp/win95/winmain.cpp");
 	size_t const firstListCall = winmain.find("RelayList_");
-	size_t const quitting = winmain.find("\tRelayList_BeforeQuitting(2000);\n");
+	// The call itself, not the tab before it, so it's where winmain's first "RelayList_" is (Fourth's fix of 2026-11-09: with the tab the
+	// two were a letter apart, and the check below could never pass)
+	size_t const quitting = winmain.find("RelayList_BeforeQuitting(2000);");
 	size_t const afterMenus = winmain.find("TimeStampedMessage(\"After Menus\");");
 	size_t const exitSystem = winmain.find("\tExitSystem();\n");
 	Check(winmain.size() > 10000 && !Has(winmain, "Relay_ServerName(") && !Has(winmain, "Relay_ListPort(") && firstListCall == quitting

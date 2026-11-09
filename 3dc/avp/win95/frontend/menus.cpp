@@ -1721,6 +1721,14 @@ static void RenderMenu(void)
 		RenderSmallMenuText(askingLine, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
+	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes
+	char relayNews[128];
+
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews)))
+	{
+		RenderSmallMenuText(relayNews, MENU_CENTREX, (answerRowsShown && AvPMenus.MenuElements == answerRows) ? 56 : 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
 		int targetBrightness;

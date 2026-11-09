@@ -35,7 +35,8 @@
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   -dev -onlinescreens shows every online-play screen at the menus, with made-up games, for pictures (online_screens_page.h)
-//   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer
+//   while a player asks to join this host, a line on the screen in play says who, and that Esc gets to the answer; the relay's news on
+//   the host, and on both copies the relay and its round trip, kept up at the top right while the game goes through a relay
 //   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
 
 #include "3dc.h"
@@ -973,8 +974,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 							// A tester's mark: noted now, and its picture taken when this frame is drawn
 							Mark_ReadKey();
 
-							// A player asking to join this host: a line on the screen says who, and that Esc gets to the answer
-							OnlineHost_InPlayFrame();
+							// Online play's lines: a player asking to join this host, the relay's news, and the relay and its round trip, kept up
+							// at the top right for as long as the game goes through a relay (online_screens_page.h)
+							OnlinePlay_Frame();
 
 							FlushTextprintBuffer();
 

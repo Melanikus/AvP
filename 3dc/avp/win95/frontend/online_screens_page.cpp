@@ -28,6 +28,7 @@
 extern char AAFontWidths[256];
 extern unsigned char DebouncedKeyboardInput[];
 extern bool bRunning;
+extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;   // the screen's size in play, for the line kept at its top right
 extern void DrawMainMenusBackdrop(void);
 
 // The page shows no more rows than the menu has rows for (menu_data.cpp's AvPMenu_MultiplayerSelectSession)
@@ -782,8 +783,10 @@ void OnlineHost_Answer(bool yes)
 }
 
 extern void NewOnScreenMessage(char *messagePtr);
+extern void RenderString(char *stringPtr, int x, int y, int colour);
 
-void OnlineHost_InPlayFrame(void)
+// H1 in play: who asks, every 5 s while they wait
+static void AskingLineInPlay(void)
 {
 	char name[kOnlineRowLetters];
 	int seconds = 0;
@@ -803,6 +806,113 @@ void OnlineHost_InPlayFrame(void)
 	_snprintf(shown, sizeof(shown) - 1, "%s. %s", asking, OnlineScreens_Words(kOnlineWordsEscToAnswer));
 	shown[sizeof(shown) - 1] = '\0';
 	NewOnScreenMessage(shown);
+}
+
+// ---- H2: the relay's news, on the host
+
+static unsigned int newsSeen = 0;          // the relay state's count of changes, when the page last looked
+static char newsLine[128];                 // the latest news, kept for as long as the game runs, as the screen keeps what it's given
+static uint32_t newsAt = 0;
+static bool newsCame = false;
+
+// Looks at the host's relay state (Net_RelayHostStateNow, which changes nothing by being asked), and makes the words when it has changed.
+// True when there's new news this time.
+static bool NewsHasCome(void)
+{
+	NetRelayHostState state;
+	Net_RelayHostStateNow(&state);
+
+	if (state.changes == newsSeen)
+	{
+		return false;
+	}
+
+	newsSeen = state.changes;
+
+	char region[kRelayListRegionLetters + 1];
+	char why[64];
+
+	switch (state.what)
+	{
+		case kNetRelayHostFinding:
+			Put(newsLine, sizeof(newsLine), OnlineScreens_Words(kOnlineWordsRelayFinding));
+			break;
+		case kNetRelayHostListed:
+			OnlineScreens_SafeName(state.region, sizeof(state.region), region, sizeof(region));
+			OnlineScreens_ListedWords(region, state.ms, newsLine, sizeof(newsLine));
+			break;
+		case kNetRelayHostNoRelay:
+			Put(newsLine, sizeof(newsLine), OnlineScreens_Words(kOnlineWordsRelayNone));
+			break;
+		case kNetRelayHostRoomGone:
+			OnlineScreens_SafeName(state.why, sizeof(why) - 1, why, sizeof(why));
+			OnlineScreens_RoomGoneWords(why, newsLine, sizeof(newsLine));
+			break;
+		default:
+			return false;
+	}
+
+	newsAt = Now();
+	newsCame = true;
+	return true;
+}
+
+bool OnlineHost_NewsLine(char *line, size_t size)
+{
+	NewsHasCome();
+
+	if (!newsCame || HasCome(Now(), newsAt + kFailedLineMs))
+	{
+		return false;
+	}
+
+	Put(line, size, newsLine);
+	return true;
+}
+
+// ---- The line kept up in play, on the host and on a joiner
+
+static void RelayLineInPlay(void)
+{
+	NetRelayPlayState state;
+	Net_RelayPlayStateNow(&state);
+
+	if (!state.throughRelay)
+	{
+		return;
+	}
+
+	char region[kRelayListRegionLetters + 1];
+	char line[64];
+
+	OnlineScreens_SafeName(state.region, sizeof(state.region), region, sizeof(region));
+	OnlineScreens_PlayLineWords(state.isHost, region, state.ms, line, sizeof(line));
+
+	// At the top right, in the HUD's font and at its size, a little in from the edges. The words are only letters the font has (the
+	// region was made safe), so each one's width is in the font's own table.
+	int width = 0;
+
+	for (const char *letter = line; *letter; letter++)
+	{
+		width += AAFontWidths[(unsigned char)*letter];
+	}
+
+	int const margin = MUL_FIXED(HUDScaleFactor, 12);
+	int const x = ScreenDescriptorBlock.SDB_Width - MUL_FIXED(HUDScaleFactor, width) - margin;
+
+	RenderString(line, x > 0 ? x : 0, margin, (int)RCOLOR_ARGB(255, 200, 200, 200));
+}
+
+void OnlinePlay_Frame(void)
+{
+	AskingLineInPlay();
+
+	if (NewsHasCome())
+	{
+		NewOnScreenMessage(newsLine);
+	}
+
+	RelayLineInPlay();
 }
 
 // ---- -dev -onlinescreens
@@ -841,12 +951,14 @@ static const char *const kDemoSteps[] =
 	"H2 finding the nearest relay",
 	"H2 your game is on the list",
 	"H2 no relay answered",
-	"H2 the room on the relay has gone"
+	"H2 the room on the relay has gone",
+	"In play: the host's relay and round trip",
+	"In play: a joiner's relay and round trip"
 };
 
-// Where the run's screens fall in that list. The four H2 screens are the last.
-static const int kDemoFirstJoining = 6, kDemoFirstBackOnTheList = 10, kDemoAsked = 15, kDemoFirstNews = 16;
-static_assert(sizeof(kDemoSteps) / sizeof(kDemoSteps[0]) == kDemoFirstNews + 4, "kDemoSteps and the places of its screens must agree");
+// Where the run's screens fall in that list. The four H2 screens, then the two lines kept up in play, are the last.
+static const int kDemoFirstJoining = 6, kDemoFirstBackOnTheList = 10, kDemoAsked = 15, kDemoFirstNews = 16, kDemoFirstPlayLine = 20;
+static_assert(sizeof(kDemoSteps) / sizeof(kDemoSteps[0]) == kDemoFirstPlayLine + 2, "kDemoSteps and the places of its screens must agree");
 
 static const int kDemoStepCount = (int)(sizeof(kDemoSteps) / sizeof(kDemoSteps[0]));
 
@@ -992,12 +1104,32 @@ static void DrawDemoStep(int step)
 			RenderMenuText(GetTextString(TEXTSTRING_INGAMEMENU_RESUMEGAME), MENU_CENTREX, 230, BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		}
+		case kDemoFirstPlayLine:
+		case kDemoFirstPlayLine + 1:
+			// The line kept at the top right in play, on the host and on a joiner. In play it's in the HUD's font at the HUD's size; here, the
+			// menus' small font in their 640 by 480
+			OnlineScreens_PlayLineWords(step == kDemoFirstPlayLine, "virginia", step == kDemoFirstPlayLine ? 41 : 63, line, sizeof(line));
+			Words(line, 610, 12, ONE_FIXED, AVPMENUFORMAT_RIGHTJUSTIFIED);
+			break;
 		default:
 		{
-			// H2: the relay's news, as a line at the top of the screen in play
-			static const OnlineWords kNews[4] = { kOnlineWordsRelayFinding, kOnlineWordsRelayListed, kOnlineWordsRelayNone, kOnlineWordsRelayGone };
+			// H2: the relay's news, as a line at the top of the screen in play, made the way the game makes it
 			int const news = step - kDemoFirstNews;
-			Words(OnlineScreens_Words(kNews[news >= 0 && news < 4 ? news : 0]), 30, 40, ONE_FIXED, AVPMENUFORMAT_LEFTJUSTIFIED);
+
+			if (news == 1)
+			{
+				OnlineScreens_ListedWords("virginia", 41, line, sizeof(line));
+			}
+			else if (news == 3)
+			{
+				OnlineScreens_RoomGoneWords("the relay didn't answer", line, sizeof(line));
+			}
+			else
+			{
+				Put(line, sizeof(line), OnlineScreens_Words(news == 2 ? kOnlineWordsRelayNone : kOnlineWordsRelayFinding));
+			}
+
+			Words(line, 30, 40, ONE_FIXED, AVPMENUFORMAT_LEFTJUSTIFIED);
 			break;
 		}
 	}
