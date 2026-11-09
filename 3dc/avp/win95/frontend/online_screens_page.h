@@ -85,9 +85,10 @@ void OnlineHost_Answer(bool yes);
 // Each frame of play, from the game's loop, once the HUD is drawn:
 // - on the host, while a player waits to be let in, a line every 5 s says who asks and how to answer (H1);
 // - on the host, the relay's news as it comes (H2): finding the nearest relay, on the list through which relay, no relay, the room gone;
-// - on both, for as long as the game is played through a relay, a line kept at the top right, in the HUD's font: "Hosting through
-//   virginia, 41 ms" or "Joined through virginia, 63 ms", its time refreshed from the measured round trip (the user: "I want the Hudsons
-//   showing server name and ping").
+// - on both, for as long as the game is played through a relay, a line kept at the top right, in the HUD's font and at its size: "HOST,
+//   Relay: nyc3, 145 ms (round trip, host to server)" or "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)",
+//   its time refreshed from the measured round trip (the user: "I want the Hudsons showing server name and ping"; the owner's words and
+//   "Larger text", 2026-11-09). A line too wide for the picture goes on two, split before its bracket.
 void OnlinePlay_Frame(void);
 
 // The relay's latest news for the co-op lobby page, where the host waits before play: true for 8 s after it came, with its words

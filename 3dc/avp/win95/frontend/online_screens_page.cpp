@@ -16,6 +16,7 @@
 #include "language.h"
 #include "renderStates.h"
 #include "d3d_hud.h"
+#include "hud_layout.h"
 #include "d3d_render.h"
 #include "mark_key.h"
 #include "logString.h"
@@ -783,7 +784,7 @@ void OnlineHost_Answer(bool yes)
 }
 
 extern void NewOnScreenMessage(char *messagePtr);
-extern void RenderString(char *stringPtr, int x, int y, int colour);
+extern void D3D_RenderHUDString_Centred(char *stringPtr, uint32_t centreX, uint32_t y, uint32_t colour);
 
 // H1 in play: who asks, every 5 s while they wait
 static void AskingLineInPlay(void)
@@ -872,6 +873,57 @@ bool OnlineHost_NewsLine(char *line, size_t size)
 
 // ---- The line kept up in play, on the host and on a joiner
 
+// How wide words are on the screen at the HUD's own size. They're only letters the font has (made safe), so each one's width is in the
+// font's own table.
+static int WidthAtTheHUDsSize(const char *words)
+{
+	int width = 0;
+
+	for (const char *letter = words; *letter; letter++)
+	{
+		width += AAFontWidths[(unsigned char)*letter];
+	}
+
+	return MUL_FIXED(HUDScaleFactor, width);
+}
+
+// One line at the top right, at the HUD's own size (the size of its ammo and health numbers, which D3D_RenderHUDString_Centred draws), its
+// right end a margin in from the edge. A line wider than the picture starts at its left edge instead.
+static void LineAtTheTopRight(char *words, int y, int margin)
+{
+	int const width = WidthAtTheHUDsSize(words);
+	int centreX = (int)ScreenDescriptorBlock.SDB_Width - margin - width / 2;
+
+	if (centreX < width / 2)
+	{
+		centreX = width / 2;
+	}
+
+	D3D_RenderHUDString_Centred(words, (uint32_t)centreX, (uint32_t)y, (uint32_t)RCOLOR_ARGB(255, 220, 220, 220));
+}
+
+// The line kept up in play, large, at the HUD's own size, so it can be read in a film, even with two films side by side (the owner,
+// 2026-11-09: "Larger text"). Before, it was drawn at the font's own size whatever the screen's, which is tiny on a big one. A line too
+// wide for the picture goes on two, split before its first bracket, which is where its explaining starts. line is cut there to do that.
+// Modified 2026-11-09 by Melanikus for the AvP port: the HUD's size, and the split.
+static void PlayLineAtTheTopRight(char *line)
+{
+	int const margin = MUL_FIXED(HUDScaleFactor, 12);
+	int const lineHeight = MUL_FIXED(HUDScaleFactor, HUD_FONT_HEIGHT + 4);
+	char *const bracket = strstr(line, " (");
+
+	if (bracket && WidthAtTheHUDsSize(line) + 2 * margin > (int)ScreenDescriptorBlock.SDB_Width)
+	{
+		*bracket = '\0';
+		LineAtTheTopRight(line, margin, margin);
+		LineAtTheTopRight(bracket + 1, margin + lineHeight, margin);
+	}
+	else
+	{
+		LineAtTheTopRight(line, margin, margin);
+	}
+}
+
 static void RelayLineInPlay(void)
 {
 	NetRelayPlayState state;
@@ -883,24 +935,14 @@ static void RelayLineInPlay(void)
 	}
 
 	char region[kRelayListRegionLetters + 1];
-	char line[64];
+	char line[160];
 
 	OnlineScreens_SafeName(state.region, sizeof(state.region), region, sizeof(region));
-	OnlineScreens_PlayLineWords(state.isHost, region, state.ms, line, sizeof(line));
 
-	// At the top right, in the HUD's font and at its size, a little in from the edges. The words are only letters the font has (the
-	// region was made safe), so each one's width is in the font's own table.
-	int width = 0;
-
-	for (const char *letter = line; *letter; letter++)
-	{
-		width += AAFontWidths[(unsigned char)*letter];
-	}
-
-	int const margin = MUL_FIXED(HUDScaleFactor, 12);
-	int const x = ScreenDescriptorBlock.SDB_Width - MUL_FIXED(HUDScaleFactor, width) - margin;
-
-	RenderString(line, x > 0 ? x : 0, margin, (int)RCOLOR_ARGB(255, 200, 200, 200));
+	// A joiner's own time to the server and back, as the games page measured it before the join, or -1 when it has none (a host has none)
+	int const serverMs = state.isHost ? -1 : Net_JoinerMsToRelay(state.region);
+	OnlineScreens_PlayLineWords(state.isHost, region, state.ms, serverMs, line, sizeof(line));
+	PlayLineAtTheTopRight(line);
 }
 
 void OnlinePlay_Frame(void)
@@ -1124,11 +1166,14 @@ static void DrawDemoStep(int step)
 		}
 		case kDemoFirstPlayLine:
 		case kDemoFirstPlayLine + 1:
-			// The line kept at the top right in play, on the host and on a joiner. In play it's in the HUD's font at the HUD's size; here, the
-			// menus' small font in their 640 by 480
-			OnlineScreens_PlayLineWords(step == kDemoFirstPlayLine, "virginia", step == kDemoFirstPlayLine ? 41 : 63, line, sizeof(line));
-			Words(line, 610, 12, ONE_FIXED, AVPMENUFORMAT_RIGHTJUSTIFIED);
+		{
+			// The line kept at the top right in play, on the host and on a joiner, drawn as play draws it: the HUD's font at the HUD's size
+			char playLine[160];
+			bool const host = step == kDemoFirstPlayLine;
+			OnlineScreens_PlayLineWords(host, "nyc3", host ? 145 : 290, host ? -1 : 146, playLine, sizeof(playLine));
+			PlayLineAtTheTopRight(playLine);
 			break;
+		}
 		default:
 		{
 			// H2: the relay's news, as a line at the top of the screen in play, made the way the game makes it

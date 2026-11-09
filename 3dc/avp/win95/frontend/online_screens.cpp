@@ -443,8 +443,8 @@ static const char *const kWords[] =
 	"No games from the list",                                     // kOnlineWordsListFailed
 	"The host is answering someone else. Try again in a moment",  // kOnlineWordsHostBusy
 	"Esc to answer",                                              // kOnlineWordsEscToAnswer
-	"Hosting through",                                            // kOnlineWordsHostingThrough
-	"Joined through",                                             // kOnlineWordsJoinedThrough
+	"HOST, Relay:",                                               // kOnlineWordsHostingThrough
+	"CLIENT, Relay:",                                             // kOnlineWordsJoinedThrough
 	"a relay",                                                    // kOnlineWordsARelay
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
@@ -540,7 +540,7 @@ void OnlineScreens_ListedWords(const char *safeRegion, int ms, char *words, size
 	words[size - 1] = '\0';
 }
 
-void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, char *words, size_t size)
+void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, int serverMs, char *words, size_t size)
 {
 	if (size == 0)
 	{
@@ -552,13 +552,26 @@ void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, ch
 
 	OnlineWords const start = isHost ? kOnlineWordsHostingThrough : kOnlineWordsJoinedThrough;
 
+	// Each time says what it measures (the owner, 2026-11-09): the host's is to the relay server and back; a joiner's goes to the host and
+	// back, through the server, and its own time to the server and back, measured on the games page, follows when it has one
 	if (ms < 0)
 	{
 		_snprintf(words, size - 1, "%s %s", OnlineScreens_Words(start), place);
 	}
+	else if (isHost)
+	{
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, host to server)", OnlineScreens_Words(start), place,
+			Between(ms, 0, kRelayListMostHostMs));
+	}
+	else if (serverMs < 0)
+	{
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, client to host through server)", OnlineScreens_Words(start), place,
+			Between(ms, 0, kRelayListMostHostMs));
+	}
 	else
 	{
-		_snprintf(words, size - 1, "%s %s, %d ms", OnlineScreens_Words(start), place, Between(ms, 0, kRelayListMostHostMs));
+		_snprintf(words, size - 1, "%s %s, %d ms (round trip, client to host through server), %d ms round trip to server",
+			OnlineScreens_Words(start), place, Between(ms, 0, kRelayListMostHostMs), Between(serverMs, 0, kRelayListMostHostMs));
 	}
 
 	words[size - 1] = '\0';
