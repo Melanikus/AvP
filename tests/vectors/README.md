@@ -38,8 +38,9 @@ AVPx-Dedicated-Server repository):
 - handshake A: every input, A1, A2 and A3, h and ck after each of the 16 steps, Split's keys, the transcript;
 - A's datagrams: the cookie round and the fragments;
 - four sealed control messages;
-- handshake B;
-- the epoch keys, AES-GCM, and refusals.
+- handshake B, with its refusals 10 and 21 as bytes;
+- the epoch keys, AES-GCM, and refusals;
+- sealed game datagrams (CRYPTO.md section 9).
 
 Every random choice in it comes from a fixed seed, and each key is given as what the primitive itself takes: a P-384 private key as its
 48-byte number, an ML-KEM key pair as FIPS 203's d then z, an encapsulation as its m. So the game makes the same bytes with nothing of
@@ -49,10 +50,13 @@ Java's.
 relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
 (`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
 
-**Where it comes from.** AVPx-Dedicated-Server, commit `3fcb588`, file `test-vectors/crypto-v2.json`, made for CRYPTO.md as at `bd0e45d`.
+**Where it comes from.** AVPx-Dedicated-Server, commit `d0d268b`, file `test-vectors/crypto-v2.json`, made for CRYPTO.md as at `b9113a7`.
+The file is the same at `379ec97`, whose CRYPTO.md changes no bytes. From `3fcb588`'s copy, only three places changed (2026-11-09): the
+"about" line, handshake B's refusals 10 and 21, and the new sealed game datagrams. Handshake A's bytes, which this repository's tests
+read, are the same.
 
-- 190,877 bytes, with plain line ends (LF);
-- sha256 `8894d55285ecd1b3baa98ee413c00a2e5ae93d3237690b7a354d3ad4206bcc88`.
+- 211,149 bytes, with plain line ends (LF);
+- sha256 `402e557962071ba62b647daa3d17d50e1b62e70d9e183fe5fe4bf616fc333fc2`.
 
 The gate checks that sha256 ("Check protocol version 2's test vectors are the relay's own"). A newer one is taken the same way as
 `relay-v1.json`'s, above.
