@@ -343,8 +343,10 @@ static void TestBuildLines()
 
 		while ((got = fread(piece, 1, sizeof(piece), program)) > 0)
 		{
-			MD5Update(&md5, (md5byte const *)piece, (unsigned)got);
-			programSize += got;
+			// fread never gives more than it was asked for, but the bound is said here too, so nothing reading this has to know that
+			size_t const take = got < sizeof(piece) ? got : sizeof(piece);
+			MD5Update(&md5, (md5byte const *)piece, (unsigned)take);
+			programSize += take;
 		}
 
 		fclose(program);
