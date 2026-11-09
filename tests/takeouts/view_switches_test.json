@@ -41,7 +41,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");",
+					"from": "LogString(std::string(\"developer tools: \") + name + \" needs -dev, so it's off\");",
 					"to": ""
 				}
 			]
