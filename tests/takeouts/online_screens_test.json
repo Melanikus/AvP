@@ -813,6 +813,16 @@
 					"to": "int const again = oldElement - kFirstGameElement;"
 				}
 			]
+		},
+		{
+			"name": "the play line's round trip isn't capped, for a joiner with no time to the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tBetween(ms, 0, kRelayListMostHostMs));",
+					"to": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tms);"
+				}
+			]
 		}
 	]
 }

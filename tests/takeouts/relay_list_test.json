@@ -919,8 +919,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "LogString(std::string(\"Relay list: \") + piece);",
-					"to": "LogString(piece);"
+					"from": "LogString(std::string(\"Relay list: \") + std::string(piece, strnlen(piece, kMostNewsLetters)));",
+					"to": "LogString(std::string(piece, strnlen(piece, kMostNewsLetters)));"
 				}
 			]
 		},
@@ -1009,13 +1009,13 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n",
+					"from": "\t\t\tif (end && onTheList.listed && SameField(endRegion, onTheList.region) && SameField(endCode, onTheList.code))\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n",
 					"to": ""
 				},
 				{
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n",
-					"to": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n\n\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n"
+					"to": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n\n\t\t\tif (end && onTheList.listed && SameField(endRegion, onTheList.region) && SameField(endCode, onTheList.code))\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n"
 				}
 			]
 		},

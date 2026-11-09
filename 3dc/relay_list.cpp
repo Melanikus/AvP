@@ -189,10 +189,19 @@ namespace
 		int version;
 	};
 
+	// Added 2026-11-09 by Melanikus for the AvP port: whether two of the list's text fields of the same size say the same, read only within
+	// that size, so a field that somehow had no end could never be read past it (Snyk Code: improper null termination). The compiler
+	// refuses two fields of different sizes.
+	template <size_t N>
+	bool SameField(const char (&a)[N], const char (&b)[N])
+	{
+		return strncmp(a, b, N) == 0;
+	}
+
 	// Whether what the list shows of the game is the same: the pass and the round trip aren't shown, so they don't count here
 	bool SameShown(const Listing &a, const Listing &b)
 	{
-		return strcmp(a.name, b.name) == 0 && strcmp(a.level, b.level) == 0 && strcmp(a.mode, b.mode) == 0 && a.gameStyle == b.gameStyle &&
+		return SameField(a.name, b.name) && SameField(a.level, b.level) && SameField(a.mode, b.mode) && a.gameStyle == b.gameStyle &&
 			a.levelNumber == b.levelNumber && a.coopLobby == b.coopLobby && a.players == b.players && a.maxPlayers == b.maxPlayers &&
 			a.version == b.version;
 	}
@@ -852,6 +861,8 @@ namespace
 			char endCode[kRelayCodeLetters + 1];
 			memcpy(endRegion, shared->endRegion, sizeof(endRegion));
 			memcpy(endCode, shared->endCode, sizeof(endCode));
+			endRegion[sizeof(endRegion) - 1] = 0;   // each ends within its room, whatever the copy held (added 2026-11-09)
+			endCode[sizeof(endCode) - 1] = 0;
 			shared->endWanted = false;
 
 			bool const host = shared->hostWanted;
@@ -865,7 +876,7 @@ namespace
 			LeaveCriticalSection(&shared->lock);
 
 			// The game that ended comes off the list, if it's the one on it
-			if (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)
+			if (end && onTheList.listed && SameField(endRegion, onTheList.region) && SameField(endCode, onTheList.code))
 			{
 				TakeOffTheList();
 			}
@@ -884,7 +895,7 @@ namespace
 			if (host)
 			{
 				// Another room is another game, not yet on the list. The one before it, if it was, goes when the list forgets it.
-				if (strcmp(listing.region, onTheList.region) != 0 || strcmp(listing.code, onTheList.code) != 0)
+				if (!SameField(listing.region, onTheList.region) || !SameField(listing.code, onTheList.code))
 				{
 					onTheList.listed = false;
 					memcpy(onTheList.region, listing.region, sizeof(onTheList.region));
@@ -1015,11 +1026,15 @@ namespace
 			newsWritten = oldestKept;
 		}
 
+		// Each piece is one of this file's own fixed words (the longest is about 100 letters). It's read only up to kMostNewsLetters, so a
+		// piece that somehow had no end could never be read past (added 2026-11-09 by Melanikus for the AvP port; Snyk Code).
+		size_t const kMostNewsLetters = 256;
+
 		for (; newsWritten < number; newsWritten++)
 		{
 			if (const char *const piece = news[newsWritten % kMostNews])
 			{
-				LogString(std::string("Relay list: ") + piece);
+				LogString(std::string("Relay list: ") + std::string(piece, strnlen(piece, kMostNewsLetters)));
 			}
 		}
 	}

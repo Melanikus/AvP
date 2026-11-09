@@ -5,3 +5,4 @@ tests/net_start_test.cpp
 3dc/networking.cpp
 3dc/MemoryStream.cpp
 3dc/net_host.cpp
+3dc/relay_list_text.cpp
