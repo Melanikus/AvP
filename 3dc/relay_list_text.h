@@ -1,13 +1,14 @@
-// The words that go to and from the relay server's list: the bodies the game sends, and the list of games it reads back. Written
-// 2026-11-08 by Melanikus for the AvP port.
+// The words that go to and from the relay server's list: the bodies the game sends, and the answers it reads back. Written 2026-11-08 by
+// Melanikus for the AvP port.
 //
 // The list is a page on the relay server, over HTTPS (relay_shared.h says what the relay is). A host puts its game on it, and a player
-// reads it to pick a game. PROTOCOL.md in the server's repository, section 4, is the whole of what goes back and forth, and this is
-// written to it. relay_list.cpp makes the calls. This part only turns things into text and back, so that a test can try all of it.
+// reads it to pick a game. It also says where each region's relay is. PROTOCOL.md in the server's repository, section 4, is the whole of
+// what goes back and forth, and this is written to it (at 7014de1). relay_list.cpp makes the calls. This part only turns things into text
+// and back, so that a test can try all of it.
 //
 // What comes back is from the network, so it's treated as hostile (AVP Tao 3). This reads exactly what the protocol says, and nothing
-// else: one object holding "games", a list of at most 100 games, each with exactly its eight fields, each within its limits. Anything
-// else, anywhere in the answer, refuses the whole of it, with the reason, rather than keeping the part that looked right.
+// else: one object holding one field, a list of at most so many objects, each with exactly its fields, each within its limits. Anything
+// else, anywhere in an answer, refuses the whole of it, with the reason, rather than keeping the part that looked right.
 //
 // tests/relay_list_test.cpp tries every refusal, and the bodies.
 
@@ -21,78 +22,136 @@
 
 enum
 {
-	kRelayListMostGames = 100,           // the server sends at most this many
-	kRelayListTextLetters = 32,          // a name, a level or a mode: 1 to 32 printable ASCII characters
+	kRelayListMostGames = 100,           // the list sends at most this many games
+	kRelayListMostRelays = 16,           // and at most this many relays
+	kRelayListTextLetters = 32,          // a name or a mode: 1 to 32 printable ASCII characters
+	kRelayListLevelLetters = 39,         // a level's name: 1 to 39, the longest the game's own go (kLevelNameSize - 1, networking.h)
+	kRelayListRegionLetters = 16,        // a region: 1 to 16 small letters, digits and -
+	kRelayListHostLetters = 63,          // a relay's DNS name: 1 to 63 letters, digits, - and .
+	kRelayListSecretBytes = 16,          // a pass and an owner: 16 bytes, written as 32 hex digits, small letters
 	kRelayListMostVersion = 65535,       // the game's network version, 1 to 65535
-	kRelayListMostSeconds = 31536000,    // how long a game has been listed: no game is listed for more than a year
-	kRelayListMostAnswerBytes = 32768,   // 100 games at every limit come to about 25 KB
-	kRelayListMostBodyBytes = 1024       // the server takes a body of at most 1 KB
+	kRelayListMostSeconds = 31536000,    // how long a game has been listed: a year at most
+	kRelayListMostHostMs = 9999,         // the host's round trip to its relay, in ms; 0 if it wasn't measured
+	kRelayListMostLevelNumber = 100,     // 0 to 99 for a stock level, 100 for a custom one, found by its name
+	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 41,111 bytes)
+	kRelayListMostRelaysBytes = 4096,    // an answer to GET /v1/relays: 4 KB at most (its worst case is 1,868 bytes)
+	kRelayListMostOwnerBytes = 1024,     // an answer to POST: {"owner"}, far less than this
+	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
 };
+
+// The most a passTime can be: the most a JSON number holds exactly, 2 to the 53rd, less 1
+static const uint64_t kRelayListMostPassTime = 9007199254740991ull;
 
 // One game on the list, as the Find games page shows it. Every text is ended by a 0.
 struct RelayListGame
 {
+	char region[kRelayListRegionLetters + 1];
 	char code[kRelayCodeLetters + 1];
 	char name[kRelayListTextLetters + 1];
-	char level[kRelayListTextLetters + 1];
+	char level[kRelayListLevelLetters + 1];
 	char mode[kRelayListTextLetters + 1];
+	int gameStyle;
+	int levelNumber;
+	int coopLobby;
 	int players;
 	int maxPlayers;
 	int version;
+	int hostMs;
 	long seconds;
 };
 
-// Why a list was refused. Each has its own words, for the log and for the tests.
+// One region's relay: where a game of that region is joined. networking.cpp reads these (RelayList_Relays).
+struct RelayListRelay
+{
+	char region[kRelayListRegionLetters + 1];
+	char host[kRelayListHostLetters + 1];
+	int port;
+};
+
+// What a host puts on the list. The texts are the game's own, already fitted (RelayList_FitText).
+struct RelayListListing
+{
+	const char *region;
+	const char *code;                        // the 8 letters, with or without a 0 after them
+	uint8_t pass[kRelayListSecretBytes];     // from the newest HOST_OPENED or HOST_KEPT
+	uint64_t passTime;                       // from that same message
+	const char *name;
+	const char *level;
+	const char *mode;
+	int gameStyle;
+	int levelNumber;
+	int coopLobby;
+	int players;
+	int maxPlayers;
+	int version;
+	int hostMs;
+};
+
+// Why an answer was refused. Each has its own words, for the log and for the tests.
 enum RelayListRefusal
 {
 	kRelayListAccepted,
-	kRelayListTooBig,          // more bytes than any honest list
+	kRelayListTooBig,          // more bytes than any honest answer
 	kRelayListHasAZero,        // a 0 byte, which no JSON text holds
 	kRelayListNotAnObject,     // it doesn't start with {
-	kRelayListNotGames,        // its one field isn't "games"
-	kRelayListNotAList,        // "games" isn't a list
-	kRelayListTooManyGames,    // more than 100
-	kRelayListNotAGame,        // something in the list isn't an object
+	kRelayListNotItsField,     // its one field isn't the one the protocol says ("games", "relays" or "owner")
+	kRelayListNotAList,        // that field isn't a list
+	kRelayListTooMany,         // more than 100 games, or 16 relays
+	kRelayListNotAnEntry,      // something in the list isn't an object
 	kRelayListUnknownField,    // a field the protocol doesn't have
-	kRelayListFieldTwice,      // a field given twice in one game
-	kRelayListFieldMissing,    // a game without all eight
-	kRelayListBadEscape,       // a \ that isn't \" or \\, the only two the server writes
-	kRelayListBadText,         // a name, level or mode that isn't 1 to 32 printable ASCII characters
+	kRelayListFieldTwice,      // a field given twice in one entry
+	kRelayListFieldMissing,    // an entry without all its fields
+	kRelayListBadEscape,       // a \ that isn't \" or \\, the only two the list writes
+	kRelayListBadText,         // a name, level or mode that isn't printable ASCII of its length
 	kRelayListBadCode,         // a code that isn't 8 code letters
+	kRelayListBadRegion,       // a region that isn't 1 to 16 small letters, digits and -
+	kRelayListBadHost,         // a relay's host that isn't a DNS name, or is an address instead of one
+	kRelayListBadSecret,       // an owner that isn't 32 hex digits, small letters
 	kRelayListBadNumber,       // a number that isn't a whole number in its range
 	kRelayListMorePlayersThanRoom, // players over maxPlayers
 	kRelayListOtherVersion,    // a game for another network version than the one asked for
-	kRelayListSameGameTwice,   // two games with one code
-	kRelayListEndsTooSoon,     // the text stops before the list is closed
+	kRelayListTwice,           // two games with one region and code, or two relays for one region
+	kRelayListEndsTooSoon,     // the text stops before its end
 	kRelayListNotWhatComesNext, // something else where a , : } or ] has to be
 	kRelayListMoreAfterTheEnd  // more after the closing }
 };
 
-// The words for a refusal: "the list holds a game with a field the protocol doesn't have", and so on
+// The words for a refusal: "a game has a field the protocol doesn't have", and so on
 const char *RelayList_RefusalWords(RelayListRefusal why);
 
 // Reads a GET /v1/games answer. games has room for kRelayListMostGames. ourVersion is the version that was asked for. On a refusal,
 // count is 0 and nothing in games is to be used.
 RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count);
 
-// The body of a POST or PUT /v1/games. False, with nothing to send, if any of it is outside the protocol's limits: the game checks its
-// own words before they go, so the server never has to refuse them. room is the space in body, a 0 included.
-bool RelayList_ListingBody(const uint8_t token[kRelayTokenBytes], const char *name, const char *level, const char *mode, int players,
-	int maxPlayers, int version, char *body, size_t room);
+// Reads a GET /v1/relays answer. relays has room for kRelayListMostRelays.
+RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count);
 
-// The body of a DELETE /v1/games
-bool RelayList_EndingBody(const uint8_t token[kRelayTokenBytes], char *body, size_t room);
+// Reads a POST's answer, {"owner"}: the 16 bytes a host proves its listing with afterwards
+RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes]);
 
-// Makes the game's own words fit a name, level or mode: a character that isn't printable ASCII becomes ?, at most 32 are kept, and nothing
-// at all becomes fallback. to has room for kRelayListTextLetters + 1.
-void RelayList_FitText(const char *from, const char *fallback, char *to);
+// The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
+// limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
+bool RelayList_ListingBody(const RelayListListing &listing, const uint8_t *owner, char *body, size_t room);
+
+// The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
+bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room);
+
+// Makes the game's own words fit a text on the list: a character that isn't printable ASCII becomes ?, at most `most` are kept, and nothing
+// at all becomes fallback. to has room for most + 1.
+void RelayList_FitText(const char *from, const char *fallback, char *to, size_t most);
 
 // The words the list shows for a game's style, the game's own number for it (NETGAME_TYPE in pldnet.h, in that order: relay_list.cpp
 // checks they still match). In English, whatever language the host plays in, so everyone reading the list reads the same words.
 const char *RelayList_ModeWords(int gameStyle, bool coopCampaign);
 
-// Whether the settings' server name is one to ask Windows to find: 1 to 253 characters, in parts between dots of 1 to 63 letters, digits
-// and -, none starting or ending with -. Anything else in the settings file isn't trusted to be a name (Tao 3).
+// Whether a name is one to ask Windows to find: 1 to 253 characters, in parts between dots of 1 to 63 letters, digits and -, none
+// starting or ending with -. For the settings' server name, which isn't trusted to be a name just because it's in the file (Tao 3).
 bool Relay_IsServerName(const char *name);
+
+// A region: 1 to 16 small letters, digits and -
+bool RelayList_IsRegion(const char *region);
+
+// A relay's host from the list: a DNS name of 1 to 63 characters, and never an address: a name whose every part is digits is one
+bool RelayList_IsRelayHost(const char *host);
 
 #endif

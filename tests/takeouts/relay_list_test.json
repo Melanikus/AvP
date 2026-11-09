@@ -5,11 +5,11 @@
 	],
 	"rows": [
 		{
-			"name": "a list over 32 KB is read",
+			"name": "a list over 48 KB is read",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (bytes > kRelayListMostAnswerBytes)",
+					"from": "if (bytes > mostBytes)",
 					"to": "if (false)"
 				}
 			]
@@ -49,8 +49,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (why == kRelayListAccepted && length == 0)",
-					"to": "if (false)"
+					"from": "return (why == kRelayListAccepted && length == 0) ? kRelayListBadText : why;",
+					"to": "return why;"
 				}
 			]
 		},
@@ -105,7 +105,7 @@
 			]
 		},
 		{
-			"name": "a game missing a field is taken",
+			"name": "an entry missing a field is taken",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
@@ -129,7 +129,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (game.version != ourVersion)",
+					"from": "if (game.version != g.ourVersion)",
 					"to": "if (false)"
 				}
 			]
@@ -139,17 +139,57 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(game.code, length)))",
-					"to": "if (why == kRelayListBadText)"
+					"from": "return (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(rule.text, length))) ? kRelayListBadCode : why;",
+					"to": "return why == kRelayListBadText ? kRelayListBadCode : why;"
 				}
 			]
 		},
 		{
-			"name": "two games with one code are taken",
+			"name": "any region of 16 printable characters is taken",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (strcmp(games[g].code, games[n].code) == 0)",
+					"from": "(why == kRelayListAccepted && !RelayList_IsRegion(rule.text))) ? kRelayListBadRegion",
+					"to": "(false)) ? kRelayListBadRegion"
+				}
+			]
+		},
+		{
+			"name": "a relay's host is taken as it comes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !RelayList_IsRelayHost(rule.text))) ? kRelayListBadHost",
+					"to": "(false)) ? kRelayListBadHost"
+				}
+			]
+		},
+		{
+			"name": "two games with one region and code are taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (strcmp(g.games[other].code, game.code) == 0 && strcmp(g.games[other].region, game.region) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a game is known by its code alone",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " && strcmp(g.games[other].region, game.region) == 0)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "two relays for one region are taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (strcmp(relays[other].region, relay.region) == 0)",
 					"to": "if (false)"
 				}
 			]
@@ -159,48 +199,88 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (Next(r) != 0)\n\t\t{\n\t\t\treturn kRelayListMoreAfterTheEnd;",
-					"to": "if (false)\n\t\t{\n\t\t\treturn kRelayListMoreAfterTheEnd;"
+					"from": "return Next(r) == 0 ? kRelayListAccepted : kRelayListMoreAfterTheEnd;",
+					"to": "return kRelayListAccepted;"
 				}
 			]
 		},
 		{
-			"name": "a field after \"games\" is not called a second field",
+			"name": "a field after the answer's one field is not called a second field",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (close == ',')",
-					"to": "if (false)"
+					"from": "if (Next(r) == ',')\n\t\t{\n\t\t\treturn kRelayListNotItsField;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn kRelayListNotItsField;"
 				}
 			]
 		},
 		{
-			"name": "any first field is taken for \"games\"",
+			"name": "any field is taken for the answer's one field",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (why == kRelayListBadText || (why == kRelayListAccepted && strcmp(name, \"games\") != 0))",
-					"to": "if (why == kRelayListBadText)"
+					"from": "(why == kRelayListAccepted && strcmp(name, field) != 0)",
+					"to": "(false)"
 				}
 			]
 		},
 		{
-			"name": "a refused list leaves its count as it was",
+			"name": "a refused list of games leaves its count as it was",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t*count = 0;\n\n\tif (!body && bytes > 0)",
-					"to": "\n\tif (!body && bytes > 0)"
+					"from": "\t*count = 0;\n\tint n = 0;\n\tGamesInto",
+					"to": "\tint n = 0;\n\tGamesInto"
 				}
 			]
 		},
 		{
-			"name": "the token's hex digits are written the wrong way round",
+			"name": "an owner's bytes are read with their digits the wrong way round",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "AddChar(w, kHex[token[i] >> 4]);\n\t\t\tAddChar(w, kHex[token[i] & 15]);",
-					"to": "AddChar(w, kHex[token[i] & 15]);\n\t\t\tAddChar(w, kHex[token[i] >> 4]);"
+					"from": "secret[i] = static_cast<uint8_t>(high * 16 + low);",
+					"to": "secret[i] = static_cast<uint8_t>(low * 16 + high);"
+				}
+			]
+		},
+		{
+			"name": "an owner is given back from an answer that was refused",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (why == kRelayListAccepted)\n\t{\n\t\tmemcpy(owner, read, sizeof(read));\n\t}",
+					"to": "\tmemcpy(owner, read, sizeof(read));"
+				}
+			]
+		},
+		{
+			"name": "a region may have capitals",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!allowed || n >= kRelayListRegionLetters)",
+					"to": "if (n >= kRelayListRegionLetters)"
+				}
+			]
+		},
+		{
+			"name": "a relay's host may be an address",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
+					"to": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a secret's hex digits are written the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "AddChar(w, kHex[secret[i] >> 4]);\n\t\t\tAddChar(w, kHex[secret[i] & 15]);",
+					"to": "AddChar(w, kHex[secret[i] & 15]);\n\t\t\tAddChar(w, kHex[secret[i] >> 4]);"
 				}
 			]
 		},
@@ -219,18 +299,28 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "players < 1 || players > maxPlayers || ",
-					"to": "players < 1 || "
+					"from": "l.players < 1 || l.players > l.maxPlayers ||",
+					"to": "l.players < 1 ||"
 				}
 			]
 		},
 		{
-			"name": "a listing with an empty name is sent",
+			"name": "a passTime past what JSON holds exactly is sent",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "!IsListText(name) || ",
+					"from": "l.passTime > kRelayListMostPassTime ||",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a level of any length is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "!IsListText(l.level, kRelayListLevelLetters)",
+					"to": "!IsListText(l.level, 64)"
 				}
 			]
 		},
@@ -241,6 +331,16 @@
 					"file": "3dc/relay_list_text.cpp",
 					"from": "if (!w.fits || w.used > kRelayListMostBodyBytes)",
 					"to": "if (w.used > kRelayListMostBodyBytes)"
+				}
+			]
+		},
+		{
+			"name": "a PUT is sent without its owner",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (owner)\n\t{\n\t\tAddName(w, \"owner\");",
+					"to": "\tif (false)\n\t{\n\t\tAddName(w, \"owner\");"
 				}
 			]
 		},
@@ -259,8 +359,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (FitInto(from, to) == 0 && FitInto(fallback, to) == 0)",
-					"to": "if (FitInto(from, to) == 0)"
+					"from": "if (FitInto(from, to, most) == 0 && FitInto(fallback, to, most) == 0)",
+					"to": "if (FitInto(from, to, most) == 0)"
 				}
 			]
 		},
@@ -309,8 +409,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "|| c == '-';",
-					"to": "|| c == '-' || c == '_';"
+					"from": "|| c == '-';\n\n\t\tif (!allowed)\n",
+					"to": "|| c == '-' || c == '_';\n\n\t\tif (!allowed)\n"
 				}
 			]
 		},
@@ -385,12 +485,22 @@
 			]
 		},
 		{
-			"name": "SOURCE: the list is read into more than 32 KB",
+			"name": "SOURCE: the list of games is read into more than 48 KB",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "char findAnswer[kRelayListMostAnswerBytes];",
-					"to": "char findAnswer[kRelayListMostAnswerBytes * 2];"
+					"from": "char gamesAnswer[kRelayListMostGamesBytes];",
+					"to": "char gamesAnswer[kRelayListMostGamesBytes * 2];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relays are read into more than 4 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "char relaysAnswer[kRelayListMostRelaysBytes];",
+					"to": "char relaysAnswer[kRelayListMostRelaysBytes * 2];"
 				}
 			]
 		},

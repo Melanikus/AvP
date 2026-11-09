@@ -2,16 +2,20 @@
 //
 // HOW IT WORKS
 //
-// The game's main thread says what it wants: this host's game on the list, or off it, or the list read. A thread of this file's own does
-// the HTTPS and puts the answer where the main thread picks it up. The two share one small store, Shared below, and touch it only while
-// holding its lock, and only to copy things in and out. Nothing waits on the network while holding it.
+// The game's main thread says what it wants: this host's game on the list, or off it, or the relays or the games read. A thread of this
+// file's own does the HTTPS, and puts each answer where the main thread picks it up. The two share one small store, Shared below, and
+// touch it only while holding its lock, and only to copy things in and out. Nothing waits on the network while holding it.
+//
+// A host's game: the POST puts it on the list and gives back its owner, the proof that the listing is this host's. Only this file's thread
+// ever holds the owner. Each newer pass the relay gives the host is sent in a PUT, which keeps the listing alive (the list forgets one
+// after 45 seconds), and so is any change to what it shows. When the room ends, a DELETE takes it off.
 //
 // The game's log isn't written from two threads at once, so the list's thread never writes to it. It leaves its news in the store, and
 // the main thread writes it, the next time it calls in here.
 //
-// HTTPS: WinHTTP, Windows' own. TLS 1.2 or newer. Windows checks the server's certificate, and a certificate it doesn't accept ends the
-// call: nothing here can turn that check off. Redirects, cookies and sign-ins are all turned off, since the list never needs them, and a
-// redirect could send the game somewhere else. Each step has 5 seconds.
+// HTTPS: WinHTTP, Windows' own. TLS 1.2 or newer. Windows checks the list's certificate, and a certificate it doesn't accept ends the call:
+// nothing here can turn that check off. Redirects, cookies and sign-ins are all turned off, since the list never needs them, and a redirect
+// could send the game somewhere else. Each step has 5 seconds.
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -33,38 +37,51 @@
 static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStanding == 2 && NGT_PredatorTag == 3 && NGT_Coop == 4 &&
 	NGT_AlienTag == 5, "RelayList_ModeWords in relay_list_text.cpp has the game styles in NETGAME_TYPE's order, and that has changed");
 
+// A level's name on the list is at most what the game's own session holds
+static_assert(kRelayListLevelLetters == kLevelNameSize - 1, "the list's level names are the game's own, kLevelNameSize - 1 long");
+
 namespace
 {
-	// What the list shows of a host's game
+	// What the list shows of a host's game, with what proves the room is its own
 	struct Listing
 	{
+		char region[kRelayListRegionLetters + 1];
+		char code[kRelayCodeLetters + 1];
+		uint8_t pass[kRelayListSecretBytes];
+		uint64_t passTime;
+		int hostMs;
 		char name[kRelayListTextLetters + 1];
-		char level[kRelayListTextLetters + 1];
+		char level[kRelayListLevelLetters + 1];
 		char mode[kRelayListTextLetters + 1];
+		int gameStyle;
+		int levelNumber;
+		int coopLobby;
 		int players;
 		int maxPlayers;
 		int version;
 	};
 
-	bool SameListing(const Listing &a, const Listing &b)
+	// Whether what the list shows of the game is the same: the pass and the round trip aren't shown, so they don't count here
+	bool SameShown(const Listing &a, const Listing &b)
 	{
-		return strcmp(a.name, b.name) == 0 && strcmp(a.level, b.level) == 0 && strcmp(a.mode, b.mode) == 0 && a.players == b.players &&
-			a.maxPlayers == b.maxPlayers && a.version == b.version;
+		return strcmp(a.name, b.name) == 0 && strcmp(a.level, b.level) == 0 && strcmp(a.mode, b.mode) == 0 && a.gameStyle == b.gameStyle &&
+			a.levelNumber == b.levelNumber && a.coopLobby == b.coopLobby && a.players == b.players && a.maxPlayers == b.maxPlayers &&
+			a.version == b.version;
 	}
 
-	// The game's session, as the list shows it
-	Listing ListingOf(const SessionDescription &session)
+	// The game's session, as the list shows it, into a listing that already has its room's region, code and pass
+	void ShowSession(const SessionDescription &session, Listing &l)
 	{
-		Listing l;
-		memset(&l, 0, sizeof(l));
-		RelayList_FitText(session.sessionName, "AVPx game", l.name);
-		RelayList_FitText(session.levelName, "A level", l.level);
-		RelayList_FitText(RelayList_ModeWords(session.gameStyle, session.coopLobby != kCoopLobbyNone), "Game", l.mode);
+		RelayList_FitText(session.sessionName, "AVPx game", l.name, kRelayListTextLetters);
+		RelayList_FitText(session.levelName, "A level", l.level, kRelayListLevelLetters);
+		RelayList_FitText(RelayList_ModeWords(session.gameStyle, session.coopLobby != kCoopLobbyNone), "Game", l.mode, kRelayListTextLetters);
 
+		l.gameStyle = session.gameStyle;
+		l.levelNumber = session.level;
+		l.coopLobby = session.coopLobby;
 		l.maxPlayers = session.maxPlayers < 1 ? 1 : (session.maxPlayers > kRelayMostPlayers ? kRelayMostPlayers : session.maxPlayers);
 		l.players = session.nPlayers < 1 ? 1 : (session.nPlayers > l.maxPlayers ? l.maxPlayers : session.nPlayers);
 		l.version = static_cast<int>(session.version);
-		return l;
 	}
 
 	// Words for the log and the page. Fixed words of the game's own: what a server says is never shown or written down.
@@ -82,17 +99,23 @@ namespace
 		CRITICAL_SECTION lock;
 		HANDLE wake;                     // set when the main thread wants something done
 
-		wchar_t server[256];             // the server's name, set before the thread starts, and never changed
+		wchar_t server[256];             // the list's name, set before the thread starts, and never changed
 
-		// The host's game. listingNumber goes up each time what the list should show changes.
+		// The host's game. listingNumber goes up each time the listing changes, a newer pass included.
 		bool hostWanted;
-		uint8_t token[kRelayTokenBytes];
 		Listing listing;
 		int listingNumber;
 
-		// A room that has ended, whose game should come off the list
+		// A game that should come off the list, known by its region and code
 		bool endWanted;
-		uint8_t endToken[kRelayTokenBytes];
+		char endRegion[kRelayListRegionLetters + 1];
+		char endCode[kRelayCodeLetters + 1];
+
+		// The relays: a call wanted, and the last good answer
+		bool relaysWanted;
+		bool relaysKnown;
+		RelayListRelay relays[kRelayListMostRelays];
+		int relayCount;
 
 		// Finding games: a call wanted, and an answer waiting for the main thread
 		bool findWanted;
@@ -122,7 +145,7 @@ namespace
 	// What a call gave back
 	struct Answer
 	{
-		bool worked;          // it reached the server and got a status
+		bool worked;          // it reached the list and got a status
 		DWORD status;
 		const char *why;      // when it didn't work
 		size_t bytes;
@@ -174,7 +197,7 @@ namespace
 			return a;
 		}
 
-		// Finding the server, connecting, sending and each wait for the answer get 5 seconds each
+		// Finding the list, connecting, sending and each wait for the answer get 5 seconds each
 		WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000);
 
 		// TLS 1.2 or newer, never older. An older Windows that doesn't know 1.3's flag gets 1.2 alone.
@@ -236,7 +259,7 @@ namespace
 			return a;
 		}
 
-		// The answer, up to room bytes. One byte more than room means it's too big, and the rest isn't read.
+		// The answer, up to room bytes. Anything past room means it's too big, and the rest isn't read.
 		size_t got = 0;
 
 		for (;;)
@@ -288,26 +311,59 @@ namespace
 		return a;
 	}
 
-	// The answers to a host's calls aren't used, beyond their status. This is where they go.
-	char hostAnswer[kRelayListMostBodyBytes];
+	// What the list's thread knows of the host's game on the list: whether it's on it, which game (region and code), its owner, and
+	// which listing it last sent. Only the list's thread touches these.
+	struct OnTheList
+	{
+		bool listed;
+		char region[kRelayListRegionLetters + 1];
+		char code[kRelayCodeLetters + 1];
+		uint8_t owner[kRelayListSecretBytes];
+		int listingNumber;
+	};
 
-	// Puts the host's game on the list, or changes what it shows. listed says whether it's on it already, and is changed to say so after.
-	// True if the list shows the listing now.
-	bool PutOnTheList(const uint8_t token[kRelayTokenBytes], const Listing &l, bool *listed)
+	OnTheList onTheList;
+
+	// The answers to a host's calls: a POST's has the owner, and the others aren't read beyond their status
+	char hostAnswer[kRelayListMostOwnerBytes];
+
+	RelayListListing ListingToSend(const Listing &l)
+	{
+		RelayListListing out;
+		out.region = l.region;
+		out.code = l.code;
+		memcpy(out.pass, l.pass, sizeof(out.pass));
+		out.passTime = l.passTime;
+		out.name = l.name;
+		out.level = l.level;
+		out.mode = l.mode;
+		out.gameStyle = l.gameStyle;
+		out.levelNumber = l.levelNumber;
+		out.coopLobby = l.coopLobby;
+		out.players = l.players;
+		out.maxPlayers = l.maxPlayers;
+		out.version = l.version;
+		out.hostMs = l.hostMs;
+		return out;
+	}
+
+	// Puts the host's game on the list with a POST, or renews it with a PUT. True if the list has this listing now.
+	bool SendTheListing(const Listing &l)
 	{
 		char body[kRelayListMostBodyBytes + 1];
+		RelayListListing const send = ListingToSend(l);
 
-		if (!RelayList_ListingBody(token, l.name, l.level, l.mode, l.players, l.maxPlayers, l.version, body, sizeof(body)))
-		{
-			Tell("Relay list: the game's own words couldn't be made into a listing, so it isn't on the list");
-			return false;
-		}
-
-		// A new game is POSTed and a listed one PUT. If the list says otherwise (409: it's listed already, 404: it isn't), the other is
-		// tried, once.
+		// A new listing is POSTed. If a PUT finds the list has forgotten it (404), it's POSTed again, once.
 		for (int tries = 0; tries < 2; tries++)
 		{
-			Answer const a = Call(*listed ? L"PUT" : L"POST", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
+			if (!RelayList_ListingBody(send, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
+			{
+				Tell("Relay list: the game's own words couldn't be made into a listing, so it isn't on the list");
+				return false;
+			}
+
+			bool const posting = !onTheList.listed;
+			Answer const a = Call(posting ? L"POST" : L"PUT", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
 
 			if (!a.worked)
 			{
@@ -315,18 +371,32 @@ namespace
 				return false;
 			}
 
-			if ((!*listed && a.status == 201) || (*listed && a.status == 200))
+			if (posting && a.status == 201)
 			{
-				*listed = true;
+				if (RelayList_ReadOwner(hostAnswer, a.bytes, onTheList.owner) != kRelayListAccepted)
+				{
+					Tell("Relay list: the answer to the game's listing was refused, so it can't be kept up");
+					return false;
+				}
+
+				onTheList.listed = true;
+				Tell("Relay list: the game is on the list");
 				return true;
 			}
 
-			if ((!*listed && a.status == 409) || (*listed && a.status == 404))
+			if (!posting && a.status == 204)
 			{
-				*listed = !*listed;
+				return true;
+			}
+
+			if (!posting && a.status == 404)
+			{
+				onTheList.listed = false;
 				continue;
 			}
 
+			// 403 (a pass that's no longer good), 409 (listed already, by a POST whose answer was lost) or 503 (the list is full): the
+			// next pass, or the list forgetting the old listing, puts it right, so it's tried again later
 			break;
 		}
 
@@ -334,24 +404,26 @@ namespace
 		return false;
 	}
 
-	void TakeOffTheList(const uint8_t token[kRelayTokenBytes])
+	void TakeOffTheList(void)
 	{
 		char body[kRelayListMostBodyBytes + 1];
 
-		if (!RelayList_EndingBody(token, body, sizeof(body)))
+		if (!RelayList_EndingBody(onTheList.region, onTheList.code, onTheList.owner, body, sizeof(body)))
 		{
 			return;
 		}
 
-		// 204: taken off. 403: the server knows no room with that token, which is what's wanted too. A room that ends takes its game off
-		// the list anyway, so a call that fails here leaves nothing behind for long.
+		onTheList.listed = false;
+
+		// 204: taken off. 404: the list had forgotten it already, which is what's wanted too. Either way, a listing the host stops
+		// renewing goes from the list by itself within 45 seconds.
 		Answer const a = Call(L"DELETE", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
 
 		if (!a.worked)
 		{
 			Tell(a.why);
 		}
-		else if (a.status == 204 || a.status == 403)
+		else if (a.status == 204 || a.status == 404)
 		{
 			Tell("Relay list: the game is off the list");
 		}
@@ -361,16 +433,18 @@ namespace
 		}
 	}
 
-	// The answer to a GET: read as hostile (relay_list_text.h), and only kept if all of it is right
-	char findAnswer[kRelayListMostAnswerBytes];
-	RelayListGame foundGames[kRelayListMostGames];
+	// The answers to the two GETs: read as hostile (relay_list_text.h), and only kept if all of it is right
+	char gamesAnswer[kRelayListMostGamesBytes];
+	char relaysAnswer[kRelayListMostRelaysBytes];
+	RelayListGame gamesRead[kRelayListMostGames];
+	RelayListRelay relaysRead[kRelayListMostRelays];
 
-	void ReadTheList(void)
+	void ReadTheGames(void)
 	{
 		wchar_t path[64];
 		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/games?version=%d", kMultiplayerVersion);
 
-		Answer const a = Call(L"GET", path, NULL, findAnswer, sizeof(findAnswer));
+		Answer const a = Call(L"GET", path, NULL, gamesAnswer, sizeof(gamesAnswer));
 		int count = 0;
 		const char *why = a.why;
 
@@ -380,25 +454,55 @@ namespace
 		}
 		else if (a.worked)
 		{
-			RelayListRefusal const refusal = RelayList_ReadGames(findAnswer, a.bytes, kMultiplayerVersion, foundGames, &count);
+			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, kMultiplayerVersion, gamesRead, &count);
 			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
 		}
 
 		EnterCriticalSection(&shared->lock);
-		memcpy(shared->games, foundGames, sizeof(RelayListGame) * static_cast<size_t>(why ? 0 : count));
 		shared->count = why ? 0 : count;
+		memcpy(shared->games, gamesRead, sizeof(RelayListGame) * static_cast<size_t>(shared->count));
 		shared->why = why;
 		shared->answerReady = true;
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	void ReadTheRelays(void)
+	{
+		Answer const a = Call(L"GET", L"/v1/relays", NULL, relaysAnswer, sizeof(relaysAnswer));
+		int count = 0;
+
+		if (!a.worked)
+		{
+			Tell(a.why);
+			return;
+		}
+
+		if (a.status != 200)
+		{
+			Tell(kSaidNo);
+			return;
+		}
+
+		RelayListRefusal const refusal = RelayList_ReadRelays(relaysAnswer, a.bytes, relaysRead, &count);
+
+		if (refusal != kRelayListAccepted)
+		{
+			Tell("Relay list: the list of relays was refused, so the game keeps the last good one, if it has one");
+			return;
+		}
+
+		EnterCriticalSection(&shared->lock);
+		memcpy(shared->relays, relaysRead, sizeof(RelayListRelay) * static_cast<size_t>(count));
+		shared->relayCount = count;
+		shared->relaysKnown = true;
+		LeaveCriticalSection(&shared->lock);
+	}
+
 	DWORD WINAPI ListThread(void *)
 	{
-		// What this thread has put on the list: whether the game is on it, for which room, and which listing it shows
-		bool listed = false;
-		uint8_t listedToken[kRelayTokenBytes] = {};
-		int listedNumber = -1;
 		bool tryAgainLater = false;
+		onTheList.listed = false;
+		onTheList.listingNumber = -1;
 
 		for (;;)
 		{
@@ -407,54 +511,46 @@ namespace
 
 			EnterCriticalSection(&shared->lock);
 			bool const end = shared->endWanted;
-			uint8_t endToken[kRelayTokenBytes];
-			memcpy(endToken, shared->endToken, sizeof(endToken));
+			char endRegion[kRelayListRegionLetters + 1];
+			char endCode[kRelayCodeLetters + 1];
+			memcpy(endRegion, shared->endRegion, sizeof(endRegion));
+			memcpy(endCode, shared->endCode, sizeof(endCode));
 			shared->endWanted = false;
 
 			bool const host = shared->hostWanted;
-			uint8_t token[kRelayTokenBytes];
-			memcpy(token, shared->token, sizeof(token));
 			Listing const listing = shared->listing;
 			int const number = shared->listingNumber;
 
+			bool const relays = shared->relaysWanted;
+			shared->relaysWanted = false;
 			bool const find = shared->findWanted;
 			shared->findWanted = false;
 			LeaveCriticalSection(&shared->lock);
 
-			if (end)
+			// The game that ended comes off the list, if it's the one on it
+			if (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)
 			{
-				TakeOffTheList(endToken);
-
-				if (memcmp(endToken, listedToken, sizeof(endToken)) == 0)
-				{
-					listed = false;
-				}
+				TakeOffTheList();
 			}
 
 			tryAgainLater = false;
 
 			if (host)
 			{
-				// Another room is another game, not yet on the list
-				if (memcmp(token, listedToken, sizeof(token)) != 0)
+				// Another room is another game, not yet on the list. The one before it, if it was, goes when the list forgets it.
+				if (strcmp(listing.region, onTheList.region) != 0 || strcmp(listing.code, onTheList.code) != 0)
 				{
-					listed = false;
-					memcpy(listedToken, token, sizeof(token));
-					listedNumber = -1;
+					onTheList.listed = false;
+					memcpy(onTheList.region, listing.region, sizeof(onTheList.region));
+					memcpy(onTheList.code, listing.code, sizeof(onTheList.code));
+					onTheList.listingNumber = -1;
 				}
 
-				if (number != listedNumber)
+				if (number != onTheList.listingNumber)
 				{
-					bool const wasListed = listed;
-
-					if (PutOnTheList(token, listing, &listed))
+					if (SendTheListing(listing))
 					{
-						listedNumber = number;
-
-						if (!wasListed)
-						{
-							Tell("Relay list: the game is on the list");
-						}
+						onTheList.listingNumber = number;
 					}
 					else
 					{
@@ -463,14 +559,19 @@ namespace
 				}
 			}
 
+			if (relays)
+			{
+				ReadTheRelays();
+			}
+
 			if (find)
 			{
-				ReadTheList();
+				ReadTheGames();
 			}
 		}
 	}
 
-	// Makes the store and starts the thread, the first time either is needed. False if there's no relay server, or it can't start.
+	// Makes the store and starts the thread, the first time either is needed. False if there's no list set, or it can't start.
 	bool Start(void)
 	{
 		if (shared)
@@ -542,8 +643,14 @@ namespace
 		}
 	}
 
-	// The page asked with no relay server set: its answer, which needs no thread
-	bool noServerAnswerWaiting = false;
+	void Wake(void)
+	{
+		SetEvent(shared->wake);
+		WriteTheNews();
+	}
+
+	// The page asked with no list to ask: its answer, which needs no thread
+	bool noListAnswerWaiting = false;
 }
 
 const char *Relay_ServerName(void)
@@ -569,26 +676,57 @@ const char *Relay_ServerName(void)
 	return name;
 }
 
-void RelayList_HostRoomOpened(const uint8_t token[kRelayTokenBytes], const char code[kRelayCodeLetters], const SessionDescription &session)
+void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,
+	int hostMs, const SessionDescription &session)
 {
-	(void)code;   // the list gives a game its code from the token: it's here for networking.cpp to say which room this is
-
-	if (!token || !Start())
+	// What networking.cpp hands over is checked here too: a room the list couldn't take isn't sent
+	if (!RelayList_IsRegion(region) || !code || !Relay_IsCode(code, kRelayCodeLetters) || !pass || !Start())
 	{
 		return;
 	}
 
-	Listing const l = ListingOf(session);
+	Listing l;
+	memset(&l, 0, sizeof(l));
+	memcpy(l.region, region, strlen(region) + 1);
+	memcpy(l.code, code, kRelayCodeLetters);
+	memcpy(l.pass, pass, sizeof(l.pass));
+	l.passTime = passTime;
+	l.hostMs = hostMs;
+	ShowSession(session, l);
 
 	EnterCriticalSection(&shared->lock);
 	shared->hostWanted = true;
-	memcpy(shared->token, token, sizeof(shared->token));
 	shared->listing = l;
 	shared->listingNumber++;
 	LeaveCriticalSection(&shared->lock);
 
-	SetEvent(shared->wake);
-	WriteTheNews();
+	Wake();
+}
+
+void RelayList_HostKept(const uint8_t pass[kRelayListSecretBytes], uint64_t passTime, int hostMs)
+{
+	if (!shared || !pass)
+	{
+		return;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	bool const wanted = shared->hostWanted;
+
+	if (wanted)
+	{
+		memcpy(shared->listing.pass, pass, sizeof(shared->listing.pass));
+		shared->listing.passTime = passTime;
+		shared->listing.hostMs = hostMs;
+		shared->listingNumber++;
+	}
+
+	LeaveCriticalSection(&shared->lock);
+
+	if (wanted)
+	{
+		Wake();
+	}
 }
 
 void RelayList_HostSessionNow(const SessionDescription &session)
@@ -598,16 +736,21 @@ void RelayList_HostSessionNow(const SessionDescription &session)
 		return;
 	}
 
-	Listing const l = ListingOf(session);
 	bool changed = false;
 
 	EnterCriticalSection(&shared->lock);
 
-	if (shared->hostWanted && !SameListing(l, shared->listing))
+	if (shared->hostWanted)
 	{
-		shared->listing = l;
-		shared->listingNumber++;
-		changed = true;
+		Listing now = shared->listing;
+		ShowSession(session, now);
+
+		if (!SameShown(now, shared->listing))
+		{
+			shared->listing = now;
+			shared->listingNumber++;
+			changed = true;
+		}
 	}
 
 	LeaveCriticalSection(&shared->lock);
@@ -635,7 +778,8 @@ void RelayList_HostRoomClosed(void)
 	{
 		shared->hostWanted = false;
 		shared->endWanted = true;
-		memcpy(shared->endToken, shared->token, sizeof(shared->endToken));
+		memcpy(shared->endRegion, shared->listing.region, sizeof(shared->endRegion));
+		memcpy(shared->endCode, shared->listing.code, sizeof(shared->endCode));
 		ended = true;
 	}
 
@@ -649,11 +793,47 @@ void RelayList_HostRoomClosed(void)
 	WriteTheNews();
 }
 
+void RelayList_FindRelays(void)
+{
+	if (!Start())
+	{
+		return;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->relaysWanted = true;
+	LeaveCriticalSection(&shared->lock);
+
+	Wake();
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	*count = 0;
+
+	if (!shared)
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	bool const known = shared->relaysKnown;
+
+	if (known)
+	{
+		*count = shared->relayCount;
+		memcpy(relays, shared->relays, sizeof(RelayListRelay) * static_cast<size_t>(shared->relayCount));
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return known;
+}
+
 void RelayList_FindGames(void)
 {
 	if (!Start())
 	{
-		noServerAnswerWaiting = true;
+		noListAnswerWaiting = true;
 		return;
 	}
 
@@ -661,7 +841,7 @@ void RelayList_FindGames(void)
 	shared->findWanted = true;
 	LeaveCriticalSection(&shared->lock);
 
-	SetEvent(shared->wake);
+	Wake();
 }
 
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
@@ -669,10 +849,10 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
 	*count = 0;
 	*why = NULL;
 
-	if (noServerAnswerWaiting)
+	if (noListAnswerWaiting)
 	{
-		noServerAnswerWaiting = false;
-		*why = kNoServer;
+		noListAnswerWaiting = false;
+		*why = Relay_ServerName()[0] ? kCantStart : kNoServer;
 		return true;
 	}
 
