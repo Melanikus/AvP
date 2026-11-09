@@ -14,6 +14,7 @@
 #include "net_checks.h"
 #include "net_relay.h"
 #include "net_peer_v2.h"
+#include "net_identity_run.h"
 #include "relay_list.h"
 
 #include <algorithm>
@@ -760,6 +761,61 @@ static std::deque<WaitingDatagram> datagramsWaiting;
 
 // The last thing the game sent from that socket, byte for byte
 static std::vector<uint8_t> lastDatagramSent;
+
+// Added 2026-11-09 by Melanikus for the AvP port (#21): the identity store's stand-in (net_identity_store.h). It finds what the test says,
+// and gives back a whole identity, made fresh, where the real store would give the kept one or a new one it has kept. The real store, with
+// Windows' sealing and the file, is net_identity_store_test's: here the test sees what networking.cpp does with each answer.
+static NetIdentityStoreResult storeFinds = kNetIdentityStoreNoFile;
+static bool storeKeepFails = false;
+static int storeLoads = 0, storeMakes = 0;
+
+NetIdentityStoreResult NetIdentityStore_Load(NetIdentity *out, const char **why)
+{
+	storeLoads++;
+
+	if (why)
+	{
+		*why = storeFinds == kNetIdentityStoreLoaded || storeFinds == kNetIdentityStoreNoFile ? NULL : "the test's stand-in says so";
+	}
+
+	if (storeFinds == kNetIdentityStoreLoaded)
+	{
+		return NetIdentity_Make(out) ? kNetIdentityStoreLoaded : kNetIdentityStoreCantRead;
+	}
+
+	return storeFinds;
+}
+
+bool NetIdentityStore_MakeAndKeep(NetIdentity *out)
+{
+	storeMakes++;
+
+	if (storeKeepFails || !NetIdentity_Make(out))
+	{
+		return false;
+	}
+
+	storeFinds = kNetIdentityStoreLoaded;   // kept, so the next run finds it
+	return true;
+}
+
+const char *NetIdentityStore_Words(NetIdentityStoreResult result)
+{
+	return result == kNetIdentityStoreNoFile ? "none is kept yet" : "the kept one can't be used";
+}
+
+static bool AllZeroBytes(const uint8_t *bytes, size_t size)
+{
+	for (size_t i = 0; i < size; i++)
+	{
+		if (bytes[i] != 0)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay, as far as handshake B goes. A joiner runs
 // B over its port on the relay before ENet connects, so a join through the relay needs a host that answers: this is the real host's side
@@ -3517,6 +3573,111 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: or the next level starts");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (#21): THIS RUN'S IDENTITY, KEPT BETWEEN RUNS (net_identity_run.h). The store's stand-in
+// says what it found. On the first run, one is made and kept. On the next, the kept one is used. A kept one that can't be used is never
+// replaced without the player's yes, and until then nothing goes to a relay. The player's yes is refused while a game is open.
+static void RestartTheNetwork()
+{
+	EndTheGame();
+	Net_Deinitialise();
+	logLines.clear();
+	Net_Initialise();
+}
+
+static size_t SentToTheRelaySince(size_t first)
+{
+	size_t count = 0;
+
+	for (size_t i = first; i < datagramsSentTo.size(); i++)
+	{
+		count += datagramsSentTo[i].host == kRelayHost ? 1 : 0;
+	}
+
+	return count;
+}
+
+static void TestTheKeptIdentity()
+{
+	printf("This run's identity, kept between runs (#21)\n");
+	uint8_t statics[kNetIdentityStaticBytes];
+	uint8_t fingerprint[kNetIdentityFingerprintBytes];
+	uint8_t worked[kNetIdentityFingerprintBytes];
+
+	// The first run: none is kept, so one is made and kept, once
+	storeFinds = kNetIdentityStoreNoFile;
+	int const loadsAtFirst = storeLoads;
+	int const makesAtFirst = storeMakes;
+	RestartTheNetwork();
+	Check(storeLoads == loadsAtFirst && storeMakes == makesAtFirst, "starting the network doesn't look for the identity: only a relay's first use, or the page, does");
+	Check(Net_KeptIdentityResult() == kNetIdentityStoreNoFile && storeLoads == loadsAtFirst + 1 && storeMakes == makesAtFirst + 1
+		&& LogHas("net: a new identity was made for this player and kept"), "the first run: none is kept, so one is made and kept, and the log says so");
+	memset(statics, 0xA5, sizeof(statics));
+	memset(fingerprint, 0xA5, sizeof(fingerprint));
+	Check(Net_OurIdentity(statics, fingerprint) && storeLoads == loadsAtFirst + 1 && storeMakes == makesAtFirst + 1,
+		"the page gets this run's identity, without looking again");
+	Check(NetIdentity_Fingerprint(statics, statics + kNetCryptoP384PublicBytes, worked) && memcmp(worked, fingerprint, sizeof(worked)) == 0,
+		"and the fingerprint it gets is the one its public halves make");
+	Check(!Net_OurIdentity(NULL, fingerprint) && !Net_OurIdentity(statics, NULL), "nowhere to put them is refused");
+
+	// The next run: the kept one, and nothing new made
+	RestartTheNetwork();
+	Check(Net_KeptIdentityResult() == kNetIdentityStoreLoaded && storeMakes == makesAtFirst + 1 && LogHas("net: this player's identity is the one kept from earlier runs"),
+		"the next run uses the kept one, and makes none");
+
+	// A kept one that can't be used: none is made, and nothing goes to a relay, until the player's yes
+	NetIdentityStoreResult const unusable[] = { kNetIdentityStoreRefused, kNetIdentityStoreCantUnseal, kNetIdentityStoreCantRead };
+
+	for (NetIdentityStoreResult const found : unusable)
+	{
+		std::string const which = " (" + std::string(found == kNetIdentityStoreRefused ? "refused" : found == kNetIdentityStoreCantUnseal ? "not opened for this user" : "not read") + ")";
+		storeFinds = found;
+		RestartTheNetwork();
+		int const loads = storeLoads;
+		int const makes = storeMakes;
+		memset(statics, 0xA5, sizeof(statics));
+		memset(fingerprint, 0xA5, sizeof(fingerprint));
+		Check(!Net_OurIdentity(statics, fingerprint) && AllZeroBytes(statics, sizeof(statics)) && AllZeroBytes(fingerprint, sizeof(fingerprint))
+			&& Net_KeptIdentityResult() == found && storeLoads == loads + 1 && storeMakes == makes,
+			"a kept identity that can't be used" + which + ": none is made, the page gets only 0s, and it's looked for once");
+		Check(LogHas("net: the kept identity: the kept one can't be used (the test's stand-in says so)")
+			&& LogHas("net: so there's no identity this run until the player chooses to make a new one, and nothing goes through a relay"),
+			"and the log says what was found, and what it means" + which);
+		relayNamed = true;
+		size_t const sentBefore = datagramsSentTo.size();
+		Check(HostAGame() == NET_OK && SentToTheRelaySince(sentBefore) == 0, "a game hosted then sends nothing to the relay: it's open on this network only" + which);
+		EndTheGame();
+		relayNamed = false;
+	}
+
+	// The player's yes: refused while a game is open, then a new one made and kept, and nothing left to ask
+	Check(HostAGame() == NET_OK, "a game hosted on this network");
+	int const makesBeforeYes = storeMakes;
+	Check(!Net_MakeNewIdentity() && storeMakes == makesBeforeYes && LogHas("net: a new identity isn't made while a network game is open"),
+		"the player's yes is refused while a network game is open, and nothing is made");
+	EndTheGame();
+	Check(Net_MakeNewIdentity() && storeMakes == makesBeforeYes + 1 && Net_KeptIdentityResult() == kNetIdentityStoreLoaded && Net_OurIdentity(statics, fingerprint),
+		"once it's over, the player's yes makes a new one and keeps it, and there's nothing left to ask");
+
+	// A yes whose new identity can't be kept: none this run
+	storeKeepFails = true;
+	Check(!Net_MakeNewIdentity() && !Net_OurIdentity(statics, fingerprint) && AllZeroBytes(fingerprint, sizeof(fingerprint)),
+		"a yes whose new identity can't be kept leaves none this run");
+
+	// The first run, with an identity that can't be kept: none this run, and it's tried once
+	storeFinds = kNetIdentityStoreNoFile;
+	RestartTheNetwork();
+	int const makesUnkept = storeMakes;
+	Check(!Net_OurIdentity(statics, fingerprint) && !Net_OurIdentity(statics, fingerprint) && storeMakes == makesUnkept + 1
+		&& LogHas("net: a new identity couldn't be made and kept, so there's none this run, and nothing goes through a relay"),
+		"an identity that can't be kept on the first run: none this run, tried once, and the log says so");
+	storeKeepFails = false;
+
+	// As the tests after this expect: the network started, with an identity to use
+	storeFinds = kNetIdentityStoreLoaded;
+	RestartTheNetwork();
+	Check(Net_OurIdentity(statics, fingerprint), "the network started again, with the kept identity");
+}
+
 // The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
 // to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
 // The three numbers the settings file holds, one per line, as a player's file has them
@@ -3624,6 +3785,7 @@ int main()
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
+	TestTheKeptIdentity();
 	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();

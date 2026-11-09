@@ -2754,6 +2754,116 @@
 					"to": "return side && CopyCheckCode(side->CheckCode(), out);"
 				}
 			]
+		},
+		{
+			"name": "a kept identity that can't be used is replaced without the player's yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityKept != kNetIdentityStoreNoFile)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the kept identity is looked for again at every use",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityLookedFor)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kept identity that loads isn't used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityKept == kNetIdentityStoreLoaded)\n\t{\n\t\tLogString(\"net: this player's identity is the one kept from earlier runs\");\n\t\treturn true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the kept identity isn't looked for again when the network starts again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trunIdentityLookedFor = false;\n\trunIdentityKept = kNetIdentityStoreNoFile;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the player's yes is taken while a network game is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (host)\n\t{\n\t\tLogString(\"net: a new identity isn't made while a network game is open\");",
+					"to": "\tif (false)\n\t{\n\t\tLogString(\"net: a new identity isn't made while a network game is open\");"
+				}
+			]
+		},
+		{
+			"name": "after the player's yes, the page still has something to ask",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trunIdentityKept = kNetIdentityStoreLoaded;\n\tLogString(\"net: a new identity was made for this player, as they asked",
+					"to": "\tLogString(\"net: a new identity was made for this player, as they asked"
+				}
+			]
+		},
+		{
+			"name": "the page gets a fingerprint that isn't the identity's",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tmemcpy(fingerprint, runIdentity.fingerprint, kNetIdentityFingerprintBytes);\n\treturn true;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "with no identity, the page gets whatever was in its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tmemset(fingerprint, 0, kNetIdentityFingerprintBytes);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the page's call with nowhere to put the identity isn't refused",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!statics || !fingerprint)\n\t{\n\t\treturn false;\n\t}\n\n\tif (!RelayIdentityReady())",
+					"to": "\tif (!RelayIdentityReady())"
+				}
+			]
+		},
+		{
+			"name": "the first run never makes an identity",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!NetIdentityStore_MakeAndKeep(&runIdentity))\n\t{\n\t\tLogString(\"net: a new identity couldn't be made and kept, so there's none this run, and nothing",
+					"to": "if (true)\n\t{\n\t\tLogString(\"net: a new identity couldn't be made and kept, so there's none this run, and nothing"
+				}
+			]
+		},
+		{
+			"name": "the page's question doesn't look for the kept identity first",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n\tRelayIdentityReady();\n",
+					"to": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n"
+				}
+			]
 		}
 	]
 }
