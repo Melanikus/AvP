@@ -2855,11 +2855,17 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 
 bool HudsonPlay_RibbonIsOn()
 {
-	return ribbonIsOn;
+	return HudsonRunIsOn && ribbonIsOn;
 }
 
 void HudsonPlay_RibbonCorners(std::vector<HudsonPlayRibbonCorner> &corners)
 {
+	if (!HudsonRunIsOn)
+	{
+		corners.clear();
+		return;
+	}
+
 	corners.clear();
 
 	// The route goes in first, because that's what's being watched. It starts from the point he last passed.

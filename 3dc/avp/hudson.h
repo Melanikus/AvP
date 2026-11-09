@@ -20,6 +20,8 @@ typedef struct matrixch MATRIXCH;
 typedef struct strategyblock STRATEGYBLOCK;
 
 // True only when the command line asked for a run, with -dev and -hudson. In a normal game this is false for the whole of the game, and everything that asks it carries on as if none of this were here.
+// So that a player's game can never run Hudson, every one of Hudson's functions the game calls starts by doing nothing unless this is true, and gives back
+// what it would with no run. tools/check-hudson-asleep.ps1 checks that, on every pull request and before a release.
 extern bool HudsonRunIsOn;
 
 // break=prisms: the shadow prisms aren't sent to the card, so that a run can see Hudson's vision notice. False in any other run.

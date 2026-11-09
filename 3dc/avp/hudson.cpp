@@ -817,12 +817,13 @@ static bool Hudson_FindTheSecondScreen(RECT *area);
 
 int Hudson_CheckBeforeStarting()
 {
-	gameThread = GetCurrentThreadId();
-
 	if (!HudsonRunIsOn)
 	{
 		return 0;
 	}
+
+	// The watchdog started below asks Windows about this thread
+	gameThread = GetCurrentThreadId();
 
 	if (refusalFromReading)
 	{
@@ -1031,6 +1032,11 @@ int Hudson_CheckBeforeStarting()
 
 bool Hudson_RunFolder(char *folder, size_t size)
 {
+	if (!HudsonRunIsOn)
+	{
+		return false;
+	}
+
 	char exePath[MAX_PATH] = { 0 };
 	DWORD const pathLength = GetModuleFileNameA(NULL, exePath, sizeof(exePath));
 
@@ -1228,6 +1234,11 @@ void Hudson_SayWhereTheWindowWent()
 
 void Hudson_SetVideoSettings()
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	// With no second screen, or with screen=main, the window goes in the top left of the main screen, so it has to fit there. On a second screen it's made smaller if it has to be. A size somebody asked for and doesn't fit is refused in Hudson_CheckBeforeStarting. One nobody asked for just gives way.
 	bool const fits = HudsonPlan_SizeFits(plan.width, plan.height, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
 	int const width = (fits || plan.sizeAsked) ? plan.width : kHudsonDefaultWidth;
@@ -1247,12 +1258,12 @@ void Hudson_SetVideoSettings()
 
 int Hudson_MarineEpisode()
 {
-	return episode;
+	return HudsonRunIsOn ? episode : -1;
 }
 
 int Hudson_Environment()
 {
-	return environment;
+	return HudsonRunIsOn ? environment : -1;
 }
 
 int Hudson_CustomMapPlace()
@@ -1262,22 +1273,22 @@ int Hudson_CustomMapPlace()
 
 bool Hudson_PlayAsAlien()
 {
-	return plan.playAsAlien;
+	return HudsonRunIsOn && plan.playAsAlien;
 }
 
 int Hudson_ListPlace()
 {
-	return plan.listPlaceAsked ? plan.listPlace : -1;
+	return (HudsonRunIsOn && plan.listPlaceAsked) ? plan.listPlace : -1;
 }
 
 bool Hudson_PlayAsPredator()
 {
-	return plan.playAsPredator;
+	return HudsonRunIsOn && plan.playAsPredator;
 }
 
 int Hudson_ClassSlider()
 {
-	return plan.classSlider;
+	return HudsonRunIsOn ? plan.classSlider : 0;
 }
 
 // The game's own way out of a level, so that its shutdown gets tested as well.
@@ -1299,6 +1310,11 @@ static int lampCompareNumber = 0;
 
 bool Hudson_LampCompareIsDue()
 {
+	if (!HudsonRunIsOn)
+	{
+		return false;
+	}
+
 	bool const due = lampCompareIsDue;
 
 	lampCompareIsDue = false;
@@ -1308,6 +1324,11 @@ bool Hudson_LampCompareIsDue()
 
 void Hudson_SaveLampCompareScreen(const char *stage)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	char const *const folder = GetSaveFolderPath();
 	std::string const pictures = std::string(folder ? folder : "") + "pictures\\";
 	char name[48] = { 0 };
@@ -1340,6 +1361,11 @@ void Hudson_SaveLampCompareScreen(const char *stage)
 
 void Hudson_SaveLampCompareSurface(struct IDirect3DTexture9 *surface)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	char const *const folder = GetSaveFolderPath();
 	std::string const pictures = std::string(folder ? folder : "") + "pictures\\";
 	char name[48] = { 0 };
@@ -2377,6 +2403,11 @@ static STRATEGYBLOCK *TheMarine()
 
 void Hudson_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	if (marineStage == kMarineWalking && marine == TheMarine())
 	{
 		HudsonNav_MarineLanded(marine, fallingSpeed, wouldKillHim);
@@ -4116,6 +4147,11 @@ static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)
 
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	if (marineStage == kMarineNotMade || !NAME_ISEQUAL(block->SBname, marineName))
 	{
 		return;
@@ -4442,6 +4478,11 @@ static void WatchTheMarine(LONG frame)
 
 void Hudson_SetTheMode()
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	if (plan.lighting == kHudsonLightingAsItIs && plan.shadows == kHudsonShadowsAsTheyAre)
 	{
 		return;
@@ -4962,6 +5003,11 @@ bool Hudson_CustomMapHasEnded()
 
 void Hudson_LooksForThePageAfterAMap(bool thePageIsBack)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	static int frames = 0;
 
 	frames++;
@@ -4975,6 +5021,11 @@ void Hudson_LooksForThePageAfterAMap(bool thePageIsBack)
 
 void Hudson_SaveThePage(const char *name)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	char const *const folder = GetSaveFolderPath();
 	std::string const pictures = std::string(folder ? folder : "") + "pictures\\";
 
@@ -4993,6 +5044,11 @@ void Hudson_SaveThePage(const char *name)
 
 void Hudson_TakePictureIfDue()
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	SayTheHostIsReady();
 
 	if (plan.recordVideo)
@@ -5098,6 +5154,11 @@ static void PutTheCameraBehindHim(const STRATEGYBLOCK *marine, VECTORCH *place)
 
 void Hudson_PointTheCamera(VECTORCH *place, MATRIXCH *turn)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	STRATEGYBLOCK *const marine = TheMarine();
 
 	if (!marine)
@@ -5134,6 +5195,11 @@ void Hudson_PointTheCamera(VECTORCH *place, MATRIXCH *turn)
 
 bool Hudson_KeepsStill(STRATEGYBLOCK *block)
 {
+	if (!HudsonRunIsOn)
+	{
+		return false;
+	}
+
 	if (HudsonWorldIsLive)
 	{
 		return false;
@@ -5261,6 +5327,11 @@ static DWORD walkMayStartAt = 0;   // when a walk can start: see "A WALK". 0 is 
 
 void Hudson_TheLevelStartedAgain()
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	levelStartedAgain = true;
 
 	// With dieat=, the walk is for after the restart
@@ -5337,7 +5408,7 @@ bool Hudson_NoFriendlyFire()
 
 int Hudson_Difficulty()
 {
-	return plan.difficulty;
+	return HudsonRunIsOn ? plan.difficulty : 0;
 }
 
 // Asked every frame he's out, from single player's path (pmove.cpp) and from a co-op host's (Coop_WhileOut). One press each time he goes out: a
@@ -5940,6 +6011,11 @@ static bool aimedThisFrame = false;
 
 void Hudson_EndOfFrame()
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	HoldToTheFrameRate();
 	NoteHowFastThisFrameWent();
 
@@ -7563,6 +7639,11 @@ static bool netPictureIsTheSmokeTest = false;
 
 const char *Hudson_NetPictureKind()
 {
+	if (!HudsonRunIsOn)
+	{
+		return "net";
+	}
+
 	bool const isTheSmokeTest = netPictureIsTheSmokeTest;
 
 	netPictureIsTheSmokeTest = false;
@@ -7571,6 +7652,11 @@ const char *Hudson_NetPictureKind()
 
 bool Hudson_NetPictureIsDue()
 {
+	if (!HudsonRunIsOn)
+	{
+		return false;
+	}
+
 	bool const due = netPictureIsDue;
 
 	if (due)
@@ -7718,6 +7804,11 @@ bool Hudson_NetIsHost()
 
 void Hudson_NetSay(const char *stage)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	_snprintf(netStage, sizeof(netStage) - 1, "%s", stage);
 	netStage[sizeof(netStage) - 1] = 0;
 	LogString(std::string("net: ") + stage);
@@ -10386,6 +10477,11 @@ static void WalkHim(PLAYER_STATUS *status)
 
 void Hudson_NetInput(void *playerStatus)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)
 	{
 		WalkHim((PLAYER_STATUS *)playerStatus);
@@ -10699,6 +10795,11 @@ void Hudson_NetInput(void *playerStatus)
 
 void Hudson_NetStopBecause(const char *why)
 {
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
 	Hudson_NetSay(why);
 	LogErrorString(std::string("net: it stopped here: ") + why);
 	EndAtOnce(why, kHudsonExitNetStopped);
