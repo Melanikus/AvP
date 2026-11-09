@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"docs",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a copy's sha256 is never compared",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "return bytes.size() == file.bytes && Sha256Hex(bytes) == file.sha256;",
+					"to": "return bytes.size() == file.bytes;"
+				}
+			]
+		},
+		{
+			"name": "a copy's size is never compared",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "return bytes.size() == file.bytes && Sha256Hex(bytes) == file.sha256;",
+					"to": "return Sha256Hex(bytes) == file.sha256;"
+				}
+			]
+		},
+		{
+			"name": "the sha256 is written wrong, half of each byte twice",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "text += hexDigits[b & 15];",
+					"to": "text += hexDigits[b >> 4];"
+				}
+			]
+		},
+		{
+			"name": "a file in the folder that COPIED.md doesn't list is let pass",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "extra.push_back(name);",
+					"to": "(void)name;"
+				}
+			]
+		},
+		{
+			"name": "a sha256 that isn't 64 small hex digits is read",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "if (!IsSmallHex(file.sha256, 64))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name with a folder in it is read",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "if (!IsPlainName(file.name))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a file listed twice is read",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "if (!seen.insert(file.name).second)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a page with no From: line is read",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "if (commit->empty())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a size with a 0 in front is read",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": " || (bytes.size() > 1 && bytes[0] == '0')",
+					"to": " || false"
+				}
+			]
+		},
+		{
+			"name": "a line naming another hash is read as a sha256",
+			"changes": [
+				{
+					"file": "tests/protocol_copy_test.cpp",
+					"from": "line.compare(end + 1, 10, \": sha256 `\") != 0",
+					"to": "false"
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DWIN32_LEAN_AND_MEAN /DNDEBUG
+tests/protocol_copy_test.cpp
+bcrypt.lib

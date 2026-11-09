@@ -4,7 +4,7 @@ Written 2026-11-09 by Melanikus, at the owner's word: "20 years from now, we won
 
 **Who this is for:** you, years from now, with this repository and none of our accounts, keys or tokens. Nobody can give you permission, and you don't need it. This page is how you build the game, decide which servers it trusts, and release it under your own name.
 
-**Two repositories go together.** The game is here. Its online server, and the design of the cryptography both use (CRYPTO.md, PROTOCOL.md), are in **AVPx-Dedicated-Server** (github.com/Melanikus/AVPx-Dedicated-Server when this was written). That repository has its own TAKING-OVER.md, for running a server and approving players. **If you find one of the two, look for the other, and keep them together:** the game's online play can't be understood, or trusted, without the server's design.
+**Two repositories go together.** The game is here. Its online server is in **AVPx-Dedicated-Server** (github.com/Melanikus/AVPx-Dedicated-Server when this was written), with its own TAKING-OVER.md for running a server and approving players. The design both are built from, CRYPTO.md and PROTOCOL.md, is written there, and **copied here, byte for byte, in `docs/protocol/`**. COPIED.md there names the server commit each came from, with its sha256, and `tests/protocol_copy_test` fails if a copy drifts. So this repository alone is enough to understand and rebuild online play. If you find the other one too, keep them together.
 
 **Marked [BETA.2]:** parts being built for beta.2 (BETA2-PLAN, "Built to outlive us") that may not be in your copy. If one is missing, the design is still what's written here.
 
