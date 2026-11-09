@@ -73,6 +73,10 @@ static size_t TotalBytes(const ENetBuffer *buffers, size_t count)
 }
 
 // A datagram outside a connection: the connection number "none", the checksum, then the command. A COOKIE is patch 006's token answer.
+// Modified 2026-11-09 by Melanikus for the AvP port: the connection number must be exactly "none" (ENET_PROTOCOL_MAXIMUM_PEER_ID, with no
+// flags, as patch 006 writes it) before byte 6 is read as the command. A datagram of a connection that carries its sent time has a 4-byte
+// header, so its command is at byte 8, and its byte 6 is part of the checksum: one in 16 of those looked like a COOKIE, and the count of
+// what the hook saw then failed by chance (GitHub, split-120's first run: "2 token answer(s)" with only 2 datagrams in all).
 static bool IsACookie(const ENetBuffer *buffers, size_t count)
 {
 	std::vector<uint8_t> all;
@@ -84,7 +88,16 @@ static bool IsACookie(const ENetBuffer *buffers, size_t count)
 	}
 
 	size_t const commandAt = sizeof(enet_uint16) + sizeof(enet_uint32);
-	return all.size() > commandAt && (all[commandAt] & ENET_PROTOCOL_COMMAND_MASK) == ENET_PROTOCOL_COMMAND_COOKIE;
+
+	if (all.size() <= commandAt)
+	{
+		return false;
+	}
+
+	enet_uint16 connection = 0;
+	memcpy(&connection, all.data(), sizeof(connection));
+	return ENET_NET_TO_HOST_16(connection) == ENET_PROTOCOL_MAXIMUM_PEER_ID
+		&& (all[commandAt] & ENET_PROTOCOL_COMMAND_MASK) == ENET_PROTOCOL_COMMAND_COOKIE;
 }
 
 static int ENET_CALLBACK TheHook(ENetHost *host, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount)
@@ -290,6 +303,31 @@ static void TestFailingHook()
 	EndHosts(&pair);
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: the test's own reader of token answers, on two datagrams made by hand, so its rule is
+// tried every run and not only when a checksum happens to look like a COOKIE. A connection's datagram with its sent time, whose byte 6
+// (in its checksum) reads as a COOKIE, isn't one; patch 006's own layout is.
+static void TestTheCookieReader()
+{
+	printf("\n0. What the test counts as a token answer\n");
+	uint8_t connected[12] = {};
+	enet_uint16 const peer = ENET_HOST_TO_NET_16(static_cast<enet_uint16>(1 | ENET_PROTOCOL_HEADER_FLAG_SENT_TIME));
+	memcpy(connected, &peer, sizeof(peer));
+	connected[6] = ENET_PROTOCOL_COMMAND_COOKIE;   // part of the checksum, by chance
+	connected[8] = ENET_PROTOCOL_COMMAND_VERIFY_CONNECT | ENET_PROTOCOL_COMMAND_FLAG_ACKNOWLEDGE;
+	uint8_t cookie[12] = {};
+	enet_uint16 const none = ENET_HOST_TO_NET_16(static_cast<enet_uint16>(ENET_PROTOCOL_MAXIMUM_PEER_ID));
+	memcpy(cookie, &none, sizeof(none));
+	cookie[6] = ENET_PROTOCOL_COMMAND_COOKIE;
+	ENetBuffer one;
+	one.data = connected;
+	one.dataLength = sizeof(connected);
+	ENetBuffer two;
+	two.data = cookie;
+	two.dataLength = sizeof(cookie);
+	HookCheck(!IsACookie(&one, 1), "a connection's datagram whose checksum happens to read as a COOKIE at byte 6 isn't counted as a token answer");
+	HookCheck(IsACookie(&two, 1), "and patch 006's token answer is: the connection number \"none\", the checksum, then COOKIE");
+}
+
 int main()
 {
 	if (enet_initialize() != 0)
@@ -299,6 +337,7 @@ int main()
 	}
 
 	printf("ENet patch 007: every datagram a host sends goes through its send hook\n");
+	TestTheCookieReader();
 	TestNoHook();
 	TestPassingHook();
 	TestDroppingHook();
