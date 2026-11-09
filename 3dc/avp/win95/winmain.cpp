@@ -40,6 +40,7 @@
 //   the host, and on both copies the relay and its round trip, kept up at the top right while the game goes through a relay
 //   -dev -windowed: a test copy in a window on its own half of the screen, so two copies run side by side (window_slot.h)
 //   -dev -findgames: at the first menus, straight to the page of games found, the player's own way (online_screens_page.h)
+//   the tag on the top right is off until it's asked for: -dev -statuson starts with it on; -statusoff still means off, and says so
 
 #include "3dc.h"
 #include "window_slot.h"
@@ -444,10 +445,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ShadowShootOn = 1;
 			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
 		}
+		// The tag on the top right (ShadowStatus_Draw in d3d_render.cpp) is off until it's asked for, because it covers the game, and the
+		// relay's line in play, at the top right. F7 shows and hides it in play, and -dev -statuson starts with it on, for a film that needs it.
+		// -statusoff was how to hide it when it started on. It still means off, even with -statuson, so a launch line that says it gets
+		// what it asked for, and the log says it isn't needed any more.
 		extern int ShadowStatusOn;
+		if (devSwitch("-statuson"))
+		{
+			ShadowStatusOn = 1;
+			LogString("tag: shown on the top right from the start (-dev -statuson); F7 hides it");
+		}
 		if (CommandLineHasWord(command_line, "-statusoff"))
 		{
 			ShadowStatusOn = 0;
+			LogString("tag: off (-statusoff), as it is anyway until F7 or -dev -statuson asks for it");
 		}
 		extern int ShadowsFullReport;
 		if (devSwitch("-shadowreport"))
