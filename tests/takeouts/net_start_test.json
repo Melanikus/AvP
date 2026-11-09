@@ -539,8 +539,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "OpenDiscoverySocket();\n\n\t\t\t// create session",
-					"to": "// create session"
+					"from": "\t\t\t\tOpenDiscoverySocket();\n\t\t\t}\n\n\t\t\t// create session",
+					"to": "\t\t\t}\n\n\t\t\t// create session"
 				}
 			]
 		},

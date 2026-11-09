@@ -1283,6 +1283,9 @@
     <ClInclude Include="..\..\3dc\net_host.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_relay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h">
       <Filter>Header Files</Filter>
     </ClInclude>

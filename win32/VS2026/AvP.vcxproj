@@ -713,6 +713,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h" />
     <ClInclude Include="..\..\3dc\net_checks.h" />
     <ClInclude Include="..\..\3dc\net_host.h" />
+    <ClInclude Include="..\..\3dc\net_relay.h" />
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h" />
     <ClInclude Include="..\..\3dc\avp\sound_address.h" />
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />

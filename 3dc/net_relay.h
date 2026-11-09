@@ -603,6 +603,20 @@ public:
 		return true;
 	}
 
+	// The same, as the relay gave them, for the list's calls: the token's 16 bytes, and the code's 8 letters with no 0 after. False, with
+	// nothing written, before it's open.
+	bool RoomSecret(uint8_t *tokenOut, char *codeOut) const
+	{
+		if (state != kOpen)
+		{
+			return false;
+		}
+
+		memcpy(tokenOut, token, kNetRelaySecretBytes);
+		memcpy(codeOut, code, kNetRelayCodeLetters);
+		return true;
+	}
+
 	int Joiners() const { return joiners; }                // as the relay last counted them
 	int LostWhy() const { return lostWhy; }                // kNetRelayFine until the room is lost
 	size_t HellosWaiting() const

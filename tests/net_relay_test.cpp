@@ -215,6 +215,9 @@ static void TheHost()
 	char tokenHex[33], codeText[9];
 	Check(host.Room(tokenHex, codeText) && strcmp(tokenHex, "0123456789abcdef1032547698badcfe") == 0 && strcmp(codeText, kCode) == 0,
 		"the room's token and code are given, for the list");
+	uint8_t tokenBytes[16];
+	char codeBytes[8];
+	Check(host.RoomSecret(tokenBytes, codeBytes) && memcmp(tokenBytes, kToken, 16) == 0 && memcmp(codeBytes, kCode, 8) == 0, "and as the relay gave them, for the list's calls");
 	Check(host.Hear(kControl, opened.b, 64, 1040) && host.UnusedMessages(kNetRelayNotForNow) == 1 && host.Room(tokenHex, codeText) && strcmp(codeText, kCode) == 0,
 		"a second HOST_OPENED is taken and not used: the room stays the one it was");
 	Check(host.Hear(kControl, cookie.b, 64, 1040) && SendCount(host) == 0 && host.UnusedMessages(kNetRelayNotForNow) == 2,

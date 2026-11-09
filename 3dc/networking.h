@@ -212,4 +212,8 @@ struct PlayerDetails
 
 extern PlayerDetails thisClientPlayer;
 
+// Modified 2026-11-08 by Melanikus for the AvP port: why the last join through the relay failed, in words for the menu's page. Always one of
+// the game's own fixed sentences (NetRelay_WhyText, net_relay.h), never text from the network.
+const char *Net_RelayJoinFailedWhy();
+
 #endif // #ifndef _NETWORKING_

@@ -70,6 +70,9 @@
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
+#include "net_relay.h"
+#include "relay_shared.h"
+#include "relay_list.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -159,6 +162,259 @@ static uint32_t incomingBandwidth = 0;
 static uint32_t outgoingBandwidth = 0;
 
 SessionDescription netSession; // main game session
+
+// Modified 2026-11-08 by Melanikus for the AvP port: THE RELAY (net_relay.h, and AVPx Dedicated Server's PROTOCOL.md).
+// With a relay server set (Relay_ServerName, relay_shared.h), a host opens a room on it, and its game goes on the list (relay_list.h); every
+// joiner comes through the relay, each from a port of its own there, so a player nobody can reach from the internet can still play. The
+// relay's own little messages arrive on the game's own socket, so RelayIntercept takes them off it before ENet reads anything, and ENet only
+// ever sees the game's packets. They're sent from that same socket too (RelaySendAll), so the relay sees each player's game through the same
+// door in their router that the game itself uses.
+// A host open through the relay listens to the relay alone: a packet from any other address is dropped (RelayIntercept). That's also why
+// its limit on connections from one address can be the room's size: every joiner comes from the relay's address, and the relay keeps its
+// own limits, 8 joiners to a room. So a host open through the relay isn't also open to its own network: friends there join through the list.
+static ENetAddress relayAddress;               // the relay's address, and its control port
+static bool relayHosting = false;              // this machine hosts a game that's open through the relay
+static NetRelayHost relayHost;
+static NetRelayJoiner relayJoiner;
+static bool relayRoomListed = false;           // the list has been told the room is open (RelayList_HostRoomOpened)
+static bool relayLostSaid = false;             // the log has been told the room was lost
+static uint32_t relayListedAt = 0;             // when the list was last given the game as it is now: once a second
+static uint32_t relayStrangersDropped = 0;     // packets to a host open through the relay, from anywhere but the relay
+static int relayJoinFailedWhy = kNetRelayFine; // why the last join through the relay failed
+
+uint32_t const kRelayListEveryMs = 1000;
+size_t const kRelayMostPacketBytes = 1500;     // the most the relay passes on (PROTOCOL.md, section 2)
+size_t const kRelayMostPacketsAWait = 16;      // the join's handshake reads at most this many packets each time it waits
+uint32_t const kRelayWaitMs = 50;              // and waits this long each time for one
+uint32_t const kRelayJoinMostMs = kNetRelayGiveUpAskingMs + kNetRelayWaitForReadyMs + 1000;   // the most a join's handshake can take
+
+// The relay's address from its name, with its control port. False with no relay set, or a name that gives no address. Looking a name up asks
+// the network's name service, so it's done once, when a game starts.
+static bool RelayFindServer(ENetAddress *out)
+{
+	const char *const name = Relay_ServerName();
+
+	if (!name || !name[0])
+	{
+		return false;
+	}
+
+	ENetAddress found;
+
+	if (enet_address_set_host(&found, name) != 0 || found.host == ENET_HOST_ANY || found.host == ENET_HOST_BROADCAST)
+	{
+		Con_PrintError("net: the relay server's name gave no address, so this game doesn't go through the relay");
+		return false;
+	}
+
+	found.port = kNetRelayDefaultControlPort;
+	*out = found;
+	return true;
+}
+
+// Sends what one end of the relay's talk wants sent (NetRelayHost or NetRelayJoiner), from this ENet host's own socket, to the relay's ports
+template <typename End>
+static void RelaySendAll(ENetHost *from, End &end)
+{
+	NetRelaySend sends[kNetRelayMostSends];
+	size_t const count = end.TakeSends(sends, kNetRelayMostSends);
+
+	for (size_t i = 0; i < count && from; i++)
+	{
+		ENetAddress to = relayAddress;
+		to.port = sends[i].port;
+		ENetBuffer buffer;
+		buffer.data = sends[i].bytes;
+		buffer.dataLength = kNetRelayMessageBytes;
+		enet_socket_send(from->socket, &to, &buffer, 1);
+	}
+}
+
+// Whether a connection comes through the relay: from the relay's address, while this host is open through it
+static bool PeerIsThroughRelay(const ENetPeer *peer)
+{
+	return relayHosting && peer->address.host == relayAddress.host;
+}
+
+// ENet shows us every packet that arrives, before it reads it (ENetHost::intercept). Giving back 1 means "taken": ENet never sees it.
+static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
+{
+	(void)event;
+	bool const fromRelay = on->receivedAddress.host == relayAddress.host;
+	uint32_t const now = enet_time_get();
+
+	if (relayHosting)
+	{
+		if (!fromRelay)
+		{
+			relayStrangersDropped++;
+			return 1;
+		}
+
+		return relayHost.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+	}
+
+	// A joiner through the relay: a READY sent again after its game has connected is the relay's, not the game's
+	return fromRelay && relayJoiner.Hear(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now) ? 1 : 0;
+}
+
+// A host opens its room on the relay, when a relay is set. False with none, and then the game is found on this network as it always was.
+static bool RelayHostStart()
+{
+	relayHosting = false;
+	relayRoomListed = false;
+	relayLostSaid = false;
+	relayStrangersDropped = 0;
+
+	if (!host || !RelayFindServer(&relayAddress))
+	{
+		return false;
+	}
+
+	relayHosting = true;
+	host->duplicatePeers = kMostClients;
+	host->intercept = RelayIntercept;
+	uint32_t const now = enet_time_get();
+	relayHost.Start(relayAddress.port, now);
+	relayListedAt = now;
+	RelaySendAll(host, relayHost);
+	Con_PrintMessage("net: this game is opening through the relay");
+	return true;
+}
+
+// Each frame while hosting through the relay: keep the room, say hello to joiners, and keep the list told
+static void RelayHostFrame()
+{
+	if (!relayHosting || !host)
+	{
+		return;
+	}
+
+	uint32_t const now = enet_time_get();
+	relayHost.Tick(now);
+	RelaySendAll(host, relayHost);
+
+	uint8_t token[kNetRelaySecretBytes];
+	char code[kNetRelayCodeLetters];
+
+	if (!relayRoomListed && relayHost.RoomSecret(token, code))
+	{
+		relayRoomListed = true;
+		relayListedAt = now;
+		RelayList_HostRoomOpened(token, code, netSession);
+		Con_PrintMessage("net: the relay has opened this game's room, and it's going on the list");
+	}
+	else if (relayRoomListed && relayHost.Open() && now - relayListedAt >= kRelayListEveryMs)
+	{
+		relayListedAt = now;
+		RelayList_HostSessionNow(netSession);
+	}
+
+	if (!relayHost.Open() && !relayHost.Asking() && !relayLostSaid)
+	{
+		relayLostSaid = true;
+		Con_PrintError(std::string("net: this game's room on the relay is gone, so nobody more can join through it: ") + NetRelay_WhyText(relayHost.LostWhy()));
+
+		if (relayRoomListed)
+		{
+			RelayList_HostRoomClosed();
+		}
+	}
+}
+
+// The host leaves: HOST_CLOSE, so the relay ends the room and its list entry at once, and the list is told
+static void RelayHostLeave()
+{
+	if (!relayHosting)
+	{
+		return;
+	}
+
+	relayHost.Close();
+	RelaySendAll(host, relayHost);
+
+	if (relayRoomListed && !relayLostSaid)
+	{
+		RelayList_HostRoomClosed();
+	}
+
+	if (relayStrangersDropped > 0)
+	{
+		LogString("net: while open through the relay, " + std::to_string(relayStrangersDropped) + " packet(s) from elsewhere were dropped");
+	}
+
+	relayHosting = false;
+	relayRoomListed = false;
+
+	if (host)
+	{
+		host->intercept = NULL;
+	}
+}
+
+// A JOIN THROUGH THE RELAY: the relay's handshake for a game's code, on this new ENet host's own socket, before ENet connects. It takes
+// at most the joiner's own limits (10 s for an answer, 15 s for READY), and never more than kRelayJoinMostMs in all. Gives back the relay's
+// port to connect the game to, or 0, with relayJoinFailedWhy saying why. Everything heard from anywhere but the relay is dropped.
+static uint16_t RelayHandshake(const char *code)
+{
+	uint32_t const started = enet_time_get();
+
+	if (!host || !relayJoiner.Start(relayAddress.port, code, started))
+	{
+		relayJoinFailedWhy = kNetRelayRefusedNoGame;
+		return 0;
+	}
+
+	static uint8_t packet[kRelayMostPacketBytes];
+
+	while (!relayJoiner.Ready() && !relayJoiner.Failed() && enet_time_get() - started < kRelayJoinMostMs)
+	{
+		RelaySendAll(host, relayJoiner);
+		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+
+		if (enet_socket_wait(host->socket, &condition, kRelayWaitMs) < 0)
+		{
+			break;
+		}
+
+		for (size_t i = 0; i < kRelayMostPacketsAWait && (condition & ENET_SOCKET_WAIT_RECEIVE); i++)
+		{
+			ENetAddress from;
+			ENetBuffer buffer;
+			buffer.data = packet;
+			buffer.dataLength = sizeof(packet);
+			int const got = enet_socket_receive(host->socket, &from, &buffer, 1);
+
+			if (got <= 0)
+			{
+				break;
+			}
+
+			if (from.host == relayAddress.host)
+			{
+				relayJoiner.Hear(from.port, packet, static_cast<size_t>(got), enet_time_get());
+			}
+		}
+
+		relayJoiner.Tick(enet_time_get());
+	}
+
+	if (!relayJoiner.Ready())
+	{
+		relayJoinFailedWhy = relayJoiner.Failed() ? relayJoiner.FailedWhy() : kNetRelayNoAnswer;
+		return 0;
+	}
+
+	// A READY sent again later is the relay's, so the intercept takes it off ENet's hands
+	host->intercept = RelayIntercept;
+	relayJoinFailedWhy = kNetRelayFine;
+	return relayJoiner.Port();
+}
+
+const char *Net_RelayJoinFailedWhy()
+{
+	return NetRelay_WhyText(relayJoinFailedWhy);
+}
 
 extern void MinimalNetCollectMessages(void);
 extern void InitAVPNetGameForHost(int species, int gamestyle, int level);
@@ -649,7 +905,11 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			}
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
-			OpenDiscoverySocket();
+			// Modified 2026-11-08 by Melanikus for the AvP port: through the relay instead, when one is set (RelayHostStart, above).
+			if (!RelayHostStart())
+			{
+				OpenDiscoverySocket();
+			}
 
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
@@ -721,6 +981,9 @@ void Net_Disconnect()
 			LogString("net: left without hearing back from " + std::to_string(stillClosing) + " connection(s), which may have gone already");
 		}
 
+		// Then the room on the relay, after the goodbyes have gone through it
+		RelayHostLeave();
+
 		enet_host_destroy(host);
 		host = NULL;
 	}
@@ -748,7 +1011,12 @@ void Net_RemoveThisPlayer(NetID id)
 	{
 		if (peer->state == ENET_PEER_STATE_CONNECTED && IDOfConnection(peer) == id)
 		{
-			CoopRemoved_Add(removedPlayers, peer->address.host);
+			// Not by the relay's address, which every joiner through the relay has: that would bar them all (debt: so a removed player
+			// can come back through the relay)
+			if (!PeerIsThroughRelay(peer))
+			{
+				CoopRemoved_Add(removedPlayers, peer->address.host);
+			}
 
 			// They're out at once: nothing more from this connection counts, whatever it does about the goodbye
 			peer->data = NULL;
@@ -1053,6 +1321,9 @@ void Net_KeepAnsweringWhileLoading()
 
 	// With nowhere to put an event, ENet acknowledges what's arrived and keeps it for later
 	enet_host_service(host, NULL, 0);
+
+	// A long level load mustn't lose the room on the relay
+	RelayHostFrame();
 }
 
 void Net_SayLongestGapWhileLoading()
@@ -1071,6 +1342,7 @@ void Net_ServiceNetwork()
 	if (host)
 	{
 		enet_host_service(host, NULL, 0);
+		RelayHostFrame();
 
 		LogConnectionNumbers();
 
@@ -1180,7 +1452,7 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 	}
 
 	// Somebody the host took out of this game
-	if (CoopRemoved_Has(removedPlayers, peer->address.host))
+	if (!PeerIsThroughRelay(peer) && CoopRemoved_Has(removedPlayers, peer->address.host))
 	{
 		Net_NoteRefused(kCoopRefusedRemoved);
 		enet_peer_disconnect(peer, kCoopRemovedByTheHost);
@@ -1405,6 +1677,12 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						lastHeardFrom[eEvent.peer - host->peers] = enet_time_get();
 						bytesUsed[eEvent.peer - host->peers] = 0;
 						messagesUsed[eEvent.peer - host->peers] = 0;
+					}
+
+					// A joiner through the relay has connected through its port there: the host's hellos on that port can stop
+					if (PeerIsThroughRelay(eEvent.peer))
+					{
+						relayHost.JoinerConnected(eEvent.peer->address.port);
 					}
 
 					// Which connection it is, by number, and never the other machine's address or port: players stream and share pictures of
