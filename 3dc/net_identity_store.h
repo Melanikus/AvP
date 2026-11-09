@@ -14,6 +14,8 @@
 //
 // THE FILE is laid out as net_identity_file.h says, and read as hostile input:
 // - It's opened once, and everything is checked through that one handle, so it can't be swapped between a check and the read.
+// - It has to be a plain file. A link (a symbolic link, or another "reparse point") is opened as itself, never followed, and refused as a
+//   link: the game only ever writes a plain file, so a link was put there by something else.
 // - Its owner has to be this Windows user. A file someone else put there, even with keys that hold together, is refused: whoever made it
 //   would know its private halves (Primary's read, finding 3). The game writes it owned by this user, readable and writable by this user
 //   alone: not even SYSTEM or the Administrators group is on its list, since an administrator can take a file over anyway, and backups
@@ -29,7 +31,8 @@
 // The private halves exist unsealed only in memory, for as long as it takes, and are wiped (SecureZeroMemory) as soon as they're done
 // with. Nothing about them, and no fingerprint, goes in the log.
 //
-// Modified 2026-11-09 by Melanikus for the AvP port: Primary's three findings (the file's place, its owner, and its data on the disk).
+// Modified 2026-11-09 by Melanikus for the AvP port: Primary's three findings (the file's place, its owner, and its data on the disk), and
+// his fourth, a link refused as a link.
 
 #ifndef NET_IDENTITY_STORE_H
 #define NET_IDENTITY_STORE_H
