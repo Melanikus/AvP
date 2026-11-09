@@ -6097,6 +6097,11 @@ void Hudson_PlayInput(void *playerStatus)
 	{
 		started = true;
 
+		if (plan.playStepSeconds > 0)
+		{
+			HudsonPlay_SetStepSeconds(plan.playStepSeconds);
+		}
+
 		if (plan.netMode == kHudsonNetJoin)
 		{
 			HudsonPlay_StartFollowing(LevelName);
@@ -6191,7 +6196,7 @@ static void Hudson_NetLoadWalk()
 	// Which rooms join which. Without one, a step can't be checked, and the log says so.
 	HudsonStrategies_LoadRoomList((std::string("HudsonChains\\") + LevelName + ".rooms").c_str());
 
-	FILE *const file = fopen(path.c_str(), "r");
+	FILE *const file = fopen(path.c_str(), "rb");
 
 	if (!file)
 	{
@@ -6199,14 +6204,46 @@ static void Hudson_NetLoadWalk()
 		return;
 	}
 
-	// A room's name can be long, and these lines can name many rooms
-	char text[4000];
+	// The whole file, with limits, as the other files of steps are read (Primary's read, 2026-11-09: this was read a line at a time with no
+	// limit on the whole, and a line too long for the buffer was cut, the rest of it read as a step of its own). One byte more than the
+	// limit is read, so a file that's too big is seen to be, and refused for it; so is a line that's too long, rather than cut. The real files
+	// are about 1 KB, with lines of at most about 250 characters: a room's name can be long, and a line can name many rooms.
+	static const size_t kChainMostBytes = 64 * 1024;
+	static const size_t kChainLongestLine = 3999;
+	std::string all(kChainMostBytes + 1, '\0');
+
+	all.resize(fread(&all[0], 1, all.size(), file));
+	fclose(file);
+
+	if (all.size() > kChainMostBytes)
+	{
+		LogString("walk: the chain file is longer than " + std::to_string(kChainMostBytes) + " bytes, so it's refused, and nothing is walked: " + path);
+		return;
+	}
+
 	std::vector<std::string> nextWhere;
 	std::vector<std::string> nextNear;
+	size_t at = 0;
 
-	while (fgets(text, sizeof(text), file))
+	while (at < all.size())
 	{
-		std::string line = text;
+		size_t end = all.find('\n', at);
+
+		if (end == std::string::npos)
+		{
+			end = all.size();
+		}
+
+		std::string line = all.substr(at, end - at);
+
+		at = end + 1;
+
+		if (line.size() > kChainLongestLine)
+		{
+			walkSteps.clear();
+			LogString("walk: a line of the chain file is longer than " + std::to_string(kChainLongestLine) + " characters, so it's refused, and nothing is walked: " + path);
+			return;
+		}
 
 		while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' '))
 		{
@@ -6259,8 +6296,6 @@ static void Hudson_NetLoadWalk()
 
 		walkSteps.push_back(step);
 	}
-
-	fclose(file);
 
 	char line[120];
 

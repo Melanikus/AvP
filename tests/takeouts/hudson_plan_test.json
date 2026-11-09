@@ -9675,6 +9675,56 @@
 					"to": "if (false) {\n\t\t\t\tHudson_MarineLanded"
 				}
 			]
+		},
+		{
+			"name": "REFUSAL: stepseconds= takes any number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->playStepSeconds < 10 || plan->playStepSeconds > 600)",
+					"to": "false)"
+				}
+			]
+		},
+		{
+			"name": "REFUSAL: stepseconds= without play=yes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!plan->play && seenStepSeconds)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: stepseconds= never reaches the play code",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonPlay_SetStepSeconds(plan.playStepSeconds);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chain file of any size is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (all.size() > kChainMostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chain line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (line.size() > kChainLongestLine)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }

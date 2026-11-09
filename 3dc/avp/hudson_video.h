@@ -51,13 +51,16 @@ enum HudsonVideoStop
 {
 	kHudsonVideoGoOn,
 	kHudsonVideoFileIsFull,
-	kHudsonVideoDiskIsFull
+	kHudsonVideoDiskIsFull,
+	kHudsonVideoDiskWontSay    // the disk wouldn't say how much room is left: a film never goes on not knowing it can't fill the disk
 };
 
-// Should a film being written stop here? bytesFree is -1 if the disk wouldn't say. Then this goes on, because a write that really fails stops the film anyway.
+// Should a film being written stop here? bytesFree is -1 if the disk wouldn't say, and then it stops too, because a film that can't tell how
+// much room is left could fill the disk (Primary's read, 2026-11-09: a film went on not knowing, so only its own size limit held it).
 HudsonVideoStop HudsonVideo_ShouldStop(long long bytesSoFar, long long mostBytes, long long bytesFree);
 
-// Is there room to start? There has to be room for the largest film it might be, as well as what's left alone. bytesFree is -1 if the disk wouldn't say.
+// Is there room to start? There has to be room for the largest film it might be, as well as what's left alone. bytesFree is -1 if the disk
+// wouldn't say, and then there's no film: not knowing isn't room.
 bool HudsonVideo_DiskHasRoom(long long bytesFree, long long mostBytes);
 
 // Why a picture of this size can't be recorded, in words, or nothing if it can

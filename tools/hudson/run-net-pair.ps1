@@ -82,6 +82,7 @@ param(
     [string]$Siege = '',
     [int]$HostGun = 0,      # with -Play, the slot of the gun each Hudson is given and holds, from 1 to 14: 10 is the shotgun
     [int]$JoinGun = 0,
+    [int]$StepSeconds = 0,  # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600: for a film that should move on. 0 is 180
     [int]$HostFilmSkip = 0,
     [int]$JoinFilmSkip = 0
 )
@@ -372,6 +373,7 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($Play) { $words += '-Play' }
     if ($word -eq 'host' -and $HostGun -gt 0) { $words += @('-PlayGun', $HostGun) }
     if ($word -eq 'join' -and $JoinGun -gt 0) { $words += @('-PlayGun', $JoinGun) }
+    if ($StepSeconds -gt 0) { $words += @('-StepSeconds', $StepSeconds) }
     if ($Hostile) { $words += '-Hostile' }
     if ($kind) { $words += @('-HostileKind', $kind) }
     if ($kind -eq 'flood') { $words += @('-NetSecondPartner', "`"$joinFull`"") }

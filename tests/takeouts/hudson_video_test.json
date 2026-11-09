@@ -169,18 +169,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_video.cpp",
-					"from": "if (bytesFree >= 0 && bytesFree < kHudsonVideoDiskToLeave)",
+					"from": "if (bytesFree < kHudsonVideoDiskToLeave)",
 					"to": "if (false)"
 				}
 			]
 		},
 		{
-			"name": "a disk that will not say stops it",
+			"name": "a disk that will not say does not stop it",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_video.cpp",
-					"from": "if (bytesFree >= 0 && bytesFree < kHudsonVideoDiskToLeave)",
-					"to": "if (bytesFree < kHudsonVideoDiskToLeave)"
+					"from": "return kHudsonVideoDiskWontSay;",
+					"to": "return kHudsonVideoGoOn;"
 				}
 			]
 		},
@@ -199,18 +199,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_video.cpp",
-					"from": "return bytesFree < 0 || bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
+					"from": "return bytesFree >= 0 && bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
 					"to": "return true;"
 				}
 			]
 		},
 		{
-			"name": "a disk that will not say stops it starting",
+			"name": "a disk that will not say lets it start",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_video.cpp",
-					"from": "return bytesFree < 0 || bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
-					"to": "return bytesFree - kHudsonVideoDiskToLeave >= mostBytes;"
+					"from": "return bytesFree >= 0 && bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
+					"to": "return bytesFree < 0 || bytesFree - kHudsonVideoDiskToLeave >= mostBytes;"
 				}
 			]
 		},

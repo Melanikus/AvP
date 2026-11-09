@@ -73,6 +73,7 @@ static const DWORD kGiveUpOnAKill = 30000;
 static const DWORD kGiveUpOnAFight = 30000;
 static const DWORD kGiveUpOnShootingSomething = 20000;
 static const DWORD kAStepHasTakenTooLong = 180000;
+static DWORD aStepHasTakenTooLong = kAStepHasTakenTooLong;   // the same, or stepseconds='s (HudsonPlay_SetStepSeconds)
 static const DWORD kLeastTimeBetweenFillingHisHealth = 1000;
 static const DWORD kStandOnAPlaceFor = 1500;
 static const DWORD kWaitToPickUp = 6000;
@@ -1157,9 +1158,9 @@ static void WalkAlongTheWay(PLAYER_STATUS *status, DWORD now)
 		switchWaitIsDue = switchWaitIsDue && !aSwitchIsNear;
 	}
 
-	if (!movedToThisStep && now - stepStartedAt >= kAStepHasTakenTooLong)
+	if (!movedToThisStep && now - stepStartedAt >= aStepHasTakenTooLong)
 	{
-		MoveHimToTheStep("this step has taken " + std::to_string((int)(kAStepHasTakenTooLong / 1000)) + " seconds", now);
+		MoveHimToTheStep("this step has taken " + std::to_string((int)(aStepHasTakenTooLong / 1000)) + " seconds", now);
 		return;
 	}
 
@@ -3218,6 +3219,12 @@ void HudsonPlay_KeepHimAliveWhileHeWaits(void *playerStatus)
 	{
 		KeepHimAlive(status, GetTickCount());
 	}
+}
+
+void HudsonPlay_SetStepSeconds(int seconds)
+{
+	// The plan reader only takes 10 to 600; anything else here keeps the usual limit, so a mistake can't make a step endless or instant
+	aStepHasTakenTooLong = seconds >= 10 && seconds <= 600 ? (DWORD)seconds * 1000 : kAStepHasTakenTooLong;
 }
 
 void HudsonPlay_HoldGun(int slot)

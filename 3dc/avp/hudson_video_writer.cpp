@@ -344,6 +344,10 @@ static void StopIfThereIsNoRoom()
 			HudsonVideoWriter_StopBecause("disk_full", why);
 			break;
 
+		case kHudsonVideoDiskWontSay:
+			HudsonVideoWriter_StopBecause("disk_unknown", "the disk won't say how much room is left, so the film stops here, before it could fill it, and the run goes on");
+			break;
+
 		default:
 			break;
 	}
@@ -359,6 +363,10 @@ static unsigned __stdcall WriterThread(void *)
 	if (FAILED(startup))
 	{
 		StopBecauseOf("start", "couldn't start Windows' video writer", startup);
+	}
+	else if (BytesFreeOnTheDisk() < 0)
+	{
+		HudsonVideoWriter_StopBecause("disk_unknown", "the disk won't say how much room is left, so there's no film, because it could fill the disk, and the run goes on");
 	}
 	else if (!HudsonVideo_DiskHasRoom(BytesFreeOnTheDisk(), video.mostBytes))
 	{

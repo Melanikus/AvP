@@ -54,7 +54,12 @@ HudsonVideoStop HudsonVideo_ShouldStop(long long bytesSoFar, long long mostBytes
 		return kHudsonVideoFileIsFull;
 	}
 
-	if (bytesFree >= 0 && bytesFree < kHudsonVideoDiskToLeave)
+	if (bytesFree < 0)
+	{
+		return kHudsonVideoDiskWontSay;
+	}
+
+	if (bytesFree < kHudsonVideoDiskToLeave)
 	{
 		return kHudsonVideoDiskIsFull;
 	}
@@ -64,7 +69,7 @@ HudsonVideoStop HudsonVideo_ShouldStop(long long bytesSoFar, long long mostBytes
 
 bool HudsonVideo_DiskHasRoom(long long bytesFree, long long mostBytes)
 {
-	return bytesFree < 0 || bytesFree - kHudsonVideoDiskToLeave >= mostBytes;
+	return bytesFree >= 0 && bytesFree - kHudsonVideoDiskToLeave >= mostBytes;
 }
 
 const char *HudsonVideo_WhyNotThisSize(int width, int height)

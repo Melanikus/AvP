@@ -37,6 +37,9 @@ void HudsonPlay_KeepHimAliveWhileHeWaits(void *playerStatus);
 // playgun=: the slot of the gun he's given and holds, from 1 to 14. Asked for before he starts.
 void HudsonPlay_HoldGun(int slot);
 
+// stepseconds=: how long one step may take before he's moved to it, a logged cheat, from 10 to 600 (the plan reader checks it). Without it, 180.
+void HudsonPlay_SetStepSeconds(int seconds);
+
 // One line for the run's result: how many steps there were, how many worked, and how many cheats it took
 void HudsonPlay_ForTheResult(char *line, int size);
 

@@ -152,6 +152,8 @@ const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= has a name lo
 const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character a server's name can't have here: small letters, digits, - and . only";
 const char *const kHudsonRefusedRemoteRelayWithoutNet = "remoterelay= says which relay a network run may use, so it needs net=";
 const char *const kHudsonRefusedRemoteRelayHostile = "remoterelay= takes a run beyond this machine, where the other end could be anybody's game, so it can't be a hostile= run";
+const char *const kHudsonRefusedStepSeconds = "stepseconds= is a whole number of seconds, from 10 to 600";
+const char *const kHudsonRefusedStepSecondsWithoutPlay = "stepseconds= is how long a step of play=yes may take, so it needs play=yes";
 const char *const kHudsonRefusedSiegeTooLong = "siege= has a room name that's too long";
 const char *const kHudsonRefusedSiegeCharacter = "siege= has a character a room name can't have here";
 const char *const kHudsonRefusedSiegeNeedsAPair = "siege= is for a pair of games with coop=yes, and it's a fight of its own, so it has no other fight, kill, walk or hostile test";
@@ -378,6 +380,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
+	bool seenStepSeconds = false;
 	bool seenPlayGun = false;
 	bool seenSpecies = false;
 	bool seenMeets = false;
@@ -1686,6 +1689,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedGunNotASlot;
 			}
 		}
+		else if (WordIs(place, nameLength, "stepseconds"))
+		{
+			if (seenStepSeconds)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenStepSeconds = true;
+
+			// How long one step of play=yes may take before he's moved to it: shorter for a film that should move on, never so short that a
+			// step he's really walking is cut, nor longer than ten minutes
+			if (!ReadNumber(value, valueLength, &plan->playStepSeconds) || plan->playStepSeconds < 10 || plan->playStepSeconds > 600)
+			{
+				return kHudsonRefusedStepSeconds;
+			}
+		}
 		else if (WordIs(place, nameLength, "species"))
 		{
 			if (seenSpecies)
@@ -2653,6 +2672,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	// A walk and a hostile test turn him themselves, and a game with no campaign has an old test that does too
 	bool const aPairOnTheCampaign = plan->netMode != kHudsonNetNone && plan->coop && !plan->coopWalk && !plan->hostile;
+
+	if (!plan->play && seenStepSeconds)
+	{
+		return kHudsonRefusedStepSecondsWithoutPlay;
+	}
 
 	if (seenSiegeFrom && !seenSiege)
 	{

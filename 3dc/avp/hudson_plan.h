@@ -240,6 +240,7 @@ struct HudsonPlan
 	bool gunMarine;       // gunmarine=yes: a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
 	int gunSlot;          // gun=: the slot of a marine's gun to try, from 1 to 14, or 15 to try each in turn. 0 means no gun is tried. See hudson.cpp
 	int playGunSlot;      // playgun=: with play=yes, the slot of the gun he's given and holds, from 1 to 14. 0 leaves him what the level gives him
+	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool breakVideo;      // break=video: the encoder fails for real part way, to prove that a run survives it. It needs a run with a film
@@ -437,6 +438,8 @@ extern const char *const kHudsonRefusedRemoteRelayTooLong;
 extern const char *const kHudsonRefusedRemoteRelayCharacter;
 extern const char *const kHudsonRefusedRemoteRelayWithoutNet;
 extern const char *const kHudsonRefusedRemoteRelayHostile;
+extern const char *const kHudsonRefusedStepSeconds;
+extern const char *const kHudsonRefusedStepSecondsWithoutPlay;
 extern const char *const kHudsonRefusedSiegeFarEmpty;
 extern const char *const kHudsonRefusedSiegeFarTooLong;
 extern const char *const kHudsonRefusedSiegeFarCharacter;

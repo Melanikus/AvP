@@ -175,6 +175,7 @@ param(
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
     [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
+    [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
     [switch]$GunAlien,     # a gun= run makes an alien in front of him, for a throw or a shot to hit
     [switch]$NoFilm,
     [string]$Net = '',
@@ -241,6 +242,18 @@ if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 # No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
+
+# Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
+# nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
+# (kHudsonVideoMostBytes), so a run that may film needs both; one with -NoFilm needs the 1 GB only. A disk that won't say how much room it
+# has is refused too: not knowing isn't room.
+$mostFilmBytes = 2000000000
+$leaveBytes = 1000000000
+$freeBytes = -1
+try { $freeBytes = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($folder)).AvailableFreeSpace } catch { $freeBytes = -1 }
+$needBytes = $leaveBytes + $(if ($NoFilm) { 0 } else { $mostFilmBytes })
+if ($freeBytes -lt 0) { Stop-Here "the run's disk won't say how much room it has, so the run doesn't start" }
+if ($freeBytes -lt $needBytes) { Stop-Here "the run's disk has $([math]::Floor($freeBytes / 1MB)) MB free, and a run needs $([math]::Floor($needBytes / 1MB)) MB, so it doesn't start" }
 
 $partner = ''
 
@@ -364,6 +377,10 @@ if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
+# The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied
+if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { Stop-Here "-StepSeconds is a whole number of seconds, from 10 to 600" }
+if ($StepSeconds -ne 0 -and -not $Play) { Stop-Here "-StepSeconds is how long a step of -Play may take, so it needs -Play" }
+if ($StepSeconds -gt 0) { $arguments += " stepseconds=$StepSeconds" }
 if ($Coop) { $arguments += " coop=yes" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
@@ -508,8 +525,9 @@ foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
     }
 }
 
-# Where the window went, for a run that had it moved
-$windowNotes = Join-Path $saves 'window-place.txt'
+# Where the window went, for a run that had it moved: the game writes it as hudson-window.txt (hudson.cpp, kWindowFileName). This once named
+# window-place.txt, which nothing writes, so it was never kept (Primary's read, 2026-11-09)
+$windowNotes = Join-Path $saves 'hudson-window.txt'
 if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -Destination $kept }
 
 $result = Join-Path $kept 'hudson-result.txt'
