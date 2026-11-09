@@ -117,6 +117,8 @@ namespace
 		wchar_t server[256];             // the list's name and port, set before the thread starts, and never changed
 		INTERNET_PORT port;
 		bool developer;                  // -dev: a relay on this machine or this network may be used, for a test
+		int version;                     // the version this copy speaks (Net_OurVersion), whose games it lists and asks for
+		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a fingerprint
 
 		// The host's game. listingNumber goes up each time the listing changes, a newer pass included.
 		bool hostWanted;
@@ -394,7 +396,7 @@ namespace
 		// A new listing is POSTed. If a PUT finds the list has forgotten it (404), it's POSTed again, once.
 		for (int tries = 0; tries < 2; tries++)
 		{
-			if (!RelayList_ListingBody(send, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
+			if (!RelayList_ListingBody(send, shared->v2Draft, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
 			{
 				Tell("the game's own words couldn't be made into a listing, so it isn't on the list");
 				return false;
@@ -480,7 +482,7 @@ namespace
 	void ReadTheGames(void)
 	{
 		wchar_t path[64];
-		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/games?version=%d", kMultiplayerVersion);
+		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/games?version=%d", shared->version);
 
 		Answer const a = Call(L"GET", path, NULL, gamesAnswer, sizeof(gamesAnswer));
 		int count = 0;
@@ -492,7 +494,7 @@ namespace
 		}
 		else if (a.worked)
 		{
-			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, kMultiplayerVersion, gamesRead, &count);
+			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, shared->v2Draft, gamesRead, &count);
 			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
 		}
 
@@ -713,6 +715,11 @@ namespace
 		made->port = static_cast<INTERNET_PORT>(Relay_ListPort());
 		made->developer = DevMode != 0;
 
+		// The version and the v2 draft are fixed for the run, so they're read once here, on the main thread (added 2026-11-09 by Melanikus
+		// for the AvP port; networking.h)
+		made->version = Net_OurVersion();
+		made->v2Draft = Net_V2DraftOn();
+
 		// The name service is Windows' sockets', which have to be started on this thread's behalf too. ENet starts them as well. Each start
 		// is counted by Windows, and this one is kept for as long as the game runs, as the thread is.
 		WSADATA sockets;
@@ -885,8 +892,9 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 		return;
 	}
 
-	// A listing without the host's fingerprint would send its joiners to a host they can't check, so it isn't sent at all
-	if (!hostIdentityGiven)
+	// A listing without the host's fingerprint would send its joiners to a host they can't check, so it isn't sent at all. Modified
+	// 2026-11-09 by Melanikus for the AvP port: only with the v2 draft (networking.h). Version 1's listing has no fingerprint.
+	if (Net_V2DraftOn() && !hostIdentityGiven)
 	{
 		LogString("Relay list: this run has no identity to show joiners yet, so the game isn't put on the list");
 		return;

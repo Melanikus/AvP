@@ -79,8 +79,11 @@
 #include "net_peer_v2.h"
 #include "relay_shared.h"
 #include "relay_list.h"
+#include "build_identity.h"
 #include <assert.h>
 #include <random>
+
+extern int DevMode;   // -dev (d3d_render.cpp): the v2 draft is on only with it (Net_V2DraftOn)
 #include "MemoryStream.h"
 
 static ENetHost *host = NULL;
@@ -725,7 +728,8 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 			return 1;
 		}
 
-		return RelayEndToEndHeard(on, now);
+		// Without the v2 draft (networking.h), the rest is ENet's, as in version 1
+		return Net_V2DraftOn() ? RelayEndToEndHeard(on, now) : 0;
 	}
 
 	// A joiner through a relay hears from the relay alone, as a host does: the game's packets come from its port there, and anything from
@@ -744,7 +748,8 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 		return 1;
 	}
 
-	return RelayEndToEndHeard(on, now);
+	// Without the v2 draft (networking.h), the rest is ENet's, as in version 1
+	return Net_V2DraftOn() ? RelayEndToEndHeard(on, now) : 0;
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the host's news about its relay has changed, for its screen to say once
@@ -819,23 +824,34 @@ static bool RelayHostStart()
 	}
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose fingerprint the listing carries and
-	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game is open on this network only.
-	if (!RelayIdentityReady())
+	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game is open on this network only. Only with the v2
+	// draft (networking.h): without it, the host is version 1's, with no identity, no handshake and nothing sealed.
+	bool const draft = Net_V2DraftOn();
+
+	if (draft && !RelayIdentityReady())
 	{
 		Con_PrintError("net: this game's identity couldn't be made, so it's open on this network only");
 		RelayHostNews(kNetRelayHostNoRelay, NULL);
 		return false;
 	}
 
-	RelayEndToEndForget();
-	RelayList_HostIdentity(runIdentity.fingerprint);
+	if (draft)
+	{
+		RelayEndToEndForget();
+		RelayList_HostIdentity(runIdentity.fingerprint);
+	}
 
 	relayHosting = true;
 	relayPicking = true;
 	host->duplicatePeers = kMostClients;
 	host->intercept = RelayIntercept;
-	host->sendHook = RelaySealedSend;
-	relaySealing = true;
+
+	if (draft)
+	{
+		host->sendHook = RelaySealedSend;
+		relaySealing = true;
+	}
+
 	RelaySendAll(host, relayPicker, relayCandidates, relayCandidateCount);
 	Con_PrintMessage("net: this game is finding the nearest relay");
 	RelayHostNews(kNetRelayHostFinding, NULL);
@@ -1408,7 +1424,7 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.players = static_cast<uint8_t>(shownPlayers);
 	entry.maxPlayers = static_cast<uint8_t>(shownMost);
 
-	if (version != kMultiplayerVersion)
+	if (version != Net_OurVersion())
 	{
 		float const shownVersion = 1.0f + version / 100.0f;
 		entry.AllowedToJoin = false;
@@ -1649,7 +1665,7 @@ static void Net_AddSession(SessionDescription &session)
 	}
 
 	// multiplayer version number (possibly)
-	if (session.version != kMultiplayerVersion)
+	if (session.version != Net_OurVersion())
 	{
 		float version = 1.0f + session.version / 100.0f;
 		SessionData[NumberOfSessionsFound].AllowedToJoin = false;
@@ -1875,6 +1891,31 @@ static int NetSettingOrOwn(const char *name, int fromTheFile, bool usable, int o
 	return own;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: PROTOCOL VERSION 2'S DRAFT (networking.h). It's on only in a copy started with -dev -netv2
+// that knows the commit it was made from. Off, which is every player's game, nothing of version 2 runs: no identity is made, no handshake,
+// nothing is sealed, and the version is 114, exactly as before.
+bool NetV2DraftAsked = false;
+
+// The first 32 bits of this build's commit (build_identity.h), for the draft's rule that two copies play only if they're the same commit.
+// 0 if the build doesn't know it, and then the draft can't be on.
+static uint32_t OurCommitWord()
+{
+	uint32_t word = 0;
+	BuildIdentity_CommitWord(&word);
+	return word;
+}
+
+bool Net_V2DraftOn(void)
+{
+	uint32_t word = 0;
+	return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);
+}
+
+int Net_OurVersion(void)
+{
+	return Net_V2DraftOn() ? kNetV2DraftVersion : kMultiplayerVersion;
+}
+
 NetResult Net_Initialise()
 {
 	Con_PrintMessage("Initialising ENet networking");
@@ -1897,6 +1938,20 @@ NetResult Net_Initialise()
 	outgoingBandwidth = (uint32_t)NetSettingOrOwn("OutgoingBandwidth", outgoing, outgoing >= 0, 0);
 
 	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network. See OpenDiscoverySocket.
+
+	// The v2 draft, said once, so a tester's log shows which version this copy speaks (added 2026-11-09 by Melanikus for the AvP port)
+	if (Net_V2DraftOn())
+	{
+		LogString("net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit");
+	}
+	else if (NetV2DraftAsked && DevMode == 0)
+	{
+		LogString("net: -netv2 needs -dev, so this copy speaks version 114, without the v2 draft");
+	}
+	else if (NetV2DraftAsked)
+	{
+		LogString("net: -netv2 needs a copy made by tools/build-and-package.ps1, which knows the commit it was made from, so this copy speaks version 114, without the v2 draft");
+	}
 
 	// register console commands
 	Con_AddCommand("connect", Net_ConnectToAddress);
@@ -2018,13 +2073,13 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
 			if (IsCustomLevel(level, gameStyle))
 			{
-				if ((Net_CreateSession(sessionName, levelName, maxPlayers, kMultiplayerVersion, gameStyle, 100)) != NET_OK) {
+				if ((Net_CreateSession(sessionName, levelName, maxPlayers, Net_OurVersion(), gameStyle, 100)) != NET_OK) {
 					return NET_FAIL;
 				}
 			}
 			else
 			{
-				if ((Net_CreateSession(sessionName, levelName, maxPlayers, kMultiplayerVersion, gameStyle, level)) != NET_OK) {
+				if ((Net_CreateSession(sessionName, levelName, maxPlayers, Net_OurVersion(), gameStyle, level)) != NET_OK) {
 					return NET_FAIL;
 				}
 			}
@@ -2054,7 +2109,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		thisClientPlayer.name[kPlayerNameSize-1] = '\0';
 		thisClientPlayer.ID   = AvPNetID;
 		thisClientPlayer.type = 0; // ??
-		thisClientPlayer.version = kMultiplayerVersion;
+		thisClientPlayer.version = Net_OurVersion();
 	}
 
 	InitAVPNetGameForHost(species, gameStyle, level);
@@ -2632,7 +2687,7 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 	player.name[kPlayerNameSize - 1] = '\0';
 
 	// A game that doesn't speak this version means different things by the same numbers
-	if (player.version != kMultiplayerVersion)
+	if (player.version != Net_OurVersion())
 	{
 		LogDroppedMessage("a client asked to join with another version of the game");
 		enet_peer_disconnect(peer, 0);
@@ -2710,7 +2765,7 @@ static void HoldOrLetIn(ENetPeer *peer, const uint8_t *details)
 	memcpy(&player, details, sizeof(player));
 	player.name[kPlayerNameSize - 1] = '\0';
 
-	bool const noQuestion = letEveryJoinerIn || player.version != kMultiplayerVersion || netSession.nPlayers >= netSession.maxPlayers
+	bool const noQuestion = letEveryJoinerIn || player.version != Net_OurVersion() || netSession.nPlayers >= netSession.maxPlayers
 		|| (!PeerIsThroughRelay(peer) && CoopRemoved_Has(removedPlayers, peer->address.host));
 
 	if (noQuestion)
@@ -3044,6 +3099,18 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				{
 					enet_peer_timeout(eEvent.peer, 0, kConnectionPatienceMilliseconds, kConnectionPatienceMilliseconds);
 
+					// Modified 2026-11-09 by Melanikus for the AvP port: a host running the v2 draft (networking.h) plays only a joiner made from
+					// the same commit, which the joiner says in its CONNECT. Any other is closed at once with JBLD, as another version is, before
+					// anything about it is kept or shown, and the log counts it as dropped, so a flood of them can't fill the log. The place is
+					// marked as nobody's first, whoever had it before. Without the draft, a CONNECT's data isn't looked at, as before.
+					if (AvP.Network == I_Host && Net_V2DraftOn() && eEvent.data != OurCommitWord())
+					{
+						LogDroppedMessage("a joiner of the v2 draft was made from another commit");
+						eEvent.peer->data = NULL;
+						enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);
+						break;
+					}
+
 					if (AvP.Network == I_Host && (size_t)(eEvent.peer - host->peers) <= kMostClients)
 					{
 						connectionStartedAt[eEvent.peer - host->peers] = enet_time_get();
@@ -3148,6 +3215,13 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						if (joinAnswer == kNetJoinAnswerWaiting)
 						{
 							joinAnswer = eEvent.data == kNetJoinRefusedNo ? kNetJoinAnswerNo : eEvent.data == kNetJoinRefusedBusy ? kNetJoinAnswerBusy : kNetJoinAnswerNoAnswer;
+						}
+
+						// Modified 2026-11-09 by Melanikus for the AvP port: a host running the v2 draft closes a joiner made from another
+						// commit as its CONNECT arrives, whether or not the joiner's request has gone yet (JBLD, networking.h)
+						if (eEvent.data == kNetJoinRefusedOtherBuild && joinAnswer != kNetJoinAnswerYes)
+						{
+							joinAnswer = kNetJoinAnswerOtherBuild;
 						}
 					}
 
@@ -3307,8 +3381,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		ServerAddress.port = relayPort;
 
 		// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): handshake B with the host the list named, before ENet
-		// sends a byte. A failure ends the join: nothing is ever sent through the relay unsealed.
-		relayEndToEndJoinFailed = RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayFingerprint);
+		// sends a byte. A failure ends the join: nothing is ever sent through the relay unsealed. Only with the v2 draft (networking.h):
+		// without it, the join is version 1's.
+		relayEndToEndJoinFailed = Net_V2DraftOn() ? RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayFingerprint) : NULL;
 
 		if (relayEndToEndJoinFailed)
 		{
@@ -3325,7 +3400,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		relayJoinedRegion[kRelayListRegionLetters] = 0;
 	}
 
-	ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);
+	// Modified 2026-11-09 by Melanikus for the AvP port: a v2 draft (networking.h) says the commit it was made from in its CONNECT, for the
+	// host to check that they're the same (JBLD). Without the draft it's 0, as before, and a host doesn't look at it.
+	ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);
 	if (ServerPeer == NULL)
 	{
 		Con_PrintError("Net_ConnectToSession - Failed to connect to server host");
@@ -3345,7 +3422,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	// event, as the one wait did, and by its number of turns too, in case the clock stands still.
 	bool connected = false;
 
-	if (SessionData[sessionNumber].throughRelay)
+	if (SessionData[sessionNumber].throughRelay && Net_V2DraftOn())
 	{
 		uint32_t const waitStarted = enet_time_get();
 
@@ -3411,7 +3488,7 @@ static bool Net_CreatePlayer(char *playerName)
 	}
 
 	thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;
-	thisClientPlayer.version = kMultiplayerVersion;
+	thisClientPlayer.version = Net_OurVersion();
 	strncpy(thisClientPlayer.name, playerName, kPlayerNameSize - 1);
 	thisClientPlayer.name[kPlayerNameSize-1] = 0;
 

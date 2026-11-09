@@ -137,3 +137,9 @@ bool BuildIdentity_IsABeta()
 {
 	return BetaBuild_VersionIsABeta(AVP_RELEASE_VERSION);
 }
+
+// Added 2026-11-09 by Melanikus for the AvP port: see build_identity.h
+bool BuildIdentity_CommitWord(uint32_t *out)
+{
+	return BuildIdentity_WordFromCommit(AVP_RELEASE_COMMIT, out);
+}
