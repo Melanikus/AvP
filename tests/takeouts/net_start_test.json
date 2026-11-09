@@ -335,7 +335,7 @@
 			]
 		},
 		{
-			"name": "the log says so every time",
+			"name": "the log says so every time a message has nobody to send it to",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
@@ -1815,7 +1815,7 @@
 			]
 		},
 		{
-			"name": "the log says so every time",
+			"name": "the log says so every time a game message has no game running",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",

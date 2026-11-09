@@ -66,7 +66,7 @@
 			]
 		},
 		{
-			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"name": "NAMES: avp_chunk.cpp: a generator's name reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/avp_chunk.cpp",
@@ -76,7 +76,7 @@
 			]
 		},
 		{
-			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"name": "NAMES: avp_chunk.cpp: a generator's other name reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/avp_chunk.cpp",
@@ -86,7 +86,7 @@
 			]
 		},
 		{
-			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"name": "NAMES: avp_chunk.cpp: a power cable's name reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/avp_chunk.cpp",
@@ -136,7 +136,7 @@
 			]
 		},
 		{
-			"name": "NAMES: bitmap_names.cpp rifname reads on past its chunk",
+			"name": "NAMES: bitmap_names.cpp: an outside shape's list of bitmaps reads its rifname on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/bitmap_names.cpp",
@@ -156,7 +156,7 @@
 			]
 		},
 		{
-			"name": "NAMES: bitmap_names.cpp rifname reads on past its chunk",
+			"name": "NAMES: bitmap_names.cpp: a bitmap's check sum names read their rifname on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/bitmap_names.cpp",
@@ -216,7 +216,7 @@
 			]
 		},
 		{
-			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"name": "NAMES: chunk_palette.cpp: a lighting table's outside file name reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_palette.cpp",
@@ -236,7 +236,7 @@
 			]
 		},
 		{
-			"name": "NAMES: chunk_palette.cpp rifname reads on past its chunk",
+			"name": "NAMES: chunk_palette.cpp: a child file's rifname reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_palette.cpp",
@@ -246,7 +246,7 @@
 			]
 		},
 		{
-			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"name": "NAMES: chunk_palette.cpp: a child file's own file name reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_palette.cpp",
@@ -256,7 +256,7 @@
 			]
 		},
 		{
-			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"name": "NAMES: chunk_palette.cpp: each file name a child file lists reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_palette.cpp",
@@ -266,22 +266,12 @@
 			]
 		},
 		{
-			"name": "NAMES: chunk_palette.cpp rifname reads on past its chunk",
+			"name": "NAMES: chunk_palette.cpp: a palette store's rifname reads on past its chunk",
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_palette.cpp",
 					"from": "size_t len = 0;\n\trifname = CopyNameFromChunk(start, ssize, sdata, &len);\n\tsdata += len + 4 &~3;",
 					"to": "size_t const len = strlen(sdata)+1;\n\trifname = new char[len];\n\tstrcpy(rifname,sdata);\n\tsdata += len + 3 &~3;"
-				}
-			]
-		},
-		{
-			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
-			"changes": [
-				{
-					"file": "3dc/win95/chunk_palette.cpp",
-					"from": "filename = CopyNameFromChunk(sdata, ssize, sdata+32);\n\t}\n\telse ",
-					"to": "size_t const filename_size = strlen(sdata+32)+1;\n\t\tfilename = new char[filename_size];\n\t\tmemcpy(filename,sdata+32,filename_size);\n\t}\n\telse "
 				}
 			]
 		},
@@ -332,16 +322,6 @@
 					"file": "3dc/win95/chunk_shape.cpp",
 					"from": "size_t length=0;\n\tfrag_type_name=CopyNameFromChunk(start,chunk_bytes,data,&length);\n\tdata+=(length+4)&~3;",
 					"to": "int length=strlen(data)+1;\n\tfrag_type_name=new char[length];\n\tstrcpy(frag_type_name,data);\n\tdata+=(length+3)&~3;"
-				}
-			]
-		},
-		{
-			"name": "NAMES: chunk_shape.cpp name reads on past its chunk",
-			"changes": [
-				{
-					"file": "3dc/win95/chunk_shape.cpp",
-					"from": "name=CopyNameFromChunk(chunk_start,chunk_bytes,data);\n}\n\nv",
-					"to": "name=new char[strlen(data)+1];\n\tstrcpy(name,data);\n}\n\nv"
 				}
 			]
 		},
