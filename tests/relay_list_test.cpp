@@ -784,6 +784,36 @@ static void TestTheCalls()
 	Check(!Has(source, " printf(") && !Has(source, "\tprintf(") && !Has(source, "OutputDebugString"), "and nothing prints what a call sent or got");
 }
 
+static size_t CountOf(const std::string &text, const char *piece)
+{
+	size_t count = 0;
+
+	for (size_t at = text.find(piece); at != std::string::npos; at = text.find(piece, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
+static void TestTheMenus()
+{
+	puts("14. when the menus ask the list (read, not run: the menus need the whole game)");
+
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	Check(menus.size() > 100000, "menus.cpp was found and read, from the top of the repository");
+
+	// The page of games found is set up again each time its list changes. Asking the list there would ask again for every answer, for
+	// as long as the page is open, so it has to be in the part that runs only when the page is first opened.
+	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(firstOpen, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 1,
+		"the page of games found asks the list once each time it's opened, and nowhere else");
+
+	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -799,6 +829,7 @@ int main()
 	TestServerNames();
 	TestModeWords();
 	TestTheCalls();
+	TestTheMenus();
 
 	if (checksFailed)
 	{

@@ -505,6 +505,26 @@
 			]
 		},
 		{
+			"name": "SOURCE: the page of games found asks the list each time it is set up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tRelayList_FindRelays();\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
+					"to": "\t\t\t\tRelayList_FindRelays();\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the multiplayer page does not ask where the relays are",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRelayList_FindRelays();\n\n\t\t\t//skirmishMode must be false",
+					"to": "\t\t\t//skirmishMode must be false"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the list's thread writes to the game's log",
 			"changes": [
 				{
