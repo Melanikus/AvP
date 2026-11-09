@@ -792,30 +792,47 @@ static void FireAt(PLAYER_STATUS *status, VECTORCH const &point)
 	}
 }
 
-// True if he's fighting this frame. Something he can't hurt can't hold him for ever: after a while it's killed for him, and if even that doesn't work he leaves it alone.
+// True if he's fighting this frame. Something he can't hurt can't hold him for ever: if firing at it hasn't hurt it at all after a while, he
+// can't hit it from here, and he leaves it alone and walks on (hudson_play_steps.h, HudsonPlay_CantHurtIt). Something he does hurt, but
+// that won't go down, is killed for him after longer, and if even that doesn't work he leaves it alone.
 static bool Fighting(PLAYER_STATUS *status, DWORD now)
 {
 	static const STRATEGYBLOCK *lastThreat = 0;
 	static const STRATEGYBLOCK *leftAlone = 0;
 	static DWORD fightingItSince = 0;
+	static DWORD lastSawItAt = 0;     // when he last saw the one he's fighting, so a moment out of sight doesn't start the fight again
+	static int healthAtStart = 0;     // its health when the fight began, to tell whether he's hurting it at all
 	STRATEGYBLOCK *const threat = NearestThreat(leftAlone, lastThreat);
 
 	if (!threat)
 	{
-		if (lastThreat)
+		// Out of sight for a moment is still the same fight, on the same clock: only after a while is it over. Meanwhile he walks.
+		if (lastThreat && !HudsonPlay_IsTheSameFight(true, now - lastSawItAt))
 		{
 			SayAboutTheStep("nothing he can see is against him now");
+			lastThreat = 0;
 		}
 
-		lastThreat = 0;
 		return false;
 	}
 
-	if (threat != lastThreat)
+	if (!HudsonPlay_IsTheSameFight(threat == lastThreat, now - lastSawItAt))
 	{
 		lastThreat = threat;
 		fightingItSince = now;
+		healthAtStart = threat->SBDamageBlock.Health;
 		SayAboutTheStep("he fights " + HudsonStrategies_Title(threat));
+	}
+
+	lastSawItAt = now;
+
+	if (HudsonPlay_CantHurtIt(now - fightingItSince, healthAtStart, threat->SBDamageBlock.Health))
+	{
+		SayAboutTheStep("he's fired at " + HudsonStrategies_Title(threat) + " for " + std::to_string((int)(kHudsonPlayCantHurtItAfter / 1000)) +
+			" seconds and it isn't hurt at all, so he can't hit it from here: he leaves it alone and walks on");
+		leftAlone = threat;
+		lastThreat = 0;
+		return false;
 	}
 
 	if (now - fightingItSince >= kGiveUpOnAFight)

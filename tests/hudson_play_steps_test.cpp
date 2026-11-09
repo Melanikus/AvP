@@ -441,6 +441,33 @@ static void TestTheRealLists()
 	Check(stepsInAll == 159, "159 steps in all");
 }
 
+// A fight he can't win from here mustn't stop him walking (hudson_play_steps.h, 2026-11-09, from the owner watching a run)
+static void TestFightsThatCantStopHim()
+{
+	printf("Fights that can't stop him\n");
+
+	Check(HudsonPlay_IsTheSameFight(true, 0), "the same threat, never out of sight: the same fight");
+	Check(HudsonPlay_IsTheSameFight(true, 2999), "out of sight for just under 3 s and back: still the same fight, on the same clock");
+	Check(!HudsonPlay_IsTheSameFight(true, 3000), "out of sight for 3 s: the fight was over, and seeing it again starts a new one");
+	Check(!HudsonPlay_IsTheSameFight(false, 0), "another threat is always another fight");
+
+	Check(!HudsonPlay_CantHurtIt(0, 100, 100), "a fight that has just begun goes on");
+	Check(!HudsonPlay_CantHurtIt(7999, 100, 100), "just under 8 s of firing without hurting it: he goes on fighting");
+	Check(HudsonPlay_CantHurtIt(8000, 100, 100), "8 s of firing and not hurt at all: he can't hit it from here, and leaves it");
+	Check(HudsonPlay_CantHurtIt(8000, 100, 101), "nor if it's somehow healthier than when he began");
+	Check(!HudsonPlay_CantHurtIt(8000, 100, 99), "but any harm done means he can hit it, so he goes on");
+	Check(!HudsonPlay_CantHurtIt(60000, 100, 1), "however long, as long as he's hurting it");
+
+	// And the game's fight uses both, so these sums are what decides it: a moment out of sight doesn't start the fight again, and a
+	// threat he can't hurt is left alone
+	std::string play;
+
+	Check(ReadWholeFile("3dc/avp/hudson_play.cpp", &play), "3dc/avp/hudson_play.cpp is there");
+	Check(play.find("if (lastThreat && !HudsonPlay_IsTheSameFight(true, now - lastSawItAt))") != std::string::npos, "the fight only ends after a while out of sight");
+	Check(play.find("if (!HudsonPlay_IsTheSameFight(threat == lastThreat, now - lastSawItAt))") != std::string::npos, "and only a new fight resets its clock");
+	Check(play.find("if (HudsonPlay_CantHurtIt(now - fightingItSince, healthAtStart, threat->SBDamageBlock.Health))") != std::string::npos, "a threat he can't hurt is judged by its health since the fight began");
+}
+
 int main()
 {
 	TestAGoodList();
@@ -453,6 +480,7 @@ int main()
 	TestWalkControls();
 	TestHopping();
 	TestTheRealLists();
+	TestFightsThatCantStopHim();
 
 	if (checksFailed > 0)
 	{

@@ -318,6 +318,28 @@ inline bool HudsonPlay_AimedWell(int angle)
 	return angle > -60 && angle < 60;
 }
 
+// A FIGHT HE CAN'T WIN FROM HERE MUSTN'T STOP HIM WALKING. Added 2026-11-09, from the owner watching a run: "I see the path, it works, he's
+// just not following it". He stood still beside his way for minutes, because an alien he could see now and then, but not hurt, kept
+// starting a fight: every time it came back into sight, it counted as a new fight, so the fight's own time limit never came, and between
+// the moments he saw it, he was never turned back to his way long enough to walk.
+// So: out of sight for less than kHudsonPlaySameFightWithin and back again is still the same fight, with the same clock. And firing at it
+// for kHudsonPlayCantHurtItAfter without its health going down means he can't hit it from where he is: he leaves it alone and walks on.
+// That isn't a cheat (nothing is done for him), so it isn't counted as one; the log says so each time.
+static const unsigned long kHudsonPlaySameFightWithin = 3000;  // ms
+static const unsigned long kHudsonPlayCantHurtItAfter = 8000;  // ms
+
+// True if a threat seen again is the same fight as the one before: the same one, out of sight for less than the limit
+inline bool HudsonPlay_IsTheSameFight(bool sameThreat, unsigned long outOfSightFor)
+{
+	return sameThreat && outOfSightFor < kHudsonPlaySameFightWithin;
+}
+
+// True if he's been fighting it long enough to know he can't hurt it from here: its health hasn't gone down at all since the fight began
+inline bool HudsonPlay_CantHurtIt(unsigned long fightingFor, int healthAtStart, int healthNow)
+{
+	return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;
+}
+
 // Has he reached a point on his way? Across, he has to be close. Up and down it's more generous, because where the game says he is and where the grid says
 // the floor is differ by about his height. But a point on the floor above isn't one he's reached, however close it is across.
 inline bool HudsonPlay_ReachedPoint(int acrossX, int acrossZ, int upOrDown, int closeAcross, int closeUpOrDown)
