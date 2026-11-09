@@ -5,6 +5,7 @@
 
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -414,6 +415,53 @@ static bool Has(std::string const &text, char const *words)
 	return text.find(words) != std::string::npos;
 }
 
+// The number an enum's value stands for, read from the start of value: written there as a number, or as the name of another enum's
+// number, which is followed once to "enum { <name> = <number> };", written exactly once in source. 0, which no room check accepts, for
+// anything else: a name written nowhere or twice, or a sum. Added 2026-11-09 by Melanikus for the AvP port.
+static int EnumNumber(std::string const &source, std::string const &value)
+{
+	size_t length = 0;
+
+	while (length < value.size() && (isalnum(static_cast<unsigned char>(value[length])) || value[length] == '_'))
+	{
+		length++;
+	}
+
+	// What comes after the word has to end it: a comma, or the enum's closing brace, so "name + 1" is a sum, and refused
+	bool const ends = length < value.size() &&
+		(value[length] == ',' || value[length] == '}' || value.compare(length, 2, " }") == 0);
+
+	if (length == 0 || !ends)
+	{
+		return 0;
+	}
+
+	std::string const word = value.substr(0, length);
+
+	if (isdigit(static_cast<unsigned char>(word[0])))
+	{
+		return word.find_first_not_of("0123456789") == std::string::npos ? atoi(word.c_str()) : 0;
+	}
+
+	std::string const definition = "enum { " + word + " = ";
+	size_t const at = source.find(definition);
+
+	if (at == std::string::npos || source.find(definition, at + 1) != std::string::npos)
+	{
+		return 0;
+	}
+
+	size_t const digits = at + definition.size();
+	size_t const end = source.find_first_not_of("0123456789", digits);
+
+	if (end == digits || end == std::string::npos || source.compare(end, 3, " };") != 0)
+	{
+		return 0;
+	}
+
+	return atoi(source.substr(digits, end - digits).c_str());
+}
+
 // Whether a key is named, as itself: KEY_L isn't there just because KEY_LEFT is.
 static bool NamesKey(std::string const &text, std::string const &key)
 {
@@ -591,9 +639,12 @@ static void TheRealGame()
 	Check(CountOf(loader, "textureRelief.Build(") == 1, "and that's the only way in");
 
 	// The tag is a fixed list of lines on the stack, and more lines than it has room for would write past its end.
+	// Modified 2026-11-09 by Melanikus for the AvP port: the room can be written as a name, since the relay's line in play started under the
+	// tag (kMostLines = kShadowStatusMostLines, the number the two share), and is then followed to where it's written as a number.
 	std::string const tag = Between(render, "enum { kMostLines = ", "int characters = 0;");
-	int const room = atoi(tag.c_str() + (tag.empty() ? 0 : strlen("enum { kMostLines = ")));
+	int const room = EnumNumber(render, tag.empty() ? std::string() : tag.substr(strlen("enum { kMostLines = ")));
 	int const lines = CountOf(tag, "lines[numLines++]");
+	Check(room > 0, "the tag's room is a number this test can read, or a name it can follow to one");
 	Check(lines > 0 && lines <= room, "the tag has room for every line it can write, even if all of them come at once");
 
 	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
