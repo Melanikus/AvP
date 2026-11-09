@@ -38,7 +38,7 @@ bool NetPq_KemDecapsulate(const uint8_t *, const uint8_t *, uint8_t secretOut[kN
 	return false;
 }
 
-bool NetPq_DsaVerify(const uint8_t *, const uint8_t *, size_t, const char *, const uint8_t *)
+bool NetPq_DsaVerify(const uint8_t *, const uint8_t *, size_t, const uint8_t *)
 {
 	return false;
 }

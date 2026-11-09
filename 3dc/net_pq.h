@@ -33,7 +33,6 @@ size_t const kNetPqKemCiphertextBytes = 1568;
 size_t const kNetPqKemSecretBytes = 32;
 size_t const kNetPqDsaPublicBytes = 2592;       // an ML-DSA-87 public key
 size_t const kNetPqDsaSignatureBytes = 4627;
-size_t const kNetPqMostContextBytes = 255;      // FIPS 204's limit on a signature's context string
 
 // Whether this game has a post-quantum half at all. False with net_pq_none.cpp: then version 2 can't be used, and the game says so.
 bool NetPq_Available();
@@ -50,9 +49,11 @@ bool NetPq_KemEncapsulate(const uint8_t publicKey[kNetPqKemPublicBytes], uint8_t
 // The secret a ciphertext carries, with privateKey. False only for a private key that fails FIPS 203 section 7.3's own check of itself.
 bool NetPq_KemDecapsulate(const uint8_t privateKey[kNetPqKemPrivateBytes], const uint8_t ciphertext[kNetPqKemCiphertextBytes], uint8_t secretOut[kNetPqKemSecretBytes]);
 
-// Whether signature is publicKey's ML-DSA-87 signature of message, made with context (CRYPTO.md section 12: pure ML-DSA, the context
-// "AVPX <what> v2" as ASCII)
-bool NetPq_DsaVerify(const uint8_t publicKey[kNetPqDsaPublicBytes], const uint8_t *message, size_t messageSize, const char *context,
+// Whether signature is publicKey's ML-DSA-87 signature of message: pure ML-DSA (FIPS 204's ML-DSA.Verify) with the EMPTY context, the
+// only one the relay's Java can sign with (CRYPTO.md section 5.1 point 16, and section 12). Nothing is lost by that: the message is the
+// 48-byte digest D = SHA-384("AVPX <what> v2" || the bytes), whose first words already say what kind of thing was signed, so a signature
+// over one kind of thing can't be passed off as another.
+bool NetPq_DsaVerify(const uint8_t publicKey[kNetPqDsaPublicBytes], const uint8_t *message, size_t messageSize,
 	const uint8_t signature[kNetPqDsaSignatureBytes]);
 
 #endif

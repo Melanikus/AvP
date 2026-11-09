@@ -409,7 +409,7 @@ static void ThePostQuantumStandIn()
 		"decapsulating is refused too");
 
 	static uint8_t dsaKey[kNetPqDsaPublicBytes], dsaSig[kNetPqDsaSignatureBytes];
-	Check(!NetPq_DsaVerify(dsaKey, reinterpret_cast<const uint8_t *>("m"), 1, "AVPX test v2", dsaSig), "and no signature ever checks");
+	Check(!NetPq_DsaVerify(dsaKey, reinterpret_cast<const uint8_t *>("m"), 1, dsaSig), "and no signature ever checks");
 }
 
 // ---- The Noise state (CRYPTO.md section 5)
