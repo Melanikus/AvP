@@ -179,6 +179,11 @@ int main()
 	NONE_OF(types, "bh_types.cpp", "bh_spcl.h", "XenoMorphRoom", "XENO_MORPH_ROOM", "I_BehaviourXenoborgMorphRoom", "door_lock_target", "lockable_door",
 		"has_lock_target", "RequestEnvChangeViaLift", "SBNeededForNextEnv", "curr_stn->env");
 
+	// The morph room's fade to black: bh_spcl.cpp held it, and hud.cpp set it to 0 and nothing else read it. A name a taken-out file
+	// held is only gone once nothing names it, or the game won't link (GitHub's Build the game found this one)
+	std::string const hud = Code("3dc/avp/hud.cpp", "void InitMarineHUD(void)");
+	NONE_OF(hud, "hud.cpp", "RequestFadeToBlackLevel");
+
 	std::string const setup = Code("3dc/avp/win95/object_setup.cpp", "static void add_prox_door");
 	NONE_OF(setup, "object_setup.cpp", "bh_spcl.h", "XENO_MORPH_ROOM", "xmrtt", "Xenoborg_Morph_Thingy", "has_lock_target", "ltt->environment", "ltt->orient");
 

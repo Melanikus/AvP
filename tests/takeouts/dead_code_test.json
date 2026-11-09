@@ -16,6 +16,16 @@
 			]
 		},
 		{
+			"name": "hud.cpp names the morph room's fade to black again",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;\n",
+					"to": "extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;\nextern signed int RequestFadeToBlackLevel;\n"
+				}
+			]
+		},
+		{
 			"name": "bh_types.cpp includes the morph room again",
 			"changes": [
 				{
