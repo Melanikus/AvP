@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (bytes > 0 && memchr(body, 0, bytes) != NULL)",
-					"to": "if (false)"
+					"from": "\t\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "\t\tif (false)"
 				}
 			]
 		},
@@ -329,8 +329,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (!w.fits || w.used > kRelayListMostBodyBytes)",
-					"to": "if (w.used > kRelayListMostBodyBytes)"
+					"from": "if (!w.fits || w.used > most)",
+					"to": "if (w.used > most)"
 				}
 			]
 		},
@@ -946,6 +946,236 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\tout.fingerprint = l.fingerprint;\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an access answer with any HTTP status is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (status != 200 && status != 400 && status != 429 && status != 503)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer of any size is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > kRelayAccessMostAnswerBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer with a 0 byte isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\n\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer's version isn't held to 1",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "{ \"v\", kKindNumber, 0, 1, 1, NULL, &version, NULL },\n\t\t\t{ \"fp\"",
+					"to": "{ \"v\", kKindNumber, 0, 0, 9, NULL, &version, NULL },\n\t\t\t{ \"fp\""
+				}
+			]
+		},
+		{
+			"name": "a word too long for any of the protocol's is called bad text, not a bad word",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (why == kRelayListBadText)\n\t{\n\t\treturn kRelayListBadWord;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "more after an access answer is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (Next(r) != 0)\n\t{\n\t\treturn kRelayListMoreAfterTheEnd;",
+					"to": "\tif (false)\n\t{\n\t\treturn kRelayListMoreAfterTheEnd;"
+				}
+			]
+		},
+		{
+			"name": "a word is taken with any status",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (kAccessWords[i].status == status && strcmp(kAccessWords[i].word, word) == 0)",
+					"to": "if (strcmp(kAccessWords[i].word, word) == 0)"
+				}
+			]
+		},
+		{
+			"name": "an answer about another key is taken for this PC's",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (status == 200 && (!ours || memcmp(fingerprint, ours, sizeof(fingerprint)) != 0))",
+					"to": "if (status == 200 && !ours)"
+				}
+			]
+		},
+		{
+			"name": "the access code's bits are taken lowest first",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "value = value * 2 + ((fingerprint[bit / 8] >> (7 - bit % 8)) & 1);",
+					"to": "value = value * 2 + ((fingerprint[bit / 8] >> (bit % 8)) & 1);"
+				}
+			]
+		},
+		{
+			"name": "the access code has no dashes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (letter > 0 && letter % 4 == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name of 16 letters can be sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (length > kRelayAccessNameMostBytes)",
+					"to": "if (length > kRelayAccessNameMostBytes + 1)"
+				}
+			]
+		},
+		{
+			"name": "a name can have a \"",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return byte >= 0x20 && byte <= 0x7E && c != '\"' && c != '\\\\';",
+					"to": "return byte >= 0x20 && byte <= 0x7E && c != '\\\\';"
+				}
+			]
+		},
+		{
+			"name": "a name can have a \\",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return byte >= 0x20 && byte <= 0x7E && c != '\"' && c != '\\\\';",
+					"to": "return byte >= 0x20 && byte <= 0x7E && c != '\"';"
+				}
+			]
+		},
+		{
+			"name": "a name can start with a space",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[length - 1] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a name can end with a space",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[0] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a profile's name keeps the spaces at its start",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (IsAccessNameLetter(c) && !(c == ' ' && n == 0))",
+					"to": "if (IsAccessNameLetter(c))"
+				}
+			]
+		},
+		{
+			"name": "a profile's name keeps the spaces at its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "while (n > 0 && to[n - 1] == ' ')",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "a profile's name is read past its room",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "profile && i < profileBytes && profile[i]",
+					"to": "profile && profile[i]"
+				}
+			]
+		},
+		{
+			"name": "an access request is sent with a name that breaks the rule",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (RelayAccess_NameRefusal(name) != kRelayAccessNameGood || !statics",
+					"to": "if (!statics"
+				}
+			]
+		},
+		{
+			"name": "an access request is sent for an identity never made",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || !statics || statics[0] != 0x04)",
+					"to": " || !statics)"
+				}
+			]
+		},
+		{
+			"name": "an access request is held to the other calls' 1 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return Finish(w, kRelayAccessMostBodyBytes);",
+					"to": "return Finish(w, kRelayListMostBodyBytes);"
+				}
+			]
+		},
+		{
+			"name": "the key is written in base64's web letters, - and _",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"",
+					"to": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\""
+				}
+			]
+		},
+		{
+			"name": "the key's last three bytes aren't written",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "for (size_t i = 0; i + 3 <= size; i += 3)",
+					"to": "for (size_t i = 0; i + 3 < size; i += 3)"
 				}
 			]
 		}

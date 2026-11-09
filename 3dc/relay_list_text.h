@@ -44,6 +44,21 @@ enum
 	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
 };
 
+// Asking for online access (server #24): the sizes PROTOCOL.md gives for POST /v1/access-requests. Added 2026-11-09 by Melanikus for the
+// AvP port.
+enum
+{
+	kRelayAccessNameMostBytes = 15,      // a name: 1 to 15 bytes, the most a profile's name can be (MAX_SIZE_OF_USERS_NAME, user_profile.h)
+	kRelayAccessKeyLetters = 2220,       // the public halves of an identity, 1,665 bytes, in base64: always exactly this many letters
+	kRelayAccessCodeLetters = 16,        // the access code: 16 code letters
+	kRelayAccessCodeTextBytes = 20,      // written XXXX-XXXX-XXXX-XXXX, with the 0 at the end
+	kRelayAccessMostBodyBytes = 4096,    // the list takes a request of at most 4 KB, its own limit (the other calls keep 1 KB)
+	kRelayAccessMostAnswerBytes = 512    // and answers it with far less than this
+};
+
+static_assert(kNetIdentityStaticBytes % 3 == 0 && kNetIdentityStaticBytes / 3 * 4 == kRelayAccessKeyLetters,
+	"the public halves are a whole number of threes, so their base64 has no = at the end, and is always the same length");
+
 // The most a passTime can be: the most a JSON number holds exactly, 2 to the 53rd, less 1
 static const uint64_t kRelayListMostPassTime = 9007199254740991ull;
 
@@ -142,7 +157,10 @@ enum RelayListRefusal
 	kRelayListEndsTooSoon,     // the text stops before its end
 	kRelayListNotWhatComesNext, // something else where a , : } or ] has to be
 	kRelayListMoreAfterTheEnd, // more after the closing }
-	kRelayListBadFingerprint   // a game's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadFingerprint,  // a game's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadStatus,       // an access request's answer with an HTTP status the protocol never gives it
+	kRelayListBadWord,         // a state or an error that isn't one of the protocol's words for its status
+	kRelayListNotOurKey        // an answer to an access request that isn't about this PC's own key
 };
 
 // The words for a refusal: "a game has a field the protocol doesn't have", and so on
@@ -183,5 +201,65 @@ bool RelayList_IsRegion(const char *region);
 
 // A relay's host from the list: a DNS name of 1 to 63 characters, and never an address: a name whose every part is digits is one
 bool RelayList_IsRelayHost(const char *host);
+
+// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+//
+// A player asks the list's owner to let this PC play online. The game sends the name the player chose and the public halves of this PC's
+// identity (net_identity.h), with POST /v1/access-requests, and only when the player presses Request access: never by itself. A person
+// looks at each request. To approve one, the owner types the access code the player gave him, which is made from the identity's
+// fingerprint and shown only on this PC's screen. That code is what makes the request safe: a request whose key was swapped on the way
+// has another fingerprint, so another code, and is never approved. PROTOCOL.md, in the server's repository, is the whole of the call.
+
+// Why a name can't be sent. The list refuses exactly the same names, and never changes one to fit.
+enum RelayAccessNameRefusal
+{
+	kRelayAccessNameGood,
+	kRelayAccessNameEmpty,
+	kRelayAccessNameTooLong,       // more than 15 bytes
+	kRelayAccessNameBadLetter,     // a byte outside 32 to 126, or a " or a \, which would need escaping in JSON and in the owner's window
+	kRelayAccessNameSpaceAtAnEnd   // a space first or last, which nobody reading it could see
+};
+
+RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name);
+
+// The words for why a name can't be sent, for the log and the tests (the page has its own, in language.cpp's table)
+const char *RelayAccess_NameWords(RelayAccessNameRefusal why);
+
+// The name the request page starts with: the profile's (at most profileBytes of it), kept to the rule. A letter the rule doesn't take is
+// left out, spaces at either end are taken off, and it's cut to 15 bytes. Empty if nothing is left, and then the player types one. to has
+// room for kRelayAccessNameMostBytes + 1.
+void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char *to);
+
+// The access code for an identity's fingerprint. It's the fingerprint's first 80 bits, highest first, as 16 code letters of 5 bits each
+// (the relay codes' letters, kNetRelayCodeAlphabet), in groups of four: XXXX-XXXX-XXXX-XXXX. 80 bits can't be matched by making keys until
+// one fits. The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.
+void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes]);
+
+// The body of a POST /v1/access-requests: {"v":1,"name":"...","key":"..."}. False, with nothing to send, if the name breaks the rule,
+// or the public halves aren't an identity's (they start with the P-384 key's 04), or there's no room.
+bool RelayList_AccessBody(const char *name, const uint8_t statics[kNetIdentityStaticBytes], char *body, size_t room);
+
+// What the list said about a request
+enum RelayAccessAnswer
+{
+	kRelayAccessWaiting,   // 200, "waiting": a person will look at it when they can
+	kRelayAccessApproved,  // 200, "approved"
+	kRelayAccessRefused,   // 200, "refused": it stays so; a new identity is the way to ask again
+	kRelayAccessRevoked,   // 200, "revoked": it was approved, and isn't any more; it stays so too
+	kRelayAccessBadName,   // 400, "name": the list wouldn't take the name
+	kRelayAccessBadKey,    // 400, "key": nor the key
+	kRelayAccessBadShape,  // 400, "shape": nor the request
+	kRelayAccessBusy,      // 429, "busy": too many requests from this address just now, or too many waiting; try again in a minute
+	kRelayAccessClosed     // 503, "closed": the list isn't taking requests just now
+};
+
+// The words for an answer, for the log
+const char *RelayAccess_AnswerWords(RelayAccessAnswer answer);
+
+// Reads the answer to a POST /v1/access-requests. status is the answer's HTTP status: 200 is {"v":1,"fp":"...","state":"..."}, whose fp
+// has to be ours, this PC's own fingerprint; 400, 429 and 503 are {"v":1,"error":"..."}, each with its own words. Anything else is refused.
+// answer is set only when the whole answer is good.
+RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes, const uint8_t ours[kNetIdentityFingerprintBytes],
+	RelayAccessAnswer *answer);
 
 #endif
