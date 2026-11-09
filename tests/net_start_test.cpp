@@ -3995,6 +3995,21 @@ static NetResult JoinThroughTheChannel()
 	return Net_ConnectToSession(0, playerName);
 }
 
+// Whether a log line holding words was written from logLines[from] on (added 2026-11-09 by Melanikus for the AvP port), so a check sees its
+// own step's lines and not an earlier test's
+static bool LoggedSince(size_t from, const char *words)
+{
+	for (size_t i = from; i < logLines.size(); i++)
+	{
+		if (logLines[i].find(words) != std::string::npos)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // The number a game through a relay writes in the log as it ends, of the packets it dropped as not the game's (Net_Disconnect), looked for
 // from logLines[from] on. 0 when there's no such line, as none is written for 0.
 static int DroppedFromElsewhereLogged(size_t from)
@@ -4168,6 +4183,7 @@ static void TestTheRelayChannel()
 
 	// The channel ending ends the room, with its words
 	int const wipesBefore = netRelayV2StandIn.wipes;
+	size_t const giveUpLogFrom = logLines.size();
 	netRelayV2StandIn.failWith = kNetRelayV2NoAnswer;
 	enetClock += 10;
 	Net_ServiceNetwork();
@@ -4184,7 +4200,13 @@ static void TestTheRelayChannel()
 		"a connection from anywhere else isn't touched: it keeps its player, and the counts above are the relay's one alone");
 	fromElsewhere.state = ENET_PEER_STATE_DISCONNECTED;
 	fromElsewhere.data = NULL;
+	// Added 2026-11-09 by Melanikus for the AvP port: a host that loses its relay (as a revoke ends a room: the relay just stops answering)
+	// says what went sealed until then, once
+	Check(LoggedSince(giveUpLogFrom, "net: through the relay, ") && LoggedSince(giveUpLogFrom, " datagram(s) went out sealed, and "),
+		"a host that loses its relay says, as it gives it up, how many datagrams went out sealed and came in and opened: counts only");
+	size_t const hostEndFrom = logLines.size();
 	EndTheGame();
+	Check(!LoggedSince(hostEndFrom, "net: through the relay, "), "and leaving after that doesn't say them twice");
 
 	// Version 1's host, without the draft, gives the relay up as it always did, its connections left to ENet: ending them is the draft's
 	// alone, as v2 changes nothing in a player's game (added 2026-11-09 by Melanikus for the AvP port). Its room is lost as in
@@ -4240,7 +4262,12 @@ static void TestTheRelayChannel()
 	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
 	ArrivesFromTheRelay(ready, 27501);
 	AvP.Network = I_Peer;
+	size_t const joinLogFrom = logLines.size();
 	Check(Net_ConnectToSession(0, playerName) == NET_OK, "a game joined through the relay, with the v2 draft");
+	// Added 2026-11-09 by Melanikus for the AvP port: the joiner's log proves its own steps, in fixed words with no key, code or address
+	Check(LoggedSince(joinLogFrom, "net: the joiner's sealed channel to the relay is open")
+		&& LoggedSince(joinLogFrom, "net: handshake B with the host is done: from here the game is sealed end to end"),
+		"the joiner's log says its sealed channel to the relay is open, and that handshake B with the host is done");
 	Check(netRelayV2StandIn.starts == 1 && netRelayV2StandIn.pickerStarts == 0 && !netRelayV2StandIn.sealed.empty() && netRelayV2StandIn.sealed[0][5] == kNetRelayJoin
 		&& netRelayV2StandIn.sealedTo[0] == kNetRelayDefaultControlPort,
 		"the joiner opens the channel first (handshake A, with no timing: only a host needs that), then asks to join through it, sealed");
@@ -4257,7 +4284,11 @@ static void TestTheRelayChannel()
 	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == joinerHeard + 2 && netRelayV2StandIn.heardFrom.back() == 27501
 		&& netRelayV2StandIn.openedGiven == joinerOpened + 1,
 		"sealed, from the joiner's own port, the channel opens it and hands it on: it hears the relay on every port");
+	size_t const joinEndFrom = logLines.size();
 	EndTheGame();
+	Check(LoggedSince(joinEndFrom, "net: through the relay, ") && LoggedSince(joinEndFrom, " datagram(s) went out sealed, and ")
+		&& LoggedSince(joinEndFrom, " came in and opened"),
+		"and as the game ends, its log says how many datagrams went out sealed through the relay and how many came in and opened: counts only");
 
 	// A joiner whose game's region has no RelayKey: no join, and nothing sent
 	ResetTheStandInChannel();
@@ -4397,6 +4428,17 @@ static void TestTheRelayChannel()
 	std::string const takingOpened = Between(networking, "static void RelayV2TakeOpened(uint32_t now)\n{", "\n}\n");
 	Check(Has(sendingAll, "NetCrypto_Wipe(sends, sizeof(sends));\n\tRelayV2SendAll(on);") && Has(takingOpened, "\n\tNetCrypto_Wipe(opened, sizeof(opened));"),
 		"SOURCE: the version 1 messages held on the stack, plain, are wiped once they've been sealed or read");
+
+	// Added 2026-11-09 by Melanikus for the AvP port: what this test's stand-ins can't show (no scripted joiner finishes B with a host here, and
+	// the stand-in ENet sends nothing through the hook), read in the code: the host's line for a joiner's B, and the two counts behind the
+	// end-of-game line
+	std::string const endToEndHearing = Between(networking, "static int RelayEndToEndHeard(ENetHost *on, uint32_t now)\n{", "\n}\n");
+	std::string const endToEndSealing = Between(networking, "static int ENET_CALLBACK RelaySealedSend(ENetHost *from, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount)\n{", "\n}\n");
+	Check(Has(endToEndHearing, "bool const wasReady = side->Ready();")
+		&& Has(endToEndHearing, "if (!wasReady && side->Ready())\n\t\t{\n\t\t\tLogString(\"net: a joiner's handshake B is done: from here its game is sealed end to end\");")
+		&& Has(endToEndHearing, "relayEndToEndOpened++;\n\ton->receivedData = relayOpened;")
+		&& Has(endToEndSealing, "int const sent = enet_socket_send(from->socket, address, &buffer, 1);\n\trelayEndToEndSealed += sent < 0 ? 0 : 1;"),
+		"SOURCE: the host logs once when a joiner's handshake B is done, and every datagram sealed out or opened in is counted for the end-of-game line");
 	std::string const relayMachines = ReadSourceFile("3dc/net_relay.h");
 	Check(Has(forgetting, "relayHost.Reset();\n\trelayJoiner.Reset();")
 		&& Has(relayMachines, "\t\tmemset(hellos, 0, sizeof(hellos));\n\t\tsendCount = 0;\n\t\tmemset(sends, 0, sizeof(sends));")

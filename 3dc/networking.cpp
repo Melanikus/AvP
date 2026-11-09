@@ -297,6 +297,10 @@ static NetPeerHostSide relayEndToEndHosts[kNetRelayMostJoiners];   // a host's h
 static bool relaySealing = false;                                  // this game's ENet sends through RelaySealedSend (set by the relay's use)
 static uint8_t relayOpened[kRelayMostPacketBytes];                 // a game datagram just opened, for ENet to read in its place
 static uint32_t relayEndToEndDropped = 0;                          // ENet's datagrams dropped on their way out because nothing could seal them
+// Added 2026-11-09 by Melanikus for the AvP port: how many of the game's datagrams went out sealed through the relay, and how many came in
+// and opened, for the log's line at the game's end. A count of what happened, never what was in them.
+static uint32_t relayEndToEndSealed = 0;
+static uint32_t relayEndToEndOpened = 0;
 static_assert(kNetRelayCheckCodeBytes == kNetHandshakeBCheckCodeBytes, "networking.h's check code is as long as net_handshake_b.h's");
 static NetPeerStartLimit relayEndToEndStarts;                      // how many handshakes a host starts, per named port and per second (Primary's finding 1)
 
@@ -468,8 +472,16 @@ static int RelayEndToEndHeard(ENetHost *on, uint32_t now)
 			return 1;
 		}
 
+		// The moment a joiner's handshake B is done on this side (its B5 checked), the log says so, once (added 2026-11-09 by Melanikus for
+		// the AvP port): fixed words, with no key, code or address
+		bool const wasReady = side->Ready();
 		side->Hear(on->receivedData, on->receivedDataLength, relayOpened, sizeof(relayOpened), &opened, now);
 		RelayEndToEndSendAll(on, *side, port);
+
+		if (!wasReady && side->Ready())
+		{
+			LogString("net: a joiner's handshake B is done: from here its game is sealed end to end");
+		}
 	}
 	else
 	{
@@ -487,6 +499,7 @@ static int RelayEndToEndHeard(ENetHost *on, uint32_t now)
 		return 1;
 	}
 
+	relayEndToEndOpened++;
 	on->receivedData = relayOpened;
 	on->receivedDataLength = opened;
 	return 0;
@@ -556,6 +569,7 @@ static int ENET_CALLBACK RelaySealedSend(ENetHost *from, const ENetAddress *addr
 	buffer.data = sealed;
 	buffer.dataLength = written;
 	int const sent = enet_socket_send(from->socket, address, &buffer, 1);
+	relayEndToEndSealed += sent < 0 ? 0 : 1;
 	return sent < 0 ? sent : static_cast<int>(total);
 }
 
@@ -664,6 +678,7 @@ static const char *RelayEndToEndJoin(const char *region, uint16_t port, const ui
 
 	if (relayEndToEndJoiner.Ready())
 	{
+		LogString("net: handshake B with the host is done: from here the game is sealed end to end");   // fixed words (added 2026-11-09 by Melanikus for the AvP port)
 		return NULL;
 	}
 
@@ -1509,9 +1524,24 @@ static bool RelayHostStart()
 
 // No relay answered the echoes, or the room on the relay is gone: the game is open on this network instead, as it would be with no relays
 // at all, so a player can still join it here (Fourth's cold read, finding 4). why is the game's own fixed words.
+// The log's line at the end of a game's time through the relay: how many of its datagrams went out sealed, and how many came in and
+// opened. Counts only, never what was in them. Then they start again from 0. (Added 2026-11-09 by Melanikus for the AvP port.)
+static void RelayLogSealedCounts()
+{
+	LogString("net: through the relay, " + std::to_string(relayEndToEndSealed) + " datagram(s) went out sealed, and " + std::to_string(relayEndToEndOpened) + " came in and opened");
+	relayEndToEndSealed = 0;
+	relayEndToEndOpened = 0;
+}
+
 static void RelayHostGiveUp(const char *why)
 {
 	bool const wasOpen = relayHosting && !relayPicking;   // while still timing the relays, nobody has come through one
+
+	// A host that loses its relay (a revoke ends the room this way: the relay just stops answering) says what went sealed until then
+	if (Net_V2DraftOn() && wasOpen && relaySealing)
+	{
+		RelayLogSealedCounts();
+	}
 	relayHosting = false;
 	relayPicking = false;
 
@@ -1747,6 +1777,12 @@ static void RelayHostLeave()
 		LogString("net: while going through a relay, " + std::to_string(relayEndToEndStarts.Refused()) + " handshake(s) weren't started, because a joiner's port, or the host, had started as many as it may");
 	}
 
+	// What went sealed through the relay in all, with the draft (added 2026-11-09 by Melanikus for the AvP port)
+	if (relaySealing)
+	{
+		RelayLogSealedCounts();
+	}
+
 	relayEndToEndDropped = 0;
 	RelayEndToEndForget();
 
@@ -1828,6 +1864,10 @@ static uint16_t RelayHandshake(const char *region, const char *code)
 
 			if (step == kRelayV2Ready && !joinerStarted)
 			{
+				// The joiner's own line for what the host's "sealed channel to the relay is open" says (added 2026-11-09 by Melanikus for the
+				// AvP port): its keys matched, and handshake A is done
+				LogString("net: the joiner's sealed channel to the relay is open");
+
 				if (!relayJoiner.Start(relayAddress.port, code, enet_time_get()))
 				{
 					relayJoinFailedWhy = kNetRelayRefusedNoGame;
@@ -3037,7 +3077,15 @@ void Net_Disconnect()
 		LogString("net: while going through a relay, " + std::to_string(relayEndToEndDropped) + " datagram(s) the game sent couldn't be sealed yet, so were dropped");
 	}
 
+	// And what went sealed through the relay in all (added 2026-11-09 by Melanikus for the AvP port)
+	if (relayEndToEndPort != 0)
+	{
+		RelayLogSealedCounts();
+	}
+
 	relayEndToEndDropped = 0;
+	relayEndToEndSealed = 0;
+	relayEndToEndOpened = 0;
 	RelayEndToEndForget();
 	relaySealing = false;
 }

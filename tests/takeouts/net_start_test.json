@@ -3444,6 +3444,76 @@
 					"to": "\t\tif (!gameGoesOn || !endToEnd)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 0;\n\t\t}"
 				}
 			]
+		},
+		{
+			"name": "the joiner's log never says its sealed channel to the relay is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\tLogString(\"net: the joiner's sealed channel to the relay is open\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the joiner's log never says handshake B is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogString(\"net: handshake B with the host is done: from here the game is sealed end to end\");   // fixed words (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's log never says a joiner's handshake B is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tLogString(\"net: a joiner's handshake B is done: from here its game is sealed end to end\");",
+					"to": "\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "a host that loses its relay doesn't say what went sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && relaySealing)\n\t{\n\t\tRelayLogSealedCounts();\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner's game ends without saying what went sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayEndToEndPort != 0)\n\t{\n\t\tRelayLogSealedCounts();\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "datagrams that came in and opened aren't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayEndToEndOpened++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "datagrams that went out sealed aren't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayEndToEndSealed += sent < 0 ? 0 : 1;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
