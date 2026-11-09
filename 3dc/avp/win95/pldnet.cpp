@@ -55,6 +55,8 @@
 //   be in the list of far places as well as in the list of AI modules
 //   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
 //   messages don't all fit, so a tester's log shows both
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each frame of a network game tells the 10-second report how long it took (net_watch.h)
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -1039,6 +1041,8 @@ void NetCollectMessages(void)
 #if EXTRAPOLATION_TEST
 		PlayerGhostExtrapolation();
 #endif
+		// For the 10-second report: how long the frame took (net_watch.h). This is the frame just played, so it counts frames of play only.
+		Net_NoteFrame(RealFrameTime);
 	}
 
 	LogNetInfo("Finished message collection post-processing \n");

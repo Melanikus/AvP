@@ -7,6 +7,9 @@
 //   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
 //   a corpse with no display block stays far
 //   a ghost's new data block is checked before it's cleared, not after
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each frame, a ghost that waited more than 100 ms for news tells the 10-second report how long, and how far the news moved it
+//   (net_watch.h)
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -29,6 +32,7 @@ d  ----------------------------------------------------------------------*/
 #include "pvisible.h"
 #include "pldnet.h"
 #include "pldghost.h"
+#include "networking.h"
 #include "lighting.h"
 #include "psnd.h"
 #include "load_shape.h"
@@ -172,6 +176,7 @@ void UpdateGhost(STRATEGYBLOCK *sbPtr,VECTORCH *position,EULER *orientation,int 
 	/* update the dynamics block */
 	{
 		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+		Ghost_NewsCame(ghostData, &dynPtr->Position);
 //		dynPtr->Position = dynPtr->PrevPosition = *position;
 		dynPtr->PrevPosition = dynPtr->Position;
 		dynPtr->PrevOrientMat = dynPtr->OrientMat;
@@ -877,6 +882,24 @@ void PlayerGhostExtrapolation()
 				int time;
 				DYNAMICSBLOCK* dynPtr= sbPtr->DynPtr;
 				if(ghostData->onlyValidFar) continue;
+
+				// For the 10-second report's line on figures that wait for news (net_watch.h). This runs after the frame's messages, so
+				// its news is all in: if it waited too long, the report hears how long, and how far the news moved it.
+				if (ghostData->newsThisFrame)
+				{
+					unsigned int waitedMs = 0;
+
+					if (NetFigureNews_Came(&ghostData->news, timeGetTime(), &waitedMs))
+					{
+						VECTORCH moved = dynPtr->Position;
+						SubVector(&ghostData->placeBeforeNews, &moved);
+
+						bool const aPlayer = ghostData->type == I_BehaviourMarinePlayer || ghostData->type == I_BehaviourAlienPlayer || ghostData->type == I_BehaviourPredatorPlayer;
+						Net_NoteFigureWait(waitedMs, (unsigned int)Approximate3dMagnitude(&moved), aPlayer);
+					}
+
+					ghostData->newsThisFrame = 0;
+				}
 
 				if(UseExtrapolation)
 				{
@@ -5366,6 +5389,7 @@ void UpdateAlienAIGhost(STRATEGYBLOCK *sbPtr,VECTORCH *position,EULER *orientati
 	/* update the dynamics block */
 	{
 		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+		Ghost_NewsCame(ghostData, &dynPtr->Position);
 
 		dynPtr->PrevPosition = dynPtr->Position;
 		dynPtr->PrevOrientMat = dynPtr->OrientMat;

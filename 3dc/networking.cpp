@@ -61,6 +61,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a host's log says when it starts answering searches, or that it can't, when the first search question comes, and every minute how
 //   many came and were answered, never from which address (net_search_log.h)
+//   the 10-second report also says how this machine's frames went, and how often other players' and NPCs' figures waited for news
+//   (net_watch.h)
 // Modified 2026-11-08 by Melanikus for the AvP port (Hudson's branch, never pushed):
 //   a Hudson run with net= only uses this machine's own address, opens no socket for finding games unless it's trying the search, never
 //   asks the whole network or an address that isn't this machine's, and logs who joins, what arrives and who leaves
@@ -84,6 +86,7 @@
 #include "net_relay.h"
 #include "relay_shared.h"
 #include "relay_list.h"
+#include "net_watch.h"
 #include <assert.h>
 #include <random>
 #include "MemoryStream.h"
@@ -2101,6 +2104,20 @@ static unsigned int netStatsBytesIn = 0;
 static unsigned int netStatsBytesOut = 0;
 static bool netStatsStruggling[kMostClients + 1];
 
+// What the frames and the figures did since the last full lines (net_watch.h). They start again with each set of lines, and with a new game.
+static NetFrameWatch netFrames = {};
+static NetFigureWatch netFigures = {};
+
+void Net_NoteFrame(int frameTime)
+{
+	NetFrameWatch_Note(&netFrames, NetFrameWatch_Milliseconds(frameTime));
+}
+
+void Net_NoteFigureWait(unsigned int waitedMs, unsigned int jumpMm, bool aPlayer)
+{
+	NetFigureWatch_Note(&netFigures, waitedMs, jumpMm, aPlayer);
+}
+
 static void LogConnectionNumbers()
 {
 	unsigned int const now = enet_time_get();
@@ -2112,6 +2129,8 @@ static void LogConnectionNumbers()
 		netStatsLastLines = now;
 		netStatsBytesIn = host->totalReceivedData;
 		netStatsBytesOut = host->totalSentData;
+		netFrames = NetFrameWatch();
+		netFigures = NetFigureWatch();
 
 		for (size_t i = 0; i <= kMostClients; i++)
 		{
@@ -2161,6 +2180,16 @@ static void LogConnectionNumbers()
 	{
 		NetStats_BytesLine(host->totalReceivedData, netStatsBytesIn, host->totalSentData, netStatsBytesOut, now - netStatsLastLines, words, sizeof(words));
 		LogString(words);
+
+		// How the frames went, and how often the figures had to wait, over the same time
+		unsigned int const seconds = (now - netStatsLastLines + 500) / 1000;
+		NetFrameWatch_Line(netFrames, seconds, words, sizeof(words));
+		LogString(words);
+		NetFigureWatch_Line(netFigures, seconds, words, sizeof(words));
+		LogString(words);
+		netFrames = NetFrameWatch();
+		netFigures = NetFigureWatch();
+
 		netStatsLastLines = now;
 		netStatsBytesIn = host->totalReceivedData;
 		netStatsBytesOut = host->totalSentData;
