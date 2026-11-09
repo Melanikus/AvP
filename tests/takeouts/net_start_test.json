@@ -2305,7 +2305,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
+					"from": "relayJoinStep = joinerStarted && relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
 					"to": "relayJoinStep = kNetRelayJoinStepReaching;"
 				}
 			]
