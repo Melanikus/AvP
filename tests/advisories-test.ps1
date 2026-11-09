@@ -141,8 +141,27 @@ Expect-Refusal @{ version = '2.0.0'; built = '2.0.0'; read = @(); answer = '{"me
 Expect-Refusal @{ version = '2.0.0'; built = '2.0.0'; read = @(); answer = '[{"ghsa_id": ' } 'isn''t JSON' 'an answer that isn''t JSON is refused'
 Expect-Refusal @{ version = '2.0.0'; built = '2.0.0'; read = @(); answer = @(1..100 | ForEach-Object { New-Advisory $id1 @('< 1') }) } 'a whole page' `
     'a full page of 100 is refused, as there may be more'
-Expect-Refusal @{ version = '2.0.0'; built = '2.0.0'; read = @(New-Read 'GHSA-xxxx-xxxx-xxxx' '2.0.0'); answer = @(New-Advisory 'GHSA-xxxx-xxxx-xxxx' @('< 1')) } `
-    'isn''t a GitHub advisory''s' 'an advisory id in letters GitHub never uses is refused'
+# GitHub's ids are 'GHSA-' and three groups of four, from the small letters and digits 23456789cfghjmpqrvwx only. Each of these isn't
+# one, and is refused even though a read entry names it. ('x' is one of GitHub's letters, so 'GHSA-xxxx-xxxx-xxxx' is a real id's form:
+# see the passing case below.)
+foreach ($bad in @(@('GHSA-aaaa-bbbb-1111', 'letters GitHub never uses'), @('GHSA-2345-6789-CFGH', 'capitals'),
+                   @('GHSA-2345-6789-cfg', 'too few letters'), @("GHSA-2345-6789-cfgh`n", 'a line break at its end')))
+{
+    Expect-Refusal @{ version = '2.0.0'; built = '2.0.0'; read = @(New-Read $bad[0] '2.0.0'); answer = @(New-Advisory $bad[0] @('< 1')) } `
+        'isn''t a GitHub advisory''s' "an advisory id with $($bad[1]) is refused"
+}
+
+$kem = @{ version = '2.0.0'; built = '2.0.0'; read = @(New-Read 'GHSA-xxxx-wwww-2222' '2.0.0'); answer = @(New-Advisory 'GHSA-xxxx-wwww-2222' @('< 1.5.0')) }
+$r = Run-Case $kem (Clean @())
+Check ($r.Code -eq 0 -and $r.Passed -eq 'mlkem-native,mldsa-native') "an id in GitHub's own letters, x and w among them, passes. It said: $($r.Text)"
+
+# A range is written by the other project's people, so it's hostile: a line break in it, with an order to GitHub's runner after it,
+# must reach the log as '?', never as a line of its own
+$kem = @{ version = '2.0.0'; built = '2.0.0'; read = @(New-Read $id1 '2.0.0'); answer = @(New-Advisory $id1 @("< 1`n::error::planted")) }
+$r = Run-Case $kem (Clean @())
+$ownLine = @($r.Text -split "`n" | Where-Object { $_.TrimStart().StartsWith('::') })
+Check ($r.Code -ne 0 -and $r.Text.Contains('< 1?::error::planted') -and $ownLine.Count -eq 0) `
+    "a line break in a range is printed as '?', so nothing after it starts a line. It said: $($r.Text -replace '[^\x20-\x7E]', '?')"
 
 # Two advisories, one read and one not: the unread one alone is named
 $kem = @{ version = '2.0.0'; built = '2.0.0'; read = @(New-Read $id1 '2.0.0'); answer = @((New-Advisory $id1 @('< 1')), (New-Advisory $id2 @('< 1'))) }

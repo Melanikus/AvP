@@ -17,6 +17,8 @@ WHAT IT CHECKS, for each library in .github/advisories-read.json:
 3. Every advisory on it has been read for this version, as below, and none says this version is affected. What each one affects is
    read by machine (its vulnerable version ranges, such as ">= 1.0.0, < 2.0.1"). One whose ranges this check can't read fails, and so
    does one with none at all: a person has to look, and this check has to learn to read it.
+4. GitHub's answer is written by another project's people, so it's treated as hostile: an id must be exactly GitHub's form, and
+   whatever of it is printed reaches the log as plain printable letters only (Write-Safe), so it can't start a line of its own.
 
 WHAT "READ" MEANS, AND WHERE IT'S WRITTEN DOWN. An advisory is read when a person has opened it on the project's page, compared what it
 affects and what fixed it with the version the port builds, and found that version not affected. They write it in
@@ -55,16 +57,35 @@ if (-not $Repository)
 $Repository = (Resolve-Path -LiteralPath $Repository).Path
 $script:refusals = 0
 
+# Some of what this prints comes from outside: GitHub's answer, written by another project's people, and an error's own words. Input is
+# treated as hostile, so only plain printable letters reach the log, and anything else becomes '?'. That matters most for a line break:
+# the text after one would start a line of its own, and a line that starts with '::' is an order to GitHub's runner. A long text is cut
+# at 300 letters too, so an answer can't fill the log.
+function Write-Safe([string]$text)
+{
+    $plain = $text -replace '[^\x20-\x7E]', '?'
+
+    if ($plain.Length -gt 300)
+    {
+        $plain = $plain.Substring(0, 300) + '...'
+    }
+
+    Write-Host $plain
+}
+
 function Write-Refusal([string]$why)
 {
-    Write-Host "REFUSED: $why"
+    Write-Safe "REFUSED: $why"
     $script:refusals++
 }
+
+# Every pattern here ends with \z, the very end of the text. '$' would do almost the same, but it also lets one line break through at
+# the end, and a line break must never pass as part of an id or a version.
 
 # A version as three whole numbers, such as 2.0.0, or $null for anything else. "v2.0.0" and "2.0" are taken as 2.0.0.
 function Read-Version([string]$text)
 {
-    $match = [regex]::Match($text, '^v?(\d{1,9})(?:\.(\d{1,9}))?(?:\.(\d{1,9}))?$')
+    $match = [regex]::Match($text, '^v?(\d{1,9})(?:\.(\d{1,9}))?(?:\.(\d{1,9}))?\z')
 
     if (-not $match.Success)
     {
@@ -83,7 +104,7 @@ function Test-InRange([version]$version, [string]$range)
 
     foreach ($part in ($range -split ','))
     {
-        $match = [regex]::Match($part.Trim(), '^(>=|<=|>|<|==|=)?\s*(\S+)$')
+        $match = [regex]::Match($part.Trim(), '^(>=|<=|>|<|==|=)?\s*(\S+)\z')
 
         if (-not $match.Success)
         {
@@ -191,7 +212,7 @@ foreach ($library in $libraries)
     $repositoryName = [string]$library.repository
     $refusalsBefore = $script:refusals
 
-    if ($port -notmatch '^[a-z0-9-]{1,64}$' -or $repositoryName -notmatch '^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$')
+    if ($port -cnotmatch '^[a-z0-9-]{1,64}\z' -or $repositoryName -notmatch '^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}\z')
     {
         Write-Refusal "a library in .github/advisories-read.json has a port or repository that isn't one ('$port', '$repositoryName')"
         continue
@@ -227,8 +248,8 @@ foreach ($library in $libraries)
 
         $entryVersion = Read-Version ([string]$entry.version)
 
-        if ([string]$entry.id -cmatch '^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$' -and $null -ne $entryVersion -and $entryVersion -eq $version -and
-            ([string]$entry.why).Trim() -and ([string]$entry.readBy).Trim() -and [string]$entry.readOn -match '^\d{4}-\d{2}-\d{2}$')
+        if ([string]$entry.id -cmatch '^GHSA(-[23456789cfghjmpqrvwx]{4}){3}\z' -and $null -ne $entryVersion -and $entryVersion -eq $version -and
+            ([string]$entry.why).Trim() -and ([string]$entry.readBy).Trim() -and [string]$entry.readOn -match '^\d{4}-\d{2}-\d{2}\z')
         {
             $readIds[[string]$entry.id] = $true
         }
@@ -269,7 +290,7 @@ foreach ($library in $libraries)
     {
         $id = [string]$advisory.ghsa_id
 
-        if ($id -cnotmatch '^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$')
+        if ($id -cnotmatch '^GHSA(-[23456789cfghjmpqrvwx]{4}){3}\z')
         {
             Write-Refusal "${repositoryName}: an advisory has an id that isn't a GitHub advisory's"
             continue
@@ -304,7 +325,7 @@ foreach ($library in $libraries)
 
     if ($script:refusals -eq $refusalsBefore)
     {
-        Write-Host "${port} ${version}: $($advisories.Count) published advisories on $repositoryName, every one read for this version, none affecting it"
+        Write-Safe "${port} ${version}: $($advisories.Count) published advisories on $repositoryName, every one read for this version, none affecting it"
         $passedPorts += $port
     }
 }
