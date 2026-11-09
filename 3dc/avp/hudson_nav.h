@@ -35,9 +35,6 @@ int HudsonNav_TimesShuffled();
 // How many times he was stuck, and tried a step to one side before anyone moved him.
 int HudsonNav_TimesSteppedAside();
 
-// To look at, such as for drawing in the world. The map grows as he walks, so its spots have to be asked for each time. It only means anything on a walk.
-const HudsonNavGraph &HudsonNav_TheMap();
-
 // map=grid: the next walk finds its way with the 3D grid. Called before HudsonNav_Start.
 void HudsonNav_UseTheGrid();
 
@@ -48,9 +45,6 @@ const HudsonGrid &HudsonNav_TheGrid();
 void HudsonNav_StartTheGrid();
 bool HudsonNav_TheGridIsStillBuilding();
 HudsonGrid &HudsonNav_TheGridToSearch();
-
-// The point he's being sent to at this moment, after feeling his way. False if nothing's sending him anywhere.
-bool HudsonNav_WhereHesGoing(int *x, int *y, int *z);
 
 // How many times a rescue put him somewhere he couldn't stay, and he was put back: nothing to stand on, or the game pushed him out.
 int HudsonNav_RescuesRefused();

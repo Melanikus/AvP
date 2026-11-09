@@ -157,17 +157,9 @@ float HudsonGrid_HowMuchItFacesUp(const HudsonGridPolygon &polygon)
 	return size > 0.0 ? (float)(-ny / size) : 0.0f;
 }
 
-HudsonGrid::HudsonGrid() : limitPolygons(kHudsonGridMostPolygons), limitBits(kHudsonGridMostBits), limitPlaces(kHudsonGridMostPlaces), limitMoves(kHudsonGridMostMoves)
+HudsonGrid::HudsonGrid(HudsonGridLimits const &limits) : limitPolygons(limits.polygons), limitBits(limits.bits), limitPlaces(limits.places), limitMoves(limits.moves)
 {
 	Clear();
-}
-
-void HudsonGrid::LowerLimitsForATest(size_t mostPolygons, size_t mostBits, size_t mostPlaces, size_t mostMoves)
-{
-	limitPolygons = mostPolygons;
-	limitBits = mostBits;
-	limitPlaces = mostPlaces;
-	limitMoves = mostMoves;
 }
 
 void HudsonGrid::Clear()

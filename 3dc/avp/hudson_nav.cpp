@@ -163,8 +163,6 @@ static int waysTurned = 0;
 static int waysBlocked = 0;
 static int stepsAside = 0;
 static int rescuesRefused = 0;
-static VECTORCH whereHesGoing = { 0, 0, 0 };
-static bool hesGoingSomewhere = false;
 static double howFarAtTheLastSearch = 0.0;
 static int floorOfTheSpot = 0;     // the height he's looking for at the spot he's going to: see LookForAWay
 static int pressed = 0;
@@ -747,9 +745,6 @@ static void SteerAt(STRATEGYBLOCK *marine, int x, int z)
 	VECTORCH const spot = { place.vx + (int)(acrossX * lead / length), place.vy, place.vz + (int)(acrossZ * lead / length) };
 
 	Marine_GuardThisSpot(marine, &spot, hisModule);
-
-	whereHesGoing = spot;
-	hesGoingSomewhere = true;
 }
 
 // Sends him towards this point, by the nearest way that his box really can go: see hudson_nav_feel.h.
@@ -2600,24 +2595,6 @@ HudsonGrid &HudsonNav_TheGridToSearch()
 const HudsonGrid &HudsonNav_TheGrid()
 {
 	return theGrid;
-}
-
-const HudsonNavGraph &HudsonNav_TheMap()
-{
-	return theMap;
-}
-
-bool HudsonNav_WhereHesGoing(int *x, int *y, int *z)
-{
-	if (wayState == kWayLeftAlone || !hesGoingSomewhere)
-	{
-		return false;
-	}
-
-	*x = whereHesGoing.vx;
-	*y = whereHesGoing.vy;
-	*z = whereHesGoing.vz;
-	return true;
 }
 
 int HudsonNav_RescuesRefused()

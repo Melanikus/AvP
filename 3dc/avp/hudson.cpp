@@ -5634,7 +5634,9 @@ static GhostLogEntry &GhostLogEntryFor(int guid)
 
 // Called for each message: sent on the host, and arrived on the joiner
 // A thing a queen throws, on the host when it's sent and on the others when it arrives. The name has no end to it, so the log gives its number.
-void Hudson_GhostLogThrownObject(char const *name, int x, int y, int z)
+// The name is a whole 8-byte name, said in the type, so the compiler won't let anything shorter in. On a joiner it came from the other
+// machine: its last four bytes are copied out as a number, which reads nothing outside it whatever they hold.
+void Hudson_GhostLogThrownObject(char const (&name)[SB_NAME_LENGTH], int x, int y, int z)
 {
 	if (!HudsonRunIsOn || !plan.ghostLog)
 	{
@@ -5642,8 +5644,11 @@ void Hudson_GhostLogThrownObject(char const *name, int x, int y, int z)
 	}
 
 	char line[120];
+	int number = 0;
 
-	_snprintf(line, sizeof(line) - 1, "thrownlog: t=%lu id=%d x=%d y=%d z=%d", (unsigned long)timeGetTime(), *(int const *)&name[4], x, y, z);
+	static_assert(SB_NAME_LENGTH == 4 + sizeof(number), "a name is four bytes and then its number");
+	memcpy(&number, &name[4], sizeof(number));
+	_snprintf(line, sizeof(line) - 1, "thrownlog: t=%lu id=%d x=%d y=%d z=%d", (unsigned long)timeGetTime(), number, x, y, z);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }

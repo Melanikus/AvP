@@ -461,6 +461,11 @@ static STRATEGYBLOCK *FindObjectFromNetIndex(int obIndex);
 static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcSound(NETMESSAGE_NPCSOUND *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr);
+// Hudson's ghost log (ghostlog=yes, in hudson.cpp) writes down the NPC messages sent and arrived, to compare the two machines.
+// Outside a Hudson run that asked for it, each of these does nothing and returns at once.
+extern void Hudson_GhostLogThrownObject(char const (&name)[SB_NAME_LENGTH], int x, int y, int z);
+extern void Hudson_GhostLogMessage(NETMESSAGE_NPCSTATE const *message);
+extern void Hudson_GhostLogDeath(int guid, int deathCode, int deathTime, int gibbFactor);
 static void ProcessNetMsg_LiftState(NETMESSAGE_LIFTSTATE *messagePtr);
 static void ProcessNetMsg_NpcXenoDeltas(NETMESSAGE_NPCXENODELTAS *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID senderId);
@@ -7390,6 +7395,8 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 		destroyed already, so just ignore it */
 		if (sbPtr)
 		{
+			Hudson_NetSayAHit(messageHeader->ammo_id, sbPtr);
+
 			// fill out damage profile
 			damage.Id = static_cast<enum AMMO_ID>(messageHeader->ammo_id);
 
@@ -8611,6 +8618,7 @@ static void AddNpcStateMessages(void)
 			break;
 		}
 
+		Hudson_GhostLogMessage(&state);
 
 		NETMESSAGE_NPCXENODELTAS deltas;
 
@@ -8737,6 +8745,7 @@ void AddNetMsg_NpcThrownObject(STRATEGYBLOCK *object)
 	message.yOrient = (short)way.EulerY;
 	message.zOrient = (short)way.EulerZ;
 	AddPartToSendBuffer(NetMT_NpcThrownObject, &message, sizeof(message));
+	Hudson_GhostLogThrownObject(message.name, message.vx, message.vy, message.vz);
 }
 
 // The host says where a thing the queen threw has got to. Everything in this message came from another machine.
@@ -8793,6 +8802,8 @@ static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr
 	body->GravityOn = 0;
 	body->OnlyCollideWithEnvironment = 1;
 	object->containingModule = room;
+
+	Hudson_GhostLogThrownObject(messagePtr->name, place.vx, place.vy, place.vz);
 }
 
 // PlaySound checks the voice and the category against what it has loaded, so those can be any number.
@@ -8843,6 +8854,7 @@ void AddNetMsg_NpcKilled(STRATEGYBLOCK *sbPtr, int deathCode, int deathTime, int
 	killed.death_time = deathTime;
 	killed.GibbFactor = gibbFactor;
 	AddPartToSendBuffer(NetMT_NpcKilled, &killed, sizeof(killed));
+	Hudson_GhostLogDeath(killed.Guid, deathCode, deathTime, gibbFactor);
 }
 
 // Every number in these has come over the network, so nothing is used until it has been checked. The sender has already been checked to be the host: see kNetPartRules.
@@ -8912,6 +8924,7 @@ static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID sender
 		return;
 	}
 
+	Hudson_GhostLogMessage(messagePtr);
 	NpcGhosts_ApplyState(sbPtr, messagePtr, &position, &orientation);
 }
 
@@ -8982,6 +8995,8 @@ static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID send
 		return;
 	}
 
+	Hudson_NetSayAnNpcDied(messagePtr->death_code);
+	Hudson_GhostLogDeath(messagePtr->Guid, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 	NpcGhosts_Kill(sbPtr, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 }
 
@@ -13883,6 +13898,8 @@ static void Coop_GoToPlace(int place)
 	if (!coopLevelChangeIsDue)
 	{
 		coopCampaignIsOver = true;
+		// A Hudson pair run ends here, as finished. Outside one, this does nothing.
+		Hudson_NetCampaignIsOver();
 	}
 }
 
