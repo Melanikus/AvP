@@ -898,6 +898,176 @@
 					"to": "\t\t\t\tSetEvent(shared->endDone);\n\t\t\t}\n\n\t\t\tif (end && onTheList.listed && strcmp(endRegion, onTheList.region) == 0 && strcmp(endCode, onTheList.code) == 0)\n\t\t\t{\n\t\t\t\tTakeOffTheList();\n\t\t\t}\n"
 				}
 			]
+		},
+		{
+			"name": "a leading zero is read as an address",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (digits > 1 && text[at] == '0')\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an address may have more after it",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (part < 3 ? after != '.' : after != '\\0')\n",
+					"to": "\t\tif (part < 3 && after != '.')\n"
+				}
+			]
+		},
+		{
+			"name": "a number past 255 is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (digits > 3 || value > 255)\n",
+					"to": "\t\tif (digits > 3)\n"
+				}
+			]
+		},
+		{
+			"name": "a pin of any length is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (strlen(text) != 2 * static_cast<size_t>(kRelayListPinBytes))\n",
+					"to": "\tif (strlen(text) < 2 * static_cast<size_t>(kRelayListPinBytes))\n"
+				}
+			]
+		},
+		{
+			"name": "a refused pin is half written",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tread[i] = static_cast<uint8_t>(high * 16 + low);\n",
+					"to": "\t\tread[i] = static_cast<uint8_t>(high * 16 + low);\n\t\tpin[i] = read[i];\n"
+				}
+			]
+		},
+		{
+			"name": "any certificate matches the pin",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tdifference = static_cast<uint8_t>(difference | (digest[i] ^ pin[i]));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the shown name may be any length",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (length > static_cast<size_t>(kRelayListShownNameLetters))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the shown name may have a quote",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " && c != ',')\n",
+					"to": " && c != ',' && c != '\"')\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pinned path also passes an expired certificate",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "DWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID;",
+					"to": "DWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the certificate is passed before the pin's check is in place",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (WinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK ||\n\t\t\t\t!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)))",
+					"to": "\t\t\tif (!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)) ||\n\t\t\t\tWinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a certificate that isn't the pinned one leaves the call open",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tcheck->closed = true;\n\t\t\tWinHttpCloseHandle(request);\n",
+					"to": "\t\t\tcheck->closed = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pinned call whose check never ran is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (shared->pinned && !check.matched)\n\t\t{\n\t\t\ta.why = kPinUnread;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\ta.why = kPinUnread;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pin is read without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\telse if (!DevMode)\n\t\t\t{\n\t\t\t\tLogString(\"Relay list: the settings' RelayListPin is for tests only, with -dev, so it's ignored\");\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a bad pin still leaves a list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (!name[0] || PinRefused())",
+					"to": "if (!name[0])"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any digits and dots are a server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": " && (!OnlyDigitsAndDots(setting.c_str()) || IsUsableAddress(setting.c_str())))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an unpinned list's relays are taken to be at its address",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (shared->atAnAddress && shared->pinned)",
+					"to": "if (shared->atAnAddress)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shown name is read without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\telse if (!DevMode)\n\t\t{\n\t\t\tLogString(\"Relay list: the settings' RelayServerName is for tests only, with -dev, so it's ignored\");\n\t\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

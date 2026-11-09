@@ -1561,6 +1561,19 @@ static void TestARunsOneRelayBeyondThisMachine()
 	EndTheGame();
 	datagramsWaiting.clear();
 
+	// Modified 2026-11-09 by Melanikus for the AvP port: given the relay by its address (-dev's test server, relay_list.h), the run knows it by
+	// that address, whatever name the list gives it. The test's relay is at 10.11.12.13 (kRelayHost, as ENet keeps it).
+	Check(Net_AllowOneRemoteRelay("10.11.12.13"), "given the relay by its address");
+	int const sentByAddress = datagramsSent;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kRoute && datagramsSent == sentByAddress + 1 && datagramsSentTo.back().host == kRelayHost &&
+		Net_RemoteRelayAddress() == kRelayHost, "the list's relay at that address is the one, whatever its name");
+	EndTheGame();
+	Check(Net_AllowOneRemoteRelay("10.11.12.14"), "given another address");
+	int const sentElsewhere = datagramsSent;
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentElsewhere && Net_RemoteRelayAddress() == 0,
+		"the list's relay, at another, is left out, and nothing is let through");
+	EndTheGame();
+
 	// No way towards the relay found: this machine's own address, as before, so the relay just can't be reached
 	Check(Net_AllowOneRemoteRelay("relay.example"), "given the relay again");
 	routeTowardsTheRelay = 0;

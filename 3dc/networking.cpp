@@ -305,7 +305,22 @@ uint32_t Net_RemoteRelayAddress()
 // the address, and a different one later is left out.
 static bool TheRemoteRelay(const RelayListRelay &relay)
 {
-	if (!remoteRelayName[0] || _stricmp(relay.host, remoteRelayName) != 0 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
+	if (!remoteRelayName[0] || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
+	{
+		return false;
+	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: a run given the relay by one plain address (-dev's test server reached by its
+	// address and pin, relay_list.h) knows it by that address, as the list names its relay by a name no name service may know. A run given a
+	// name knows it by its name.
+	uint32_t givenAddress = 0;
+	bool const givenAnAddress = RelayList_ReadIPv4(remoteRelayName, &givenAddress);
+
+	// As ENet keeps an address: the first number in the lowest byte, as x86 lays out network order (see IsThisMachinesOwnAddress)
+	uint32_t const givenAsENetKeepsIt = ((givenAddress >> 24) & 0xFFu) | ((givenAddress >> 8) & 0xFF00u) | ((givenAddress << 8) & 0xFF0000u) |
+		((givenAddress << 24) & 0xFF000000u);
+
+	if (givenAnAddress ? relay.address != givenAsENetKeepsIt : _stricmp(relay.host, remoteRelayName) != 0)
 	{
 		return false;
 	}

@@ -2650,8 +2650,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "_stricmp(relay.host, remoteRelayName) != 0 || ",
-					"to": ""
+					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
+					"to": ": false)"
 				}
 			]
 		},
@@ -2732,6 +2732,16 @@
 					"file": "win32/di_func.cpp",
 					"from": "\tif (bActive)\n\t{\n\t\tReadJoysticks();\n\t}",
 					"to": "\tReadJoysticks();"
+				}
+			]
+		},
+		{
+			"name": "a run given the relay by address knows it by name only",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "givenAnAddress ? relay.address != givenAsENetKeepsIt : ",
+					"to": ""
 				}
 			]
 		}

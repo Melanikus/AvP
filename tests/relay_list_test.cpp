@@ -758,6 +758,8 @@ static bool Has(const std::string &text, const char *piece)
 	return text.find(piece) != std::string::npos;
 }
 
+static size_t CountOf(const std::string &text, const char *piece);   // below
+
 static void TestTheCalls()
 {
 	puts("13. how relay_list.cpp makes its calls (read, not run: it needs the network)");
@@ -769,7 +771,29 @@ static void TestTheCalls()
 	Check(Has(call, "WINHTTP_FLAG_SECURE)"), "every call is HTTPS");
 	Check(Has(call, "WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;") && !Has(source, "TLS1_1") && !Has(source, "PROTOCOL_TLS1 ") &&
 		!Has(source, "PROTOCOL_SSL") && !Has(source, "PROTOCOL_ALL"), "with TLS 1.2 or newer, and nothing older named anywhere");
-	Check(!Has(source, "SECURITY_FLAG_IGNORE") && !Has(source, "WINHTTP_OPTION_SECURITY_FLAGS"), "and nothing turns the certificate check off");
+	// Modified 2026-11-09 by Melanikus for the AvP port: the certificate check is turned off nowhere but on -dev's pinned path, and there only
+	// for an unknown issuer and another name, and only once the pin's own check is in place for the call (relay_list.h, RelayListPin)
+	std::string const passLine = "\t\tif (shared->pinned)\n\t\t{\n\t\t\tDWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID;\n";
+	size_t const pinnedBlock = call.find(passLine);
+	size_t const callback = call.find("WinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0)");
+	size_t const passed = call.find("WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass))");
+	size_t const firstSend = call.find("WinHttpSendRequest(");
+	Check(CountOf(source, "SECURITY_FLAG_IGNORE") == 2 && CountOf(source, "WINHTTP_OPTION_SECURITY_FLAGS") == 1 && pinnedBlock != std::string::npos,
+		"nothing turns the certificate check off but -dev's pinned path, and there only for an unknown issuer and another name");
+	Check(callback != std::string::npos && passed != std::string::npos && firstSend != std::string::npos && pinnedBlock < callback && callback < passed &&
+		passed < firstSend, "and there the pin's check is in place before that, and both before the call's first byte");
+	std::string const pinCheck = SourceSlice(source, "void CALLBACK CheckThePin(", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(pinCheck, "status != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST") && Has(pinCheck, "WINHTTP_OPTION_SERVER_CERT_CONTEXT") &&
+		Has(pinCheck, "Sha256(certificate->pbCertEncoded, certificate->cbCertEncoded, digest)") && Has(pinCheck, "RelayList_PinMatches(digest, check->pin)") &&
+		Has(pinCheck, "CertFreeCertificateContext(certificate);"),
+		"the pin's check reads the list's certificate just before the first byte, compares its SHA-256 with the pin, and gives it back");
+	Check(Has(pinCheck, "if (!check->matched)\n\t\t{\n\t\t\tcheck->closed = true;\n\t\t\tWinHttpCloseHandle(request);"),
+		"and a certificate that isn't the pinned one, or none it could read, closes the call there, unsent");
+	size_t const closedSaid = call.find("if (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;");
+	size_t const unreadSaid = call.find("if (shared->pinned && !check.matched)\n\t\t{\n\t\t\ta.why = kPinUnread;");
+	size_t const firstRead = call.find("WinHttpReceiveResponse(");
+	Check(closedSaid != std::string::npos && unreadSaid != std::string::npos && firstRead != std::string::npos && firstSend < closedSaid &&
+		closedSaid < unreadSaid && unreadSaid < firstRead, "a call the check closed says so, and a pinned call whose check never ran has nothing of its answer read");
 	Check(Has(call, "WINHTTP_DISABLE_REDIRECTS") && Has(call, "WINHTTP_DISABLE_COOKIES") && Has(call, "WINHTTP_DISABLE_AUTHENTICATION"),
 		"redirects, cookies and signing in are off");
 	Check(Has(call, "WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000)"), "each step has 5 seconds");
@@ -793,6 +817,26 @@ static void TestTheCalls()
 	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(serverName, "if (!DevMode)") && Has(serverName, "memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));"),
 		"without -dev, the list's name is the game's own, whatever the settings say");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: -dev's test server reached with nothing changed on the tester's computer (relay_list.h)
+	Check(Has(serverName, "(!OnlyDigitsAndDots(setting.c_str()) || IsUsableAddress(setting.c_str()))"),
+		"with -dev, digits and dots in RelayServer must be one plain address a server can have");
+	std::string const pinSetting = SourceSlice(source, "const PinSetting &ThePinSetting(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const pinDev = pinSetting.find("else if (!DevMode)");
+	size_t const pinRead = pinSetting.find("else if (RelayList_ReadPin(setting.c_str(), pinSetting.pin))");
+	Check(pinDev != std::string::npos && pinRead != std::string::npos && pinDev < pinRead && Has(pinSetting, "pinSetting.refused = true;"),
+		"RelayListPin is read only with -dev, and one that's set but isn't a pin is refused");
+	std::string const starting = SourceSlice(source, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(starting, "if (!name[0] || PinRefused())"), "and then there's no list at all, so a test meant to be pinned is never called unpinned");
+	std::string const relaysRead = SourceSlice(source, "void ReadTheRelays(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(relaysRead, "if (shared->atAnAddress && shared->pinned)\n\t\t\t{\n\t\t\t\taddress = shared->serverAddress;") &&
+		Has(relaysRead, "RelayList_AddressRefusal(ntohl(address), shared->developer)"),
+		"a test server at an address, with a pin: its relays are taken to be at that address, no name looked up, and the address still checked");
+	std::string const shownName = SourceSlice(source, "const char *Relay_ServerShownName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const shownDev = shownName.find("else if (!DevMode)");
+	size_t const shownRead = shownName.find("RelayList_IsShownName(setting.c_str())");
+	Check(shownDev != std::string::npos && shownRead != std::string::npos && shownDev < shownRead,
+		"the name people see for the server is read only with -dev, and only if it's one");
 	std::string const listPort = SourceSlice(source, "int Relay_ListPort(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(listPort, "if (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""),
 		"and the list's port is the settings' only with -dev");
@@ -988,6 +1032,84 @@ static void TestAddresses()
 		"and nowhere else in relay_list.cpp looks a name up");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: -dev's test server reached with nothing changed on the tester's computer (relay_list.h):
+// its address written plainly, the pin of its certificate, and the name people see for it
+static void TestTheTestServer()
+{
+	puts("16. a test server by its address, its certificate's pin, and the name people see");
+
+	// The address, written plainly. Each refusal says why, and writes nothing.
+	uint32_t address = 0x12345678u;
+	Check(RelayList_IPv4Refusal("203.0.113.9", &address) == kRelayIPv4Read && address == 0xCB007109u, "an address written plainly is read, first number highest");
+	Check(RelayList_ReadIPv4("0.0.0.0", &address) && address == 0 && RelayList_ReadIPv4("255.255.255.255", &address) && address == 0xFFFFFFFFu,
+		"the lowest and the highest are read (whether a server can have one is RelayList_AddressRefusal's)");
+	address = 7;
+	Check(RelayList_IPv4Refusal("203.0.113.09", &address) == kRelayIPv4LeadingZero && RelayList_IPv4Refusal("010.1.1.1", &address) == kRelayIPv4LeadingZero,
+		"a leading zero is refused for being one, as some readers take it as octal");
+	Check(RelayList_IPv4Refusal("256.1.1.1", &address) == kRelayIPv4TooBig && RelayList_IPv4Refusal("1.1.1.1000", &address) == kRelayIPv4TooBig &&
+		RelayList_IPv4Refusal("1.1.1.99999999999", &address) == kRelayIPv4TooBig, "a number past 255, or of four digits or more, is too big");
+	Check(RelayList_IPv4Refusal("1.1.1", &address) == kRelayIPv4WrongShape && RelayList_IPv4Refusal("1.1.1.1.1", &address) == kRelayIPv4WrongShape &&
+		RelayList_IPv4Refusal("1.1.1.1.", &address) == kRelayIPv4WrongShape, "three numbers, five, or a dot after the last, is the wrong shape");
+	Check(RelayList_IPv4Refusal(" 1.1.1.1", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("1.1.1.1 ", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal("1.1.1.1\n", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("1..1.1", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal(".1.1.1.1", &address) == kRelayIPv4NotANumber && RelayList_IPv4Refusal("+1.1.1.1", &address) == kRelayIPv4NotANumber &&
+		RelayList_IPv4Refusal("0x1.1.1.1", &address) == kRelayIPv4NotANumber, "a space, a newline, an empty number, a sign or hex is not a number");
+	Check(RelayList_IPv4Refusal("", &address) == kRelayIPv4NoText && RelayList_IPv4Refusal(NULL, &address) == kRelayIPv4NoText &&
+		RelayList_IPv4Refusal("1.1.1.1", NULL) == kRelayIPv4NoText, "nothing at all, or nowhere to put it, is no text");
+	Check(address == 7, "and no refusal wrote anything");
+
+	// The pin
+	char const *const nyc3 = "7f1096882c32876dbc4606b871b2c06bfdc504f9af483e4314a439403ece6767";
+	uint8_t pin[kRelayListPinBytes];
+	memset(pin, 0xAA, sizeof(pin));
+	Check(RelayList_PinRefusal(nyc3, pin) == kRelayPinRead && pin[0] == 0x7f && pin[1] == 0x10 && pin[31] == 0x67, "a pin of 64 hex digits is read, in order");
+	uint8_t upper[kRelayListPinBytes];
+	Check(RelayList_ReadPin("7F1096882C32876DBC4606B871B2C06BFDC504F9AF483E4314A439403ECE6767", upper) && memcmp(pin, upper, sizeof(pin)) == 0,
+		"capitals read the same");
+	uint8_t untouched[kRelayListPinBytes];
+	memset(untouched, 0x5A, sizeof(untouched));
+	std::string const shortPin(nyc3, 63);
+	std::string const longPin = std::string(nyc3) + "0";
+	std::string colons;
+	for (int i = 0; i < 32; i++)
+	{
+		colons += std::string(nyc3 + 2 * i, 2) + (i < 31 ? ":" : "");
+	}
+	Check(RelayList_PinRefusal(shortPin.c_str(), untouched) == kRelayPinWrongLength && RelayList_PinRefusal(longPin.c_str(), untouched) == kRelayPinWrongLength &&
+		RelayList_PinRefusal(colons.c_str(), untouched) == kRelayPinWrongLength,
+		"63 or 65 digits, or the pin written with colons as some tools print it, is the wrong length: the settings take the digits alone");
+	std::string spaced = nyc3;
+	spaced[10] = ' ';
+	std::string notHex = nyc3;
+	notHex[63] = 'g';
+	Check(RelayList_PinRefusal(spaced.c_str(), untouched) == kRelayPinNotHex && RelayList_PinRefusal(notHex.c_str(), untouched) == kRelayPinNotHex,
+		"a space or a letter that isn't hex, at the right length, is not hex");
+	Check(RelayList_PinRefusal("", untouched) == kRelayPinNoText && RelayList_PinRefusal(NULL, untouched) == kRelayPinNoText &&
+		RelayList_PinRefusal(nyc3, NULL) == kRelayPinNoText, "nothing at all, or nowhere to put it, is no text");
+	Check(untouched[0] == 0x5A && untouched[31] == 0x5A, "and no refusal wrote anything, not even the part it had read");
+
+	uint8_t digest[kRelayListPinBytes];
+	memcpy(digest, pin, sizeof(digest));
+	Check(RelayList_PinMatches(digest, pin), "the pinned certificate's SHA-256 matches its pin");
+	digest[17] ^= 0x01;
+	Check(!RelayList_PinMatches(digest, pin), "one bit different in the middle, and it doesn't");
+	digest[17] ^= 0x01;
+	digest[31] ^= 0x80;
+	Check(!RelayList_PinMatches(digest, pin), "nor one in the last byte, which a compare that stopped early would reach last");
+	Check(!RelayList_PinMatches(NULL, pin) && !RelayList_PinMatches(digest, NULL), "nor does a missing one");
+
+	// The name people see
+	Check(RelayList_ShownNameRefusal("New York (Mel's server)") == kRelayShownNameGood && RelayList_IsShownName("A") && RelayList_IsShownName("nyc3, test-1."),
+		"the name people see: letters, digits, spaces and ' ( ) - . ,");
+	Check(RelayList_IsShownName(std::string(32, 'x').c_str()) && RelayList_ShownNameRefusal(std::string(33, 'x').c_str()) == kRelayShownNameTooLong,
+		"up to 32 of them, and 33 is too long");
+	Check(RelayList_ShownNameRefusal("") == kRelayShownNameNoText && RelayList_ShownNameRefusal(NULL) == kRelayShownNameNoText, "none is no text");
+	Check(RelayList_ShownNameRefusal("New York\n") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("a\"b") == kRelayShownNameBadCharacter &&
+		RelayList_ShownNameRefusal("a%s") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("a/b") == kRelayShownNameBadCharacter &&
+		RelayList_ShownNameRefusal("a\tb") == kRelayShownNameBadCharacter && RelayList_ShownNameRefusal("caf\xc3\xa9") == kRelayShownNameBadCharacter,
+		"and anything else is a bad character: a newline, a quote, a %, a slash, a tab, a letter beyond ASCII");
+}
+
 int main()
 {
 	TestGoodLists();
@@ -1005,6 +1127,7 @@ int main()
 	TestTheCalls();
 	TestTheMenus();
 	TestAddresses();
+	TestTheTestServer();
 
 	if (checksFailed)
 	{

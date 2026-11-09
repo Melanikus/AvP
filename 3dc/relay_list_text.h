@@ -175,4 +175,51 @@ bool RelayList_IsRegion(const char *region);
 // A relay's host from the list: a DNS name of 1 to 63 characters, and never an address: a name whose every part is digits is one
 bool RelayList_IsRelayHost(const char *host);
 
+// ---- Reaching a test server with no name and no certificate Windows trusts (-dev only; relay_list.cpp). Added 2026-11-09 by Melanikus for
+// the AvP port, so a test can reach the relay on another machine with nothing changed on the tester's computer: no hosts line, nothing
+// added to Windows' trusted certificates.
+
+// Whether text is exactly one IPv4 address written plainly: four whole numbers from 0 to 255 with a dot between each, no leading zeros
+// (a leading zero means octal to some readers), and nothing else, not even a space. The address goes into hostOrder with its first
+// number in the highest byte (192.168.0.1 is 0xC0A80001). Anything else is refused, with nothing written, and the refusal says why.
+enum RelayIPv4Refusal
+{
+	kRelayIPv4Read,
+	kRelayIPv4NoText,        // no text, or nowhere to put the address
+	kRelayIPv4NotANumber,    // a part that's empty, or isn't digits: a space, a sign, a letter
+	kRelayIPv4LeadingZero,   // a part of two or three digits starting with 0
+	kRelayIPv4TooBig,        // a part past 255, or of more than three digits
+	kRelayIPv4WrongShape     // not four parts with a dot between each and nothing after
+};
+RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder);
+bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder);   // RelayList_IPv4Refusal(...) == kRelayIPv4Read
+
+// The SHA-256 of the list's own certificate, as the settings give it (RelayListPin): exactly 64 hex digits, small letters or capitals,
+// and nothing else. Anything else is refused, with nothing written, and the refusal says why.
+int const kRelayListPinBytes = 32;
+enum RelayPinRefusal
+{
+	kRelayPinRead,
+	kRelayPinNoText,         // no text, or nowhere to put the pin
+	kRelayPinWrongLength,    // not 64 characters: a pin written with colons or spaces between its pairs is longer
+	kRelayPinNotHex          // a character that isn't 0-9, a-f or A-F
+};
+RelayPinRefusal RelayList_PinRefusal(const char *text, uint8_t pin[kRelayListPinBytes]);
+bool RelayList_ReadPin(const char *text, uint8_t pin[kRelayListPinBytes]);   // RelayList_PinRefusal(...) == kRelayPinRead
+
+// Whether a certificate's SHA-256 is the pin's, comparing every byte whatever the first difference (it takes the same time either way)
+bool RelayList_PinMatches(const uint8_t digest[kRelayListPinBytes], const uint8_t pin[kRelayListPinBytes]);
+
+// The name people see for a test server (RelayServerName): 1 to 32 characters, each a letter, a digit, a space or one of ' ( ) - . ,
+int const kRelayListShownNameLetters = 32;
+enum RelayShownNameRefusal
+{
+	kRelayShownNameGood,
+	kRelayShownNameNoText,       // no text, or an empty one
+	kRelayShownNameTooLong,      // more than 32 characters
+	kRelayShownNameBadCharacter  // a character outside the set: a quote, a newline, a tab, a %, a slash, a letter beyond ASCII
+};
+RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name);
+bool RelayList_IsShownName(const char *name);   // RelayList_ShownNameRefusal(...) == kRelayShownNameGood
+
 #endif

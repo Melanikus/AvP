@@ -31,6 +31,21 @@ const char *Relay_ServerName(void);
 // number from 1 to 65535 is written in the log, and 443 is used.
 int Relay_ListPort(void);
 
+// Added 2026-11-09 by Melanikus for the AvP port: a test server reached with nothing changed on the tester's computer. Only with -dev,
+// read with the two above, and each kept for the whole run:
+//   - RelayServer may be one plain IPv4 address (RelayList_ReadIPv4) instead of a name. Digits and dots that aren't one are refused.
+//   - [Network] RelayListPin: the SHA-256 of the list's own certificate (RelayList_ReadPin). With a pin, every call to the list checks the
+//     certificate it's given against the pin before a byte of the call is sent, and only then lets Windows pass a certificate it doesn't
+//     know, or one for another name (relay_list.cpp, Call). A pin that isn't 64 hex digits means no list at all.
+//   - With an address and a pin, every relay the list names is taken to be at that same address: a test server runs its list and its
+//     relay on one machine, and the relay's name may be one no name service knows.
+// Without -dev these settings are ignored, with a line in the log, and the list is called as it always was.
+bool Relay_ListIsPinned(void);
+
+// The name people see for the relay server, from -dev's [Network] RelayServerName (RelayList_IsShownName), for the online screens to show
+// instead of a region's id; "" when there's none, or it isn't one. Like the region, the screen makes it safe before drawing it.
+const char *Relay_ServerShownName(void);
+
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
 // The relay has given the host its room: the game goes on the list. region is the relay's (from RelayList_Relays), pass and passTime
