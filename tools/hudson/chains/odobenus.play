@@ -1,0 +1,9 @@
+# What Hudson does to play odobenus on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk 0 1 19093 | airlock1
+walk 0 0 0 | airlock2
+press -15639 8198 -74361 | switch18A
+press -19257 -8145 -103982 | Switch06
+press -19257 -8145 -105516 | Switch04
+press -23256 -8219 -140213 | switch3A
+walk -24620 -3674 -150477 | areaswich

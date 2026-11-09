@@ -1,0 +1,7 @@
+# level: temple   end started by: walk
+# campaign: Alien 1
+# route: the chains, and what opens the doors on the way there. The rooms are joined by what they can see or not at all, so this level has not been walked from the file. The fewest steps found, worked out from the level file. No one has walked it.
+# This level could not be walked from the file. These steps come from the chains, and what opens the doors on the way. Their order is one that the chains allow.
+where hybe01 | hybe02 | hybe03 | hybe04
+walk areaswitchendmissionjobby2
+end missioncomplete

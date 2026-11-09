@@ -1,0 +1,5 @@
+# What Hudson does to play fall_m on foot, as a Marine. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press 225482 11271 138216 | switch12
+press 86603 11271 100769 | switch04
+kill 5599 3613 -366 | predator

@@ -13,6 +13,9 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the sound pages' Room echo row
 //   the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the Join page's "Find Games" row and its help, and the page of games found's Search box and Refresh row, after everything
+//   language.txt holds
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1540,6 +1543,12 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ACCESS_NEWID_NO,
 	TEXTSTRING_ACCESS_NEWID_MADE,
 	TEXTSTRING_ACCESS_NEWID_FAILED,
+	TEXTSTRING_MULTIPLAYER_FINDGAMES,
+	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
+	TEXTSTRING_MULTIPLAYER_SEARCH,
+	TEXTSTRING_MULTIPLAYER_SEARCH_HELP,
+	TEXTSTRING_MULTIPLAYER_REFRESH,
+	TEXTSTRING_MULTIPLAYER_REFRESH_HELP,
 	TEXTSTRING_RENDERING_HUDSIZE,
 	TEXTSTRING_RENDERING_HUDSIZE_HELP,
 	MAX_NO_OF_TEXTSTRINGS

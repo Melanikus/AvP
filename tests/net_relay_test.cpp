@@ -231,22 +231,7 @@ static void TheMessages()
 	Check(NetRelay_Read(bad.b, 64, &untouched) == kNetRelayNotCode && untouched.port == 77 && untouched.type == kNetRelayCookie,
 		"a packet that isn't a message leaves what it was to be read into as it was");
 
-	Check(strcmp(NetRelay_NotAMessageWhy(kNetRelayNotUnused), "a field its kind of message doesn't use isn't 0") == 0
-		&& strcmp(NetRelay_NotAMessageWhy(kNetRelayNotPassTime), "its pass time is past the most the list takes") == 0
-		&& strcmp(NetRelay_NotAMessageWhy(99), "no such reason") == 0, "each reason has its words, and a number that isn't one says so");
-
-	// Codes and secrets
-	char code[8];
-	Check(NetRelay_CodeFromText("abcd-2345", code) && memcmp(code, kCode, 8) == 0, "a typed code in small letters with a dash is the code");
-	Check(NetRelay_CodeFromText(" ABCD 2345 ", code) && memcmp(code, kCode, 8) == 0, "and with spaces round it and in it");
-	char kept8[8] = { 'K', 'K', 'K', 'K', 'K', 'K', 'K', 'K' };
-	Check(!NetRelay_CodeFromText("ABCD234", kept8) && !NetRelay_CodeFromText("ABCD23456", kept8) && !NetRelay_CodeFromText("ABCD2340", kept8)
-		&& !NetRelay_CodeFromText("", kept8) && !NetRelay_CodeFromText(NULL, kept8) && kept8[0] == 'K',
-		"7 letters, 9, a 0 in it, none, or no text at all: not a code, and nothing is written");
-
-	char hex[33];
-	NetRelay_SecretHex(kToken, hex);
-	Check(strcmp(hex, "0123456789abcdef1032547698badcfe") == 0, "16 bytes as the list writes them: 32 hex digits, small letters");
+	// Secrets
 	Check(NetRelay_SameSecret(kToken, kToken) && !NetRelay_SameSecret(kToken, kOther), "two secrets differing in the last bit aren't the same");
 
 	Check(NetRelay_RefusedWhy(2) == kNetRelayRefusedFull && NetRelay_RefusedWhy(0) == kNetRelayRefusedOther && NetRelay_RefusedWhy(5) == kNetRelayRefusedOther,

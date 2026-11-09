@@ -1,0 +1,9 @@
+# level: invasion   end started by: walk
+# campaign: Marine 3
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DoorHanga
+where DoorHanga | TopLiftShf
+walk liftdoorswitch
+where DoorHanga | Midview04 | Midview05 | topview | Bigroom1
+walk dropswitch
+end endmissionobject

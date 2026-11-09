@@ -1,0 +1,99 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a track goes back to the start at the end of its file, as it did before #94, so it never ends",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\t_reachedEnd = true;\n\t\t\tbreak;\n",
+					"to": "\t\t\tov_raw_seek(&_oggFile, 0);\n"
+				}
+			]
+		},
+		{
+			"name": "after the end, the rest of the buffer keeps whatever it held before, instead of silence",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\tif (_reachedEnd && bytesReadTotal < sizeToRead)\n\t{\n\t\tmemset(_audioData + bytesReadTotal, 0, sizeToRead - bytesReadTotal);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a track that has ended never finishes: the music thread waits for ever, and the next track is never picked",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\t\tvorbis->_finished = true;\n\t\t\t\tbreak;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a track finishes before all of it has been heard, as soon as one buffer is back",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "if (numBuffersFree >= static_cast<uint32_t>(kBufferCount))",
+					"to": "if (numBuffersFree >= 1)"
+				}
+			]
+		},
+		{
+			"name": "a track that has finished still says it's playing, so the game never picks the next",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "return inGameMusic->_isPlaying && !inGameMusic->_finished;",
+					"to": "return inGameMusic->_isPlaying;"
+				}
+			]
+		},
+		{
+			"name": "a file that ends before any audio comes out of it is taken for a track that has ended, not refused",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\tif (!_gotAnyAudio)\n\t\t\t{\n\t\t\t\tLogErrorString(\"ogg vorbis file holds no audio\", __LINE__, kThisFile);\n\t\t\t\t_readFailed = true;\n\t\t\t\tbreak;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the audio that comes out of a file isn't noted, so every end of a file is taken for a file with none",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\t_gotAnyAudio = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "track numbers aren't counted from 1, so track 1 plays the second name in the list",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "size_t const index = (track == 0) ? 0 : track - 1;",
+					"to": "size_t const index = track;"
+				}
+			]
+		},
+		{
+			"name": "with no tracks found, asking for track 0 reads TrackList[0] of an empty list, as it did before (this one crashes)",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\tif (index >= TrackList.size()) {\n\t\treturn;\n\t}\n",
+					"to": "\tif (index > TrackList.size()) {\n\t\treturn;\n\t}\n"
+				}
+			]
+		}
+	]
+}

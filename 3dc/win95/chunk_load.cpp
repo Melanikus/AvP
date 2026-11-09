@@ -12,6 +12,9 @@
 //   a level file can only ask for so many pictures
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a shape records how long each of its texture coordinate lists is
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a shape stays still if a frame of its texture animation has a place on its picture too far out to work out in 16.16 (#97). See
+//   texture_animation.h
 
 #include <stdlib.h>
 #include <string>
@@ -19,6 +22,7 @@
 
 #include "list_tem.hpp"
 #include "chunk_load.hpp"
+#include "texture_animation.h"
 #include "oechunk.h"
 #include "strategy_def.h"
 //#include "bh_types.h"
@@ -2213,6 +2217,24 @@ void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *a
 		if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))
 		{
 			return;
+		}
+	}
+
+	// Each frame's places on its picture come from the level file too, and the game works with them in 16.16 (texture_animation.h), so
+	// one too far out would run over. A shape with one stays still the same way. Every one in the game's own levels is 0 to 127 texels.
+	// Each frame has two numbers for each of its corners, and the chunk's own check has already made sure of the count (animation_chunk.cpp).
+	for (int i = 0; i < ac->NumPolys; i++)
+	{
+		TEXANIM const *animation = ac->AnimList[i];
+
+		for (int j = 0; j < animation->NumSeq; j++)
+		{
+			FrameList const *sequence = animation->Seq[j];
+
+			if (!TextureAnimation_PlacesFit(sequence->UVCoords, 2LL * animation->NumVerts * sequence->NumFrames))
+			{
+				return;
+			}
 		}
 	}
 

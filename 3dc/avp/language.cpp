@@ -25,6 +25,10 @@
 //   the words of the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the words of the Online access page (server #24), which is only there with -dev for now
+//   the Join page's first row, "Find Games", in place of the 1999 "Find Local Servers", and its help, which says what a player's search
+//   does: it looks on this network. Only with -dev does it ask the online list of games too, and a release game reaches no server, so the
+//   help never promises the list to a player (the owner's ruling)
+//   the page of games found's Search box and Refresh row, and their help
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -208,6 +212,12 @@ static char OurTextStrings[][200] =
 	"No, go back",
 	"A new identity was made.",
 	"A new identity couldn't be made.",
+	"Find Games",
+	"Press ENTER to look for games on this network.",
+	"Search",
+	"Type part of a game's name to show only the games with it. What you type stays on this PC.",
+	"Refresh",
+	"Press ENTER to fetch the open sessions again.",
 	"HUD size",
 	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };

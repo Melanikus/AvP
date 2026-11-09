@@ -503,6 +503,12 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 	// see-through by its kind, but it has to stay in the solid half, or it would be drawn over the level.
 	bool depthWritesOff = false;
 
+	// Added 2026-11-09 by Melanikus for the AvP port (#177): between kCommandSeeThroughWithoutDepth and kCommandSeeThroughWithDepth, a
+	// see-through polygon is drawn with depth writes off, and a solid one with them on. Only what this stretch turned off is turned back
+	// on, so a list drawn with depth writes off by its caller (the decals) is left as it is, and the sky's own commands still win.
+	bool seeThroughWithoutDepth = false;
+	bool stretchTurnedDepthOff = false;
+
 	// set vertex declaration
 	if (declarationWithHeights)
 	{
@@ -532,10 +538,25 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 				case kCommandZWriteEnable:
 					ChangeZWriteEnable(ZWRITE_ENABLED);
 					depthWritesOff = false;
+					stretchTurnedDepthOff = false;
 					break;
 				case kCommandZWriteDisable:
 					ChangeZWriteEnable(ZWRITE_DISABLED);
 					depthWritesOff = true;
+					stretchTurnedDepthOff = false;
+					break;
+				case kCommandSeeThroughWithoutDepth:
+					seeThroughWithoutDepth = true;
+					break;
+				case kCommandSeeThroughWithDepth:
+					seeThroughWithoutDepth = false;
+
+					if (stretchTurnedDepthOff)
+					{
+						ChangeZWriteEnable(ZWRITE_ENABLED);
+						stretchTurnedDepthOff = false;
+					}
+
 					break;
 			}
 		}
@@ -546,6 +567,16 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 
 			if (numPrimitives && (part == kEverything || (part == kSolid) == solid))
 			{
+				// In the stretch (#177): depth writes off for a see-through polygon, back on for a solid one, told to the card only when that
+				// changes what's set now
+				bool const wantDepthOff = !solid;
+
+				if (seeThroughWithoutDepth && !depthWritesOff && wantDepthOff != stretchTurnedDepthOff)
+				{
+					stretchTurnedDepthOff = wantDepthOff;
+					ChangeZWriteEnable(wantDepthOff ? ZWRITE_DISABLED : ZWRITE_ENABLED);
+				}
+
 				// set texture
 				R_SetTexture(0, get_texID(it->sortKey));
 				ChangeTranslucencyMode((enum TRANSLUCENCY_TYPE)			get_transType(it->sortKey));
@@ -562,6 +593,13 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 				R_DrawIndexedPrimitive(baseIndexValue, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
 			}
 		}
+	}
+
+	// A stretch still open at the end of the list (the list was drawn before the stretch's end was added, when it filled up mid-frame):
+	// depth writes go back on, for whatever's drawn next
+	if (stretchTurnedDepthOff)
+	{
+		ChangeZWriteEnable(ZWRITE_ENABLED);
 	}
 
 	if (declarationWithHeights)

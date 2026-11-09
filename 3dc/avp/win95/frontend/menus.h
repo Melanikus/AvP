@@ -5,7 +5,8 @@
 //   a game found can be one from the relay server's list: SESSION_DESC says so, with its region and code
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
-//   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER)
+//   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
+//   (AVPMENU_ELEMENT_FINDAGAIN)
 //   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
 //   the Online access pages and their rows (server #24), only with -dev for now
 #ifndef _included_AvP_Menus_h_
@@ -230,6 +231,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
 	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
+	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };
 
 

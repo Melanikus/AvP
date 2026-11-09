@@ -11,14 +11,14 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   added RefHolder, a helper that lets go of a shared object automatically when the code using it ends;
 //   deleted the reference-tracking debug code, which was switched off and never compiled
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the fail function comes from the game's own fail.h now (issue #87), which keeps itself from being read twice
 
 #ifndef _refobj
 #define _refobj 1
 
 
-	#ifndef __fail_h
 	#include "fail.h"
-	#endif
 
 /* Version settings *****************************************************/
 

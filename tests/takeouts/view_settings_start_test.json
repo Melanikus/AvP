@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the switch-on happens again at every start",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "if (savedVersion >= kViewSettingsVersion)",
+					"to": "if (savedVersion > kViewSettingsVersion)"
+				}
+			]
+		},
+		{
+			"name": "a file from a later build is switched on too",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "if (savedVersion >= kViewSettingsVersion)",
+					"to": "if (savedVersion == kViewSettingsVersion)"
+				}
+			]
+		},
+		{
+			"name": "a new file starts with the game's own lighting",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\t\t*lighting = kLightingPerPixel;\n\t\t*shadows = true;\n\t\treturn kViewSettingsNewFile;",
+					"to": "\t\t*lighting = kLightingGouraud;\n\t\t*shadows = true;\n\t\treturn kViewSettingsNewFile;"
+				}
+			]
+		},
+		{
+			"name": "a new file starts with the shadows off",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\t\t*shadows = true;\n\t\treturn kViewSettingsNewFile;",
+					"to": "\t\t*shadows = false;\n\t\treturn kViewSettingsNewFile;"
+				}
+			]
+		},
+		{
+			"name": "an old file's shadows are not switched on",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\t*shadows = true;\n\treturn kViewSettingsSwitchedOn;",
+					"to": "\treturn kViewSettingsSwitchedOn;"
+				}
+			]
+		},
+		{
+			"name": "an old file's lighting is not switched on",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\tif (*lighting == kLightingGouraud)\n\t{\n\t\t*lighting = kLightingPerPixel;\n\t}\n",
+					"to": "\tif (*lighting == kLightingGouraud)\n\t{\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "switching on takes normals and relief down to per pixel",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\tif (*lighting == kLightingGouraud)\n",
+					"to": "\tif (*lighting != kLightingPerPixel)\n"
+				}
+			]
+		},
+		{
+			"name": "an old file is taken for a new one",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\tif (!fileHadRendering)\n",
+					"to": "\tif (!fileHadRendering || savedVersion == 0)\n"
+				}
+			]
+		},
+		{
+			"name": "a version of five digits is read",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "*character > '9' || digits == 4",
+					"to": "*character > '9' || digits == 5"
+				}
+			]
+		},
+		{
+			"name": "a space or a sign is read as a digit",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "if (*character < '0' || *character > '9'",
+					"to": "if (*character < ' ' || *character > '9'"
+				}
+			]
+		},
+		{
+			"name": "nothing at all reads as version 0",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "if (!word || !*word)",
+					"to": "if (!word)"
+				}
+			]
+		},
+		{
+			"name": "a refused word changes the version anyway",
+			"changes": [
+				{
+					"file": "3dc/view_settings_start.h",
+					"from": "\tint number = 0;\n\tint digits = 0;\n",
+					"to": "\t*version = 0;\n\tint number = 0;\n\tint digits = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new file is read as an old one",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "Config_GetString(kHeading, kRendering, \"\")",
+					"to": "Config_GetString(kHeading, kRendering, Lighting_Word(kLightingGouraud))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a file with no version line counts as this build's",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "Config_GetString(kHeading, kVersionSetting, \"0\")",
+					"to": "Config_GetString(kHeading, kVersionSetting, \"1\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a version line changed by hand switches them on",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tversion = kViewSettingsVersion;\n\t\tConfig_SetString(kHeading, kVersionSetting",
+					"to": "\t\tversion = 0;\n\t\tConfig_SetString(kHeading, kVersionSetting"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the start is not decided",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "ViewSettingsStart const start = ViewSettings_LightsAtStart(fileHadRendering, version, &choice, &shadows);",
+					"to": "ViewSettingsStart const start = kViewSettingsAsSaved;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the version line is not written",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tConfig_SetString(kHeading, kVersionSetting, std::to_string(kViewSettingsVersion));\n\t\tConfig_Save();",
+					"to": "\t\tConfig_Save();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch-on is not in the log",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "this once. From now on they stay as the player chooses",
+					"to": "this once"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Rendering line that is not a choice goes back to the game's own lighting",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "so it's PERPIXEL\");\n\t\tchoice = kLightingPerPixel;",
+					"to": "so it's GOURAUD\");\n\t\tchoice = kLightingGouraud;"
+				}
+			]
+		}
+	]
+}

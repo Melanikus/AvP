@@ -92,8 +92,12 @@ void CalculateWhereGunIsPointing(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA
 	GunMuzzleDirectionInVS.vz = 65536;
 	GunMuzzleDirectionInVS.vx = 
 		(GunMuzzleSightX-(ScreenDescriptorBlock.SDB_Width<<15))/(VDBPtr->VDB_ProjX);
-	GunMuzzleDirectionInVS.vy = 
-		/*((*/(GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY)/*)*3)/4*/;
+	// Modified 2026-11-09 by Melanikus for the AvP port (#179): the 3/4 is back, as the 1999 game has it. SmartTarget (below) puts a
+	// sight's height on the screen at 4/3 of the plain sum, so turning the sight back into a direction takes that 4/3 off again. With the
+	// 3/4 left out, a smart gun or plasma caster locked on a target above or below the middle of the screen aimed 4/3 too steeply, and
+	// missed by more the further up or down the target was.
+	GunMuzzleDirectionInVS.vy =
+		(((GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY))*3)/4;
 
 	/* Now fudge for gun judder! */
 	if ((twPtr->UseStateMovement==0)||(weaponPtr->WeaponIDNumber == WEAPON_MINIGUN)) 

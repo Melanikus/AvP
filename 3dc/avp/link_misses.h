@@ -2,16 +2,21 @@
 //
 // WHY: everything in a level aims at other things by name: a switch at the alien it wakes, a track at the door it opens, an NPC's death at
 // the switch it sets off. A name that found nothing has always done nothing, without a word, so a broken link looked just like one that
-// hadn't been used yet. Third's survey of the stock levels found 59 links broken since 1999 (AvP-docs, level-links-broken.md), and in the
-// user's co-op game a facehugger stayed asleep because a switch's name found nothing (#126). Now the log says so, in two places:
+// hadn't been used yet. Third read every link in the 63 stock level files on 2026-11-08, with no game running: of 4,800 links, 59 aim at an
+// id that appears nowhere else in their level's file, so nothing has it, and they've been broken since 1999. And in the user's co-op game a
+// facehugger stayed asleep because a switch's name found nothing (#126). Now the log says so, in two places:
 //
 //     links: a switch (id 1a2b3c4d5e6f7000) at (12.3, -4.0, 56.7) aims at 0a0b0c0d0e0f1000, and nothing in this level has that name
 //     links: a switch (id 1a2b3c4d5e6f7000) at (12.3, -4.0, 56.7) went on or off, and its target 0a0b0c0d0e0f1000 isn't in this level
 //
 // The first is written when a level's links are made, at its start and at each restart (AssignAllSBNames in bh_types.cpp): that's the check
 // that every link finds its target. The second is written when a switch goes on or off with a target missing. An id is the name the level
-// gives, as 16 hex digits; AvP-docs' level-ids-where.js finds the object with that id. Each name gets each line once a level, and at most
-// kLinkMissesMostNames names do, so a level with many broken links can't fill the log.
+// gives, as 16 hex digits, its 8 bytes in the order the file keeps them. To find what has an id, search the level's file for those 8 bytes,
+// once it's unpacked if it starts with REBCRIF1 (huffman.hpp, the game's own unpacking). Each place inside a strategy chunk (AVPSTRAT) is a
+// link aiming at it; any other place is the target's own record, and the chunk round it says what kind of thing it is. If the links are the
+// only places, nothing in the level has that id. An object's, a generator's or a sound's id is worked out from its name and never written in
+// the file, so those are found by their names instead. Each name gets each line once a level, and at most kLinkMissesMostNames names do, so a
+// level with many broken links can't fill the log.
 //
 // A link to a placed NPC that this machine hasn't made finds nothing, as it should: a machine that joined a network game makes none (the
 // host does, and its switches do the waking), and some NPCs are only made at another difficulty. Those aren't written one by one: one line

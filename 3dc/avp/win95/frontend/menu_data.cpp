@@ -18,6 +18,8 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
 //   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, which is there only with -dev
+//   the Join page's first row is "Find Games": its search looks on this network, and with -dev asks the online list of games too
+//   (language.cpp's words, which promise a player only this network)
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -529,7 +531,7 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerStartGame[]=
 
 static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=
 {
-	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDLOCAL},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDLOCAL_HELP},
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDGAMES},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_OPENADDRESS},	{AVPMENU_MULTIPLAYEROPENADDRESS},	{0},	{0},	TEXTSTRING_MULTIPLAYER_OPENADDRESS_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
@@ -545,8 +547,11 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame2[]=
 
 };
 
+// The page of games found: the Search box and the Refresh row, then a row for each of up to 10 games (MakeSelectSessionMenu)
 static AVPMENU_ELEMENT AvPMenu_MultiplayerSelectSession[]=
 {
+	{AVPMENU_ELEMENT_ENDOFMENU}, // Search
+	{AVPMENU_ELEMENT_ENDOFMENU}, // Refresh
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 1
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 2
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 3
@@ -1186,32 +1191,42 @@ AVPMENU AvPMenusData[]=
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
 static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_ONLINE_ACCESS_NEW + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
-// The page of games found: one row for each game the online-play screens show (online_screens_page.h), which keep them steady while the
-// page refreshes and draw them as a table. With none, one row for the search, whose words the screens draw; its own help line is left
-// blank, so it can't say something else.
+// The page of games found (online_screens_page.h). On the list: the Search box (the menus' own text field, typing into the page's own
+// buffer of 20 letters), the Refresh row, and a row for each game the search lets through, even none. While the open sessions are fetched
+// or a fetch has failed: one Refresh row, for Enter to try again, whose words the page draws itself.
 extern void MakeSelectSessionMenu(void)
 {
-	int i;
-	int const rows = OnlinePage_RowCount();
+	int i = 0;
 	int const room = (int)(sizeof(AvPMenu_MultiplayerSelectSession) / sizeof(AvPMenu_MultiplayerSelectSession[0])) - 1;
 
-	if (rows > 0)
+	if (OnlinePage_ShowsTheList())
 	{
-		for (i = 0; i < rows && i < room; i++)
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_TEXTFIELD;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_MULTIPLAYER_SEARCH;
+		AvPMenu_MultiplayerSelectSession[i].MaxTextLength = OnlinePage_SearchLetters();
+		AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_SearchBox();
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_SEARCH_HELP;
+		i++;
+
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_FINDAGAIN;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_MULTIPLAYER_REFRESH;
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_REFRESH_HELP;
+		i++;
+
+		for (int row = 0; row < OnlinePage_RowCount() && i < room; row++, i++)
 		{
 			AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_LISTCHOICE;
-			AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_RowName(i);
+			AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_RowName(row);
 			AvPMenu_MultiplayerSelectSession[i].MenuToGoTo = AVPMENU_MULTIPLAYER_JOINING;
 			AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_SELECTSESSION_HELP;
 		}
 	}
 	else
 	{
-		AvPMenu_MultiplayerSelectSession[0].ElementID = AVPMENU_ELEMENT_GOTOMENU;
-		AvPMenu_MultiplayerSelectSession[0].TextDescription = TEXTSTRING_MULTIPLAYER_NOSESSIONSFOUND;
-		AvPMenu_MultiplayerSelectSession[0].MenuToGoTo = AVPMENU_MULTIPLAYERJOINGAME;
-		AvPMenu_MultiplayerSelectSession[0].HelpString = TEXTSTRING_BLANK;
-		i = 1;
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_FINDAGAIN;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_BLANK;
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_BLANK;
+		i++;
 	}
 
 	AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_ENDOFMENU;

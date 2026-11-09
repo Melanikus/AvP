@@ -1,0 +1,738 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a moment before the start is not the first picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (seconds <= 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "it is not 30 a second",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "double const slot = seconds * kHudsonVideoFramesPerSecond;",
+					"to": "double const slot = seconds * 25;"
+				}
+			]
+		},
+		{
+			"name": "a very long time turns into nonsense",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return slot >= 2000000000.0 ? 2000000000 : (int)slot;",
+					"to": "return (int)slot;"
+				}
+			]
+		},
+		{
+			"name": "a picture is at the wrong time",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return (long long)slot * 10000000LL / kHudsonVideoFramesPerSecond;",
+					"to": "return (long long)slot * 1000000LL / kHudsonVideoFramesPerSecond;"
+				}
+			]
+		},
+		{
+			"name": "the sum for a time overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return (long long)slot * 10000000LL / kHudsonVideoFramesPerSecond;",
+					"to": "return (long long)(slot * 10000000);"
+				}
+			]
+		},
+		{
+			"name": "a picture lasts the wrong time",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return 10000000LL / kHudsonVideoFramesPerSecond;",
+					"to": "return 10000000LL;"
+				}
+			]
+		},
+		{
+			"name": "a full queue has a place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q.waiting < kHudsonVideoRingFrames ?",
+					"to": "true ?"
+				}
+			]
+		},
+		{
+			"name": "a place ignores where the queue starts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "(q.first + q.waiting) % kHudsonVideoRingFrames : -1",
+					"to": "q.waiting % kHudsonVideoRingFrames : -1"
+				}
+			]
+		},
+		{
+			"name": "a place runs off the end of the ring",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "(q.first + q.waiting) % kHudsonVideoRingFrames : -1",
+					"to": "(q.first + q.waiting) : -1"
+				}
+			]
+		},
+		{
+			"name": "adding is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q->waiting++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "an empty queue has something to write",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q.waiting > 0 ? q.first : -1",
+					"to": "q.first"
+				}
+			]
+		},
+		{
+			"name": "writing does not move on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q->first = (q->first + 1) % kHudsonVideoRingFrames;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "writing runs off the end of the ring",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q->first = (q->first + 1) % kHudsonVideoRingFrames;",
+					"to": "q->first = q->first + 1;"
+				}
+			]
+		},
+		{
+			"name": "writing is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "q->waiting--;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a film goes past its limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (bytesSoFar >= mostBytes)",
+					"to": "if (bytesSoFar > mostBytes)"
+				}
+			]
+		},
+		{
+			"name": "a film has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (bytesSoFar >= mostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a full disk does not stop it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (bytesFree < kHudsonVideoDiskToLeave)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a disk that will not say does not stop it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return kHudsonVideoDiskWontSay;",
+					"to": "return kHudsonVideoGoOn;"
+				}
+			]
+		},
+		{
+			"name": "it stops only when the disk is already below what it leaves by one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "bytesFree < kHudsonVideoDiskToLeave)",
+					"to": "bytesFree + 1 < kHudsonVideoDiskToLeave)"
+				}
+			]
+		},
+		{
+			"name": "it starts with no room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return bytesFree >= 0 && bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a disk that will not say lets it start",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return bytesFree >= 0 && bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
+					"to": "return bytesFree < 0 || bytesFree - kHudsonVideoDiskToLeave >= mostBytes;"
+				}
+			]
+		},
+		{
+			"name": "starting does not leave what it should",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "bytesFree - kHudsonVideoDiskToLeave >= mostBytes;",
+					"to": "bytesFree >= mostBytes;"
+				}
+			]
+		},
+		{
+			"name": "no size is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width <= 0 || height <= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no height is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width <= 0 || height <= 0)",
+					"to": "if (width <= 0)"
+				}
+			]
+		},
+		{
+			"name": "no width is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width <= 0 || height <= 0)",
+					"to": "if (height <= 0)"
+				}
+			]
+		},
+		{
+			"name": "an odd size is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width % 2 != 0 || height % 2 != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an odd height is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width % 2 != 0 || height % 2 != 0)",
+					"to": "if (width % 2 != 0)"
+				}
+			]
+		},
+		{
+			"name": "too big is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width > kHudsonVideoMostWidth || height > kHudsonVideoMostHeight)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "too tall is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (width > kHudsonVideoMostWidth || height > kHudsonVideoMostHeight)",
+					"to": "if (width > kHudsonVideoMostWidth)"
+				}
+			]
+		},
+		{
+			"name": "the bit rate does not go up with the size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "return width * height * 6;",
+					"to": "return 12000000;"
+				}
+			]
+		},
+		{
+			"name": "rows too short are read past their end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (pitch < width * 4)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "rows exactly long enough are refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (pitch < width * 4)",
+					"to": "if (pitch <= width * 4)"
+				}
+			]
+		},
+		{
+			"name": "rows are read with no gap between them",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "from + y * pitch",
+					"to": "from + y * width * 4"
+				}
+			]
+		},
+		{
+			"name": "rows are written with a gap between them",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "memcpy(to + y * width * 4,",
+					"to": "memcpy(to + y * pitch,"
+				}
+			]
+		},
+		{
+			"name": "only part of a row is copied",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "from + y * pitch, width * 4);",
+					"to": "from + y * pitch, width * 2);"
+				}
+			]
+		},
+		{
+			"name": "the film comes out upside down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "pictures.it->SetUINT32(MF_MT_DEFAULT_STRIDE, width * 4);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it does not write in fragments",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "MFTranscodeContainerType_FMPEG4",
+					"to": "MFTranscodeContainerType_MPEG4"
+				}
+			]
+		},
+		{
+			"name": "every picture is at the start of the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "hr = sample.it->SetSampleTime(HudsonVideo_TimeOfSlot(video.slots[place]));",
+					"to": "hr = sample.it->SetSampleTime(0);"
+				}
+			]
+		},
+		{
+			"name": "a picture does not remember its moment",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "video.slots[place] = slot;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a full queue is not counted when it is asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "InterlockedIncrement(&video.dropped);\n\t\tReachedSlot(slot);\n\t\treturn false;",
+					"to": "ReachedSlot(slot);\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a full queue is not counted when it is given one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "InterlockedIncrement(&video.dropped);\n\t\tReachedSlot(slot);\n\t\treturn;",
+					"to": "ReachedSlot(slot);\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "a dropped picture is asked for again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "InterlockedIncrement(&video.dropped);\n\t\tReachedSlot(slot);\n\t\treturn false;",
+					"to": "InterlockedIncrement(&video.dropped);\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "moments with no picture are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "InterlockedExchangeAdd(&video.noPicture, missed);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a stopped film wants pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!video.goingOn || video.finishAsked)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a stopped film takes pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!video.goingOn || video.finishAsked)\n\t{\n\t\treturn;",
+					"to": "if (false)\n\t{\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "it wants the same moment twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (slot <= video.lastSlot)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "it takes the same moment twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (slot <= video.lastSlot)\n\t{\n\t\treturn;",
+					"to": "if (false)\n\t{\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "breaking it on purpose does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "breakIt ? stream + 1 : stream",
+					"to": "stream"
+				}
+			]
+		},
+		{
+			"name": "breaking it comes a picture late",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "video.written + 1 == video.breakAtPicture",
+					"to": "video.written == video.breakAtPicture"
+				}
+			]
+		},
+		{
+			"name": "a failed picture does not stop the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (FAILED(hr))\n\t{\n\t\tStopBecauseOf(\"encoder\",",
+					"to": "if (false)\n\t{\n\t\tStopBecauseOf(\"encoder\","
+				}
+			]
+		},
+		{
+			"name": "a failure does not say Windows' number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "\"%s: Windows said 0x%08lX\", what, (unsigned long)hr",
+					"to": "\"%s\", what"
+				}
+			]
+		},
+		{
+			"name": "room is not looked at while it writes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "LeaveCriticalSection(&video.lock);\n\n\t\t\tStopIfThereIsNoRoom();",
+					"to": "LeaveCriticalSection(&video.lock);"
+				}
+			]
+		},
+		{
+			"name": "the file is never measured",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "return ((long long)facts.nFileSizeHigh << 32) | facts.nFileSizeLow;",
+					"to": "return 0;"
+				}
+			]
+		},
+		{
+			"name": "the size is not kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "video.bytes = bytes;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "reaching the limit is not said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "HudsonVideoWriter_StopBecause(\"file_full\", why);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it starts with no room on the disk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "else if (!HudsonVideo_DiskHasRoom(BytesFreeOnTheDisk(), video.mostBytes))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "the disk is never asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "return (long long)available.QuadPart;",
+					"to": "return -1;"
+				}
+			]
+		},
+		{
+			"name": "a wrong size starts anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (wrongSize)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a path too long is not noticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, path, -1, video.path, MAX_PATH))",
+					"to": "MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, path, -1, video.path, MAX_PATH);\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "a second film can start over the first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (video.started && !video.finishedInTime)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "finishing does not wait",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "WaitForSingleObject(video.thread, mostMilliseconds) == WAIT_OBJECT_0",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "finishing a film nobody started waits on nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!video.started || InterlockedExchange(&video.finishAsked, 1) != 0)",
+					"to": "if (InterlockedExchange(&video.finishAsked, 1) != 0)"
+				}
+			]
+		},
+		{
+			"name": "finishing twice waits again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!video.started || InterlockedExchange(&video.finishAsked, 1) != 0)",
+					"to": "if (!video.started)"
+				}
+			]
+		},
+		{
+			"name": "the thread never hears it is the end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (!video.goingOn || thatIsTheEnd)",
+					"to": "if (!video.goingOn)"
+				}
+			]
+		},
+		{
+			"name": "the end leaves the last pictures behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (place < 0 || !video.goingOn || !WriteOnePicture(sink, stream, place))",
+					"to": "if (place < 0 || !video.goingOn || video.finishAsked || !WriteOnePicture(sink, stream, place))"
+				}
+			]
+		},
+		{
+			"name": "the first reason does not stay",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "if (video.stopped[0] == 0)\n\t{\n\t\t_snprintf",
+					"to": "if (true)\n\t{\n\t\t_snprintf"
+				}
+			]
+		},
+		{
+			"name": "rows too short do not stop the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "HudsonVideoWriter_StopBecause(\"grab\", \"the frame's rows are shorter than the film's, so the film stops here and the run goes on\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it can record where it cannot",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "dllsAreLoaded = dll.Startup && dll.Shutdown",
+					"to": "dllsAreLoaded = dll.Shutdown"
+				}
+			]
+		},
+		{
+			"name": "a machine that checks changes may skip real films",
+			"changes": [
+				{
+					"file": "tests/hudson_video_test.cpp",
+					"from": "return ciWord == 0 && actionsWord == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a CI machine may skip them",
+			"changes": [
+				{
+					"file": "tests/hudson_video_test.cpp",
+					"from": "return ciWord == 0 && actionsWord == 0;",
+					"to": "return actionsWord == 0;"
+				}
+			]
+		},
+		{
+			"name": "GitHub may skip them",
+			"changes": [
+				{
+					"file": "tests/hudson_video_test.cpp",
+					"from": "return ciWord == 0 && actionsWord == 0;",
+					"to": "return ciWord == 0;"
+				}
+			]
+		},
+		{
+			"name": "a finished film does not say how big it came out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "\t\tNoteTheSizeOfTheFile();\n\t}",
+					"to": "\t\t;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a film whose folder isn't there says the disk won't say how much room it has",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "\telse if (!TheFolderIsThere())\n\t{\n\t\tHudsonVideoWriter_StopBecause(\"start\", \"couldn't make the file, because its folder isn't there, so there's no film, and the run goes on\");\n\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
