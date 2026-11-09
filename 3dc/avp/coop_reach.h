@@ -132,7 +132,7 @@ inline bool CoopReach_NameIsFine(std::string const &name)
 
 inline int CoopReach_RoomNumber(CoopRoomList const &list, std::string const &name)
 {
-	std::map<std::string, int>::const_iterator const found = list.numbers.find(name);
+	const auto found = list.numbers.find(name);
 
 	return found == list.numbers.end() ? -1 : found->second;
 }

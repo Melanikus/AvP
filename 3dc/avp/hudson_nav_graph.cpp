@@ -85,7 +85,7 @@ HudsonNavRayAnswer HudsonNavGraph::Ray(HudsonNavRays &rays, int x, int y, int z,
 // The spot on this place on the grid that's the same floor as this height, or -1. Two floors can't be this close, because he has to be able to stand on each.
 int HudsonNavGraph::NodeAt(int gridX, int gridZ, int floorHeight) const
 {
-	std::map<uint64_t, std::vector<int> >::const_iterator const column = columns.find(ColumnKey(gridX, gridZ));
+	const auto column = columns.find(ColumnKey(gridX, gridZ));
 
 	if (column == columns.end())
 	{
