@@ -4518,7 +4518,12 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 	fixed_t centeredSmartTargetSightY = SmartTargetSightY - (ScreenDescriptorBlock.SDB_Height << 15);
 	z = MUL_FIXED(MUL_FIXED(z, z), 2048);
 	{
-		centreY = MUL_FIXED((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY, z);
+		// Modified 2026-11-09 by Melanikus for the AvP port (#179), the vertical error the note above names: SmartTarget (targeting.cpp) puts
+		// the sight's height on the screen at 4/3 of the plain sum, because the 1999 game drew its world 4/3 tall and drew this triangle in
+		// that same stretched space. This game draws the world without the stretch, through the same sum as this triangle
+		// (d3d.matProjection), so the 4/3 is taken off here, as the gun's aim takes it off (CalculateWhereGunIsPointing). Without it, the
+		// triangle stood 4/3 as far above or below the middle of the screen as its target did.
+		centreY = MUL_FIXED((((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);
 
 		if (MIRROR_CHEATMODE) {
 			centreX = MUL_FIXED((- (centeredSmartTargetSightX - (ScreenDescriptorBlock.SDB_Width))) / Global_VDB_Ptr->VDB_ProjX, z);
