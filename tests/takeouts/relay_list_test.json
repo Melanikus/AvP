@@ -269,8 +269,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
-					"to": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
+					"from": "\t\tif (host[i] != '.' && (host[i] < '0' || host[i] > '9'))\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
+					"to": "\t\tif (host[i] != '.' && (host[i] < '0' || host[i] > '9'))\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
 				}
 			]
 		},
@@ -1579,8 +1579,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "profile && i < profileBytes && profile[i]",
-					"to": "profile && profile[i]"
+					"from": "profile && i < profileBytes && profile[i] && n < kRelayAccessNameMostBytes",
+					"to": "profile && profile[i] && n < kRelayAccessNameMostBytes"
 				}
 			]
 		},
