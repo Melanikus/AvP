@@ -26,6 +26,8 @@
 #include "logString.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
+#include "level_lists.h"
+#include "coop_menu.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -256,12 +258,17 @@ static int LiveRows(OnlineRow *rows, int most)
 		row.canJoin = session.AllowedToJoin;
 
 		OnlineScreens_SplitName(session.Name, sizeof(session.Name), row.name, sizeof(row.name), bracket, sizeof(bracket));
-		OnlineScreens_SafeName(session.levelName, sizeof(session.levelName), row.level, sizeof(row.level));
 
-		if (row.level[0] == '\0')
-		{
-			Put(row.level, sizeof(row.level), "-");
-		}
+		// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): a co-op game on one of the 32 campaign places is named by its
+		// place, in the game's own words, never by the name its host sent. An honest host sends no name for a campaign level (mp_config.cpp's
+		// GetCustomMultiplayerLevelName), so the column said "-", and a dishonest one could send any. Every other game keeps the host's name,
+		// made safe.
+		int campaign = kCampaignNone;
+		int campaignLevel = 0;
+		bool const onACampaign = session.gameStyle == NGT_Coop &&
+			LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_COOPERATIVE_EPISODES, &campaign, &campaignLevel);
+		OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName, sizeof(session.levelName),
+			row.level, sizeof(row.level));
 
 		PlayersWords(session, bracket, row.players, sizeof(row.players));
 

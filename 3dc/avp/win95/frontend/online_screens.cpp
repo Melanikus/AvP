@@ -422,6 +422,31 @@ void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t si
 	words[size - 1] = '\0';
 }
 
+// ---- The level column (added 2026-11-10 by Melanikus for the AvP port)
+
+void OnlineScreens_LevelWords(const char *campaignName, const char *hostsName, size_t hostsNameBytes, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	// The game's own words, made safe too, so whatever its text holds is drawn the way every name is
+	if (campaignName)
+	{
+		OnlineScreens_SafeName(campaignName, strlen(campaignName), words, size);
+	}
+	else
+	{
+		OnlineScreens_SafeName(hostsName ? hostsName : "", hostsName ? hostsNameBytes : 0, words, size);
+	}
+
+	if (words[0] == '\0')
+	{
+		Put(words, size, "-");
+	}
+}
+
 // ---- The ping column
 
 void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *words, size_t size)

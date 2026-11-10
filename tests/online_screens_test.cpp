@@ -195,6 +195,53 @@ static void TestSafeNames()
 	Check(to[0] == '\0', "no name at all gives an empty one");
 }
 
+// ---- The level column. Added 2026-11-10 by Melanikus for the AvP port (PO's ruling): a co-op game on one of the 32 campaign places is
+// named by the game, never by its host. Where the page works out which game that is, is read from its source (TestWhereTheyAreDrawn).
+
+static void TestTheLevelColumn()
+{
+	puts("The level column");
+
+	char words[64];
+
+	OnlineScreens_LevelWords("Derelict", "Stranded", 40, words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "a campaign level's own name is shown, and the name its host sent isn't");
+
+	char const hostile[] = { 'E', 'v', 'i', 'l', 10, 27, '%', 's', 0 };
+	OnlineScreens_LevelWords("Derelict", hostile, sizeof(hostile), words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "whatever the host sent, letters a screen can't show included");
+
+	OnlineScreens_LevelWords("Derelict", "", 40, words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "and when it sent nothing, as an honest host does for a campaign level, there's no \"-\"");
+
+	// The game's own words come from language.txt, a file a player can change, so they're made safe like any name
+	OnlineScreens_LevelWords("Der\x1b" "elict", "", 40, words, sizeof(words));
+	Check(strcmp(words, "Der?elict") == 0, "a campaign name is made safe too");
+
+	OnlineScreens_LevelWords("", "Stranded", 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "and a campaign place with no name of its own shows \"-\", still never the host's");
+
+	OnlineScreens_LevelWords(NULL, hostile, sizeof(hostile), words, sizeof(words));
+	Check(strcmp(words, "Evil??%s") == 0, "any other game shows the name its host sent, made safe");
+
+	OnlineScreens_LevelWords(NULL, "", 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "and \"-\" when the host sent none");
+
+	OnlineScreens_LevelWords(NULL, NULL, 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "or no name at all");
+
+	char const noEnd[9] = { 'H', 'a', 'd', 'l', 'e', 'y', 'X', 'Y', 0 };
+	OnlineScreens_LevelWords(NULL, noEnd, 6, words, sizeof(words));
+	Check(strcmp(words, "Hadley") == 0, "a host's name with no 0 is read no further than the bytes it's given");
+
+	OnlineScreens_LevelWords("Derelict", NULL, 0, words, 4);
+	Check(strcmp(words, "Der") == 0, "a name longer than its room is cut, and ends with a 0");
+
+	words[0] = 'Q';
+	OnlineScreens_LevelWords("Derelict", "Stranded", 40, words, 0);
+	Check(words[0] == 'Q', "a room of no bytes isn't written at all");
+}
+
 // Every letter 10 wide and a dot 4, and a note of the lowest letter number asked about
 static int lowestLetterAsked = 1000;
 
@@ -707,6 +754,18 @@ static void TestWhereTheyAreDrawn()
 		"over the games the search lets through, going to Refresh when there are none");
 	std::string const opened = SourceSlice(page, "void OnlinePage_Opened(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(opened, "lastGameKept = false;"), "a page just opened forgets the game last selected");
+
+	// The level column (added 2026-11-10 by Melanikus for the AvP port, PO's ruling). A co-op game is on a campaign place when its number
+	// is one of the 32 on the co-op list, and the name comes from the co-op pages' own list for that place. Nothing else writes the column.
+	std::string const rows = SourceSlice(page, "static int LiveRows(OnlineRow *rows, int most)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(rows, "bool const onACampaign = session.gameStyle == NGT_Coop &&\n\t\t\tLevelList_CampaignAt(session.levelIndex, "
+		"MAX_NO_OF_COOPERATIVE_EPISODES, &campaign, &campaignLevel);"),
+		"a game is on a campaign place only when it's a co-op game and its number is one of the 32 on the co-op list");
+	Check(Has(rows, "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName, "
+		"sizeof(session.levelName),\n\t\t\trow.level, sizeof(row.level));"),
+		"and then the column shows the co-op pages' own name for that place, and the host's name for any other game");
+	// (on the rows' code itself: an empty slice would have nothing in it to find, and pass)
+	Check(rows.size() > 500 && !Has(rows, "OnlineScreens_SafeName(session.levelName"), "the host's level name reaches the column by no other way");
 }
 
 // ---- The check code (protocol version 2, CRYPTO.md section 8). Added 2026-11-09 by Melanikus for the AvP port. It reads the source with
@@ -805,6 +864,7 @@ int main()
 {
 	TestTheTail();
 	TestSafeNames();
+	TestTheLevelColumn();
 	TestFitting();
 	TestSplitting();
 	TestRows();

@@ -131,6 +131,14 @@ void OnlineScreens_ConnectedWords(int sessions, char *words, size_t size);
 void OnlineScreens_CantConnectWords(const char *safeServer, char *words, size_t size);
 void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t size);
 
+// ---- The level column. Added 2026-11-10 by Melanikus for the AvP port (PO's ruling: a campaign level is named from its number).
+// campaignName is the game's own name for the level (the co-op pages' list, CoopMenu_LevelName) when the game is a co-op game on one of the
+// 32 campaign places (level_lists.h), or NULL for any other game. When it's given, it's what the column says, made safe, and the name the
+// host sent is never shown, whatever it says. Otherwise the host's name is shown, made safe. Either way an empty name shows as "-". (The
+// game's own names are never NULL once language.txt is read: language.cpp gives a text the file lacks an empty one.) words always ends
+// with a 0.
+void OnlineScreens_LevelWords(const char *campaignName, const char *hostsName, size_t hostsNameBytes, char *words, size_t size);
+
 // ---- The ping column
 
 // "about N ms" for a game through a relay: the joiner's own time to that game's relay, and the host's (hostMs, 0 when the host didn't
