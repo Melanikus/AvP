@@ -2185,13 +2185,15 @@ static void TestTourAndSharedMachine()
 		Check(ComesBefore(cut, "NameTheClip(step);", "StartTheVideo(filmSize);"), "SOURCE: the clip is named before the next one starts");
 		Check(Has(naming, "!HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName))") && Has(naming, "if (!MoveFileA("),
 			"SOURCE: its name is made by the checked rule, and MoveFileA never replaces a file that's there");
+		Check(Has(naming, "memcpy(videoName, clipName, clipLength);\n\tvideoName[clipLength] = 0;"),
+			"SOURCE: the new name is copied by its letters, then ended with a 0 of its own, so the film's name is always ended");
 		Check(Has(hudson, "_snprintf(videoName, sizeof(videoName) - 1, \"hudson-video-%s-clip%02d.mp4\", filmStamp, clipNumber);"),
 			"SOURCE: each clip has its own number, so none has another's name even if it can't be renamed");
 		Check(Has(hudson, "if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))"),
 			"SOURCE: a clip of another size gets a copy of its own size");
 		Check(Has(menusFrame, "if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)"), "SOURCE: pagehold= holds a page to be pictured first");
 		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "MenuFrameForARun(picture, !letIn);"), "SOURCE: but never the joiner's let in, which the host is waiting on");
-		Check(Has(hudson, "return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;"), "SOURCE: and only in a run with film=menus");
+		Check(Has(hudson, "return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;"), "SOURCE: and only in a run with film=menus");
 	}
 	// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): which hudson-stop files end a run
 	Check(HudsonPlan_StopFileCounts(true, false, false, 100, 100), "#198: a plain hudson-stop written as the run started ends it");

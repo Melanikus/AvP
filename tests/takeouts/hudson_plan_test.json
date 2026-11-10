@@ -10101,7 +10101,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;",
+					"from": "return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;",
 					"to": "return HudsonRunIsOn ? plan.pageHoldSeconds : 0;"
 				}
 			]
@@ -10433,6 +10433,16 @@
 					"file": "tools/hudson/run-net-pair.ps1",
 					"from": "$lines += \"d3d_errors_$game=$($errors.Count)\"",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "film=menus: the renamed clip's name isn't ended with its own 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "videoName[clipLength] = 0;",
+					"to": ";"
 				}
 			]
 		}

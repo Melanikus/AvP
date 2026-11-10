@@ -180,6 +180,9 @@ bool HudsonVideo_ClipName(const char *filmName, const char *step, char *out, siz
 	memcpy(out, filmName, baseLength);
 	out[baseLength] = '-';
 	memcpy(out + baseLength + 1, step, stepLength);
-	memcpy(out + baseLength + 1 + stepLength, kEnd, endLength + 1);
+	memcpy(out + baseLength + 1 + stepLength, kEnd, endLength);
+
+	// The 0 that ends the name, on a line of its own: the check above counted room for it
+	out[baseLength + 1 + stepLength + endLength] = 0;
 	return true;
 }

@@ -5016,7 +5016,12 @@ static void NameTheClip(const char *step)
 		return;
 	}
 
-	memcpy(videoName, clipName, sizeof(videoName));
+	// The new name's letters, then the 0 that ends them on a line of its own. clipName is as big as videoName and HudsonVideo_ClipName
+	// ended it, so it has at most sizeof(videoName) - 1 letters, and the 0 always fits.
+	size_t const clipLength = strnlen(clipName, sizeof(clipName) - 1);
+
+	memcpy(videoName, clipName, clipLength);
+	videoName[clipLength] = 0;
 	LogString(std::string("video: the clip ") + videoName + " is finished");
 }
 
@@ -5269,7 +5274,7 @@ int Hudson_AnswerAfterSeconds()
 // pagehold= (with film=menus): the seconds each page the menus picture is held first. Added 2026-11-10 by Melanikus (Third) for the AvP port
 int Hudson_PageHoldSeconds()
 {
-	return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;
+	return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;
 }
 
 bool Hudson_JoinsThroughFindGames()

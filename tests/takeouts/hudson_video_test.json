@@ -813,6 +813,16 @@
 					"to": "if (baseLength + 1 + stepLength + endLength > outSize)"
 				}
 			]
+		},
+		{
+			"name": "a clip's name isn't ended with its own 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "out[baseLength + 1 + stepLength + endLength] = 0;",
+					"to": ";"
+				}
+			]
 		}
 	]
 }

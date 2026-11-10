@@ -822,6 +822,11 @@ static void TestClipNames()
 	strcpy(out, "unchanged");
 	Check(!HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, 28) && strcmp(out, "unchanged") == 0, "one less isn't");
 	Check(!HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, 0), "and no room at all isn't");
+
+	// A name it makes ends with its own 0, whatever out held before (Snyk Code, 2026-11-10: the 0 is written on a line of its own)
+	memset(out, 'x', sizeof(out));
+	Check(HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, sizeof(out)) && out[28] == 0 && strcmp(out, "hudson-video-1-join-list.mp4") == 0,
+		"a name made in a buffer full of other letters still ends right after its .mp4");
 }
 
 // film=menus's cut, as hudson.cpp makes it (CutTheFilm): a clip finished within the cut's wait, then the next started at once, perhaps at
