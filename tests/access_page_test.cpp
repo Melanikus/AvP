@@ -238,12 +238,13 @@ static void TestTheBeta2Words()
 		"a profile's letters left out of the name to send are said, under the rows");
 }
 
-// Where the page's parts go (access_page_rules.h). Added 2026-11-10 by Melanikus for the AvP port, after the owner's picture: the page's
-// title, "Your access code" and the code were drawn on top of each other, so the code couldn't be read, with an empty gap above the rows.
-// The numbers are the menus' 640 by 480 grid, which is stretched to the screen, so what holds here holds at 16:9 and at 4:3 alike.
+// Where the page's parts go, and its rows (access_page_rules.h). Added 2026-11-10 by Melanikus for the AvP port, after the owner's
+// pictures: the page's title, "Your access code" and the code were drawn on top of each other, with an empty gap above the rows; then
+// "we have space for some more padding", the rows not chosen too faint to find "Copy access code", and "They have to use arrows to get
+// it?". The numbers are the menus' 640 by 480 grid, which is stretched to the screen, so what holds here holds at 16:9 and at 4:3 alike.
 static void TestWhereThePartsGo()
 {
-	puts("5. where the page's parts go");
+	puts("5. where the page's parts go, and its rows");
 
 	// A row of the small font is HUD_FONT_HEIGHT + 4 high (menus.cpp, HeightOfMenuElement): the access page has 4 rows, the question 2
 	int const row = kAccessPageSmallLine + 4;
@@ -251,65 +252,117 @@ static void TestWhereThePartsGo()
 
 	// The title's letters can hang below its line: menus.cpp starts a picture under a title at 106, "a few pixels clear of the tails"
 	Check(kAccessPageTop >= titleBottom + kAccessPageSmallLine, "the page starts well under the title, clear of its letters' tails");
+	Check(AccessPage_RowsHeight(4 * row, 4) == 4 * row + 3 * kAccessPageRowsApart && AccessPage_RowsHeight(row, 1) == row &&
+		AccessPage_RowsHeight(0, 0) == 0 && kAccessPageRowsApart > 0, "the rows are kAccessPageRowsApart further apart than the menus' own, between each two");
 
 	bool allInside = true;
 	bool inOrder = true;
 	bool wordsWholeWhenTheyFit = true;
+	bool underWhole = true;
+	bool spareShared = true;
 
 	for (int shown = 0; shown < 2; shown++)
 	{
-		for (int rows = 0; rows <= 6; rows++)
+		for (int rows = 0; rows <= 5; rows++)
 		{
-			for (int lines = -1; lines <= 40; lines++)
+			int const rowsHeight = AccessPage_RowsHeight(rows * row, rows);
+
+			for (int under = 0; under <= 3; under++)
 			{
-				AccessPageLayout const at = AccessPage_Layout(shown != 0, lines, rows * row);
-				int const first = shown ? at.labelTop : at.wordsTop;
-				int const wordsBottom = at.wordsTop + at.wordsLines * kAccessPageSmallLine;
-
-				allInside = allInside && first >= kAccessPageTop && at.underTop + kAccessPageSmallLine <= kAccessPageBottom && at.wordsLines >= 0;
-
-				if (shown)
+				for (int lines = -1; lines <= 40; lines++)
 				{
-					inOrder = inOrder && at.labelTop + kAccessPageSmallLine <= at.codeTop && at.codeTop + kAccessPageBigLine <= at.wordsTop;
-				}
-				else
-				{
-					inOrder = inOrder && at.labelTop == -1 && at.codeTop == -1;
-				}
+					AccessPageLayout const at = AccessPage_Layout(shown != 0, lines, rowsHeight, under);
+					int const first = shown ? at.labelTop : at.wordsTop;
+					int const wordsBottom = at.wordsTop + at.wordsLines * kAccessPageSmallLine;
+					int const kept = under > kAccessPageUnderKept ? under : kAccessPageUnderKept;
 
-				inOrder = inOrder && wordsBottom <= at.rowsTop && at.rowsTop + rows * row <= at.underTop;
+					allInside = allInside && first >= kAccessPageTop && at.underTop + kept * kAccessPageSmallLine <= kAccessPageBottom &&
+						at.wordsLines >= 0 && at.underLines >= 0;
 
-				// Words are cut only when there's no room for them: the lines drawn are all of them, or as many as fit
-				AccessPageLayout const oneMore = AccessPage_Layout(shown != 0, at.wordsLines + 1, rows * row);
-				wordsWholeWhenTheyFit = wordsWholeWhenTheyFit && (lines < 0 || at.wordsLines == lines ||
-					(at.wordsLines < lines && oneMore.underTop + kAccessPageSmallLine > kAccessPageBottom));
+					if (shown)
+					{
+						// A clear gap under the code, of a small line at least (the owner: the code and the words nearly touched)
+						inOrder = inOrder && at.labelTop + kAccessPageSmallLine <= at.codeTop &&
+							at.codeTop + kAccessPageBigLine + kAccessPageLeastWordsGap <= at.wordsTop;
+					}
+					else
+					{
+						inOrder = inOrder && at.labelTop == -1 && at.codeTop == -1;
+					}
+
+					// A small line's gap at least above the first row, and the lines under the rows below them
+					inOrder = inOrder && wordsBottom + kAccessPageLeastRowsGap <= at.rowsTop &&
+						at.rowsTop + rowsHeight + kAccessPageLeastUnderGap <= at.underTop;
+
+					// Words are cut only when there's no room for them: the lines drawn are all of them, or so many that one more, with every
+					// gap at its least, would push the lines kept under the rows below the bottom edge
+					int const least = (shown ? kAccessPageSmallLine + kAccessPageCodeGap + kAccessPageBigLine + kAccessPageLeastWordsGap : 0) +
+						kAccessPageLeastRowsGap + rowsHeight + kAccessPageLeastUnderGap + kept * kAccessPageSmallLine;
+					wordsWholeWhenTheyFit = wordsWholeWhenTheyFit && (lines < 0 ? at.wordsLines == 0 : (at.wordsLines == lines ||
+						(at.wordsLines < lines && least + (at.wordsLines + 1) * kAccessPageSmallLine > kAccessPageBottom - kAccessPageTop)));
+
+					// Up to 5 rows and 3 lines under them always fit: those lines are never cut
+					underWhole = underWhole && at.underLines == under;
+
+					// The room left is shared, up to kAccessPageMostSpare a gap, and never more than there is
+					int const gaps = shown ? 4 : 3;
+					spareShared = spareShared && at.spare >= 0 && at.spare <= kAccessPageMostSpare &&
+						least + at.wordsLines * kAccessPageSmallLine + gaps * at.spare <= kAccessPageBottom - kAccessPageTop;
+				}
 			}
 		}
 	}
 
-	Check(allInside, "every part, for any number of lines and up to 6 rows, sits between MENU_TOPYEDGE (130) and MENU_BOTTOMYEDGE (390)");
-	Check(inOrder, "top to bottom, nothing on anything: Your access code, the code, the words, the rows, the line under them");
-	Check(wordsWholeWhenTheyFit, "and the words are cut only when there's no room left for another line");
+	Check(allInside, "every part, for any number of lines, up to 5 rows and 3 lines under them, sits between MENU_TOPYEDGE (130) and MENU_BOTTOMYEDGE (390)");
+	Check(inOrder, "top to bottom, nothing on anything, with a small line's gap at least under the code and above the rows");
+	Check(wordsWholeWhenTheyFit, "the words are cut only when there's no room left for another line");
+	Check(underWhole, "the lines under the rows are kept whole, their room kept first");
+	Check(spareShared, "and the room left is shared out between the gaps, up to its most, and never more than there is");
 
-	// The three pages as they are: room for at least 6 lines of words on each, about twice what their longest words take
-	Check(AccessPage_Layout(false, 99, 4 * row).wordsLines >= 6, "before a request is sent, there's room for 6 lines of words above the 4 rows");
-	Check(AccessPage_Layout(true, 99, 4 * row).wordsLines >= 6, "with the code shown, too");
-	Check(AccessPage_Layout(false, 99, 2 * row).wordsLines >= 6, "and on the question before a new identity, above its 2 rows");
+	// The three pages as they are, with the lines their words take in Hudson's pictures at 1920x1080 (2026-11-10): before a request is
+	// sent, 3 lines above the rows; with the code shown, 2, and 2 under the rows ("Waiting for approval..."); the question, 2. Each has
+	// room for at least one more line of words than that.
+	Check(AccessPage_Layout(false, 99, AccessPage_RowsHeight(4 * row, 4), 1).wordsLines >= 4, "before a request is sent, there's room for 4 lines of words above the 4 rows");
+	Check(AccessPage_Layout(true, 99, AccessPage_RowsHeight(4 * row, 4), 2).wordsLines >= 3, "with the code shown and 2 lines under the rows, 3");
+	Check(AccessPage_Layout(false, 99, AccessPage_RowsHeight(2 * row, 2), 0).wordsLines >= 3, "and on the question before a new identity, 3, above its 2 rows");
 
-	// The gap the owner saw is gone: the rows start right under the words
-	AccessPageLayout const asked = AccessPage_Layout(true, 2, 4 * row);
-	Check(asked.rowsTop == asked.wordsTop + 2 * kAccessPageSmallLine + kAccessPageRowsGap, "the first row is right under the words, with no gap but its own");
+	// The page the owner saw, with the code and the answer: padded, and the rows don't move when the answer changes
+	AccessPageLayout const waiting = AccessPage_Layout(true, 2, AccessPage_RowsHeight(4 * row, 4), 2);
+	AccessPageLayout const approved = AccessPage_Layout(true, 2, AccessPage_RowsHeight(4 * row, 4), 1);
+	Check(waiting.spare > 0 && waiting.labelTop > kAccessPageTop, "with the code shown, the room left goes into the gaps, the one under the title too");
+	Check(waiting.rowsTop == approved.rowsTop && waiting.underTop == approved.underTop, "and the rows stay put when Waiting... becomes Approved");
 
-	// And the menus use it, by reading their source: the title is where this file says, a row is as high, and the rows start where the page
-	// says
+	// The rows not chosen: brighter than the menus' quarter, still clearly dimmer than the chosen one
+	Check(kAccessPageRowNotChosenOutOf100 > 25 && kAccessPageRowNotChosenOutOf100 <= 75, "a row not chosen is drawn brighter than the menus' 25 out of 100, and dimmer than the chosen 100");
+
+	// The row the page chooses: Copy access code, as the page opens with the code on it, or the moment a press first puts it there
+	Check(AccessPage_ChoosesCopy(true, false, true) && AccessPage_ChoosesCopy(true, true, true), "the page opens on Copy access code when the code is on it");
+	Check(AccessPage_ChoosesCopy(false, false, true), "and chooses it the moment Request access first puts the code there");
+	Check(!AccessPage_ChoosesCopy(false, true, true), "but never again while the code stays, so the arrows move from wherever the player goes");
+	Check(!AccessPage_ChoosesCopy(true, false, false) && !AccessPage_ChoosesCopy(false, false, false) && !AccessPage_ChoosesCopy(false, true, false),
+		"and never while there's no code to copy");
+
+	// And the menus use it, by reading their source: the title is where this file says, a row is as high, the rows start where the page
+	// says and are as far apart, the rows not chosen are as bright, and the row the page chooses is taken
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/access_page.cpp");
 	std::string const render = SourceSlice(menus, "static void RenderMenu(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(render, "RenderMenuText(textPtr, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);") && kAccessPageTitleTop == 70,
 		"RenderMenu draws the title at y 70, where this page's rule says it is");
 	Check(Has(menus, "h = HUD_FONT_HEIGHT+4;"), "a row of the small font is HUD_FONT_HEIGHT + 4 high, as this test counts it");
-	Check(Has(render, "y = AccessPage_DrawTop(AvPMenus.MenuHeight);") && Has(render, "y = AccessPage_DrawQuestion(AvPMenus.MenuHeight);") &&
+	Check(Has(render, "y = AccessPage_DrawTop(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);") &&
+		Has(render, "y = AccessPage_DrawQuestion(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);") &&
 		CountOf(menus, "AccessPage_DrawTop(") == 1 && CountOf(menus, "AccessPage_DrawQuestion(") == 1,
-		"and RenderMenu starts both pages' rows where the page puts them, in one place each");
+		"RenderMenu starts both pages' rows where the page puts them, in one place each");
+	Check(Has(render, "y += HeightOfMenuElement(elementPtr) + (accessPage ? kAccessPageRowsApart : 0);") &&
+		Has(render, "targetBrightness = ONE_FIXED * kAccessPageRowNotChosenOutOf100 / 100;"),
+		"and draws their rows kAccessPageRowsApart further apart, the ones not chosen at kAccessPageRowNotChosenOutOf100");
+	Check(Has(menus, "int const choose = AccessPage_Frame(AvPMenus.MenuElements);") &&
+		Has(menus, "if (choose >= 0 && choose < AvPMenus.NumberOfElementsInMenu)\n\t\t{\n\t\t\tAvPMenus.CurrentlySelectedElement = choose;"),
+		"the row the page chooses is taken, only when it's one of the page's rows");
+	Check(Has(page, "chooseCopy = AccessPage_ChoosesCopy(true, codeWasShown, CodeShown());") &&
+		Has(page, "if (AccessPage_ChoosesCopy(false, codeWasShown, CodeShown()))"),
+		"and the page asks the rule as it opens, and on each frame");
 }
 
 int main()

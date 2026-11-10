@@ -32,6 +32,9 @@ static TEXTSTRING_ID stateLine = TEXTSTRING_BLANK;   // the line under the rows:
 static bool needsANewIdentity = false;   // the server said refused or revoked, which stays so: asking again would only use up calls
 static RelayAccessAnswer lastAnswer = kRelayAccessWaiting;
 
+static bool codeWasShown = false;     // the code was on the page the frame before (AccessPage_ChoosesCopy)
+static bool chooseCopy = false;       // the next frame chooses Copy access code for the player
+
 static bool haveIdentity = false;
 static uint8_t ourStatics[kNetIdentityStaticBytes];
 static uint8_t ourFingerprint[kNetIdentityFingerprintBytes];
@@ -77,6 +80,26 @@ static void Ask(void)
 	onItsWay = true;
 	lastCallAt = Now();
 	stateLine = TEXTSTRING_ACCESS_SENDING;
+}
+
+// Whether the code is on the page: once a request has been sent this run, for an identity this PC has
+static bool CodeShown(void)
+{
+	return sentThisRun && ourCode[0] != '\0';
+}
+
+// Copy access code's place among the page's rows, or -1 on a page without it
+static int CopyRowOf(const AVPMENU_ELEMENT *rows)
+{
+	for (int at = 0; rows && rows[at].ElementID != AVPMENU_ELEMENT_ENDOFMENU; at++)
+	{
+		if (rows[at].ElementID == AVPMENU_ELEMENT_ONLINE_ACCESS && rows[at].MaxValue == kAccessRowCopy)
+		{
+			return at;
+		}
+	}
+
+	return -1;
 }
 
 // Once a request has been sent, its row asks again, and says so
@@ -160,6 +183,10 @@ bool AccessPage_Opened(AVPMENU_ELEMENT *rows)
 		Ask();
 	}
 
+	// With the code on the page, the page opens on Copy access code (access_page_rules.h, AccessPage_ChoosesCopy)
+	chooseCopy = AccessPage_ChoosesCopy(true, codeWasShown, CodeShown());
+	codeWasShown = CodeShown();
+
 	SetTheRows(rows);
 	return true;
 }
@@ -169,7 +196,7 @@ bool AccessPage_QuestionOpened(void)
 	return DevMode != 0;
 }
 
-void AccessPage_Frame(AVPMENU_ELEMENT *rows)
+int AccessPage_Frame(AVPMENU_ELEMENT *rows)
 {
 	bool answered = false;
 	RelayAccessAnswer answer = kRelayAccessWaiting;
@@ -193,6 +220,23 @@ void AccessPage_Frame(AVPMENU_ELEMENT *rows)
 	}
 
 	SetTheRows(rows);
+
+	// The moment a press first puts the code on the page (Request access sent), the page chooses Copy access code for the player
+	if (AccessPage_ChoosesCopy(false, codeWasShown, CodeShown()))
+	{
+		chooseCopy = true;
+	}
+
+	codeWasShown = CodeShown();
+
+	int const copyRow = chooseCopy ? CopyRowOf(rows) : -1;
+
+	if (copyRow >= 0)
+	{
+		chooseCopy = false;
+	}
+
+	return copyRow;
 }
 
 bool AccessPage_Pressed(int row, enum AVPMENU_ID *page)
@@ -287,25 +331,33 @@ static_assert(kAccessPageBottom == MENU_BOTTOMYEDGE, "the access page ends where
 static_assert(kAccessPageBigLine == MENU_FONT_HEIGHT, "the big font's height is MENU_FONT_HEIGHT");
 static_assert(kAccessPageSmallLine == HUD_FONT_HEIGHT, "the small font's height is HUD_FONT_HEIGHT");
 
-// The words drawn into their place: a box exactly as tall as the lines given, so RenderSmallFontString_Wrapped starts them at its top
-static void DrawWords(char *words, AccessPageLayout const &at)
+// How many lines a text takes in the words' box: the same width above the rows and under them
+static int LinesOf(const char *text)
 {
-	if (!words || at.wordsLines <= 0)
+	return text ? SmallFontString_WrappedLines(text, kAccessPageWordsRight - kAccessPageWordsLeft) : 0;
+}
+
+// A text drawn into its place: a box exactly as tall as the lines given, so RenderSmallFontString_Wrapped starts it at its top. One line
+// is centred, as that routine does; more are lined up on the left.
+static void DrawWrapped(char *text, int top, int lines)
+{
+	if (!text || lines <= 0)
 	{
 		return;
 	}
 
 	int x = 0;
 	int y = 0;
-	RECT area = { kAccessPageWordsLeft, at.wordsTop, kAccessPageWordsRight, at.wordsTop + at.wordsLines * kAccessPageSmallLine };
-	RenderSmallFontString_Wrapped(words, &area, ONE_FIXED, &x, &y);
+	RECT area = { kAccessPageWordsLeft, top, kAccessPageWordsRight, top + lines * kAccessPageSmallLine };
+	RenderSmallFontString_Wrapped(text, &area, ONE_FIXED, &x, &y);
 }
 
 // Modified 2026-11-10 by Melanikus for the AvP port, after the owner's picture: the title, "Your access code" and the code were drawn on
 // top of each other, and an empty gap sat above the rows. The page now lays itself out under the title, top to bottom, by
 // AccessPage_Layout (access_page_rules.h), and gives back where the rows start.
-int AccessPage_DrawTop(int rowsHeight)
+int AccessPage_DrawTop(int menuHeight, int rows)
 {
+	int const rowsHeight = AccessPage_RowsHeight(menuHeight, rows);
 	char paragraph[420];
 	char *words = NULL;
 	bool codeShown = false;
@@ -324,8 +376,10 @@ int AccessPage_DrawTop(int rowsHeight)
 		codeShown = true;
 	}
 
-	int const lines = words ? SmallFontString_WrappedLines(words, kAccessPageWordsRight - kAccessPageWordsLeft) : 0;
-	AccessPageLayout const at = AccessPage_Layout(codeShown, lines, rowsHeight);
+	// What the server said, or why nothing was sent, under the rows: wrapped to the words' width (the owner, 2026-11-10: as one line it
+	// ran almost from one edge of the screen to the other)
+	char *under = stateLine != TEXTSTRING_BLANK ? GetTextString(stateLine) : NULL;
+	AccessPageLayout const at = AccessPage_Layout(codeShown, LinesOf(words), rowsHeight, LinesOf(under));
 
 	if (codeShown)
 	{
@@ -333,22 +387,17 @@ int AccessPage_DrawTop(int rowsHeight)
 		RenderMenuText(ourCode, MENU_CENTREX, at.codeTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
-	DrawWords(words, at);
-
-	if (stateLine != TEXTSTRING_BLANK)
-	{
-		RenderSmallMenuText(GetTextString(stateLine), MENU_CENTREX, at.underTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-	}
-
+	DrawWrapped(words, at.wordsTop, at.wordsLines);
+	DrawWrapped(under, at.underTop, at.underLines);
 	return at.rowsTop;
 }
 
 // The question before a new identity: its words under the title, and its two rows right under them, by the same layout
-int AccessPage_DrawQuestion(int rowsHeight)
+int AccessPage_DrawQuestion(int menuHeight, int rows)
 {
 	char *words = GetTextString(TEXTSTRING_ACCESS_NEWID_EXPLAIN);
-	AccessPageLayout const at = AccessPage_Layout(false, SmallFontString_WrappedLines(words, kAccessPageWordsRight - kAccessPageWordsLeft), rowsHeight);
-	DrawWords(words, at);
+	AccessPageLayout const at = AccessPage_Layout(false, LinesOf(words), AccessPage_RowsHeight(menuHeight, rows), 0);
+	DrawWrapped(words, at.wordsTop, at.wordsLines);
 	return at.rowsTop;
 }
 

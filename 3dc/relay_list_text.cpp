@@ -1609,7 +1609,7 @@ bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes)
 void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes])
 {
 	static_assert(sizeof(kNetRelayCodeAlphabet) == 33, "32 code letters, so each is exactly 5 bits");
-	static_assert(kRelayAccessCodeLetters * 5 <= kNetIdentityFingerprintBytes * 8, "the code's 80 bits are all in the fingerprint");
+	static_assert(kRelayAccessCodeLetters * 5 <= kNetIdentityFingerprintBytes * 8, "the code's bits are all in the fingerprint");
 
 	size_t at = 0;
 
@@ -1774,7 +1774,8 @@ RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes
 	}
 
 	// The fingerprint the list worked out has to be this PC's own. That catches a list and a game that work it out differently. It's no
-	// defence against someone in the middle, who would change this as well: the access code on the player's screen is.
+	// defence against someone in the middle, who would change this as well: the list's key, checked before a byte is sent, is, with the
+	// access code on the player's screen (RelayAccess_Code, relay_list_text.h, says why the code alone isn't, since 2026-11-10).
 	if (status == 200 && (!ours || memcmp(fingerprint, ours, sizeof(fingerprint)) != 0))
 	{
 		return kRelayListNotOurKey;

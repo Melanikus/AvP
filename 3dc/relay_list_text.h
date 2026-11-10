@@ -50,8 +50,8 @@ enum
 {
 	kRelayAccessNameMostBytes = 15,      // a name: 1 to 15 bytes, the most a profile's name can be (MAX_SIZE_OF_USERS_NAME, user_profile.h)
 	kRelayAccessKeyLetters = 2220,       // the public halves of an identity, 1,665 bytes, in base64: always exactly this many letters
-	kRelayAccessCodeLetters = 16,        // the access code: 16 code letters
-	kRelayAccessCodeTextBytes = 20,      // written XXXX-XXXX-XXXX-XXXX, with the 0 at the end
+	kRelayAccessCodeLetters = 8,         // the access code: 8 code letters (16 before 2026-11-10: RelayAccess_Code says why it's safe)
+	kRelayAccessCodeTextBytes = 10,      // written XXXX-XXXX, with the 0 at the end
 	kRelayAccessMostBodyBytes = 4096,    // the list takes a request of at most 4 KB, its own limit (the other calls keep 1 KB)
 	kRelayAccessMostAnswerBytes = 512    // and answers it with far less than this
 };
@@ -249,9 +249,17 @@ void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char 
 // and neither is the cut to 15. Added 2026-11-09 by Melanikus for the AvP port.
 bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes);
 
-// The access code for an identity's fingerprint. It's the fingerprint's first 80 bits, highest first, as 16 code letters of 5 bits each
-// (the relay codes' letters, kNetRelayCodeAlphabet), in groups of four: XXXX-XXXX-XXXX-XXXX. 80 bits can't be matched by making keys until
-// one fits. The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.
+// The access code for an identity's fingerprint. It's the fingerprint's first 40 bits, highest first, as 8 code letters of 5 bits each
+// (the relay codes' letters, kNetRelayCodeAlphabet), in two groups of four: XXXX-XXXX. They're the first 8 letters of the 16 that builds
+// before 2026-11-10 showed, so the owner's kit matches either by its first 8.
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner: "Shorter code too?"; PO's ruling). 40 bits CAN be matched by making keys
+// until one fits: about a million million tries, hours on hired machines. So the code alone no longer proves which request is the
+// player's. Two things keep a matched code from ever being approved:
+// - the owner's kit refuses a code that more than one request has, and shows them all (avpx-players), so a stranger who asks with a key
+//   made to match a player's code gets a refusal the owner sees, never the player's approval;
+// - the game checks the list's key before it sends a byte (its servers.cfg line, or -dev's RelayListPin), so nobody on the way can drop
+//   the player's request and send their own in its place, which would leave only one request with that code for the kit to find.
+// The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.
 void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes]);
 
 // The body of a POST /v1/access-requests: {"v":1,"name":"...","key":"..."}. False, with nothing to send, if the name breaks the rule,

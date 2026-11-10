@@ -1204,6 +1204,8 @@ static void TestAccessCodes()
 
 	// The same examples are in the server's own test of its approve command, so both sides make the same code from the same fingerprint.
 	// They were worked out a second way, with whole-number arithmetic rather than bit by bit (Fourth's access-code.js, 2026-11-09).
+	// Modified 2026-11-10 by Melanikus for the AvP port: the code is 8 letters now (relay_list_text.h, RelayAccess_Code), each example's
+	// the first 8 of its 16 before, worked out again in Node with the game's alphabet; the 80th bit's two examples moved to the 40th.
 	struct Example
 	{
 		const char *fingerprint;
@@ -1212,15 +1214,15 @@ static void TestAccessCodes()
 	};
 
 	Example const examples[] = {
-		{ "00000000000000000000000000000000", "2222-2222-2222-2222", "all 0 is the alphabet's first letter, 16 times" },
-		{ "ffffffffffffffffffffffffffffffff", "ZZZZ-ZZZZ-ZZZZ-ZZZZ", "all 1s is its last" },
-		{ "000102030405060708090a0b0c0d0e0f", "222J-62S6-2N52-G42B", "a fingerprint counting up" },
-		{ "0123456789abcdef0123456789abcdef", "26KN-CTWB-PH8Y-Y2B5", "another" },
-		{ "f0e1d2c3b4a5968778695a4b3c2d1e0f", "Y5JX-7JXN-NQDA-GY5B", "and one counting down" },
-		{ "80000000000000000000000000000000", "J222-2222-2222-2222", "the highest bit of the first byte is the first letter's highest" },
-		{ "00000000000000000001000000000000", "2222-2222-2222-2223", "the 80th bit is the last letter's lowest" },
-		{ "0000000000000000000000ffffffffff", "2222-2222-2222-2222", "bits past the 80th make no difference" },
-		{ "08421084210842108421000000000000", "3333-3333-3333-3333", "and each letter is exactly 5 bits" }
+		{ "00000000000000000000000000000000", "2222-2222", "all 0 is the alphabet's first letter, 8 times" },
+		{ "ffffffffffffffffffffffffffffffff", "ZZZZ-ZZZZ", "all 1s is its last" },
+		{ "000102030405060708090a0b0c0d0e0f", "222J-62S6", "a fingerprint counting up" },
+		{ "0123456789abcdef0123456789abcdef", "26KN-CTWB", "another" },
+		{ "f0e1d2c3b4a5968778695a4b3c2d1e0f", "Y5JX-7JXN", "and one counting down" },
+		{ "80000000000000000000000000000000", "J222-2222", "the highest bit of the first byte is the first letter's highest" },
+		{ "00000000010000000000000000000000", "2222-2223", "the 40th bit is the last letter's lowest" },
+		{ "0000000000ffffffffffffffffffffff", "2222-2222", "bits past the 40th make no difference" },
+		{ "08421084210000000000000000000000", "3333-3333", "and each letter is exactly 5 bits" }
 	};
 
 	for (size_t i = 0; i < sizeof(examples) / sizeof(examples[0]); i++)
@@ -1234,7 +1236,7 @@ static void TestAccessCodes()
 
 		if (read && strcmp(code, examples[i].code) != 0)
 		{
-			printf("          it made %.20s, not %s\n", code, examples[i].code);
+			printf("          it made %.10s, not %s\n", code, examples[i].code);
 		}
 	}
 }

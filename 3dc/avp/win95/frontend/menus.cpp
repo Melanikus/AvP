@@ -104,6 +104,7 @@
 #include "online_screens.h"
 #include "online_screens_page.h"
 #include "access_page.h"
+#include "access_page_rules.h"   // the Online access pages' rows: how far apart, and how bright when not chosen
 
 // -dev (d3d_render.cpp): the Online access row and pages are there only with it
 extern int DevMode;
@@ -1591,8 +1592,14 @@ extern void AvP_UpdateMenus(void)
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
 	{
-		// The server's answer comes on the list's own thread, and the page shows it as it comes
-		AccessPage_Frame(AvPMenus.MenuElements);
+		// The server's answer comes on the list's own thread, and the page shows it as it comes. Modified 2026-11-10 by Melanikus for the
+		// AvP port: once the code is on the page, the page chooses Copy access code, so one Enter copies it (AccessPage_ChoosesCopy)
+		int const choose = AccessPage_Frame(AvPMenus.MenuElements);
+
+		if (choose >= 0 && choose < AvPMenus.NumberOfElementsInMenu)
+		{
+			AvPMenus.CurrentlySelectedElement = choose;
+		}
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
@@ -2461,11 +2468,11 @@ static void RenderMenu(void)
 			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's picture: the code was drawn over the title, with an empty gap
 			// above the rows): the Online access pages draw their own parts under the title, and their rows start right under those
 			// (access_page_rules.h, "Where the page's parts go")
-			y = AccessPage_DrawTop(AvPMenus.MenuHeight);
+			y = AccessPage_DrawTop(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);
 		}
 		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
 		{
-			y = AccessPage_DrawQuestion(AvPMenus.MenuHeight);
+			y = AccessPage_DrawQuestion(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);
 		}
 		else
 		{
@@ -2518,6 +2525,11 @@ static void RenderMenu(void)
 		RenderSmallMenuText(relayNews, MENU_CENTREX, 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
+	// The Online access pages: their rows a little further apart, and a row not chosen brighter than the menus' quarter, so it's read
+	// against the starfield (modified 2026-11-10 by Melanikus for the AvP port: the owner couldn't find Copy access code; access_page_rules.h)
+	bool const accessPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS &&
+		(AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW);
+
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
 		int targetBrightness;
@@ -2525,6 +2537,10 @@ static void RenderMenu(void)
 		if (e==AvPMenus.CurrentlySelectedElement)
 		{
 			targetBrightness = BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT;
+		}
+		else if (accessPage)
+		{
+			targetBrightness = ONE_FIXED * kAccessPageRowNotChosenOutOf100 / 100;
 		}
 		else
 		{
@@ -2566,7 +2582,7 @@ static void RenderMenu(void)
 			RenderMenuElement(elementPtr,e,y);
 		}
 
-		y += HeightOfMenuElement(elementPtr);
+		y += HeightOfMenuElement(elementPtr) + (accessPage ? kAccessPageRowsApart : 0);
 	}
 
 	// Render Menu Title
