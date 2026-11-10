@@ -54,8 +54,14 @@ static void FailedSlice(std::string const &why)
 	Check(false, why);
 }
 
-// The store asks whether this is the game's second copy, for the name of the game's own file, which this test never uses
+// The store asks whether this is the game's second copy, and whether it's a Hudson run, for the name of the game's own file, which this
+// test never uses. The game's own are in utilities.cpp, which the test reads to check they're there (TestTheFileNames).
 bool SaveFolder_IsTheSecondCopy()
+{
+	return false;
+}
+
+bool SaveFolder_IsAHudsonRun()
 {
 	return false;
 }
@@ -501,8 +507,8 @@ static void TestTheSource()
 	Check(store.find("SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &local)") != std::string::npos &&
 		store.find("GetSaveFolderPath") == std::string::npos,
 		"the file is kept in this PC's own LocalAppData, never the save folder");
-	Check(store.find("SaveFolder_IsTheSecondCopy() ? kSecondCopyFileName : kFileName") != std::string::npos &&
-		store.find("L\"identity-v2-second-copy.bin\"") != std::string::npos, "and a second copy of the game on this PC keeps a file of its own");
+	Check(store.find("return folder + L\"\\\\\" + NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy());") != std::string::npos,
+		"and its name says whether this is a Hudson run, and whether it's the second copy (TestTheFileNames)");
 
 	// Finding 3: the owner is checked through the same handle the file is read through
 	std::string const reader = SourceSlice(store, "bool ReadWholeFile(const wchar_t *path,", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
@@ -617,6 +623,40 @@ static void TestWhoseFile()
 	NetIdentity_Free(&made);
 }
 
+// The kept file's name, and the game's own answers to what it's named by (added 2026-11-09 by Melanikus for the AvP port). A Hudson run
+// has files of its own, so the test marine never reads, replaces or sends the player's identity and its approvals (Fifth's read). And the
+// two functions the store asks are really in the game: the first had no definition there at all, only this test's stand-in, so the game
+// couldn't link, and nothing else would have said so.
+static void TestTheFileNames()
+{
+	puts("The kept file's name");
+
+	Check(wcscmp(NetIdentityStore_FileName(false, false), L"identity-v2.bin") == 0 &&
+		wcscmp(NetIdentityStore_FileName(false, true), L"identity-v2-second-copy.bin") == 0, "the player's own file, and the second copy's");
+	Check(wcscmp(NetIdentityStore_FileName(true, false), L"identity-v2-hudson.bin") == 0 &&
+		wcscmp(NetIdentityStore_FileName(true, true), L"identity-v2-hudson-second-copy.bin") == 0, "a Hudson run's own two");
+
+	bool allApart = true;
+	const wchar_t *const names[] = {NetIdentityStore_FileName(false, false), NetIdentityStore_FileName(false, true),
+		NetIdentityStore_FileName(true, false), NetIdentityStore_FileName(true, true)};
+
+	for (size_t a = 0; a < 4; a++)
+	{
+		for (size_t b = a + 1; b < 4; b++)
+		{
+			allApart = allApart && _wcsicmp(names[a], names[b]) != 0;
+		}
+	}
+
+	Check(allApart, "no two of them are the same file, whatever the letters' case, so a Hudson run never opens the player's");
+
+	std::string const utilities = CodeOnly(ReadSource("3dc/utilities.cpp"));
+	Check(utilities.find("bool SaveFolder_IsTheSecondCopy()\n{\n\treturn saveFolderIsTheSecondCopy;\n}") != std::string::npos,
+		"the game itself says whether it's the second copy (utilities.cpp), so the store links");
+	Check(utilities.find("bool SaveFolder_IsAHudsonRun()\n{\n\treturn HudsonRunIsOn;\n}") != std::string::npos,
+		"and whether this is a Hudson run");
+}
+
 int main()
 {
 	TestKeepAndRead();
@@ -626,6 +666,7 @@ int main()
 	TestReplacing();
 	TestWhoseFile();
 	TestTheSource();
+	TestTheFileNames();
 
 	DeleteFileW(kKept);
 	DeleteFileW(kMissing);
