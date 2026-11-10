@@ -1922,6 +1922,21 @@ static void CountTheRowsOnThisPage(void)
 	}
 }
 
+// The Multiplayer page's Host row's two choices: "Online (New York)", with the server's name as servers.cfg gives it, made safe first, and
+// "At home". A name over 20 letters is cut short here, so the row fits the page in the big font; the yes page shows it whole. Added
+// 2026-11-10 by Melanikus for the AvP port (PO's ruling).
+static char **HostWhereNames(void)
+{
+	static char online[64];
+	static char atHome[64];
+	static char *names[2] = { online, atHome };
+	char server[kServersCfgNameLetters + 1];
+	OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));
+	snprintf(online, sizeof(online), "%s (%.20s)", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE), server);
+	snprintf(atHome, sizeof(atHome), "%s", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME));
+	return names;
+}
+
 static void SetupNewMenu(enum AVPMENU_ID menuID)
 {
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
@@ -2234,9 +2249,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
-			// The Online access row is on this page when servers.cfg names a server, the one it asks (modified 2026-11-10 by Melanikus for
-			// the AvP port, beta.2: it was -dev only for beta.1). It's set before the page's rows are counted.
-			MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);
+			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Host row and the Online access row are there when servers.cfg
+			// names a server (modified 2026-11-10 by Melanikus for the AvP port, beta.2: the access row was -dev only for beta.1, and the Host
+			// row is new, PO's ruling). They're set before the page's rows are counted.
+			MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());
 
 			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
 			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
@@ -3843,12 +3859,12 @@ static void ActUponUsersInput(void)
 	}
 }
 
-// Whether a game hosted now would be hosted online: when servers.cfg names a server, as Net_HostGame decides it (networking.cpp, HostGame).
-// Added 2026-11-10 by Melanikus for the AvP port, for the ways online (ServerYesPage_WayIn): a host asks for the yes only when it would
-// host online.
+// Whether a game hosted now would be hosted online: when servers.cfg names a server (as Net_HostGame decides it, networking.cpp) and the
+// Host row says Online (menu_data.h, MP_HostWhere). Added 2026-11-10 by Melanikus for the AvP port, for the ways online
+// (ServerYesPage_WayIn): a host asks for the yes only when it would host online.
 static bool HostsOnline(void)
 {
-	return Relay_ServerName()[0] != 0;
+	return Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;
 }
 
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
@@ -4424,7 +4440,13 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					netGameData.coopCampaignLevel = 0;
 				}
 
-				if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) != NET_FAIL)
+				// Where the Host row says (menu_data.h, MP_HostWhere; added 2026-11-10 by Melanikus for the AvP port, PO's ruling): online
+				// through the server servers.cfg names, or a plain game at home
+				NetResult const hosted = MP_HostWhere == kHostWhereAtHome ?
+					Net_HostAtHome(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) :
+					Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);
+
+				if (hosted != NET_FAIL)
 				{
 					AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 					SetLevelToLoadForThisNetworkGame();

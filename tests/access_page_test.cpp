@@ -170,21 +170,24 @@ static void TestOnlyWithAServer()
 	std::string const list = ReadSource("3dc/relay_list.cpp");
 	Check(!data.empty() && !menus.empty() && !page.empty() && !list.empty(), "the four sources were found and read");
 
-	// The Multiplayer page's own table: four rows of 1999, then the end where the row would go, and the row is nowhere in it
+	// The Multiplayer page's own table: its four rows of 1999, then its end, and room for the rows a named server brings. Modified
+	// 2026-11-10 by Melanikus for the AvP port: the rows are written as the page opens (menu_data.cpp, MenuData_SetMultiplayerRows).
 	std::string const table = SourceSlice(data, "static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=", "\n};\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(CountOf(table, "{AVPMENU_ELEMENT_GOTOMENU,") == 3 && CountOf(table, "{AVPMENU_ELEMENT_TEXTFIELD,") == 1 && CountOf(table, "{AVPMENU_ELEMENT_ENDOFMENU}") == 2 &&
-		!Has(table, "TEXTSTRING_ACCESS"), "the Multiplayer page's table has its four rows, then its end where the Online access row would go");
-	Check(Has(data, "static const int kMultiplayerAccessRow = 4;"), "and that place is the fifth row, just after the four");
+	Check(Has(table, "\tPlayerNameRow,\n\tStartGameRow,\n\tCoopRow,\n\tJoinGameRow,\n\tEndOfTheRows,\n") && !Has(table, "OnlineAccessRow") &&
+		!Has(table, "HostWhereRow"), "the Multiplayer page's table has its four rows of 1999, then its end, and the Online access row isn't in it");
 
-	std::string const setter = SourceSlice(data, "void MenuData_ShowOnlineAccessRow(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	// "AvPMenu_Multiplayer[" is in the file twice: the table's own name, and the one line that writes the row
-	Check(Has(setter, "AvPMenu_Multiplayer[kMultiplayerAccessRow] = aServerIsNamed ? OnlineAccessRow : NoOnlineAccessRow;") && CountOf(data, "AvPMenu_Multiplayer[") == 2,
-		"the row is put there only when it's asked for with a server named, and nothing else writes the table");
-	Check(CountOf(menus, "MenuData_ShowOnlineAccessRow(") == 1 && Has(menus, "MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);"),
-		"and the menus ask for it in one place only, when servers.cfg names a server (relay_list.h, Relay_ServerName)");
+	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostWhereNames)", "\n}\n", kSliceEndAfterTheStart,
+		FailedSlice);
+	size_t const joinRow = setter.find("AvPMenu_Multiplayer[row++] = JoinGameRow;");
+	size_t const accessRow = setter.find("\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row++] = OnlineAccessRow;\n\t}");
+	Check(joinRow != std::string::npos && accessRow != std::string::npos && joinRow < accessRow && CountOf(data, "= OnlineAccessRow;") == 1 &&
+		CountOf(data, "AvPMenu_Multiplayer[row") == CountOf(setter, "AvPMenu_Multiplayer[row"),
+		"the row is put there, last, only when a server is named, and nothing else writes the table");
+	Check(CountOf(menus, "MenuData_SetMultiplayerRows(") == 1 && Has(menus, "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());"),
+		"and the menus write the rows in one place only, saying whether servers.cfg names a server (relay_list.h, Relay_ServerName)");
 
 	std::string const opening = SourceSlice(menus, "case AVPMENU_MULTIPLAYER:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(opening, "MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);"), "each time the Multiplayer page opens, before its rows are counted");
+	Check(Has(opening, "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());"), "each time the Multiplayer page opens, before its rows are counted");
 
 	std::string const opened = SourceSlice(page, "bool AccessPage_Opened(AVPMENU_ELEMENT *rows)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(opened.find("if (!Relay_ServerName()[0])\n\t{\n\t\treturn false;\n\t}") != std::string::npos &&

@@ -169,8 +169,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\treturn Relay_ServerName()[0] != 0;\n}\n\nstatic void InteractWithMenuElement",
-					"to": "\treturn true;\n}\n\nstatic void InteractWithMenuElement"
+					"from": "\treturn Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;\n}",
+					"to": "\treturn true;\n}"
 				}
 			]
 		},
@@ -191,6 +191,96 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
 					"to": "\t\tif (!line)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host asks for the yes whatever the Host row says",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\treturn Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;\n}",
+					"to": "\treturn Relay_ServerName()[0] != 0;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row starts on At home",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "int MP_HostWhere = kHostWhereOnline;",
+					"to": "int MP_HostWhere = kHostWhereAtHome;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row is kept with a multiplayer setup",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "void SaveMultiplayerConfiguration(const char* name)\n{\n",
+					"to": "void SaveMultiplayerConfiguration(const char* name)\n{\n\t(void)MP_HostWhere;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row is on the page with no server named",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;",
+					"to": "\tif (true)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row is under the rows that host",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
+					"to": "\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row draws the server's name as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tOnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));\n\tsnprintf(online,",
+					"to": "\tsnprintf(server, sizeof(server), \"%s\", Relay_ServerName());\n\tsnprintf(online,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start game hosts online whatever the Host row says",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ?\n\t\t\t\t\tNet_HostAtHome(",
+					"to": "NetResult const hosted = false ?\n\t\t\t\t\tNet_HostAtHome("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the co-op page hosts online whatever the Host row says",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ? Net_HostAtHome(",
+					"to": "NetResult const hosted = false ? Net_HostAtHome("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row's help doesn't say who can join at home",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "At home: only players on this home network can join.\",",
+					"to": "At home: anyone can join.\","
 				}
 			]
 		}

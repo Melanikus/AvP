@@ -3514,6 +3514,26 @@
 					"to": "\t\t// port; networking.h)\n"
 				}
 			]
+		},
+		{
+			"name": "a home game chosen with a server in the file goes online after all",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\treturn HostGame(playerName, sessionName, species, gameStyle, level, true);",
+					"to": "\treturn HostGame(playerName, sessionName, species, gameStyle, level, false);"
+				}
+			]
+		},
+		{
+			"name": "a home game is online whenever servers.cfg names a server",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const online = !atHome && Relay_ServerName()[0] != 0;",
+					"to": "bool const online = Relay_ServerName()[0] != 0;"
+				}
+			]
 		}
 	]
 }

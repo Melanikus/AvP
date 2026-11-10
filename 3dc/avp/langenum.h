@@ -1545,6 +1545,10 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ACCESS_NEWID_MADE,
 	TEXTSTRING_ACCESS_NEWID_FAILED,
 	TEXTSTRING_ACCESS_NAME_LEFT_OUT,     // the profile's name had letters the rule won't take, left out of the name to send (beta.2, 2026-11-09)
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE,         // the Multiplayer page's Host row: where a host's game is hosted (2026-11-10, PO's ruling)
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE,  // its first choice, with the server's name after it in brackets
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME,  // its second
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_HELP,    // what each means, in plain words
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

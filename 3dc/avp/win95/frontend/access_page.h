@@ -4,7 +4,7 @@
 // ONLY WITH A SERVER. Modified 2026-11-10 by Melanikus for the AvP port (beta.2, PO's go): the pages were -dev only (the owner's ruling of
 // 2026-11-09, "NOTHING that can be actually accessed by people with the release", for beta.1). Beta.2 plays online, so they're there for
 // every player whose servers.cfg names a server, and they ask that server: the Multiplayer page's row is put there only then (menu_data.cpp,
-// MenuData_ShowOnlineAccessRow), and the pages send anyone else straight back. -dev decides nothing here. Before anything goes to the
+// MenuData_SetMultiplayerRows), and the pages send anyone else straight back. -dev decides nothing here. Before anything goes to the
 // server, the player says yes to it (server_yes_page.h; the row's press asks), and relay_list.cpp sends a request only to the server a
 // servers.cfg line names, after that yes. access_page_test checks each.
 //
@@ -33,9 +33,7 @@ enum
 // The name row's text: the profile's name to start with (RelayAccess_NameFromProfile), which the player may change
 extern char AccessPageName[kRelayAccessNameMostBytes + 1];
 
-// Puts the Online access row on the Multiplayer page, or takes it off: on only when aServerIsNamed (servers.cfg names a server,
-// Relay_ServerName). menu_data.cpp has the page, and menus.cpp asks each time the Multiplayer page opens.
-void MenuData_ShowOnlineAccessRow(bool aServerIsNamed);
+// The Online access row is on the Multiplayer page only when servers.cfg names a server: menu_data.h, MenuData_SetMultiplayerRows.
 
 // The Online access page has opened, with these rows. False when servers.cfg names no server, and then menus.cpp goes back to the
 // Multiplayer page.

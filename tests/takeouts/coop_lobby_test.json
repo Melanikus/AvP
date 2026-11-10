@@ -759,7 +759,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},\t{0},\t{0},\tTEXTSTRING_COOP_TITLE_HELP},\n",
+					"from": "\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
 					"to": ""
 				}
 			]

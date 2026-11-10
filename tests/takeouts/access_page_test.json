@@ -9,8 +9,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\t// The Online access row's place: when servers.cfg names a server it's put here (MenuData_ShowOnlineAccessRow). Otherwise the page ends\n\t// here.\n\t{AVPMENU_ELEMENT_ENDOFMENU},",
-					"to": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_ACCESS_ROW},\t{AVPMENU_ONLINE_ACCESS},\t{0},\t{0},\tTEXTSTRING_ACCESS_ROW_HELP},"
+					"from": "\tJoinGameRow,\n\tEndOfTheRows,\n\n\t// Room for",
+					"to": "\tJoinGameRow,\n\tOnlineAccessRow,\n\n\t// Room for"
 				}
 			]
 		},
@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "= aServerIsNamed ? OnlineAccessRow : NoOnlineAccessRow;",
-					"to": "= OnlineAccessRow;"
+					"from": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row++] = OnlineAccessRow;\n\t}",
+					"to": "\tAvPMenu_Multiplayer[row++] = OnlineAccessRow;"
 				}
 			]
 		},
@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);",
-					"to": "MenuData_ShowOnlineAccessRow(true);"
+					"from": "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());",
+					"to": "MenuData_SetMultiplayerRows(true, HostWhereNames());"
 				}
 			]
 		},
