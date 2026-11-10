@@ -45,7 +45,7 @@ L. Plain only at home: a typed address is asked only if it's on this network (Ne
    from outside the network before ENet reads it; nothing clears a host's intercept; and a search's answer from outside the network is
    ignored.
 WHAT IT CAN'T PROVE: how the code behaves, as opposed to how it's written. That's net_start_test's and relay_list_test's, with their
-take-out rows; NetAddress_IsThisNetwork's ranges are proved by net_checks_test, and the fingerprint's sum by net_server_fingerprint's.
+take-out rows; NetAddress_IsThisNetwork's ranges are proved by net_checks_test, and the fingerprint's sum by net_relay_keys_test.
 Anything this check can't place is refused with the file and the line, so a new way out is read by a person before it's let through.
 #>
 param(
