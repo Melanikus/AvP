@@ -1,0 +1,6 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/servers_cfg_test.cpp
+3dc/servers_cfg.cpp
+3dc/relay_list_text.cpp

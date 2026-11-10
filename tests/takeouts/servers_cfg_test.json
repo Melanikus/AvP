@@ -1,0 +1,268 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a file over 16 KB is read",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (bytes > static_cast<size_t>(kServersCfgMostBytes))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a file of more than 64 lines is read",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (lines > kServersCfgMostLines)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a last line with no newline is not counted",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (bytes > first && text[bytes - 1] != '\\n')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "UTF-8's mark at the start is not skipped",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (bytes >= sizeof(kByteOrderMark) && memcmp(text, kByteOrderMark, sizeof(kByteOrderMark)) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "Windows' line end is not taken off",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (end > start && text[end - 1] == '\\r')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any byte may be in a line",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "return (byte >= 0x20 && byte <= 0x7E) || byte == '\\t';",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a line with a bad byte is read anyway",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (!clean)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "spaces at the start of a line count",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "while (piece.length > 0 && IsGap(piece.at[0]))",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "a note is read as a server",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (line.length == 0 || line.at[0] == '#')",
+					"to": "if (line.length == 0)"
+				}
+			]
+		},
+		{
+			"name": "a missing name is not told as a missing field",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (fingerprintField.length == 0 || rest.length == 0)",
+					"to": "if (fingerprintField.length == 0)"
+				}
+			]
+		},
+		{
+			"name": "a name may start with #",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (piece.length == 0 || piece.at[0] == '#')",
+					"to": "if (piece.length == 0)"
+				}
+			]
+		},
+		{
+			"name": "runs of spaces in a name are kept",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (gap && i > 0 && IsGap(piece.at[i - 1]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a port may start with 0, and be 0",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (piece.length < 1 || piece.length > 5 || piece.at[0] == '0')",
+					"to": "if (piece.length < 1 || piece.length > 5)"
+				}
+			]
+		},
+		{
+			"name": "a port past 65535 is taken",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (value > 65535)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an address the reader refuses is taken as 0.0.0.0",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (RelayList_IPv4Refusal(address, &value) != kRelayIPv4Read)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a carrier's network is a home network",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (carriersNetwork)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "broadcast, multicast, 0/8 and 240/4 are servers on the internet",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "// \"This network\", broadcast, multicast and the reserved block: never one machine to send to\n\t\t\t\treturn kServersCfgNeverAServer;",
+					"to": "break;"
+				}
+			]
+		},
+		{
+			"name": "this PC is said to be the internet",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "place = kServersCfgOnThisPC;",
+					"to": "place = kServersCfgOnTheInternet;"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint may have capitals",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (letter >= 'a' && letter <= 'f')",
+					"to": "if ((letter >= 'a' && letter <= 'f') || (letter >= 'A' && letter <= 'F'))"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint may be longer than 64 digits",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (piece.length != 2 * size)",
+					"to": "if (piece.length < 2 * size)"
+				}
+			]
+		},
+		{
+			"name": "capitals make another name",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "return letter >= 'A' && letter <= 'Z' ? static_cast<char>(letter - 'A' + 'a') : letter;",
+					"to": "return letter;"
+				}
+			]
+		},
+		{
+			"name": "two lines may share a name",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "if (SameName(candidates[i].name, candidates[j].name))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the first of two lines with one name keeps it",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "notes[i].why = notes[j].why = kServersCfgNameShared;",
+					"to": "notes[j].why = kServersCfgNameShared;"
+				}
+			]
+		},
+		{
+			"name": "two lines may share an address",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "else if (candidates[i].address == candidates[j].address)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "the first of two lines with one address keeps it",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "notes[i].why = notes[i].why == kServersCfgLineGood ? kServersCfgAddressShared : notes[i].why;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line refused on its own still takes another's name away",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg.cpp",
+					"from": "return why == kServersCfgLineGood || why == kServersCfgNameShared || why == kServersCfgAddressShared;",
+					"to": "return true;"
+				}
+			]
+		}
+	]
+}

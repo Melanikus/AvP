@@ -156,6 +156,9 @@
     <ClCompile Include="..\..\3dc\net_handshake_a.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\servers_cfg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_pq_native.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1392,6 +1395,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_a.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\servers_cfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_b.h">
