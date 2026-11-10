@@ -993,6 +993,26 @@
 					"to": "\t\t\t\t58, 480);"
 				}
 			]
+		},
+		{
+			"name": "RULE: a narrower help text isn't centred between the menus' edges",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\treturn width <= 0 || width >= widest ? kOnlineHelpLeft : kOnlineHelpLeft + (widest - width) / 2;",
+					"to": "\treturn kOnlineHelpLeft;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a help text of two lines isn't evened out, so a last word can sit on a line of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\treturn wide;\n}",
+					"to": "\treturn widest;\n}"
+				}
+			]
 		}
 	]
 }

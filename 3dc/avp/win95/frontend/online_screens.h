@@ -228,16 +228,27 @@ void OnlineScreens_CheckCodeWords(const char *digits, char *words, size_t size);
 
 // THE CHECK CODE'S TWO HELP LINES, under it on the joining page and on the host's "asks to join" rows. Added 2026-11-10 by Melanikus for
 // the AvP port, after the owner's showcase pictures: the two grey lines were drawn 10 apart in the small font, which is 15 high, so they
-// lay on top of each other, and the host's ran almost from one edge of the screen to the other. Now each is wrapped to the words' box (the
-// Online access page's, 60 to 580 on the menus' 640-wide grid) and placed under the one before by its own height, with a gap. If they
-// don't both fit above the limit given, the second is cut to the lines that fit first, then the first: they never run into what's below.
-// The limit is the joining page's, where the menus' help line starts (420), or the top of the host's answer rows.
+// lay on top of each other, and the host's ran almost from one edge of the screen to the other. Now each is wrapped to the menus' own
+// edges (30 to 610 on their 640-wide grid, MENU_LEFTXEDGE and MENU_RIGHTXEDGE: the owner, "so each text fits whole") and placed under the
+// one before by its own height, with a gap. A text that still needs more than one line is wrapped to the narrowest width that keeps that
+// many lines, in the middle (online_screens_page.cpp, BalancedWidth), so its lines come out about the same length: never a full line and
+// a last word on its own. If they don't both fit above the limit given, the second is cut to the lines that fit first, then the first:
+// they never run into what's below. The limit is the joining page's, where the menus' help line starts (420), or the top of the host's
+// answer rows. The grid is the same at every screen size, so this holds at 4:3 and at 16:9 alike.
 int const kOnlineHelpLineHeight = 15;    // the small font's height, HUD_FONT_HEIGHT (online_screens_page.cpp checks it when the game is built)
 int const kOnlineHelpCodeGap = 5;        // between the check code's own line and the first help text
 int const kOnlineHelpGap = 4;            // between the two help texts
-int const kOnlineHelpLeft = 60;          // the box both are wrapped to
-int const kOnlineHelpRight = 580;
+int const kOnlineHelpLeft = 30;          // the widest both may be: the menus' own edges, MENU_LEFTXEDGE and MENU_RIGHTXEDGE
+int const kOnlineHelpRight = 610;
 int const kOnlineHelpPageBottom = 420;   // the joining page's limit: menus.cpp draws the help line from 420
+
+// Where a box of this width starts, in the middle of the widest one: a text wrapped narrower than the edges is centred. A width wider
+// than the edges, or none, gets the edges themselves.
+inline int OnlineScreens_HelpBoxLeft(int width)
+{
+	int const widest = kOnlineHelpRight - kOnlineHelpLeft;
+	return width <= 0 || width >= widest ? kOnlineHelpLeft : kOnlineHelpLeft + (widest - width) / 2;
+}
 
 struct OnlineHelpLines
 {

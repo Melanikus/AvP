@@ -861,8 +861,23 @@ static void TestTheHelpLines()
 	Check(wholeWhenThereIsRoom, "both are drawn whole when there's room");
 	Check(secondCutFirst, "and when there isn't, the second is cut first");
 
-	// The two places as they are: two lines each, as each text takes in the 520-wide box, fit whole under the joiner's code (at kWordsTop
-	// + 50, 320) above the page's help line, and under the host's (at 58) above its answer rows, which start lower than 200
+	// The box: the widest is the menus' own edges, and a narrower one sits in its middle, never past them (the owner, 2026-11-10: "so each
+	// text fits whole", with no last word on a line of its own)
+	bool centred = true;
+
+	for (int width = -1; width <= 700; width++)
+	{
+		int const left = OnlineScreens_HelpBoxLeft(width);
+		int const used = width <= 0 || width > kOnlineHelpRight - kOnlineHelpLeft ? kOnlineHelpRight - kOnlineHelpLeft : width;
+		centred = centred && left >= kOnlineHelpLeft && left + used <= kOnlineHelpRight &&
+			(width <= 0 || width >= kOnlineHelpRight - kOnlineHelpLeft || (left - kOnlineHelpLeft) - (kOnlineHelpRight - (left + width)) <= 1);
+	}
+
+	Check(kOnlineHelpLeft == 30 && kOnlineHelpRight == 610, "the widest the help texts may be is the menus' own edges, 30 to 610");
+	Check(centred, "and a text wrapped narrower sits in their middle, never past them");
+
+	// The two places as they are: two lines each at the most, as each text takes between those edges, fit whole under the joiner's code
+	// (at kWordsTop + 50, 320) above the page's help line, and under the host's (at 58) above its answer rows, which start lower than 200
 	OnlineHelpLines const joiner = OnlineScreens_HelpLines(320, 2, 2, kOnlineHelpPageBottom);
 	OnlineHelpLines const host = OnlineScreens_HelpLines(58, 2, 2, 196);
 	Check(joiner.firstLines == 2 && joiner.secondLines == 2 && host.firstLines == 2 && host.secondLines == 2,
@@ -879,9 +894,14 @@ static void TestTheHelpLines()
 		!Has(menus, "MENU_CENTREX, 74, ONE_FIXED / 2") && !Has(menus, "MENU_CENTREX, 84, ONE_FIXED / 2"),
 		"and so does the host's, under its code at 58, above its answer rows");
 	std::string const helpers = Between(page, "void OnlinePage_DrawCheckCodeHelp(", "\n}\n");
-	Check(Has(helpers, "SmallFontString_WrappedLines(first, width)") && Has(helpers, "SmallFontString_WrappedLines(second, width)") &&
-		Has(page, "RECT area = { kOnlineHelpLeft, top, kOnlineHelpRight, top + lines * kOnlineHelpLineHeight };"),
-		"each text's lines are counted by the wrapping rule itself, and drawn into a box exactly that tall");
+	Check(Has(helpers, "int const firstWidth = first ? BalancedWidth(first, widest) : widest;") &&
+		Has(helpers, "int const secondWidth = second ? BalancedWidth(second, widest) : widest;") &&
+		Has(helpers, "SmallFontString_WrappedLines(first, firstWidth)") && Has(helpers, "SmallFontString_WrappedLines(second, secondWidth)") &&
+		Has(page, "int const left = OnlineScreens_HelpBoxLeft(width);\n\tRECT area = { left, top, left + width, top + lines * kOnlineHelpLineHeight };"),
+		"each text is wrapped to the narrowest width that keeps its lines, its lines counted by the wrapping rule itself, and drawn into a box that tall, in the middle");
+	std::string const balanced = Between(page, "static int BalancedWidth(const char *text, int widest)", "\n}\n");
+	Check(Has(balanced, "if (SmallFontString_WrappedLines(text, middle) == lines)\n\t\t{\n\t\t\twide = middle;") && Has(balanced, "return wide;"),
+		"and that width is the narrowest found to keep as many lines as the widest gives");
 	Check(Has(menus, "area.top    = 420;") && kOnlineHelpPageBottom == 420, "the joining page's limit is where the menus draw their help line, 420");
 }
 
