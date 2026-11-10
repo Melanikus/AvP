@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   a pouncing alien with no target goes back to hunting, and the damage shell does nothing without a target, before either reads it
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of one if-statement in the alien's jump code, which was never
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
@@ -716,6 +718,12 @@ static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)
 	dynPtr = sbPtr->DynPtr;
 	LOCALASSERT(alienStatusPointer);
 	LOCALASSERT(dynPtr);
+
+	// Nothing to hurt without a target. Attack and Pounce, which call this, check first; this keeps the read below safe whoever calls it.
+	// Added 2026-11-10 by Melanikus (Third) for the AvP port (#109's hardening)
+	if (alienStatusPointer->Target==NULL) {
+		return;
+	}
 
 	/* Damage shell! */
 	workingflags=alienStatusPointer->HModelController.keyframe_flags>>1;
@@ -2466,6 +2474,17 @@ static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 	dynPtr = sbPtr->DynPtr;
 	LOCALASSERT(alienStatusPointer);
 	LOCALASSERT(dynPtr);
+
+	// A pounce at nothing: back to hunting, as Attack and Approach do when they find they have no target. No way into a pounce with no
+	// target is known (each frame a near alien that has lost its target is moved to Hunt or Wander first, bh_alien.cpp), but everything
+	// below reads the target, so this keeps it from ever reading through an empty pointer. Added 2026-11-10 by Melanikus (Third) for the
+	// AvP port (#109's hardening)
+	if (alienStatusPointer->Target==NULL) {
+		alienStatusPointer->BehaviourState = ABS_Hunt;
+		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
+		InitWaypointManager(&alienStatusPointer->waypointManager);
+		return;
+	}
 
 	/* don't climb on walls, etc */
 	dynPtr->UseStandardGravity=1;

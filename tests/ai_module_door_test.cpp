@@ -210,6 +210,12 @@ static void TestTheGameUsesIt()
 	Check(Has(locked, "return static_cast<PROXDOOR_BEHAV_BLOCK const *>(block->SBdataptr)->door_locked ? 1 : 0;")
 		&& locked.find("door_locked") > locked.find("return -1;"), "before door_locked is read");
 	Check(Has(Between(scent, "static bool DoorIsOpen(MODULE *door)", "\n}\n"), "return door && GetState(door->m_sbptr);"), "and a lift or switch door is asked whether it's open, if there is one");
+
+	// GetState answers no for no block, and for a block without its data, before any kind's data is read. Added 2026-11-10 by Melanikus
+	// (Third) for the AvP port (#109's hardening)
+	std::string const state = Between(ReadSourceFile("3dc/avp/bh_types.cpp"), "BOOL GetState(STRATEGYBLOCK* sbptr)\n{", "switch (sbptr->I_SBtype)");
+	Check(Has(state, "if(!sbptr)\n\t{\n\t\treturn FALSE;") && Has(state, "if(!sbptr->SBdataptr)\n\t{\n\t\treturn FALSE;"),
+		"GetState answers no for no block, and for a block without its data, before it reads any");
 }
 
 int main()

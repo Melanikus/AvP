@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   GetState answers no for a block without its data, as it does for no block
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
@@ -2663,6 +2665,13 @@ BOOL GetState(STRATEGYBLOCK* sbptr)
 {
 	// a lift's door can be named in a level file and not exist
 	if(!sbptr)
+	{
+		return FALSE;
+	}
+
+	// Every kind below reads the block's own data: a block without it has no state either (modified 2026-11-10 by Melanikus (Third) for the
+	// AvP port, #109's hardening; such a block isn't known to happen, as each of these kinds is made with its data)
+	if(!sbptr->SBdataptr)
 	{
 		return FALSE;
 	}

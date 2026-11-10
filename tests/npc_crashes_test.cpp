@@ -403,6 +403,16 @@ static void TestTheAlienWithNoTarget()
 	Check(Has(approach, check), "it checks it has a target");
 	Check(Has(approach, read), "and measures how far away it is, at the start");
 	Check(ComesBefore(approach, check, read), "but only after the check, so an alien with none never reads through the empty pointer");
+
+	// A pounce and the damage shell read the target too. No way in with none is known, but each checks first all the same. Added
+	// 2026-11-10 by Melanikus (Third) for the AvP port (#109's hardening)
+	std::string const near = ReadSourceFile("3dc/avp/bh_near.cpp");
+	std::string const pounce = Between(near, "static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string const shell = Between(near, "static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+
+	Check(Has(pounce, check) && Has(pounce, read) && ComesBefore(pounce, check, read), "a pouncing alien checks it has a target before it reads where it is");
+	Check(Has(pounce, "if (alienStatusPointer->Target==NULL) {\n\t\talienStatusPointer->BehaviourState = ABS_Hunt;"), "and with none it goes back to hunting");
+	Check(Has(shell, check) && Has(shell, read) && ComesBefore(shell, check, read), "and so does the damage shell, whoever calls it");
 }
 
 // Everything placed in a level is marked to be kept until the level ends, because switches, tracks and other things in the level keep

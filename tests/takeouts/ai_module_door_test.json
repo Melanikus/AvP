@@ -153,6 +153,16 @@
 					"to": "\tint const lockedFirst = static_cast<PROXDOOR_BEHAV_BLOCK const *>(door->m_sbptr->SBdataptr)->door_locked;\n\t(void)lockedFirst;\n\n\tif (!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr)\n"
 				}
 			]
+		},
+		{
+			"name": "GetState reads a block without its data",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tif(!sbptr->SBdataptr)",
+					"to": "\tif(false)"
+				}
+			]
 		}
 	]
 }

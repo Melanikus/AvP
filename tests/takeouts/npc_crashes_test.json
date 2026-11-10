@@ -768,6 +768,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a pouncing alien with no target reads it all the same",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AvP port (#109's hardening)\n\tif (alienStatusPointer->Target==NULL) {\n\t\talienStatusPointer->BehaviourState = ABS_Hunt;",
+					"to": "AvP port (#109's hardening)\n\tif (false) {\n\t\talienStatusPointer->BehaviourState = ABS_Hunt;"
+				}
+			]
+		},
+		{
+			"name": "the damage shell with no target reads it all the same",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(#109's hardening)\n\tif (alienStatusPointer->Target==NULL) {\n\t\treturn;",
+					"to": "(#109's hardening)\n\tif (false) {\n\t\treturn;"
+				}
+			]
 		}
 	]
 }
