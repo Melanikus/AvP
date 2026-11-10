@@ -84,7 +84,14 @@ param(
     [int]$JoinGun = 0,
     [int]$StepSeconds = 0,  # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600: for a film that should move on. 0 is 180
     [int]$HostFilmSkip = 0,
-    [int]$JoinFilmSkip = 0
+    [int]$JoinFilmSkip = 0,
+    # The host alone walks, as run-hudson.ps1's -WalkFrom, -WalkTo and -LookAt: x,y,z in the level's own mm, where an m stands for a
+    # minus sign. He's put at -HostWalkFrom about 3 seconds into the level, walks to -HostWalkTo, and looks at -HostLookAt. The joiner
+    # stays where the level starts him. For a lift's car that should stay put as the host comes near it (#189). The walk doesn't wait
+    # for the smoke test, which the host may then fail, because he leaves the place where the two were to look at each other.
+    [string]$HostWalkFrom = '',
+    [string]$HostWalkTo = '',
+    [string]$HostLookAt = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -245,6 +252,12 @@ if ($Stranded)
 }
 
 if (-not $Level) { Stop-Here "-Level says which level to play, or -Stranded runs the Stranded test" }
+# The host's walk goes into the game's command line, so each place is three whole numbers and nothing else: no space or quote can
+# slip another word in. \z and not $, because $ would let a line break through at the end.
+foreach ($place in @($HostWalkFrom, $HostWalkTo, $HostLookAt))
+{
+    if ($place -and $place -cnotmatch '^m?[0-9]{1,8},m?[0-9]{1,8},m?[0-9]{1,8}\z') { Stop-Here "-HostWalkFrom, -HostWalkTo and -HostLookAt are x,y,z, whole numbers in mm with m for a minus sign, like m24900,1316,m192793: $place isn't" }
+}
 if (-not (Test-Path -LiteralPath $HostFolder -PathType Container)) { Stop-Here "there's no folder $HostFolder" }
 if (-not (Test-Path -LiteralPath $JoinFolder -PathType Container)) { Stop-Here "there's no folder $JoinFolder" }
 
@@ -356,6 +369,10 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($Uncapped) { $words += '-Uncapped' } else { $words += @('-Fps', $Fps) }
     if ($NoFriendlyFire) { $words += '-NoFriendlyFire' }
     if ($word -eq 'host' -and $HostDieAt -gt 0) { $words += @('-DieAt', $HostDieAt) }
+    # run-hudson.ps1 checks the three places, and Hudson refuses a walk that's missing one end
+    if ($word -eq 'host' -and $HostWalkFrom) { $words += @('-WalkFrom', $HostWalkFrom) }
+    if ($word -eq 'host' -and $HostWalkTo) { $words += @('-WalkTo', $HostWalkTo) }
+    if ($word -eq 'host' -and $HostLookAt) { $words += @('-LookAt', $HostLookAt) }
     if ($word -eq 'join' -and $JoinDieAt -gt 0) { $words += @('-DieAt', $JoinDieAt) }
     if ($word -eq 'host' -and $Difficulty) { $words += @('-Difficulty', $Difficulty) }
     if ($Meets) { $words += '-Meets' }
