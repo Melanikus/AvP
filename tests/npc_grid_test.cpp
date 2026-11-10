@@ -831,6 +831,35 @@ static void Reach()
 	Check(grid.NearestCell(500, -1650, 4000, kNpcGridAlien, 1200) == kNpcGridNoCell, "and one further than the reach finds none");
 }
 
+static void Pieces()
+{
+	printf("Pieces that don't join\n");
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Floor(0, 3000, 0, 3000, 0));
+	world.push_back(Floor(10000, 13000, 0, 3000, 0));
+	AlienWaysMap map;
+	NpcGrid grid;
+	const char *why;
+
+	if (!Build(world, &map, &grid, &why))
+	{
+		Check(false, "two floors far apart build");
+		return;
+	}
+
+	Check(grid.Pieces() == 2 && grid.PiecesGaveUp() == nullptr, "two floors far apart are two pieces (" + Number(grid.Pieces()) + ")");
+	AlienWaysXYZ const here = { 1500, -500, 1500 }, there = { 11500, -500, 1500 }, alsoHere = { 600, -500, 2400 };
+	Check(Says(grid.StartSearch(here, there, kNpcGridAlien, 10, 100000), "the start and the goal are in pieces that don't join") &&
+		grid.Work(1000) == kNpcGridNoWay && grid.LastSearchLooks() == 0 && grid.Way().empty(),
+		"an alien's search from one to the other is refused at once, having looked at nothing");
+	Check(grid.StartSearch(here, alsoHere, kNpcGridAlien, 10, 100000) == nullptr && grid.Work(static_cast<size_t>(-1)) == kNpcGridFound,
+		"while one across a floor runs as before");
+	// Each cell keeps 6 bytes of its own (flags, room, polygon), and the two sheets about 200 more, which is less than the pieces' 484
+	// (2 bytes for each of the 242 cells): so what's kept reaches the cells' and the pieces' together only if the pieces are counted
+	Check(grid.PieceBytes() >= grid.Cells() * 2 && grid.BytesKept() >= grid.Cells() * 6 + grid.PieceBytes(),
+		"the pieces' 2 bytes a cell are counted in what the grid keeps (" + Number(grid.PieceBytes()) + " of " + Number(grid.BytesKept()) + ")");
+}
+
 // What a refused build leaves: nothing
 static bool KeptNothing(NpcGrid const &grid)
 {
@@ -858,7 +887,8 @@ static void Limits()
 	}
 
 	size_t const sheets = grid.Sheets(), cells = grid.Cells(), kept = grid.BytesKept(), rays = grid.RayTests(), squares = grid.SquareTests();
-	size_t const building = grid.BytesWhileBuilding(), forLinks = (grid.Links() + grid.Falls()) * 2 * sizeof(uint32_t);
+	size_t const building = grid.BytesWhileBuilding(), forLinks = (grid.Links() + grid.Falls()) * 2 * sizeof(uint32_t),
+		forPieces = grid.PieceBytes();
 	Check(kept > 0 && rays > 0 && squares > 0 && building > 0, "it counts what it keeps, its rays, its squares and what it held while building");
 	std::vector<AlienWaysPolygon> const world = PillarRoom();
 
@@ -893,10 +923,17 @@ static void Limits()
 	Check(Try::With(limits, world, map, &grid) == nullptr, "the most cells is let through");
 
 	limits = NpcGrid_UsualLimits(false);
-	limits.mostBytesKept = kept - forLinks - 1;
+	// What's kept is the cells and sheets, then the links and falls, then the pieces. The grid needs the first two; the pieces it goes
+	// without, if they don't fit.
+	Check(forPieces > 0, "the room with the pillar has its pieces");
+	limits.mostBytesKept = kept - forPieces - forLinks - 1;
 	Check(Says(Try::With(limits, world, map, &grid), "the grid would keep too much memory, for its cells") && KeptNothing(grid), "a byte too many for its cells is refused");
-	limits.mostBytesKept = kept - 1;
+	limits.mostBytesKept = kept - forPieces - 1;
 	Check(Says(Try::With(limits, world, map, &grid), "the grid would keep too much memory, for its links") && KeptNothing(grid), "a byte too many for its links is refused");
+	limits.mostBytesKept = kept - 1;
+	Check(Try::With(limits, world, map, &grid) == nullptr && grid.PieceBytes() == 0 && grid.Pieces() == 0 && grid.BytesKept() == kept - forPieces &&
+		Says(grid.PiecesGaveUp(), "they would keep more than the cap allows"),
+		"a byte too few for the pieces builds the grid without them, keeping no more than the cap, and says why");
 	limits.mostBytesKept = kept;
 	Check(Try::With(limits, world, map, &grid) == nullptr && grid.BytesKept() == kept, "exactly the cap is let through");
 
@@ -1046,6 +1083,7 @@ int main()
 	Sheets();
 	Searches();
 	Reach();
+	Pieces();
 	Steps();
 	Falls();
 	Slopes();
