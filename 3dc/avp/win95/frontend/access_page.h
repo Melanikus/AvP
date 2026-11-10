@@ -55,4 +55,8 @@ void AccessPage_DrawTop(int rowsBottom);
 // The question's words, above its two rows
 void AccessPage_DrawQuestion(void);
 
+// Whether a call to the list is on its way, its answer not come yet: for a Hudson run pressing the page's rows (hudson_plan.h's access=),
+// which pictures the page once the answer is on it. Added 2026-11-09 by Melanikus for the AvP port.
+bool AccessPage_CallOnItsWay(void);
+
 #endif
