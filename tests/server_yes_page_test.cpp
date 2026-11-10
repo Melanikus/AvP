@@ -65,6 +65,18 @@ static bool Has(const std::string &text, const char *part)
 	return text.find(part) != std::string::npos;
 }
 
+static size_t CountOf(const std::string &text, const char *part)
+{
+	size_t count = 0;
+
+	for (size_t at = text.find(part); at != std::string::npos; at = text.find(part, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
 static void TestTheRows()
 {
 	printf("1. what each row means\n");
@@ -140,11 +152,75 @@ static void TestTheWiring()
 		"the words are PO's, in langenum.h's order");
 }
 
+// THE WAYS ONLINE (PO's rulings, 2026-11-10): the yes is asked as a way's row is pressed, never as a page opens; a host asks only when
+// it hosts online; after a No, Find games goes on to its page with this network's games only, the others back to the Multiplayer page,
+// and nothing goes to the server. The rules are tried here; how the menus use them is read in the code. Added 2026-11-10 by Melanikus for
+// the AvP port.
+static void TestTheWaysOnline()
+{
+	printf("4. the ways online: which ask, and where a No goes\n");
+	Check(ServerYes_WayAsks(kServerYesWayAccess, false) && ServerYes_WayAsks(kServerYesWayAccess, true),
+		"the Online access page always asks: it would send the request to the server");
+	Check(ServerYes_WayAsks(kServerYesWayFindGames, false) && ServerYes_WayAsks(kServerYesWayFindGames, true),
+		"Find games always asks: it would read the server's list");
+	Check(ServerYes_WayAsks(kServerYesWayHost, true) && !ServerYes_WayAsks(kServerYesWayHost, false),
+		"a host asks only when it hosts online: a game at home uses no server");
+	Check(!ServerYes_WayAsks(kServerYesNotAWay, true) && !ServerYes_WayAsks(kServerYesNotAWay, false), "any other row never asks");
+	Check(ServerYes_NoGoesOn(kServerYesWayFindGames) && !ServerYes_NoGoesOn(kServerYesWayAccess) && !ServerYes_NoGoesOn(kServerYesWayHost) &&
+		!ServerYes_NoGoesOn(kServerYesNotAWay), "after a No only Find games goes on to its page; the others go back");
+
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/server_yes_page.cpp");
+	std::string const data = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const list = ReadSource("3dc/relay_list.cpp");
+	Check(menus.size() > 1000 && page.size() > 1000 && data.size() > 1000 && list.size() > 1000, "the menus', the page's, the rows' and the list's sources were found and read");
+
+	// Which rows are the ways: by the page they're on and the page they go to
+	std::string const wayOf = SourceSlice(page, "static ServerYesWay WayOf(enum AVPMENU_ID from, enum AVPMENU_ID goTo)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)\n\t{\n\t\treturn kServerYesWayAccess;"),
+		"the Multiplayer page's row to Online access is a way online");
+	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST))\n\t{\n\t\treturn kServerYesWayHost;"),
+		"so are its two host rows, Start game and Co-op campaign");
+	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)\n\t{\n\t\treturn kServerYesWayFindGames;"),
+		"and the Join game page's Find games, never the typed address's row, which uses no server");
+	Check(Has(data, "static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_ACCESS_ROW},\t{AVPMENU_ONLINE_ACCESS},") &&
+		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_MULTIPLAYER_STARTGAME},\t{AVPMENU_MULTIPLAYER_CONFIG},") &&
+		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},") &&
+		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t\t{TEXTSTRING_MULTIPLAYER_FINDGAMES},\t{AVPMENU_MULTIPLAYERSELECTSESSION},"),
+		"each of those rows is a row that goes to its page, so its press goes through the yes");
+
+	std::string const wayIn = SourceSlice(page, "enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline)", "\n}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(wayIn, "if (!ServerYes_WayAsks(way, hostsOnline))\n\t{\n\t\treturn goTo;") &&
+		Has(wayIn, "return ServerYesPage_Needed(goTo, ServerYes_NoGoesOn(way) ? goTo : AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;"),
+		"a way that asks opens the yes page in its page's place, while the line needs it; after a No, on or back by the rule");
+
+	// The menus: every row that goes to a page goes through it, as it's pressed, with whether a host would host online
+	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
+		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(pressing, "SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));") &&
+		CountOf(pressing, "SetupNewMenu(") == 1, "a pressed row goes to its page only through the yes, and no other way");
+	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(online, "return Relay_ServerName()[0] != 0;"), "a host hosts online when servers.cfg names a server, as Net_HostGame decides it");
+	Check(CountOf(menus, "ServerYesPage_WayIn(") == 1 && CountOf(menus, "ServerYesPage_Needed(") == 0,
+		"the menus ask in that one place, never as a page opens");
+
+	// After a No nothing goes to the server: the No tells the list nothing (section 3), and the list's thread is made in one place, Start,
+	// only after the player's yes to the line
+	std::string const starting = SourceSlice(list, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
+	size_t const thread = starting.find("CreateThread(");
+	Check(gate != std::string::npos && thread != std::string::npos && gate < thread && CountOf(list, "CreateThread(") == 1 &&
+		CountOf(list, "new (std::nothrow) Shared") == 1 && gate < starting.find("new (std::nothrow) Shared"),
+		"after a No the list's thread isn't started: it's made in Start alone, after the yes, so nothing goes to the server");
+}
+
 int main()
 {
 	TestTheRows();
 	TestTheLines();
 	TestTheWiring();
+	TestTheWaysOnline();
 
 	if (checksFailed)
 	{

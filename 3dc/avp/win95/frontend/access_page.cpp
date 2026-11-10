@@ -1,5 +1,5 @@
-// The Online access pages (server #24). access_page.h says what they're for, and why they're only there with -dev. Written 2026-11-09 by
-// Melanikus for the AvP port.
+// The Online access pages (server #24). access_page.h says what they're for, and why they're only there when servers.cfg names a server.
+// Written 2026-11-09 by Melanikus for the AvP port.
 
 #include "3dc.h"
 #include "inline.h"
@@ -18,7 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 
-extern int DevMode;
+// The names the screens make safe before drawing them (online_screens.cpp): a letter the game's font doesn't have shows as ?
+void OnlineScreens_SafeName(const char *from, size_t mostBytes, char *to, size_t toSize);
 
 char AccessPageName[kRelayAccessNameMostBytes + 1];
 
@@ -158,7 +159,8 @@ static bool CopyToClipboard(const char *text)
 
 bool AccessPage_Opened(AVPMENU_ELEMENT *rows)
 {
-	if (!DevMode)
+	// Modified 2026-11-10 by Melanikus for the AvP port (beta.2): the page is for the server servers.cfg names, so with none it isn't there
+	if (!Relay_ServerName()[0])
 	{
 		return false;
 	}
@@ -195,7 +197,7 @@ bool AccessPage_Opened(AVPMENU_ELEMENT *rows)
 
 bool AccessPage_QuestionOpened(void)
 {
-	return DevMode != 0;
+	return Relay_ServerName()[0] != 0;
 }
 
 int AccessPage_Frame(AVPMENU_ELEMENT *rows)
@@ -366,9 +368,14 @@ int AccessPage_DrawTop(int menuHeight, int rows)
 
 	if (!sentThisRun)
 	{
-		// Before anything is sent: what Request access does, in plain words, above the rows (the owner's spec). Two lines of the text
-		// table, which holds at most 199 characters a line, made one paragraph here.
-		snprintf(paragraph, sizeof(paragraph), "%s %s", GetTextString(TEXTSTRING_ACCESS_EXPLAIN), GetTextString(TEXTSTRING_ACCESS_EXPLAIN_MORE));
+		// Before anything is sent: what Request access does, in plain words, above the rows (the owner's spec). Lines of the text table,
+		// which holds at most 199 characters a line, made one paragraph here, with the server's name as servers.cfg gives it (modified
+		// 2026-11-10 by Melanikus for the AvP port: the server is the line's, no longer always Mel's). The name comes from a file from
+		// outside the game, so it's made safe before it's drawn, and it's only ever a %s's argument, never the format.
+		char server[kServersCfgNameLetters + 1];
+		OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));
+		snprintf(paragraph, sizeof(paragraph), "%s %s %s %s", GetTextString(TEXTSTRING_ACCESS_EXPLAIN_ASKS), server,
+			GetTextString(TEXTSTRING_ACCESS_EXPLAIN), GetTextString(TEXTSTRING_ACCESS_EXPLAIN_MORE));
 		words = paragraph;
 	}
 	else if (ourCode[0])

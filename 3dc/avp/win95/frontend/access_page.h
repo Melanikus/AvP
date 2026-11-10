@@ -1,10 +1,12 @@
 // The Online access pages (server #24): asking the list's owner to let this PC play online. Written 2026-11-09 by Melanikus for the AvP
 // port.
 //
-// ONLY WITH -dev FOR NOW. The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with
-// the release". So the Multiplayer page's row for these pages is put there only with -dev (menu_data.cpp, MenuData_ShowOnlineAccessRow),
-// the pages send anyone without -dev straight back, and relay_list.cpp refuses the call without -dev as well. access_page_test checks all
-// three.
+// ONLY WITH A SERVER. Modified 2026-11-10 by Melanikus for the AvP port (beta.2, PO's go): the pages were -dev only (the owner's ruling of
+// 2026-11-09, "NOTHING that can be actually accessed by people with the release", for beta.1). Beta.2 plays online, so they're there for
+// every player whose servers.cfg names a server, and they ask that server: the Multiplayer page's row is put there only then (menu_data.cpp,
+// MenuData_ShowOnlineAccessRow), and the pages send anyone else straight back. -dev decides nothing here. Before anything goes to the
+// server, the player says yes to it (server_yes_page.h; the row's press asks), and relay_list.cpp sends a request only to the server a
+// servers.cfg line names, after that yes. access_page_test checks each.
 //
 // WHAT THE PLAYER SEES. The name to send (the profile's, which they may change), and above it what Request access does, in plain words.
 // Nothing is sent until they press Request access. Then their access code, to give the owner themselves (Copy access code puts it on the
@@ -31,11 +33,12 @@ enum
 // The name row's text: the profile's name to start with (RelayAccess_NameFromProfile), which the player may change
 extern char AccessPageName[kRelayAccessNameMostBytes + 1];
 
-// Puts the Online access row on the Multiplayer page, or takes it off: on only when developer is true (-dev). menu_data.cpp has the page,
-// and menus.cpp asks each time the Multiplayer page opens.
-void MenuData_ShowOnlineAccessRow(bool developer);
+// Puts the Online access row on the Multiplayer page, or takes it off: on only when aServerIsNamed (servers.cfg names a server,
+// Relay_ServerName). menu_data.cpp has the page, and menus.cpp asks each time the Multiplayer page opens.
+void MenuData_ShowOnlineAccessRow(bool aServerIsNamed);
 
-// The Online access page has opened, with these rows. False without -dev, and then menus.cpp goes back to the Multiplayer page.
+// The Online access page has opened, with these rows. False when servers.cfg names no server, and then menus.cpp goes back to the
+// Multiplayer page.
 bool AccessPage_Opened(AVPMENU_ELEMENT *rows);
 
 // The question before a new identity has opened. False without -dev, as above.

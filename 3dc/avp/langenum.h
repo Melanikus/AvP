@@ -1505,6 +1505,7 @@ enum TEXTSTRING_ID
 	// The Online access page (server #24, access_page.cpp), only with -dev for now. Added 2026-11-09 by Melanikus for the AvP port.
 	TEXTSTRING_ACCESS_ROW,               // the Multiplayer page's row, and the page's title
 	TEXTSTRING_ACCESS_ROW_HELP,
+	TEXTSTRING_ACCESS_EXPLAIN_ASKS,      // "Request access asks", then the server's name (2026-11-10), then the two lines below
 	TEXTSTRING_ACCESS_EXPLAIN,           // what Request access does, above the rows, before anything is sent: two lines of the table,
 	TEXTSTRING_ACCESS_EXPLAIN_MORE,      // since each holds at most 199 characters, drawn as one paragraph
 	TEXTSTRING_ACCESS_NAME,

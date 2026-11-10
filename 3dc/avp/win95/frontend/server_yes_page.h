@@ -30,6 +30,11 @@
 // run): then the caller goes on as it was.
 bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo);
 
+// A row on page from, going to page goTo, has been pressed: the page to open. That's the yes page in goTo's place when the row is one of
+// the ways online (server_yes_rules.h) and the line needs the player's yes first; goTo itself otherwise. hostsOnline is whether a host
+// would host online. Added 2026-11-10 by Melanikus for the AvP port (PO's rulings): menus.cpp asks it for every row that goes to a page.
+enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline);
+
 // The page has opened. False when there's no line waiting for a yes after all, and then menus.cpp goes back to the Multiplayer page.
 bool ServerYesPage_Opened(void);
 

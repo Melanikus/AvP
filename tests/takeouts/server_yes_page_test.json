@@ -73,6 +73,126 @@
 					"to": "\t\t\tif (!ServerYesPage_Opened() && false)"
 				}
 			]
+		},
+		{
+			"name": "the access page goes on without asking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "return way == kServerYesWayAccess || way == kServerYesWayFindGames ||",
+					"to": "return way == kServerYesWayFindGames ||"
+				}
+			]
+		},
+		{
+			"name": "Find games goes on without asking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "return way == kServerYesWayAccess || way == kServerYesWayFindGames ||",
+					"to": "return way == kServerYesWayAccess ||"
+				}
+			]
+		},
+		{
+			"name": "a game hosted at home asks for the yes too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "(way == kServerYesWayHost && hostsOnline)",
+					"to": "(way == kServerYesWayHost)"
+				}
+			]
+		},
+		{
+			"name": "every No goes on to the page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "\treturn way == kServerYesWayFindGames;\n}",
+					"to": "\treturn way != kServerYesNotAWay;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Online access row skips the yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)",
+					"to": "if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS_NEW)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Co-op campaign skips the yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "(goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST)",
+					"to": "(goTo == AVPMENU_MULTIPLAYER_CONFIG)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Find games skips the yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)",
+					"to": "if (from == AVPMENU_MULTIPLAYEROPENADDRESS && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: after a No, Find games goes back to the Multiplayer page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "ServerYes_NoGoesOn(way) ? goTo : AVPMENU_MULTIPLAYER",
+					"to": "ServerYes_NoGoesOn(way) ? AVPMENU_MULTIPLAYER : AVPMENU_MULTIPLAYER"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pressed row goes to its page without the yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));",
+					"to": "SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host asks for the yes as if it always hosted online",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\treturn Relay_ServerName()[0] != 0;\n}\n\nstatic void InteractWithMenuElement",
+					"to": "\treturn true;\n}\n\nstatic void InteractWithMenuElement"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a No says yes to the line anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\tcase kServerYesGoBack:\n\t\t\t*page = backToAfterNo;",
+					"to": "\t\tcase kServerYesGoBack:\n\t\t\tRelayList_AgreeToTheLine();\n\t\t\t*page = backToAfterNo;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list starts after a No, before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
+					"to": "\t\tif (!line)"
+				}
+			]
 		}
 	]
 }

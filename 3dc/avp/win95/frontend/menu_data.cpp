@@ -461,7 +461,8 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP},
 
-	// The Online access row's place: with -dev it's put here (MenuData_ShowOnlineAccessRow). Without -dev the page ends here.
+	// The Online access row's place: when servers.cfg names a server it's put here (MenuData_ShowOnlineAccessRow). Otherwise the page ends
+	// here.
 	{AVPMENU_ELEMENT_ENDOFMENU},
 
 	{AVPMENU_ELEMENT_ENDOFMENU}
@@ -472,11 +473,12 @@ static const int kMultiplayerAccessRow = 4;
 static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_ROW},	{AVPMENU_ONLINE_ACCESS},	{0},	{0},	TEXTSTRING_ACCESS_ROW_HELP};
 static AVPMENU_ELEMENT const NoOnlineAccessRow = {AVPMENU_ELEMENT_ENDOFMENU};
 
-// The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release". So the
-// row is there only with -dev: without it, the Multiplayer page has its four rows of 1999, and nothing leads to the Online access pages.
-void MenuData_ShowOnlineAccessRow(bool developer)
+// Modified 2026-11-10 by Melanikus for the AvP port (beta.2, PO's go): the row was there only with -dev (the owner's ruling of 2026-11-09,
+// for beta.1). Now it's there when servers.cfg names a server, the one its page asks. With none, the Multiplayer page has its four rows of
+// 1999, and nothing leads to the Online access pages.
+void MenuData_ShowOnlineAccessRow(bool aServerIsNamed)
 {
-	AvPMenu_Multiplayer[kMultiplayerAccessRow] = developer ? OnlineAccessRow : NoOnlineAccessRow;
+	AvPMenu_Multiplayer[kMultiplayerAccessRow] = aServerIsNamed ? OnlineAccessRow : NoOnlineAccessRow;
 }
 
 // The Online access page (access_page.h): the name to send, then the rows that send it, copy the code, and make a new identity

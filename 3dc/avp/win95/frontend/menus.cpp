@@ -107,8 +107,6 @@
 #include "server_yes_page.h"
 #include "access_page_rules.h"   // the Online access pages' rows: how far apart, and how bright when not chosen
 
-// -dev (d3d_render.cpp): the Online access row and pages are there only with it
-extern int DevMode;
 #include "credits_roll.h"
 
 #if defined(_MSC_VER)
@@ -2236,9 +2234,9 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
-			// The Online access row is on this page only with -dev (the owner's ruling, 2026-11-09: nothing a release game does may reach
-			// a server yet). It's set before the page's rows are counted.
-			MenuData_ShowOnlineAccessRow(DevMode != 0);
+			// The Online access row is on this page when servers.cfg names a server, the one it asks (modified 2026-11-10 by Melanikus for
+			// the AvP port, beta.2: it was -dev only for beta.1). It's set before the page's rows are counted.
+			MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);
 
 			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
 			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
@@ -2268,7 +2266,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_ONLINE_ACCESS:
 		{
-			// Only with -dev. Without it nothing leads here, and if anything ever did, it goes straight back.
+			// Only when servers.cfg names a server. Without one nothing leads here, and if anything ever did, it goes straight back.
 			if (!AccessPage_Opened(AvPMenus.MenuElements))
 			{
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
@@ -3845,6 +3843,14 @@ static void ActUponUsersInput(void)
 	}
 }
 
+// Whether a game hosted now would be hosted online: when servers.cfg names a server, as Net_HostGame decides it (networking.cpp, HostGame).
+// Added 2026-11-10 by Melanikus for the AvP port, for the ways online (ServerYesPage_WayIn): a host asks for the yes only when it would
+// host online.
+static bool HostsOnline(void)
+{
+	return Relay_ServerName()[0] != 0;
+}
+
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -3882,8 +3888,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					// save profile, so that multiplayer name is remembered
 					SaveUserProfile(UserProfilePtr);
 				}
-			
-				SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
+
+				// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part, PO's rulings): a way online asks for the player's yes to
+				// the server in servers.cfg first, as its row is pressed (server_yes_page.h, ServerYesPage_WayIn). Every other row goes where it
+				// always went.
+				SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));
 			}
 			break;
 		}

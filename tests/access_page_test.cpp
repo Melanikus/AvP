@@ -158,9 +158,11 @@ static void TestTheWords()
 		"only refused and revoked need a new identity to ask again");
 }
 
-static void TestOnlyWithDev()
+// Modified 2026-11-10 by Melanikus for the AvP port (beta.2, PO's go): the pages were -dev only for beta.1; now they're there when
+// servers.cfg names a server, the one they ask, and -dev decides nothing
+static void TestOnlyWithAServer()
 {
-	puts("3. nothing of it without -dev (the owner's ruling, read in the source)");
+	puts("3. nothing of it when servers.cfg names no server, and -dev decides nothing (read in the source)");
 
 	std::string const data = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
@@ -174,20 +176,21 @@ static void TestOnlyWithDev()
 		!Has(table, "TEXTSTRING_ACCESS"), "the Multiplayer page's table has its four rows, then its end where the Online access row would go");
 	Check(Has(data, "static const int kMultiplayerAccessRow = 4;"), "and that place is the fifth row, just after the four");
 
-	std::string const setter = SourceSlice(data, "void MenuData_ShowOnlineAccessRow(bool developer)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const setter = SourceSlice(data, "void MenuData_ShowOnlineAccessRow(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	// "AvPMenu_Multiplayer[" is in the file twice: the table's own name, and the one line that writes the row
-	Check(Has(setter, "AvPMenu_Multiplayer[kMultiplayerAccessRow] = developer ? OnlineAccessRow : NoOnlineAccessRow;") && CountOf(data, "AvPMenu_Multiplayer[") == 2,
-		"the row is put there only when it's asked for with developer true, and nothing else writes the table");
-	Check(CountOf(menus, "MenuData_ShowOnlineAccessRow(") == 1 && Has(menus, "MenuData_ShowOnlineAccessRow(DevMode != 0);"),
-		"and the menus ask for it in one place only, with -dev's own answer");
+	Check(Has(setter, "AvPMenu_Multiplayer[kMultiplayerAccessRow] = aServerIsNamed ? OnlineAccessRow : NoOnlineAccessRow;") && CountOf(data, "AvPMenu_Multiplayer[") == 2,
+		"the row is put there only when it's asked for with a server named, and nothing else writes the table");
+	Check(CountOf(menus, "MenuData_ShowOnlineAccessRow(") == 1 && Has(menus, "MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);"),
+		"and the menus ask for it in one place only, when servers.cfg names a server (relay_list.h, Relay_ServerName)");
 
 	std::string const opening = SourceSlice(menus, "case AVPMENU_MULTIPLAYER:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(opening, "MenuData_ShowOnlineAccessRow(DevMode != 0);"), "each time the Multiplayer page opens, before its rows are counted");
+	Check(Has(opening, "MenuData_ShowOnlineAccessRow(Relay_ServerName()[0] != 0);"), "each time the Multiplayer page opens, before its rows are counted");
 
 	std::string const opened = SourceSlice(page, "bool AccessPage_Opened(AVPMENU_ELEMENT *rows)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(opened.find("if (!DevMode)\n\t{\n\t\treturn false;\n\t}") != std::string::npos && opened.find("if (!DevMode)") < opened.find("Ask();"),
-		"the page itself refuses to open without -dev, before it could ask anything");
-	Check(Has(page, "bool AccessPage_QuestionOpened(void)\n{\n\treturn DevMode != 0;\n}"), "and so does the question before a new identity");
+	Check(opened.find("if (!Relay_ServerName()[0])\n\t{\n\t\treturn false;\n\t}") != std::string::npos &&
+		opened.find("if (!Relay_ServerName()[0])") < opened.find("Ask();"), "the page itself refuses to open with no server named, before it could ask anything");
+	Check(Has(page, "bool AccessPage_QuestionOpened(void)\n{\n\treturn Relay_ServerName()[0] != 0;\n}"), "and so does the question before a new identity");
+	Check(!Has(page, "DevMode") && !Has(menus, "DevMode"), "and -dev decides nothing on the pages or in the menus");
 
 	std::string const pageCase = SourceSlice(menus, "case AVPMENU_ONLINE_ACCESS:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(pageCase, "if (!AccessPage_Opened(AvPMenus.MenuElements))\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\t\t\t\treturn;"),
@@ -416,13 +419,21 @@ static void TestOnlyToTheLinesServer()
 	Check(Has(page, "stateLine = !Relay_ServerName()[0] ? TEXTSTRING_ACCESS_NO_SERVER : TEXTSTRING_ACCESS_CANT_REACH;"),
 		"the page says so when no line names a server, never nothing");
 	Check(Has(table, "\"No server is set, so nothing was sent.\","), "in words of its own: nothing was sent, and why");
+	// The words above the rows name the server servers.cfg names, made safe first, and only ever as a %s's argument (added 2026-11-10)
+	std::string const top = SourceSlice(page, "int AccessPage_DrawTop(int menuHeight, int rows)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const safe = top.find("OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));");
+	Check(safe != std::string::npos && safe < top.find("snprintf(paragraph, sizeof(paragraph), \"%s %s %s %s\", GetTextString(TEXTSTRING_ACCESS_EXPLAIN_ASKS), server,"),
+		"the words above the rows name the line's server, made safe before they're written, as an argument, never the format");
+	Check(Has(table, "\"Request access asks\",\n\t\"to let this PC play online. It sends the name below and a key made on this PC, and nothing else.\",") &&
+		!Has(table, "Mel's server"), "and the words around the name say what Request access does, never Mel's server");
+
 }
 
 int main()
 {
 	TestWhenItAsks();
 	TestTheWords();
-	TestOnlyWithDev();
+	TestOnlyWithAServer();
 	TestTheBeta2Words();
 	TestWhereThePartsGo();
 	TestOnlyToTheLinesServer();
