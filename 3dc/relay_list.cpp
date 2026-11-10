@@ -1628,6 +1628,16 @@ bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentity
 		return false;
 	}
 
+	// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): an access request goes only to a list whose key is checked before a
+	// byte is sent (-dev's RelayListPin). The 8-letter access code is safe only then (relay_list_text.h, RelayAccess_Code): to a list
+	// Windows merely trusts, someone on the way could drop the player's request and send one with a key made to match its code instead.
+	// Nothing is made or sent, and the page says why (access_page.cpp, Ask).
+	if (!Relay_ListIsPinned())
+	{
+		LogString("Relay list: an access request goes only to a list whose key is checked before a byte is sent, and the settings pin none, so nothing was sent");
+		return false;
+	}
+
 	// The body is made here, on the game's thread, so a name or key that can't be sent is refused before anything starts
 	char body[kRelayAccessMostBodyBytes + 1];
 

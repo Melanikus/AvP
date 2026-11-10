@@ -1544,6 +1544,7 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ACCESS_NEWID_MADE,
 	TEXTSTRING_ACCESS_NEWID_FAILED,
 	TEXTSTRING_ACCESS_NAME_LEFT_OUT,     // the profile's name had letters the rule won't take, left out of the name to send (beta.2, 2026-11-09)
+	TEXTSTRING_ACCESS_NOT_PINNED,        // nothing sent: the list has no pin, and an access request goes only to a pinned list (2026-11-10)
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

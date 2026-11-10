@@ -213,6 +213,7 @@ static char OurTextStrings[][200] =
 	"A new identity was made.",
 	"A new identity couldn't be made.",
 	"Some letters of your profile's name can't be sent (accents, \" or \\), so they were left out. Change the name if you like.",
+	"This build asks only a server whose key it knows, and its settings pin none, so nothing was sent.",
 	"Find Games",
 	"Press ENTER to look for games on this network.",
 	"Search",

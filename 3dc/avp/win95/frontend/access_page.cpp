@@ -70,7 +70,9 @@ static void Ask(void)
 {
 	if (!RelayList_AskForAccess(AccessPageName, ourStatics, ourFingerprint))
 	{
-		stateLine = Relay_ServerName()[0] ? TEXTSTRING_ACCESS_CANT_REACH : TEXTSTRING_ACCESS_NO_SERVER;
+		// Modified 2026-11-10 by Melanikus for the AvP port: a list with no pin is refused before anything is sent (relay_list.cpp), and the
+		// page says so, rather than leave the player waiting on a request that never went
+		stateLine = !Relay_ServerName()[0] ? TEXTSTRING_ACCESS_NO_SERVER : !Relay_ListIsPinned() ? TEXTSTRING_ACCESS_NOT_PINNED : TEXTSTRING_ACCESS_CANT_REACH;
 		return;
 	}
 

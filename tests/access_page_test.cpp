@@ -13,8 +13,11 @@
 //    - relay_list.cpp refuses the call without -dev, whatever asks it.
 //    And the pages' only way to the network is that one call. What a row does on a real screen needs a run of the game with -dev.
 // 3. Beta.2's words, by reading the text table.
-// 4. Where the page's parts go (the owner's picture of 2026-11-10): under the title, in order, nothing on anything, inside the menus'
-//    edges, with the rows right under the words. What the words look like on a real screen needs Hudson's picture of the page.
+// 4. Where the page's parts go (the owner's pictures of 2026-11-10): under the title, in order, nothing on anything, inside the menus'
+//    edges, padded evenly; its rows further apart and brighter; and Copy access code chosen once the code is there. What it looks like
+//    on a real screen needs Hudson's picture of the page.
+// 5. An access request goes only to a list whose key is checked before a byte is sent, which the 8-letter code needs (PO's ruling,
+//    2026-11-10), by reading relay_list.cpp.
 //
 // HOW IT RUNS
 //
@@ -283,7 +286,7 @@ static void TestWhereThePartsGo()
 					{
 						// A clear gap under the code, of a small line at least (the owner: the code and the words nearly touched)
 						inOrder = inOrder && at.labelTop + kAccessPageSmallLine <= at.codeTop &&
-							at.codeTop + kAccessPageBigLine + kAccessPageLeastWordsGap <= at.wordsTop;
+							at.codeTop + kAccessPageBigLine + kAccessPageSmallLine <= at.wordsTop;
 					}
 					else
 					{
@@ -291,7 +294,7 @@ static void TestWhereThePartsGo()
 					}
 
 					// A small line's gap at least above the first row, and the lines under the rows below them
-					inOrder = inOrder && wordsBottom + kAccessPageLeastRowsGap <= at.rowsTop &&
+					inOrder = inOrder && wordsBottom + kAccessPageSmallLine <= at.rowsTop &&
 						at.rowsTop + rowsHeight + kAccessPageLeastUnderGap <= at.underTop;
 
 					// Words are cut only when there's no room for them: the lines drawn are all of them, or so many that one more, with every
@@ -365,6 +368,33 @@ static void TestWhereThePartsGo()
 		"and the page asks the rule as it opens, and on each frame");
 }
 
+// An access request goes only to a list whose key is checked before a byte is sent (PO's ruling, 2026-11-10). The 8-letter access code is
+// safe only then (relay_list_text.h, RelayAccess_Code): to a list Windows merely trusts, someone on the way could drop the player's request
+// and send one with a key made to match its code. Read in the source, since the call needs the network. Added 2026-11-10 by Melanikus for
+// the AvP port.
+static void TestOnlyToAPinnedList()
+{
+	puts("6. an access request goes only to a pinned list (by reading the source)");
+
+	std::string const list = ReadSource("3dc/relay_list.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/access_page.cpp");
+	std::string const table = ReadSource("3dc/avp/language.cpp");
+	Check(!list.empty() && !page.empty() && table.size() > 10000, "relay_list.cpp, the page and language.cpp were found and read");
+
+	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccess(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const refusal = ask.find("if (!Relay_ListIsPinned())\n\t{\n\t\tLogString(\"Relay list: an access request goes only to a list whose key is checked before a byte is sent");
+	size_t const refusalEnds = ask.find("return false;", refusal);
+	Check(refusal != std::string::npos && refusalEnds != std::string::npos && refusalEnds < ask.find("\n\t}\n", refusal) + 4,
+		"RelayList_AskForAccess refuses a list with no pin, and says why in the log");
+	Check(refusal != std::string::npos && ask.find("if (!DevMode || !fingerprint)") < refusal && refusal < ask.find("RelayList_AccessBody(") &&
+		refusal < ask.find("Start()") && refusal < ask.find("Wake();"), "after the -dev check, and before the request is made, the thread started or woken");
+
+	Check(Has(page, "stateLine = !Relay_ServerName()[0] ? TEXTSTRING_ACCESS_NO_SERVER : !Relay_ListIsPinned() ? TEXTSTRING_ACCESS_NOT_PINNED : TEXTSTRING_ACCESS_CANT_REACH;"),
+		"the page says so when it's refused for that, never nothing");
+	Check(Has(table, "\"This build asks only a server whose key it knows, and its settings pin none, so nothing was sent.\","),
+		"in words of its own: nothing was sent, and why");
+}
+
 int main()
 {
 	TestWhenItAsks();
@@ -372,6 +402,7 @@ int main()
 	TestOnlyWithDev();
 	TestTheBeta2Words();
 	TestWhereThePartsGo();
+	TestOnlyToAPinnedList();
 
 	if (checksFailed)
 	{

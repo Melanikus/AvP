@@ -213,6 +213,76 @@
 					"to": "\t\t\t;\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: an access request goes to a list with no pin",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!Relay_ListIsPinned())\n\t{\n\t\tLogString(\"Relay list: an access request goes only",
+					"to": "\tif (false)\n\t{\n\t\tLogString(\"Relay list: an access request goes only"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page says nothing of why an unpinned request was never sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "!Relay_ListIsPinned() ? TEXTSTRING_ACCESS_NOT_PINNED : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "RULE: a row not chosen is as faint as the menus' own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "int const kAccessPageRowNotChosenOutOf100 = 60;",
+					"to": "int const kAccessPageRowNotChosenOutOf100 = 25;"
+				}
+			]
+		},
+		{
+			"name": "RULE: Copy access code is chosen on every frame the code is there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "\treturn codeShown && (opening || !codeWasShown);",
+					"to": "\treturn codeShown;"
+				}
+			]
+		},
+		{
+			"name": "RULE: the words touch the code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "int const kAccessPageLeastWordsGap = 15;",
+					"to": "int const kAccessPageLeastWordsGap = 0;"
+				}
+			]
+		},
+		{
+			"name": "RULE: a gap takes all the room left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "\tat.spare = share > kAccessPageMostSpare ? kAccessPageMostSpare : share;",
+					"to": "\tat.spare = share;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the access pages' rows are as close as the menus' own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "y += HeightOfMenuElement(elementPtr) + (accessPage ? kAccessPageRowsApart : 0);",
+					"to": "y += HeightOfMenuElement(elementPtr);"
+				}
+			]
 		}
 	]
 }
