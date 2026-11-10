@@ -665,6 +665,7 @@ namespace
 			memcpy(shared->goodKey, first.shown, first.shownSize);
 			shared->goodKeySize = first.shownSize;
 			memcpy(shared->relayRegion, region, sizeof(region));
+			shared->relayRegion[kRelayListRegionLetters] = 0;
 			memcpy(shared->relayP384, keys.p384, sizeof(keys.p384));
 			memcpy(shared->relayKem, keys.kem, sizeof(keys.kem));
 		}
@@ -855,7 +856,7 @@ namespace
 		uint8_t p384[kNetCryptoP384PublicBytes] = {};
 		uint8_t kem[kNetPqKemPublicBytes] = {};
 
-		if (!why && strcmp(region, shared->relayRegion) != 0)
+		if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)
 		{
 			why = "the relay asked about isn't the one the server in " SERVERS_CFG_FILE_NAME " has";
 		}
@@ -938,6 +939,7 @@ namespace
 			shared->keysWanted = false;
 			char keysRegion[kRelayListRegionLetters + 1];
 			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
+			keysRegion[kRelayListRegionLetters] = 0;
 			int const keysAsking = shared->keysAsked;
 			bool const access = shared->accessWanted;
 			shared->accessWanted = false;
@@ -1458,7 +1460,9 @@ bool RelayList_AskForRelayKeys(const char *region)
 
 	EnterCriticalSection(&shared->lock);
 	shared->keysWanted = true;
-	memcpy(shared->keysRegion, region, strlen(region) + 1);
+	// The region is at most kRelayListRegionLetters (RelayList_IsRegion, above); it's copied no further than that, and ended (Snyk Code)
+	strncpy(shared->keysRegion, region, kRelayListRegionLetters);
+	shared->keysRegion[kRelayListRegionLetters] = 0;
 	shared->keysAsked++;
 	LeaveCriticalSection(&shared->lock);
 

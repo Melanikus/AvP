@@ -1531,7 +1531,7 @@ static void TestRelayKeys()
 	// are in TestTheCalls), proved by the server's servers.cfg line, and handed over only for its relay's region
 	std::string const fetch = SourceSlice(source, "void ReadTheRelayKeys(const char *region, int asking)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const checked = fetch.find("const char *why = CheckTheServer();");
-	size_t const sameRegion = fetch.find("if (!why && strcmp(region, shared->relayRegion) != 0)");
+	size_t const sameRegion = fetch.find("if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)");
 	size_t const given = fetch.find("memcpy(p384, shared->relayP384, sizeof(p384));");
 	Check(checked != std::string::npos && sameRegion != std::string::npos && given != std::string::npos && checked < sameRegion && sameRegion < given,
 		"SOURCE: the keys handed over are the ones the server's check proved, and only for the region of the server's own relay");

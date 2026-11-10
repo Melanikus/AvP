@@ -12,10 +12,11 @@
 // line. relay_list.cpp takes the SubjectPublicKeyInfo of the certificate it's served, asks for the relay's keys over that same connection,
 // and calls NetServerFingerprint_IsTheLines. Until it's true, nothing more is sent to that server.
 //
-// THE KNOWN ANSWER (tests/net_server_fingerprint_test.cpp, and the server's CRYPTO.md): nyc3's list key and relay id of 2026-11-10 give
-// bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e.
+// THE KNOWN ANSWER (tests/net_relay_keys_test.cpp, TestTheServersCfgFingerprint, and the server's CRYPTO.md): nyc3's list key and relay
+// id of 2026-11-10 give bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e.
 //
-// It's game-free: the test tries every case.
+// It's game-free: that test tries every case. (Modified 2026-11-10 by Melanikus for the AvP port: it named a test file that was never
+// written, net_server_fingerprint_test.cpp; Primary's review of #175, N-3.)
 
 #ifndef NET_SERVER_FINGERPRINT_H
 #define NET_SERVER_FINGERPRINT_H
