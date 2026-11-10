@@ -5073,6 +5073,11 @@ int Hudson_AnswerAfterSeconds()
 	return HudsonRunIsOn ? plan.answerAfterSeconds : 0;
 }
 
+bool Hudson_JoinsThroughFindGames()
+{
+	return HudsonRunIsOn ? plan.findGames : false;
+}
+
 void Hudson_PictureThisFrame(const char *name)
 {
 	if (!HudsonRunIsOn)

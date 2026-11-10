@@ -9795,6 +9795,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "findgames= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\tif (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFindGamesWord;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "findgames= is taken on a host's run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFindGames && plan->netMode != kHudsonNetJoin)",
+					"to": "if (seenFindGames && plan->netMode == kHudsonNetNone)"
+				}
+			]
 		}
 	]
 }

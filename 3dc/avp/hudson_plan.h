@@ -312,6 +312,7 @@ struct HudsonPlan
 	int accessWaitSeconds; // accesswait=: with access=check, the seconds from the request to Check again, 61 to 3600. Unless asked, 70
 	int answerPress;      // answer=: from kHudsonAnswer...: a net=host run answers a player asking to join with that row. 0 for none: every joiner is let in, as before
 	int answerAfterSeconds; // answerafter=: the seconds the host's answer rows are up before the press, 1 to 15. Unless asked, 3
+	bool findGames;       // findgames=yes: a net=join run through the relay joins as a player does: Find Games, then the list's game's row, with pictures of the joining page asking (its check code) and let in. Otherwise the list's game is joined from the code, as before
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -382,6 +383,8 @@ extern const char *const kHudsonRefusedAnswerWithoutHost;
 extern const char *const kHudsonRefusedAnswerAfterNotANumber;
 extern const char *const kHudsonRefusedAnswerAfterOutOfRange;
 extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
+extern const char *const kHudsonRefusedFindGamesWord;
+extern const char *const kHudsonRefusedFindGamesWithoutJoin;
 extern const char *const kHudsonRefusedBotWeapon;
 extern const char *const kHudsonRefusedDeathWay;
 extern const char *const kHudsonRefusedVsync;

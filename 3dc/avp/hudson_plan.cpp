@@ -86,6 +86,8 @@ const char *const kHudsonRefusedAnswerWithoutHost = "answer= is the host's answe
 const char *const kHudsonRefusedAnswerAfterNotANumber = "answerafter= is a number of seconds";
 const char *const kHudsonRefusedAnswerAfterOutOfRange = "answerafter= is from 1 to 15 seconds, well inside the joiner's 20 s wait";
 const char *const kHudsonRefusedAnswerAfterWithoutAnswer = "answerafter= says when the host answers, so it needs answer=";
+const char *const kHudsonRefusedFindGamesWord = "findgames= can only be yes";
+const char *const kHudsonRefusedFindGamesWithoutJoin = "findgames= is a joiner's way in, through Find Games, so it needs net=join";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
 const char *const kHudsonRefusedKillWords = "killkind= (marine, predator, xenoborg or queen), killat=x,y,z and killer= (host or join) go together, on a net= run with coop=yes";
 const char *const kHudsonRefusedFramesPerSecond = "fps= is a number from 10 to 1000, or uncapped";
@@ -407,7 +409,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	plan->accessWaitSeconds = kHudsonDefaultAccessWaitSeconds;
 	plan->answerAfterSeconds = kHudsonDefaultAnswerAfterSeconds;
 
-	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false;
+	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
@@ -1445,6 +1447,23 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			{
 				return kHudsonRefusedAnswerWord;
 			}
+		}
+		else if (WordIs(place, nameLength, "findgames"))
+		{
+			// Added 2026-11-09 by Melanikus for the AvP port: see findGames in hudson_plan.h
+			if (seenFindGames)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenFindGames = true;
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedFindGamesWord;
+			}
+
+			plan->findGames = true;
 		}
 		else if (WordIs(place, nameLength, "answerafter"))
 		{
@@ -2820,6 +2839,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenAnswerAfter && !seenAnswer)
 	{
 		return kHudsonRefusedAnswerAfterWithoutAnswer;
+	}
+
+	if (seenFindGames && plan->netMode != kHudsonNetJoin)
+	{
+		return kHudsonRefusedFindGamesWithoutJoin;
 	}
 
 	if (seenSiegeFrom && !seenSiege)

@@ -446,6 +446,8 @@ static void StartTheCoopCampaign(void)
 	}
 }
 
+static bool JoinThroughFindGamesForARun(void);   // findgames=yes, below with the other presses a player makes
+
 // A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
 // A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
 // Everything is on this machine's own address: see NetLoopbackOnly in networking.cpp. If it can't get as far as starting a level, the run ends here, and its result says how far it got.
@@ -517,7 +519,19 @@ static void StartNetworkGameForHudsonRun(void)
 
 		// -dev -relayjoin (server #14, relay_auto.h): the list's first game of this version, joined through its relay, the way a player
 		// picks one on the page of games found. Nothing else is tried: a run that asked for the relay and can't reach it stops, and says why.
-		if (RelayAuto_Mode() == kRelayAutoJoin)
+		// Modified 2026-11-09 by Melanikus for the AvP port: with findgames=yes, as a player does it, by Find Games and the game's row
+		if (RelayAuto_Mode() == kRelayAutoJoin && Hudson_JoinsThroughFindGames())
+		{
+			Hudson_NetSay("the joiner goes to Find Games, as a player does, to join the list's game through the relay");
+			connected = JoinThroughFindGamesForARun();
+
+			if (!connected)
+			{
+				Hudson_NetStopBecause("the join through Find Games failed, or the host didn't let it in");
+				return;
+			}
+		}
+		else if (RelayAuto_Mode() == kRelayAutoJoin)
 		{
 			int const session = RelayAuto_FindAGame();
 
@@ -752,6 +766,91 @@ static bool PictureTheAnswerForARun(const char *picture)
 	MenuSecondsForARun(2);
 	MenuFrameForARun(picture);
 	return came;
+}
+
+// findgames=yes: a joiner through the relay joins as a player does (PO's ruling, 2026-11-09: the rehearsal proves the player's path).
+// Join Game, Find Games, then, once the list shows a game this version may join through a relay, its row, pressed. The row's own code
+// joins it (Net_ConnectToSession, drawing the joining screen meanwhile). Then the joining page, drawn as a player sees it, is pictured
+// asking the host with its check code (join-asking.png), and let in (join-letin.png). True once the host has let it in.
+static bool JoinThroughFindGamesForARun(void)
+{
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);
+	MenuSecondsForARun(1);
+
+	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	int row = -1;
+	DWORD const started = GetTickCount();
+
+	// The list's games come within a few seconds of the page opening; at most 30 s
+	while (joined && bRunning && row < 0 && (DWORD)(GetTickCount() - started) < 30000u)
+	{
+		MenuFrameForARun(NULL);
+
+		for (int r = 0; r < AvPMenus.NumberOfElementsInMenu && row < 0; r++)
+		{
+			int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
+
+			if (s >= 0 && SessionData[s].AllowedToJoin && SessionData[s].throughRelay)
+			{
+				row = r;
+			}
+		}
+	}
+
+	if (row < 0)
+	{
+		LogErrorString("hudson: Find Games showed no game this version may join through a relay");
+		joined = false;
+	}
+
+	if (joined)
+	{
+		MenuFrameForARun("join-list.png");
+		AvPMenus.CurrentlySelectedElement = row;
+		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+		LogString("hudson: pressed the list's game");
+
+		// A row that joined goes on to the joining page (its MenuToGoTo); one that didn't stays on the games page, saying why
+		joined = AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING;
+	}
+
+	bool askingPictured = false;
+	bool letIn = false;
+	DWORD const asked = GetTickCount();
+
+	// Asking the host (J4), then let in (J5): at most 40 s, past the host's 30 s for an answer
+	while (joined && bRunning && !letIn && (DWORD)(GetTickCount() - asked) < 40000u)
+	{
+		int const answer = Net_JoinAnswerNow();
+		char digits[kNetRelayCheckCodeBytes];
+		const char *picture = NULL;
+
+		if (answer == kNetJoinAnswerYes)
+		{
+			picture = "join-letin.png";
+			letIn = true;
+		}
+		else if (answer != kNetJoinAnswerWaiting && answer != kNetJoinAnswerNone)
+		{
+			// The host said no, was answering someone else, didn't answer, or is another build: the page says which. (None is a request
+			// not under way yet, which is still waiting.)
+			LogErrorString("hudson: the host didn't let this joiner in");
+			MenuSecondsForARun(2);
+			break;
+		}
+		else if (!askingPictured && Net_RelayCheckCodeNow(digits) && (DWORD)(GetTickCount() - asked) > 1000u)
+		{
+			picture = "join-asking.png";
+			askingPictured = true;
+		}
+
+		MenuFrameForARun(picture);
+	}
+
+	ReleaseAllAvPMenuGfx();
+	return letIn;
 }
 
 // access=: Multiplayer, Online access, then Request access (and Check again after accesswait=), or Make a new identity and Yes. The run

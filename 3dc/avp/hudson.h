@@ -142,6 +142,8 @@ int Hudson_AccessWaitSeconds();
 // answer=: kHudsonAnswer..., 0 for none, and answerafter='s seconds
 int Hudson_AnswerPress();
 int Hudson_AnswerAfterSeconds();
+// findgames=yes: a joiner through the relay joins by Find Games and the list's game's row, as a player does
+bool Hudson_JoinsThroughFindGames();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);

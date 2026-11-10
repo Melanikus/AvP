@@ -305,6 +305,18 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=16", kHudsonRefusedAnswerAfterOutOfRange);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=x", kHudsonRefusedAnswerAfterNotANumber);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answerafter=3", kHudsonRefusedAnswerAfterWithoutAnswer);
+	// findgames=yes: a joiner's way in, as a player's, through Find Games
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes", &plan) == 0 && plan.findGames,
+			"findgames=yes: the joiner presses Find Games and the list's game");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join", &plan) == 0 && !plan.findGames,
+			"and without it the list's game is joined from the code, as before");
+	}
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=no", kHudsonRefusedFindGamesWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes findgames=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
+	Refused("-hudson level=invasion frames=5 findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): a server's name in small letters, once, with net=
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
