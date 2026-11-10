@@ -193,6 +193,136 @@
 					"to": "return answer != kRelayAccessWaiting;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the code goes to the owner by message or email, with no word that it isn't secret",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\"Send this code to the owner on Discord. It isn't secret: it only matches your request, and only a request with this code is approved.\",",
+					"to": "\"Give the owner this code yourself, by message or email. Only a request with this exact code is approved.\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a profile's letters left out of the name aren't said",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\t\t\tstateLine = TEXTSTRING_ACCESS_NAME_LEFT_OUT;\n",
+					"to": "\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request is sent with no servers.cfg line naming a server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!Server())\n\t{\n\t\tLogString(\"Relay list: an access request goes only",
+					"to": "\tif (false)\n\t{\n\t\tLogString(\"Relay list: an access request goes only"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request is refused even with a servers.cfg line naming a server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!Server())\n\t{\n\t\tLogString(\"Relay list: an access request goes only",
+					"to": "\tif (true)\n\t{\n\t\tLogString(\"Relay list: an access request goes only"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request is queued when the list didn't start",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (!RelayList_AccessBody(name, statics, body, sizeof(body)) || !Start())",
+					"to": "if (!RelayList_AccessBody(name, statics, body, sizeof(body)))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request goes with a line but no yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
+					"to": "\t\tif (!line)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request goes out keeping whatever key the list shows",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tcheck.keepIt = false;\n\t\treturn CallChecked(method, path, body, answer, room, check);",
+					"to": "\t\tcheck.keepIt = true;\n\t\treturn CallChecked(method, path, body, answer, room, check);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page says nothing of why a request with no line was never sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "stateLine = !Relay_ServerName()[0] ? TEXTSTRING_ACCESS_NO_SERVER : TEXTSTRING_ACCESS_CANT_REACH;",
+					"to": "stateLine = TEXTSTRING_ACCESS_CANT_REACH;"
+				}
+			]
+		},
+		{
+			"name": "RULE: a row not chosen is as faint as the menus' own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "int const kAccessPageRowNotChosenOutOf100 = 60;",
+					"to": "int const kAccessPageRowNotChosenOutOf100 = 25;"
+				}
+			]
+		},
+		{
+			"name": "RULE: Copy access code is chosen on every frame the code is there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "\treturn codeShown && (opening || !codeWasShown);",
+					"to": "\treturn codeShown;"
+				}
+			]
+		},
+		{
+			"name": "RULE: the words touch the code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "int const kAccessPageLeastWordsGap = 15;",
+					"to": "int const kAccessPageLeastWordsGap = 0;"
+				}
+			]
+		},
+		{
+			"name": "RULE: a gap takes all the room left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "\tat.spare = share > kAccessPageMostSpare ? kAccessPageMostSpare : share;",
+					"to": "\tat.spare = share;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the access pages' rows are as close as the menus' own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "y += HeightOfMenuElement(elementPtr) + (accessPage ? kAccessPageRowsApart : 0);",
+					"to": "y += HeightOfMenuElement(elementPtr);"
+				}
+			]
 		}
 	]
 }

@@ -652,6 +652,73 @@ static void Words(const char *text, int x, int y, int alpha, enum AVPMENUFORMAT_
 	RenderSmallMenuText(line, x, y, alpha, format);
 }
 
+// online_screens.h's copy of the small font's height must be the font's own: it can't include hud_layout.h, so the check is here, where
+// the game is built
+static_assert(kOnlineHelpLineHeight == HUD_FONT_HEIGHT, "the check code's help lines are spaced by the small font's height, HUD_FONT_HEIGHT");
+static_assert(kOnlineHelpLeft == MENU_LEFTXEDGE && kOnlineHelpRight == MENU_RIGHTXEDGE, "the help lines' widest box is the menus' own edges");
+
+// The narrowest width, at most widest, that keeps the text to as many lines as widest gives it: so a text of two lines is cut into two of
+// about the same length, never a full line and a last word on its own (the owner, 2026-11-10). A narrower box can only give it as many
+// lines or more, so the narrowest that keeps the count is found by halving the gap between a width too narrow and one that keeps it.
+static int BalancedWidth(const char *text, int widest)
+{
+	int const lines = SmallFontString_WrappedLines(text, widest);
+
+	if (lines <= 1)
+	{
+		return widest;
+	}
+
+	int narrow = widest / lines;   // as many lines from here would need the text to be no longer than the whole box
+	int wide = widest;
+
+	while (wide - narrow > 1)
+	{
+		int const middle = narrow + (wide - narrow) / 2;
+
+		if (SmallFontString_WrappedLines(text, middle) == lines)
+		{
+			wide = middle;
+		}
+		else
+		{
+			narrow = middle;
+		}
+	}
+
+	return wide;
+}
+
+// One help text, grey, wrapped into a box of width wide and exactly as tall as the lines given, in the middle of the menus' edges, so
+// RenderSmallFontString_Wrapped starts it at its top: one line is centred in it, more are lined up on its left
+static void HelpText(const char *text, int width, int top, int lines)
+{
+	if (!text || lines <= 0)
+	{
+		return;
+	}
+
+	char words[256];
+	Put(words, sizeof(words), text);
+	int x = 0;
+	int y = 0;
+	int const left = OnlineScreens_HelpBoxLeft(width);
+	RECT area = { left, top, left + width, top + lines * kOnlineHelpLineHeight };
+	RenderSmallFontString_Wrapped(words, &area, ONE_FIXED / 2, &x, &y);
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (online_screens_page.h says why)
+void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit)
+{
+	int const widest = kOnlineHelpRight - kOnlineHelpLeft;
+	int const firstWidth = first ? BalancedWidth(first, widest) : widest;
+	int const secondWidth = second ? BalancedWidth(second, widest) : widest;
+	OnlineHelpLines const at = OnlineScreens_HelpLines(codeTop, first ? SmallFontString_WrappedLines(first, firstWidth) : 0,
+		second ? SmallFontString_WrappedLines(second, secondWidth) : 0, limit);
+	HelpText(first, firstWidth, at.firstTop, at.firstLines);
+	HelpText(second, secondWidth, at.secondTop, at.secondLines);
+}
+
 // The tail, lit by the menu's highlight glow. alpha is 0 to ONE_FIXED, as the menus' brightness is.
 static void DrawTail(int x, int y, int size, int alpha)
 {
@@ -833,6 +900,12 @@ static void JoiningLine(int step, const char *region, char *line, size_t size)
 // wait is over (OnlinePage_JoinWaitOver)
 static bool joinDrewFrames = false;
 
+// Whether the wait closed a frame that was open when it began. Added 2026-11-10 by Melanikus for the AvP port (#202): a player's Enter
+// starts the join inside the menus' open frame, which the wait closes and gives back after; but a Hudson run presses the row between
+// frames, with none open, and giving it one back then left a frame open that nobody finished, so the run's next frame couldn't begin
+// (D3DERR_INVALIDCALL from BeginScene, once a join). So the wait gives back only what it closed.
+static bool joinClosedAFrame = false;
+
 void OnlinePage_DrawJoining(const char *region)
 {
 	char line[96];
@@ -843,7 +916,13 @@ void OnlinePage_DrawJoining(const char *region)
 	// menus' frame is closed first, once, and each frame of the wait is then a whole frame of its own.
 	if (!joinDrewFrames)
 	{
-		ThisFramesRenderingHasFinished();
+		joinClosedAFrame = ThisFramesRenderingIsOpen();
+
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasFinished();
+		}
+
 		joinDrewFrames = true;
 	}
 
@@ -861,8 +940,15 @@ void OnlinePage_JoinWaitOver(void)
 	if (joinDrewFrames)
 	{
 		joinDrewFrames = false;
-		ThisFramesRenderingHasBegun();
-		DrawMainMenusBackdrop();
+
+		// Only a frame the wait closed is given back (#202): with none open when the join began, the caller opens its own next
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasBegun();
+			DrawMainMenusBackdrop();
+		}
+
+		joinClosedAFrame = false;
 	}
 }
 
@@ -923,8 +1009,10 @@ static void DrawTheCheckCode(void)
 
 	if (line[0])
 	{
+		// Modified 2026-11-10 by Melanikus for the AvP port: the two help lines wrapped and spaced, never on each other (online_screens.h)
 		Words(line, MENU_CENTREX, kWordsTop + 50, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), MENU_CENTREX, kWordsTop + 70, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+			kWordsTop + 50, kOnlineHelpPageBottom);
 	}
 }
 

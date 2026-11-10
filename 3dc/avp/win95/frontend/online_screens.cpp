@@ -500,8 +500,12 @@ static const char *const kWords[] =
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
 	"Your game's room on the relay has gone",                     // kOnlineWordsRelayGone
-	"Read it to the host: the same 6 digits on both screens means nobody is in between",  // kOnlineWordsCheckCodeMeans
-	"Ask the player for theirs: the same 6 digits on both screens means nobody is in between"   // kOnlineWordsCheckCodeMeansHost
+	// The check code, for friends and for strangers (the owner's ruling, 2026-11-09: always shown on both screens; friends compare it
+	// outside the game; a stranger may go on without, told what that means; the game's own chat is never the way to compare, since it runs
+	// over the very connection the code checks)
+	"Friends compare it by voice or Discord, never in the game's chat: the same 6 digits means nobody is in between",  // kOnlineWordsCheckCodeMeans
+	"Ask a friend for theirs by voice or Discord, never in the game's chat: the same 6 digits means nobody is in between",   // kOnlineWordsCheckCodeMeansHost
+	"Not comparing is your choice: the game is still encrypted, but someone in the middle can't be ruled out"   // kOnlineWordsCheckCodeSkipped
 };
 
 static_assert(sizeof(kWords) / sizeof(kWords[0]) == kOnlineWordsCount, "kWords needs one line for each of OnlineWords, in its order");
