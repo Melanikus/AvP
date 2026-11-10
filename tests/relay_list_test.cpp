@@ -1114,6 +1114,37 @@ static void TestAddresses()
 		Check(RelayList_AddressRefusal(cases[i].address) == cases[i].kind, cases[i].what);
 	}
 
+	// A line's address as the yes page shows it (added 2026-11-10 by Melanikus for the AvP port, #175's last part): whole or not at all. The
+	// page's first address was 24 bytes, so "255.255.255.255:65535:65535" (27 letters) would have been shown cut short, on the very page that
+	// shows the player where a server is before they say yes to it.
+	char shown[kRelayListShownAddressBytes];
+	Check(RelayList_ShownAddress(Address(104, 131, 35, 41), 443, 27500, shown, sizeof(shown)) && strcmp(shown, "104.131.35.41") == 0,
+		"an address with the usual ports is shown alone");
+	Check(RelayList_ShownAddress(Address(203, 0, 113, 7), 8443, 27500, shown, sizeof(shown)) && strcmp(shown, "203.0.113.7:8443:27500") == 0,
+		"with another list port, both ports are shown");
+	Check(RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27501, shown, sizeof(shown)) && strcmp(shown, "203.0.113.7:443:27501") == 0,
+		"and with another relay port too");
+	Check(RelayList_ShownAddress(Address(255, 255, 255, 255), 65535, 65535, shown, sizeof(shown)) &&
+		strcmp(shown, "255.255.255.255:65535:65535") == 0, "the longest there can be is shown whole, in the room the page has for it");
+
+	char tooSmall[27];
+	memset(tooSmall, 'x', sizeof(tooSmall));
+	Check(!RelayList_ShownAddress(Address(255, 255, 255, 255), 65535, 65535, tooSmall, sizeof(tooSmall)) && tooSmall[0] == '\0',
+		"in a byte less room, nothing is shown: never a part of an address");
+	memset(shown, 'x', sizeof(shown));
+	Check(!RelayList_ShownAddress(Address(203, 0, 113, 7), 0, 27500, shown, sizeof(shown)) && shown[0] == '\0' &&
+		!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 65536, shown, sizeof(shown)) && shown[0] == '\0',
+		"nor for a port that isn't 1 to 65535");
+	Check(!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27500, NULL, 10) &&
+		!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27500, shown, 0), "and nothing at all with nowhere to write it");
+
+	// The yes page's address is this one, in a room of this size (relay_list.h's RelayListLineToAgree), and nothing else writes it
+	std::string const header = ReadSource("3dc/relay_list.h");
+	std::string const lines = ReadSource("3dc/relay_list.cpp");
+	Check(Has(header, "\tchar address[kRelayListShownAddressBytes];") &&
+		Has(lines, "if (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))\n\t{\n\t\treturn false;\n\t}") &&
+		!Has(lines, "%u.%u.%u.%u:%d:%d"), "the yes page's address is written by it alone, into room for the longest");
+
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): no name is looked up at all, now the server is a servers.cfg line with its
 	// address written plainly, and its relay is at that same address
 	std::string const source = ReadSource("3dc/relay_list.cpp");
