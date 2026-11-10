@@ -10355,6 +10355,16 @@
 					"to": "if (CommandLineHasWord(commandLine, \"-relayhost\")"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a Hudson host's co-op game keeps the deathmatch list's number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tlevel = coopPlace;",
+					"to": "\t\t\t;"
+				}
+			]
 		}
 	]
 }

@@ -1448,6 +1448,15 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("3dc/relay_auto.cpp"), "if (mode == kRelayAutoHost && RelayAuto_AsksJoiners(commandLine, developer))") &&
 			Has(ReadSourceFile("3dc/relay_auto.cpp"), "else if (mode == kRelayAutoHost)\n\t{\n\t\tLogString(\"relay auto: -dev -relayhost: this copy hosts by itself through the relay, and lets every joiner in without asking\");\n\t\tNet_LetEveryJoinerIn(true);"),
 			"SOURCE: and that's because -relayhost alone lets every joiner in, and -askjoiners doesn't");
+		// coop=yes's game is numbered on the co-op list, as the host's own menu numbers it (coop_menu.cpp), never the deathmatch list's,
+		// where a campaign level has no place: the showcase of 2026-11-10 hosted derelict as level 0, and the games page named it
+		// "Stranded". Added 2026-11-10 by Melanikus (Third) for the AvP port, from Secondary's trace.
+		std::string const hosting = Between(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "static void StartNetworkGameForHudsonRun(void)", "netGameData.levelNumber = level;");
+		Check(ComesBefore(hosting, "netGameData.gameType = NGT_Coop;", "int const coopPlace = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);") &&
+			Has(hosting, "if (coopPlace >= 0)\n\t\t{\n\t\t\tlevel = coopPlace;"),
+			"SOURCE: a Hudson host's co-op game is numbered by its campaign level's place on the co-op list, as a player's host menu numbers it");
+		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/coop_menu.cpp"), "netGameData.levelNumber = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);"),
+			"SOURCE: and that's the number the player's own co-op host menu gives");
 		// film=menus and pagehold= reach a run through both scripts (the owner's showcase, 2026-11-10)
 		Check(Has(runHudson, "if ($FilmMenus) { $arguments += \" film=menus\" }") && Has(runHudson, "if ($PageHold -ne 0) { $arguments += \" pagehold=$PageHold\" }"),
 			"SOURCE: the script can ask for film=menus and pagehold=");

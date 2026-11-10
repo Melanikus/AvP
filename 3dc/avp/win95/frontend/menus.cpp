@@ -71,6 +71,7 @@
 #include "env_info.h"
 #include "custom_maps.h"
 #include "coop_menu.h"
+#include "level_lists.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -456,7 +457,7 @@ static void StartNetworkGameForHudsonRun(void)
 	extern int MultiplayerEpisodeForEnvironment(int environment);
 
 	int const onTheList = MultiplayerEpisodeForEnvironment(Hudson_Environment());
-	int const level = onTheList >= 0 ? onTheList : 0;
+	int level = onTheList >= 0 ? onTheList : 0;
 
 	SetDefaultMultiplayerConfig();
 	netGameData.gameType = NGT_Individual;
@@ -479,6 +480,17 @@ static void StartNetworkGameForHudsonRun(void)
 
 		netGameData.gameType = NGT_Coop;
 		netGameData.disableFriendlyFire = Hudson_NoFriendlyFire();
+
+		// The game's level number is the campaign level's place on the co-op list, as the host's own menu gives it (coop_menu.cpp), not
+		// the deathmatch list's, which has no campaign level: derelict came out as -1, then 0, and the games page named it "Stranded" (the
+		// showcase of 2026-11-10, Secondary's trace). A campaign with no such level (-1) keeps the number above. Modified 2026-11-10 by
+		// Melanikus (Third) for the AvP port.
+		int const coopPlace = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);
+
+		if (coopPlace >= 0)
+		{
+			level = coopPlace;
+		}
 	}
 
 	// hostile=yes and no campaign: a species game, the only kind that keeps the species scores one of the bad messages aims at
