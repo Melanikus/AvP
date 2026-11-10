@@ -7,7 +7,8 @@
 #     also fails if precompiled code (DLLs, libraries, executables) is in the repository.
 #   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
 #     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
-#     it is not scanned.
+#     it is not scanned. For the libraries Snyk can't recognise (the two post-quantum ones, #174), known vulnerabilities
+#     come from their projects' own GitHub security advisories, checked by machine (tools/check-advisories.ps1).
 # ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
 # or exclude findings. The single exception is .github/snyk-accepted.json: 4 reports where Snyk's own data is wrong, which
 # no code change can clear. It names each report and expires. If Snyk or GitHub Actions is unavailable, the checks fail
@@ -342,11 +343,29 @@ jobs:
           chmod +x "$RUNNER_TEMP/snyk"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
+      # The libraries Snyk Open Source can't recognise (mlkem-native and mldsa-native v2.0.0: #174) get their known vulnerabilities
+      # from their projects' own GitHub security advisories instead, checked by machine: the owner's decision, 2026-11-09. Snyk has
+      # been asked to index them too. tools/check-advisories.ps1 says what it checks, and what "read" means; .github/advisories-read.json
+      # is where a read is written down. First its own test, with made-up advisories and no network, then the real check. The libraries
+      # it passes, written to a file, are the only ones the scan below lets through as "not recognised", and only in this run. Added
+      # 2026-11-09 by Melanikus for the AvP port.
+      - name: Test the advisories check
+        shell: pwsh
+        run: ./repo/tests/advisories-test.ps1
+
+      - name: Known vulnerabilities from the projects' own advisories, for the libraries Snyk can't recognise
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./repo/tools/check-advisories.ps1 -Repository repo -Passed (Join-Path $env:RUNNER_TEMP 'advisories-passed.txt')
+
       # Every library that was collected is scanned, even if an earlier one fails, so one run shows everything; the job
       # fails at the end if any scan found anything. The eight we know of must be present by name, so a broken hand-over
       # can't pass as clean, and a new library is scanned without anyone adding it here. No library may carry a comment or
-      # a settings file that tells a scanner to look away.
+      # a settings file that tells a scanner to look away. It runs even if the advisories check failed, so the run still shows every
+      # scan; then nothing is let through as "not recognised".
       - name: SAST and SCA on each library's source
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -418,8 +437,13 @@ jobs:
               if [ "$rc" -ne 0 ]; then failed=1; fi
               tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
               if [ "$tested" -lt 1 ]; then
-                echo "::error::Snyk Open Source did not recognise $lib"
-                failed=1
+                # Only a library whose own advisories passed the check above, in this run (the whole name, one a line)
+                if [ -f "$RUNNER_TEMP/advisories-passed.txt" ] && grep -qxF -- "$lib" "$RUNNER_TEMP/advisories-passed.txt"; then
+                  echo "::notice::Snyk Open Source doesn't recognise $lib, so its known vulnerabilities came from its project's own advisories, checked above"
+                else
+                  echo "::error::Snyk Open Source did not recognise $lib"
+                  failed=1
+                fi
               fi
             done
           done

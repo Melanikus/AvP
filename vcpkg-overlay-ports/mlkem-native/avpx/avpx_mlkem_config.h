@@ -12,12 +12,20 @@
 #define AVPX_MLKEM_CONFIG_H
 
 // ML-KEM-1024, the largest of FIPS 203's three sizes, the one network protocol version 2 uses. The project's own default is 768, the
-// middle one, so leaving this out would build a weaker library without a word. avpx_mlkem.h refuses to compile if it's anything else.
+// middle one, so leaving this out would build a weaker library without a word. The check just below stops any build that reads this
+// file, the library's own and the game's alike, if it's ever anything else; avpx_mlkem.h and the wrapper's sizes check it again.
+// (Modified 2026-11-09 by Melanikus for the AvP port, Fourth's cold read, finding 2: the check was only in avpx_mlkem.h, which the
+// library's own build never reads.)
 #define MLK_CONFIG_PARAMETER_SET 1024
 
+#if MLK_CONFIG_PARAMETER_SET != 1024
+#error "The game's ML-KEM is ML-KEM-1024: MLK_CONFIG_PARAMETER_SET has to be 1024"
+#endif
+
 // Every name the library makes public starts with this, so none can clash with any other library's names in the game:
-// avpx_mlkem1024_keypair, avpx_mlkem1024_enc, avpx_mlkem1024_dec and the rest. With the size in the name, a game built against a
-// library of another size can't link at all.
+// avpx_mlkem1024_keypair, avpx_mlkem1024_enc, avpx_mlkem1024_dec and the rest. The "1024" in it is only text: in a build of one size,
+// as this is, the library uses this prefix as it is and adds no size of its own (mlkem_native.h, MLK_API_NAMESPACE_PREFIX), so the name
+// alone can't tell a library of another size. What does is the check above, and the wrapper's sizes (pq_key_exchange.cpp).
 #define MLK_CONFIG_NAMESPACE_PREFIX avpx_mlkem1024
 
 // The library is built from one file, so its own helper functions can all be private to that file (static). Only the functions in

@@ -27,4 +27,6 @@ install(FILES mldsa/mldsa_native.h avpx/avpx_mldsa_config.h avpx/avpx_mldsa.h DE
 
 # The project's own known answers, for tests/pq_mldsa_test only: a key and signatures made from fixed seeds, for each size. They come
 # from the same archive as the library, checked by the same SHA-512, so they can't drift from the code they were made with.
-install(FILES test/test_vectors/expected_test_vectors.h DESTINATION include/mldsa-native/upstream-tests)
+# They go under share/, not include/ (Fourth's cold read, finding 4, 2026-11-09): include/ is on the game's own include path, and the
+# game must never be able to read a test's fixed keys by mistake. Only the test's own .args adds share/mldsa-native to its path.
+install(FILES test/test_vectors/expected_test_vectors.h DESTINATION share/mldsa-native/upstream-tests)
