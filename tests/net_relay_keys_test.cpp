@@ -3,9 +3,8 @@
 // WHAT IT TESTS:
 // - the fingerprint of the relay keys in the relay's own test vectors (tests/vectors/crypto-v2.json, handshakeA.relayStatic) is all 48
 //   bytes of SHA-384 over the words and the keys, and its first 16 are the vector the relay server's test was first held to;
-// - one bit changed anywhere in the keys gives another fingerprint;
-// - the check takes the right fingerprint and no other, in all 48 bytes;
-// - the -dev setting is read as a region and 96 hex digits, and nothing else;
+// - one bit changed anywhere in the keys gives another fingerprint (modified 2026-11-10 by Melanikus for the AvP port, #175: the check that
+//   held keys to the -dev setting RelayKey, and the setting's reader, are gone; the server's servers.cfg line proves the keys now);
 // - (added 2026-11-10 by Melanikus for the AvP port, #175) a server's servers.cfg fingerprint (3dc/net_server_fingerprint.h): nyc3's known
 //   answer, the same list key with the vectors' relay, and that a change to any byte of the list's key, the relay's keys or the line's
 //   number is refused;
@@ -92,91 +91,21 @@ static void TestTheFingerprint()
 	std::string const hex = HexOf(fingerprint, sizeof(fingerprint));
 	Check(made && hex == kVectorFingerprint, "its fingerprint is all 48 bytes of SHA-384 over the words and the keys (it's " + hex + ")");
 	Check(hex.compare(0, 32, "fc352802066e547c261e37fe63f11486") == 0, "and its first 16 bytes are the vector the server's test was first held to");
-	Check(NetRelayKeys_AreThese(&keys, fingerprint), "the check takes those keys for that fingerprint");
 
-	// One bit changed anywhere in the keys: another fingerprint, which the check refuses
+	// One bit changed anywhere in the keys: another id, so the line's fingerprint no longer matches them (net_server_fingerprint.h)
 	size_t const places[] = { 0, 1, 96, kNetCryptoP384PublicBytes, kNetCryptoP384PublicBytes + 1, kNetCryptoP384PublicBytes + kNetPqKemPublicBytes - 1 };
-	bool allRefused = true;
+	bool allDiffer = true;
 
 	for (size_t const place : places)
 	{
 		uint8_t *const byte = place < kNetCryptoP384PublicBytes ? &keys.p384[place] : &keys.kem[place - kNetCryptoP384PublicBytes];
+		uint8_t other[kNetRelayKeysFingerprintBytes];
 		*byte ^= 0x01;
-		allRefused = allRefused && !NetRelayKeys_AreThese(&keys, fingerprint);
+		allDiffer = allDiffer && NetRelayKeys_Fingerprint(&keys, other) && memcmp(other, fingerprint, sizeof(other)) != 0;
 		*byte ^= 0x01;
 	}
 
-	Check(allRefused, "keys with one bit changed, at the first, second and last byte of each key, aren't taken for that fingerprint");
-
-	// A fingerprint one bit away, in any of its 48 bytes, isn't theirs: the whole of it is compared
-	bool otherRefused = true;
-
-	for (size_t i = 0; i < kNetRelayKeysFingerprintBytes; i++)
-	{
-		fingerprint[i] ^= 0x80;
-		otherRefused = otherRefused && !NetRelayKeys_AreThese(&keys, fingerprint);
-		fingerprint[i] ^= 0x80;
-	}
-
-	Check(otherRefused && NetRelayKeys_AreThese(&keys, fingerprint), "nor are the keys taken for a fingerprint one bit away from theirs, in any of its 48 bytes");
-	Check(!NetRelayKeys_AreThese(NULL, fingerprint) && !NetRelayKeys_AreThese(&keys, NULL), "and no keys, or no fingerprint, is never a match");
-}
-
-static void TestTheSetting()
-{
-	printf("2. the -dev setting, RelayKey=<region>:<96 hex digits>\n");
-	char region[kRelayListRegionLetters + 1];
-	uint8_t fingerprint[kNetRelayKeysFingerprintBytes];
-	std::string const good = kVectorFingerprint;
-	bool const read = NetRelayKeys_ReadSetting(("newyork:" + good).c_str(), region, fingerprint);
-	Check(read && strcmp(region, "newyork") == 0 && HexOf(fingerprint, sizeof(fingerprint)) == good, "a region and its relay's fingerprint are read");
-	Check(NetRelayKeys_ReadSetting(("a:" + std::string(95, '0') + "1").c_str(), region, fingerprint) && strcmp(region, "a") == 0
-		&& fingerprint[kNetRelayKeysFingerprintBytes - 1] == 1, "a region of one letter, and the last digit counts");
-	Check(NetRelayKeys_ReadSetting(("sixteen-letters1:" + good).c_str(), region, fingerprint) && strcmp(region, "sixteen-letters1") == 0,
-		"and one of 16, the most there is");
-
-	std::string capitals = good;
-
-	for (char &c : capitals)
-	{
-		c = (c >= 'a' && c <= 'f') ? static_cast<char>(c - 'a' + 'A') : c;
-	}
-
-	std::string const bad[] = {
-		"",
-		"newyork",
-		":" + good,
-		"newyork:",
-		"New York:" + good,
-		"newyork:" + capitals,
-		"newyork:" + good + "0",
-		"newyork:" + good.substr(1),
-		"newyork:" + good.substr(0, 32),
-		"newyork:" + good + " ",
-		" newyork:" + good,
-		"seventeen-letters:" + good,
-		"newyork:" + good.substr(0, 95) + "g",
-		"newyork::" + good,
-	};
-	bool allRefused = true;
-
-	for (std::string const &setting : bad)
-	{
-		memset(region, 'x', sizeof(region));
-		memset(fingerprint, 0xA5, sizeof(fingerprint));
-		allRefused = allRefused && !NetRelayKeys_ReadSetting(setting.c_str(), region, fingerprint) && region[0] == '\0' && AllZero(fingerprint, sizeof(fingerprint));
-	}
-
-	memset(region, 'x', sizeof(region));
-	allRefused = allRefused && !NetRelayKeys_ReadSetting(NULL, region, fingerprint) && region[0] == '\0';
-	Check(allRefused, "nothing else is taken: no region, no digits, capitals, a digit too many or too few, the short 32 of before, a space, a "
-		"region too long or not one, a letter that isn't a digit, two colons, no setting; and each leaves no region and a fingerprint of 0s");
-
-	// A setting with no end in sight is read no further than the longest a setting could be
-	char noEnd[kNetRelayKeysMostSettingLetters + 8];
-	memset(noEnd, 'a', sizeof(noEnd));
-	noEnd[sizeof(noEnd) - 1] = '\0';
-	Check(!NetRelayKeys_ReadSetting(noEnd, region, fingerprint) && region[0] == '\0', "a setting longer than any can be is refused");
+	Check(allDiffer, "keys with one bit changed, at the first, second and last byte of each key, have another id");
 }
 
 // Added 2026-11-10 by Melanikus for the AvP port (#175): a server's servers.cfg fingerprint. The known answers were worked out three ways
@@ -188,7 +117,7 @@ static const char kNyc3KeyWithVectorRelay[] = "6f15c487060a467449128e470ae9f4ba5
 
 static void TestTheServersCfgFingerprint()
 {
-	printf("3. a server's servers.cfg fingerprint\n");
+	printf("2. a server's servers.cfg fingerprint\n");
 	std::vector<uint8_t> listKey, relayId, nyc3, withVector;
 	bool const have = FromHex(kNyc3ListKey, &listKey) && listKey.size() == 91 && FromHex(kNyc3RelayId, &relayId) &&
 		relayId.size() == kNetRelayKeysFingerprintBytes && FromHex(kNyc3Fingerprint, &nyc3) && FromHex(kNyc3KeyWithVectorRelay, &withVector);
@@ -351,7 +280,7 @@ static bool KeyOf(const char *certificateHex, std::vector<uint8_t> *key)
 
 static void TestTheListsKey()
 {
-	printf("4. the list's key, from the certificate it shows\n");
+	printf("3. the list's key, from the certificate it shows\n");
 	std::vector<uint8_t> nyc3Key, expected, keyA, keyB, keyAOtherName;
 	FromHex(kNyc3ListKey, &expected);
 	Check(KeyOf(kNyc3Certificate, &nyc3Key) && nyc3Key == expected, "nyc3's certificate gives its 91-byte key, byte for byte as Node read it");
@@ -415,7 +344,6 @@ int main()
 {
 	printf("A relay's keys and their fingerprint\n");
 	TestTheFingerprint();
-	TestTheSetting();
 	TestTheServersCfgFingerprint();
 	TestTheListsKey();
 

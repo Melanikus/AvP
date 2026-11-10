@@ -596,8 +596,9 @@ $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
 Check ($result.Code -eq 0 -and $result.Text.Contains($letThrough)) "the real repository's Hudson stays asleep in a player's game. It said: $($result.Text)"
 
 # --- check-servers-dev-only.ps1: the owner's ruling (2026-11-09) that a player's game can reach none of our servers. Each way it can be
-# broken is refused, for its own reason, and each way the code is written to need -dev is let through. The cases are AvP-docs'
-# servers_dev_only_cases.js, tried by hand on 2026-11-09, written out here.
+# broken is refused, for its own reason, and each way the code is written to need -dev is let through. Each case is written out here.
+# Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is a servers.cfg line, so the model's list reads its server from
+# servers.cfg and writes it from the line's address, and the cases try check-servers-dev-only.ps1's new rules 3 to 5.
 $serverGood = @{ '3dc/d3d_render.cpp' = (@'
 int DevMode = 0;
 '@) + "`n"; '3dc/avp/win95/winmain.cpp' = (@'
@@ -606,46 +607,41 @@ void Begin(const char *command_line)
 	DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
 }
 '@) + "`n"; '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -653,6 +649,12 @@ namespace
 	{
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
 }
 '@) + "`n" }
 $serverCases = @(
@@ -661,48 +663,43 @@ void Frame()
 {
 }
 '@) + "`n" }; Passes = 'None of the game''s server code is in this commit, so a player''s game can''t reach a server.' },
-    @{ What = 'the smallest list that needs -dev for its server is let through'; None = $false; Files = @{  }; Passes = 'A player''s game can''t reach a server: no server is built in, every call beyond this PC is in 3dc/relay_list.cpp and needs one, and 1 server settings are read only with -dev.' },
+    @{ What = 'the smallest list that needs -dev for its server is let through'; None = $false; Files = @{  }; Passes = 'A player''s game can''t reach a server: servers.cfg names none, Relay_ServerName gives none without -dev, every call beyond this PC is in 3dc/relay_list.cpp and needs one, and 0 server settings are read only with -dev.' },
     @{ What = 'a server setting read only inside if (DevMode) is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -710,6 +707,12 @@ namespace
 	{
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
 }
 
 int Relay_ListPort(void)
@@ -726,46 +729,41 @@ int Relay_ListPort(void)
 }
 '@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
     @{ What = 'and one read, then ignored without -dev unless empty, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -773,6 +771,12 @@ namespace
 	{
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
 }
 
 void ReadThePin(void)
@@ -792,97 +796,55 @@ void ReadThePin(void)
 	}
 }
 '@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
-    @{ What = 'a server built into the game is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "nyc3.relay.example";
+    @{ What = 'a shipped servers.cfg of notes only is let through'; None = $false; Files = @{ 'servers.cfg' = (@'
+# This release names no server yet.
 
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
+   # a note after spaces
+	
+'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
+    @{ What = 'a shipped servers.cfg naming a server is refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+# a note
+203.0.113.7 bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e New York
+'@) + "`n" }; Reason = 'servers.cfg line 2 names a server: until protocol version 2 is on for players, the servers.cfg a release ships names none' },
+    @{ What = 'and one naming it after spaces'; None = $false; Files = @{ 'servers.cfg' = (@'
+   203.0.113.7 bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e New York
+'@) + "`n" }; Reason = 'servers.cfg line 1 names a server' },
+    @{ What = 'a server name without -dev is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
 namespace
 {
-	bool Start(void)
+	const ServersCfgServer *Server(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
 	}
 }
-'@) + "`n" }; Reason = 'must define kRelayBuiltInServer once, as static const char kRelayBuiltInServer[] = ""; (no server built into the game)' },
-    @{ What = 'a server name the settings give without -dev is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -891,48 +853,51 @@ namespace
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
 }
-'@) + "`n" }; Reason = 'must give back the built-in name without -dev' },
-    @{ What = 'a server setting a player''s game would use is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'must give back no name without -dev, before anything else' },
+    @{ What = 'and servers.cfg read before -dev is asked about'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+	Server();
 
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -940,6 +905,70 @@ namespace
 	{
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'must give back no name without -dev, before anything else' },
+    @{ What = 'servers.cfg read outside the list''s file is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Peek(void)
+{
+	ServersCfgFileRead file;
+	ServersCfg_ReadTheGames(&file);
+}
+'@) + "`n" }; Reason = '3dc/menus.cpp reads servers.cfg: only 3dc/relay_list.cpp may' },
+    @{ What = 'a server setting a player''s game would use is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
+
+const char *Relay_ServerName(void)
+{
+	if (!DevMode)
+	{
+		return "";
+	}
+
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		if (!Relay_ServerName()[0])
+		{
+			return false;
+		}
+
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
 }
 
 void ReadThePin(void)
@@ -949,46 +978,41 @@ void ReadThePin(void)
 }
 '@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
     @{ What = 'and one whose -dev branch is the wrong way round'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -996,6 +1020,12 @@ namespace
 	{
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
 }
 
 void ReadThePin(void)
@@ -1027,47 +1057,42 @@ void Fetch(void)
 	HINTERNET s = WinHttpOpen(L"x", 0, 0, 0, 0);
 }
 '@) + "`n" }; Reason = '3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC' },
-    @{ What = 'the list calling a host other than the one it started with is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+    @{ What = 'the list calling a host other than the line''s address is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -1076,43 +1101,44 @@ namespace
 		HINTERNET connection = WinHttpConnect(session, otherServer, shared->port, 0);
 	}
 }
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
 '@) + "`n" }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to shared->server' },
     @{ What = 'the list starting with no name is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		return true;
 	}
 
@@ -1121,48 +1147,49 @@ namespace
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
 }
-'@) + "`n" }; Reason = 'must take its name from Relay_ServerName, and make nothing when there''s none' },
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'must make nothing when Relay_ServerName gives no name' },
     @{ What = 'the list''s server written a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
 
 const char *Relay_ServerName(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
 	if (!DevMode)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		return "";
 	}
 
-	return name;
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
 }
 
 namespace
 {
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
+		if (!Relay_ServerName()[0])
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(line->address);
 		made->server[0] = 0;
 		return true;
 	}
@@ -1172,7 +1199,114 @@ namespace
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
 	}
 }
-'@) + "`n" }; Reason = 'must write the list''s server in one place only, from the name it started with' },
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'uses the list''s server in a way this check doesn''t know' },
+    @{ What = 'and written from anything but the line''s four numbers'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
+
+const char *Relay_ServerName(void)
+{
+	if (!DevMode)
+	{
+		return "";
+	}
+
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		if (!Relay_ServerName()[0])
+		{
+			return false;
+		}
+
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		wcscpy(made->server, line->wideName);
+		made->relayAddress = htonl(line->address);
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'must write the list''s server in one place only, from the line''s four numbers' },
+    @{ What = 'the relay at another address than the line''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+namespace
+{
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+		ServersCfg_ReadTheGames(&file);
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+}
+
+const char *Relay_ServerName(void)
+{
+	if (!DevMode)
+	{
+		return "";
+	}
+
+	const ServersCfgServer *const line = Server();
+	return line ? line->name : "";
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		if (!Relay_ServerName()[0])
+		{
+			return false;
+		}
+
+		const ServersCfgServer *const line = Server();
+		Shared *made = new Shared;
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
+			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		made->relayAddress = htonl(otherAddress);
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+bool RelayList_Relays(RelayListRelay *relays, int *count)
+{
+	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	return true;
+}
+'@) + "`n" }; Reason = 'must write the relay''s address in one place only, from the line''s address' },
     @{ What = 'DevMode starting on is refused'; None = $false; Files = @{ '3dc/d3d_render.cpp' = (@'
 int DevMode = 1;
 '@) + "`n" }; Reason = 'DevMode must be defined once, as int DevMode = 0; it is: 3dc/d3d_render.cpp line 1: int DevMode = 1;' },

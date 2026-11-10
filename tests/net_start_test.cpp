@@ -145,14 +145,12 @@ void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintByt
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the list's side of a relay's keys, and handshake A's
-// draws. The list gives the test's own made-up keys, and the settings' RelayKey is their fingerprint, for every region unless a test says
-// otherwise. So with the draft on, the channel to the relay opens by itself (with the stand-in session, net_start_test_stubs/net_relay_v2.h),
-// and the relay tests from before step 7 still mean what they meant. TestTheRelayChannel says otherwise, to see each rule.
+// draws. The list gives the test's own made-up keys. So with the draft on, the channel to the relay opens by itself (with the stand-in
+// session, net_start_test_stubs/net_relay_v2.h), and the relay tests from before step 7 still mean what they meant. TestTheRelayChannel says
+// otherwise, to see each rule. Modified 2026-11-10 by Melanikus for the AvP port (#175): the real list hands over only keys its server's
+// servers.cfg line has proved (relay_list.h), so there's no RelayKey setting here to hold them to.
 static NetRelayStaticKeys testRelayKeys;
-static uint8_t testRelayKeyFingerprint[kNetCryptoHashBytes];
-static std::string relayKeyRegion = "*";     // the region the settings' RelayKey names: "*" for every region, "" for none
 static int relayKeysGive = kRelayKeysCame;   // what the list answers: the keys, still waiting, or refused
-static bool relayKeysWrong = false;          // the list's keys aren't the ones RelayKey names
 static int relayKeysAsked = 0;
 static int drawsMade = 0;
 
@@ -167,21 +165,6 @@ static void MakeTheTestRelayKeys()
 	{
 		testRelayKeys.kem[i] = static_cast<uint8_t>(9 + i * 3);
 	}
-
-	NetRelayKeys_Fingerprint(&testRelayKeys, testRelayKeyFingerprint);
-}
-
-bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes])
-{
-	memset(fingerprint, 0, kNetCryptoHashBytes);
-	bool const named = region != NULL && (relayKeyRegion == "*" || relayKeyRegion == region);
-
-	if (named)
-	{
-		memcpy(fingerprint, testRelayKeyFingerprint, kNetCryptoHashBytes);
-	}
-
-	return named;
 }
 
 bool RelayList_AskForRelayKeys(const char *region)
@@ -200,7 +183,6 @@ int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem
 	{
 		memcpy(p384, testRelayKeys.p384, kNetCryptoP384PublicBytes);
 		memcpy(kem, testRelayKeys.kem, kNetPqKemPublicBytes);
-		kem[0] ^= relayKeysWrong ? 1 : 0;
 	}
 
 	return relayKeysGive;
@@ -1792,10 +1774,11 @@ static void TestTheRelayOnTheScreen()
 }
 
 // Hudson's branch, server #14's run through a relay on another machine (2026-11-09). A run with net= uses only this machine's own address,
-// or, given one relay beyond it by name, that relay at the one address its name gave. Its sockets then go on this machine's address towards
-// that relay, never on 0.0.0.0, and each drops whatever comes from anywhere else before ENet reads it.
+// or, given one relay beyond it by its address, that relay at that address. Its sockets then go on this machine's address towards that
+// relay, never on 0.0.0.0, and each drops whatever comes from anywhere else before ENet reads it. (Modified 2026-11-10 by Melanikus for the
+// AvP port, #175: the relay is given by its address alone, a servers.cfg line's, and a name is refused.)
 extern bool NetLoopbackOnly;
-bool Net_AllowOneRemoteRelay(const char *name);
+bool Net_AllowOneRemoteRelay(const char *address);
 uint32_t Net_RemoteRelayAddress();
 
 static void TestARunsOneRelayBeyondThisMachine()
@@ -1809,7 +1792,7 @@ static void TestARunsOneRelayBeyondThisMachine()
 	enet_uint32 const kThisMachine = 0x0100007F;   // 127.0.0.1, as ENet keeps it
 	enet_uint32 const kRoute = 0x0A01A8C0;         // 192.168.1.10: this machine's address towards the relay
 	enet_uint32 const kElsewhere = 0x0B0C0B0A;     // a machine that isn't the relay
-	enet_uint32 const kMovedTo = 0x0E0C0B0A;       // where the relay's name might point later
+	enet_uint32 const kMovedTo = 0x0E0C0B0A;       // another address the list might give its relay
 	NetLoopbackOnly = true;
 	relayNamed = true;
 	routeTowardsTheRelay = kRoute;
@@ -1821,21 +1804,24 @@ static void TestARunsOneRelayBeyondThisMachine()
 		"given none, a run's host is on this machine's own address, and the list's relay elsewhere is sent nothing");
 	EndTheGame();
 
-	Check(Net_AllowOneRemoteRelay("other.example"), "given another relay, by its name");
+	Check(Net_AllowOneRemoteRelay("10.11.12.14"), "given another relay, by its address");
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentBefore && Net_RemoteRelayAddress() == 0,
-		"the list's relay, which has another name, is still left out, and no address is let through");
+		"the list's relay, at another address, is still left out, and no address is let through");
 	EndTheGame();
 
-	Check(!Net_AllowOneRemoteRelay("not a name") && !Net_AllowOneRemoteRelay(NULL), "what isn't a server's name is refused");
+	Check(!Net_AllowOneRemoteRelay("relay.example") && !Net_AllowOneRemoteRelay("10.11.12.013") && !Net_AllowOneRemoteRelay("10.11.12.13 ")
+		&& !Net_AllowOneRemoteRelay("0.0.0.0") && !Net_AllowOneRemoteRelay("255.255.255.255") && !Net_AllowOneRemoteRelay(NULL),
+		"a name, an address with a leading zero or a space after it, any address, everyone's, or nothing at all, is refused");
 
-	Check(Net_AllowOneRemoteRelay("relay.example"), "given the list's relay, by its name");
+	// The test's relay is at 10.11.12.13 (kRelayHost, as ENet keeps it), whatever name the list gives it
+	Check(Net_AllowOneRemoteRelay("10.11.12.13"), "given the list's relay, by its address");
 	int const connectsBefore = socketsConnected;
 	int const openBefore = socketsOpen;
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kRoute && hostsBoundTo.back().port == 23513,
 		"the host's socket goes on this machine's address towards that relay, never on 0.0.0.0, at the game's port");
 	Check(socketsConnected == connectsBefore + 1 && lastSocketConnectedTo.host == kRelayHost && socketsOpen == openBefore,
 		"which it found by connecting a socket to the relay, a thing that sends nothing, and that socket is closed again");
-	Check(Net_RemoteRelayAddress() == kRelayHost, "the one address let through is the one the relay's name gave");
+	Check(Net_RemoteRelayAddress() == kRelayHost, "the one address let through is the one it was given");
 	Check(datagramsSent == sentBefore + 1 && datagramsSentTo.back().host == kRelayHost, "and the relay is timed, as one on this machine would be");
 	uint8_t stranger[40];
 	memset(stranger, 0x22, sizeof(stranger));
@@ -1856,11 +1842,11 @@ static void TestARunsOneRelayBeyondThisMachine()
 	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "its room lost, the host still drops whatever isn't the relay's");
 	EndTheGame();
 
-	// The relay's name giving another address later: that one is left out
+	// The list giving its relay another address later: that one is left out (a servers.cfg line's address never changes, but the rule holds)
 	relayAddressNamed = kMovedTo;
 	int const sentMoved = datagramsSent;
 	Check(HostAGame() == NET_OK && datagramsSent == sentMoved && Net_RemoteRelayAddress() == kRelayHost,
-		"the relay's name giving another address later: that one is sent nothing, and the first stays the only one let through");
+		"the list giving its relay another address later: that one is sent nothing, and the first stays the only one let through");
 	TellTheHost(kMovedTo, kNetRelayDefaultControlPort, stranger, sizeof(stranger));
 	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "and what comes from the new one is dropped");
 	EndTheGame();
@@ -1888,21 +1874,10 @@ static void TestARunsOneRelayBeyondThisMachine()
 	EndTheGame();
 	datagramsWaiting.clear();
 
-	// Modified 2026-11-09 by Melanikus for the AvP port: given the relay by its address (-dev's test server, relay_list.h), the run knows it by
-	// that address, whatever name the list gives it. The test's relay is at 10.11.12.13 (kRelayHost, as ENet keeps it).
-	Check(Net_AllowOneRemoteRelay("10.11.12.13"), "given the relay by its address");
-	int const sentByAddress = datagramsSent;
-	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kRoute && datagramsSent == sentByAddress + 1 && datagramsSentTo.back().host == kRelayHost &&
-		Net_RemoteRelayAddress() == kRelayHost, "the list's relay at that address is the one, whatever its name");
-	EndTheGame();
-	Check(Net_AllowOneRemoteRelay("10.11.12.14"), "given another address");
-	int const sentElsewhere = datagramsSent;
-	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine && datagramsSent == sentElsewhere && Net_RemoteRelayAddress() == 0,
-		"the list's relay, at another, is left out, and nothing is let through");
-	EndTheGame();
+	// (Removed 2026-11-10 by Melanikus for the AvP port, #175: the cases of a relay given by its address, which every case above is now.)
 
 	// No way towards the relay found: this machine's own address, as before, so the relay just can't be reached
-	Check(Net_AllowOneRemoteRelay("relay.example"), "given the relay again");
+	Check(Net_AllowOneRemoteRelay("10.11.12.13"), "given the relay again");
 	routeTowardsTheRelay = 0;
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().host == kThisMachine, "with no way towards it found, the host stays on this machine's own address");
 	EndTheGame();
@@ -3930,8 +3905,8 @@ static void TestTheGameUsesThis()
 
 // Added 2026-11-09 by Melanikus for the AvP port: THE CHANNEL TO THE RELAY (protocol version 2's draft, step 7; AvP-docs/engine/
 // v2-step7-design.md, agreed with Primary). With the draft:
-// - a relay is used only once its keys have come from the list and match the settings' RelayKey in all 48 bytes, and a relay whose region
-//   has no RelayKey is sent nothing at all;
+// - a relay is used only once its keys have come from the list, which hands over only keys the server's servers.cfg line has proved
+//   (modified 2026-11-10, #175), and until then it's sent nothing at all;
 // - every version 1 message to the relay goes sealed, through the session, and only messages the session opened are read;
 // - a plain version 1 message from the relay, a READY sent again among them, is dropped and never read, and so is a sealed one that
 //   doesn't open;
@@ -3956,9 +3931,7 @@ static void ResetTheStandInChannel()
 	netRelayV2StandIn = NetRelayV2StandIn();
 	netRelayV2StandIn.goReady = true;
 	netRelayV2StandIn.pickerMs = 41;
-	relayKeyRegion = "*";
 	relayKeysGive = kRelayKeysCame;
-	relayKeysWrong = false;
 }
 
 static NetRelayMessage TheRoomOpened()
@@ -4047,38 +4020,18 @@ static void TestTheRelayChannel()
 	NetRelayPlayState play;
 	relayNamed = true;
 
-	// Keys before anything: no RelayKey for the relay's region
-	ResetTheStandInChannel();
-	relayKeyRegion = "";
+	// Keys before anything. Modified 2026-11-10 by Melanikus for the AvP port (#175): the keys come proved by the server's servers.cfg line
+	// (relay_list.h), so there's no RelayKey to hold them to here: the host asks for them, and sends nothing until they've come.
 	int const asksAtFirst = relayKeysAsked;
 	size_t sentFirst = datagramsSentTo.size();
 	int channelFirst = channelSends;
-	Check(HostAGame() == NET_OK, "a game hosts, with no RelayKey for its relay's region");
-	Net_ServiceNetwork();
-	Net_RelayHostStateNow(&news);
-	Check(relayKeysAsked == asksAtFirst && SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && news.what == kNetRelayHostNoRelay,
-		"with no RelayKey for its region, the relay's keys aren't asked for, nothing at all is sent to it, and the game is open on this network only");
-	EndTheGame();
-
-	// Keys that aren't the ones RelayKey names
-	ResetTheStandInChannel();
-	relayKeysWrong = true;
-	sentFirst = datagramsSentTo.size();
-	channelFirst = channelSends;
-	Check(HostAGame() == NET_OK && relayKeysAsked == asksAtFirst + 1, "with a RelayKey, the host asks the list for its relay's keys");
-	Net_ServiceNetwork();
-	Net_RelayHostStateNow(&news);
-	Check(SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && netRelayV2StandIn.pickerStarts == 0 && netRelayV2StandIn.starts == 0
-		&& news.what == kNetRelayHostNoRelay,
-		"keys one bit away from the ones RelayKey names: nothing is sent to the relay, not even the cookie round, and the game is open on this network only");
-	EndTheGame();
 
 	// Keys that haven't come, then keys the list won't give
 	ResetTheStandInChannel();
 	relayKeysGive = kRelayKeysWaiting;
 	sentFirst = datagramsSentTo.size();
 	channelFirst = channelSends;
-	Check(HostAGame() == NET_OK, "a game hosts, its relay's keys still to come");
+	Check(HostAGame() == NET_OK && relayKeysAsked == asksAtFirst + 1, "a game hosts, and asks the list for its relay's keys, which are still to come");
 	Net_ServiceNetwork();
 	enetClock += 1000;
 	Net_ServiceNetwork();
@@ -4290,9 +4243,10 @@ static void TestTheRelayChannel()
 		&& LoggedSince(joinEndFrom, " came in and opened"),
 		"and as the game ends, its log says how many datagrams went out sealed through the relay and how many came in and opened: counts only");
 
-	// A joiner whose game's region has no RelayKey: no join, and nothing sent
+	// A joiner whose relay's keys the list won't give (modified 2026-11-10 by Melanikus for the AvP port, #175: in place of a region with no
+	// RelayKey, which is gone): no join, and nothing sent
 	ResetTheStandInChannel();
-	relayKeyRegion = "";
+	relayKeysGive = kRelayKeysRefused;
 	datagramsWaiting.clear();
 	NumberOfSessionsFound = 0;
 	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
@@ -4300,9 +4254,9 @@ static void TestTheRelayChannel()
 	sentFirst = datagramsSentTo.size();
 	channelFirst = channelSends;
 	int const joinAsks = relayKeysAsked;
-	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && relayKeysAsked == joinAsks
-		&& strstr(Net_RelayJoinFailedWhy(), "RelayKey") != NULL,
-		"a join through a relay whose region has no RelayKey: its keys aren't even asked for, nothing is sent to it, and the player is told why");
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && relayKeysAsked == joinAsks + 1
+		&& strstr(Net_RelayJoinFailedWhy(), "keys") != NULL,
+		"a join through a relay whose keys the list won't give: they're asked for, nothing is sent to the relay, and the player is told why");
 	EndTheGame();
 
 	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's finding 2.1): ONCE A JOINER'S CHANNEL HAS ENDED, its game goes on over B's

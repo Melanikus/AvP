@@ -163,9 +163,9 @@ const char *const kHudsonRefusedSiegeFarWithoutSiege = "siegefar= says where a s
 const char *const kHudsonRefusedSiegeFromTooLong = "siegefrom= has a room name that's too long";
 const char *const kHudsonRefusedSiegeFromCharacter = "siegefrom= has a character a room name can't have here: write a space as _";
 const char *const kHudsonRefusedSiegeFromWithoutSiege = "siegefrom= says where a siege's enemies come from, so it needs siege=";
-const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no server's name";
-const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= has a name longer than a server's can be";
-const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character a server's name can't have here: small letters, digits, - and . only";
+const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no address";
+const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= is longer than an IPv4 address can be";
+const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character an IPv4 address can't have: digits and . only";
 const char *const kHudsonRefusedRemoteRelayWithoutNet = "remoterelay= says which relay a network run may use, so it needs net=";
 const char *const kHudsonRefusedRemoteRelayHostile = "remoterelay= takes a run beyond this machine, where the other end could be anybody's game, so it can't be a hostile= run";
 const char *const kHudsonRefusedStepSeconds = "stepseconds= is a whole number of seconds, from 10 to 600";
@@ -2050,17 +2050,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedRemoteRelayEmpty;
 			}
 
-			if (valueLength > kHudsonLongestRelayName)
+			if (valueLength > kHudsonLongestRelayAddress)
 			{
 				return kHudsonRefusedRemoteRelayTooLong;
 			}
 
-			// A server's name, in small letters. networking.cpp checks it again as one (Relay_IsServerName): nothing on the command line is believed.
+			// An address's digits and dots (modified 2026-11-10 by Melanikus for the AvP port, #175: a servers.cfg line's address, never a
+			// name). networking.cpp reads it again as one plain IPv4 address: nothing on the command line is believed.
 			for (size_t i = 0; i < valueLength; i++)
 			{
 				char const c = value[i];
 
-				if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))
+				if (!((c >= '0' && c <= '9') || c == '.'))
 				{
 					return kHudsonRefusedRemoteRelayCharacter;
 				}

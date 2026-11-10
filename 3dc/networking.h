@@ -318,7 +318,7 @@ size_t const kNetRelayRegionLetters = 16;   // relay_list_text.h's kRelayListReg
 int const kNetRelayHostNone = 0;       // not hosting through a relay
 int const kNetRelayHostFinding = 1;    // timing the relays the list named, to open the game's room on the nearest
 int const kNetRelayHostListed = 2;     // the room is open, and the game is going on the list: region and ms say through which relay, and how far
-int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be looked up: the game is open on this network only
+int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be used: the game is open on this network only
 int const kNetRelayHostRoomGone = 4;   // the room on the relay has gone (why says why), so the game is open on this network instead
 struct NetRelayHostState
 {

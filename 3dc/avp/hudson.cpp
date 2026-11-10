@@ -150,7 +150,7 @@ extern char LevelName[];
 extern void RemovePickedUpObject(STRATEGYBLOCK *objectPtr);
 extern bool NetLoopbackSearch;                                      // networking.cpp
 extern bool NetLoopbackOnly;                                        // networking.cpp
-extern bool Net_AllowOneRemoteRelay(const char *name);              // networking.cpp: the one relay beyond this machine a run with net= may use
+extern bool Net_AllowOneRemoteRelay(const char *address);           // networking.cpp: the one relay beyond this machine a run with net= may use
 extern uint32_t Net_RemoteRelayAddress();                           // networking.cpp: the one address that let through, 0 if none
 extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.cpp
 extern bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft); // online_screens_page.cpp: a player waiting to be let in
@@ -903,10 +903,11 @@ int Hudson_CheckBeforeStarting()
 		// Modified 2026-11-09 by Melanikus for the AvP port: unless the run asks to answer as a player does, with answer= (hudson_plan.h)
 		Net_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);
 
-		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its name (hudson_plan.h)
+		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its address (hudson_plan.h;
+		// modified 2026-11-10 by Melanikus for the AvP port, #175: a servers.cfg line's address, never a name)
 		if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))
 		{
-			WriteResult("remoterelay= isn't a server's name the game takes", kHudsonExitBadArguments);
+			WriteResult("remoterelay= isn't one plain IPv4 address a relay can have", kHudsonExitBadArguments);
 			return kHudsonExitBadArguments;
 		}
 	}

@@ -36,7 +36,7 @@ A port can't be forwarded on any of those. Those players can still join: someone
 
 ## 2. Soon: through the relay
 
-**It isn't live yet.** The relay server's address isn't built into the game until its domain is bought, so for now everything in this section is only for testers.
+**It isn't live yet.** A release names no server yet, so for now everything in this section is only for testers. The game finds its server in **servers.cfg**, a short text file beside the game's `bin` folder, and never anywhere else: not in the settings, not on the command line.
 
 **What it is:** a server of ours that carries a game's packets between the host and each joiner. Nobody has to forward anything, and a player behind carrier-grade NAT can host. It also keeps a **list of games**, so you pick a game instead of typing an address.
 
@@ -55,15 +55,20 @@ A port can't be forwarded on any of those. Those players can still join: someone
   - the game times each relay and opens on the nearest, and its game goes on the list;
   - a host open through the relay hears only the relay, so **friends on your own network join through the list too**;
   - if no relay answers, the game is open on your own network instead, as it always was.
-- **There's nothing to set.** The relay server's name will be built into the game.
+- **There'll be nothing to set.** A release will ship a servers.cfg that already has our server's line in it.
 
-**For testers only.** The settings below are read **only when the game starts with `-dev`**, for a test with a relay server on the same machine. Without `-dev` they're ignored, so a settings file someone shares can't point your game at another server. Note the heading is `[Network]`, not the `[Networking]` that `PortNumber` is under:
+**For testers only.** Until online play is on for players, the game uses servers.cfg **only when it starts with `-dev`**. Without `-dev` it doesn't even read the file, so it reaches no server at all. servers.cfg has one line per server: its address, written plainly, its fingerprint and its name, with spaces between them:
 
 ```
-[Network]
-RelayServer = localhost
-RelayListPort = 8443
+# A line starting with # is a note. The game skips notes and empty lines.
+203.0.113.7  <64 small hex digits>  New York
+127.0.0.1:8443:27500  <64 small hex digits>  My test server
 ```
+
+- **The address** is four numbers with dots, never a name. The server's list of games answers HTTPS on port 443 there, and its relay on port 27500, unless the line gives both ports, as `address:listport:relayport`.
+- **The fingerprint** proves the server. Before the game sends the server anything that matters, it checks the server's keys against the fingerprint, and a server whose keys don't match is sent nothing more. Take a server's line only from whoever runs that server.
+- **The name** is what the game shows, up to 31 letters.
+- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped. For now the game uses the first good line.
 
 Two copies of the game on one PC: start the second with `-dev -secondcopy`, so it keeps its own settings, log and saves in `Documents\My Games\Aliens versus Predator (second copy)`.
 
@@ -90,7 +95,7 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | `net: this game is opening through the nearest relay, N ms away` | the nearest relay, and its round trip | nothing |
 | `net: the relay has opened this game's room, and it's going on the list` | the room is open, and the list is told | nothing |
 | `net: no relay answered, so this game is open on this network only` | no relay answered in time | try again later. Your own network can still join |
-| `net: no relay the list named could be looked up, so this game is open on this network only` | none of the relays the list named has an address the game can use: either their names gave no address, or the address was refused, being private or this PC's own, which only `-dev` allows | check your internet connection. A tester with a relay on this PC or this network needs `-dev` |
+| `net: the relay the list named can't be used, so this game is open on this network only` | the relay at the server's address can't be used, such as one with no port it can take | send us the log |
 | `net: this game won't answer searches on this network while it goes through a relay` | hosting through the relay, a search on your own network won't find the game | nothing. Friends there join from the list, like everyone else |
 | `net: this game's room on the relay is gone, so nobody more can join through it: …` | the room couldn't be kept. The reason follows, one of: "the relay didn't answer" (no room within 10 s), "the relay is too busy just now", "the relay has too many games from this address", "the relay said no, for a reason this version doesn't know", "the relay stopped answering, so the room has gone" (no answer to the room's keeps for 45 s). The game is then open on your own network | host again, to get back on the relay |
 | `net: this game is open on this network instead` | after a lost room, the game is open on your own network | nothing |
@@ -102,12 +107,13 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | Line | What it means | What to do |
 |---|---|---|
 | `Relay list: the game is on the list` and `… off the list` | a host's game was listed, then taken off | nothing |
-| `Relay list: no games from the list, because …` | reading the list failed. The reason is the game's own: "no relay server is set" (normal until it's live), "the relay server couldn't be reached", "… took too long to answer", "… certificate wasn't accepted", "… said no", or a reason the list's answer was refused, such as "the answer has more after its end" | for "couldn't be reached" or "took too long", check your connection. Send us any other |
-| `Relay list: the relay server's certificate wasn't accepted` | Windows didn't accept the server's HTTPS certificate, so the game refused to talk to it | check your PC's date and time. If those are right, tell us: the game never talks to a server Windows doesn't trust |
-| `Relay list: the relay's name looked up to …, which only -dev allows` (and the other "looked up to" lines) | a relay's name led to an address that can't be a relay out on the internet, such as your own network's, so that relay is left out | nothing. That's the protection working |
-| `Relay list: a relay's name gave no address, so that relay is left out` | a relay's name couldn't be looked up | check your connection |
-| `Relay list: the list of relays was refused, …` | the list's answer wasn't what the game expects, so it keeps the last good one | send us the log |
-| `Relay list: the settings' RelayServer is for tests only, with -dev, so the game's own is used` | the settings name a relay server, but the game started without `-dev`, so they're ignored | nothing, unless you're testing |
+| `Relay list: no games from the list, because …` | reading the list failed. The reason is the game's own: "no relay server is set" (normal until it's live: no `-dev`, or no good line in servers.cfg), "the relay server couldn't be reached", "… took too long to answer", "… secure connection couldn't be made", "… said no", "the relay server's keys don't match its line in servers.cfg, …", or a reason the list's answer was refused, such as "the answer has more after its end" | for "couldn't be reached" or "took too long", check your connection. For the keys, see below. Send us any other |
+| `Relay list: the server is servers.cfg line N` (with `, on this PC` or `, on this network` for a server at home) | which line of servers.cfg the game uses | nothing |
+| `Relay list: servers.cfg line N isn't used: …` | that line was skipped. The reason says what's wrong with it, such as "its fingerprint isn't 64 small hex digits", "its address can't be a server's", or "another line has the same name, so neither is used". The line itself is never written in the log | fix that line, or get it again from whoever runs the server |
+| `Relay list: servers.cfg isn't used: …`, or `Relay list: there's no servers.cfg in the game's folder, …` (and the other lines about finding the file) | the whole file was skipped, such as one over 16 KB or of more than 64 lines, or the game couldn't find or read it | put a good servers.cfg beside the game's `bin` folder |
+| `Relay list: the relay server's keys match its line in servers.cfg` | the server proved it's the one the line names | nothing |
+| `Relay list: the relay server's keys don't match its line in servers.cfg, so nothing more is sent to it` | the server at that address isn't the one the line names: the line is wrong or old, or something else answered at that address. Nothing more goes to it until the game restarts | get the line again from whoever runs the server. If it's right, tell them |
+| `Relay list: the relay server showed another key than the one that matched its line, so nothing was sent to it` | after it matched, the server showed another key on a later call, so that call was dropped before anything went | tell whoever runs the server, and send us the log |
 | `Relay list: couldn't start, …` | the game couldn't start its list calls | send us the log |
 | `Relay list: N earlier piece(s) of news came too fast to keep` | some list lines were left out | nothing |
 | `Relay list: the games page looks for games again` | Enter on the page of games found, after it had stopped looking | nothing |

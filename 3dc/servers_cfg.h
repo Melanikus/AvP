@@ -27,8 +27,8 @@
 // chooses on the day, so a lapsed name would send every player who has the line somewhere else (the owner's ruling, 2026-11-09). A server
 // that moves gets a new line. Some addresses can never be a server's: "this network" (0/8), broadcast, multicast, the reserved block
 // (240/4), and a carrier's own network (100.64/10), which isn't the player's network. The player's own machine (127/8) and their own
-// network (10/8, 172.16/12, 192.168/16, 169.254/16) may be, for a server run at home, and the game says so before it uses the line. (The
-// file a release ships has none of those: tools/check-online-play.ps1 refuses them there.)
+// network (10/8, 172.16/12, 192.168/16, 169.254/16) may be, for a server run at home, and the game is to say so before it uses the line
+// (#175's yes-screen). The file a release ships is to have none of those: tools/check-online-play.ps1, with #175's last part, refuses them.
 //
 // READ AS HOSTILE (AVP Tao 3): anyone can write this file, and it passes through a download. So:
 //   - a file over 16 KB, or of more than 64 lines, is refused whole: nothing in it is used;
@@ -42,7 +42,8 @@
 //     passed off as another, and neither of the two is guessed at;
 //   - every refusal is told with the line's number and a reason in the game's own words, never what the line said, which could be
 //     anything at all (ServersCfg_LineWords), in the log and on the screen, so someone following an instruction can see what to fix;
-//   - a line that passes is still never used until the player has said yes to it (relay_list.cpp): reading it contacts nothing.
+//   - reading a line contacts nothing. Until #175's yes-screen, where the player says yes to a line before it's used, only a game started
+//     with -dev uses one at all (relay_list.cpp's Relay_ServerName), so a player's game reaches no server.
 // Nothing in a line is ever run, followed or used for anything but what's written above.
 
 #ifndef SERVERS_CFG_H

@@ -3036,22 +3036,12 @@
 			]
 		},
 		{
-			"name": "the relay's name may point anywhere later",
+			"name": "a relay at any address is let through",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
-					"to": "\tif (false)\n\t{"
-				}
-			]
-		},
-		{
-			"name": "a relay by any name is let through",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
-					"to": ": false)"
+					"from": "if (remoteRelayGiven == 0 || relay.address != remoteRelayGiven)",
+					"to": "if (remoteRelayGiven == 0)"
 				}
 			]
 		},
@@ -3071,16 +3061,6 @@
 				{
 					"file": "3dc/networking.cpp",
 					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a run given the relay by address knows it by name only",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "givenAnAddress ? relay.address != givenAsENetKeepsIt : ",
 					"to": ""
 				}
 			]
@@ -3142,26 +3122,6 @@
 					"file": "3dc/networking.cpp",
 					"from": "else if (from.host == relayAddress.host && !draft)",
 					"to": "else if (from.host == relayAddress.host)"
-				}
-			]
-		},
-		{
-			"name": "the relay's keys aren't held to RelayKey",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!RelayList_RelayKeyFingerprint(relayV2Region, fingerprint) || !NetRelayKeys_AreThese(&relayV2Keys, fingerprint))",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "a relay's keys are asked for with no RelayKey for its region",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!region || !RelayList_RelayKeyFingerprint(region, fingerprint))",
-					"to": "if (!region)"
 				}
 			]
 		},
@@ -3512,6 +3472,36 @@
 					"file": "3dc/networking.cpp",
 					"from": "\trelayEndToEndSealed += sent < 0 ? 0 : 1;\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the address given is taken in the wrong byte order",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "uint32_t const asENetKeepsIt = ((given >> 24) & 0xFFu) | ((given >> 8) & 0xFF00u) | ((given << 8) & 0xFF0000u) | ((given << 24) & 0xFF000000u);",
+					"to": "uint32_t const asENetKeepsIt = given;"
+				}
+			]
+		},
+		{
+			"name": "everyone's address is taken for one relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (asENetKeepsIt == ENET_HOST_ANY || asENetKeepsIt == ENET_HOST_BROADCAST)",
+					"to": "if (asENetKeepsIt == ENET_HOST_ANY)"
+				}
+			]
+		},
+		{
+			"name": "any address is taken for one relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (asENetKeepsIt == ENET_HOST_ANY || asENetKeepsIt == ENET_HOST_BROADCAST)",
+					"to": "if (asENetKeepsIt == ENET_HOST_BROADCAST)"
 				}
 			]
 		}

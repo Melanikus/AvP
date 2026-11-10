@@ -203,7 +203,7 @@ namespace
 		bool const carriersNetwork = (value & 0xFFC00000u) == 0x64400000u;
 		ServersCfgPlace place = kServersCfgOnTheInternet;
 
-		switch (RelayList_AddressRefusal(value, false))
+		switch (RelayList_AddressRefusal(value))
 		{
 			case kRelayAddressUsable:
 				place = kServersCfgOnTheInternet;

@@ -148,7 +148,8 @@ Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
 # The servers the game plays online through (#175), beside bin, where the game looks for them (3dc/servers_cfg_file.h). The one at the
-# repository's root is the release's, held to its rules by tools/check-online-play.ps1. Added 2026-11-10 by Melanikus for the AvP port.
+# repository's root is the release's (with #175's last part, tools/check-online-play.ps1 holds it to its rules; until then it names no
+# server). Added 2026-11-10 by Melanikus for the AvP port.
 if (-not (Test-Path -LiteralPath 'servers.cfg' -PathType Leaf)) { throw 'servers.cfg is missing from the repository, so the package would have no servers file' }
 Copy-Item -LiteralPath 'servers.cfg' -Destination (Join-Path $OutFolder 'servers.cfg')
 

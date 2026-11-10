@@ -2,8 +2,9 @@
 // each region's relay through it. Written 2026-11-08 by Melanikus for the AvP port.
 //
 // relay_shared.h says what the relay is. The list is HTTPS, made with WinHTTP, Windows' own, so the game needs no library of its own for
-// it, and Windows checks the list's certificate the way it does for any program. The list's name is one setting (Relay_ServerName).
-// What goes back and forth is in relay_list_text.h, which reads the answers as hostile.
+// it. Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is a line of servers.cfg in the game's folder, its address and
+// one fingerprint for both its keys (servers_cfg.h), and the list is trusted by that alone: relay_list.cpp's top says how. What goes back
+// and forth is in relay_list_text.h, which reads the answers as hostile.
 //
 // Every call here returns at once. The HTTPS is done on a thread of its own, so the game never waits for the network, and what it says
 // comes back to the game's own thread, through RelayList_Relays and RelayList_FoundGames. All of these are called from the game's main
@@ -19,32 +20,14 @@
 
 struct SessionDescription;
 
-// The list's name: the one built into the game, or, only with -dev, [Network] RelayServer from the settings, checked as a host name
-// (Relay_IsServerName). Empty when there's none, and then there's no relay: hosting and joining are as they are without one.
+// The server's name, as people see it: its servers.cfg line's (servers_cfg.h). Empty when there's none, and then there's no relay: hosting
+// and joining are as they are without one. Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing in AliensVsPredator.cfg names a
+// server any more. Until protocol version 2 is on for players, there's a server only with -dev, so a player's game reaches none.
 //
-// Both of these read their answer the first time they're asked, and keep it for the whole run. So they must never be asked before
-// winmain.cpp has read -dev from the command line, or -dev would be missed for the run. Only the menus and hosting ask, long after;
-// relay_list_test checks that winmain.cpp itself never does.
+// servers.cfg is read the first time this is asked, and kept for the whole run, and -dev is read with it. So it must never be asked before
+// winmain.cpp has read -dev from the command line. Only the menus and hosting ask, long after; relay_list_test checks that winmain.cpp
+// itself never does. The screens make the name safe before drawing it, as they do anything from outside the game.
 const char *Relay_ServerName(void);
-
-// The list's HTTPS port: 443, or, only with -dev, [Network] RelayListPort, as a test on one machine needs. A setting that isn't a whole
-// number from 1 to 65535 is written in the log, and 443 is used.
-int Relay_ListPort(void);
-
-// Added 2026-11-09 by Melanikus for the AvP port: a test server reached with nothing changed on the tester's computer. Only with -dev,
-// read with the two above, and each kept for the whole run:
-//   - RelayServer may be one plain IPv4 address (RelayList_ReadIPv4) instead of a name. Digits and dots that aren't one are refused.
-//   - [Network] RelayListPin: the SHA-256 of the list's own certificate (RelayList_ReadPin). With a pin, every call to the list checks the
-//     certificate it's given against the pin before a byte of the call is sent, and only then lets Windows pass a certificate it doesn't
-//     know, or one for another name (relay_list.cpp, Call). A pin that isn't 64 hex digits means no list at all.
-//   - With an address and a pin, every relay the list names is taken to be at that same address: a test server runs its list and its
-//     relay on one machine, and the relay's name may be one no name service knows.
-// Without -dev these settings are ignored, with a line in the log, and the list is called as it always was.
-bool Relay_ListIsPinned(void);
-
-// The name people see for the relay server, from -dev's [Network] RelayServerName (RelayList_IsShownName), for the online screens to show
-// instead of a region's id; "" when there's none, or it isn't one. Like the region, the screen makes it safe before drawing it.
-const char *Relay_ServerShownName(void);
 
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
@@ -76,14 +59,14 @@ void RelayList_HostRoomClosed(void);
 // never used.
 void RelayList_BeforeQuitting(unsigned int mostMs);
 
-// ---- The relays: where each region's relay is
+// ---- The relay: the server's own (modified 2026-11-10 by Melanikus for the AvP port, #175)
 
-// Asks the list for its relays. The answer comes a moment later. The menus ask when the host page and the Find games page open.
+// Checks the server against its servers.cfg line, if it hasn't been yet (relay_list.cpp, TRUSTED BY ITS KEY ALONE). The answer comes a
+// moment later. The menus ask when the host page and the Find games page open.
 void RelayList_FindRelays(void);
 
-// The relays from the last good answer, into relays, which has room for kRelayListMostRelays. False while there's been no good answer.
-// Each one's name has been looked up already, on the list's own thread, so the game's thread never waits for that: only the relays whose
-// name gave an address that can be a relay's are here (RelayList_AddressRefusal), each with its address.
+// The server's one relay, into relays (room for kRelayListMostRelays): at its line's address and relay port, with the region the server's
+// check gave. False while the server hasn't been checked and found good. Nothing is looked up by name.
 bool RelayList_Relays(RelayListRelay *relays, int *count);
 
 // ---- Finding games. The menus call these.
@@ -108,20 +91,20 @@ bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentity
 // the list's). False while there's no new answer. The log gets only those words: never the name, the key, the fingerprint or the code.
 bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why);
 // Modified 2026-11-09 by Melanikus for the AvP port: for the page of games found's failure screen. Whether a why from RelayList_FoundGames
-// means the game never got a connection to the list's server (it couldn't be reached, took too long, its certificate wasn't accepted, or
+// means the game never got a connection to the list's server (it couldn't be reached, took too long, its secure connection failed, or
 // the call couldn't start), rather than that it connected and couldn't fetch the games (an answer too big, a no, or an answer refused).
 // It compares the why with this file's own words, never what anybody sent; NULL and "no relay server is set" are neither, so false.
 bool RelayList_WhyIsNoConnection(const char *why);
 
 // ---- A relay's keys, for protocol version 2's draft (step 7). Added 2026-11-09 by Melanikus for the AvP port.
 //
-// Handshake A proves a relay to the game only with the relay's real static public keys. Until there's a signed directory of them, the
-// game asks the list server for them (GET /v1/relay-keys, CRYPTO.md 12.1) and networking.cpp holds them to a fingerprint the tester types
-// into the -dev settings (RelayKey=<region>:<96 hex digits>, net_relay_keys.h) before anything goes to that relay. Only the v2 draft asks,
-// and only with a list server set, which only -dev can do: a player's game never asks.
+// Handshake A proves a relay to the game only with the relay's real static public keys. Modified 2026-11-10 by Melanikus for the AvP port
+// (#175): they're the keys the server's check took (GET /v1/relay-keys, CRYPTO.md 12.1), proved by the server's servers.cfg line together
+// with the list's own key (net_server_fingerprint.h), before anything else is sent to the server.
 
-// Asks the list for a region's relay's keys. The answer comes a moment later, through RelayList_RelayKeysCame. False if the region isn't
-// one or the list can't start (no server is set).
+// Asks for the keys of the server's relay, the one in region (RelayList_Relays gives it). The answer comes a moment later, through
+// RelayList_RelayKeysCame: the keys, or a refusal if the server isn't checked and good, or region isn't its relay's. False if the region
+// isn't one or the list can't start (no server is set).
 bool RelayList_AskForRelayKeys(const char *region);
 
 // What came for the newest asking: waiting, the keys (into p384 and kem), or refused, with why in fixed words of the game's own. p384 and
@@ -130,9 +113,5 @@ int const kRelayKeysWaiting = 0;
 int const kRelayKeysCame = 1;
 int const kRelayKeysRefused = 2;
 int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why);
-
-// The settings' RelayKey fingerprint for a region (all 48 bytes): false, with fingerprint all 0, without -dev, with no setting or one that
-// isn't one, or for another region than the one the setting names.
-bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes]);
 
 #endif
