@@ -609,7 +609,6 @@ namespace
 	{
 		RelayListGame *games;
 		int ourVersion;
-		bool hostIds;   // whether each game carries its host's id: only a v2 draft's do (RelayList_ReadGames)
 	};
 
 	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
@@ -638,14 +637,7 @@ namespace
 			{ "id", kKindHostId, 0, 0, 0, NULL, NULL, game.hostId }
 		};
 
-		// Modified 2026-11-09 by Melanikus for the AvP port: the host's id is the last rule, and only a v2 draft's games have it. Without,
-		// the rules are version 1's, so a game is read exactly as version 1 reads it, and its id is left all 0.
-		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0])) - (g.hostIds ? 0 : 1);
-
-		if (!g.hostIds)
-		{
-			memset(game.hostId, 0, sizeof(game.hostId));
-		}
+		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0]));
 
 		RelayListRefusal const why = ReadEntry(r, rules, ruleCount);
 
@@ -953,12 +945,12 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 	return "the answer was refused for a reason with no words";
 }
 
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool hostIds, RelayListGame *games, int *count)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
 {
 	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
 	*count = 0;
 	int n = 0;
-	GamesInto into = { games, ourVersion, hostIds };
+	GamesInto into = { games, ourVersion };
 	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
 
 	if (why == kRelayListAccepted)
@@ -1044,7 +1036,7 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char re
 	return why;
 }
 
-bool RelayList_ListingBody(const RelayListListing &l, bool withHostId, const uint8_t *owner, char *body, size_t room)
+bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
 {
 	Writer w = { body, room, 0, room > 0 };
 
@@ -1057,7 +1049,7 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withHostId, const uin
 		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
 		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
 		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
-		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || (withHostId && !IsAHostId(l.hostId)))
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || !IsAHostId(l.hostId))
 	{
 		return false;
 	}
@@ -1100,13 +1092,9 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withHostId, const uin
 	AddName(w, "version");
 	AddNumber(w, static_cast<unsigned long long>(l.version));
 
-	// Only a v2 draft's listing carries the host's id (modified 2026-11-09 by Melanikus for the AvP port): version 1's has no such field.
-	// It's "id", all 48 bytes, since 2026-11-10 (SERVER-BLOCKERS item 6).
-	if (withHostId)
-	{
-		AddName(w, "id");
-		AddHostId(w, l.hostId);
-	}
+	// The host's id (modified 2026-11-09 by Melanikus for the AvP port): "id", all 48 bytes, since 2026-11-10 (SERVER-BLOCKERS item 6)
+	AddName(w, "id");
+	AddHostId(w, l.hostId);
 
 	AddName(w, "hostMs");
 	AddNumber(w, static_cast<unsigned long long>(l.hostMs));

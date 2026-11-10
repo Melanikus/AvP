@@ -171,10 +171,9 @@ const char *RelayList_RefusalWords(RelayListRefusal why);
 
 // Reads a GET /v1/games answer. games has room for kRelayListMostGames. ourVersion is the version that was asked for. On a refusal,
 // count is 0 and nothing in games is to be used.
-// Modified 2026-11-09 by Melanikus for the AvP port: hostIds says whether the games carry their host's id, which only a v2 draft's do
-// (networking.h, Net_V2DraftOn). Then a game without one is refused. Without it, the answer is read as version 1's, with no id field, and
-// each game's id is left all 0.
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool hostIds, RelayListGame *games, int *count);
+// Modified 2026-11-09 by Melanikus for the AvP port: every game carries its host's id, and a game without one is refused. (Modified
+// 2026-11-10, #175 PR 3a: version 1's answer, with no id field, went with version 1.)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count);
 
 // Reads a POST's answer, {"owner"}: the 16 bytes a host proves its listing with afterwards
 RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes]);
@@ -194,10 +193,9 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char re
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
-// With withHostId (a v2 draft's listing, Net_V2DraftOn), a listing with no host id, or one that's all 0 (no identity was made for this
-// run), is one of those. Without it (modified 2026-11-09 by Melanikus for the AvP port), the body is version 1's, with no id field at
-// all, whatever the listing holds.
-bool RelayList_ListingBody(const RelayListListing &listing, bool withHostId, const uint8_t *owner, char *body, size_t room);
+// A listing with no host id, or one that's all 0 (no identity was made for this run), is one of those. (Modified 2026-11-10 by Melanikus for
+// the AvP port, #175 PR 3a: version 1's body, with no id field, went with version 1.)
+bool RelayList_ListingBody(const RelayListListing &listing, const uint8_t *owner, char *body, size_t room);
 
 // The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
 bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room);

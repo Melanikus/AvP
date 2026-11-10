@@ -2023,17 +2023,17 @@ static void TestTourAndSharedMachine()
 		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine\nif ($serversRefusal) { Stop-Here $serversRefusal }")
 			&& ComesBefore(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine", "$process = Start-Process -FilePath $exePath"),
 			"and each game is told the relay's address (remoterelay=), and has the server's one line in its servers.cfg before it starts");
-		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
-		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
-		// with the list on this machine pinned, it's reached by its address
-		Check(Has(oneRun, "if ($NetV2) { $relaySwitch += ' -netv2' }") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
+		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair through the relay. The joiner is the second copy (before -hudson, as
+		// the game's own switches go), so the two have their own identity each. Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a):
+		// -NetV2 and the game's -netv2 went with the v2 draft's switch, as every relay game is version 2
+		Check(!Has(oneRun, "NetV2") && !Has(oneRun, "-netv2") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
 			&& ComesBefore(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }", "$arguments = \"-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson"),
-			"SOURCE: -NetV2 and -SecondCopy are the game's own switches, -netv2 and -secondcopy, before -hudson");
+			"SOURCE: -SecondCopy is the game's own switch, -secondcopy, before -hudson, and there's no -NetV2 any more");
 		// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is the run's one servers.cfg line, so no relay setting is written
 		Check(!Has(oneRun, "RelayKey = ") && !Has(oneRun, "RelayServer = ") && !Has(oneRun, "RelayListPin = ") && !Has(oneRun, "[Network]")
 			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
 			"SOURCE: no relay setting goes in the run's settings, and the second copy's files are read from its own folder");
-		Check(Has(oneRun, "if ($Relay -and -not $ServersLine) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
+		Check(Has(oneRun, "if ($Relay -and -not $ServersLine) { Stop-Here") && Has(pairScript, "if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }")
 			&& Has(pairScript, "$said = Get-HudsonServersLineRefusal $case[0] $case[1]") && Has(pairScript, "$said = Get-HudsonRemoteRelayRefusal $case[0]"),
 			"SOURCE: -Relay needs the server's line, the pair's joiner is always the second copy, and -CheckTheWatch tries every refusal of -RemoteRelay and -ServersLine");
 		// Added 2026-11-10 by Melanikus for the AvP port (#175): a run writes servers.cfg only into a copy made for Hudson's runs (PO's

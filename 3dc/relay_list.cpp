@@ -211,8 +211,7 @@ namespace
 		uint8_t lineFingerprint[kNetServerFingerprintBytes];
 		uint32_t relayAddress;
 		int relayPort;
-		int version;                     // the version this copy speaks (Net_OurVersion), whose games it lists and asks for
-		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a host's id
+		int version;                     // the version this copy speaks (kMultiplayerVersion), whose games it lists and asks for
 
 		// The server's key (added 2026-11-10, #175). keyState is the list's thread's to set, and anyone's to read under the lock. Once
 		// it's good, the key that matched and the relay's region and keys are set once, and never changed.
@@ -224,7 +223,7 @@ namespace
 		uint8_t relayP384[kNetCryptoP384PublicBytes];
 		uint8_t relayKem[kNetPqKemPublicBytes];
 
-		// A relay's keys, asked for by the v2 draft (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
+		// A relay's keys, asked for by networking.cpp (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
 		// has a number, and an answer says which asking it's for, so an answer to an older one is never taken for the newest.
 		bool keysWanted;
 		char keysRegion[kRelayListRegionLetters + 1];
@@ -739,7 +738,7 @@ namespace
 		// A new listing is POSTed. If a PUT finds the list has forgotten it (404), it's POSTed again, once.
 		for (int tries = 0; tries < 2; tries++)
 		{
-			if (!RelayList_ListingBody(send, shared->v2Draft, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
+			if (!RelayList_ListingBody(send, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
 			{
 				Tell("the game's own words couldn't be made into a listing, so it isn't on the list");
 				return false;
@@ -835,7 +834,7 @@ namespace
 		}
 		else if (a.worked)
 		{
-			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, shared->v2Draft, gamesRead, &count);
+			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, gamesRead, &count);
 			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
 		}
 
@@ -934,7 +933,7 @@ namespace
 			bool const find = shared->findWanted;
 			shared->findWanted = false;
 
-			// A relay's keys, for the v2 draft (added 2026-11-09 by Melanikus for the AvP port)
+			// A relay's keys, for the channel to the relay (added 2026-11-09 by Melanikus for the AvP port)
 			bool const keys = shared->keysWanted;
 			shared->keysWanted = false;
 			char keysRegion[kRelayListRegionLetters + 1];
@@ -1050,10 +1049,9 @@ namespace
 		made->relayPort = line->relayPort;
 		made->keyState = kKeyNotChecked;
 
-		// The version and the v2 draft are fixed for the run, so they're read once here, on the main thread (added 2026-11-09 by Melanikus
-		// for the AvP port; networking.h)
-		made->version = Net_OurVersion();
-		made->v2Draft = Net_V2DraftOn();
+		// The version is fixed for the run, so it's read once here, on the main thread (added 2026-11-09 by Melanikus for the AvP port;
+		// networking.h)
+		made->version = kMultiplayerVersion;
 
 		if (!made->wake || !made->endDone)
 		{
@@ -1165,9 +1163,9 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 		return;
 	}
 
-	// A listing without the host's id would send its joiners to a host they can't check, so it isn't sent at all. Modified 2026-11-09 by
-	// Melanikus for the AvP port: only with the v2 draft (networking.h). Version 1's listing has no id.
-	if (Net_V2DraftOn() && !hostIdentityGiven)
+	// A listing without the host's id would send its joiners to a host they can't check, so it isn't sent at all (modified 2026-11-10 by
+	// Melanikus for the AvP port, #175 PR 3a: every listing, since version 1's, which had no id, went).
+	if (!hostIdentityGiven)
 	{
 		LogString("Relay list: this run has no identity to show joiners yet, so the game isn't put on the list");
 		return;

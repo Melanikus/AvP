@@ -1,7 +1,7 @@
 // The game's side of the relay (AVPx Dedicated Server): the messages it sends and hears, and what a host and a joiner do with them.
 // Written 2026-11-08 by Melanikus for the AvP port.
 // Modified 2026-11-08 by Melanikus for the AvP port: PROTOCOL.md 7014de1, a relay in each region: a message's pass, the rule that every field
-// a kind of message doesn't use is 0, and the echoes a host times the relays with (NetRelayPicker).
+// a kind of message doesn't use is 0, and the echoes a host timed the relays with (version 1's, gone since #175 PR 3a, 2026-11-10).
 // Modified 2026-11-08 by Melanikus for the AvP port: a pass time is at most 2^53 - 1, as the relay reads it (its shared test vectors).
 //
 // WHY THERE'S A RELAY. Many players can't be reached from the internet at all: their provider puts many homes behind one address
@@ -10,8 +10,9 @@
 // relay, and the relay passes the game's own packets between the two, unread and unchanged. How it all works, every message, field and limit:
 // PROTOCOL.md in the AVPx-Dedicated-Server repository (at 7014de1, which this follows). That file is the single source both sides read.
 //
-// WHAT THIS FILE IS. Only the relays' own little messages, and three "state machines": the one that picks a relay (NetRelayPicker), the
-// host's (NetRelayHost) and the joiner's (NetRelayJoiner). A state machine here is a small object that is told the time and what arrived,
+// WHAT THIS FILE IS. Only the relays' own little messages, and two "state machines": the host's (NetRelayHost) and the joiner's
+// (NetRelayJoiner). (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: the one that picked a relay with plain echoes,
+// NetRelayPicker, went with version 1. Version 2 sends these machines' messages only sealed, through the channel, net_relay_v2.h.) A state machine here is a small object that is told the time and what arrived,
 // and says what to send. It never sends or reads anything itself. networking.cpp does that, from the game's own network socket, so a relay
 // sees each player's game through the same door in their router that the game itself uses. Nothing here knows about the game, so
 // tests/net_relay_test.cpp can try every case.
@@ -369,8 +370,8 @@ inline int NetRelay_RefusedWhy(uint16_t number)
 	return number >= kNetRelayRefusedNoGame && number <= kNetRelayRefusedTooMany ? number : kNetRelayRefusedOther;
 }
 
-// WHAT A STATE MACHINE WANTS SENT: a message, to one of a relay's ports. relay says which relay, for the one that picks a relay
-// (NetRelayPicker); the host and the joiner each talk to one relay only, and give 0.
+// WHAT A STATE MACHINE WANTS SENT: a message, to one of a relay's ports. relay says which relay; the host and the joiner each talk to one
+// relay only, and give 0.
 struct NetRelaySend
 {
 	uint8_t relay;
@@ -404,221 +405,6 @@ int const kNetRelayBadPort = 3;        // a port that can't be a joiner's: 0, or
 int const kNetRelayNoRoom = 4;         // NEW_JOINER with the host's hellos already full
 int const kNetRelayNoPass = 5;         // HOST_OPENED or HOST_KEPT without a pass, which every one has
 int const kNetRelayUnusedKinds = 6;
-
-// THE ONE THAT PICKS A RELAY, before the host opens its room (PROTOCOL.md, section 2, Round trips): kNetRelayEchoes echoes to each relay,
-// kNetRelayEchoEveryMs apart, each with 16 fresh random bytes; each relay's lowest round trip counts, a relay that doesn't answer within
-// kNetRelayEchoAnswerWithinMs is left out, and the one with the lowest time wins. Only an answer from that relay's control port, carrying
-// bytes this sent to that relay, counts: anything else is taken and counted.
-class NetRelayPicker
-{
-public:
-	NetRelayPicker() { Reset(); }
-
-	void Reset()
-	{
-		count = 0;
-		started = false;
-		startedAt = 0;
-		echoesSent = 0;
-		memset(echoSentAt, 0, sizeof(echoSentAt));
-		memset(controlPorts, 0, sizeof(controlPorts));
-		memset(randomBytes, 0, sizeof(randomBytes));
-		memset(answered, 0, sizeof(answered));
-		memset(bestMs, 0, sizeof(bestMs));
-		memset(hasTime, 0, sizeof(hasTime));
-		sendCount = 0;
-		sendsDropped = 0;
-		memset(notMessages, 0, sizeof(notMessages));
-		memset(unused, 0, sizeof(unused));
-	}
-
-	// Starts timing relayCount relays (at most kNetRelayMostRelays), each at its control port. random holds 16 fresh random bytes for each
-	// echo, kNetRelayEchoes of them to each relay, relay by relay. The first echo to each goes at once. False, and nothing sent, for none.
-	bool Start(size_t relayCount, const uint16_t *ports, const uint8_t *random, uint32_t now)
-	{
-		Reset();
-
-		if (relayCount == 0 || relayCount > kNetRelayMostRelays || !ports || !random)
-		{
-			return false;
-		}
-
-		count = relayCount;
-		memcpy(controlPorts, ports, count * sizeof(uint16_t));
-		memcpy(randomBytes, random, count * kNetRelayEchoes * kNetRelaySecretBytes);
-		started = true;
-		startedAt = now;
-		SendEchoes(now);
-		return true;
-	}
-
-	// A packet from relay number relay's address, from its port fromPort. True if it was that relay's message, from its control port.
-	bool Hear(size_t relay, uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
-	{
-		if (!started || relay >= count || fromPort != controlPorts[relay])
-		{
-			return false;
-		}
-
-		NetRelayMessage m;
-		int const why = NetRelay_Read(data, size, &m);
-
-		if (why != kNetRelayIsAMessage)
-		{
-			notMessages[why]++;
-			return true;
-		}
-
-		if (m.type != kNetRelayEchoBack)
-		{
-			return Unused(kNetRelayNotForNow);
-		}
-
-		// Its count says which echo it answers: 1 for the first. It has to be one sent already, not answered yet, with that echo's bytes.
-		if (m.number < 1 || m.number > echoesSent || answered[relay][m.number - 1]
-			|| !NetRelay_SameSecret(m.secret, randomBytes[relay][m.number - 1]))
-		{
-			return Unused(kNetRelayWrongSecret);
-		}
-
-		answered[relay][m.number - 1] = true;
-		uint32_t const took = now - echoSentAt[m.number - 1];
-
-		if (took <= kNetRelayEchoAnswerWithinMs && (!hasTime[relay] || took < bestMs[relay]))
-		{
-			bestMs[relay] = took;
-			hasTime[relay] = true;
-		}
-
-		return true;
-	}
-
-	// The time has moved on: the next echoes, when it's their time
-	void Tick(uint32_t now)
-	{
-		if (!started)
-		{
-			return;
-		}
-
-		while (echoesSent < kNetRelayEchoes && now - startedAt >= static_cast<uint32_t>(echoesSent) * kNetRelayEchoEveryMs)
-		{
-			SendEchoes(now);
-		}
-	}
-
-	// Every echo sent, and the last one's time to be answered gone by
-	bool Done(uint32_t now) const
-	{
-		return started && echoesSent == kNetRelayEchoes && now - echoSentAt[kNetRelayEchoes - 1] >= kNetRelayEchoAnswerWithinMs;
-	}
-
-	// The relay with the lowest round trip, or -1 if none answered in time; and that time, in ms
-	int Best() const
-	{
-		int best = -1;
-
-		for (size_t i = 0; i < count; i++)
-		{
-			if (hasTime[i] && (best < 0 || bestMs[i] < bestMs[best]))
-			{
-				best = static_cast<int>(i);
-			}
-		}
-
-		return best;
-	}
-
-	uint32_t BestMs() const
-	{
-		int const best = Best();
-		return best < 0 ? 0 : bestMs[best];
-	}
-
-	// One relay's own lowest round trip, in ms: false if it hasn't one (no echo answered in time, or no such relay). For the joiner's ping
-	// column (networking.cpp, Net_JoinerMsToRelay), which times every relay.
-	bool RelayMs(size_t relay, uint32_t *ms) const
-	{
-		if (relay >= count || !hasTime[relay] || !ms)
-		{
-			return false;
-		}
-
-		*ms = bestMs[relay];
-		return true;
-	}
-
-	size_t TakeSends(NetRelaySend *out, size_t most)
-	{
-		size_t const n = sendCount < most ? sendCount : most;
-
-		for (size_t i = 0; i < n; i++)
-		{
-			out[i] = sends[i];
-		}
-
-		for (size_t i = n; i < sendCount; i++)
-		{
-			sends[i - n] = sends[i];
-		}
-
-		sendCount -= n;
-		return n;
-	}
-
-	uint32_t NotMessages(int why) const { return why >= 0 && why < kNetRelayNotKinds ? notMessages[why] : 0; }
-	uint32_t UnusedMessages(int why) const { return why >= 0 && why < kNetRelayUnusedKinds ? unused[why] : 0; }
-	uint32_t SendsDropped() const { return sendsDropped; }
-
-private:
-	// One echo to every relay: the next of kNetRelayEchoes. Its round trip is timed from now.
-	void SendEchoes(uint32_t now)
-	{
-		echoSentAt[echoesSent] = now;
-
-		for (size_t i = 0; i < count; i++)
-		{
-			NetRelayMessage m = NetRelay_Message(kNetRelayEcho);
-			memcpy(m.secret, randomBytes[i][echoesSent], kNetRelaySecretBytes);
-			m.number = static_cast<uint16_t>(echoesSent + 1);
-
-			if (sendCount == kNetRelayMostSends)
-			{
-				sendsDropped++;
-				continue;
-			}
-
-			sends[sendCount].relay = static_cast<uint8_t>(i);
-			sends[sendCount].port = controlPorts[i];
-			NetRelay_Write(m, sends[sendCount].bytes);
-			sendCount++;
-		}
-
-		echoesSent++;
-	}
-
-	bool Unused(int why)
-	{
-		unused[why]++;
-		return true;
-	}
-
-	size_t count;
-	bool started;
-	uint32_t startedAt;
-	size_t echoesSent;
-	uint32_t echoSentAt[kNetRelayEchoes];
-	uint16_t controlPorts[kNetRelayMostRelays];
-	uint8_t randomBytes[kNetRelayMostRelays][kNetRelayEchoes][kNetRelaySecretBytes];
-	bool answered[kNetRelayMostRelays][kNetRelayEchoes];
-	uint32_t bestMs[kNetRelayMostRelays];
-	bool hasTime[kNetRelayMostRelays];
-	NetRelaySend sends[kNetRelayMostSends];
-	size_t sendCount;
-	uint32_t sendsDropped;
-	uint32_t notMessages[kNetRelayNotKinds];
-	uint32_t unused[kNetRelayUnusedKinds];
-};
 
 // THE HOST. Start, then once a frame Hear each packet from the relay's address and Tick; take what to send with TakeSends.
 class NetRelayHost

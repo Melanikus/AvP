@@ -1049,7 +1049,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (Net_V2DraftOn() && !hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
+					"from": "\tif (!hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
 					"to": ""
 				}
 			]
@@ -1285,7 +1285,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: the list asks for the players' version's games, draft or not",
+			"name": "SOURCE: the list asks for the games of a version other than the one it copied at its start",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
@@ -1299,8 +1299,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "made->version = Net_OurVersion();",
-					"to": "made->version = kMultiplayerVersion;"
+					"from": "made->version = kMultiplayerVersion;",
+					"to": "made->version = kMultiplayerVersion - 1;"
 				}
 			]
 		},
@@ -1619,7 +1619,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tAddName(w, \"id\");\n\t\tAddHostId(w, l.hostId);\n",
+					"from": "\tAddName(w, \"id\");\n\tAddHostId(w, l.hostId);\n",
 					"to": ""
 				}
 			]
@@ -1665,52 +1665,12 @@
 			]
 		},
 		{
-			"name": "without the draft, a game must still carry a host id",
+			"name": "a listing needs no host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": " - (g.hostIds ? 0 : 1);",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "without the draft, a game keeps whatever was in its host id",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\tmemset(game.hostId, 0, sizeof(game.hostId));\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a listing without the draft carries the host id",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\tif (withHostId)\n\t{\n\t\tAddName(w, \"id\");",
-					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"id\");"
-				}
-			]
-		},
-		{
-			"name": "a listing without the draft needs a host id",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "(withHostId && !IsAHostId(l.hostId))",
-					"to": "!IsAHostId(l.hostId)"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the list reads and writes hosts' ids without the draft",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "made->v2Draft = Net_V2DraftOn();",
-					"to": "made->v2Draft = true;"
+					"from": " || !IsAHostId(l.hostId))",
+					"to": ")"
 				}
 			]
 		},
@@ -1749,8 +1709,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tAddName(w, \"id\");\n",
-					"to": "\t\tAddName(w, \"fingerprint\");\n"
+					"from": "\tAddName(w, \"id\");\n",
+					"to": "\tAddName(w, \"fingerprint\");\n"
 				}
 			]
 		},

@@ -68,10 +68,8 @@ param(
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line (relay-words.ps1)
     [string]$ServersLine = '',   # that line, for both games: "<address>[:<list port>:<relay port>] <fingerprint> <name>"
     [string]$RemoteRelay = '',   # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. It means -Relay too
-    # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft, through the relay (relay-words.ps1).
-    # Both games get -NetV2; the joiner is the second copy (-secondcopy), so the two have their own online identity each, and are two
-    # players, not one.
-    [switch]$NetV2,               # -netv2 for both games. Needs -Relay (or -RemoteRelay)
+    # Through the relay (version 2 for every game since #175 PR 3a, 2026-11-10), the joiner is the second copy (-secondcopy), so the two
+    # have their own online identity each, and are two players, not one (added 2026-11-09 by Melanikus (Fifth) for the AvP port)
 
     [ValidateRange(0, 600)][int]$HostSpareSeconds = 30,  # the host plays this much longer than the joiner, so the joiner ends first (0: the same)
     [switch]$NoFilm,
@@ -376,8 +374,7 @@ if ($Relay -and -not $ServersLine) { Stop-Here "-Relay needs -ServersLine: the g
 if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }
 $serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
 if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
-if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay or -RemoteRelay" }
-if ($NetV2 -and $ThirdFolder) { Stop-Here "-NetV2 is two players, the host and the second copy, and -ThirdFolder would be a third copy with no folder of its own" }
+if ($Relay -and $ThirdFolder) { Stop-Here "a pair through the relay is two players, the host and the second copy, and -ThirdFolder would be a third copy with no identity of its own" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -417,7 +414,6 @@ $lines = @("host=$hostFull", "join=$joinFull", "level=$Level", "frames=$Frames",
 # Which relay beyond this machine the watch let through, and at which address: the user's own server's, never a player's
 if ($RemoteRelay) { $lines += @("remote_relay=$RemoteRelay", "remote_relay_address=$remoteRelayAddress", "remote_relay_route=$remoteRelayRoute") }
 if ($ServersLine) { $lines += "servers_line=$ServersLine" }   # public: the server's address, fingerprint and name
-if ($NetV2) { $lines += "net_v2=yes" }
 
 function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]$outputName, [string]$kind = '')
 {
@@ -476,9 +472,8 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($RemoteRelay) { $words += @('-RemoteRelay', $RemoteRelay) }
     # The line holds spaces, and Start-Process joins its words with nothing but spaces, so it goes in quotes (its rule has no quote in it)
     if ($ServersLine) { $words += @('-ServersLine', "`"$ServersLine`"") }
-    # Protocol version 2's draft for both, and the joiner as the second copy (added 2026-11-09 by Melanikus (Fifth) for the AvP port)
-    if ($NetV2) { $words += '-NetV2' }
-    if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }
+    # Through the relay, the joiner is the second copy (added 2026-11-09 by Melanikus (Fifth) for the AvP port)
+    if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 

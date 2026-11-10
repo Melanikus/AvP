@@ -207,8 +207,7 @@ param(
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
     [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
     [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
-    # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a run on protocol version 2's draft, through the relay (relay-words.ps1)
-    [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay
+    # (-NetV2 went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
     [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
 )
 $ErrorActionPreference = 'Stop'
@@ -249,8 +248,7 @@ if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 # Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port; its key line went with #175, as the
-# servers.cfg line proves the relay's keys)
-if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay" }
+# servers.cfg line proves the relay's keys, and every relay run is version 2 since #175 PR 3a)
 if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
@@ -332,8 +330,7 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 # -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
 # starts with -, and one in among them would cut them short
 $relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
-# -netv2 and -secondcopy are the game's own switches too, so they go before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
-if ($NetV2) { $relaySwitch += ' -netv2' }
+# -secondcopy is the game's own switch too, so it goes before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }

@@ -565,16 +565,6 @@
 			]
 		},
 		{
-			"name": "a host that's another v2 test build has no words",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "\"The host runs another test build of the v2 draft\",",
-					"to": "\"\","
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the screen asking the host doesn't show the joiner's check code",
 			"changes": [
 				{
@@ -601,16 +591,6 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "\t\tif (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,",
 					"to": "\t\tif (false)\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a host that's another v2 test build is taken for a join that just failed",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tcase kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));\n\t\t\treturn true;\n",
-					"to": ""
 				}
 			]
 		},
