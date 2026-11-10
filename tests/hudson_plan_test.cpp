@@ -319,12 +319,14 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): its address, once, with net=. Modified 2026-11-10 by
-	// Melanikus for the AvP port (#175): an address's digits and dots, as a servers.cfg line has only an address; a name is refused
+	// Melanikus for the AvP port (#175): an address's digits and dots, as a servers.cfg line has only an address; a name is refused. Each
+	// of these is 15 letters at most, so it's the letter that's refused and not the length, which is looked at first (above)
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
 	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayAddress + 1, '1')).c_str(), kHudsonRefusedRemoteRelayTooLong);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", kHudsonRefusedRemoteRelayTooLong);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5a", kHudsonRefusedRemoteRelayCharacter);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50:443", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5:443", kHudsonRefusedRemoteRelayCharacter);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=-203.0.113.5", kHudsonRefusedRemoteRelayCharacter);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 remoterelay=203.0.113.50", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayWithoutNet);
