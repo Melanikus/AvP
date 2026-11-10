@@ -219,7 +219,8 @@ static void TestTheBeta2Words()
 
 	std::string const table = ReadSource("3dc/avp/language.cpp");
 	std::string const page = ReadSource("3dc/avp/win95/frontend/access_page.cpp");
-	Check(table.size() > 20000 && page.size() > 5000, "language.cpp and the page were found and read");
+	// language.cpp is about 16 KB (2026-11-10): the sizes only show each file was found and read, so they sit well under what each holds
+	Check(table.size() > 10000 && page.size() > 5000, "language.cpp and the page were found and read");
 
 	Check(Has(table, "\"Send this code to the owner on Discord. It isn't secret: it only matches your request, and only a request with this code is approved.\","),
 		"the code goes to the owner on Discord, the one place, and isn't secret: it only matches the request");
