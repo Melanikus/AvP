@@ -644,6 +644,36 @@ static void Words(const char *text, int x, int y, int alpha, enum AVPMENUFORMAT_
 	RenderSmallMenuText(line, x, y, alpha, format);
 }
 
+// online_screens.h's copy of the small font's height must be the font's own: it can't include hud_layout.h, so the check is here, where
+// the game is built
+static_assert(kOnlineHelpLineHeight == HUD_FONT_HEIGHT, "the check code's help lines are spaced by the small font's height, HUD_FONT_HEIGHT");
+
+// One help text, grey, wrapped into a box exactly as tall as the lines given, so RenderSmallFontString_Wrapped starts it at its top
+static void HelpText(const char *text, int top, int lines)
+{
+	if (!text || lines <= 0)
+	{
+		return;
+	}
+
+	char words[256];
+	Put(words, sizeof(words), text);
+	int x = 0;
+	int y = 0;
+	RECT area = { kOnlineHelpLeft, top, kOnlineHelpRight, top + lines * kOnlineHelpLineHeight };
+	RenderSmallFontString_Wrapped(words, &area, ONE_FIXED / 2, &x, &y);
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (online_screens_page.h says why)
+void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit)
+{
+	int const width = kOnlineHelpRight - kOnlineHelpLeft;
+	OnlineHelpLines const at = OnlineScreens_HelpLines(codeTop, first ? SmallFontString_WrappedLines(first, width) : 0,
+		second ? SmallFontString_WrappedLines(second, width) : 0, limit);
+	HelpText(first, at.firstTop, at.firstLines);
+	HelpText(second, at.secondTop, at.secondLines);
+}
+
 // The tail, lit by the menu's highlight glow. alpha is 0 to ONE_FIXED, as the menus' brightness is.
 static void DrawTail(int x, int y, int size, int alpha)
 {
@@ -915,9 +945,10 @@ static void DrawTheCheckCode(void)
 
 	if (line[0])
 	{
+		// Modified 2026-11-10 by Melanikus for the AvP port: the two help lines wrapped and spaced, never on each other (online_screens.h)
 		Words(line, MENU_CENTREX, kWordsTop + 50, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), MENU_CENTREX, kWordsTop + 70, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
-		Words(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped), MENU_CENTREX, kWordsTop + 80, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+			kWordsTop + 50, kOnlineHelpPageBottom);
 	}
 }
 

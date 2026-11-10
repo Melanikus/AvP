@@ -766,7 +766,7 @@ static void TestTheCheckCode()
 
 	std::string const joiner = Between(page, "static void DrawTheCheckCode(void)", "\n}\n");
 	Check(Has(joiner, "if (!Net_RelayCheckCodeNow(digits))") && Has(joiner, "OnlineScreens_CheckCodeWords(digits, line, sizeof(line));") &&
-		Has(joiner, "Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans)"), "a joiner's own code is shown, with what it's for, once its handshake has made one");
+		Has(joiner, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans)"), "a joiner's own code is shown, with what it's for, once its handshake has made one");
 
 	std::string const asking = Between(page, "bool OnlinePage_DrawAsking(void)", "\n}\n");
 	size_t const firstDraw = asking.find("DrawTheCheckCode();");
@@ -788,8 +788,10 @@ static void TestTheCheckCode()
 	Check(strcmp(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
 		"Not comparing is your choice: the game is still encrypted, but someone in the middle can't be ruled out") == 0,
 		"and a stranger who doesn't compare it is told what that means");
-	Check(Has(joiner, "Words(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped), MENU_CENTREX, kWordsTop + 80,") &&
-		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84,"), "on both screens, under what the code is for");
+	// Modified 2026-11-10 by Melanikus for the AvP port: both texts are drawn by OnlinePage_DrawCheckCodeHelp now, the second under the first
+	Check(Has(joiner, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),") &&
+		Has(menus, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),"),
+		"on both screens, under what the code is for");
 
 	// And nothing covers it. The relay's news on the co-op host page waits while a join request's rows are up, its 8 s starting again, and
 	// is shown once they've gone, where the asking line was (Secondary's second dry run of the weekend, R1-4: it was drawn at y 56, over
@@ -808,6 +810,81 @@ static void TestTheCheckCode()
 		"a host that's another test build of the v2 draft is said so, not taken for a join that just failed");
 }
 
+// The check code's two help lines (online_screens.h, OnlineScreens_HelpLines). Added 2026-11-10 by Melanikus for the AvP port, after the
+// owner's showcase pictures: they were drawn 10 apart in the small font, which is 15 high, so they lay on each other, on the joining page
+// and on the host's "asks to join" rows.
+static void TestTheHelpLines()
+{
+	puts("The check code's help lines");
+
+	bool apart = true;
+	bool inside = true;
+	bool wholeWhenThereIsRoom = true;
+	bool secondCutFirst = true;
+	int const codeTops[] = { 58, 320 };
+	int const limits[] = { 196, 300, kOnlineHelpPageBottom };
+
+	for (int top : codeTops)
+	{
+		for (int limit : limits)
+		{
+			// A limit with no room for the code's line and a gap under it isn't one a page has
+			if (limit < top + kOnlineHelpLineHeight + kOnlineHelpCodeGap + kOnlineHelpGap)
+			{
+				continue;
+			}
+
+			for (int first = -1; first <= 6; first++)
+			{
+				for (int second = -1; second <= 6; second++)
+				{
+					OnlineHelpLines const at = OnlineScreens_HelpLines(top, first, second, limit);
+					int const wantFirst = first < 0 ? 0 : first;
+					int const wantSecond = second < 0 ? 0 : second;
+
+					// A small line's height at least between each, so no line lies on another
+					apart = apart && at.firstTop >= top + kOnlineHelpLineHeight && at.firstLines >= 0 && at.secondLines >= 0 &&
+						at.secondTop >= at.firstTop + at.firstLines * kOnlineHelpLineHeight + 1 &&
+						at.bottom == at.secondTop + at.secondLines * kOnlineHelpLineHeight;
+					inside = inside && at.bottom <= limit && at.firstLines <= wantFirst && at.secondLines <= wantSecond;
+
+					bool const fits = at.firstTop + (wantFirst + wantSecond) * kOnlineHelpLineHeight + kOnlineHelpGap <= limit;
+					wholeWhenThereIsRoom = wholeWhenThereIsRoom && (!fits || (at.firstLines == wantFirst && at.secondLines == wantSecond));
+					secondCutFirst = secondCutFirst && (at.firstLines == wantFirst || at.secondLines == 0);
+				}
+			}
+		}
+	}
+
+	Check(apart, "the code's line, the first help text and the second each sit under the one before, a small line apart at least: none lies on another");
+	Check(inside, "nothing goes past the limit, the joining page's help line or the host's answer rows");
+	Check(wholeWhenThereIsRoom, "both are drawn whole when there's room");
+	Check(secondCutFirst, "and when there isn't, the second is cut first");
+
+	// The two places as they are: two lines each, as each text takes in the 520-wide box, fit whole under the joiner's code (at kWordsTop
+	// + 50, 320) above the page's help line, and under the host's (at 58) above its answer rows, which start lower than 200
+	OnlineHelpLines const joiner = OnlineScreens_HelpLines(320, 2, 2, kOnlineHelpPageBottom);
+	OnlineHelpLines const host = OnlineScreens_HelpLines(58, 2, 2, 196);
+	Check(joiner.firstLines == 2 && joiner.secondLines == 2 && host.firstLines == 2 && host.secondLines == 2,
+		"the joining page and the host's rows have room for both texts at two lines each");
+
+	// And the game draws them that way, by reading its source
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const joinerDraws = Between(page, "static void DrawTheCheckCode(void)", "\n}\n");
+	Check(Has(joinerDraws, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),\n\t\t\tkWordsTop + 50, kOnlineHelpPageBottom);") &&
+		!Has(joinerDraws, "kWordsTop + 70") && !Has(joinerDraws, "kWordsTop + 80"),
+		"the joining page draws both through the rule, under its code at kWordsTop + 50, and no longer 10 apart");
+	Check(Has(menus, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),\n\t\t\t\t58, y - kOnlineHelpGap);") &&
+		!Has(menus, "MENU_CENTREX, 74, ONE_FIXED / 2") && !Has(menus, "MENU_CENTREX, 84, ONE_FIXED / 2"),
+		"and so does the host's, under its code at 58, above its answer rows");
+	std::string const helpers = Between(page, "void OnlinePage_DrawCheckCodeHelp(", "\n}\n");
+	Check(Has(helpers, "SmallFontString_WrappedLines(first, width)") && Has(helpers, "SmallFontString_WrappedLines(second, width)") &&
+		Has(page, "RECT area = { kOnlineHelpLeft, top, kOnlineHelpRight, top + lines * kOnlineHelpLineHeight };"),
+		"each text's lines are counted by the wrapping rule itself, and drawn into a box exactly that tall");
+	Check(Has(menus, "area.top    = 420;") && kOnlineHelpPageBottom == 420, "the joining page's limit is where the menus draw their help line, 420");
+}
+
 int main()
 {
 	TestTheTail();
@@ -819,6 +896,7 @@ int main()
 	TestPingAndWaits();
 	TestWords();
 	TestTheCheckCode();
+	TestTheHelpLines();
 	TestWhereTheyAreDrawn();
 
 	if (checksFailed)

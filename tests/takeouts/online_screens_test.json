@@ -949,8 +949,48 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tRenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,\n\t\t\t\tAVPMENUFORMAT_CENTREJUSTIFIED);\n",
-					"to": ""
+					"from": "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),",
+					"to": "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), NULL,"
+				}
+			]
+		},
+		{
+			"name": "RULE: the check code's two help lines are 10 apart again, on each other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\tat.secondTop = at.firstTop + at.firstLines * kOnlineHelpLineHeight + kOnlineHelpGap;",
+					"to": "\tat.secondTop = at.firstTop + 10;"
+				}
+			]
+		},
+		{
+			"name": "RULE: the help lines go past their limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\troom = room < 0 ? 0 : room;",
+					"to": "\troom = 99;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joining page draws its help lines with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\t\tkWordsTop + 50, kOnlineHelpPageBottom);",
+					"to": "\t\t\tkWordsTop + 50, 9999);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's help lines go over its answer rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t58, y - kOnlineHelpGap);",
+					"to": "\t\t\t\t58, 480);"
 				}
 			]
 		}

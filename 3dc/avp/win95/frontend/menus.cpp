@@ -2507,10 +2507,11 @@ static void RenderMenu(void)
 		if (checkCodeLine[0])
 		{
 			RenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)), MENU_CENTREX, 74, ONE_FIXED / 2,
-				AVPMENUFORMAT_CENTREJUSTIFIED);
-			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,
-				AVPMENUFORMAT_CENTREJUSTIFIED);
+
+			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's showcase pictures: the two lines were drawn on each other, and
+			// ran almost edge to edge): wrapped and spaced, and never past the answer rows, whose top is y (online_screens.h)
+			OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+				58, y - kOnlineHelpGap);
 		}
 	}
 

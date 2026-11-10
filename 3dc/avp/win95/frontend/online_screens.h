@@ -226,4 +226,48 @@ void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, in
 // nothing half-made is ever shown as a code. words always ends with a 0.
 void OnlineScreens_CheckCodeWords(const char *digits, char *words, size_t size);
 
+// THE CHECK CODE'S TWO HELP LINES, under it on the joining page and on the host's "asks to join" rows. Added 2026-11-10 by Melanikus for
+// the AvP port, after the owner's showcase pictures: the two grey lines were drawn 10 apart in the small font, which is 15 high, so they
+// lay on top of each other, and the host's ran almost from one edge of the screen to the other. Now each is wrapped to the words' box (the
+// Online access page's, 60 to 580 on the menus' 640-wide grid) and placed under the one before by its own height, with a gap. If they
+// don't both fit above the limit given, the second is cut to the lines that fit first, then the first: they never run into what's below.
+// The limit is the joining page's, where the menus' help line starts (420), or the top of the host's answer rows.
+int const kOnlineHelpLineHeight = 15;    // the small font's height, HUD_FONT_HEIGHT (online_screens_page.cpp checks it when the game is built)
+int const kOnlineHelpCodeGap = 5;        // between the check code's own line and the first help text
+int const kOnlineHelpGap = 4;            // between the two help texts
+int const kOnlineHelpLeft = 60;          // the box both are wrapped to
+int const kOnlineHelpRight = 580;
+int const kOnlineHelpPageBottom = 420;   // the joining page's limit: menus.cpp draws the help line from 420
+
+struct OnlineHelpLines
+{
+	int firstTop;      // the first help text's first line
+	int firstLines;    // how many of its lines are drawn: all of them, unless there's no room
+	int secondTop;     // the second's
+	int secondLines;
+	int bottom;        // under the last line drawn
+};
+
+// Where the two help texts go, under the check code's line at codeTop. firstLines and secondLines are how many lines each takes in the
+// box (SmallFontString_WrappedLines); limit is the most the last may reach.
+inline OnlineHelpLines OnlineScreens_HelpLines(int codeTop, int firstLines, int secondLines, int limit)
+{
+	OnlineHelpLines at;
+
+	firstLines = firstLines < 0 ? 0 : firstLines;
+	secondLines = secondLines < 0 ? 0 : secondLines;
+
+	at.firstTop = codeTop + kOnlineHelpLineHeight + kOnlineHelpCodeGap;
+
+	// How many lines fit for both, with the gap between them; the first takes what it needs of them, and the second the rest
+	int room = (limit - at.firstTop - kOnlineHelpGap) / kOnlineHelpLineHeight;
+	room = room < 0 ? 0 : room;
+	at.firstLines = firstLines > room ? room : firstLines;
+	at.secondLines = secondLines > room - at.firstLines ? room - at.firstLines : secondLines;
+
+	at.secondTop = at.firstTop + at.firstLines * kOnlineHelpLineHeight + kOnlineHelpGap;
+	at.bottom = at.secondTop + at.secondLines * kOnlineHelpLineHeight;
+	return at;
+}
+
 #endif
