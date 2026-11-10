@@ -141,6 +141,13 @@ bool AccessPage_Opened(AVPMENU_ELEMENT *rows)
 	{
 		RelayAccess_NameFromProfile(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name), AccessPageName);
 		nameStarted = true;
+
+		// Modified 2026-11-09 by Melanikus for the AvP port (Secondary's dry run of beta.2, T2.2): a letter the rule won't take is left out
+		// of the name to send, and the page says so, rather than drop it without a word
+		if (stateLine == TEXTSTRING_BLANK && RelayAccess_NameLeftLettersOut(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name)))
+		{
+			stateLine = TEXTSTRING_ACCESS_NAME_LEFT_OUT;
+		}
 	}
 
 	TakeTheIdentity();

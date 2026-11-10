@@ -1286,6 +1286,14 @@ static void TestAccessNames()
 	RelayAccess_NameFromProfile(NULL, 16, name);
 	Check(name[0] == '\0', "and so is no name at all");
 
+	// Whether letters were left out, for the page to say so (Secondary's dry run of beta.2, T2.2; added 2026-11-09)
+	Check(RelayAccess_NameLeftLettersOut("Jos\xE9 \"Hicks\"", 16) && RelayAccess_NameLeftLettersOut("a\\b", 16) &&
+		RelayAccess_NameLeftLettersOut("Tab\there", 16), "an accent, \", \\ or anything not printable is a letter left out");
+	Check(!RelayAccess_NameLeftLettersOut("Melanikus", 16) && !RelayAccess_NameLeftLettersOut("  Ripley  ", 16) &&
+		!RelayAccess_NameLeftLettersOut("ABCDEFGHIJKLMNOPQRST", 32), "spaces at the ends, and the cut to 15, aren't letters left out");
+	Check(!RelayAccess_NameLeftLettersOut("ABC\xE9", 3) && !RelayAccess_NameLeftLettersOut(NULL, 16),
+		"and a profile's name is read no further than its room, nor at all when there's none");
+
 	// The page's words for each reason are access_page_test's to check (AccessPage_NameText)
 }
 

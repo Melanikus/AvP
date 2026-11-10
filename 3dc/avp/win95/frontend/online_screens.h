@@ -184,6 +184,7 @@ enum OnlineWords
 	kOnlineWordsOtherBuild,           // J5: the host is a v2 test build from another commit, so the two can't play (added 2026-11-09)
 	kOnlineWordsCheckCodeMeans,       // J4 and J5: what the check code is for, under it (CRYPTO.md section 8, added 2026-11-09)
 	kOnlineWordsCheckCodeMeansHost,   // H1: the same, on the host's screen
+	kOnlineWordsCheckCodeSkipped,     // on both, under that: what not comparing it means, for strangers (the owner's ruling, beta.2)
 	kOnlineWordsCount
 };
 

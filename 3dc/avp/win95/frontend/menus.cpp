@@ -2224,6 +2224,8 @@ static void RenderMenu(void)
 			RenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)), MENU_CENTREX, 74, ONE_FIXED / 2,
 				AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,
+				AVPMENUFORMAT_CENTREJUSTIFIED);
 		}
 	}
 

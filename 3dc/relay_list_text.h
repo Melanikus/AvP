@@ -233,6 +233,11 @@ RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name);
 // room for kRelayAccessNameMostBytes + 1.
 void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char *to);
 
+// Whether making that name left any of the profile's letters out because the rule doesn't take them (an accent, ", \ or anything not
+// printable), so the page can say so rather than drop them without a word (Secondary's dry run of beta.2, T2.2). Spaces aren't counted,
+// and neither is the cut to 15. Added 2026-11-09 by Melanikus for the AvP port.
+bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes);
+
 // The access code for an identity's fingerprint. It's the fingerprint's first 80 bits, highest first, as 16 code letters of 5 bits each
 // (the relay codes' letters, kNetRelayCodeAlphabet), in groups of four: XXXX-XXXX-XXXX-XXXX. 80 bits can't be matched by making keys until
 // one fits. The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.

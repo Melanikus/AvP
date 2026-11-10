@@ -210,11 +210,36 @@ static void TestOnlyWithDev()
 		"the question's first row is No");
 }
 
+// Beta.2's words (the owner's rulings and Secondary's dry run of the tester's path, 2026-11-09), by reading language.cpp's table and the
+// page: Discord is the one place to send the code, which isn't secret; a request waits 30 days; refused and revoked say what to do next;
+// busy says why; and a profile's letters left out of the name are said. Added 2026-11-09 by Melanikus for the AvP port.
+static void TestTheBeta2Words()
+{
+	puts("4. beta.2's words (by reading the table and the page)");
+
+	std::string const table = ReadSource("3dc/avp/language.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/access_page.cpp");
+	Check(table.size() > 20000 && page.size() > 5000, "language.cpp and the page were found and read");
+
+	Check(Has(table, "\"Send this code to the owner on Discord. It isn't secret: it only matches your request, and only a request with this code is approved.\","),
+		"the code goes to the owner on Discord, the one place, and isn't secret: it only matches the request");
+	Check(Has(table, "\"Waiting for approval. A request nobody answers in 30 days is forgotten: if you hear nothing in a month, ask again.\","),
+		"a request waiting says it's forgotten after 30 days");
+	Check(Has(table, "\"Not approved. Ask the owner on Discord if you think that's a mistake. To ask again, make a new identity.\",") &&
+		Has(table, "\"Your approval was taken back. Ask the owner on Discord why. To ask again, make a new identity.\","),
+		"refused and revoked say what a player can do next");
+	Check(Has(table, "\"The server takes one request a minute from each home, and another PC there may just have asked: try again in a minute.\","),
+		"and busy says why, for two PCs behind one home address");
+	Check(Has(page, "RelayAccess_NameLeftLettersOut(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name)))\n\t\t{\n\t\t\tstateLine = TEXTSTRING_ACCESS_NAME_LEFT_OUT;"),
+		"a profile's letters left out of the name to send are said, under the rows");
+}
+
 int main()
 {
 	TestWhenItAsks();
 	TestTheWords();
 	TestOnlyWithDev();
+	TestTheBeta2Words();
 
 	if (checksFailed)
 	{

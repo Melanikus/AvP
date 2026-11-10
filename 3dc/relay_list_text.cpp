@@ -1476,6 +1476,19 @@ void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char 
 	to[n] = '\0';
 }
 
+bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes)
+{
+	for (size_t i = 0; profile && i < profileBytes && profile[i]; i++)
+	{
+		if (!IsAccessNameLetter(profile[i]))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes])
 {
 	static_assert(sizeof(kNetRelayCodeAlphabet) == 33, "32 code letters, so each is exactly 5 bits");

@@ -780,6 +780,17 @@ static void TestTheCheckCode()
 		Has(menus, "if (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,") &&
 		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)"), "and it's shown under the asking line, with what it's for");
 
+	// Beta.2 (the owner's ruling, 2026-11-09): friends compare it outside the game, never in its chat, which runs over the very connection
+	// the code checks; a stranger may go on without comparing, and is told what that means, on both screens. Added by Melanikus.
+	Check(strstr(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), "by voice or Discord, never in the game's chat") != NULL &&
+		strstr(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), "by voice or Discord, never in the game's chat") != NULL,
+		"the code is compared by voice or Discord, never in the game's own chat");
+	Check(strcmp(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+		"Not comparing is your choice: the game is still encrypted, but someone in the middle can't be ruled out") == 0,
+		"and a stranger who doesn't compare it is told what that means");
+	Check(Has(joiner, "Words(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped), MENU_CENTREX, kWordsTop + 80,") &&
+		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84,"), "on both screens, under what the code is for");
+
 	// And nothing covers it. The relay's news on the co-op host page waits while a join request's rows are up, its 8 s starting again, and
 	// is shown once they've gone, where the asking line was (Secondary's second dry run of the weekend, R1-4: it was drawn at y 56, over
 	// the code at 58). Added 2026-11-09 by Melanikus for the AvP port.

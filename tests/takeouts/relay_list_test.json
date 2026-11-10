@@ -1743,6 +1743,16 @@
 					"to": "made->v2Draft = true;"
 				}
 			]
+		},
+		{
+			"name": "a profile's name never has letters left out, by the page's reckoning",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn true;\n\t\t}",
+					"to": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+				}
+			]
 		}
 	]
 }

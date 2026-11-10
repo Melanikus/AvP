@@ -917,6 +917,7 @@ static void DrawTheCheckCode(void)
 	{
 		Words(line, MENU_CENTREX, kWordsTop + 50, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 		Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), MENU_CENTREX, kWordsTop + 70, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		Words(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped), MENU_CENTREX, kWordsTop + 80, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 }
 

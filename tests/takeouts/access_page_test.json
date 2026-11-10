@@ -193,6 +193,26 @@
 					"to": "return answer != kRelayAccessWaiting;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the code goes to the owner by message or email, with no word that it isn't secret",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\"Send this code to the owner on Discord. It isn't secret: it only matches your request, and only a request with this code is approved.\",",
+					"to": "\"Give the owner this code yourself, by message or email. Only a request with this exact code is approved.\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a profile's letters left out of the name aren't said",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\t\t\tstateLine = TEXTSTRING_ACCESS_NAME_LEFT_OUT;\n",
+					"to": "\t\t\t;\n"
+				}
+			]
 		}
 	]
 }

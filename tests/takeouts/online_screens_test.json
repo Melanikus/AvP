@@ -943,6 +943,16 @@
 					"to": "RenderSmallMenuText(relayNews, MENU_CENTREX, answering ? 56 : 40,"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the host's screen doesn't say what not comparing the code means",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,\n\t\t\t\tAVPMENUFORMAT_CENTREJUSTIFIED);\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
