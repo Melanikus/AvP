@@ -6,6 +6,7 @@
 //   -dev's pin and shown name
 
 #include "relay_list_text.h"
+#include "servers_cfg.h"   // the usual ports, which a shown address leaves out (RelayList_ShownAddress)
 
 #include <stdio.h>
 #include <string.h>
@@ -1293,6 +1294,48 @@ RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder)
 bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder)
 {
 	return RelayList_IPv4Refusal(text, hostOrder) == kRelayIPv4Read;
+}
+
+// ---- A servers.cfg line's address, as a person reads it. Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see
+// relay_list_text.h.
+
+bool RelayList_ShownAddress(uint32_t address, int listPort, int relayPort, char *out, size_t room)
+{
+	if (!out || room == 0)
+	{
+		return false;
+	}
+
+	out[0] = 0;
+
+	if (listPort < 1 || listPort > 65535 || relayPort < 1 || relayPort > 65535)
+	{
+		return false;
+	}
+
+	// Written here first, in room for the longest address there can be, so it's never cut on the way
+	char text[kRelayListShownAddressBytes];
+	unsigned int const a = address;
+	int written = 0;
+
+	if (listPort == kServersCfgListPort && relayPort == kServersCfgRelayPort)
+	{
+		written = snprintf(text, sizeof(text), "%u.%u.%u.%u", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu);
+	}
+	else
+	{
+		written = snprintf(text, sizeof(text), "%u.%u.%u.%u:%d:%d", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,
+			listPort, relayPort);
+	}
+
+	// snprintf says how long the whole text is, even when it didn't fit. The whole address, or none: never a part of one.
+	if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)
+	{
+		return false;
+	}
+
+	memcpy(out, text, static_cast<size_t>(written) + 1);
+	return true;
 }
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.

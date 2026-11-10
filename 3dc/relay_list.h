@@ -90,7 +90,8 @@ int RelayList_ServerState(const char **why);
 struct RelayListLineToAgree
 {
 	char name[kServersCfgNameLetters + 1];   // as the line names it
-	char address[24];                         // "104.131.35.41", or with both ports when they aren't the usual ones: "203.0.113.7:8443:27500"
+	char address[kRelayListShownAddressBytes];   // "104.131.35.41", or with both ports when they aren't the usual ones: "203.0.113.7:8443:27500"
+	                                             // (relay_list_text.h, RelayList_ShownAddress; modified 2026-11-10: 24 bytes could cut one)
 	ServersCfgPlace place;                    // on the internet, on this PC, or on the player's own network
 	char keyStart[9];                         // its fingerprint's first 8 digits ("bb0e2958"), and its last 8 ("f28d663e"), which a
 	char keyEnd[9];                           // person can hold against what the server's owner gave out

@@ -1468,17 +1468,14 @@ bool RelayList_LineToAgree(RelayListLineToAgree *out)
 
 	memset(out, 0, sizeof(*out));
 	snprintf(out->name, sizeof(out->name), "%s", line->name);
-	unsigned int const a = line->address;
 
-	// The address as the line says it: with its two ports only when they aren't the usual ones
-	if (line->listPort == kServersCfgListPort && line->relayPort == kServersCfgRelayPort)
+	// The address as the line says it, with its two ports only when they aren't the usual ones, whole or not at all (relay_list_text.h;
+	// modified 2026-11-10 by Melanikus for the AvP port: it was written here, into 24 bytes, which could cut an address with both ports).
+	// It always fits. If it ever didn't, there'd be no page to show, and still nothing would go to the server: the list starts only after
+	// the yes (Start).
+	if (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))
 	{
-		snprintf(out->address, sizeof(out->address), "%u.%u.%u.%u", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu);
-	}
-	else
-	{
-		snprintf(out->address, sizeof(out->address), "%u.%u.%u.%u:%d:%d", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,
-			line->listPort, line->relayPort);
+		return false;
 	}
 
 	out->place = line->place;
