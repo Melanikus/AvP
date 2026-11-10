@@ -2034,8 +2034,8 @@ static void TestTourAndSharedMachine()
 		Check(Has(pairScript, "@('udp', '', $exampleRoute, '', '', $false)") && Has(pairScript, "@('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true)")
 			&& Has(pairScript, "@('tcp', 'Established', $exampleRoute, '203.0.113.51', '443', $true)") && Has(pairScript, "@('tcp', 'Listen', $exampleRoute, '0.0.0.0', '0', $true)"),
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
-		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
-			"and each game is told the relay's name (remoterelay=), and has it as its relays' list, at HTTPS's own port");
+		Check(Has(oneRun, "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
+			"and each game is told the relay's name (remoterelay=, which Hudson takes only with net=, so an -Access run has the list alone), and has it as its relays' list, at HTTPS's own port");
 		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
 		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
 		// with the list on this machine pinned, it's reached by its address

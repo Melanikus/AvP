@@ -8941,7 +8941,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }",
+					"from": "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }",
 					"to": ""
 				}
 			]
@@ -10003,6 +10003,16 @@
 					"file": "tools/hudson/run-net-pair.ps1",
 					"from": "$JoinFindGames) { $words += '-FindGames' }",
 					"to": "$JoinFindGames) { }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an -Access run is told the relay's name, which Hudson refuses without net=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($RemoteRelay -and $Net) {",
+					"to": "if ($RemoteRelay) {"
 				}
 			]
 		}

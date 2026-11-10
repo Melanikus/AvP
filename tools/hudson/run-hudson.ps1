@@ -430,7 +430,9 @@ if ($AnswerAfter -ne 0) { $arguments += " answerafter=$AnswerAfter" }
 if ($FindGames) { $arguments += " findgames=yes" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
-if ($RemoteRelay) { $arguments += " remoterelay=$RemoteRelay" }
+# remoterelay= keeps a network run's game traffic to that one relay, and Hudson takes it only with net=. An -Access run through a server
+# beyond this machine has no game traffic: it calls the list, at the address its settings name, so it gets the settings' lines alone
+if ($RemoteRelay -and $Net) { $arguments += " remoterelay=$RemoteRelay" }
 if ($KillKind) { $arguments += " killkind=$KillKind killat=$($KillAt -replace 'm', '-') killer=$Killer" }
 if ($BotStay) { $arguments += " botstay=yes" }
 if ($BotOwn) { $arguments += " botown=yes" }
