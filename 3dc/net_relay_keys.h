@@ -1,5 +1,8 @@
 // A relay's static public keys, and the check that they really are that relay's (protocol version 2's draft, step 7; CRYPTO.md 12.1).
 // Written 2026-11-09 by Melanikus for the AvP port.
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   the setting's reader no longer checks for an empty region itself: RelayList_IsRegion refuses one just after, so that check could
+//   never decide anything
 //
 // WHY. Handshake A proves the relay to the game, but only if the game holds the relay's real static public keys: whoever holds the
 // private halves of the keys the game uses is "the relay" to it. Until there's a signed directory of the relays' keys (a later card), the
@@ -141,7 +144,9 @@ inline bool NetRelayKeys_ReadSetting(const char *setting, char region[kRelayList
 
 	size_t const regionLetters = static_cast<size_t>(colon - setting);
 
-	if (regionLetters == 0 || regionLetters > kRelayListRegionLetters)
+	// Too long for the copy below. An empty region is refused by RelayList_IsRegion, the one rule for a region, just after: a check of
+	// its own here could never decide anything (Take-outs, #191, 2026-11-10), so there isn't one.
+	if (regionLetters > kRelayListRegionLetters)
 	{
 		return false;
 	}

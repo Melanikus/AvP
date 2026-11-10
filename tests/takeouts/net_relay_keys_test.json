@@ -75,16 +75,6 @@
 			]
 		},
 		{
-			"name": "a setting with nothing before its colon is taken",
-			"changes": [
-				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "if (regionLetters == 0 || regionLetters > kRelayListRegionLetters)",
-					"to": "if (regionLetters > kRelayListRegionLetters)"
-				}
-			]
-		},
-		{
 			"name": "a fingerprint in capitals is taken",
 			"changes": [
 				{

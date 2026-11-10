@@ -338,9 +338,17 @@ static void TheFragmentRules()
 	NetV2Fragment bad = f1;
 	bad.start = kNetV2MostMessageBytes - 10;
 	PartsCheck(!NetV2_AssemblyAdd(&a, &bad), "a fragment made by hand to start anywhere else is refused, not copied");
+	// Modified 2026-11-10 by Melanikus for the AvP port (Take-outs, #191): one claiming more than 1,164 bytes goes to an assembly of its own,
+	// with a part that really holds 1,165, so its size is the one thing that can refuse it. Given to the assembly above, which has fragment
+	// 1 already, it would also be refused as fragment 1 come again with other bytes, and the size rule could go unseen.
+	NetV2Assembly fresh;
+	NetV2_AssemblyClear(&fresh);
+	std::vector<uint8_t> tooMuch(kNetV2PartBytes + 1, 0x33);
 	bad = f1;
-	bad.partBytes = kNetV2PartBytes + 1;
-	PartsCheck(!NetV2_AssemblyAdd(&a, &bad), "and so is one claiming more than 1,164 bytes");
+	bad.part = tooMuch.data();
+	bad.partBytes = tooMuch.size();
+	PartsCheck(!NetV2_AssemblyAdd(&fresh, &bad) && !fresh.started && fresh.haveCount == 0,
+		"and so is one claiming more than 1,164 bytes, with nothing taken");
 }
 
 // ----- The replay window
