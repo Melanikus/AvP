@@ -1663,6 +1663,56 @@
 					"to": "\tif (bytes > kRelayKeysMostAnswerBytes)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a new check of the server starts as the last one ended",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tEnterCriticalSection(&shared->lock);\n\t\tshared->serverWhy = NULL;\n\t\tLeaveCriticalSection(&shared->lock);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server that couldn't be reached is still being asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\treturn CantUse(a.why);",
+					"to": "\t\t\treturn a.why;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server that said no is still being asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\treturn CantUse(kSaidNo);",
+					"to": "\t\t\treturn kSaidNo;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server whose keys didn't match can be used",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tstate = kRelayServerCantUse;\n\t\t*why = kKeysDontMatch;",
+					"to": "\t\tstate = kRelayServerGood;\n\t\t*why = kKeysDontMatch;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server whose check ended without an answer is still being asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\telse if (shared->serverWhy)\n\t{\n\t\tstate = kRelayServerCantUse;",
+					"to": "\telse if (false)\n\t{\n\t\tstate = kRelayServerCantUse;"
+				}
+			]
 		}
 	]
 }

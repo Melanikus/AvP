@@ -217,6 +217,7 @@ namespace
 		// The server's key (added 2026-11-10, #175). keyState is the list's thread's to set, and anyone's to read under the lock. Once
 		// it's good, the key that matched and the relay's region and keys are set once, and never changed.
 		int keyState;
+		const char *serverWhy;   // why the last check of the server ended without an answer, or NULL (one of this file's own words; #188)
 		uint8_t goodKey[kNetServerFingerprintMostKeyBytes];
 		size_t goodKeySize;
 		char relayRegion[kRelayListRegionLetters + 1];
@@ -609,12 +610,26 @@ namespace
 	// otherwise fixed words saying why not, which the caller hands on.
 	char keysAnswer[kRelayKeysMostAnswerBytes];
 
+	// Keeps why the server's check ended without an answer, for RelayList_ServerState, and gives it back (added 2026-11-10, #188)
+	const char *CantUse(const char *why)
+	{
+		EnterCriticalSection(&shared->lock);
+		shared->serverWhy = why;
+		LeaveCriticalSection(&shared->lock);
+		return why;
+	}
+
 	const char *CheckTheServer(void)
 	{
 		if (shared->keyState != kKeyNotChecked)
 		{
 			return shared->keyState == kKeyGood ? NULL : kKeysDontMatch;
 		}
+
+		// A new asking: until it ends, the server stands as "no answer yet", not as the last asking left it (#188)
+		EnterCriticalSection(&shared->lock);
+		shared->serverWhy = NULL;
+		LeaveCriticalSection(&shared->lock);
 
 		static KeyCheck first;
 		first.keepIt = true;
@@ -623,13 +638,13 @@ namespace
 		if (!a.worked)
 		{
 			Tell(a.why);
-			return a.why;
+			return CantUse(a.why);
 		}
 
 		if (a.status != 200)
 		{
 			Tell(kSaidNo);
-			return kSaidNo;
+			return CantUse(kSaidNo);
 		}
 
 		char region[kRelayListRegionLetters + 1];
@@ -639,7 +654,7 @@ namespace
 		if (refusal != kRelayListAccepted)
 		{
 			Tell(RelayList_RefusalWords(refusal));
-			return RelayList_RefusalWords(refusal);
+			return CantUse(RelayList_RefusalWords(refusal));
 		}
 
 		bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint);
@@ -1352,6 +1367,38 @@ bool RelayList_Relays(RelayListRelay *relays, int *count)
 
 	LeaveCriticalSection(&shared->lock);
 	return known;
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (#188): see relay_list.h. A list that hasn't started has asked nothing yet.
+int RelayList_ServerState(const char **why)
+{
+	*why = NULL;
+
+	if (!shared)
+	{
+		return kRelayServerAsking;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	int state = kRelayServerAsking;
+
+	if (shared->keyState == kKeyGood)
+	{
+		state = kRelayServerGood;
+	}
+	else if (shared->keyState == kKeyRefused)
+	{
+		state = kRelayServerCantUse;
+		*why = kKeysDontMatch;
+	}
+	else if (shared->serverWhy)
+	{
+		state = kRelayServerCantUse;
+		*why = shared->serverWhy;
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return state;
 }
 
 void RelayList_FindGames(void)

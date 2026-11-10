@@ -69,6 +69,15 @@ void RelayList_FindRelays(void);
 // check gave. False while the server hasn't been checked and found good. Nothing is looked up by name.
 bool RelayList_Relays(RelayListRelay *relays, int *count);
 
+// Where the server stands (added 2026-11-10 by Melanikus for the AvP port, #188), for networking.cpp's Net_ServerState, so a host can wait
+// for an answer that hasn't come, and is never told "no relay" for that alone. It only reads. why is the game's own fixed words.
+int const kRelayServerAsking = 0;    // not asked yet, or being asked: no answer yet
+int const kRelayServerGood = 1;      // checked against its servers.cfg line, and good: RelayList_Relays names its relay
+int const kRelayServerCantUse = 2;   // why says why: the last asking couldn't reach it, it said no, its answer was refused, or its keys
+                                     // don't match its line (asking again, RelayList_FindRelays, tries again, but not after keys that
+                                     // didn't match: those stay refused until the game restarts)
+int RelayList_ServerState(const char **why);
+
 // ---- Finding games. The menus call these.
 
 // Asks the list for the games of this version of the game. The answer comes a moment later, through RelayList_FoundGames.

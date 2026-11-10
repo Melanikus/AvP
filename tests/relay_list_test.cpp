@@ -884,6 +884,23 @@ static void TestTheCalls()
 	Check(!now.empty() && !Has(now, "fingerprint"), "and what the session says later never changes it");
 	std::string const toSend = SourceSlice(source, "RelayListListing ListingToSend(const Listing &l)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(toSend, "out.fingerprint = l.fingerprint;"), "every POST and PUT of it sends it");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#188): where the server stands, so a host waits for an answer that hasn't come and is
+	// never told "no relay" for that alone (networking.h's Net_ServerState). Each asking starts as "no answer yet", and each way the check
+	// ends without one keeps its words; keys that don't match stay refused.
+	std::string const check = SourceSlice(source, "const char *CheckTheServer(void)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const startsAgain = check.find("shared->serverWhy = NULL;");
+	size_t const asks = check.find("Answer const a = CallChecked(L\"GET\", L\"/v1/relay-keys\"");
+	Check(startsAgain != std::string::npos && asks != std::string::npos && startsAgain < asks,
+		"SOURCE: each check of the server starts as \"no answer yet\", whatever the last one ended with");
+	Check(Has(check, "return CantUse(a.why);") && Has(check, "return CantUse(kSaidNo);") && Has(check, "return CantUse(RelayList_RefusalWords(refusal));"),
+		"SOURCE: and a check that couldn't reach the server, was told no, or had its answer refused keeps why, for the host's screen");
+	std::string const state = SourceSlice(source, "int RelayList_ServerState(const char **why)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(state, "if (shared->keyState == kKeyGood)\n\t{\n\t\tstate = kRelayServerGood;")
+		&& Has(state, "else if (shared->keyState == kKeyRefused)\n\t{\n\t\tstate = kRelayServerCantUse;\n\t\t*why = kKeysDontMatch;")
+		&& Has(state, "else if (shared->serverWhy)\n\t{\n\t\tstate = kRelayServerCantUse;\n\t\t*why = shared->serverWhy;")
+		&& Has(state, "int state = kRelayServerAsking;"),
+		"SOURCE: the server is good only once its keys matched, can't be used with keys that didn't or a check that ended without an answer, and is still being asked otherwise");
 }
 
 static size_t CountOf(const std::string &text, const char *piece)
