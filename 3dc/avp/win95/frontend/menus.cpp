@@ -893,6 +893,35 @@ static void RunTheAccessPagesForHudson(void)
 		: "a press on the Online access page couldn't be made, or the server's answer never came", asAsked);
 }
 
+// menus=pictures: four of the menus' pages as a player sees them, each pictured, for the owner to compare how the menus are drawn
+// (-dev -squaremenus or not, d3d_render.cpp). The only row pressed is Multiplayer's Online access; the page opening sends nothing,
+// since it asks the list only once a request has been sent, which a new run never has. Added 2026-11-10 by Melanikus for the AvP port.
+static void RunTheMenuPicturesForHudson(void)
+{
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+
+	SetupNewMenu(AVPMENU_MAIN);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-main.png");
+
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-multiplayer.png");
+
+	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-access.png");
+
+	SetupNewMenu(AVPMENU_OPTIONS);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-options.png");
+
+	ReleaseAllAvPMenuGfx();
+	Hudson_AccessRunEnds(accessOpened ? "four of the menus' pages were pictured" : "the Online access row couldn't be pressed, so three pages were pictured",
+		accessOpened);
+}
+
 static int StartLevelForHudsonRun(void)
 {
 	static bool levelStarted = false;
@@ -926,6 +955,13 @@ static int StartLevelForHudsonRun(void)
 	if (Hudson_AccessPress() != kHudsonAccessNone)
 	{
 		RunTheAccessPagesForHudson();
+		return 0;
+	}
+
+	// menus=pictures: the run stays at the menus, pictures four pages, and ends there (added 2026-11-10, hudson_plan.h)
+	if (Hudson_MenuPictures())
+	{
+		RunTheMenuPicturesForHudson();
 		return 0;
 	}
 

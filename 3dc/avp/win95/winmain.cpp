@@ -374,6 +374,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// whether the word is there is read; networking.cpp decides whether it counts (with -dev, in a build that knows its commit).
 		NetV2DraftAsked = CommandLineHasWord(command_line, "-netv2");
 
+		// Modified 2026-11-10 by Melanikus for the AvP port: -dev -squaremenus draws the menus at one scale both ways, the 640 by 480 grid
+		// centred on a wide screen, for the owner to compare with how they're drawn now, stretched to fill it (d3d_render.cpp, WPos2DC).
+		// Only with -dev, and only whether the word is there is read.
+		extern bool SquareMenusAsked;
+		SquareMenusAsked = DevMode && CommandLineHasWord(command_line, "-squaremenus");
+
+		if (SquareMenusAsked)
+		{
+			LogString("menus: drawn at one scale both ways, centred (-dev -squaremenus)");
+		}
+
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
 		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
 		RelayAuto_ReadCommandLine(command_line, DevMode != 0);

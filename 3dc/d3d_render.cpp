@@ -322,12 +322,32 @@ inline float FMV_HPos2DC(int32_t pos)
 	return (float(pos / (float)480) * 2) - 1;
 }
 
+// -dev -squaremenus (winmain.cpp). Added 2026-11-10 by Melanikus for the AvP port, for the owner to compare by eye: the menus are drawn
+// on a grid 640 wide and 480 high, stretched to fill the screen, so on a 16:9 screen every letter comes out a third wider than it's tall.
+bool SquareMenusAsked = false;
+
+// How much of the screen's width the menus' grid takes: all of it, as the game has always drawn it; or, with -dev -squaremenus on a screen
+// wider than 4:3, only the 4:3 part in its middle, so the grid has one scale both ways and a letter is as wide as it is tall. Films are
+// drawn by FMV_WPos2DC, above, and keep the whole width.
+static float MenuWidthShare(void)
+{
+	int const wide = ScreenDescriptorBlock.SDB_Width;
+	int const high = ScreenDescriptorBlock.SDB_Height;
+
+	if (!SquareMenusAsked || wide <= 0 || high <= 0 || wide * 3 <= high * 4)
+	{
+		return 1.0f;
+	}
+
+	return (float)(high * 4) / (float)(wide * 3);
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
 	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
-		return (float(pos / (float)640) * 2) - 1;
+		return ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();
 	}
 	else {
 		return (float(pos / (float)ScreenDescriptorBlock.SDB_Width) * 2) - 1;

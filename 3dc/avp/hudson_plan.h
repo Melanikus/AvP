@@ -313,6 +313,7 @@ struct HudsonPlan
 	int answerPress;      // answer=: from kHudsonAnswer...: a net=host run answers a player asking to join with that row. 0 for none: every joiner is let in, as before
 	int answerAfterSeconds; // answerafter=: the seconds the host's answer rows are up before the press, 1 to 15. Unless asked, 3
 	bool findGames;       // findgames=yes: a net=join run through the relay joins as a player does: Find Games, then the list's game's row, with pictures of the joining page asking (its check code) and let in. Otherwise the list's game is joined from the code, as before
+	bool menuPictures;    // menus=pictures: a run that stays at the menus, pictures four pages (main, Multiplayer, Online access, Options) and ends, pressing nothing that sends. For comparing how the menus are drawn (-squaremenus). Added 2026-11-10 by Melanikus for the AvP port
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -378,6 +379,8 @@ extern const char *const kHudsonRefusedAccessWithNet;
 extern const char *const kHudsonRefusedAccessWaitNotANumber;
 extern const char *const kHudsonRefusedAccessWaitOutOfRange;
 extern const char *const kHudsonRefusedAccessWaitWithoutCheck;
+extern const char *const kHudsonRefusedMenusWord;
+extern const char *const kHudsonRefusedMenusWithOthers;
 extern const char *const kHudsonRefusedAnswerWord;
 extern const char *const kHudsonRefusedAnswerWithoutHost;
 extern const char *const kHudsonRefusedAnswerAfterNotANumber;
