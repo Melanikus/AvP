@@ -13,6 +13,7 @@
 #include <string>
 
 #include "server_yes_rules.h"
+#include "host_wait_rules.h"
 #include "source_slice.h"
 
 static int checksFailed = 0;
@@ -198,9 +199,10 @@ static void TestTheWaysOnline()
 	// The menus: every row that goes to a page goes through it, as it's pressed, with whether a host would host online
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(pressing, "SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));") &&
-		CountOf(pressing, "SetupNewMenu(") == 1, "a pressed row goes to its page only through the yes, and no other way");
-	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const pressedWayIn = pressing.find("enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());");
+	Check(pressedWayIn != std::string::npos && pressedWayIn < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1,
+		"a pressed row goes to its page only through the yes, and no other way");
+	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(online, "return Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;"),
 		"a host hosts online when servers.cfg names a server and the Host row says Online");
 	Check(CountOf(menus, "ServerYesPage_WayIn(") == 1 && CountOf(menus, "ServerYesPage_Needed(") == 0,
@@ -257,12 +259,102 @@ static void TestWhereAHostHosts()
 	std::string const starting = SourceSlice(menus, "case AVPMENU_ELEMENT_STARTMPGAME:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)", "\n\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(starting, "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ?\n\t\t\t\t\tNet_HostAtHome(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) :\n\t\t\t\t\tNet_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);") &&
-		Has(starting, "if (hosted != NET_FAIL)") && CountOf(starting, "Net_Host") == 2, "Start game hosts at home when the row says so, online otherwise");
+		Has(starting, "if (hosted != NET_FAIL)") && CountOf(starting, "Net_HostGame(") == 1 && CountOf(starting, "Net_HostAtHome(") == 1, "Start game hosts at home when the row says so, online otherwise");
 	Check(Has(coop, "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ? Net_HostAtHome(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel) :\n\t\tNet_HostGame(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel);") &&
 		CountOf(coop, "Net_HostGame(") == 1 && CountOf(coop, "Net_HostAtHome(") == 1, "and so does the co-op page, which hosts nowhere else");
 
-	Check(Has(words, "\t\"Host\",\n\t\"Online\",\n\t\"At home\",\n\t\"Online: players anywhere can find your game through this server. At home: only players on this home network can join.\",\n\t\"Find Games\","),
+	Check(Has(words, "\t\"Host\",\n\t\"Online\",\n\t\"At home\",\n\t\"Online: players anywhere can find your game through this server. At home: only players on this home network can join.\",\n"),
 		"the row's words, and its help line says plainly who can join at home");
+}
+
+// A HOST'S WAIT, AND A FAILED HOST'S LINE (PO's rulings Q3 and Q4, 2026-11-10; host_wait_rules.h says why). The rules are tried here,
+// with a server that never answers; how the menus use them is read in the code. Added 2026-11-10 by Melanikus for the AvP port.
+static void TestTheHostsWait()
+{
+	printf("6. a host waits for the server, never forever, and a failed host says why\n");
+	Check(HostWait_Step(false, true, false, 0, 0) == kHostWaitHostNow && HostWait_Step(true, true, false, 0, 99999) == kHostWaitHostNow,
+		"a server that's ready hosts now, even at the limit");
+	Check(HostWait_Step(false, false, true, 0, 0) == kHostWaitCantUse, "a server that can't be used stops the wait, to say why");
+	Check(HostWait_Step(true, false, false, 1000, 1000) == kHostWaitGoOn && HostWait_Step(true, false, false, 1000, 1000 + kHostWaitMostMs - 1) == kHostWaitGoOn,
+		"a server still being asked is waited for, up to the limit");
+	Check(HostWait_Step(true, false, false, 1000, 1000 + kHostWaitMostMs) == kHostWaitGiveUp && HostWait_Step(true, false, false, 1000, 4000000000u) == kHostWaitGiveUp,
+		"A SERVER THAT NEVER ANSWERS: at the limit the wait gives up, and so on every frame after");
+	uint32_t const nearTheWrap = 0xFFFFFFFFu - 1000u;
+	Check(HostWait_Step(true, false, false, nearTheWrap, nearTheWrap + 5000u) == kHostWaitGoOn &&
+		HostWait_Step(true, false, false, nearTheWrap, nearTheWrap + kHostWaitMostMs) == kHostWaitGiveUp,
+		"and the clock going round past 0 neither stops it early nor lets it wait forever");
+	Check(HostWait_Step(false, false, false, 0, 0) == kHostWaitHostNow, "nothing to wait for (no server, or no yes) hosts now, and the host says what's wrong");
+	Check(kHostWaitMostMs == 30000u, "the limit is 30 seconds, as the words say");
+
+	char line[96];
+	HostWait_FailedLine("Couldn't host online:", "the relay server couldn't be reached", line, sizeof(line));
+	Check(strcmp(line, "Couldn't host online: the relay server couldn't be reached.") == 0, "a failed host's line is what failed, then why");
+	HostWait_FailedLine("This game couldn't be hosted.", NULL, line, sizeof(line));
+	Check(strcmp(line, "This game couldn't be hosted.") == 0, "with no why, what failed alone");
+	char small[8];
+	HostWait_FailedLine("Couldn't host online:", "x", small, sizeof(small));
+	Check(strcmp(small, "Couldn'") == 0, "cut short at its room, and still ended");
+	HostWait_FailedLine("a", "b", NULL, 10);
+	Check(true, "nowhere to write is no harm");
+
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const words = ReadSource("3dc/avp/language.cpp");
+	Check(menus.size() > 1000 && words.size() > 1000, "the menus' and the words' sources were found and read");
+
+	std::string const begins = SourceSlice(menus, "static bool AHostWaits(HostWaitFor what)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const onlyOnline = begins.find("if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)\n\t{\n\t\treturn false;\n\t}");
+	Check(onlyOnline != std::string::npos && onlyOnline < begins.find("hostWaiting = what;") && Has(begins, "hostWaitSince = GetTickCount();") &&
+		Has(begins, "ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_ASKING));"),
+		"a host waits only online, only while the server hasn't answered, and says Asking the server...");
+
+	std::string const frame = SourceSlice(menus, "static void HostWaitFrame(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const leaving = frame.find("if (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || AvPMenus.CurrentMenu != hostWaitPage)\n\t{\n\t\thostWaiting = kHostWaitingForNothing;\n\t\treturn;\n\t}");
+	size_t const step = frame.find("switch (HostWait_Step(state == kNetServerAsking, state == kNetServerReady, state == kNetServerCantUse, hostWaitSince, GetTickCount()))");
+	Check(leaving != std::string::npos && step != std::string::npos && leaving < step, "Esc, or any way off the page, ends the wait before it could host");
+	std::string const hostNow = SourceSlice(frame, "case kHostWaitHostNow:", "case kHostWaitCantUse:", kSliceEndAfterTheStart, FailedSlice);
+	std::string const cantUse = SourceSlice(frame, "case kHostWaitCantUse:", "case kHostWaitGiveUp:", kSliceEndAfterTheStart, FailedSlice);
+	std::string const givingUp = frame.substr(frame.find("case kHostWaitGiveUp:") == std::string::npos ? frame.size() : frame.find("case kHostWaitGiveUp:"));
+	Check(Has(hostNow, "PressTheStartRowAgain();") && Has(hostNow, "SetupNewMenu(AVPMENU_COOP_HOST);"), "a server that's ready: the host goes on as it was pressed");
+	Check(Has(cantUse, "ShowWhyTheHostFailed(hostWaitPage, why);") && !Has(cantUse, "PressTheStartRowAgain") && !Has(cantUse, "SetupNewMenu"),
+		"one that can't be used: why, and nothing hosted");
+	Check(Has(givingUp, "ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));") && !Has(givingUp, "PressTheStartRowAgain") && !Has(givingUp, "SetupNewMenu"),
+		"one that never answered: the words for that, and nothing hosted");
+	std::string const pressAgain = SourceSlice(menus, "static void PressTheStartRowAgain(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(pressAgain, "if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_STARTMPGAME)") &&
+		Has(pressAgain, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);") && CountOf(menus, "PressTheStartRowAgain();") == 1,
+		"and the Start row is pressed again for the player, so the game is hosted just as the row hosts it");
+
+	std::string const updating = SourceSlice(menus, "extern void AvP_UpdateMenus(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(updating, "\tHostWaitFrame();\n") && Has(SourceSlice(menus, "static void RenderMenu(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "\tDrawTheHostLine();\n"),
+		"the wait goes on every frame of the menus, and its line is drawn with the page");
+
+	// The two player places: Start game, and the co-op page that hosts as it opens
+	std::string const startRow = SourceSlice(menus, "case AVPMENU_ELEMENT_STARTMPGAME:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)", "\n\t\t}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	size_t const startWaits = startRow.find("if (AHostWaits(kHostWaitingToStart))\n\t\t\t\t{\n\t\t\t\t\tbreak;\n\t\t\t\t}");
+	Check(startWaits != std::string::npos && startWaits < startRow.find("Campaign_SetFromLevelRow();") && startWaits < startRow.find("Net_HostGame("),
+		"Start game waits for the server when it must, before it sets anything up or hosts");
+	size_t const hostedOrNot = startRow.find("if (hosted != NET_FAIL)");
+	Check(hostedOrNot != std::string::npos && hostedOrNot < startRow.find("ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());"),
+		"and a Start that fails says why on its page");
+	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
+		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const coopWaits = pressing.find("if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))\n\t\t\t\t{\n\t\t\t\t\tbreak;\n\t\t\t\t}");
+	Check(coopWaits != std::string::npos && coopWaits < pressing.find("SetupNewMenu(page);"), "Co-op campaign waits on the Multiplayer page before its page hosts");
+	std::string const coopOpening = SourceSlice(menus, "case AVPMENU_COOP_HOST:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
+	size_t const back = coopOpening.find("SetupNewMenu(AVPMENU_MULTIPLAYER);");
+	Check(back != std::string::npos && back < coopOpening.find("ShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);"),
+		"a co-op page that can't host goes back to the Multiplayer page, which says why");
+	std::string const failedLine = SourceSlice(menus, "static void ShowWhyTheHostFailed(enum AVPMENU_ID page, const char *why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(failedLine, "HostWait_FailedLine(GetTextString(why ? TEXTSTRING_HOST_FAILED : TEXTSTRING_HOST_FAILED_PLAIN), why, line, sizeof(line));") &&
+		CountOf(menus, "ShowWhyTheHostFailed(") == 4, "the line is the game's words, then a why that's only ever Net_HostFailedWhy's or Net_ServerState's");
+
+	// The four hosts only a run makes put the why in their log lines
+	Check(CountOf(menus, "HostFailedForARun(\"") == 4 && Has(menus, "return why ? std::string(what) + \", because \" + why : std::string(what);"),
+		"the four hosts only a run makes say why in their log lines");
+
+	Check(Has(words, "\t\"Asking the server...\",\n\t\"Couldn't host online:\",\n\t\"This game couldn't be hosted.\",\n\t\"The server didn't answer in 30 seconds, so nothing was hosted. Try again, or host at home.\",\n"),
+		"the wait's and the failed host's words, in langenum.h's order");
 }
 
 int main()
@@ -272,6 +364,7 @@ int main()
 	TestTheWiring();
 	TestTheWaysOnline();
 	TestWhereAHostHosts();
+	TestTheHostsWait();
 
 	if (checksFailed)
 	{

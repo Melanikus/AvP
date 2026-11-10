@@ -105,6 +105,7 @@
 #include "online_screens_page.h"
 #include "access_page.h"
 #include "server_yes_page.h"
+#include "host_wait_rules.h"   // a host's wait for the server, and a failed host's line (PO's rulings, 2026-11-10)
 #include "access_page_rules.h"   // the Online access pages' rows: how far apart, and how bright when not chosen
 
 #include "credits_roll.h"
@@ -451,6 +452,14 @@ static bool JoinThroughFindGamesForARun(void);   // findgames=yes, below with th
 // A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
 // A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
 // Everything is on this machine's own address: see NetLoopbackOnly in networking.cpp. If it can't get as far as starting a level, the run ends here, and its result says how far it got.
+// A run's words for a host that failed: what it was doing, then why, in the game's own fixed words (networking.h, Net_HostFailedWhy). Added
+// 2026-11-10 by Melanikus for the AvP port (PO's ruling Q4): the four hosts only a run makes put the why in their log lines.
+static std::string HostFailedForARun(const char *what)
+{
+	const char *const why = Net_HostFailedWhy();
+	return why ? std::string(what) + ", because " + why : std::string(what);
+}
+
 static void StartNetworkGameForHudsonRun(void)
 {
 	extern int MultiplayerEpisodeForEnvironment(int environment);
@@ -505,7 +514,7 @@ static void StartNetworkGameForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, level) == NET_FAIL)
 		{
-			Hudson_NetStopBecause("the host couldn't open its port on this machine");
+			Hudson_NetStopBecause(HostFailedForARun("the host couldn't open its port on this machine").c_str());
 			return;
 		}
 
@@ -970,7 +979,7 @@ static int StartLevelForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, netGameData.levelNumber) != NET_OK)
 		{
-			LogErrorString("listplace: the skirmish couldn't start, so this run isn't one");
+			LogErrorString(HostFailedForARun("listplace: the skirmish couldn't start, so this run isn't one"));
 		}
 
 		SetLevelToLoadForThisNetworkGame();
@@ -989,7 +998,7 @@ static int StartLevelForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, 0) != NET_OK)
 		{
-			LogErrorString("class: the skirmish couldn't start, so this run isn't one");
+			LogErrorString(HostFailedForARun("class: the skirmish couldn't start, so this run isn't one"));
 		}
 	}
 
@@ -1043,7 +1052,7 @@ static bool HostByItselfThroughTheRelay(void)
 
 	if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) == NET_FAIL)
 	{
-		LogString("relay auto: this copy couldn't host, so it waits at the menus");
+		LogString(HostFailedForARun("relay auto: this copy couldn't host, so it waits at the menus"));
 		return false;
 	}
 
@@ -1549,10 +1558,148 @@ static void AnswerTheRequestForARun(void)
 	PressTheRowForARun(AVPMENU_ELEMENT_RESUMEGAME, 0, "Resume");
 }
 
+// ---- A host's wait for the server, and a failed host's line (host_wait_rules.h says why). Added 2026-11-10 by Melanikus for the AvP port
+// (PO's rulings Q3 and Q4).
+
+static bool HostsOnline(void);
+
+// What a waiting host does once the server is ready: the config page's Start row hosts the game set up there; Co-op campaign opens its
+// page, which hosts as it opens
+enum HostWaitFor
+{
+	kHostWaitingForNothing,
+	kHostWaitingToStart,
+	kHostWaitingToOpenCoop
+};
+
+static HostWaitFor hostWaiting = kHostWaitingForNothing;
+static enum AVPMENU_ID hostWaitPage = AVPMENU_MULTIPLAYER;   // the page it waits on: leaving it ends the wait
+static uint32_t hostWaitSince = 0;                           // GetTickCount when it began
+static char hostLine[200];                                   // "Asking the server...", or why a host failed, under the page's rows
+static enum AVPMENU_ID hostLinePage = AVPMENU_MULTIPLAYER;   // the page it's for, the only one it's drawn on
+
+static void ShowTheHostLine(enum AVPMENU_ID page, const char *text)
+{
+	snprintf(hostLine, sizeof(hostLine), "%s", text ? text : "");
+	hostLinePage = page;
+}
+
+// Why a host failed, on the page it was pressed on: the game's words for what failed, then why in its own fixed words
+static void ShowWhyTheHostFailed(enum AVPMENU_ID page, const char *why)
+{
+	char line[sizeof(hostLine)];
+	HostWait_FailedLine(GetTextString(why ? TEXTSTRING_HOST_FAILED : TEXTSTRING_HOST_FAILED_PLAIN), why, line, sizeof(line));
+	ShowTheHostLine(page, line);
+}
+
+// The config page's Start row, pressed again for the player once the server is ready, so the game is hosted just as the row hosts it
+static void PressTheStartRowAgain(void)
+{
+	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
+	{
+		if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_STARTMPGAME)
+		{
+			AvPMenus.CurrentlySelectedElement = row;
+			InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+			return;
+		}
+	}
+}
+
+// A host pressed while the server hasn't answered yet waits for it, on the page it was pressed on. False, with nothing changed, when
+// there's nothing to wait for: a game hosted at home, or a server that has answered.
+static bool AHostWaits(HostWaitFor what)
+{
+	const char *why = NULL;
+
+	if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)
+	{
+		return false;
+	}
+
+	// Asked now, if it wasn't yet: relay_list.cpp asks once at a time, and never before the player's yes
+	RelayList_FindRelays();
+	hostWaiting = what;
+	hostWaitPage = AvPMenus.CurrentMenu;
+	hostWaitSince = GetTickCount();
+	ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_ASKING));
+	return true;
+}
+
+// One frame of a host's wait (host_wait_rules.h). A line left from another page goes, too.
+static void HostWaitFrame(void)
+{
+	if (hostLine[0] && AvPMenus.CurrentMenu != hostLinePage)
+	{
+		hostLine[0] = 0;
+	}
+
+	if (hostWaiting == kHostWaitingForNothing)
+	{
+		return;
+	}
+
+	// Esc, or any other way off the page, ends the wait, and nothing is hosted
+	if (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || AvPMenus.CurrentMenu != hostWaitPage)
+	{
+		hostWaiting = kHostWaitingForNothing;
+		return;
+	}
+
+	const char *why = NULL;
+	int const state = Net_ServerState(&why);
+	HostWaitFor const what = hostWaiting;
+
+	switch (HostWait_Step(state == kNetServerAsking, state == kNetServerReady, state == kNetServerCantUse, hostWaitSince, GetTickCount()))
+	{
+		case kHostWaitGoOn:
+			return;
+
+		case kHostWaitHostNow:
+			hostWaiting = kHostWaitingForNothing;
+			hostLine[0] = 0;
+
+			if (what == kHostWaitingToStart)
+			{
+				PressTheStartRowAgain();
+			}
+			else
+			{
+				SetupNewMenu(AVPMENU_COOP_HOST);
+			}
+			return;
+
+		case kHostWaitCantUse:
+			hostWaiting = kHostWaitingForNothing;
+			ShowWhyTheHostFailed(hostWaitPage, why);
+			return;
+
+		case kHostWaitGiveUp:
+			hostWaiting = kHostWaitingForNothing;
+			ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));
+			return;
+	}
+}
+
+// The line under the page's rows, on its own page only: two lines of the small font fit between the rows' end and the help line's top
+static void DrawTheHostLine(void)
+{
+	if (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || !hostLine[0] || AvPMenus.CurrentMenu != hostLinePage)
+	{
+		return;
+	}
+
+	RECT area = { MENU_LEFTXEDGE, MENU_BOTTOMYEDGE, MENU_RIGHTXEDGE, 420 };
+	RenderSmallFontString_Wrapped(hostLine, &area, ONE_FIXED, 0, 0);
+}
+
 extern void AvP_UpdateMenus(void)
 {
 	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
 	UpdateTheAnswerRows();
+
+	// A host waiting for the server, and the line under the rows (added 2026-11-10, PO's rulings Q3 and Q4)
+	HostWaitFrame();
 
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
 	{
@@ -2027,10 +2174,13 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_COOP_HOST:
 		{
-			// This page opens the game. If that can't be done, there's no page.
+			// This page opens the game. If that can't be done, there's no page, and the Multiplayer page says why (modified 2026-11-10 by
+			// Melanikus for the AvP port, PO's ruling Q4)
 			if (!CoopMenu_HostPageOpens())
 			{
+				const char *const why = Net_HostFailedWhy();
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				ShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);
 				return;
 			}
 			break;
@@ -2531,6 +2681,9 @@ static void RenderMenu(void)
 	{
 		ServerYesPage_Draw();
 	}
+
+	// A host's "Asking the server...", or why it failed, under the rows of the page it was pressed on (added 2026-11-10, PO's rulings)
+	DrawTheHostLine();
 
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
 	// instead of the page's own row
@@ -3908,7 +4061,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part, PO's rulings): a way online asks for the player's yes to
 				// the server in servers.cfg first, as its row is pressed (server_yes_page.h, ServerYesPage_WayIn). Every other row goes where it
 				// always went.
-				SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));
+				enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());
+
+				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)
+				if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
+				{
+					break;
+				}
+
+				SetupNewMenu(page);
 			}
 			break;
 		}
@@ -4428,7 +4589,14 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					MP_Config_Description[descriptionLength] = '\0';
 				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
-				
+
+				// Online, a host pressed before the server has answered waits for it on this page, and the row is pressed again for the player
+				// once it's ready (added 2026-11-10 by Melanikus for the AvP port, PO's ruling Q3)
+				if (AHostWaits(kHostWaitingToStart))
+				{
+					break;
+				}
+
 				Campaign_SetFromLevelRow();
 				Campaign_SetDifficulty();
 				Campaign_ChooseRollNumber();
@@ -4451,6 +4619,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 					SetLevelToLoadForThisNetworkGame();
 					SetBriefingTextForMultiplayer();
+				}
+				else
+				{
+					// It wasn't hosted: the page says why, rather than nothing at all (added 2026-11-10, PO's ruling Q4)
+					ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());
 				}
 			}
 			break;

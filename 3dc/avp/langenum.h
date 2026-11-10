@@ -1549,6 +1549,10 @@ enum TEXTSTRING_ID
 	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE,  // its first choice, with the server's name after it in brackets
 	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME,  // its second
 	TEXTSTRING_MULTIPLAYER_HOSTWHERE_HELP,    // what each means, in plain words
+	TEXTSTRING_HOST_ASKING,                  // a host waiting for the server's first answer (host_wait_rules.h, 2026-11-10, PO's ruling Q3)
+	TEXTSTRING_HOST_FAILED,                  // a failed online host's line, before the game's own words for why (Q4)
+	TEXTSTRING_HOST_FAILED_PLAIN,            // a failed host's line when there's no why to give
+	TEXTSTRING_HOST_NO_ANSWER,               // the wait gave up: the server didn't answer in kHostWaitMostMs
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

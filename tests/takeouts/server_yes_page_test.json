@@ -159,8 +159,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "SetupNewMenu(ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline()));",
-					"to": "SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));"
+					"from": "enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());",
+					"to": "enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);"
 				}
 			]
 		},
@@ -281,6 +281,166 @@
 					"file": "3dc/avp/language.cpp",
 					"from": "At home: only players on this home network can join.\",",
 					"to": "At home: anyone can join.\","
+				}
+			]
+		},
+		{
+			"name": "a server that's ready isn't hosted on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\tif (ready)\n\t{\n\t\treturn kHostWaitHostNow;\n\t}",
+					"to": "\tif (ready)\n\t{\n\t\treturn kHostWaitGoOn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a server that can't be used is waited for",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\tif (cantUse)\n\t{\n\t\treturn kHostWaitCantUse;\n\t}",
+					"to": "\tif (cantUse)\n\t{\n\t\treturn kHostWaitGoOn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a server that never answers is waited for forever",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": ">= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;",
+					"to": ">= kHostWaitMostMs ? kHostWaitGoOn : kHostWaitGoOn;"
+				}
+			]
+		},
+		{
+			"name": "the wait gives up a moment early",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": ">= kHostWaitMostMs ? kHostWaitGiveUp",
+					"to": ">= kHostWaitMostMs - 1 ? kHostWaitGiveUp"
+				}
+			]
+		},
+		{
+			"name": "the wait is two minutes, not the words' 30 seconds",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "uint32_t const kHostWaitMostMs = 30000;",
+					"to": "uint32_t const kHostWaitMostMs = 120000;"
+				}
+			]
+		},
+		{
+			"name": "a failed host's line has no why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%s %s.\", whatFailed ? whatFailed : \"\", why);",
+					"to": "\t\tsnprintf(out, room, \"%s\", whatFailed ? whatFailed : \"\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game at home waits for a server it doesn't use",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)",
+					"to": "if (Net_ServerState(&why) != kNetServerAsking)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wait goes on after the page is left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tif (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || AvPMenus.CurrentMenu != hostWaitPage)\n\t{\n\t\thostWaiting = kHostWaitingForNothing;\n\t\treturn;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\thostWaiting = kHostWaitingForNothing;\n\t\treturn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wait that gave up hosts anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));\n",
+					"to": "\t\t\tShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));\n\t\t\tPressTheStartRowAgain();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus never run the wait",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tHostWaitFrame();\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start game never waits for the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tif (AHostWaits(kHostWaitingToStart))\n\t\t\t\t{\n\t\t\t\t\tbreak;\n\t\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Co-op campaign never waits for the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Start that fails says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a co-op page that can't host goes back without saying why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run's host that failed doesn't say why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\treturn why ? std::string(what) + \", because \" + why : std::string(what);",
+					"to": "\treturn std::string(what);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the words for giving up say another limit",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\"The server didn't answer in 30 seconds, so nothing was hosted.",
+					"to": "\"The server didn't answer in a minute, so nothing was hosted."
 				}
 			]
 		}
