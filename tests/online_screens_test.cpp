@@ -905,6 +905,29 @@ static void TestTheHelpLines()
 	Check(Has(menus, "area.top    = 420;") && kOnlineHelpPageBottom == 420, "the joining page's limit is where the menus draw their help line, 420");
 }
 
+// The join's own frames (#202, Third's read of 2026-11-10: every Hudson join through Find Games logged D3DERR_INVALIDCALL from BeginScene
+// once, right after the list's game was pressed). A player's Enter starts the join inside the menus' open frame; a Hudson run presses the
+// row between frames. The wait closes a frame only if one is open, and gives back only a frame it closed, so whichever way the join began,
+// no frame is ever begun inside another. Read in the source, since it needs the game. Added 2026-11-10 by Melanikus for the AvP port.
+static void TestTheJoinsFrames()
+{
+	puts("The join's own frames");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const render = ReadSource("3dc/d3d_render.cpp");
+	std::string const drawing = Between(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n");
+	std::string const over = Between(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n");
+
+	size_t const asked = drawing.find("joinClosedAFrame = ThisFramesRenderingIsOpen();");
+	size_t const closed = drawing.find("if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}");
+	size_t const begun = drawing.find("ThisFramesRenderingHasBegun();");
+	Check(asked != std::string::npos && closed != std::string::npos && asked < closed && closed < begun,
+		"the join's wait closes the frame that was open when it began, and only if one was, before it begins a frame of its own");
+	Check(Has(over, "if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();\n\t\t}") &&
+		Has(over, "joinClosedAFrame = false;"), "and when it's over it gives back only a frame it closed");
+	Check(Has(render, "bool ThisFramesRenderingIsOpen()\n{\n\treturn frameIsOpen;\n}"), "whether a frame is open is the renderer's own word on it");
+}
+
 int main()
 {
 	TestTheTail();
@@ -917,6 +940,7 @@ int main()
 	TestWords();
 	TestTheCheckCode();
 	TestTheHelpLines();
+	TestTheJoinsFrames();
 	TestWhereTheyAreDrawn();
 
 	if (checksFailed)

@@ -892,6 +892,12 @@ static void JoiningLine(int step, const char *region, char *line, size_t size)
 // wait is over (OnlinePage_JoinWaitOver)
 static bool joinDrewFrames = false;
 
+// Whether the wait closed a frame that was open when it began. Added 2026-11-10 by Melanikus for the AvP port (#202): a player's Enter
+// starts the join inside the menus' open frame, which the wait closes and gives back after; but a Hudson run presses the row between
+// frames, with none open, and giving it one back then left a frame open that nobody finished, so the run's next frame couldn't begin
+// (D3DERR_INVALIDCALL from BeginScene, once a join). So the wait gives back only what it closed.
+static bool joinClosedAFrame = false;
+
 void OnlinePage_DrawJoining(const char *region)
 {
 	char line[96];
@@ -902,7 +908,13 @@ void OnlinePage_DrawJoining(const char *region)
 	// menus' frame is closed first, once, and each frame of the wait is then a whole frame of its own.
 	if (!joinDrewFrames)
 	{
-		ThisFramesRenderingHasFinished();
+		joinClosedAFrame = ThisFramesRenderingIsOpen();
+
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasFinished();
+		}
+
 		joinDrewFrames = true;
 	}
 
@@ -920,8 +932,15 @@ void OnlinePage_JoinWaitOver(void)
 	if (joinDrewFrames)
 	{
 		joinDrewFrames = false;
-		ThisFramesRenderingHasBegun();
-		DrawMainMenusBackdrop();
+
+		// Only a frame the wait closed is given back (#202): with none open when the join began, the caller opens its own next
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasBegun();
+			DrawMainMenusBackdrop();
+		}
+
+		joinClosedAFrame = false;
 	}
 }
 

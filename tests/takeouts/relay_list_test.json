@@ -879,7 +879,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\tif (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}\n\n",
+					"from": "\t\tif (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}\n\n",
 					"to": ""
 				}
 			]
@@ -889,8 +889,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();\n\t\tDrawMainMenusBackdrop();",
-					"to": "\t\tjoinDrewFrames = false;"
+					"from": "\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();\n",
+					"to": ""
 				}
 			]
 		},

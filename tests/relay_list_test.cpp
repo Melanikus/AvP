@@ -1061,17 +1061,20 @@ static void TestTheMenus()
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
 
-	// The wait is called from inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL, in the
-	// first footage's log). So the wait's drawing closes the menus' frame once, before its first frame of its own, and a new one is opened
-	// for the menus' loop to finish once the wait is over, however it ended.
+	// A player's Enter starts the join inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL,
+	// in the first footage's log). So the wait's drawing closes the frame that's open once, before its first frame of its own, and gives one
+	// back for the menus' loop to finish once the wait is over. Modified 2026-11-10 by Melanikus for the AvP port (#202): only a frame that
+	// was open is closed, and only one it closed is given back, since a Hudson run presses the row between frames, with none open
+	// (online_screens_test, "The join's own frames", holds the details).
 	std::string const joining = SourceSlice(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const closesTheMenus = joining.find("if (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}");
+	size_t const closesTheMenus = joining.find("if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}\n\n\t\tjoinDrewFrames = true;");
 	size_t const opensItsOwn = joining.find("ThisFramesRenderingHasBegun();");
 	Check(closesTheMenus != std::string::npos && opensItsOwn != std::string::npos && closesTheMenus < opensItsOwn,
-		"the join's wait closes the menus' open frame, once, before it opens one of its own");
+		"the join's wait closes the frame that's open, once, before it opens one of its own");
 	std::string const waitOver = SourceSlice(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();"),
-		"and once it's over, a new frame is opened for the menus, only if the wait drew any");
+	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;") &&
+		Has(waitOver, "if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();"),
+		"and once it's over, a frame is given back for the menus, only if the wait drew any and closed theirs");
 	size_t const over = menus.find("OnlinePage_JoinWaitOver();");
 	Check(unset != std::string::npos && over != std::string::npos && unset < over && over < menus.find("if (joined != NET_FAIL)", unset) &&
 		CountOf(menus, "OnlinePage_JoinWaitOver();") == 1, "which the menus ask for straight after the join, before what it did is looked at");

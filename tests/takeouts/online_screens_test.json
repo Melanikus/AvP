@@ -1013,6 +1013,26 @@
 					"to": "\treturn widest;\n}"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the join's wait closes a frame whether or not one is open",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tjoinClosedAFrame = ThisFramesRenderingIsOpen();",
+					"to": "\t\tjoinClosedAFrame = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait gives back a frame it never closed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tif (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();"
+				}
+			]
 		}
 	]
 }
