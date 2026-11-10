@@ -6,9 +6,16 @@
 // for its own reason, with the other lines still read. The text is always given in a buffer of exactly its own size, with no 0 after it,
 // so a read past its end would be a read past the buffer, which the standard library's checks (every_test.h) stop.
 //
-// Nothing here reads a file or uses the network.
+// Then where the file is found (servers_cfg_file.h): the game's folder from the program's path, which has to be in a folder called bin,
+// and the reading of a real file, in a folder of the test's own under the temporary folder, which it removes after.
+//
+// Nothing here uses the network.
 
 #include "servers_cfg.h"
+#include "servers_cfg_file.h"
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -397,8 +404,120 @@ static void TestWords(void)
 	Check(strcmp(SERVERS_CFG_FILE_NAME, "servers.cfg") == 0, "the file's name, as the log gives it");
 }
 
+static void TestTheGameFolder(void)
+{
+	puts("The game's folder, from the program's path");
+
+	wchar_t folder[64];
+	Check(ServersCfg_GameFolderOf(L"C:\\Games\\AvP\\bin\\AvP_Classic.exe", folder, 64) && wcscmp(folder, L"C:\\Games\\AvP") == 0,
+		"C:\\Games\\AvP\\bin\\AvP_Classic.exe is in the game folder C:\\Games\\AvP");
+	Check(ServersCfg_GameFolderOf(L"D:\\AvP\\BIN\\AvP_Classic.exe", folder, 64) && wcscmp(folder, L"D:\\AvP") == 0, "BIN in capitals is bin");
+	Check(ServersCfg_GameFolderOf(L"C:/Games/AvP/bin/AvP_Classic.exe", folder, 64) && wcscmp(folder, L"C:/Games/AvP") == 0, "and / works as \\ does");
+	Check(ServersCfg_GameFolderOf(L"\\\\?\\C:\\Games\\AvP\\bin\\a.exe", folder, 64) && wcscmp(folder, L"\\\\?\\C:\\Games\\AvP") == 0, "and Windows' long form");
+	Check(ServersCfg_GameFolderOf(L"C:\\bin\\a.exe", folder, 64) && wcscmp(folder, L"C:") == 0, "a bin at the top of a drive: the drive");
+
+	struct Bad { const wchar_t *path; const char *what; };
+	Bad const bad[] = {
+		{ L"C:\\Games\\AvP\\AvP_Classic.exe", "a program not in a bin folder" },
+		{ L"C:\\Games\\AvP\\bin2\\AvP_Classic.exe", "in bin2" },
+		{ L"C:\\Games\\AvP\\abin\\AvP_Classic.exe", "in abin" },
+		{ L"C:\\Games\\AvP\\bin\\", "a folder with no program in it" },
+		{ L"bin\\AvP_Classic.exe", "bin with nothing before it" },
+		{ L"AvP_Classic.exe", "a name alone" },
+		{ L"", "nothing" },
+	};
+
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+	{
+		wcscpy(folder, L"left over");
+		bool const refused = !ServersCfg_GameFolderOf(bad[i].path, folder, 64) && folder[0] == L'\0';
+		Check(refused, std::string("no game folder for ") + bad[i].what + ", and nothing left in the answer");
+	}
+
+	wchar_t small[13];
+	wcscpy(small, L"left over");
+	Check(!ServersCfg_GameFolderOf(L"C:\\Games\\AvP\\bin\\a.exe", small, 12) && small[0] == L'\0', "nor when the answer has no room for it and its 0");
+	Check(ServersCfg_GameFolderOf(L"C:\\Games\\AvP\\bin\\a.exe", small, 13) && wcscmp(small, L"C:\\Games\\AvP") == 0, "but with room for both, it's given");
+	Check(!ServersCfg_GameFolderOf(NULL, folder, 64) && !ServersCfg_GameFolderOf(L"C:\\a\\bin\\b.exe", NULL, 64) &&
+		!ServersCfg_GameFolderOf(L"C:\\a\\bin\\b.exe", folder, 0), "no path, or nowhere to put the answer, is refused");
+}
+
+// A file of the test's own, with these bytes
+static bool WriteBytes(const std::wstring &path, const std::string &bytes)
+{
+	HANDLE const file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (file == INVALID_HANDLE_VALUE)
+	{
+		return false;
+	}
+
+	DWORD written = 0;
+	bool const wrote = WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, NULL) && written == bytes.size();
+	CloseHandle(file);
+	return wrote;
+}
+
+static void TestReadingTheFile(void)
+{
+	puts("Reading the file");
+
+	wchar_t temp[MAX_PATH];
+	DWORD const tempLength = GetTempPathW(MAX_PATH, temp);
+	Check(tempLength > 0 && tempLength < MAX_PATH, "(the temporary folder is found)");
+
+	if (tempLength == 0 || tempLength >= MAX_PATH)
+	{
+		return;
+	}
+
+	std::wstring const folder = std::wstring(temp) + L"servers_cfg_test_" + std::to_wstring(GetCurrentProcessId()) + L"_" + std::to_wstring(GetTickCount());
+	std::wstring const file = folder + L"\\servers.cfg";
+	Check(CreateDirectoryW(folder.c_str(), NULL) != 0, "(a folder of the test's own is made)");
+
+	Check(ServersCfg_ReadFolder(folder.c_str(), &read) == kServersCfgNotThere && read.serverCount == 0, "a folder with no servers.cfg: there are no servers");
+	Check(ServersCfg_ReadFolder((folder + L"\\not here").c_str(), &read) == kServersCfgNotThere, "and a folder that isn't there either");
+	Check(ServersCfg_ReadFolder(NULL, &read) == kServersCfgNoFolder && ServersCfg_ReadFolder(L"", &read) == kServersCfgNoFolder, "no folder at all is nowhere to look");
+
+	// A folder where the file would be
+	Check(CreateDirectoryW(file.c_str(), NULL) != 0, "(a folder called servers.cfg is made)");
+	Check(ServersCfg_ReadFolder(folder.c_str(), &read) == kServersCfgNotAFile && read.serverCount == 0, "a folder called servers.cfg isn't read");
+	RemoveDirectoryW(file.c_str());
+
+	// A good file, with Windows' line ends and the mark Notepad may write
+	Check(WriteBytes(file, "\xEF\xBB\xBF# Our servers\r\n" + Line("203.0.113.7") + "\r\n"), "(a good file is written)");
+	Check(ServersCfg_ReadFolder(folder.c_str(), &read) == kServersCfgOpened && read.fileRefusal == kServersCfgFileRead && read.serverCount == 1 &&
+		strcmp(read.servers[0].name, "New York") == 0 && read.servers[0].lineNumber == 2, "a good file is read, as Notepad would save it");
+
+	// A file too big is read no further than one byte past the most, and refused
+	Check(WriteBytes(file, Line("203.0.113.7") + "\n#" + std::string(20000, 'x') + "\n"), "(a 20 KB file is written)");
+	Check(ServersCfg_ReadFolder(folder.c_str(), &read) == kServersCfgOpened && read.fileRefusal == kServersCfgFileTooBig && read.serverCount == 0,
+		"a file over 16 KB is refused whole");
+
+	// An empty file: read, with no servers
+	Check(WriteBytes(file, ""), "(an empty file is written)");
+	Check(ServersCfg_ReadFolder(folder.c_str(), &read) == kServersCfgOpened && read.fileRefusal == kServersCfgFileRead && read.serverCount == 0,
+		"an empty file is read, with no servers");
+
+	DeleteFileW(file.c_str());
+	Check(RemoveDirectoryW(folder.c_str()) != 0, "(the test's folder is removed)");
+
+	bool everyOne = true;
+	const char *const unknown = ServersCfg_OpeningWords(static_cast<ServersCfgOpening>(999));
+
+	for (int i = kServersCfgOpened; i <= kServersCfgCantRead; i++)
+	{
+		const char *const words = ServersCfg_OpeningWords(static_cast<ServersCfgOpening>(i));
+		everyOne = everyOne && words && words[0] && strcmp(words, unknown) != 0;
+	}
+
+	Check(everyOne, "every way of finding the file has words of its own");
+}
+
 int main()
 {
+	TestTheGameFolder();
+	TestReadingTheFile();
 	TestGoodLines();
 	TestWholeFile();
 	TestBadBytes();

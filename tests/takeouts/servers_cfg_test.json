@@ -263,6 +263,46 @@
 					"to": "return true;"
 				}
 			]
+		},
+		{
+			"name": "the program may be in any folder, not only bin",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg_file.cpp",
+					"from": "if (before < 2 || !IsBin(programPath + before, programFolderEnd - before))",
+					"to": "if (before < 2)"
+				}
+			]
+		},
+		{
+			"name": "a path with no program's name gives a game folder",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg_file.cpp",
+					"from": "if (last == length || last < 2)",
+					"to": "if (last < 2)"
+				}
+			]
+		},
+		{
+			"name": "a folder called servers.cfg is said to be unreadable, not a folder",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg_file.cpp",
+					"from": "return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) ? kServersCfgNotAFile : kServersCfgCantRead;",
+					"to": "return kServersCfgCantRead;"
+				}
+			]
+		},
+		{
+			"name": "the file is read only to the most, so a bigger one is cut short and not refused",
+			"changes": [
+				{
+					"file": "3dc/servers_cfg_file.cpp",
+					"from": "std::vector<char> text(static_cast<size_t>(kServersCfgMostBytes) + 1);",
+					"to": "std::vector<char> text(static_cast<size_t>(kServersCfgMostBytes));"
+				}
+			]
 		}
 	]
 }
