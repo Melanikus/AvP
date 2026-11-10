@@ -1,6 +1,7 @@
 // Written 2026-11-07 by Melanikus for the AvP port.
 // Modified 2026-11-10 by Melanikus for the AvP port:
 //   chunksIn and readModelFile can take a chunk with any name, as the game does, for tools/levels/lift-table.js (#189)
+//   readModelFile reads only a plain file, and checks the size of the very file it reads
 //
 // Reading and writing the game's model files (.rif), shared by rif-pick.js and rif-drop-picture.js. It only reads files it's
 // given and makes new bytes; the tools that use it decide what to write, and where.
@@ -152,9 +153,20 @@ function chunkHeading(name, bodySize) {
 
 // A whole model file, unpacked if it was packed. Gives back the bytes and the chunks inside its one REBINFF2 chunk. anyName is
 // chunksIn's, for the chunks inside it: a tool that only reads, such as tools/levels/lift-table.js, takes what the game takes.
+// Only a plain file is read: a link, a folder or a device is refused before it's opened (lstat looks at the name itself, not at
+// what a link points to). Then the size and the bytes come from the one opened file, so what's checked is what's read.
 function readModelFile(from, anyName = false) {
-  if (fs.statSync(from).size > kLargestFile) stop(`${from} is far bigger than any model file`);
-  const raw = fs.readFileSync(from);
+  if (!fs.lstatSync(from).isFile()) stop(`${from} isn't a plain file`);
+  const fd = fs.openSync(from, 'r');
+  let raw;
+  try {
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile()) stop(`${from} isn't a plain file`);
+    if (opened.size > kLargestFile) stop(`${from} is far bigger than any model file`);
+    raw = fs.readFileSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   let data;
   if (raw.length >= 8 && raw.toString('latin1', 0, 8) === 'REBCRIF1') data = unpack(raw);
   else if (raw.length >= 8 && raw.toString('latin1', 0, 8) === 'REBINFF2') data = raw;
