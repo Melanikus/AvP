@@ -5,9 +5,13 @@
 //   bytes of SHA-384 over the words and the keys, and its first 16 are the vector the relay server's test was first held to;
 // - one bit changed anywhere in the keys gives another fingerprint;
 // - the check takes the right fingerprint and no other, in all 48 bytes;
-// - the -dev setting is read as a region and 96 hex digits, and nothing else.
-// It uses Windows' own SHA-384 (CNG), so it's built and run on GitHub only, as the other cryptography tests are.
+// - the -dev setting is read as a region and 96 hex digits, and nothing else;
+// - (added 2026-11-10 by Melanikus for the AvP port, #175) a server's servers.cfg fingerprint (3dc/net_server_fingerprint.h): nyc3's known
+//   answer, the same list key with the vectors' relay, and that a change to any byte of the list's key, the relay's keys or the line's
+//   number is refused.
+// It uses Windows' own SHA-384 and SHA-256 (CNG), so it's built and run on GitHub only, as the other cryptography tests are.
 #include "net_relay_keys.h"
+#include "net_server_fingerprint.h"
 
 #include "json_reader.h"
 
@@ -170,11 +174,120 @@ static void TestTheSetting()
 	Check(!NetRelayKeys_ReadSetting(noEnd, region, fingerprint) && region[0] == '\0', "a setting longer than any can be is refused");
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (#175): a server's servers.cfg fingerprint. The known answers were worked out three ways
+// apart from the game: Node's crypto, Windows' certutil over the same bytes, and the server's own Java (ServersLine, Primary, 2026-11-10).
+static const char kNyc3ListKey[] = "3059301306072a8648ce3d020106082a8648ce3d030107034200046860ab37215b80bc818041605b4dc15b0f553ff8e0294ef67e0145059ab4fe9fb670e3b138d4fbef7c9a82ae095b32dc647e20fc0840c56c1edf1402f51515f8";
+static const char kNyc3RelayId[] = "d4afea79e806fa341d350643a54b6964e532c591c0544be9ce93db4c752b9d89f668f026ffeb75a64f5049082499e445";
+static const char kNyc3Fingerprint[] = "bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e";
+static const char kNyc3KeyWithVectorRelay[] = "6f15c487060a467449128e470ae9f4ba5649b4e9598f42aeaea450fab880df30";
+
+static void TestTheServersCfgFingerprint()
+{
+	printf("3. a server's servers.cfg fingerprint\n");
+	std::vector<uint8_t> listKey, relayId, nyc3, withVector;
+	bool const have = FromHex(kNyc3ListKey, &listKey) && listKey.size() == 91 && FromHex(kNyc3RelayId, &relayId) &&
+		relayId.size() == kNetRelayKeysFingerprintBytes && FromHex(kNyc3Fingerprint, &nyc3) && FromHex(kNyc3KeyWithVectorRelay, &withVector);
+	Check(have, "nyc3's list key (a P-256 SubjectPublicKeyInfo, 91 bytes) and its relay's id are read");
+
+	if (!have)
+	{
+		return;
+	}
+
+	uint8_t made[kNetServerFingerprintBytes];
+	Check(NetServerFingerprint_Make(listKey.data(), listKey.size(), relayId.data(), made) && HexOf(made, sizeof(made)) == kNyc3Fingerprint,
+		"nyc3's fingerprint is SHA-256 over the words, a 0, its list key and its relay's id (it's " + HexOf(made, sizeof(made)) + ")");
+
+	// One bit changed in the list key or the relay's id: another fingerprint
+	bool allDiffer = true;
+
+	for (size_t place : { static_cast<size_t>(0), static_cast<size_t>(1), listKey.size() - 1 })
+	{
+		listKey[place] ^= 0x01;
+		allDiffer = allDiffer && NetServerFingerprint_Make(listKey.data(), listKey.size(), relayId.data(), made) && memcmp(made, nyc3.data(), sizeof(made)) != 0;
+		listKey[place] ^= 0x01;
+	}
+
+	for (size_t place : { static_cast<size_t>(0), kNetRelayKeysFingerprintBytes - 1 })
+	{
+		relayId[place] ^= 0x01;
+		allDiffer = allDiffer && NetServerFingerprint_Make(listKey.data(), listKey.size(), relayId.data(), made) && memcmp(made, nyc3.data(), sizeof(made)) != 0;
+		relayId[place] ^= 0x01;
+	}
+
+	Check(allDiffer, "one bit changed at the first, second or last byte of the list key, or the first or last of the relay's id, gives another");
+	Check(NetServerFingerprint_Make(listKey.data(), listKey.size() - 1, relayId.data(), made) && memcmp(made, nyc3.data(), sizeof(made)) != 0,
+		"and so does the list key a byte short");
+
+	// What's refused
+	memset(made, 0xA5, sizeof(made));
+	Check(!NetServerFingerprint_Make(NULL, 91, relayId.data(), made) && AllZero(made, sizeof(made)), "no list key is refused, with nothing left in the answer");
+	memset(made, 0xA5, sizeof(made));
+	Check(!NetServerFingerprint_Make(listKey.data(), 0, relayId.data(), made) && AllZero(made, sizeof(made)), "nor is an empty one");
+	std::vector<uint8_t> huge(kNetServerFingerprintMostKeyBytes + 1, 0x30);
+	memset(made, 0xA5, sizeof(made));
+	Check(!NetServerFingerprint_Make(huge.data(), huge.size(), relayId.data(), made) && AllZero(made, sizeof(made)), "nor one over 4 KB");
+	Check(NetServerFingerprint_Make(huge.data(), kNetServerFingerprintMostKeyBytes, relayId.data(), made), "but one of 4 KB is hashed");
+	memset(made, 0xA5, sizeof(made));
+	Check(!NetServerFingerprint_Make(listKey.data(), listKey.size(), NULL, made) && AllZero(made, sizeof(made)), "nor no relay id");
+
+	// The check against a line: the vectors' relay keys, whose id the first part of this test proves, with nyc3's list key
+	JsonValue file;
+	std::string const all = ReadRepositoryFile("tests/vectors/crypto-v2.json");
+	JsonReader reader(all);
+	bool const read = !all.empty() && reader.ReadAll(&file) && file.kind == kJsonObject;
+	const JsonValue *const a = read ? file.Member("handshakeA") : NULL;
+	const JsonValue *const relay = a ? a->Member("relayStatic") : NULL;
+	const JsonValue *const p384 = relay ? TextMember(*relay, "p384Public") : NULL;
+	const JsonValue *const kem = relay ? TextMember(*relay, "mlkemPublic") : NULL;
+	std::vector<uint8_t> p384Bytes, kemBytes;
+	bool const haveKeys = p384 && kem && FromHex(p384->text, &p384Bytes) && FromHex(kem->text, &kemBytes) && p384Bytes.size() == kNetCryptoP384PublicBytes
+		&& kemBytes.size() == kNetPqKemPublicBytes;
+	Check(haveKeys, "the vectors' relay keys are read");
+
+	if (!haveKeys)
+	{
+		return;
+	}
+
+	NetRelayStaticKeys keys;
+	memcpy(keys.p384, p384Bytes.data(), sizeof(keys.p384));
+	memcpy(keys.kem, kemBytes.data(), sizeof(keys.kem));
+	Check(NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data()),
+		"nyc3's list key with the vectors' relay keys is the line's fingerprint 6f15c487...");
+	Check(!NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, nyc3.data()), "and isn't nyc3's own: another relay, another server");
+
+	// Any change, to the list key, either relay key or the line's number, and it isn't the line's
+	bool allRefused = true;
+	listKey[50] ^= 0x01;
+	allRefused = allRefused && !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data());
+	listKey[50] ^= 0x01;
+	keys.p384[96] ^= 0x01;
+	allRefused = allRefused && !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data());
+	keys.p384[96] ^= 0x01;
+	keys.kem[kNetPqKemPublicBytes - 1] ^= 0x01;
+	allRefused = allRefused && !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data());
+	keys.kem[kNetPqKemPublicBytes - 1] ^= 0x01;
+
+	for (size_t i = 0; i < kNetServerFingerprintBytes; i++)
+	{
+		withVector[i] ^= 0x80;
+		allRefused = allRefused && !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data());
+		withVector[i] ^= 0x80;
+	}
+
+	Check(allRefused, "a bit changed in the list key, the relay's P-384 key, its ML-KEM key, or any of the line's 32 bytes, and it isn't the line's");
+	Check(NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, withVector.data()), "and with every bit back, it is again");
+	Check(!NetServerFingerprint_IsTheLines(NULL, 0, &keys, withVector.data()) && !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), NULL, withVector.data())
+		&& !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, NULL), "no list key, no relay keys or no line is never a match");
+}
+
 int main()
 {
 	printf("A relay's keys and their fingerprint\n");
 	TestTheFingerprint();
 	TestTheSetting();
+	TestTheServersCfgFingerprint();
 
 	if (checksFailed > 0)
 	{
