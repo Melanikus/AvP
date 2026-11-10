@@ -1023,6 +1023,46 @@
 					"to": "\t\tif (true)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a join the home network's rule refused says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\t\tOnlinePage_JoinFailed(Net_JoinRefusedWhy());\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a typed address left unasked shows as no games",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "const char *const typedRefused = Net_TypedAddressRefusedWhy();",
+					"to": "const char *const typedRefused = NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page's failure line is one line again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tWrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);\n",
+					"to": "\t\tWords(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the failure line has its old 96 bytes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "static char failedLine[200];",
+					"to": "static char failedLine[96];"
+				}
+			]
 		}
 	]
 }

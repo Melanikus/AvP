@@ -4719,6 +4719,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 							OnlinePage_JoinFailed(Net_RelayJoinFailedWhy());
 						}
 					}
+					else if (Net_JoinRefusedWhy()) {
+						// Added 2026-11-10 by Melanikus for the AvP port (#188, PO's ruling Q4): a game on this network whose host isn't on the
+						// home network is refused before anything opens, and the page says why, in the networking code's own fixed words
+						LogString(std::string("net: couldn't join the game, because ") + Net_JoinRefusedWhy());
+						OnlinePage_JoinFailed(Net_JoinRefusedWhy());
+					}
 				}
 			}
 			break;

@@ -869,13 +869,20 @@ static void TestTheHelpLines()
 	// text fits whole", with no last word on a line of its own)
 	bool centred = true;
 
+	// Modified 2026-11-10 by Melanikus for the AvP port (a red take-out row, a21cf0ef's row 99): the two gaps, left and right, are held to
+	// within a pixel of each other either way. The check before allowed any left gap smaller than the right, so a box put at the left
+	// edge passed it.
 	for (int width = -1; width <= 700; width++)
 	{
 		int const left = OnlineScreens_HelpBoxLeft(width);
 		int const used = width <= 0 || width > kOnlineHelpRight - kOnlineHelpLeft ? kOnlineHelpRight - kOnlineHelpLeft : width;
+		int const gapsDiffer = (left - kOnlineHelpLeft) - (kOnlineHelpRight - (left + width));
 		centred = centred && left >= kOnlineHelpLeft && left + used <= kOnlineHelpRight &&
-			(width <= 0 || width >= kOnlineHelpRight - kOnlineHelpLeft || (left - kOnlineHelpLeft) - (kOnlineHelpRight - (left + width)) <= 1);
+			(width <= 0 || width >= kOnlineHelpRight - kOnlineHelpLeft || (gapsDiffer <= 1 && gapsDiffer >= -1));
 	}
+
+	Check(OnlineScreens_HelpBoxLeft(400) == 120 && OnlineScreens_HelpBoxLeft(579) == 30 && OnlineScreens_HelpBoxLeft(1) == 319,
+		"a text 400 wide starts at 120, half of what's left either side; 579 wide at 30; 1 wide at 319");
 
 	Check(kOnlineHelpLeft == 30 && kOnlineHelpRight == 610, "the widest the help texts may be is the menus' own edges, 30 to 610");
 	Check(centred, "and a text wrapped narrower sits in their middle, never past them");
@@ -932,6 +939,35 @@ static void TestTheJoinsFrames()
 	Check(Has(render, "bool ThisFramesRenderingIsOpen()\n{\n\treturn frameIsOpen;\n}"), "whether a frame is open is the renderer's own word on it");
 }
 
+// The home network's two refusals (#188, PO's ruling Q4): a join refused because the game's host isn't on the home network, and a typed
+// address the search left unasked for that reason, are said on the games page, in the networking code's own fixed words. Both are longer
+// than a line, so the page's failure line takes two. Read in the code, as the page needs the whole game. Added 2026-11-10 by Melanikus for
+// the AvP port.
+static void TestTheHomeRefusals()
+{
+	puts("the home network's refusals, said on the games page (by reading the source)");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	Check(menus.size() > 1000 && page.size() > 1000, "the menus' and the page's sources were found and read");
+
+	std::string const joining = SourceSlice(menus, "NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);", "\n\t\t\tbreak;\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const refused = joining.find("else if (Net_JoinRefusedWhy()) {");
+	Check(refused != std::string::npos && refused > joining.find("else if (SessionData[s].throughRelay) {") &&
+		Has(joining, "OnlinePage_JoinFailed(Net_JoinRefusedWhy());"), "a join the home network's rule refused says why on the page");
+
+	std::string const top = SourceSlice(page, "void OnlinePage_DrawTop(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const typed = top.find("if (visibleCount == 0 && shownCount == 0 && typedRefused)\n\t{\n\t\tWrappedWords(typedRefused, kFirstRowTop, 2, ONE_FIXED / 2);");
+	Check(Has(top, "const char *const typedRefused = Net_TypedAddressRefusedWhy();") && typed != std::string::npos &&
+		typed < top.find("else if (visibleCount == 0)"), "a typed address the search left unasked says so, in place of no games");
+
+	Check(Has(page, "static char failedLine[200];") && Has(page, "void OnlinePage_JoinFailed(const char *why)\n{\n\tchar safe[160];") &&
+		Has(top, "WrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);"),
+		"the page's failure line has room for those words, and two lines to draw them in");
+	std::string const wrapped = SourceSlice(page, "static void WrappedWords(const char *text, int top, int lines, int alpha)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(wrapped, "RECT area = { MENU_LEFTXEDGE, top, MENU_RIGHTXEDGE, top + lines * HUD_FONT_HEIGHT };"),
+		"between the menus' edges, as tall as its lines");
+}
+
 int main()
 {
 	TestTheTail();
@@ -946,6 +982,7 @@ int main()
 	TestTheHelpLines();
 	TestTheJoinsFrames();
 	TestWhereTheyAreDrawn();
+	TestTheHomeRefusals();
 
 	if (checksFailed)
 	{

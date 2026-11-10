@@ -118,7 +118,7 @@ struct RelayTime
 static RelayTime relayTimes[kRelayListMostGames];
 static int relayTimesKept = 0;
 
-static char failedLine[96];
+static char failedLine[200];   // modified 2026-11-10: room for the home network's refusals (#188)
 static uint32_t failedAt = 0;
 static bool failedShown = false;
 
@@ -626,7 +626,7 @@ int OnlinePage_SessionForRow(int menuRow)
 
 void OnlinePage_JoinFailed(const char *why)
 {
-	char safe[64];
+	char safe[160];
 
 	OnlineScreens_SafeName(why, sizeof(safe), safe, sizeof(safe));
 	_snprintf(failedLine, sizeof(failedLine) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsCouldNotJoin), safe);
@@ -650,6 +650,16 @@ static void Words(const char *text, int x, int y, int alpha, enum AVPMENUFORMAT_
 	char line[128];
 	Put(line, sizeof(line), text);
 	RenderSmallMenuText(line, x, y, alpha, format);
+}
+
+// Words in the small font wrapped between the menus' edges, in at most the lines given from top: one line is centred, more are lined
+// up on the left. Added 2026-11-10 by Melanikus for the AvP port, for words longer than a line (#188's refusals).
+static void WrappedWords(const char *text, int top, int lines, int alpha)
+{
+	char words[256];
+	Put(words, sizeof(words), text);
+	RECT area = { MENU_LEFTXEDGE, top, MENU_RIGHTXEDGE, top + lines * HUD_FONT_HEIGHT };
+	RenderSmallFontString_Wrapped(words, &area, alpha, 0, 0);
 }
 
 // online_screens.h's copy of the small font's height must be the font's own: it can't include hud_layout.h, so the check is here, where
@@ -837,7 +847,15 @@ void OnlinePage_DrawTop(void)
 
 	DrawHeadings();
 
-	if (visibleCount == 0)
+	// Added 2026-11-10 by Melanikus for the AvP port (#188, PO's ruling Q4): a typed address the search left unasked, as it isn't on the
+	// home network, says so in place of "no games", in the networking code's own fixed words (networking.h, Net_TypedAddressRefusedWhy)
+	const char *const typedRefused = Net_TypedAddressRefusedWhy();
+
+	if (visibleCount == 0 && shownCount == 0 && typedRefused)
+	{
+		WrappedWords(typedRefused, kFirstRowTop, 2, ONE_FIXED / 2);
+	}
+	else if (visibleCount == 0)
 	{
 		Words(OnlineScreens_Words(shownCount == 0 ? kOnlineWordsNoSessions : kOnlineWordsNoneMatch), MENU_CENTREX, kFirstRowTop, ONE_FIXED / 2,
 			AVPMENUFORMAT_CENTREJUSTIFIED);
@@ -847,7 +865,7 @@ void OnlinePage_DrawTop(void)
 	if (failedShown && !HasCome(Now(), failedAt + kFailedLineMs))
 	{
 		int const rows = visibleCount > 0 ? visibleCount : 1;
-		Words(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		WrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);
 	}
 }
 
