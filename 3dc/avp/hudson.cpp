@@ -489,8 +489,15 @@ static const char *WordForTheEnemy()
 // Something can still go wrong after that: the result is written before the shutdown starts, and the shutdown can stick, or fail an assert. Then the file would go on saying exit=0 about a run that ended
 // another way, so whatever comes later adds a line of its own, saying what really happened. The exit code Windows reports is always the last word.
 // A run's film. See hudson_video.h. The file's name has the time in it, so that a run started by hand can't write over the last one. run-hudson.ps1 moves it to the folder it keeps a run in.
-static char videoName[64] = { 0 };
+static char videoName[128] = { 0 };
 static volatile LONG videoGrabs = 0, videoGrabMicroseconds = 0, videoGrabWorstMicroseconds = 0;
+
+// film=menus (hudson_plan.h): the film starts at the menus and is cut into clips, each named after the step that ends it
+// (TakeVideoFrame). Only the game's own thread touches these. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static char clipEndsAt[64] = "";   // the picture of the menus whose clip ends at the next frame given to the film (Hudson_SaveThePage)
+static int clipNumber = 0;         // the clip being filmed, from 1
+static char filmStamp[32] = "";    // when the first clip started: the same in every clip's name, so a run's clips sort together
+static bool filmGivenUp = false;   // a clip didn't finish in time, so the writer can't start again, and the rest of the run has no film
 static volatile LONG videoSaidItStopped = 0, videoSaidItDropped = 0;
 
 static void SayIfTheVideoHasNews(const HudsonVideoFacts &facts)
@@ -4833,7 +4840,22 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 	SYSTEMTIME now;
 
 	GetLocalTime(&now);
-	_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+
+	if (plan.filmMenus)
+	{
+		// film=menus: one of the run's clips, with the time the first started and its own number, so no clip has another's name
+		if (filmStamp[0] == 0)
+		{
+			_snprintf(filmStamp, sizeof(filmStamp) - 1, "%04d-%02d-%02d-%02d%02d%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+		}
+
+		clipNumber++;
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%s-clip%02d.mp4", filmStamp, clipNumber);
+	}
+	else
+	{
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+	}
 
 	HudsonVideoWriter_Start((std::string(folder) + videoName).c_str(), (int)filmSize->Width, (int)filmSize->Height, plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, kHudsonVideoMostBytes);
 }
@@ -4842,11 +4864,20 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds)
 {
 	static IDirect3DSurface9 *copy = 0;
+	static D3DSURFACE_DESC copySize;
 
 	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
 	IDirect3DSurface9 *screen = 0;
 	D3DSURFACE_DESC size;
 	char why[200] = { 0 };
+
+	// film=menus: a clip can start at another size than the one before (the menus and the level may differ), and the copy has to be the
+	// clip's size, so one of another size is let go and made again below (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))
+	{
+		copy->Release();
+		copy = 0;
+	}
 
 	HRESULT hr = device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen);
 
@@ -4864,6 +4895,7 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 		if (SUCCEEDED(hr) && !copy)
 		{
 			hr = device->CreateOffscreenPlainSurface(filmSize.Width, filmSize.Height, filmSize.Format, D3DPOOL_SYSTEMMEM, &copy, NULL);
+			copySize = filmSize;
 		}
 
 		if (SUCCEEDED(hr))
@@ -4904,15 +4936,82 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 	}
 }
 
+// film=menus: a clip that has just been finished gets the step that ended it at the end of its name (hudson_video.h, HudsonVideo_ClipName:
+// a plain name in the same folder). MoveFileA never replaces a file that's already there, so no clip can be written over. If it can't be
+// renamed, it keeps its numbered name, which is unique too, and the log says so. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static void NameTheClip(const char *step)
+{
+	char const *const folder = GetSaveFolderPath();
+	char clipName[sizeof(videoName)];
+
+	if (!folder || folder[0] == 0 || !HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName)))
+	{
+		LogErrorString(std::string("video: a clip couldn't be named after its step, so it keeps the name ") + videoName);
+		return;
+	}
+
+	if (!MoveFileA((std::string(folder) + videoName).c_str(), (std::string(folder) + clipName).c_str()))
+	{
+		LogErrorString(std::string("video: ") + videoName + " couldn't be renamed " + clipName + ", so it keeps its name");
+		return;
+	}
+
+	memcpy(videoName, clipName, sizeof(videoName));
+	LogString(std::string("video: the clip ") + videoName + " is finished");
+}
+
+// film=menus: ends the clip being filmed at a step (a picture of the menus, or the level's first frame), names it after that step, and
+// starts the next. A clip with nothing in it isn't cut, so no clip is empty. The cut waits a little for the writer to finish
+// (kHudsonVideoCutWaitMilliseconds), because the game, perhaps a network game, is still going; a clip that isn't finished by then can't
+// be followed by another (hudson_video_writer.h), so the rest of the run has no film, and the log says so. True if the next clip started.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static bool CutTheFilm(const char *step, D3DSURFACE_DESC *filmSize)
+{
+	HudsonVideoFacts facts;
+
+	if (filmGivenUp)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_GetFacts(&facts);
+
+	if (!facts.started || facts.written == 0)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);
+	HudsonVideoWriter_GetFacts(&facts);
+	SayIfTheVideoHasNews(facts);
+
+	if (!facts.finishedInTime)
+	{
+		filmGivenUp = true;
+		LogErrorString(std::string("video: the clip ") + videoName + " wasn't finished in time at its end, so the rest of this run has no film");
+		return false;
+	}
+
+	char line[200] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "video: a clip of %ld pictures ends at %s (%ld dropped)", facts.written, step, facts.dropped);
+	LogString(line);
+	NameTheClip(step);
+	StartTheVideo(filmSize);
+	return true;
+}
+
 // Takes this moment's picture, if one's due. Reading a frame back is the only part that costs the game anything, so it isn't done unless a picture is wanted, and what it costs goes in the log.
 static void TakeVideoFrame()
 {
 	static bool triedToStart = false;
+	static bool levelClipCut = false;
 	static D3DSURFACE_DESC filmSize;
 	static LARGE_INTEGER started, ticksPerSecond;
 
-	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before
-	if (framesDone < 1)
+	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before. With
+	// film=menus (hudson_plan.h) it starts at the first frame drawn, the menus' too (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (framesDone < 1 && !plan.filmMenus)
 	{
 		return;
 	}
@@ -4923,6 +5022,18 @@ static void TakeVideoFrame()
 		StartTheVideo(&filmSize);
 		QueryPerformanceFrequency(&ticksPerSecond);
 		QueryPerformanceCounter(&started);
+	}
+
+	// film=menus: the level's first frame ends the clip of the menus and the loading, so the level starts a clip of its own. Each clip's
+	// clock starts at 0.
+	if (plan.filmMenus && framesDone >= 1 && !levelClipCut)
+	{
+		levelClipCut = true;
+
+		if (CutTheFilm("before-level", &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
 	}
 
 	LARGE_INTEGER before;
@@ -4954,6 +5065,20 @@ static void TakeVideoFrame()
 
 	HudsonVideoWriter_GetFacts(&facts);
 	SayIfTheVideoHasNews(facts);
+
+	// film=menus: a picture of the menus (Hudson_SaveThePage) ends this clip, after the frames up to it are in it
+	if (clipEndsAt[0])
+	{
+		char step[sizeof(clipEndsAt)];
+
+		memcpy(step, clipEndsAt, sizeof(step));
+		clipEndsAt[0] = 0;
+
+		if (CutTheFilm(step, &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
+	}
 }
 
 // The other game of the pair starts once this file is there, because the host only answers once it's playing: tools/hudson/run-net-pair.ps1 waits for it. It says nothing that matters, and the next run clears it.
@@ -5046,6 +5171,14 @@ void Hudson_SaveThePage(const char *name)
 	{
 		LogErrorString(std::string("hudson: couldn't save ") + name);
 	}
+
+	// film=menus: this page's picture ends a clip, named after it, at the film's next frame (TakeVideoFrame). Added 2026-11-10 by
+	// Melanikus (Third) for the AvP port.
+	if (plan.filmMenus && plan.recordVideo)
+	{
+		_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, "%s", name);
+		clipEndsAt[sizeof(clipEndsAt) - 1] = '\0';
+	}
 }
 
 // ---- The presses a player makes (access= and answer=, hudson_plan.h). Added 2026-11-09 by Melanikus for the AvP port.
@@ -5071,6 +5204,12 @@ int Hudson_AnswerPress()
 int Hudson_AnswerAfterSeconds()
 {
 	return HudsonRunIsOn ? plan.answerAfterSeconds : 0;
+}
+
+// pagehold= (with film=menus): the seconds each page the menus picture is held first. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds()
+{
+	return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;
 }
 
 bool Hudson_JoinsThroughFindGames()

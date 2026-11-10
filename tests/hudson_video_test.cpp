@@ -773,6 +773,94 @@ static void TestTheWriterNeedsAllItsFunctions()
 		!= std::string::npos, "SOURCE: the writer uses Media Foundation only with all seven of the functions it calls");
 }
 
+// film=menus's clip names (hudson_video.h, HudsonVideo_ClipName). Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static void TestClipNames()
+{
+	char out[128];
+	char tight[20];   // not "small": the Windows headers make that word mean char
+	const char *const film = "hudson-video-2026-11-10-145152-clip01.mp4";
+
+	Check(HudsonVideo_ClipName(film, "join-list.png", out, sizeof(out)) && strcmp(out, "hudson-video-2026-11-10-145152-clip01-join-list.mp4") == 0,
+		"a clip that ends at a picture is named after it, without its .png");
+	Check(HudsonVideo_ClipName(film, "before-level", out, sizeof(out)) && strcmp(out, "hudson-video-2026-11-10-145152-clip01-before-level.mp4") == 0,
+		"and one that ends at a step that isn't a picture, after the step");
+	Check(HudsonVideo_ClipName(film, "1234567890123456789012345678901234567890", out, sizeof(out)), "a step of 40 letters is fine");
+	Check(HudsonVideo_ClipName(film, "1234567890123456789012345678901234567890.png", out, sizeof(out)), "and so is a picture's name of 40 before its .png");
+
+	// What it refuses, each leaving out as it was
+	struct { const char *film; const char *step; const char *why; } const refused[] = {
+		{ film, "", "an empty step" },
+		{ film, ".png", "a step that's only .png" },
+		{ film, "12345678901234567890123456789012345678901", "a step of 41 letters" },
+		{ film, "../evil", "a step that climbs out of the folder" },
+		{ film, "a\\b", "a step with a backslash" },
+		{ film, "a/b", "a step with a slash" },
+		{ film, "c:x", "a step with a colon" },
+		{ film, "Join-List", "a step with capitals" },
+		{ film, "join list", "a step with a space" },
+		{ film, "join.list", "a step with a dot that isn't .png's" },
+		{ film, "join-list.PNG", "a .PNG in capitals, which isn't a picture's name here" },
+		{ "hudson-video-2026-11-10-145152-clip01.avi", "join-list", "a film that isn't an mp4" },
+		{ "other-video-2026-11-10-145152-clip01.mp4", "join-list", "a film that isn't Hudson's" },
+		{ "hudson-video-.mp4", "join-list", "a film whose name is only the start and the end" },
+		{ "hudson-video-..\\x.mp4", "join-list", "a film's name that climbs out" },
+		{ "hudson-video-ABC.mp4", "join-list", "a film's name with capitals" },
+		{ "C:\\runs\\hudson-video-1.mp4", "join-list", "a film given with its folder" },
+		{ 0, "join-list", "no film's name" },
+		{ film, 0, "no step" },
+	};
+
+	for (const auto &one : refused)
+	{
+		strcpy(out, "unchanged");
+		Check(!HudsonVideo_ClipName(one.film, one.step, out, sizeof(out)) && strcmp(out, "unchanged") == 0, std::string("refused, writing nothing: ") + one.why);
+	}
+
+	strcpy(tight, "unchanged");
+	Check(!HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", tight, 18) && strcmp(tight, "unchanged") == 0, "a name too long for out is refused, writing nothing");
+	Check(HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, 29) && strcmp(out, "hudson-video-1-join-list.mp4") == 0, "and exactly enough room is enough");
+	strcpy(out, "unchanged");
+	Check(!HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, 28) && strcmp(out, "unchanged") == 0, "one less isn't");
+	Check(!HudsonVideo_ClipName("hudson-video-1.mp4", "join-list", out, 0), "and no room at all isn't");
+}
+
+// film=menus's cut, as hudson.cpp makes it (CutTheFilm): a clip finished within the cut's wait, then the next started at once, perhaps at
+// another size, each a whole film that plays. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static void TestClipsBackToBack()
+{
+	int const sizes[2][2] = { { kFilmWidth, kFilmHeight }, { 320, 180 } };
+	std::string paths[2] = { BesideThisProgram("video-test-clip01.mp4"), BesideThisProgram("video-test-clip02.mp4") };
+	int const pictures = 30;
+
+	for (int c = 0; c < 2; c++)
+	{
+		int const width = sizes[c][0], height = sizes[c][1];
+		std::vector<uint8_t> const picture = MakePicture(width, height);
+		int const pitch = (width + 1) * 4;
+
+		DeleteFileA(paths[c].c_str());
+		Check(HudsonVideoWriter_Start(paths[c].c_str(), width, height, 0, kHudsonVideoMostBytes), "clip " + std::to_string(c + 1) + " starts right after the one before: " + Facts().why);
+
+		for (int i = 0; i < pictures; i++)
+		{
+			HudsonVideoWriter_Add(&picture[0], pitch, MomentOf(i));
+			WaitForWriter(i + 1);
+		}
+
+		HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);
+		Check(Facts().finishedInTime && Facts().written == pictures, "and is finished within a cut's wait, with every picture");
+	}
+
+	for (int c = 0; c < 2; c++)
+	{
+		WhatWasRead const read = ReadFilm(paths[c].c_str());
+
+		Check(read.opened && read.pictures == pictures, "clip " + std::to_string(c + 1) + " opens and holds its pictures: " + std::to_string(read.pictures));
+		Check(read.width == (UINT32)sizes[c][0] && read.height >= (UINT32)sizes[c][1], "at its own size");
+		DeleteFileA(paths[c].c_str());
+	}
+}
+
 int main(int count, char **words)
 {
 	if (count == 4 && strcmp(words[1], "read") == 0)
@@ -789,6 +877,7 @@ int main(int count, char **words)
 	TestTheQueue();
 	TestCopying();
 	TestTheWriterNeedsAllItsFunctions();
+	TestClipNames();
 
 	if (TheWriterCanWorkHere() && LoadTheReader())
 	{
@@ -797,6 +886,7 @@ int main(int count, char **words)
 		TestFinishingBeforeStarting();
 		TestAFilm();
 		TestMomentsWithNoPicture();
+		TestClipsBackToBack();
 		TestThatAFullQueueDropsPictures(true);
 		TestThatAFullQueueDropsPictures(false);
 		TestBreakingOnPurpose();

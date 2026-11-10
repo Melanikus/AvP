@@ -108,8 +108,13 @@ const char *const kHudsonRefusedBreakVideoWithoutVideo = "break=video breaks the
 const char *const kHudsonRefusedNetUnknown = "net= isn't host or join";
 const char *const kHudsonRefusedNetMeasuresTime = "net= is two games at once on one machine, so it can't measure time: it needs machine=shared";
 const char *const kHudsonRefusedNetNotAlone = "net= can't go with rooms=, nav=, route=, strategies=, strategy=, wall=, vision=, compare= or combat=, which all need a game to themselves";
-const char *const kHudsonRefusedFilmUnknown = "film= can only say no: a run that shares the machine has a film anyway, and one that measures time can't";
+const char *const kHudsonRefusedFilmUnknown = "film= can only say no or menus: a run that shares the machine has a film anyway, and one that measures time can't";
 const char *const kHudsonRefusedFilmBothWays = "record=video asks for a film and film=no says not to";
+// film=menus and pagehold= (hudson_plan.h). Added 2026-11-10 by Melanikus (Third) for the AvP port
+const char *const kHudsonRefusedFilmMenusWithoutFilm = "film=menus starts the film at the menus, so it needs a run with a film: machine=shared, and not record=numbers";
+const char *const kHudsonRefusedPageHoldNotANumber = "pagehold= is a number of seconds";
+const char *const kHudsonRefusedPageHoldOutOfRange = "pagehold= is from 1 to 10 seconds, well inside what the joiner and the list wait for";
+const char *const kHudsonRefusedPageHoldWithoutFilmMenus = "pagehold= holds the menus' pages for the film, so it needs film=menus";
 const char *const kHudsonRefusedPicturesWithoutRooms = "record=pictures means nothing without rooms=, a gun or a walk";
 const char *const kHudsonRefusedWallEmpty = "wall= has no name";
 const char *const kHudsonRefusedWallTooLong = "wall= is too long";
@@ -410,6 +415,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	plan->answerAfterSeconds = kHudsonDefaultAnswerAfterSeconds;
 
 	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
+	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
@@ -1697,9 +1703,33 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			seenFilm = true;
 
-			if (!WordIs(value, valueLength, "no"))
+			// film=menus asks for a film that starts at the menus (checked against the rest below); film=no for none
+			if (WordIs(value, valueLength, "menus"))
+			{
+				plan->filmMenus = true;
+			}
+			else if (!WordIs(value, valueLength, "no"))
 			{
 				return kHudsonRefusedFilmUnknown;
+			}
+		}
+		else if (WordIs(place, nameLength, "pagehold"))
+		{
+			if (seenPageHold)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenPageHold = true;
+
+			if (!ReadNumber(value, valueLength, &plan->pageHoldSeconds))
+			{
+				return kHudsonRefusedPageHoldNotANumber;
+			}
+
+			if (plan->pageHoldSeconds < 1 || plan->pageHoldSeconds > kHudsonMostPageHoldSeconds)
+			{
+				return kHudsonRefusedPageHoldOutOfRange;
 			}
 		}
 		else if (WordIs(place, nameLength, "lamp"))
@@ -2551,14 +2581,15 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	// A run that shares the machine films itself unless it says otherwise, because the user wants to see them, and it only reads what's already drawn, so it can't spoil a run that compares pictures. There are two ways to say no: film=no, and record=numbers,
 	// which means numbers and nothing else. A run that measures time has no film, because a film slows the frames it records, and asking for one by name there is refused just below.
-	if (plan->recordVideo && seenFilm)
+	// film=menus asks for a film too, one that starts at the menus, so only film=no is the other way round from record=video
+	if (plan->recordVideo && seenFilm && !plan->filmMenus)
 	{
 		return kHudsonRefusedFilmBothWays;
 	}
 
 	bool const saidOnlyNumbers = seenRecord && !plan->pictures && !plan->recordVideo;
 
-	if (plan->machineShared && !seenFilm && !saidOnlyNumbers)
+	if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)
 	{
 		plan->recordVideo = true;
 	}
@@ -2566,6 +2597,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->recordVideo && !plan->machineShared)
 	{
 		return kHudsonRefusedVideoMeasuresTime;
+	}
+
+	// film=menus: a run with no film (one that measures time, or says record=numbers) has nothing to start at the menus. pagehold= only
+	// holds the pages for that film. Added 2026-11-10 by Melanikus (Third) for the AvP port
+	if (plan->filmMenus && !plan->recordVideo)
+	{
+		return kHudsonRefusedFilmMenusWithoutFilm;
+	}
+
+	if (seenPageHold && !plan->filmMenus)
+	{
+		return kHudsonRefusedPageHoldWithoutFilmMenus;
 	}
 
 	if (plan->breakVideo && !plan->recordVideo)

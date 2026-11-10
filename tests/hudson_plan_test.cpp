@@ -186,6 +186,22 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=", kHudsonRefusedFilmUnknown);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=no film=no", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=video film=no", kHudsonRefusedFilmBothWays);
+	// film=menus and pagehold= (added 2026-11-10 by Melanikus (Third) for the AvP port): a film that starts at the menus needs a run with a
+	// film, and pagehold= needs film=menus
+	Refused("-hudson level=a frames=1 rooms=1 film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 machine=alone film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=numbers film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 record=video film=menus", kHudsonRefusedVideoMeasuresTime);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus film=no", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=Menus", kHudsonRefusedFilmUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared pagehold=4", kHudsonRefusedPageHoldWithoutFilmMenus);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=no pagehold=4", kHudsonRefusedPageHoldWithoutFilmMenus);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=0", kHudsonRefusedPageHoldOutOfRange);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=11", kHudsonRefusedPageHoldOutOfRange);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=-1", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=x", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=4 pagehold=4", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=numbers break=video", kHudsonRefusedBreakVideoWithoutVideo);
 	Refused("-hudson level=a frames=1 rooms=1 lighting=relief vision=check bright=no", kHudsonRefusedBrightNotYes);
 	Refused("-hudson level=a frames=1 rooms=1 lighting=relief vision=check bright=yes bright=yes", kHudsonRefusedAskedTwice);
@@ -1410,6 +1426,21 @@ static void TestTheRealGame()
 		Check(Has(runPair, "if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }"), "SOURCE: the pair's host gets its answer");
 		Check(Has(runPair, "if ($HostAnswer -and $HostAnswer -cnotmatch '\\A(letin|no)\\z')"), "SOURCE: only letin or no");
 		Check(Has(runPair, "if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }"), "SOURCE: and the pair's joiner Find Games");
+		// Added 2026-11-10 by Melanikus (Third): a host that answers gets -askjoiners, never -relayhost, which lets every joiner in without
+		// asking (relay_auto.cpp), so the page -Answer presses, and its check code, would never show (the nyc3 pair of 2026-11-10)
+		Check(Has(runHudson, "elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' }"),
+			"SOURCE: a host with -Answer hosts with -askjoiners, so it's asked about each joiner and the answer can be pressed");
+		Check(Has(ReadSourceFile("3dc/relay_auto.cpp"), "if (mode == kRelayAutoHost && RelayAuto_AsksJoiners(commandLine, developer))") &&
+			Has(ReadSourceFile("3dc/relay_auto.cpp"), "else if (mode == kRelayAutoHost)\n\t{\n\t\tLogString(\"relay auto: -dev -relayhost: this copy hosts by itself through the relay, and lets every joiner in without asking\");\n\t\tNet_LetEveryJoinerIn(true);"),
+			"SOURCE: and that's because -relayhost alone lets every joiner in, and -askjoiners doesn't");
+		// film=menus and pagehold= reach a run through both scripts (the owner's showcase, 2026-11-10)
+		Check(Has(runHudson, "if ($FilmMenus) { $arguments += \" film=menus\" }") && Has(runHudson, "if ($PageHold -ne 0) { $arguments += \" pagehold=$PageHold\" }"),
+			"SOURCE: the script can ask for film=menus and pagehold=");
+		Check(Has(runHudson, "if ($FilmMenus -and -not $WhileInUse) {") && Has(runHudson, "if ($FilmMenus -and ($NoFilm -or $Record -eq 'numbers')) {") &&
+			Has(runHudson, "if ($PageHold -ne 0 -and -not $FilmMenus) {") && Has(runHudson, "if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) {"),
+			"SOURCE: only in a run with a film, and pagehold= only with it, from 1 to 10, as Hudson says");
+		Check(Has(runPair, "if ($FilmMenus) { $words += '-FilmMenus' }") && Has(runPair, "if ($PageHold -ne 0) { $words += @('-PageHold', \"$PageHold\") }"),
+			"SOURCE: and the pair gives both games the same");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
 		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
@@ -2080,6 +2111,45 @@ static void TestTourAndSharedMachine()
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=alone", &plan) == 0 && !plan.recordVideo, "whichever way it says so");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 record=pictures", &plan) == 0 && !plan.recordVideo && plan.pictures, "not even one with pictures");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=alone film=no", &plan) == 0 && !plan.recordVideo, "and it can say so, which changes nothing");
+	// film=menus (added 2026-11-10 by Melanikus (Third) for the AvP port): a film that starts at the menus, which is still a film
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus && plan.pageHoldSeconds == 0,
+		"film=menus: a run that shares the machine films from the menus on, holding no page unless asked");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared record=video film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus,
+		"and record=video agrees with it, since both ask for a film");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared record=pictures film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus && plan.pictures,
+		"and a run with pictures keeps them");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=1", &plan) == 0 && plan.pageHoldSeconds == 1, "pagehold= from 1");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=10", &plan) == 0 && plan.pageHoldSeconds == 10, "to 10 seconds");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared", &plan) == 0 && !plan.filmMenus && plan.pageHoldSeconds == 0,
+		"and a run that doesn't ask has its film from the level, as before");
+	{
+		// SOURCE: where film=menus changes the film (hudson.cpp), and the clip's name (hudson_video.cpp)
+		std::string const taking = Between(hudson, "static void TakeVideoFrame()", "// The other game of the pair starts once this file is there");
+		std::string const page = Between(hudson, "void Hudson_SaveThePage(const char *name)", "// ---- The presses a player makes");
+		std::string const cut = Between(hudson, "static bool CutTheFilm(const char *step, D3DSURFACE_DESC *filmSize)", "static void TakeVideoFrame()");
+		std::string const naming = Between(hudson, "static void NameTheClip(const char *step)", "static bool CutTheFilm(");
+		std::string const menusFrame = Between(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "static void MenuFrameForARun(const char *picture, bool holdFirst = true)", "CheckForWindowsMessages();");
+
+		Check(Has(taking, "if (framesDone < 1 && !plan.filmMenus)\n\t{\n\t\treturn;"), "SOURCE: a film starts at the level, unless film=menus starts it at the first frame drawn");
+		Check(Has(taking, "if (plan.filmMenus && framesDone >= 1 && !levelClipCut)") && Has(taking, "CutTheFilm(\"before-level\", &filmSize)"),
+			"SOURCE: with film=menus the level's first frame ends the menus' clip");
+		Check(ComesBefore(taking, "GiveTheFilmThisFrame(filmSize, seconds);", "if (clipEndsAt[0])"), "SOURCE: a picture's clip ends after the frames up to it are in it");
+		Check(Has(page, "if (plan.filmMenus && plan.recordVideo)\n\t{\n\t\t_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, \"%s\", name);"),
+			"SOURCE: and only a picture of the menus ends a clip, only with film=menus");
+		Check(Has(cut, "if (!facts.started || facts.written == 0)\n\t{\n\t\treturn false;"), "SOURCE: a clip with nothing in it isn't cut, so no clip is empty");
+		Check(Has(cut, "HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);") && Has(cut, "if (!facts.finishedInTime)\n\t{\n\t\tfilmGivenUp = true;"),
+			"SOURCE: a cut waits a little for the clip to be finished, and one that isn't ends the run's film there, as the writer can't start again");
+		Check(ComesBefore(cut, "NameTheClip(step);", "StartTheVideo(filmSize);"), "SOURCE: the clip is named before the next one starts");
+		Check(Has(naming, "!HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName))") && Has(naming, "if (!MoveFileA("),
+			"SOURCE: its name is made by the checked rule, and MoveFileA never replaces a file that's there");
+		Check(Has(hudson, "_snprintf(videoName, sizeof(videoName) - 1, \"hudson-video-%s-clip%02d.mp4\", filmStamp, clipNumber);"),
+			"SOURCE: each clip has its own number, so none has another's name even if it can't be renamed");
+		Check(Has(hudson, "if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))"),
+			"SOURCE: a clip of another size gets a copy of its own size");
+		Check(Has(menusFrame, "if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)"), "SOURCE: pagehold= holds a page to be pictured first");
+		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "MenuFrameForARun(picture, !letIn);"), "SOURCE: but never the joiner's let in, which the host is waiting on");
+		Check(Has(hudson, "return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;"), "SOURCE: and only in a run with film=menus");
+	}
 	{
 		std::string const taking = Between(hudson, "void Hudson_TakePictureIfDue()", "if (visionIsDue)");
 		std::string const ending = Between(hudson, "static void WriteResult(const char *howItEnded, int code)", "// A run that finished is no error,");

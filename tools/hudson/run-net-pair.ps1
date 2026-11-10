@@ -96,7 +96,11 @@ param(
     # answerafter= and findgames=). Without them the host lets every joiner in, and the joiner joins by its own way, as before
     [string]$HostAnswer = '',     # letin or no
     [int]$HostAnswerAfter = 0,    # with -HostAnswer: seconds before the host answers, 1 to 15. Left out, Hudson's own 3
-    [switch]$JoinFindGames
+    [switch]$JoinFindGames,
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase: both games' films start at the menus, cut into a
+    # clip for each page they picture (run-hudson.ps1's -FilmMenus and -PageHold, Hudson's film=menus and pagehold=)
+    [switch]$FilmMenus,
+    [int]$PageHold = 0            # with -FilmMenus: seconds each pictured page is held first, 1 to 10
 )
 
 $ErrorActionPreference = 'Stop'
@@ -318,6 +322,9 @@ if ($NetV2 -and $ThirdFolder) { Stop-Here "-NetV2 is two players, the host and t
 if ($HostAnswer -and $HostAnswer -cnotmatch '\A(letin|no)\z') { Stop-Here "-HostAnswer is letin or no" }
 if ($HostAnswerAfter -ne 0 -and -not $HostAnswer) { Stop-Here "-HostAnswerAfter says when the host answers, so it needs -HostAnswer" }
 if ($HostAnswerAfter -ne 0 -and ($HostAnswerAfter -lt 1 -or $HostAnswerAfter -gt 15)) { Stop-Here "-HostAnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
+if ($FilmMenus -and $NoFilm) { Stop-Here "-FilmMenus asks for films, and -NoFilm says there are none" }
+if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
+if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -438,6 +445,8 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }
     if ($word -eq 'host' -and $HostAnswerAfter -ne 0) { $words += @('-AnswerAfter', "$HostAnswerAfter") }
     if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }
+    if ($FilmMenus) { $words += '-FilmMenus' }
+    if ($PageHold -ne 0) { $words += @('-PageHold', "$PageHold") }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 

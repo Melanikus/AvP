@@ -714,9 +714,22 @@ static bool PressTheRowForARun(enum AVPMENU_ELEMENT_ID kind, int value, const ch
 	return false;
 }
 
-// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown
-static void MenuFrameForARun(const char *picture)
+// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown.
+// pagehold= (Hudson_PageHoldSeconds, with film=menus): a page to be pictured is first held, as it is, that many seconds, so the run's film
+// shows it before the picture ends its clip. holdFirst is false for a page the other game is waiting on this one to leave (the host's
+// yes), which isn't held. Modified 2026-11-10 by Melanikus (Third) for the AvP port.
+static void MenuFrameForARun(const char *picture, bool holdFirst = true)
 {
+	if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)
+	{
+		DWORD const holdStarted = GetTickCount();
+
+		while (bRunning && (DWORD)(GetTickCount() - holdStarted) < (DWORD)Hudson_PageHoldSeconds() * 1000u)
+		{
+			MenuFrameForARun(NULL);
+		}
+	}
+
 	CheckForWindowsMessages();
 	ThisFramesRenderingHasBegun();
 	DrawMainMenusBackdrop();
@@ -846,7 +859,8 @@ static bool JoinThroughFindGamesForARun(void)
 			askingPictured = true;
 		}
 
-		MenuFrameForARun(picture);
+		// Let in is never held (pagehold=, MenuFrameForARun): once the host has said yes, it's waiting for this game to go on to the level
+		MenuFrameForARun(picture, !letIn);
 	}
 
 	ReleaseAllAvPMenuGfx();

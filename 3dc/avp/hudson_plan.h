@@ -32,7 +32,8 @@
 //   AvPx.exe -dev -hudson level=derelict frames=5000 rooms=1 lighting=normals shadows=on record=pictures
 //
 // A run that says machine=shared also makes a film of itself, an mp4 in its folder, unless it says film=no or record=numbers. record=pictures keeps a film as well. Taking a film's pictures slows the frames, so a run that measures time has no film,
-// and asking for one by name, with record=video, is refused:
+// and asking for one by name, with record=video, is refused. film=menus starts the film at the menus instead of the level, cut into a clip for each page the menus picture, and pagehold=4 holds each
+// of those pages 4 seconds first, so the film shows it (added 2026-11-10 by Melanikus (Third) for the AvP port):
 //
 //   AvPx.exe -dev -hudson level=derelict frames=400000 seconds=1200 rooms=40 views=2 holdseconds=2 machine=shared
 //
@@ -179,6 +180,7 @@ int const kHudsonLeastAccessWaitSeconds = 61;
 int const kHudsonMostAccessWaitSeconds = 3600;
 int const kHudsonDefaultAnswerAfterSeconds = 3;
 int const kHudsonMostAnswerAfterSeconds = 15;     // well inside the 20 s a Hudson joiner waits for the host's word (menus.cpp)
+int const kHudsonMostPageHoldSeconds = 10;        // pagehold=: well inside the joiner's 40 s for the host's word, and the list's 15 s patience
 
 // What a hostile run does, beyond sending each bad message in turn.
 // drain: this client uses up the other machine's blocks with messages, inside every limit.
@@ -273,6 +275,9 @@ struct HudsonPlan
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
+	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
+	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
+	int pageHoldSeconds;  // pagehold=: with film=menus, each page the menus picture is held this many seconds first, 1 to 10, so the film shows it. 0 for none
 	bool breakVideo;      // break=video: the encoder fails for real part way, to prove that a run survives it. It needs a run with a film
 	bool breakPrisms;     // break=prisms: don't send the shadow prisms to the card, so that vision=check can be seen to notice. It needs vision=
 	bool vision;          // vision=check: read the frame's pictures once a view, and say what's missing. See hudson_vision.h
@@ -517,6 +522,10 @@ extern const char *const kHudsonRefusedNetMeasuresTime;
 extern const char *const kHudsonRefusedNetNotAlone;
 extern const char *const kHudsonRefusedFilmUnknown;
 extern const char *const kHudsonRefusedFilmBothWays;
+extern const char *const kHudsonRefusedFilmMenusWithoutFilm;
+extern const char *const kHudsonRefusedPageHoldNotANumber;
+extern const char *const kHudsonRefusedPageHoldOutOfRange;
+extern const char *const kHudsonRefusedPageHoldWithoutFilmMenus;
 extern const char *const kHudsonRefusedBreakVideoWithoutVideo;
 extern const char *const kHudsonRefusedBreakUnknown;
 extern const char *const kHudsonRefusedBreakWithoutVision;

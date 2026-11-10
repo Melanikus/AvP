@@ -38,6 +38,8 @@ The window goes on the second screen, where it covers nothing anyone's using, an
 
 A run with -WhileInUse makes a film of itself, an mp4 kept with the run's other files, and the film= line of hudson-result.txt says where. -Record pictures keeps a film as well. -NoFilm or -Record numbers stops it. A film's pictures slow the frames, so a run that measures time has none, and -Record video, which asks for one by name, needs -TimingsDontMatter and -WhileInUse. Nothing deletes a film: one left behind by a run that was cut short goes to runs\films-left-behind when the next run clears the way.
 
+-FilmMenus starts the film at the menus instead of the level, for showing them: it's cut into clips, each finished at a page the menus picture, or at the level's first frame, and named after it, like hudson-video-<when>-clip02-join-list.mp4 beside join-list.png. The last clip, to the run's end, has its number alone. -PageHold 4 holds each of those pages 4 seconds first, so the clip shows it (not the joiner's "let in", which the host is waiting on). Every clip goes in the run's folder with a video= line in run.txt.
+
 -WhileInUse is for runs that don't measure time, so it needs -TimingsDontMatter as well. It doesn't wait for the machine to be idle, and touching the machine doesn't end the run. The result line says machine=shared, and touched=yes if anyone did. Every other promise stands: the window doesn't take the focus, the mouse is left alone, there's no sound, and it only runs in a test copy.
 
 Walking through the level by himself, until he's reached 5 new modules. The log's "nav:" lines say what he did, and hudson-result.txt counts what he walked into apart from any time he had to be moved:
@@ -223,7 +225,9 @@ param(
     [int]$AccessWait = 0,         # with -Access check: seconds before Check again is pressed, 61 to 3600, past the list's minute between calls
     [string]$Answer = '',         # letin or no: with -Net host, the host's answer to a player asking to join, pressed on the page's own rows
     [int]$AnswerAfter = 0,        # with -Answer: seconds before the host answers, 1 to 15, well inside the joiner's 20 s wait. Left out, Hudson's own 3
-    [switch]$FindGames            # with -Net join: the joiner finds the host through Find Games, as a player does
+    [switch]$FindGames,           # with -Net join: the joiner finds the host through Find Games, as a player does
+    [switch]$FilmMenus,           # film=menus: the film starts at the menus, cut into a clip for each page they picture (added 2026-11-10 by Melanikus (Third))
+    [int]$PageHold = 0            # with -FilmMenus: seconds each pictured page is held first, 1 to 10, so the film shows it
 )
 $ErrorActionPreference = 'Stop'
 
@@ -279,6 +283,12 @@ if ($Answer -and $Net -ne 'host') { Stop-Here "-Answer is the host's answer to a
 if ($AnswerAfter -ne 0 -and -not $Answer) { Stop-Here "-AnswerAfter says when the host answers, so it needs -Answer" }
 if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15)) { Stop-Here "-AnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
 if ($FindGames -and $Net -ne 'join') { Stop-Here "-FindGames is a joiner's way in, through Find Games, so it needs -Net join" }
+# The showcase's film (added 2026-11-10 by Melanikus (Third) for the AvP port): Hudson's own rules for film=menus and pagehold=
+# (hudson_plan.cpp), checked here first so a run that would be refused never empties its folder
+if ($FilmMenus -and -not $WhileInUse) { Stop-Here "-FilmMenus starts the film at the menus, and only a run with -WhileInUse has a film" }
+if ($FilmMenus -and ($NoFilm -or $Record -eq 'numbers')) { Stop-Here "-FilmMenus asks for a film, and -NoFilm or -Record numbers says there's none" }
+if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
+if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -358,8 +368,11 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 
 # -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
 # starts with -, and one in among them would cut them short
-# An -Access run has the list's lines in its settings and no game to host or join, so it gets neither switch
-$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+# An -Access run has the list's lines in its settings and no game to host or join, so it gets neither switch.
+# A host with -Answer gets -askjoiners, which hosts as -relayhost does but asks about each joiner (relay_auto.h). -relayhost lets every
+# joiner in without asking (relay_auto.cpp), and the game would never show the page -Answer presses, nor its check code: the nyc3 pair of
+# 2026-11-10 had answer=letin and no host-asked.png for that reason (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
 # -netv2 and -secondcopy are the game's own switches too, so they go before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($NetV2) { $relaySwitch += ' -netv2' }
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
@@ -387,6 +400,8 @@ if ($Size) { $arguments += " size=$Size" }
 if ($Vision) { $arguments += " vision=$Vision" }
 if ($Break) { $arguments += " break=$Break" }
 if ($NoFilm) { $arguments += " film=no" }
+if ($FilmMenus) { $arguments += " film=menus" }
+if ($PageHold -ne 0) { $arguments += " pagehold=$PageHold" }
 if ($Net) { $arguments += " net=$Net" }
 if ($Lamp) { $arguments += " lamp=$Lamp" }
 if ($LampKind) { $arguments += " lampkind=$LampKind" }

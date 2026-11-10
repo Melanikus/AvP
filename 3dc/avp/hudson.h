@@ -142,6 +142,9 @@ int Hudson_AccessWaitSeconds();
 // answer=: kHudsonAnswer..., 0 for none, and answerafter='s seconds
 int Hudson_AnswerPress();
 int Hudson_AnswerAfterSeconds();
+// pagehold= (with film=menus): the seconds each page the menus picture is held first, so the film shows it; 0 for none. Added 2026-11-10
+// by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds();
 // findgames=yes: a joiner through the relay joins by Find Games and the list's game's row, as a player does
 bool Hudson_JoinsThroughFindGames();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
