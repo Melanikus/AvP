@@ -41,6 +41,8 @@
 #include "net_server_fingerprint.h"
 #include "net_server_key.h"
 #include "servers_cfg_file.h"
+#include "servers_trust.h"
+#include "net_identity_store.h"
 
 #include <winsock2.h>
 #include <winhttp.h>
@@ -54,6 +56,11 @@
 // (CertFreeCertificateContext)
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "crypt32.lib")
+
+// Whether this run is Hudson's, the team's test bot (hudson.cpp's own flag, set only with -dev -hudson; tools/check-hudson-asleep.ps1
+// proves a player's game never sets it). A Hudson run uses servers.cfg's line without the player's yes, as nobody is there to give it
+// (#175's last part, added 2026-11-10 by Melanikus for the AvP port). Named here alone, as this file reads it and never writes it.
+extern bool HudsonRunIsOn;
 
 // RelayList_ModeWords has the game styles in the order of NETGAME_TYPE. If that order ever changes, this stops the build.
 static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStanding == 2 && NGT_PredatorTag == 3 && NGT_Coop == 4 &&
@@ -1010,6 +1017,45 @@ namespace
 
 	// Makes the store and starts the thread, the first time either is needed. False if there's no server, or it can't start. Modified
 	// 2026-11-10 by Melanikus for the AvP port (#175): the server is its servers.cfg line (Relay_ServerName says when there's one).
+	// THE PLAYER'S YES (#175's last part; servers_trust.h says what it is and how it's kept). Added 2026-11-10 by Melanikus for the AvP
+	// port. Until the line has had it, the list isn't started (Start, below), so nothing at all goes to the line's server or its relay.
+	// Only the main thread reads or changes these, and the list's thread starts only after the yes.
+	ServersTrustYeses yeses;
+	bool yesesRead = false;
+
+	// What a yes to a line is: SHA-256 over servers_trust.h's 68 bytes. False if it couldn't be worked out, which counts as no yes.
+	bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])
+	{
+		uint8_t input[kServersTrustInputBytes];
+		NetCryptoPiece const piece = { input, sizeof(input) };
+		return ServersTrust_HashInput(line.address, line.listPort, line.relayPort, line.fingerprint, input) && NetCrypto_Sha256(&piece, 1, hash);
+	}
+
+	// Whether a line may be used: a Hudson run's always (nobody is there to answer), anyone else's only once the player has said yes to it.
+	// The kept yeses are read the first time this is asked; a file that can't be used counts as none, so every line is asked about again.
+	bool TheLineIsAgreed(const ServersCfgServer &line)
+	{
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+
+		if (!yesesRead)
+		{
+			yesesRead = true;
+			const char *why = NULL;
+			NetTrustStoreResult const kept = NetIdentityStore_LoadTrust(&yeses, &why);
+
+			if (kept != kNetTrustStoreRead && kept != kNetTrustStoreNoFile)
+			{
+				LogString(std::string("Relay list: " SERVERS_TRUST_FILE_NAME " isn't used, so every server is asked about again: ") + (why ? why : "it couldn't be read"));
+			}
+		}
+
+		uint8_t hash[kServersTrustHashBytes];
+		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
+	}
+
 	bool Start(void)
 	{
 		if (shared)
@@ -1022,8 +1068,15 @@ namespace
 			return false;
 		}
 
+		// Nothing is made, and nothing goes to the line's server or its relay, before the player's yes to the line (#175's last part)
 		const ServersCfgServer *const line = Server();
-		Shared *made = line ? new (std::nothrow) Shared : NULL;
+
+		if (!line || !TheLineIsAgreed(*line))
+		{
+			return false;
+		}
+
+		Shared *made = new (std::nothrow) Shared;
 
 		if (!made)
 		{
@@ -1365,6 +1418,15 @@ int RelayList_ServerState(const char **why)
 {
 	*why = NULL;
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): a line the player hasn't said yes to is never asked, so there's
+	// no answer to wait for, only the yes
+	const ServersCfgServer *const line = Server();
+
+	if (line && !TheLineIsAgreed(*line))
+	{
+		return kRelayServerNeedsYes;
+	}
+
 	if (!shared)
 	{
 		return kRelayServerAsking;
@@ -1390,6 +1452,84 @@ int RelayList_ServerState(const char **why)
 
 	LeaveCriticalSection(&shared->lock);
 	return state;
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
+bool RelayList_LineToAgree(RelayListLineToAgree *out)
+{
+	const ServersCfgServer *const line = Server();
+
+	if (!out || !line || TheLineIsAgreed(*line))
+	{
+		return false;
+	}
+
+	memset(out, 0, sizeof(*out));
+	snprintf(out->name, sizeof(out->name), "%s", line->name);
+	unsigned int const a = line->address;
+
+	// The address as the line says it: with its two ports only when they aren't the usual ones
+	if (line->listPort == kServersCfgListPort && line->relayPort == kServersCfgRelayPort)
+	{
+		snprintf(out->address, sizeof(out->address), "%u.%u.%u.%u", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu);
+	}
+	else
+	{
+		snprintf(out->address, sizeof(out->address), "%u.%u.%u.%u:%d:%d", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,
+			line->listPort, line->relayPort);
+	}
+
+	out->place = line->place;
+
+	// The fingerprint's first 8 digits and its last 8, as a person can read them against what the server's owner gave out
+	static char const kDigits[] = "0123456789abcdef";
+	char hex[2 * kServersCfgFingerprintBytes + 1];
+
+	for (int i = 0; i < kServersCfgFingerprintBytes; i++)
+	{
+		hex[2 * i] = kDigits[line->fingerprint[i] >> 4];
+		hex[2 * i + 1] = kDigits[line->fingerprint[i] & 0x0F];
+	}
+
+	hex[2 * kServersCfgFingerprintBytes] = 0;
+	snprintf(out->keyStart, sizeof(out->keyStart), "%.8s", hex);
+	snprintf(out->keyEnd, sizeof(out->keyEnd), "%.8s", hex + 2 * kServersCfgFingerprintBytes - 8);
+	return true;
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
+bool RelayList_AgreeToTheLine(void)
+{
+	const ServersCfgServer *const line = Server();
+	uint8_t hash[kServersTrustHashBytes];
+
+	if (!line || !LineHash(*line, hash))
+	{
+		return false;
+	}
+
+	// The kept yeses are read first, so that writing the file again keeps them. With every place taken, the oldest yes goes, and its line
+	// is asked about again the next time it's used.
+	TheLineIsAgreed(*line);
+
+	if (!ServersTrust_Has(yeses, hash) && yeses.count >= kServersTrustMostYeses)
+	{
+		memmove(yeses.hashes[0], yeses.hashes[1], sizeof(yeses.hashes[0]) * (kServersTrustMostYeses - 1));
+		yeses.count = kServersTrustMostYeses - 1;
+	}
+
+	ServersTrust_Add(&yeses, hash);
+
+	if (NetIdentityStore_KeepTrust(yeses))
+	{
+		LogString("Relay list: the player said yes to the server in " SERVERS_CFG_FILE_NAME ", and it's kept for the next time");
+	}
+	else
+	{
+		LogString("Relay list: the player said yes to the server in " SERVERS_CFG_FILE_NAME ", but it couldn't be kept, so it holds for this run only");
+	}
+
+	return true;
 }
 
 void RelayList_FindGames(void)

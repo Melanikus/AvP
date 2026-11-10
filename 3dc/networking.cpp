@@ -1221,6 +1221,7 @@ static bool PeerIsThroughRelay(const ENetPeer *peer)
 static const char *const kNotAtHome = "that game's host isn't on your home network, and a game beyond it is played only through the online list, sealed";
 static const char *const kTypedNotAtHome = "that address isn't on your home network: a game beyond it is played only through the online list, sealed";
 static const char *const kServerNotYet = "the server hasn't answered yet";
+static const char *const kServerNotAgreed = "you haven't said yes to the server in servers.cfg yet";   // #175's last part (2026-11-10)
 static const char *const kRelayCantBeUsed = "the server's relay can't be used";
 static const char *const kNoIdentity = "this game's identity couldn't be made";
 static const char *hostFailedWhy = NULL;       // why the last Net_HostGame or Net_HostAtHome failed (Net_HostFailedWhy)
@@ -2535,6 +2536,17 @@ static NetResult HostGame(char *playerName, char *sessionName, int species, uint
 	// Online when servers.cfg names a server and the player didn't ask for a home game; a home game otherwise
 	bool const online = !atHome && Relay_ServerName()[0] != 0;
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): an online game only once the player has said yes to the server,
+	// before anything is made. Its screen shows the line and asks (RelayList_LineToAgree), then hosts again.
+	const char *notAgreedWhy = NULL;
+
+	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
+	{
+		hostFailedWhy = kServerNotAgreed;
+		Con_PrintError(std::string("net: this game can't be hosted online: ") + kServerNotAgreed);
+		return NET_FAIL;
+	}
+
 	// The server hasn't answered yet: asked now, if it wasn't (relay_list.cpp asks once at a time), and the host waits for it (Net_ServerState)
 	if (online)
 	{
@@ -2701,6 +2713,13 @@ int Net_ServerState(const char **why)
 	}
 
 	int const state = RelayList_ServerState(why);
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): a line without the player's yes is never asked
+	if (state == kRelayServerNeedsYes)
+	{
+		return kNetServerNeedsYes;
+	}
+
 	return state == kRelayServerGood ? kNetServerReady : state == kRelayServerCantUse ? kNetServerCantUse : kNetServerAsking;
 }
 

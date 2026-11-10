@@ -847,6 +847,26 @@ static void TestTheCalls()
 		Has(starting, "made->port = static_cast<INTERNET_PORT>(line->listPort);") && Has(starting, "made->relayPort = line->relayPort;"),
 		"and the list is started only for it, at its address, written as four numbers, and its ports");
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): THE PLAYER'S YES. The list needs the whole game (WinHTTP, the store,
+	// the main thread), so its side of the gate is read in the code; servers_trust_test tries the yes's hash and its file, and net_start_test
+	// what networking.cpp does before it.
+	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
+	Check(gate != std::string::npos && gate < starting.find("new (std::nothrow) Shared") && gate < starting.find("swprintf(made->server"),
+		"the list starts only for a line the player has said yes to: before it makes anything, or writes the server it would call");
+	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}");
+	Check(hudsonFirst != std::string::npos && hudsonFirst < agreed.find("if (!yesesRead)") && Has(agreed, "return LineHash(line, hash) && ServersTrust_Has(yeses, hash);") &&
+		Has(source, "extern bool HudsonRunIsOn;") && !Has(source, "HudsonRunIsOn =") && !Has(source, "HudsonRunIsOn=") ,
+		"the one way past it is a Hudson run, which this file only reads; anyone else's line needs its own hash among the kept yeses");
+	std::string const hashing = SourceSlice(source, "bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(hashing, "ServersTrust_HashInput(line.address, line.listPort, line.relayPort, line.fingerprint, input) && NetCrypto_Sha256(&piece, 1, hash);"),
+		"a yes is the SHA-256 of the line's address, ports and fingerprint (servers_trust.h)");
+	std::string const yesState = SourceSlice(source, "int RelayList_ServerState(const char **why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const needsYes = yesState.find("if (line && !TheLineIsAgreed(*line))\n\t{\n\t\treturn kRelayServerNeedsYes;\n\t}");
+	Check(needsYes != std::string::npos && needsYes < yesState.find("if (!shared)"), "a line without the yes is said to need it, before anything else");
+	Check(CountOf(source, "ServersTrust_Add(") == 1 && Has(SourceSlice(source, "bool RelayList_AgreeToTheLine(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice),
+		"ServersTrust_Add(&yeses, hash);"), "and only the player's yes adds one");
+
 	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks.
 	// Modified 2026-11-09 by Melanikus for the AvP port: its one call of the list's is RelayList_BeforeQuitting, after the menus have ended
 	// and before the game shuts down, and that never starts the list (below).

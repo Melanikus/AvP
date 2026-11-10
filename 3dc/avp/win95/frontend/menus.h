@@ -142,7 +142,8 @@ enum AVPMENU_ID
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
 	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
 	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
-	AVPMENU_ONLINE_ACCESS_NEW  // the question before a new identity is made
+	AVPMENU_ONLINE_ACCESS_NEW, // the question before a new identity is made
+	AVPMENU_SERVER_YES         // the player's yes to the server in servers.cfg, before anything goes to it (#175's last part): see server_yes_page.h
 };
 
 enum AVPMENU_FONT_ID

@@ -104,6 +104,7 @@
 #include "online_screens.h"
 #include "online_screens_page.h"
 #include "access_page.h"
+#include "server_yes_page.h"
 
 // -dev (d3d_render.cpp): the Online access row and pages are there only with it
 extern int DevMode;
@@ -2275,6 +2276,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
+		// The player's yes to the server in servers.cfg (#175's last part, server_yes_page.h): with no line waiting for one, back to the
+		// Multiplayer page
+		case AVPMENU_SERVER_YES:
+		{
+			if (!ServerYesPage_Opened())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
 		case AVPMENU_MULTIPLAYER_LOADCONFIG:
 		{
 			if (!BuildLoadMPConfigMenu())
@@ -2484,6 +2497,10 @@ static void RenderMenu(void)
 	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
 	{
 		AccessPage_DrawQuestion();
+	}
+	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
+	{
+		ServerYesPage_Draw();
 	}
 
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
@@ -4150,6 +4167,16 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		{
 			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
+
+			// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's
+			if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
+			{
+				if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && ServerYesPage_Pressed(elementPtr->MaxValue, &page))
+				{
+					SetupNewMenu(page);
+				}
+				break;
+			}
 
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AccessPage_Pressed(elementPtr->MaxValue, &page))
 			{

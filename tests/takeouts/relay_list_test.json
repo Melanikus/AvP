@@ -1723,6 +1723,46 @@
 					"to": "\tkRelayListMostGamesBytes = 49152,"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the list starts before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
+					"to": "\t\tif (!line)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes is taken for any line",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\treturn LineHash(line, hash) && ServersTrust_Has(yeses, hash);",
+					"to": "\t\treturn LineHash(line, hash);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line without the yes is waited for as if it had one",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (line && !TheLineIsAgreed(*line))",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run is asked for a yes nobody can give",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn true;\n\t\t}"
+				}
+			]
 		}
 	]
 }

@@ -3424,6 +3424,26 @@
 					"to": "\t// before the channel opens, and it hears nothing then.\n\treturn 0;\n}"
 				}
 			]
+		},
+		{
+			"name": "an online host is hosted before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line without the yes is said to be being asked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (state == kRelayServerNeedsYes)\n\t{\n\t\treturn kNetServerNeedsYes;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn kNetServerNeedsYes;\n\t}"
+				}
+			]
 		}
 	]
 }

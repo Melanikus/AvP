@@ -109,6 +109,8 @@ int const kNetServerAsking = 1;    // the server is being asked, or hasn't been 
 int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
                                    // match its line), in the game's own fixed words
+int const kNetServerNeedsYes = 4;  // the player hasn't said yes to the server in servers.cfg yet (#175's last part, added 2026-11-10): it's
+                                   // never asked, so show the line (RelayList_LineToAgree) and host after the yes (RelayList_AgreeToTheLine)
 int Net_ServerState(const char **why);
 
 // Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game on this network whose host isn't on the home network

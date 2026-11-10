@@ -17,6 +17,7 @@
 
 #include "relay_shared.h"
 #include "relay_list_text.h"
+#include "servers_cfg.h"
 
 struct SessionDescription;
 
@@ -76,7 +77,33 @@ int const kRelayServerGood = 1;      // checked against its servers.cfg line, an
 int const kRelayServerCantUse = 2;   // why says why: the last asking couldn't reach it, it said no, its answer was refused, or its keys
                                      // don't match its line (asking again, RelayList_FindRelays, tries again, but not after keys that
                                      // didn't match: those stay refused until the game restarts)
+int const kRelayServerNeedsYes = 3;  // the line hasn't had the player's yes (#175's last part): nothing has gone to its server, and nothing
+                                     // will until RelayList_AgreeToTheLine (below)
 int RelayList_ServerState(const char **why);
+
+// ---- The player's yes to servers.cfg's line (#175's last part; servers_trust.h says what it is and how it's kept). Added 2026-11-10 by
+// Melanikus for the AvP port. Until the line has had it, the list isn't started, so nothing at all goes to its server or its relay: no
+// call, no listing, no access request, no game found. A Hudson run needs none, as nobody is there to answer (HudsonRunIsOn, which
+// tools/check-hudson-asleep.ps1 proves a player's game never sets). Only the main thread calls these.
+
+// What the yes-screen shows of the line, so the player sees where it goes before anything does
+struct RelayListLineToAgree
+{
+	char name[kServersCfgNameLetters + 1];   // as the line names it
+	char address[24];                         // "104.131.35.41", or with both ports when they aren't the usual ones: "203.0.113.7:8443:27500"
+	ServersCfgPlace place;                    // on the internet, on this PC, or on the player's own network
+	char keyStart[9];                         // its fingerprint's first 8 digits ("bb0e2958"), and its last 8 ("f28d663e"), which a
+	char keyEnd[9];                           // person can hold against what the server's owner gave out
+};
+
+// True, with out filled, when there's a line and it hasn't had the yes. False when there's no line, or it has had it (a Hudson run's
+// always has).
+bool RelayList_LineToAgree(RelayListLineToAgree *out);
+
+// The player's yes to the line RelayList_LineToAgree showed: kept in servers-trusted.cfg (net_identity_store.h), and from now on the
+// list may start. A yes that couldn't be kept still holds for this run, and the log says so. False, with nothing changed, if there's no
+// line.
+bool RelayList_AgreeToTheLine(void);
 
 // ---- Finding games. The menus call these.
 

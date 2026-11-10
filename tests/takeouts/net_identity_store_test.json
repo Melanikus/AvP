@@ -353,6 +353,36 @@
 					"to": "\t\t&& NetPq_KemKeypair(out->statics + kNetCryptoP384PublicBytes, out->kemPrivate)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);"
 				}
 			]
+		},
+		{
+			"name": "the yeses' text the game didn't write is taken",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\tif (read != kServersTrustRead)\n\t{\n\t\t*said = ServersTrust_Words(read);",
+					"to": "\tif (false)\n\t{\n\t\t*said = ServersTrust_Words(read);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run reads the player's yeses",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "const char **why)\n{\n\tif (SaveFolder_IsAHudsonRun())",
+					"to": "const char **why)\n{\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run keeps the player's yeses",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\treturn !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepTrustTo(",
+					"to": "\treturn NetIdentityStore_KeepTrustTo("
+				}
+			]
 		}
 	]
 }

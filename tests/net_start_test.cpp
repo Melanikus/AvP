@@ -4368,6 +4368,19 @@ static void TestSealedOrNothing()
 	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the relay server couldn't be reached") == 0
 		&& Net_ServerState(&why) == kNetServerCantUse && why != NULL && strcmp(why, "the relay server couldn't be reached") == 0 && socketsOpen == socketsBefore,
 		"and one whose server can't be reached isn't hosted either, saying the server's words, with nothing opened on this network instead");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): one whose line the player hasn't said yes to. Nothing is made, the
+	// server isn't even asked, and the screen is told to show the line and ask (relay_list.h, RelayList_LineToAgree)
+	serverStateGiven = kRelayServerNeedsYes;
+	serverStateWhy = NULL;
+	int const askedBeforeTheYes = serverAsked;
+	size_t const boundBeforeTheYes = hostsBoundTo.size();
+	size_t const sentBeforeTheYes = datagramsSentTo.size();
+	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "you haven't said yes to the server in servers.cfg yet") == 0,
+		"an online host whose server the player hasn't said yes to isn't hosted, and says so");
+	Check(Net_ServerState(&why) == kNetServerNeedsYes && serverAsked == askedBeforeTheYes && hostsBoundTo.size() == boundBeforeTheYes
+		&& datagramsSentTo.size() == sentBeforeTheYes && socketsOpen == socketsBefore,
+		"before the yes the server isn't asked, no host is made, nothing is sent anywhere, and nothing opens on this network instead");
 	serverStateGiven = -1;
 	serverStateWhy = NULL;
 	EndTheGame();
