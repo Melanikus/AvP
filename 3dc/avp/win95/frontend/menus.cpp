@@ -1926,6 +1926,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
 	{
 		Net_StopSearchingForSessions();
+
+		// And the page's own timing of the server's relay, for its ping column, with its socket (added 2026-11-10 by Melanikus for the AvP
+		// port; networking.h)
+		Net_StopTimingTheRelay();
 	}
 
 	/* set pointer to the start of the menu's element data */

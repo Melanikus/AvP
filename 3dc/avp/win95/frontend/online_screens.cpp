@@ -439,7 +439,7 @@ void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *
 
 	if (joinerMs < 0)
 	{
-		Put(words, size, "?");
+		Put(words, size, joinerMs == kOnlineJoinerMsMeasuring ? "..." : "?");
 		return;
 	}
 

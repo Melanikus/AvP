@@ -136,6 +136,9 @@ void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t si
 // "about N ms" for a game through a relay: the joiner's own time to that game's relay, and the host's (hostMs, 0 when the host didn't
 // measure it), because every packet goes host, relay, joiner (PROTOCOL.md, "How the game uses it"). "?" while the joiner's time isn't
 // known yet (joinerMs below 0). "-" for a game on this network. Times above 9999 ms are taken as 9999, as the list caps them.
+// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): "..." while the joiner's time is being measured (joinerMs is
+// kOnlineJoinerMsMeasuring: the games page's own timing of the relay, networking.h's Net_RelayBeingTimed).
+int const kOnlineJoinerMsMeasuring = -2;
 void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *words, size_t size);
 
 // ---- Joining, and being asked (J3, J4, J5, H1)

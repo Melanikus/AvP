@@ -1835,15 +1835,179 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 	}
 }
 
+// THE GAMES PAGE'S OWN ROUND TRIP TO THE RELAY, before any join, for its ping column. Added 2026-11-10 by Melanikus for the AvP port (PO's
+// ruling, from the owner's look at the showcase: the column said "?"). The server's one relay is timed with version 2's cookie round, as a
+// host's channel times it (net_relay_v2.h's NetRelayV2Picker): kNetRelayEchoes COOKIE_ASKs, each 1,200 bytes and answered with 64, which
+// keeps nothing on the relay, opens nothing, and needs no approval. The list names the relay only once the player has said yes to its line
+// and the server's keys have matched it (relay_list.h), so nothing is sent before that. The asks go from a socket of the page's own, open
+// only while they're timed, and closed with the page (Net_StopSearchingForSessions); only an answer from the relay's own address is heard,
+// and the picker takes only a cookie, from its control port, for an ask it sent. Until it's done the page shows "...".
+int const kPageTimingNotYet = 0;     // the list hasn't named the relay yet: before the yes, or before the server's check
+int const kPageTimingMeasuring = 1;
+int const kPageTimingTimed = 2;
+int const kPageTimingCantTime = 3;   // no answer in time, or the socket couldn't be made
+
+static ENetSocket pageTimingSocket = ENET_SOCKET_NULL;
+static NetRelayV2Picker pageTimer;
+static ENetAddress pageTimedRelay;
+static char pageTimedRegion[kRelayListRegionLetters + 1];
+static int pageTiming = kPageTimingNotYet;
+static uint32_t pageTimedMs = 0;
+
+static void ClosePageTimingSocket()
+{
+	if (pageTimingSocket != ENET_SOCKET_NULL)
+	{
+		enet_socket_destroy(pageTimingSocket);
+		pageTimingSocket = ENET_SOCKET_NULL;
+	}
+}
+
+void Net_StopTimingTheRelay(void)
+{
+	ClosePageTimingSocket();
+	pageTimer.Reset();
+	pageTiming = kPageTimingNotYet;
+	pageTimedMs = 0;
+	pageTimedRegion[0] = 0;
+}
+
+void Net_TimeTheRelayForThePage(void)
+{
+	if (pageTiming == kPageTimingTimed || pageTiming == kPageTimingCantTime)
+	{
+		return;
+	}
+
+	uint32_t const now = enet_time_get();
+
+	// The first time the list names the relay: the socket, and the first ask
+	if (pageTiming == kPageTimingNotYet)
+	{
+		RelayListRelay relays[kRelayListMostRelays];
+		int named = 0;
+
+		if (!RelayList_Relays(relays, &named) || named <= 0)
+		{
+			return;
+		}
+
+		if (!RelayLookUp(relays[0], &pageTimedRelay))
+		{
+			pageTiming = kPageTimingCantTime;
+			return;
+		}
+
+		strncpy(pageTimedRegion, relays[0].region, kRelayListRegionLetters);
+		pageTimedRegion[kRelayListRegionLetters] = 0;
+		uint8_t ids[kNetRelayEchoes * kNetV2IdBytes];
+		RelayRandomBytes(ids, sizeof(ids));
+		uint16_t const port = pageTimedRelay.port;
+		pageTimingSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+
+		ENetAddress any;
+		any.host = ENET_HOST_ANY;
+		any.port = 0;
+
+		// Hudson's branch: a run with net= puts this socket on this machine's own address too, or on the way to its one relay beyond it
+		if (NetLoopbackOnly)
+		{
+			LoopbackOnlyAddress(&any);
+		}
+
+		if (pageTimingSocket == ENET_SOCKET_NULL || enet_socket_set_option(pageTimingSocket, ENET_SOCKOPT_NONBLOCK, 1) < 0
+			|| enet_socket_bind(pageTimingSocket, &any) < 0 || !pageTimer.Start(1, &port, ids, now))
+		{
+			ClosePageTimingSocket();
+			pageTiming = kPageTimingCantTime;
+			return;
+		}
+
+		pageTiming = kPageTimingMeasuring;
+		LogString("net: the games page is timing the server's relay");
+	}
+
+	// What has come: from the relay's own address only. Anything else is dropped unread.
+	static uint8_t packet[kRelayMostPacketBytes];
+
+	for (size_t n = 0; n < kRelayMostPacketsAWait; n++)
+	{
+		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+
+		if (enet_socket_wait(pageTimingSocket, &condition, 0) < 0 || !(condition & ENET_SOCKET_WAIT_RECEIVE))
+		{
+			break;
+		}
+
+		ENetAddress from;
+		ENetBuffer buffer;
+		buffer.data = packet;
+		buffer.dataLength = sizeof(packet);
+		int const got = enet_socket_receive(pageTimingSocket, &from, &buffer, 1);
+
+		if (got <= 0)
+		{
+			break;
+		}
+
+		if (from.host == pageTimedRelay.host)
+		{
+			pageTimer.Hear(0, from.port, packet, static_cast<size_t>(got), now);
+		}
+	}
+
+	pageTimer.Tick(now);
+
+	NetRelayV2PickerSend sends[kNetRelayV2MostPickerSends];
+	size_t const sendCount = pageTimer.TakeSends(sends, kNetRelayV2MostPickerSends);
+
+	for (size_t i = 0; i < sendCount; i++)
+	{
+		ENetAddress to = pageTimedRelay;
+		to.port = sends[i].port;
+		ENetBuffer buffer;
+		buffer.data = sends[i].bytes;
+		buffer.dataLength = kNetV2DatagramBytes;
+		enet_socket_send(pageTimingSocket, &to, &buffer, 1);
+	}
+
+	if (pageTimer.Done(now))
+	{
+		uint32_t ms = 0;
+		bool const timed = pageTimer.RelayMs(0, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs);
+		ClosePageTimingSocket();
+		pageTiming = timed ? kPageTimingTimed : kPageTimingCantTime;
+		pageTimedMs = timed ? ms : 0;
+		LogString(timed ? "net: the games page has timed the server's relay" : "net: the server's relay didn't answer the games page's timing in time");
+	}
+}
+
+bool Net_RelayBeingTimed(const char *region)
+{
+	return region && pageTiming == kPageTimingMeasuring && strncmp(region, pageTimedRegion, sizeof(pageTimedRegion)) == 0;
+}
+
+// The page's own time for that region's relay, or -1
+static int PageTimedMs(const char *region)
+{
+	if (!region || pageTiming != kPageTimingTimed || strncmp(region, pageTimedRegion, sizeof(pageTimedRegion)) != 0)
+	{
+		return -1;
+	}
+
+	return static_cast<int>(pageTimedMs);
+}
+
 // Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): the joiner's round trip to its relay, from the channel's own timing (the
-// cookie round, as the host's own is), once a join has made it, for the relay of that region; -1 before, when the games page shows "?", and
-// for any other region. Version 1's timing of every relay with plain echoes before a join is gone: a version 2 relay answers no plain echo
-// (Primary, beta2-server's RelayCore.java), and a version 2 game sends no plain message.
+// cookie round, as the host's own is), once a join has made it, for the relay of that region. Version 1's timing of every relay with plain
+// echoes before a join is gone: a version 2 relay answers no plain echo (Primary, beta2-server's RelayCore.java), and a version 2 game sends
+// no plain message. Modified again the same day (PO's ruling): before a join, the games page's own timing of the relay, above; -1 without
+// either, when the page shows "?" (or "..." while it's timing), and for any other region.
 int Net_JoinerMsToRelay(const char *region)
 {
 	if (!region || relayV2Ms == 0 || relayV2Ms > static_cast<uint32_t>(kRelayMostHostMs) || strncmp(region, relayV2Region, sizeof(relayV2Region)) != 0)
 	{
-		return -1;
+		return PageTimedMs(region);
 	}
 
 	return static_cast<int>(relayV2Ms);
