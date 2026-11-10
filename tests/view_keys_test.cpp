@@ -1,11 +1,14 @@
 // Tests for the keys on the rendering page. The first half tries view_keys.cpp, which knows nothing about the game, and every refusal has to give its own reason. The second half reads the game's own files,
 // to see that the page, the settings file and the keys are joined up the way view_keys.h says. Written 2026-11-05 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "view_keys.h"
 
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -61,12 +64,10 @@ static int CountOf(const std::string &text, const char *what)
 	return count;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
-
-	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool ComesBefore(const std::string &text, const char *first, const char *second)

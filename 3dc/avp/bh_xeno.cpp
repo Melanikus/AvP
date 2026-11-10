@@ -5221,7 +5221,8 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//load target
 	COPY_NAME(xenoStatusPointer->Target_SBname,block->Target_SBname);
-	xenoStatusPointer->Target = FindSBWithName(xenoStatusPointer->Target_SBname);
+	//the target's name comes from the save file, and can be anything in the level's: only one with a place in the world is kept
+	xenoStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(xenoStatusPointer->Target_SBname));
 
 	//copy strategy block stuff
 	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);

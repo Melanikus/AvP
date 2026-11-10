@@ -7,7 +7,12 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the list of placed NPCs' names is emptied whenever every strategy block is destroyed, so after a restart in a network game a switch finds the
 //   NPC it's aimed at again. It used to be emptied only when the program started (#126)
+//   so is what the log has said about links that find nothing, and about walk-in boxes set off by nearness (#130)
 //   a lookup by name follows the list of placed NPCs' names once at most, to the live blocks only (#131)
+//   a new name's number passes over any number something alive still has, so when the count goes round no two live things share an id
+//   (see sb_name_numbers.h, #139)
+//   the blocks kept for a change of environment by lift are taken out (InitPreservedSBs, PreserveStBlocksInModule, SBNeededForNextEnv,
+//   AddPreservedSBsToActiveList, TeleportPreservedSBsToNewEnvModule): that change could never run (#135)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -26,6 +31,10 @@
 #include "tables.h"
 #include "logString.h"
 #include "npc_level_names.h"
+#include "sb_name_numbers.h"
+#include "near_wake_game.h"
+
+#include <string.h>
 
 /* 
 	this attaches runtime and precompiled object
@@ -127,9 +136,17 @@ void DeallocateStrategyBlock(STRATEGYBLOCK *sptr)
 }
 
 
+// A test run can make the game behave as if every block has gone, to show nothing crashes when they do
+bool HudsonTest_NoStrategyBlocks = false;
+
 STRATEGYBLOCK* CreateActiveStrategyBlock(void)
 {
 	STRATEGYBLOCK *sb;
+
+	if (HudsonTest_NoStrategyBlocks)
+	{
+		return NULL;
+	}
 
 	sb = AllocateStrategyBlock();
 
@@ -374,241 +391,6 @@ bool BehaviourIsAnNpcTheHostRuns(AVP_BEHAVIOUR_TYPE type)
 	}
 }
 
-static STRATEGYBLOCK SB_Preserved[MAX_PRESERVED_SB];
-static int Num_SB_Preserved;
-
-
-void InitPreservedSBs()
-{
-	Num_SB_Preserved = 0;
-}
-
-
-void PreserveStBlocksInModule(MODULE* containing_mod)
-{
-	//	this used within level - find objects in module
-	// all will have sbs
-
-	int i;
-	int max_x, min_x, max_y, min_y, max_z, min_z;	
-
-	max_x = containing_mod->m_maxx + containing_mod->m_world.vx;
-	min_x = containing_mod->m_minx + containing_mod->m_world.vx;
-	max_y = containing_mod->m_maxy + containing_mod->m_world.vy;
-	min_y = containing_mod->m_miny + containing_mod->m_world.vy;
-	max_z = containing_mod->m_maxz + containing_mod->m_world.vz;
-	min_z = containing_mod->m_minz + containing_mod->m_world.vz;
-
-	GLOBALASSERT(Num_SB_Preserved == 0);
-
-	for(i = 0; i < NumActiveStBlocks && Num_SB_Preserved < MAX_PRESERVED_SB; i++)
-	{
-		VECTORCH obj_world;
-		STRATEGYBLOCK	*sbptr;
-		DYNAMICSBLOCK	*dynptr;
-
-		sbptr = ActiveStBlockList[i];
-
-		if(!(dynptr = sbptr->DynPtr))
-			continue;
-		
-		obj_world = dynptr->Position;
-
-		if(obj_world.vx < max_x)
-			if(obj_world.vx > min_x)
-				if(obj_world.vz < max_z)
-					if(obj_world.vz > min_z)
-						if(obj_world.vy < max_y)
-							if(obj_world.vy > min_y)
-								{
-									// copy name into somthing
-									if(sbptr->I_SBtype == I_BehaviourMarinePlayer)
-										{
-											SB_Preserved[Num_SB_Preserved] = *sbptr;
-
-											Num_SB_Preserved++;
-										}
-								}
-	}
-}
-
-
-BOOL SBNeededForNextEnv(STRATEGYBLOCK* sbptr)
-{
-	int i = 0;
-	
-	if(Num_SB_Preserved == 0)
-		return(0);
-
-	if (sbptr->I_SBtype!=I_BehaviourMarinePlayer) 
-		if (sbptr->I_SBtype!=I_BehaviourAlienPlayer) 
-			if (sbptr->I_SBtype!=I_BehaviourPredatorPlayer) 
-	 			if (NAME_ISNULL(sbptr->SBname)) 
-					return(0);
-
-	for(i = 0; i < Num_SB_Preserved; i++)
-	{
-		STRATEGYBLOCK	*pres_sbptr;
-
-		pres_sbptr = &SB_Preserved[i];
-		
-		if(NAME_ISEQUAL(pres_sbptr->SBname, sbptr->SBname))
-			return(1);
-	}
-
-	return(0);
-}
-
-
-void AddPreservedSBsToActiveList()
-{
-	int i;
-	STRATEGYBLOCK *new_sbptr;
-
-	for(i = 0; i < Num_SB_Preserved; i++)
-		{
-			new_sbptr =	CreateActiveStrategyBlock();
-
-			// A level that has used nearly every block loses what was to be carried over, and goes on
-			if (!new_sbptr)
-			{
-				break;
-			}
-
-			*new_sbptr = SB_Preserved[i];
-
-			if(new_sbptr->I_SBtype == I_BehaviourMarinePlayer)
-				{
-					DYNAMICSBLOCK *playerDynPtr;
-
-					Player->ObStrategyBlock = new_sbptr;
-
-					playerDynPtr = Player->ObStrategyBlock->DynPtr;
-					// Need to copy some of the preserved SB info into the appropriate places
-
-					Player->ObWorld = playerDynPtr->Position;
-					Player->ObMat 	= playerDynPtr->OrientMat;
-					Player->ObEuler = playerDynPtr->OrientEuler;
-
-					playerDynPtr->PrevPosition    = playerDynPtr->Position;
-					playerDynPtr->PrevOrientMat 	= playerDynPtr->OrientMat;
-					playerDynPtr->PrevOrientEuler = playerDynPtr->OrientEuler;
-				
-					playerDynPtr->LinVelocity.vx = 0;
-					playerDynPtr->LinVelocity.vy = 0;
-					playerDynPtr->LinVelocity.vz = 0;
-
-					playerDynPtr->LinImpulse.vx = 0;
-					playerDynPtr->LinImpulse.vy = 0;
-					playerDynPtr->LinImpulse.vz = 0;
-
-					playerDynPtr->AngVelocity.EulerX = 0;
-					playerDynPtr->AngVelocity.EulerY = 0;
-					playerDynPtr->AngVelocity.EulerZ = 0;
-
-					playerDynPtr->AngImpulse.EulerX = 0;
-					playerDynPtr->AngImpulse.EulerY = 0;
-					playerDynPtr->AngImpulse.EulerZ = 0;
-					
-				}
-
-			// we will almost certainly need
-			// some clean up here. esp for the
-			// LIFT_FLOOR_SWITCHES and for objects
-			// whose shape reference has changed
-		}
-}
-
-void TeleportPreservedSBsToNewEnvModule(MODULE *new_pos, MODULE* old_pos, int orient_change)
-{
-	int i;
-	VECTORCH mod_offset;
-
-	mod_offset.vx = new_pos->m_world.vx - old_pos->m_world.vx;
-	mod_offset.vy = new_pos->m_world.vy - old_pos->m_world.vy;
-	mod_offset.vz = new_pos->m_world.vz - old_pos->m_world.vz;
- 
-	for(i = 0; i < Num_SB_Preserved; i++)
-		{
-			VECTORCH obj_world;
-			VECTORCH pos_rel; 
-			STRATEGYBLOCK	*sbptr;
-			DYNAMICSBLOCK	*dynptr;
-
-			sbptr = &SB_Preserved[i];
-			
-			dynptr = sbptr->DynPtr;
-			GLOBALASSERT(dynptr);
-
-			obj_world = sbptr->DynPtr->Position;
-			
-			
-			{
-			  // okay we need to find our relative position to the moduke
-			int cos;
-			int sin;
-				int angle;
-				MATRIXCH mat;
-
-
-				pos_rel.vx = dynptr->Position.vx - old_pos->m_world.vx; 
-				pos_rel.vy = dynptr->Position.vy - old_pos->m_world.vy; 
-				pos_rel.vz = dynptr->Position.vz - old_pos->m_world.vz; 
-
-				if(orient_change == 1 || orient_change == -3)
-					angle = 1024;
-				else if(orient_change == 2 || orient_change == -2)
-					angle = 2048;
-				else if(orient_change == 3 || orient_change == -1)
-					angle = 3072;
-				else
-					angle = 0;
-
-			cos = GetCos(angle);
-			sin = GetSin(angle);
-
-			mat.mat11 = cos;
-			mat.mat12 = 0;
-			mat.mat13 = -sin;
-			mat.mat21 = 0;
-			mat.mat22 = 65536;
-			mat.mat23 = 0;
-			mat.mat31 = sin;
-			mat.mat32 = 0;
-			mat.mat33 = cos;
-			
-				// rotate the relative object about the center of the
-				// module and rotate the abject about its own y-axis
-				
-				RotateVector(&pos_rel, &mat);
-			MatrixMultiply(&dynptr->OrientMat,&mat,&dynptr->OrientMat);
-				MatrixToEuler(&dynptr->OrientMat, &dynptr->OrientEuler);
-			}
-
-#if 0
-			dynptr->Position.vx = mod_offset.vx; 
-			dynptr->Position.vy = mod_offset.vy; 
-			dynptr->Position.vz = mod_offset.vz; 
-
-			dynptr->PrevPosition.vx = mod_offset.vx; 
-			dynptr->PrevPosition.vy = mod_offset.vy; 
-			dynptr->PrevPosition.vz = mod_offset.vz; 
-#endif
-
-			dynptr->Position.vx = pos_rel.vx + new_pos->m_world.vx; 
-			dynptr->Position.vy = pos_rel.vy + new_pos->m_world.vy; 
-			dynptr->Position.vz = pos_rel.vz + new_pos->m_world.vz; 
-
-			dynptr->PrevPosition.vx = -pos_rel.vx + old_pos->m_world.vx; 
-			dynptr->PrevPosition.vy = -pos_rel.vy + old_pos->m_world.vy; 
-			dynptr->PrevPosition.vz = -pos_rel.vz + old_pos->m_world.vz; 
-	
-		}
- }
-
-
-
-
 // RWH 5/6/97 these next two functions were 1, changed and 2, added
 // to deal with deallocating stblocks at the end of behaviours
 // this stops problems with accessing defunct strategy blocks
@@ -780,19 +562,34 @@ void DestroyAllStrategyBlocks(void)
 	// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).
 	NpcLevelNames_Clear(&TheNpcLevelNames);
 
+	// And the next level's links, or this one's made again, get their own lines about any that find nothing (link_misses.h), and their
+	// own lines about walk-in boxes set off by a player near a sleeping NPC (near_wake.h)
+	LinkMisses_LevelEnds();
+	NearWake_LevelEnds();
 }
 
-void AssignNewSBName(STRATEGYBLOCK *sbPtr) 
+// Whether something alive other than self already has this number and tag in its name: the four bytes from SBname[4], which the network
+// uses as a thing's id. The number's three bytes come first, low byte first, as the game writes them, and the tag is the fourth.
+static bool NameNumberIsInUse(STRATEGYBLOCK const *self, unsigned int number, char tag)
 {
-	IncrementalSBname++;
+	unsigned char const id[4] = { (unsigned char)(number & 0xff), (unsigned char)((number >> 8) & 0xff), (unsigned char)((number >> 16) & 0xff), (unsigned char)tag };
 
-	if(IncrementalSBname>0xffffff)
+	for (int i = 0; i < NumActiveStBlocks; i++)
 	{
-		IncrementalSBname=1;
+		STRATEGYBLOCK const *const other = ActiveStBlockList[i];
+
+		if (other && other != self && memcmp(&other->SBname[4], id, sizeof(id)) == 0)
+		{
+			return true;
+		}
 	}
 
-	*((int *)&sbPtr->SBname[4])=IncrementalSBname;
-	
+	return false;
+}
+
+void AssignNewSBName(STRATEGYBLOCK *sbPtr)
+{
+	// The tag first, in the name's last byte: 1 playing alone, or 10 + the player's place in a network game, so two players' names never meet
 	if(AvP.Network != I_No_Network)
 	{
 		//modify name to ensure uniqueness between players
@@ -803,6 +600,17 @@ void AssignNewSBName(STRATEGYBLOCK *sbPtr)
 	{
 		sbPtr->SBname[SB_NAME_LENGTH-1]=1; /* Just to make sure... */
 	}
+
+	char const tag = sbPtr->SBname[SB_NAME_LENGTH-1];
+
+	// The next number, passing over one that something alive still has (sb_name_numbers.h): after the count goes round, a number can come
+	// back while the thing that had it is still there
+	IncrementalSBname = SBNameNumber_Next(IncrementalSBname, [sbPtr, tag](unsigned int number) { return NameNumberIsInUse(sbPtr, number, tag); }, maxstblocks);
+
+	// The number's three bytes, low byte first, as the game has always written them, leaving the tag in the fourth
+	sbPtr->SBname[4] = (char)(IncrementalSBname & 0xff);
+	sbPtr->SBname[5] = (char)((IncrementalSBname >> 8) & 0xff);
+	sbPtr->SBname[6] = (char)((IncrementalSBname >> 16) & 0xff);
 }
 
 void GivePlayerCloakAway(void) {

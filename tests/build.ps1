@@ -22,6 +22,8 @@
 #   every test asks for the C runtime as DLLs (/MD), the same as the game, and one whose settings say anything else is refused, with the
 #   reason (STATIC-UNDO-1). For a day the tests were built with the runtime inside them (/MT, STATIC-1). That's undone: Bitdefender flagged
 #   the game built that way (#111), and the user ruled static linking out (#125)
+#   every test is built with the standard library's own bounds checks, and the guard that refuses to compile one without them, and a test
+#   whose settings leave either out, or turn the checks off again, is refused with the reason (STL-HARDEN-1, #140)
 
 param([string]$Only = '')
 
@@ -85,6 +87,30 @@ foreach ($test in $tests)
     if ($settings -cnotmatch '(^|\s)[/-]MD(?=\s|$)')
     {
         Write-Host "$($test.Name) doesn't ask for /MD. Every test is built with /MD, the C runtime as DLLs, the same as the game (STATIC-UNDO-1)"
+        exit 1
+    }
+
+    # STL-HARDEN-1 (#140): every test is built with the standard library's own bounds checks (/D_MSVC_STL_HARDENING=1). With them, looking
+    # past the end of a std::vector or another of its containers stops the test at once. Without them, it reads whatever is in memory there,
+    # and a check can pass by luck. tests/every_test/every_test.h, which every C++ file of a test reads first (/Itests/every_test
+    # /FIevery_test.h), refuses to compile if they're off. A setting that turns them off again, or a part of them, is refused here too.
+    if ($settings -cnotmatch '(^|\s)[/-]D_MSVC_STL_HARDENING=1(?=\s|$)')
+    {
+        Write-Host "$($test.Name) doesn't ask for /D_MSVC_STL_HARDENING=1. Every test is built with the standard library's bounds checks (STL-HARDEN-1, #140)"
+        exit 1
+    }
+
+    $offAgain = @([regex]::Matches($settings, '(^|\s)([/-][DU]_MSVC_STL_HARDENING\S*)') | Where-Object { $_.Groups[2].Value.Substring(1) -cne 'D_MSVC_STL_HARDENING=1' })
+
+    if ($offAgain.Count -gt 0)
+    {
+        Write-Host "$($test.Name) asks for $($offAgain[0].Groups[2].Value), which could turn the standard library's bounds checks, or a part of them, off again. Every test is built with just /D_MSVC_STL_HARDENING=1 (STL-HARDEN-1, #140)"
+        exit 1
+    }
+
+    if ($settings -cnotmatch '(^|\s)[/-]Itests/every_test(?=\s|$)' -or $settings -cnotmatch '(^|\s)[/-]FIevery_test\.h(?=\s|$)')
+    {
+        Write-Host "$($test.Name) doesn't ask for /Itests/every_test /FIevery_test.h, the guard that refuses to compile a test without the standard library's bounds checks (STL-HARDEN-1, #140)"
         exit 1
     }
 

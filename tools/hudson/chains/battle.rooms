@@ -1,0 +1,26 @@
+# Rooms of battle, read from the level file by a script. Nobody has walked them. This level was worked out the rooms as the file joins them.
+join FINISH-01 | FINISH-02 | file
+join FINISH-02 | FINISH-03 | file
+join CAVERN | EGGSAC | file
+join CAVERN | FINISH-05 | file
+join CAVERN | CAVERN01 | file
+join CAVERN | CAVERN02 | file
+join CAVERN | CAVERN03 | file
+join CAVERN | CAVERN04 | file
+join CAVERN | Object02 | file
+join CAVERN | cav01 | file
+join CAVERN | cav02 | file
+join EGGSAC | CAVERN03 | file
+join EGGSAC | CAVERN04 | file
+join FINISH-03 | FINISH-04 | file
+join FINISH-04 | FINISH-05 | file
+join CAVERN01 | CAVERN02 | file
+join CAVERN01 | CAVERN03 | file
+join CAVERN01 | CAVERN04 | file
+join CAVERN02 | cav01 | file
+join CAVERN02 | cav02 | file
+join CAVERN03 | Object02 | file
+join CAVERN03 | cav02 | file
+join CAVERN03 | CAVERN04 | file
+join Object02 | cav02 | file
+join cav01 | cav02 | file

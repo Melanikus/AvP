@@ -7230,7 +7230,8 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//load target
 	COPY_NAME(predatorStatusPointer->Target_SBname,block->Target_SBname);
-	predatorStatusPointer->Target = FindSBWithName(predatorStatusPointer->Target_SBname);
+	//the target's name comes from the save file, and can be anything in the level's: only one with a place in the world is kept
+	predatorStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(predatorStatusPointer->Target_SBname));
 
 	//get the predator's attack from the attack code
 	predatorStatusPointer->current_attack = GetThisAttack_FromUniqueCode(block->currentAttackCode);

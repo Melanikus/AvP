@@ -1,0 +1,5 @@
+# Hudson walks up two flights of stairs on Derelict, COMM-ENT03 and COMM-ENT04. 390 up and 780 along, about 16 metres along the ground.
+# He has to do it on foot, with nobody moving him, and without going back and forth. See test-stairs.ps1.
+putat 48379 1208 -43666 COMM-ENT03
+walk 48653 -2695 -51546 COMM-ENT04
+walk 48653 -6198 -59338 COMM-ENT05

@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   how long ago a joiner heard about a lift car is counted by the machine's own clock (NetLiftMsSince, #90)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the table of refusal reasons has a place for each reason there is
 //   a message's parts can be held up against a short list of kinds, for the co-op lobby. Credit: Melanikus and Bobblen (the co-op
@@ -620,6 +622,23 @@ inline bool NetLiftEndIsKnown(int end)
 inline bool NetLiftHeightIsOnItsTrack(int height, int topHeight, int bottomHeight, int margin)
 {
 	return (long long)height >= (long long)topHeight - margin && (long long)height <= (long long)bottomHeight + margin;
+}
+
+// The longest ago a host's lift message is ever counted as heard, in ms. A minute is longer than any car takes to cross its track, and
+// NetLiftHostHeightNow stops a moving car at its end anyway, so this cuts off nothing that matters: it only keeps the sums small.
+static const int kNetLiftLongestMsSince = 60000;
+
+// How long ago this machine heard the host's last message about a lift car, in ms, by its own clock (timeGetTime) from the moment it
+// arrived (#90). It used to be counted by adding up the game's frame times, which leave time out: a frame is counted as at most a
+// quarter of a second however long it took, and after the game has stood still (its window not active, a load, a save) the next
+// frame is counted as an ordinary one. All that time the host's car kept moving, so the joiner's car stayed behind it, by 2 m or more,
+// until the host's next message. The clock goes back to 0 every 49.7 days; taking one unsigned reading from the other stays right
+// across that.
+inline int NetLiftMsSince(unsigned int now, unsigned int heardAt)
+{
+	unsigned int const since = now - heardAt;
+
+	return since > (unsigned int)kNetLiftLongestMsSince ? kNetLiftLongestMsSince : (int)since;
 }
 
 // Where the host's car should be by now. Its message said the car's height, whether it was moving, and to which end. A moving car

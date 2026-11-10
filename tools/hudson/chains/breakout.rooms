@@ -1,0 +1,441 @@
+# Rooms of breakout, read from the level file by a script. Nobody has walked them. This level was worked out as above, and rooms that can see each other counted as joined.
+door Mstor02 | lift
+door Mtrain04 | lift
+door Mlift03 | lift
+door Mlift04 | lift
+door Mdock02 | lift
+door Mtunnel12 | lift
+door Mtunnel13 | lift
+door Mstor03 | lift
+door Mlift01 | proximity
+door Mdock03 | lift
+door Mtunnel10 | lift
+door Mtunnel11 | lift
+door Mstor04 | lift
+door Mtrain01 | lift
+door Mlift02 | lift
+door Mlift05 | lift
+door Mdock04 | lift
+door tunnel21 | lift
+door Mtunnel14 | lift
+door Mtrain03 | lift
+door Mhangar | lift
+door Mdoor55 | lift
+join tunnel09 | train02 | file
+join tunnel09 | sulaco trap01 | sees
+join tunnel10 | train02 | file
+join tunnel10 | sulaco trap01 | sees
+join Mtunnel01 | tunnelrm05 | file
+join Mtunnel01 | tunnel01 | file
+join Mtunnel01 | sulaco trap01 | sees
+join tunnelrm05 | sulaco trap01 | sees
+join tunnelduct | tunneldu01 | file
+join tunnelduct | tunnel01 | file
+join tunnelduct | sulaco trap01 | sees
+join tunneldu01 | object56 | file
+join tunneldu01 | sulaco trap01 | sees
+join Mtunnel03 | tunnel01 | file
+join Mtunnel03 | tunnelrm10 | file
+join Mtunnel03 | sulaco trap01 | sees
+join cargolif01 | train04 | file
+join cargolif01 | train99 | file
+join cargolif01 | sulaco trap01 | sees
+join Mstor02 | lift08 | file
+join Mstor02 | dock06 | file
+join Mstor02 | sulaco trap01 | sees
+join dock01 | dock04 | file
+join dock01 | dock06 | file
+join dock01 | colla01 | file
+join dock01 | sulaco trap01 | sees
+join Mtrain04 | board06 | file
+join Mtrain04 | recept02 | file
+join Mtrain04 | sulaco trap01 | sees
+join control06 | Mlift04 | file
+join control06 | recept05 | file
+join control06 | board07 | touching
+join control06 | sulaco trap01 | sees
+join lift06 | Mlift03 | file
+join lift06 | Mlift04 | file
+join lift06 | sulaco trap01 | sees
+join lift08 | Mlift03 | file
+join lift08 | sulaco trap01 | sees
+join Mlift03 | sulaco trap01 | sees
+join Mlift04 | sulaco trap01 | sees
+join Mdock02 | stor02 | file
+join Mdock02 | dock06 | file
+join Mdock02 | sulaco trap01 | sees
+join stor02 | sulaco trap01 | sees
+join recept05 | sulaco trap01 | sees
+join recept04 | control04 | file
+join recept04 | sulaco trap01 | sees
+join board03 | board04 | file
+join board03 | train03 | file
+join board03 | board05 | file
+join board03 | sulaco trap01 | sees
+join board04 | sulaco trap01 | sees
+join board05 | sulaco trap01 | sees
+join board01 | board06 | file
+join board01 | train03 | file
+join board01 | board07 | file
+join board01 | sulaco trap01 | sees
+join board06 | sulaco trap01 | sees
+join board07 | sulaco trap01 | sees
+join control04 | recept02 | file
+join control04 | sulaco trap01 | sees
+join recept02 | sulaco trap01 | sees
+join dock04 | sulaco trap01 | sees
+join dock06 | sulaco trap01 | sees
+join Mtunnel12 | tunnelrm11 | file
+join Mtunnel12 | tunnel15 | file
+join Mtunnel12 | sulaco trap01 | sees
+join tunnelrm11 | sulaco trap01 | sees
+join Mtunnel13 | tunnelrm12 | file
+join Mtunnel13 | tunnel15 | file
+join Mtunnel13 | sulaco trap01 | sees
+join tunnelrm12 | sulaco trap01 | sees
+join vent09 | tunnel14 | file
+join vent09 | vent21 | file
+join vent09 | sulaco trap01 | sees
+join vent10 | tunnel16 | file
+join vent10 | vent101 | file
+join vent10 | sulaco trap01 | sees
+join vent12 | tunnel02 | file
+join vent12 | sulaco trap01 | sees
+join vent13 | tunnel14 | file
+join vent13 | sulaco trap01 | sees
+join vent14 | tunnel16 | file
+join vent14 | sulaco trap01 | sees
+join tunnel14 | tunnel15 | file
+join tunnel14 | vent17 | file
+join tunnel14 | sulaco trap01 | sees
+join tunnel15 | tunnel16 | file
+join tunnel15 | sulaco trap01 | sees
+join tunnel16 | vent08 | file
+join tunnel16 | sulaco trap01 | sees
+join vent31 | tunneldu03 | file
+join vent31 | duct01 | file
+join vent31 | sulaco trap01 | sees
+join tunnel32 | vent17 | file
+join tunnel32 | vent18 | touching
+join tunnel32 | sulaco trap01 | sees
+join fanobs | obsrm09 | file
+join fanobs | Object07 | file
+join fanobs | x06 | touching
+join fanobs | sulaco trap01 | sees
+join obsrm09 | vent99 | file
+join obsrm09 | vent18 | file
+join obsrm09 | sulaco trap01 | sees
+join vent99 | sulaco trap01 | sees
+join vent18 | sulaco trap01 | sees
+join vent21 | vent101 | file
+join vent21 | sulaco trap01 | sees
+join bot03 | top03 | file
+join bot03 | sulaco trap | touching
+join bot03 | sulaco trap01 | sees
+join bot04 | top12 | touching
+join bot04 | sulaco trap | touching
+join bot04 | sulaco trap01 | sees
+join top03 | sulaco trap01 | sees
+join top02 | top40 | file
+join top02 | vent105 | touching
+join top02 | top34 | touching
+join top02 | sulaco trap | touching
+join top02 | sulaco trap01 | sees
+join top12 | top19 | file
+join top12 | sulaco trap01 | sees
+join vent105 | winroom02 | touching
+join vent105 | Object29 | touching
+join vent105 | sulaco trap01 | sees
+join top19 | sulaco trap01 | sees
+join top34 | winroom04 | file
+join top34 | sulaco trap01 | sees
+join top40 | sulaco trap01 | sees
+join tunnel01 | Mtrain03 | file
+join tunnel01 | sulaco trap01 | sees
+join tunnelrm10 | sulaco trap01 | sees
+join tunneldu03 | tunnel02 | file
+join tunneldu03 | sulaco trap01 | sees
+join tunnel02 | vent17 | file
+join tunnel02 | sulaco trap01 | sees
+join vent17 | sulaco trap01 | sees
+join winroom02 | sulaco trap01 | sees
+join vent57 | winrm04 | file
+join vent57 | Object41 | file
+join vent57 | sulaco trap01 | sees
+join winroom04 | sulaco trap01 | sees
+join cargolif02 | lift03 | file
+join cargolif02 | cartrn05 | file
+join cargolif02 | sulaco trap01 | sees
+join lift03 | dock12 | file
+join lift03 | sulaco trap01 | sees
+join Mstor03 | dock08 | file
+join Mstor03 | lift04 | file
+join Mstor03 | sulaco trap01 | sees
+join dock07 | dock08 | file
+join dock07 | umbilic03 | file
+join dock07 | dock12 | file
+join dock07 | sulaco trap01 | sees
+join dock08 | Mdock03 | file
+join dock08 | sulaco trap01 | sees
+join lift04 | Mlift01 | file
+join lift04 | sulaco trap01 | sees
+join Mlift01 | sulaco trap01 | sees
+join cartrn04 | crtrn02 | file
+join cartrn04 | crtrn03 | file
+join cartrn04 | outcar02 | touching
+join cartrn04 | sulaco trap01 | sees
+join cartrn05 | crtrn02 | file
+join cartrn05 | sulaco trap01 | sees
+join outcar02 | outcar11 | file
+join outcar02 | outcar12 | file
+join outcar02 | tuneel06 | file
+join outcar02 | sulaco trap01 | sees
+join outcar08 | tunnel12 | file
+join outcar08 | outcar11 | file
+join outcar08 | outcar12 | file
+join outcar08 | tuneel06 | file
+join outcar08 | sulaco trap01 | sees
+join outcar11 | tuneel06 | file
+join outcar11 | sulaco trap01 | sees
+join outcar12 | tuneel06 | file
+join outcar12 | sulaco trap01 | sees
+join tunnel12 | tunnel17 | file
+join tunnel12 | tuneel05 | file
+join tunnel12 | tunnel21 | file
+join tunnel12 | tunnel20 | file
+join tunnel12 | tunnel19 | file
+join tunnel12 | sulaco trap01 | sees
+join tunnel17 | board02 | file
+join tunnel17 | sulaco trap01 | sees
+join tunnel19 | sulaco trap01 | sees
+join tunnel20 | sulaco trap01 | sees
+join tuneel05 | tunnel23 | file
+join tuneel05 | sulaco trap01 | sees
+join Mdock03 | stor03 | file
+join Mdock03 | sulaco trap01 | sees
+join stor03 | sulaco trap01 | sees
+join Mtunnel10 | tunnelrm08 | file
+join Mtunnel10 | tunnel22 | file
+join Mtunnel10 | sulaco trap01 | sees
+join tunnelrm08 | sulaco trap01 | sees
+join Mtunnel11 | tunnel22 | file
+join Mtunnel11 | tunnelrm09 | file
+join Mtunnel11 | sulaco trap01 | sees
+join lift09 | dock10 | file
+join lift09 | cartrn06 | touching
+join lift09 | sulaco trap01 | sees
+join Mstor04 | lift12 | file
+join Mstor04 | dock11 | file
+join Mstor04 | sulaco trap01 | sees
+join dock09 | dock10 | file
+join dock09 | dock11 | file
+join dock09 | sulaco trap01 | sees
+join Mtrain01 | recept06 | file
+join Mtrain01 | sulaco trap01 | sees
+join control02 | Mlift05 | file
+join control02 | recept01 | file
+join control02 | sulaco trap01 | sees
+join lift11 | Mlift05 | file
+join lift11 | Mlift02 | file
+join lift11 | sulaco trap01 | sees
+join lift12 | Mlift02 | file
+join lift12 | sulaco trap01 | sees
+join Mlift02 | sulaco trap01 | sees
+join Mlift05 | sulaco trap01 | sees
+join cartrn06 | crtrn03 | file
+join cartrn06 | sulaco trap01 | sees
+join Mdock04 | stor04 | file
+join Mdock04 | dock11 | file
+join Mdock04 | sulaco trap01 | sees
+join stor04 | sulaco trap01 | sees
+join crtrn02 | sulaco trap01 | sees
+join crtrn03 | sulaco trap01 | sees
+join tunnel21 | board10 | file
+join tunnel21 | sulaco trap01 | sees
+join recept01 | recept03 | touching
+join recept01 | sulaco trap01 | sees
+join recept03 | control03 | file
+join recept03 | sulaco trap01 | sees
+join board02 | sulaco trap01 | sees
+join board10 | sulaco trap01 | sees
+join control03 | recept06 | file
+join control03 | sulaco trap01 | sees
+join recept06 | sulaco trap01 | sees
+join tuneel06 | sulaco trap01 | sees
+join dock10 | sulaco trap01 | sees
+join dock11 | sulaco trap01 | sees
+join umbilic03 | sulaco trap01 | sees
+join dock12 | sulaco trap01 | sees
+join tunnel22 | Mtunnel14 | file
+join tunnel22 | duct02 | file
+join tunnel22 | sulaco trap01 | sees
+join tunnel23 | Mtunnel14 | file
+join tunnel23 | sulaco trap01 | sees
+join tunnelrm09 | sulaco trap01 | sees
+join Mtunnel14 | sulaco trap01 | sees
+join Mtunnel04 | tunnelrm01 | file
+join Mtunnel04 | tunnel07 | file
+join Mtunnel04 | sulaco trap01 | sees
+join tunnelrm01 | sulaco trap01 | sees
+join Mtunnel05 | tunnelrm02 | file
+join Mtunnel05 | tunnel07 | file
+join Mtunnel05 | sulaco trap01 | sees
+join tunnelrm02 | sulaco trap01 | sees
+join vent01 | tunnel06 | file
+join vent01 | vent24 | file
+join vent01 | sulaco trap01 | sees
+join vent02 | tunnel11 | file
+join vent02 | vent24 | file
+join vent02 | sulaco trap01 | sees
+join vent03 | vent04 | file
+join vent03 | tunnel25 | file
+join vent03 | sulaco trap01 | sees
+join vent04 | tunnel06 | file
+join vent04 | sulaco trap01 | sees
+join vent05 | vent06 | file
+join vent05 | tunnel11 | file
+join vent05 | sulaco trap01 | sees
+join vent06 | tunnel13 | file
+join vent06 | sulaco trap01 | sees
+join tunnel06 | tunnel07 | file
+join tunnel06 | vent25 | file
+join tunnel06 | sulaco trap01 | sees
+join tunnel07 | tunnel11 | file
+join tunnel07 | sulaco trap01 | sees
+join tunnel11 | vent19 | file
+join tunnel11 | sulaco trap01 | sees
+join tunnel13 | vent19 | file
+join tunnel13 | sulaco trap01 | sees
+join tunnel24 | vent25 | file
+join tunnel24 | vent22 | file
+join tunnel24 | sulaco trap01 | sees
+join obsrm01 | x11 | file
+join obsrm01 | vent11 | file
+join obsrm01 | vent22 | file
+join obsrm01 | sulaco trap01 | sees
+join vent11 | vent20 | file
+join vent11 | sulaco trap01 | sees
+join vent19 | vent20 | file
+join vent19 | sulaco trap01 | sees
+join vent20 | sulaco trap01 | sees
+join vent22 | sulaco trap01 | sees
+join vent24 | sulaco trap01 | sees
+join tunneldu02 | tunnel25 | file
+join tunneldu02 | object56 | file
+join tunneldu02 | sulaco trap01 | sees
+join tunnel25 | vent25 | file
+join tunnel25 | sulaco trap01 | sees
+join vent25 | sulaco trap01 | sees
+join train02 | train03 | file
+join train02 | train04 | file
+join train02 | Mtrain03 | file
+join train02 | sulaco trap01 | sees
+join train04 | train99 | file
+join train04 | Tlift | file
+join train04 | sulaco trap01 | sees
+join Mtrain03 | train03 | file
+join Mtrain03 | sulaco trap01 | sees
+join train03 | train99 | file
+join train03 | sulaco trap01 | sees
+join Mhangar | Object01 | file
+join Mhangar | sulaco trap01 | sees
+join object56 | sulaco trap01 | sees
+join duct01 | duct02 | file
+join duct01 | sulaco trap01 | sees
+join duct02 | sulaco trap01 | sees
+join Object29 | sulaco trap01 | sees
+join exch01 | exch03 | file
+join exch01 | exch18 | file
+join exch01 | sulaco trap01 | sees
+join exch02 | exch03 | file
+join exch02 | exch13 | file
+join exch02 | sulaco trap01 | sees
+join exch03 | sulaco trap01 | sees
+join exch04 | exch05 | file
+join exch04 | exch09 | touching
+join exch04 | sulaco trap01 | sees
+join exch05 | exch06 | file
+join exch05 | sulaco trap01 | sees
+join exch06 | exch16 | file
+join exch06 | sulaco trap01 | sees
+join exch07 | exch10 | file
+join exch07 | x06 | file
+join exch07 | sulaco trap01 | sees
+join exch09 | exch10 | file
+join exch09 | sulaco trap01 | sees
+join exch10 | sulaco trap01 | sees
+join exch13 | exch14 | file
+join exch13 | sulaco trap01 | sees
+join exch14 | exch15 | file
+join exch14 | sulaco trap01 | sees
+join exch15 | exch16 | file
+join exch15 | sulaco trap01 | sees
+join exch16 | sulaco trap01 | sees
+join exch18 | x11 | file
+join exch18 | sulaco trap01 | sees
+join train99 | Tlift | file
+join train99 | sulaco trap01 | sees
+join x11 | sulaco trap01 | sees
+join bigfanny | bigfanny2 | file
+join bigfanny | Object26 | file
+join bigfanny | sulaco trap01 | sees
+join bigfanny2 | x06 | file
+join bigfanny2 | vent56 | file
+join bigfanny2 | Object28 | touching
+join bigfanny2 | sulaco trap01 | sees
+join boxrm01 | Object35 | file
+join boxrm01 | Object33 | file
+join boxrm01 | sulaco trap01 | sees
+join Object07 | vent52 | file
+join Object07 | sulaco trap01 | sees
+join Object26 | Object27 | file
+join Object26 | sulaco trap01 | sees
+join Object27 | winrm04 | file
+join Object27 | sulaco trap01 | sees
+join Object28 | Object31 | file
+join Object28 | sulaco trap01 | sees
+join Object31 | winrm01 | file
+join Object31 | sulaco trap01 | sees
+join Object32 | Object39 | file
+join Object32 | sulaco trap01 | sees
+join Object35 | Object38 | file
+join Object35 | sulaco trap01 | sees
+join Object36 | Object34 | file
+join Object36 | sulaco trap01 | sees
+join Object38 | Object39 | file
+join Object38 | sulaco trap01 | sees
+join Object39 | sulaco trap01 | sees
+join Object40 | qw | file
+join Object40 | Object30 | file
+join Object40 | sulaco trap01 | sees
+join Object41 | Object42 | file
+join Object41 | sulaco trap01 | sees
+join Object42 | qw | file
+join Object42 | sulaco trap01 | sees
+join qw | sulaco trap01 | sees
+join Tlift | sill05 | touching
+join Tlift | sulaco trap01 | sees
+join tunnel18 | vent08 | file
+join tunnel18 | vent15 | file
+join tunnel18 | sulaco trap01 | sees
+join vent08 | vent16 | file
+join vent08 | sulaco trap01 | sees
+join vent15 | sulaco trap01 | sees
+join vent16 | sulaco trap01 | sees
+join vent52 | sulaco trap01 | sees
+join vent56 | sulaco trap01 | sees
+join winrm01 | Object34 | file
+join winrm01 | sulaco trap01 | sees
+join winrm04 | sulaco trap01 | sees
+join x06 | sulaco trap01 | sees
+join Object34 | sulaco trap01 | sees
+join Object30 | Object33 | file
+join Object30 | sulaco trap01 | sees
+join Object33 | sulaco trap01 | sees
+join vent101 | sulaco trap01 | sees
+join Mdoor55 | Object45 | file
+join Mdoor55 | sulaco trap01 | sees
+join Object45 | sulaco trap01 | sees
+join Object01 | sulaco trap01 | sees
+join colla01 | sulaco trap01 | sees
+join sulaco trap | sulaco trap01 | sees

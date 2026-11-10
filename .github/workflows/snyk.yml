@@ -7,7 +7,8 @@
 #     also fails if precompiled code (DLLs, libraries, executables) is in the repository.
 #   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
 #     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
-#     it is not scanned.
+#     it is not scanned. For the libraries Snyk can't recognise (the two post-quantum ones, #174), known vulnerabilities
+#     come from their projects' own GitHub security advisories, checked by machine (tools/check-advisories.ps1).
 # ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
 # or exclude findings. The single exception is .github/snyk-accepted.json: 4 reports where Snyk's own data is wrong, which
 # no code change can clear. It names each report and expires. If Snyk or GitHub Actions is unavailable, the checks fail
@@ -240,6 +241,14 @@ jobs:
       # no source to collect fails, because a library we can't read is a blind spot. The only folders passed over are the
       # ones named here, which aren't libraries we compile: Microsoft's D3DX is a binary package, the two vcpkg-cmake ones
       # are build helpers, and the last two are vcpkg's own working folders.
+      #
+      # Every file is copied, the ones a library doesn't build (its examples and tests) included, so all of it is scanned.
+      # A link (a symbolic link or a junction) isn't copied, because its files are already there, where it points:
+      # mldsa-native's examples, for one, are links to the library's own sources and to its test random numbers, and
+      # copying through them failed (#174, run 42564776267). Each link is written down with where it points, so nothing
+      # leaves the scan without a line saying so. One that points outside its own library's source, or that can't be read,
+      # fails the step: what it points at wouldn't be scanned at all. Get-ChildItem doesn't walk into links unless it's
+      # told to, so nothing behind one is copied twice. Changed 2026-11-09 by Melanikus for the AvP port.
       - name: Collect each library's patched source
         shell: pwsh
         run: |
@@ -257,8 +266,42 @@ jobs:
               $failed = $true
             }
             foreach ($d in $folders) {
-              Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
-              "$($port.Name)/$($d.Name)"
+              $top = $d.FullName.TrimEnd('\', '/')
+              $copied = 0
+              $links = 0
+              foreach ($item in @(Get-ChildItem -LiteralPath $top -Recurse -Force)) {
+                $relative = $item.FullName.Substring($top.Length + 1)
+                # A hard link is a file like any other, so only these two are links here
+                if ($item.LinkType -in @('SymbolicLink', 'Junction')) {
+                  # Where it points: a junction's target is a whole path, a symbolic link's is often one from the link's own folder
+                  $target = @($item.Target)[0]
+                  $resolved = ''
+                  if ($target) {
+                    $fromHere = if ([System.IO.Path]::IsPathRooted($target)) { $target } else { Join-Path (Split-Path -Parent $item.FullName) $target }
+                    $resolved = [System.IO.Path]::GetFullPath($fromHere).TrimEnd('\', '/')
+                  }
+                  # Inside means the source's own top folder or anything under it, compared as Windows compares names
+                  $inside = $resolved -and ($resolved.Equals($top, [System.StringComparison]::OrdinalIgnoreCase) -or $resolved.StartsWith($top + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))
+                  if (-not $inside -or -not (Test-Path -LiteralPath $resolved)) {
+                    Write-Output "::error::$($port.Name): $relative is a link to '$target', which isn't inside its own source, so what it points at wouldn't be scanned"
+                    $failed = $true
+                  } else {
+                    $where = if ($resolved.Length -gt $top.Length) { $resolved.Substring($top.Length + 1) } else { 'the top of its own source' }
+                    Write-Output "::notice::$($port.Name): $relative is a $($item.LinkType) to $where, which is scanned where it is"
+                  }
+                  $links++
+                  continue
+                }
+                $to = Join-Path $out (Join-Path $port.Name (Join-Path $d.Name $relative))
+                if ($item.PSIsContainer) {
+                  New-Item -ItemType Directory -Force $to | Out-Null
+                } else {
+                  New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+                  Copy-Item -LiteralPath $item.FullName -Destination $to
+                  $copied++
+                }
+              }
+              "$($port.Name)/$($d.Name): $copied files copied, $links links written down"
             }
           }
           if ($failed) { exit 1 }
@@ -300,11 +343,29 @@ jobs:
           chmod +x "$RUNNER_TEMP/snyk"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
+      # The libraries Snyk Open Source can't recognise (mlkem-native and mldsa-native v2.0.0: #174) get their known vulnerabilities
+      # from their projects' own GitHub security advisories instead, checked by machine: the owner's decision, 2026-11-09. Snyk has
+      # been asked to index them too. tools/check-advisories.ps1 says what it checks, and what "read" means; .github/advisories-read.json
+      # is where a read is written down. First its own test, with made-up advisories and no network, then the real check. The libraries
+      # it passes, written to a file, are the only ones the scan below lets through as "not recognised", and only in this run. Added
+      # 2026-11-09 by Melanikus for the AvP port.
+      - name: Test the advisories check
+        shell: pwsh
+        run: ./repo/tests/advisories-test.ps1
+
+      - name: Known vulnerabilities from the projects' own advisories, for the libraries Snyk can't recognise
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./repo/tools/check-advisories.ps1 -Repository repo -Passed (Join-Path $env:RUNNER_TEMP 'advisories-passed.txt')
+
       # Every library that was collected is scanned, even if an earlier one fails, so one run shows everything; the job
-      # fails at the end if any scan found anything. The six we know of must be present by name, so a broken hand-over
+      # fails at the end if any scan found anything. The eight we know of must be present by name, so a broken hand-over
       # can't pass as clean, and a new library is scanned without anyone adding it here. No library may carry a comment or
-      # a settings file that tells a scanner to look away.
+      # a settings file that tells a scanner to look away. It runs even if the advisories check failed, so the run still shows every
+      # scan; then nothing is let through as "not recognised".
       - name: SAST and SCA on each library's source
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -324,7 +385,7 @@ jobs:
             done
             return "$rc"
           }
-          for lib in enet fmt libogg libvorbis openal-soft pthreads; do
+          for lib in enet fmt libogg libvorbis mldsa-native mlkem-native openal-soft pthreads; do
             if [ ! -d "libsrc/$lib" ]; then
               echo "::error::No source collected for $lib"
               failed=1
@@ -376,8 +437,13 @@ jobs:
               if [ "$rc" -ne 0 ]; then failed=1; fi
               tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
               if [ "$tested" -lt 1 ]; then
-                echo "::error::Snyk Open Source did not recognise $lib"
-                failed=1
+                # Only a library whose own advisories passed the check above, in this run (the whole name, one a line)
+                if [ -f "$RUNNER_TEMP/advisories-passed.txt" ] && grep -qxF -- "$lib" "$RUNNER_TEMP/advisories-passed.txt"; then
+                  echo "::notice::Snyk Open Source doesn't recognise $lib, so its known vulnerabilities came from its project's own advisories, checked above"
+                else
+                  echo "::error::Snyk Open Source did not recognise $lib"
+                  failed=1
+                fi
               fi
             done
           done

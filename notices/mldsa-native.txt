@@ -1,0 +1,44 @@
+mldsa-native, and the licence the game takes it under
+
+What it is: mldsa-native version 2.0.0, from the pq-code-package project (github.com/pq-code-package/mldsa-native), built into the game for
+ML-DSA-87 (FIPS 204), the check of the post-quantum half of each signature the game is given.
+vcpkg builds it from source, unchanged, with this project's own settings: vcpkg-overlay-ports/mldsa-native says how.
+
+Its licence: the project offers its library under a choice of three licences. Its LICENSE file begins:
+
+    mldsa-native is a fork of the public domain Dilithium reference implementation,
+    available on https://github.com/pq-crystals/dilithium.
+
+    All new files and all files derived from the Dilithium reference
+    implementation are made available under the Apache-2.0 license OR
+    the ISC license OR the MIT license. These licenses are
+    reproduced at the bottom of this file.
+
+This project takes it under the MIT license, the third of the three. Its terms, with the copyright lines, exactly as the project's LICENSE
+gives them:
+
+Copyright (c) The mldsa-native project authors
+Copyright (c) The mlkem-native project authors
+Copyright (c) 2020 Dougall Johnson
+Copyright (c) 2022 Arm Limited
+SPDX-License-Identifier: MIT
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+vcpkg also installs the project's whole LICENSE file, with all three licences, as share/mldsa-native/copyright.

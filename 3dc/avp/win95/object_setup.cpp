@@ -4,6 +4,8 @@
 //   a map can place pickups of the new guns and their ammunition: see weapon_pickups.h
 //   a network game that plays the same as single player sets up all the level's NPCs on the host, and none on the others
 //   every machine notes each NPC's death target, for when the host says that NPC has died
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   LevelNameIsAPlacedNpc, so a machine that doesn't make the level's NPCs can tell a link to one from a broken link (#130)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
@@ -14,6 +16,10 @@
 //   removed the switched-off code for a lift in another level file
 //   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
 //   a module with more lights than can be shown is logged, where an assert stood before
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   code that could never run is taken out (#135): the xenoborg morph room's two leftovers here, a template and a flag nothing used; a
+//   proximity door's "no lock" (the lock is gone); and a lift station's environment and facing, which only the lift's change of
+//   environment read
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -52,7 +58,6 @@
 #include "bh_xeno.h"
 #include "bh_binary_switch.h"
 #include "bh_link_switch.h"
-#include "bh_spcl.h"
 #include "bh_agun.h"
 #include "bh_lift.h"
 #include "bh_light_fx.h"
@@ -118,9 +123,6 @@ static List <BehaviourBlockData*> Behav_List;
 static List <LocationGroupDieRoll*> DieRoll_List;
 
 const char * light_set_name = "NORMALLT";
-
-BOOL Xenoborg_Morph_Thingy = 0;
-XENO_MORPH_ROOM_TOOLS_TEMPLATE xmrtt;
 
 
 extern char* Rif_Sound_Directory;
@@ -572,6 +574,22 @@ void create_strategies_from_list ()
 	}
 	//get rid of stored list of rolls for quantum object groups
 	clear_location_group_die_roll_list();
+}
+
+bool LevelNameIsAPlacedNpc(const char *name)
+{
+	// The level's list keeps every NPC it places, including those this machine leaves out in a network game
+	for(LIF<BehaviourBlockData*> blif(&Behav_List);!blif.done();blif.next())
+	{
+		BehaviourBlockData* bbd=blif();
+
+		if (BehaviourIsAnNpcTheHostRuns(bbd->sb_type) && memcmp(&bbd->id, name, sizeof(bbd->id)) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void AddToBehaviourList(const char* name,const ObjectID &ID,AVP_BEHAVIOUR_TYPE sb_type,void* bhdata,int shapeindex=-1,Object_Alternate_Locations_Chunk* loc_chunk=0,int flags=0)
@@ -1929,7 +1947,6 @@ static void add_prox_door (Object_Chunk * ob, int shp1, int shp2, MODULE * mod,A
 
 	PROX_DOOR_TOOLS_TEMPLATE * pdtt =(PROX_DOOR_TOOLS_TEMPLATE *) PoolAllocateMem(sizeof(PROX_DOOR_TOOLS_TEMPLATE));
 
-	pdtt->has_lock_target = FALSE;
 	pdtt->door_opening_speed=1<<16;
 	pdtt->door_closing_speed=1<<17;
 	if(asc)
@@ -2045,8 +2062,6 @@ static void add_lift_object (Object_Chunk * ob, int list_pos, MODULE * mod, AVP_
 	*((ObjectID *)ltt->lift_door_name) = ls->AssocDoor;
 	*((ObjectID *)ltt->lift_floor_switch_name) = ls->AssocFloorSwitch;
 
-	ltt->environment = AvP.CurrentEnv;
-	
 	ltt->num_floor = ls->Floor;
 
 	*((ObjectID *)ltt->control_sb_name)=ControlID;
@@ -2059,8 +2074,6 @@ static void add_lift_object (Object_Chunk * ob, int list_pos, MODULE * mod, AVP_
 	
 	*((int *)ltt->my_module.mref_name) = *((int *)mod->m_name);
 	*((ObjectID *)ltt->nameID) = ob->object_data.ID;
-	
-	ltt->orient=ls->Facing;
 
 	AddToBehaviourList(ob->object_data.o_name,ob->object_data.ID, I_BehaviourLift, (void*)ltt,list_pos);
 	

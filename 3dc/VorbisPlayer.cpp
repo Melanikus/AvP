@@ -34,6 +34,10 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a track ends at the end of its file: it isn't played again from the start, and once all of it has been heard the game goes
+//   on to the level's next track (#94, TRACKS-1). The fix follows Bobblen's avp-forever (f15abb6, e02bf47), rewritten.
+//   Asking for a track when no tracks were found no longer reads outside the empty list
 #include <stdio.h>
 #include "VorbisPlayer.h"
 #include <vector>
@@ -151,11 +155,11 @@ VorbisPlayback::~VorbisPlayback()
 	delete[] _audioData;
 }
 
+// Fills the buffer with the next part of the track. At the end of the file it stops, and what's left of the buffer is silence.
 uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 {
 	uint32_t bytesReadTotal = 0;
 	int32_t bytesReadPerLoop = 0;
-	bool gotAudioThisPass = true;	// whether audio has come out since we last went back to the start of the file
 
 	while (bytesReadTotal < sizeToRead)
 	{
@@ -183,24 +187,32 @@ uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 			_readFailed = true;
 			break;
 		}
-		// if we reach the end of the file, go back to start. Reaching the end again with no audio in between means
-		// the file holds none, and going round again would never finish.
+		// The end of the file. Before, it went back to the start here, so a track never ended, and a level's music played its first
+		// track for ever (#94). Now the track is over: nothing more is read, and once all of it has been heard the game picks the
+		// level's next track (VorbisUpdateThread and IsVorbisPlaying, below). A file that ends before any audio has come out of
+		// it holds none, and is refused.
 		else if (bytesReadPerLoop == 0)
 		{
-			if (!gotAudioThisPass)
+			if (!_gotAnyAudio)
 			{
 				LogErrorString("ogg vorbis file holds no audio", __LINE__, kThisFile);
 				_readFailed = true;
 				break;
 			}
-			gotAudioThisPass = false;
-			ov_raw_seek(&_oggFile, 0);
+			_reachedEnd = true;
+			break;
 		}
 		else
 		{
-			gotAudioThisPass = true;
+			_gotAnyAudio = true;
 			bytesReadTotal += bytesReadPerLoop;
 		}
+	}
+
+	// After the end, the rest of the buffer is silence, so the track isn't followed by whatever the buffer held before
+	if (_reachedEnd && bytesReadTotal < sizeToRead)
+	{
+		memset(_audioData + bytesReadTotal, 0, sizeToRead - bytesReadTotal);
 	}
 
 	return bytesReadTotal;
@@ -215,8 +227,17 @@ void *VorbisUpdateThread(void *argument)
 	{
 		uint32_t numBuffersFree = vorbis->_audioStream->GetNumFreeBuffers();
 
-		// once a read has failed, the file is left alone: what is already queued plays out, then there is silence
-		if (numBuffersFree && !vorbis->_readFailed)
+		// Once the end of the file has been read, or a read has failed, nothing more is read: what is already queued plays out.
+		// When every buffer has come back, all of it has been heard, and the track has finished. The game then picks the next.
+		if (vorbis->_reachedEnd || vorbis->_readFailed)
+		{
+			if (numBuffersFree >= static_cast<uint32_t>(kBufferCount))
+			{
+				vorbis->_finished = true;
+				break;
+			}
+		}
+		else if (numBuffersFree)
 		{
 			vorbis->GetVorbisData(kBufferSize);
 			if (!vorbis->_readFailed)
@@ -254,18 +275,17 @@ void LoadVorbisTrack(size_t track)
 		inGameMusic = NULL;
 	}
 
-	// TODO? rather than return, pick a random track or just play last?
-	if (track > TrackList.size()) {
+	// Tracks count from 1, as CD Tracks.txt numbers them: track 1 is the first name in ogg_tracks.txt. 0 is taken as 1, as it always
+	// was. A number with no track is refused, and so is any number when no tracks were found: TrackList[0] of an empty list would read
+	// outside it.
+	size_t const index = (track == 0) ? 0 : track - 1;
+
+	if (index >= TrackList.size()) {
 		return;
 	}
 
-	// if user enters 1, decrement to 0 to align to array (enters 2, decrement to 1 etc)
-	if (track != 0) {
-		track--;
-	}
-
 	inGameMusic = new VorbisPlayback;
-	if (!inGameMusic->Open(TrackList[track]))
+	if (!inGameMusic->Open(TrackList[index]))
 	{
 		delete inGameMusic;
 		inGameMusic = NULL;
@@ -301,10 +321,11 @@ size_t CheckNumberOfVorbisTracks()
 	return TrackList.size();
 }
 
+// A track that has finished isn't playing, so Music_Check (MusicPlayer.cpp) picks the level's next one
 bool IsVorbisPlaying()
 {
 	if (inGameMusic) {
-		return inGameMusic->_isPlaying;
+		return inGameMusic->_isPlaying && !inGameMusic->_finished;
 	}
 
 	return false;

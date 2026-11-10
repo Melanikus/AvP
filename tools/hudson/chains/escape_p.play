@@ -1,0 +1,4 @@
+# What Hudson does to play escape_p on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+kill 79916 -18218 85812 | p
+kill -241 2271 -4242 | pretorian

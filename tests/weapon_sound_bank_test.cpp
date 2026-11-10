@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "memory_wall.h"
+
 static int checks = 0;
 static int failures = 0;
 
@@ -131,10 +133,27 @@ static Bytes OneEntryFile(const WavParts &parts)
 	return file;
 }
 
+// Modified 2026-11-08 by Melanikus for the AvP port: every file is read from memory that ends at a wall.
+// The file's bytes are copied so that its last byte is the last one that can be read (memory_wall.h). If the reader ever looked even one
+// byte past the end of a file, the test would stop there, every time. Read from the list the bytes were made in, a look past the end would
+// land in whatever happened to be next to it, and a check could pass by luck. There's only one wall, so each call replaces what the last
+// one put there: use what it gives back straight away.
+static const uint8_t *AtTheWall(const Bytes &file)
+{
+	uint8_t *const at = (uint8_t *)MemoryEndingAtAWall(file.size());
+
+	if (!file.empty())
+	{
+		memcpy(at, file.data(), file.size());
+	}
+
+	return at;
+}
+
 static SoundBankVerdict VerdictOf(const Bytes &file)
 {
 	int entries = 0;
-	return SoundBank_CheckWholeFile(file.data(), file.size(), &entries);
+	return SoundBank_CheckWholeFile(AtTheWall(file), file.size(), &entries);
 }
 
 static void TestGoodFiles()
@@ -146,18 +165,18 @@ static void TestGoodFiles()
 	AddEndMark(file);
 
 	int entries = 0;
-	Check(SoundBank_CheckWholeFile(file.data(), file.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK, "a good file of two sounds is accepted");
+	Check(SoundBank_CheckWholeFile(AtTheWall(file), file.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK, "a good file of two sounds is accepted");
 	Check(entries == 2, "a good file of two sounds counts two");
 
 	SoundBankEntry first;
-	Check(SoundBank_ReadEntry(file.data(), file.size(), 0, &first) == SOUND_BANK_ENTRY_IS_GOOD, "the first entry reads");
+	Check(SoundBank_ReadEntry(AtTheWall(file), file.size(), 0, &first) == SOUND_BANK_ENTRY_IS_GOOD, "the first entry reads");
 	Check(first.number == 30, "the first entry's number");
 	Check(first.pitch == 0, "the first entry's pitch");
 	Check(first.nameAt == 2, "the first entry's name starts after its two numbers");
 	Check(first.nameLength == strlen("Revolver_Fire.wav"), "the first entry's name length");
 
 	SoundBankEntry second;
-	Check(SoundBank_ReadEntry(file.data(), file.size(), first.nextEntryAt, &second) == SOUND_BANK_ENTRY_IS_GOOD, "the second entry follows the first");
+	Check(SoundBank_ReadEntry(AtTheWall(file), file.size(), first.nextEntryAt, &second) == SOUND_BANK_ENTRY_IS_GOOD, "the second entry follows the first");
 	Check(second.number == 76, "the second entry's number");
 	Check(second.pitch == -4, "a pitch below zero reads as below zero");
 
@@ -179,14 +198,14 @@ static void TestGoodFiles()
 	AddEntry(high, 255, 0, "high.wav", MakeWav(plain));
 	AddEndMark(high);
 	entries = 0;
-	Check(SoundBank_CheckWholeFile(high.data(), high.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK, "a sound numbered 255 reads");
+	Check(SoundBank_CheckWholeFile(AtTheWall(high), high.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK, "a sound numbered 255 reads");
 	Check(entries == 1, "number 255 alone isn't the end mark");
 
 	// An empty file with just the end mark holds no sounds, and that's not an error.
 	Bytes empty;
 	AddEndMark(empty);
 	entries = 99;
-	Check(SoundBank_CheckWholeFile(empty.data(), empty.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK && entries == 0, "only an end mark is zero sounds");
+	Check(SoundBank_CheckWholeFile(AtTheWall(empty), empty.size(), &entries) == SOUND_BANK_REACHED_THE_END_MARK && entries == 0, "only an end mark is zero sounds");
 }
 
 static void TestBrokenFiles()
@@ -203,9 +222,10 @@ static void TestBrokenFiles()
 	Check(VerdictOf(noMark) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "no end mark after a good entry");
 
 	// A start past the end of the file, as a broken size elsewhere might ask for.
+	// (Not called "small": windows.h, which memory_wall.h needs, makes that word mean "char".)
 	SoundBankEntry entry;
-	Bytes small(4, 0);
-	Check(SoundBank_ReadEntry(small.data(), small.size(), 100, &entry) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "a start beyond the file");
+	Bytes fourBytes(4, 0);
+	Check(SoundBank_ReadEntry(AtTheWall(fourBytes), fourBytes.size(), 100, &entry) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "a start beyond the file");
 
 	// The name.
 	Bytes noZero;

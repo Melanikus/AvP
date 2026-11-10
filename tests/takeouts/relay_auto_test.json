@@ -1,0 +1,178 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "-relayhost and -relayjoin work without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!developer || host == join)",
+					"to": "if (host == join)"
+				}
+			]
+		},
+		{
+			"name": "both words at once is taken as one of them",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!developer || host == join)",
+					"to": "if (!developer || (!host && !join))"
+				}
+			]
+		},
+		{
+			"name": "-relayjoin is taken for -relayhost",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "return host ? kRelayAutoHost : kRelayAutoJoin;",
+					"to": "return kRelayAutoHost;"
+				}
+			]
+		},
+		{
+			"name": "a game of another version is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (game.version == ourVersion && game.players >= 0",
+					"to": "if (game.players >= 0"
+				}
+			]
+		},
+		{
+			"name": "a full game is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "game.players < game.maxPlayers && codeIsGood",
+					"to": "game.players <= game.maxPlayers && codeIsGood"
+				}
+			]
+		},
+		{
+			"name": "a game with fewer than no players is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "game.version == ourVersion && game.players >= 0 && game.players",
+					"to": "game.version == ourVersion && game.players"
+				}
+			]
+		},
+		{
+			"name": "a code of 7 letters is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "codeIsGood = codeIsGood && game.code[letter] != 0;",
+					"to": "codeIsGood = codeIsGood;"
+				}
+			]
+		},
+		{
+			"name": "a code with no end after its 8 letters is joined",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "codeIsGood = codeIsGood && game.code[kRelayCodeLetters] == 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a count past the list's limit is read",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "if (!games || count < 0 || count > kRelayListMostGames)",
+					"to": "if (!games || count < 0)"
+				}
+			]
+		},
+		{
+			"name": "-askjoiners isn't a word for hosting",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "CommandLineHasWord(commandLine, \"-relayhost\") || CommandLineHasWord(commandLine, \"-askjoiners\");",
+					"to": "CommandLineHasWord(commandLine, \"-relayhost\");"
+				}
+			]
+		},
+		{
+			"name": "-relayhost asks about each joiner too",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.h",
+					"from": "== kRelayAutoHost && CommandLineHasWord(commandLine, \"-askjoiners\");",
+					"to": "== kRelayAutoHost;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus never host by themselves",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tHostByItselfThroughTheRelay();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it hosts the game's skirmish, which has no network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tnetGameData.skirmishMode = FALSE;   // the game's \"skirmish\" is against the computer, with no network at all\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -askjoiners lets every joiner in",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "asks the person at it about each joiner\");\n",
+					"to": "asks the person at it about each joiner\");\n\t\tNet_LetEveryJoinerIn(true);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -relayhost asks about each joiner",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "lets every joiner in without asking\");\n\t\tNet_LetEveryJoinerIn(true);\n",
+					"to": "lets every joiner in without asking\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host copy hosts by itself every time the menus start",
+			"changes": [
+				{
+					"file": "3dc/relay_auto.cpp",
+					"from": "\thosted = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it hosts without waiting for the list's relays",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tLogString(RelayAuto_WaitForRelays() ? \"relay auto: the list's relays have come, so this copy hosts through the nearest\"\n\t\t: \"relay auto: no relay came from the list in time, so this copy hosts on this network only\");\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

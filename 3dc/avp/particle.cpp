@@ -2717,7 +2717,11 @@ void HandleParticleSystem(void)
 	}
 
 	PostLandscapeRendering();
-	D3D_DecalSystem_Setup();
+
+	// Modified 2026-11-09 by Melanikus for the AvP port (#177): from here to the end of this function, glass and the other see-through
+	// polygons don't write depth, as the 1999 game drew this stretch (its D3D_DecalSystem_Setup and _End), so particles behind a window
+	// still show
+	D3D_SeeThroughWithoutDepth_Begin();
 	OutputTranslucentPolyList();
 
 	i = NumActiveParticles;
@@ -3005,7 +3009,7 @@ void HandleParticleSystem(void)
 		}
 	}
 
-	D3D_DecalSystem_End();
+	D3D_SeeThroughWithoutDepth_End();
 }
 
 void RenderAllParticlesFurtherAwayThan(int zThreshold)

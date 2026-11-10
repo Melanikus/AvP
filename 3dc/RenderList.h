@@ -41,6 +41,12 @@ const int kCommandZClear = 0;
 const int kCommandZWriteEnable = 1;
 const int kCommandZWriteDisable = 2;
 
+// Added 2026-11-09 by Melanikus for the AvP port (#177): between these two, see-through polygons (glass, a mirror's dirt) don't write
+// depth, as the 1999 game drew them in its stretch of see-through things and particles. Solid polygons there still write depth. Particles
+// are drawn after the whole list, so a pane that wrote depth hid every particle behind it. RenderList::Draw carries them out.
+const int kCommandSeeThroughWithoutDepth = 3;
+const int kCommandSeeThroughWithDepth = 4;
+
 struct RenderItem
 {
 	uint32_t	vertStart;

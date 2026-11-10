@@ -7,9 +7,10 @@
 //   what the game says while a level loads goes in the level's own log, beside it, when the level can't be loaded or has things
 //   refused (level_log.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   a lift into another environment builds that environment's alien ways map, and a level's end stops the build and lets the map go
-//   (alien_ways.h);
+//   a level's restart forgets the aliens' ways, and a level's end stops the alien ways map's build and lets the map go (alien_ways.h);
 //   the log says which level file was loaded, with its size and MD5 sum (level_file_sum.h)
+//   ChangeEnvironmentToEnv and IntegrateNewEnvironment are taken out (#135): only the lift's change of environment called them, and
+//   it could never run
 
 #include "3dc.h"
 #include "alien_ways.h"
@@ -27,6 +28,7 @@
 #include "bh_far.h"
 #include "pheromone.h"
 #include "huddefs.h"
+#include "hudson.h"
 #include "hud_gfx.h"
 #include "bh_generator.h"
 #include "pvisible.h"
@@ -222,6 +224,15 @@ void InitCharacter()
 
 void RestartLevel()
 {
+	// A test run may be pretending the blocks have run out. A restart really does give every block back, so that stops here.
+	extern bool HudsonTest_NoStrategyBlocks;
+	extern bool HudsonTest_NoDisplayBlocks;
+	extern bool HudsonTest_NoLightBlocks;
+
+	HudsonTest_NoStrategyBlocks = false;
+	HudsonTest_NoDisplayBlocks = false;
+	HudsonTest_NoLightBlocks = false;
+
 	//get the music to start again at the beginning of the play list.
 	Music_ResetForLevel();
 
@@ -310,6 +321,11 @@ void RestartLevel()
 
 	CurrentGameStats_Initialise();
 	MessageHistory_Initialise();
+
+	if (HudsonRunIsOn)
+	{
+		Hudson_TheLevelStartedAgain();
+	}
 
 	if (AvP.Network!=I_No_Network)
 	{
@@ -413,67 +429,6 @@ static int ReadModuleMapList(MODULEMAPBLOCK *mmbptr)
 void UnloadRifFile()
 {
 	unload_rif(env_rif);
-}
-
-void ChangeEnvironmentToEnv(I_AVP_ENVIRONMENTS env_to_load)
-{
-	GLOBALASSERT(env_to_load != AvP.CurrentEnv);
-
-	GLOBALASSERT(Env_List[env_to_load]);
-
-	Destroy_CurrentEnvironment(); 
-	/* Patrick: 26/6/97
-	Stop and remove all sounds here */
-	SoundSys_StopAll();
-	SoundSys_RemoveAll(); 
-
-	Music_Stop();
-
-	// Loading functions
-	AvP.CurrentEnv = env_to_load;
-	LoadRifFile();
-}
-
-
-void IntegrateNewEnvironment()
-{
-	MODULEMAPBLOCK* mmbptr = &AvpCompiledMaps[0];
-
-	// elements we need form processsystemobjects
-
-	ReadMap(Map);                /* for chunck loader*/
-	ReadModuleMapList(mmbptr);
-
-	Global_ModulePtr = MainSceneArray;
-	PreprocessAllModules();
-	if (GetModuleVisArrays() == FALSE)
-	{
-		textprint("GetModuleVisArrays() failed\n");
-	}
-
-	// elements from start game for AI
-
-	InitObjectVisibilities();
-	InitPheromoneSystem();
-	BuildFarModuleLocs();
-	AlienWays_LevelStart();
-	InitHive();
-
-	AssignAllSBNames();
-
-	/* KJL 20:54:55 05/15/97 - setup player vision (alien wideangle, etc) */
-	SetupVision();
-
-	UnloadRifFile();//deletes environment File_Chunk since it is no longer needed
-
-	/* Patrick: 26/6/97
-	Load our sounds for the new env */	
-	LoadSounds("PLAYER");
-
-	/* remove resident loaded 'fast' files */
-//	ffcloseall();
-
-	ResetFrameCounter();
 }
 
 const char *GameDataDirName = "avp_rifs";

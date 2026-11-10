@@ -40,6 +40,17 @@ struct ENetPacket
 	size_t referenceCount;
 };
 
+// Modified 2026-11-08 by Melanikus for the AvP port: what the relay's glue uses (net_relay.h): the host's socket, and the intercept that sees
+// each packet before ENet reads it, with what it's shown
+struct ENetHost;
+struct ENetEvent;
+#define ENET_CALLBACK
+typedef int (ENET_CALLBACK *ENetInterceptCallback)(ENetHost *host, ENetEvent *event);
+
+// Modified 2026-11-09 by Melanikus for the AvP port: our ENet's patch 007, the hook every datagram the host sends goes through (protocol
+// version 2 seals them there)
+typedef int (ENET_CALLBACK *ENetSendCallback)(ENetHost *host, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount);
+
 // The parts of the real one that networking.cpp uses
 struct ENetPeer
 {
@@ -52,6 +63,8 @@ struct ENetPeer
 	enet_uint32 packetLoss;
 	enet_uint32 roundTripTime;
 	enet_uint32 roundTripTimeVariance;
+	enet_uint32 lastReceiveTime;          // 0 until ENet has timed its first acknowledgement: the line in play shows no round trip before (Net_RelayPlayStateNow)
+	enet_uint32 connectID;                // ENet's own number for this connection: the request to join tells a new joiner in the same place apart by it
 };
 
 // The real one's loss is a share of this
@@ -68,6 +81,13 @@ struct ENetHost
 	size_t peerCount;
 	enet_uint32 totalSentData;            // these two, for the network's numbers in the log (net_stats.h)
 	enet_uint32 totalReceivedData;
+	ENetSocket socket;                    // these five, for the relay (net_relay.h): the relay's messages go from the host's own socket,
+	ENetAddress receivedAddress;          // and the intercept is shown each packet before ENet reads it
+	uint8_t *receivedData;
+	size_t receivedDataLength;
+	ENetInterceptCallback intercept;
+	ENetSendCallback sendHook;            // patch 007: set by networking.cpp once a game uses a relay
+	ENetAddress address;                  // where the host's socket is: Hudson's branch, a run's one relay beyond this machine (networking.cpp)
 };
 
 struct ENetEvent
@@ -109,5 +129,7 @@ void enet_socket_destroy(ENetSocket socket);
 int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32 timeout);
 int enet_socket_receive(ENetSocket socket, ENetAddress *address, ENetBuffer *buffers, size_t bufferCount);
 int enet_socket_send(ENetSocket socket, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount);
+int enet_socket_connect(ENetSocket socket, const ENetAddress *address);
+int enet_socket_get_address(ENetSocket socket, ENetAddress *address);
 
 #endif

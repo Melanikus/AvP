@@ -1,0 +1,3 @@
+# 39 degrees, derelict APORT-C08, bottom to top. Rises 3423 mm. Run with level=derelict
+putat 9661 4965 -291801 APORT-C08
+walkoff 11210 1542 -286826 APORT-C08

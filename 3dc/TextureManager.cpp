@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a picture's see-through texels take their solid neighbours' colour, so smooth filtering draws no outline round its holes (#148)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a square picture with all its smaller copies, for a hand-made relief map
 //   a level past its limit for pictures gets one line in the log, not one for every picture it names
@@ -41,6 +43,7 @@
 #include "console.h"
 #include <assert.h>
 #include "RimLoader.h"
+#include "rim_edges.h"
 #include "texture_relief.h"
 
 std::vector<Texture> textureList;
@@ -303,6 +306,14 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	}
 
 	bool const decoded = newRim.Decode(dest, pitch);
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: each see-through texel takes its solid neighbours' colour, so smooth filtering
+	// doesn't draw a line of the picture's hidden "transparent colour" round every hole and cut-out (#148). In memory only. See rim_edges.h
+	// A film's texture is drawn over by every frame of the film, so it's left as it is.
+	if (decoded && usage == TextureUsage_Normal)
+	{
+		RimEdges_ColourTheHoles(dest, width, height, pitch);
+	}
 
 	R_UnlockTexture(newTexture);
 

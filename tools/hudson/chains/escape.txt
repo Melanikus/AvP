@@ -1,0 +1,17 @@
+# level: escape   end started by: walk
+# campaign: Alien 2
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# In a network game, door medlbdoor stays shut: only killing marine "g" opens it.
+# In a network game, door airdoor02 stays shut: only killing marine "o" opens it.
+# In a network game, door wcdoor stays shut: only killing marine "j" opens it.
+# In a network game, door eggdoor02 stays shut: only killing marine "v" opens it.
+# In a network game, door eggdoor03 stays shut: only killing marine "x" opens it.
+# opens wcdoor
+missing j | a network game leaves out this marine
+# opens airdoor02
+missing o | a network game leaves out this marine
+# opens eggdoor02
+missing v | a network game leaves out this marine
+where cargoship
+walk endswitch
+end endstrategyareaswitch
