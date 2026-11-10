@@ -179,6 +179,9 @@ function Set-HudsonServersFile([string]$folder, [string]$line)
     }
 
     [System.IO.File]::WriteAllText($temporary, $wanted, [System.Text.Encoding]::ASCII)
-    if ($ours) { [System.IO.File]::Replace($temporary, $path, $null) } else { [System.IO.File]::Move($temporary, $path) }
+
+    # No copy of the old one is kept. That's [NullString]::Value, not $null: PowerShell hands $null to a .NET text parameter as an empty
+    # text, which Replace takes for a path and refuses (found by -CheckTheWatch's first run, 2026-11-10)
+    if ($ours) { [System.IO.File]::Replace($temporary, $path, [NullString]::Value) } else { [System.IO.File]::Move($temporary, $path) }
     return ''
 }
