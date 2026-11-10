@@ -252,12 +252,13 @@ static void SourceOfTheGame()
 	std::string const startGame = Between(game, "void StartGame(void)", "InitHive();");
 	Check(Has(startGame, "BuildFarModuleLocs();") && Has(startGame, "AlienWays_LevelStart();"), "SOURCE: a game's start builds the map, with the other AI's level setup");
 
-	std::string const integrate = Between(system, "void IntegrateNewEnvironment()", "InitHive();");
-	Check(Has(integrate, "BuildFarModuleLocs();\n\tAlienWays_LevelStart();"), "SOURCE: so does a lift into another environment");
+	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a lift into another environment no longer builds it, because main took
+	// that path out (#135: ChangeEnvironmentToEnv and IntegrateNewEnvironment could never run). A game's start is the one place left.
+	Check(!Has(system, "void IntegrateNewEnvironment()"), "SOURCE: there's no lift into another environment to build the map for (#135)");
 
 	std::string const destroy = Between(system, "int Destroy_CurrentEnvironment(void)", "CleanUpPheromoneSystem();");
 	Check(Has(destroy, "AlienWays_LevelEnd();\n\tKillFarModuleLocs();"), "SOURCE: a level's end stops the build and lets the map go, with the other AI's");
-	Check(CountOf(game, "AlienWays_LevelStart();") + CountOf(system, "AlienWays_LevelStart();") == 2, "SOURCE: and the build is started from those two places only");
+	Check(CountOf(game, "AlienWays_LevelStart();") == 1 && CountOf(system, "AlienWays_LevelStart();") == 0, "SOURCE: and the build is started from a game's start only");
 
 	// A restart makes every alien again: their ways and claims go, and the map stays (Secondary's read of 9e8c30fb)
 	std::string const restart = Between(system, "void RestartLevel()", "create_strategies_from_list();");

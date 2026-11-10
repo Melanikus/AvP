@@ -56,16 +56,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: a lift into another environment doesn't build the map",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/system.cpp",
-					"from": "\tBuildFarModuleLocs();\n\tAlienWays_LevelStart();\n",
-					"to": "\tBuildFarModuleLocs();\n"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a level's end doesn't stop the build",
 			"changes": [
 				{

@@ -69,8 +69,8 @@ alien_ways.cpp and alien_ways_level.cpp read the game's own structures.
 
 Where the game calls in:
 - game.cpp: `AlienWays_LevelStart` at a level's start, and `AlienWays_Frame` each frame, before any alien moves.
-- system.cpp: `AlienWays_LevelStart` for a lift into another environment, `AlienWays_LevelRestarts` at a restart, and
-  `AlienWays_LevelEnd` when a level is let go.
+- system.cpp: `AlienWays_LevelRestarts` at a restart, and `AlienWays_LevelEnd` when a level is let go. (A lift into another
+  environment used to build its map here too; main took that path out, #135, as it could never run.)
 - bh_near.cpp, the aliens' close-range behaviour: `AlienWays_Steer` in Approach, Hunt and Wander, `AlienWays_KeepDriving` after each
   frame's state, and `AlienWays_Following` to make an alien on a way crawl.
 
