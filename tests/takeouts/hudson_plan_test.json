@@ -9715,6 +9715,86 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "access= is taken on a net= run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (seenAccess && plan->netMode != kHudsonNetNone)\n\t{\n\t\treturn kHudsonRefusedAccessWithNet;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "accesswait= takes less than the list's minute",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->accessWaitSeconds < kHudsonLeastAccessWaitSeconds || plan->accessWaitSeconds > kHudsonMostAccessWaitSeconds)",
+					"to": "if (plan->accessWaitSeconds > kHudsonMostAccessWaitSeconds)"
+				}
+			]
+		},
+		{
+			"name": "accesswait= is taken without access=check",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenAccessWait && plan->accessPress != kHudsonAccessCheck)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "access=newid is read as a request",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->accessPress = kHudsonAccessNewId;",
+					"to": "\t\t\t\tplan->accessPress = kHudsonAccessRequest;"
+				}
+			]
+		},
+		{
+			"name": "answer= is taken on a joiner's run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenAnswer && plan->netMode != kHudsonNetHost)",
+					"to": "if (seenAnswer && plan->netMode == kHudsonNetNone)"
+				}
+			]
+		},
+		{
+			"name": "answerafter= takes more than the joiner waits",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerAfterSeconds < 1 || plan->answerAfterSeconds > kHudsonMostAnswerAfterSeconds)",
+					"to": "if (plan->answerAfterSeconds < 1)"
+				}
+			]
+		},
+		{
+			"name": "answer=no is read as Let in",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->answerPress = kHudsonAnswerSayNo;",
+					"to": "\t\t\t\tplan->answerPress = kHudsonAnswerLetIn;"
+				}
+			]
+		},
+		{
+			"name": "a run's accesswait= starts at 0, not 70",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tplan->accessWaitSeconds = kHudsonDefaultAccessWaitSeconds;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

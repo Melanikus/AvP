@@ -134,6 +134,20 @@ void Hudson_SaveThePage(const char *name);
 bool Hudson_CustomMapHasEnded();
 void Hudson_LooksForThePageAfterAMap(bool thePageIsBack);
 
+// The presses a player makes on the Online access page and on the host's answer (hudson_plan.h's access= and answer=). Added 2026-11-09
+// by Melanikus for the AvP port.
+// access=: kHudsonAccess..., 0 for none, and accesswait='s seconds
+int Hudson_AccessPress();
+int Hudson_AccessWaitSeconds();
+// answer=: kHudsonAnswer..., 0 for none, and answerafter='s seconds
+int Hudson_AnswerPress();
+int Hudson_AnswerAfterSeconds();
+// A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
+// before the first is taken replaces it.
+void Hudson_PictureThisFrame(const char *name);
+// An access run is over: what happened, in fixed words, and whether it went as asked
+void Hudson_AccessRunEnds(const char *howItEnded, bool asAsked);
+
 // Whether the run plays as a Predator: species=predator on a gun= run. A marine otherwise.
 bool Hudson_PlayAsPredator();
 

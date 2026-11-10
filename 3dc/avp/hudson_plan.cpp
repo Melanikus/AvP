@@ -1,6 +1,7 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   join-films' four checks moved to tools/hudson/join_films_reads.cpp, because nothing in the game calls them, and the clock's look to
 //   hudson_plan.h, because the stamper here and the reader there both need it
+//   access=, accesswait=, answer= and answerafter= (hudson_plan.h)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a siege's players can't be hurt at all, which the game's own protection doesn't manage, since it ends whenever they fire
 //   a film's clock can be read back from its corner, to line two films up
@@ -75,6 +76,16 @@ const char *const kHudsonRefusedVsync = "vsync= can only be off";
 const char *const kHudsonRefusedBotWeapon = "botweapon= can only be blades or plasma";
 const char *const kHudsonRefusedDeathWay = "deathway= has to be a number from 0 to 99";
 const char *const kHudsonRefusedRateTest = "ratetest= can only be fall or flame";
+const char *const kHudsonRefusedAccessWord = "access= can only be request, check or newid";
+const char *const kHudsonRefusedAccessWithNet = "access= stays at the menus to press the Online access page, so it can't be a net= run";
+const char *const kHudsonRefusedAccessWaitNotANumber = "accesswait= is a number of seconds";
+const char *const kHudsonRefusedAccessWaitOutOfRange = "accesswait= is from 61 seconds, past the list's minute between calls, to 3600";
+const char *const kHudsonRefusedAccessWaitWithoutCheck = "accesswait= says when Check again is pressed, so it needs access=check";
+const char *const kHudsonRefusedAnswerWord = "answer= can only be letin or no";
+const char *const kHudsonRefusedAnswerWithoutHost = "answer= is the host's answer to a player asking to join, so it needs net=host";
+const char *const kHudsonRefusedAnswerAfterNotANumber = "answerafter= is a number of seconds";
+const char *const kHudsonRefusedAnswerAfterOutOfRange = "answerafter= is from 1 to 15 seconds, well inside the joiner's 20 s wait";
+const char *const kHudsonRefusedAnswerAfterWithoutAnswer = "answerafter= says when the host answers, so it needs answer=";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
 const char *const kHudsonRefusedKillWords = "killkind= (marine, predator, xenoborg or queen), killat=x,y,z and killer= (host or join) go together, on a net= run with coop=yes";
 const char *const kHudsonRefusedFramesPerSecond = "fps= is a number from 10 to 1000, or uncapped";
@@ -393,7 +404,10 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	plan->height = kHudsonDefaultHeight;
 	plan->strategySeconds = kHudsonDefaultStrategySeconds;
 	plan->combatAliens = 1;
+	plan->accessWaitSeconds = kHudsonDefaultAccessWaitSeconds;
+	plan->answerAfterSeconds = kHudsonDefaultAnswerAfterSeconds;
 
+	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
@@ -1362,6 +1376,94 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->vsyncOff = true;
+		}
+		else if (WordIs(place, nameLength, "access"))
+		{
+			// Added 2026-11-09 by Melanikus for the AvP port: see kHudsonAccess... in hudson_plan.h
+			if (seenAccess)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAccess = true;
+
+			if (WordIs(value, valueLength, "request"))
+			{
+				plan->accessPress = kHudsonAccessRequest;
+			}
+			else if (WordIs(value, valueLength, "check"))
+			{
+				plan->accessPress = kHudsonAccessCheck;
+			}
+			else if (WordIs(value, valueLength, "newid"))
+			{
+				plan->accessPress = kHudsonAccessNewId;
+			}
+			else
+			{
+				return kHudsonRefusedAccessWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "accesswait"))
+		{
+			if (seenAccessWait)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAccessWait = true;
+
+			if (!ReadNumber(value, valueLength, &plan->accessWaitSeconds))
+			{
+				return kHudsonRefusedAccessWaitNotANumber;
+			}
+
+			if (plan->accessWaitSeconds < kHudsonLeastAccessWaitSeconds || plan->accessWaitSeconds > kHudsonMostAccessWaitSeconds)
+			{
+				return kHudsonRefusedAccessWaitOutOfRange;
+			}
+		}
+		else if (WordIs(place, nameLength, "answer"))
+		{
+			// Added 2026-11-09 by Melanikus for the AvP port: see kHudsonAnswer... in hudson_plan.h
+			if (seenAnswer)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAnswer = true;
+
+			if (WordIs(value, valueLength, "letin"))
+			{
+				plan->answerPress = kHudsonAnswerLetIn;
+			}
+			else if (WordIs(value, valueLength, "no"))
+			{
+				plan->answerPress = kHudsonAnswerSayNo;
+			}
+			else
+			{
+				return kHudsonRefusedAnswerWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "answerafter"))
+		{
+			if (seenAnswerAfter)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAnswerAfter = true;
+
+			if (!ReadNumber(value, valueLength, &plan->answerAfterSeconds))
+			{
+				return kHudsonRefusedAnswerAfterNotANumber;
+			}
+
+			if (plan->answerAfterSeconds < 1 || plan->answerAfterSeconds > kHudsonMostAnswerAfterSeconds)
+			{
+				return kHudsonRefusedAnswerAfterOutOfRange;
+			}
 		}
 		else if (WordIs(place, nameLength, "ratetest"))
 		{
@@ -2696,6 +2798,28 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (!plan->play && seenStepSeconds)
 	{
 		return kHudsonRefusedStepSecondsWithoutPlay;
+	}
+
+	// The Online access presses (added 2026-11-09): an access run never starts a network game, accesswait= belongs to access=check alone,
+	// and the host's answer to a player asking to join is a host's
+	if (seenAccess && plan->netMode != kHudsonNetNone)
+	{
+		return kHudsonRefusedAccessWithNet;
+	}
+
+	if (seenAccessWait && plan->accessPress != kHudsonAccessCheck)
+	{
+		return kHudsonRefusedAccessWaitWithoutCheck;
+	}
+
+	if (seenAnswer && plan->netMode != kHudsonNetHost)
+	{
+		return kHudsonRefusedAnswerWithoutHost;
+	}
+
+	if (seenAnswerAfter && !seenAnswer)
+	{
+		return kHudsonRefusedAnswerAfterWithoutAnswer;
 	}
 
 	if (seenSiegeFrom && !seenSiege)

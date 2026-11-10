@@ -267,6 +267,45 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siege=a siegefrom=a siegefrom=a", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siegefrom=a", kHudsonRefusedSiegeFromWithoutSiege);
 
+	// access= and answer= (the presses a player makes, for the local rehearsal of beta.2's flow, 2026-11-09)
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5", &plan) == 0 && plan.accessPress == kHudsonAccessNone &&
+			plan.answerPress == kHudsonAnswerNone, "a run presses nothing on the menus unless it asks");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=request", &plan) == 0 && plan.accessPress == kHudsonAccessRequest &&
+			plan.accessWaitSeconds == kHudsonDefaultAccessWaitSeconds, "access=request presses Request access");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=check accesswait=90", &plan) == 0 && plan.accessPress == kHudsonAccessCheck &&
+			plan.accessWaitSeconds == 90, "access=check presses Check again, accesswait= seconds later");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=newid", &plan) == 0 && plan.accessPress == kHudsonAccessNewId,
+			"access=newid makes a new identity");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0 &&
+			plan.answerPress == kHudsonAnswerLetIn && plan.answerAfterSeconds == kHudsonDefaultAnswerAfterSeconds, "answer=letin: the host presses Let in");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host answer=no answerafter=10", &plan) == 0 &&
+			plan.answerPress == kHudsonAnswerSayNo && plan.answerAfterSeconds == 10, "answer=no presses Say no, answerafter= seconds after the rows come");
+	}
+	Refused("-hudson level=invasion frames=5 access=yes", kHudsonRefusedAccessWord);
+	Refused("-hudson level=invasion frames=5 access=request access=check", kHudsonRefusedAskedTwice);
+	// An access run stays at the menus: it never starts a network game
+	Refused("-hudson level=invasion frames=5 machine=shared net=host access=request", kHudsonRefusedAccessWithNet);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join access=check", kHudsonRefusedAccessWithNet);
+	// The list takes one call a minute from one address, so Check again is never pressed within it
+	Refused("-hudson level=invasion frames=5 access=check accesswait=60", kHudsonRefusedAccessWaitOutOfRange);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=3601", kHudsonRefusedAccessWaitOutOfRange);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=soon", kHudsonRefusedAccessWaitNotANumber);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=90 accesswait=90", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 access=request accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
+	Refused("-hudson level=invasion frames=5 accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=maybe", kHudsonRefusedAnswerWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answer=no", kHudsonRefusedAskedTwice);
+	// The answer is a host's
+	Refused("-hudson level=invasion frames=5 machine=shared net=join answer=letin", kHudsonRefusedAnswerWithoutHost);
+	Refused("-hudson level=invasion frames=5 answer=letin", kHudsonRefusedAnswerWithoutHost);
+	// Well inside the 20 s a Hudson joiner waits for the host's word
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=0", kHudsonRefusedAnswerAfterOutOfRange);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=16", kHudsonRefusedAnswerAfterOutOfRange);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=x", kHudsonRefusedAnswerAfterNotANumber);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answerafter=3", kHudsonRefusedAnswerAfterWithoutAnswer);
+
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): a server's name in small letters, once, with net=
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
 	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayName + 1, 'a')).c_str(), kHudsonRefusedRemoteRelayTooLong);

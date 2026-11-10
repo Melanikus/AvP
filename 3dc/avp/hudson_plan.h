@@ -15,6 +15,8 @@
 //   friendlyfire=off has the host of a network test turn friendly fire off
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   custommap= plays a custom map made for single player, by the name the Custom maps page lists it under
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   access= and accesswait= press the Online access page's rows, and answer= and answerafter= the host's answer to a player asking to join
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -150,6 +152,34 @@ enum
 	kHudsonNetJoin
 };
 
+// access=: an access run stays at the menus and presses the Online access page's rows as a player does: Multiplayer's Online access row,
+// then Request access (request), the same and Check again after accesswait= (check), or Make a new identity and Yes (newid). Each press
+// is one fixed line in the log, and the page is pictured once the server's answer is on it. For the local rehearsal of beta.2's flow
+// (Third's, 2026-11-09). Added 2026-11-09 by Melanikus for the AvP port.
+enum
+{
+	kHudsonAccessNone = 0,
+	kHudsonAccessRequest,
+	kHudsonAccessCheck,
+	kHudsonAccessNewId
+};
+
+// answer=: a net=host run doesn't let every joiner in by itself, as runs do. When a player asks, it opens its menu, as a host presses
+// Esc, and after answerafter= seconds presses Let in (letin) or Say no (no), with a picture of the asking line, the check code and the
+// rows just before. Added 2026-11-09 by Melanikus for the AvP port.
+enum
+{
+	kHudsonAnswerNone = 0,
+	kHudsonAnswerLetIn,
+	kHudsonAnswerSayNo
+};
+
+int const kHudsonDefaultAccessWaitSeconds = 70;   // past the list's one call a minute from one address
+int const kHudsonLeastAccessWaitSeconds = 61;
+int const kHudsonMostAccessWaitSeconds = 3600;
+int const kHudsonDefaultAnswerAfterSeconds = 3;
+int const kHudsonMostAnswerAfterSeconds = 15;     // well inside the 20 s a Hudson joiner waits for the host's word (menus.cpp)
+
 // What a hostile run does, beyond sending each bad message in turn.
 // drain: this client uses up the other machine's blocks with messages, inside every limit.
 // watch: the host of a drain, hold or flood run. It logs what's left, and in a drain its player is killed at the peak.
@@ -278,6 +308,10 @@ struct HudsonPlan
 	int walkToX, walkToY, walkToZ;
 	bool lookAtSaid;      // lookat=x,y,z: once he's at walkto=, he looks at this place, and with record=pictures a picture is taken 2 and 5 seconds later
 	int lookAtX, lookAtY, lookAtZ;
+	int accessPress;      // access=: from kHudsonAccess...: an access run stays at the menus and presses the Online access page's rows. 0 for none
+	int accessWaitSeconds; // accesswait=: with access=check, the seconds from the request to Check again, 61 to 3600. Unless asked, 70
+	int answerPress;      // answer=: from kHudsonAnswer...: a net=host run answers a player asking to join with that row. 0 for none: every joiner is let in, as before
+	int answerAfterSeconds; // answerafter=: the seconds the host's answer rows are up before the press, 1 to 15. Unless asked, 3
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -338,6 +372,16 @@ extern const char *const kHudsonRefusedFramesPerSecond;
 extern const char *const kHudsonRefusedKillWords;
 extern const char *const kHudsonRefusedPicturesWord;
 extern const char *const kHudsonRefusedRateTest;
+extern const char *const kHudsonRefusedAccessWord;
+extern const char *const kHudsonRefusedAccessWithNet;
+extern const char *const kHudsonRefusedAccessWaitNotANumber;
+extern const char *const kHudsonRefusedAccessWaitOutOfRange;
+extern const char *const kHudsonRefusedAccessWaitWithoutCheck;
+extern const char *const kHudsonRefusedAnswerWord;
+extern const char *const kHudsonRefusedAnswerWithoutHost;
+extern const char *const kHudsonRefusedAnswerAfterNotANumber;
+extern const char *const kHudsonRefusedAnswerAfterOutOfRange;
+extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
 extern const char *const kHudsonRefusedBotWeapon;
 extern const char *const kHudsonRefusedDeathWay;
 extern const char *const kHudsonRefusedVsync;
