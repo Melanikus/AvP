@@ -38,6 +38,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { stop, setToolName, chunksIn, textIn, readModelFile } = require('../m5-files/rif-file.js');
 
@@ -57,6 +58,20 @@ for (const level of levels) {
   }
 }
 
+// A level's file, taken from this folder's own list of files, never made from the name it was given: the name is only compared with
+// what's here. So what's read is always a plain file of this folder (not a link, a folder or anything elsewhere), whatever the name
+// says. The game's own files are named in any case (Derelict.RIF), so the comparison ignores case, and two files that differ only in
+// case are refused rather than guessed between.
+function levelFile(level) {
+  if (!/^[A-Za-z0-9_]+$/.test(level) || kDeviceName.test(level)) {
+    stop(`a level is named with letters, digits and _ only, without .rif, and not as a device: "${level}" isn't`);
+  }
+  const wanted = `${level}.rif`.toLowerCase();
+  const found = fs.readdirSync(here, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.toLowerCase() === wanted);
+  if (found.length !== 1) stop(found.length ? `more than one file here is named ${level}.rif` : `there's no plain file ${level}.rif in ${here}`);
+  return path.join(here, path.basename(found[0].name));
+}
+
 // A 4-byte whole number inside a chunk, which has to be wholly inside it
 function wholeAt(data, chunk, offset, what) {
   if (offset + 4 > chunk.end - chunk.body) stop(`${what}: ${chunk.name} is too short to hold it`);
@@ -64,7 +79,7 @@ function wholeAt(data, chunk, offset, what) {
 }
 
 for (const level of levels) {
-  const from = path.join(here, `${level}.rif`);
+  const from = levelFile(level);
   // true: a chunk may have any name, as the game allows (see chunksIn in rif-file.js)
   const { data, top } = readModelFile(from, true);
   const shapes = new Map();
