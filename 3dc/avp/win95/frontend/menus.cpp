@@ -6216,7 +6216,12 @@ extern void DrawMainMenusBackdrop(void)
 {
 	if (!PlayMenuBackgroundFmv())
 	{
+		// Modified 2026-11-10 by Melanikus for the AvP port (the owner's choice, "true shape, starfield full width"): with -squaremenus the
+		// letters keep their true shape, and the starfield still fills the screen's width (d3d_render.cpp, MenuBackdropFullWidth)
+		extern bool MenuBackdropFullWidth;
+		MenuBackdropFullWidth = true;
 		DrawAvPMenuGfx(AVPMENUGFX_BACKDROP, 0, 0, ONE_FIXED+1, AVPMENUFORMAT_LEFTJUSTIFIED);
+		MenuBackdropFullWidth = false;
 	}
 	/* PlayMenuBackgroundFmv takes care of rendering to screen */
 }

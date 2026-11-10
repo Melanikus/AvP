@@ -326,15 +326,21 @@ inline float FMV_HPos2DC(int32_t pos)
 // on a grid 640 wide and 480 high, stretched to fill the screen, so on a 16:9 screen every letter comes out a third wider than it's tall.
 bool SquareMenusAsked = false;
 
+// True only while the menus' starfield is drawn (menus.cpp, DrawMainMenusBackdrop): the owner's choice of the three looks, 2026-11-10,
+// "true shape, starfield full width". With -squaremenus the letters keep their true shape in the middle, and the starfield behind them
+// still fills the screen's width, as it always has. Each quad's place is worked out as it's drawn (DrawQuad), so this only has to be true
+// around that one draw.
+bool MenuBackdropFullWidth = false;
+
 // How much of the screen's width the menus' grid takes: all of it, as the game has always drawn it; or, with -dev -squaremenus on a screen
 // wider than 4:3, only the 4:3 part in its middle, so the grid has one scale both ways and a letter is as wide as it is tall. Films are
-// drawn by FMV_WPos2DC, above, and keep the whole width.
+// drawn by FMV_WPos2DC, above, and keep the whole width, and so does the starfield (MenuBackdropFullWidth).
 static float MenuWidthShare(void)
 {
 	int const wide = ScreenDescriptorBlock.SDB_Width;
 	int const high = ScreenDescriptorBlock.SDB_Height;
 
-	if (!SquareMenusAsked || wide <= 0 || high <= 0 || wide * 3 <= high * 4)
+	if (!SquareMenusAsked || MenuBackdropFullWidth || wide <= 0 || high <= 0 || wide * 3 <= high * 4)
 	{
 		return 1.0f;
 	}
