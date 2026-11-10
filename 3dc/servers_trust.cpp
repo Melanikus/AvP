@@ -10,6 +10,9 @@ namespace
 	// The note the game writes at the top of the file, for anyone who opens it
 	char const kTheNote[] = "# servers-trusted.cfg: the servers.cfg lines this player said yes to, each kept as a hash and never as an address. The game writes it.\n";
 
+	// And at the top of the pick's file (added 2026-11-10, #175 2b)
+	char const kThePickNote[] = "# servers-picked.cfg: the servers.cfg line this player picked for the next start, kept as a hash and never as an address. The game writes it.\n";
+
 	char const kHexDigits[] = "0123456789abcdef";
 
 	// A small hex digit's value, or -1 for anything else (capitals included: the game writes small ones only)
@@ -28,7 +31,9 @@ namespace
 		return -1;
 	}
 
-	// One line's text, its line end taken off (and a carriage return just before it): a note, a yes into hash, or neither
+	// One line's text, its line end taken off (and a carriage return just before it): a note, a hash line into hash, or neither. word is
+	// what a hash line starts with: "yes " in the yeses' file, "pick " in the pick's (modified 2026-11-10, #175 2b), so neither file's line
+	// is ever taken in the other.
 	enum LineKind
 	{
 		kLineNote,
@@ -36,7 +41,7 @@ namespace
 		kLineBad
 	};
 
-	LineKind ReadLine(const char *line, size_t size, uint8_t hash[kServersTrustHashBytes])
+	LineKind ReadLine(const char *line, size_t size, const char *word, uint8_t hash[kServersTrustHashBytes])
 	{
 		// Every byte printable, or a tab in a note. A carriage return here is one that wasn't just before the newline.
 		for (size_t i = 0; i < size; i++)
@@ -54,17 +59,17 @@ namespace
 			return kLineNote;
 		}
 
-		size_t const yesLetters = 4;   // "yes "
+		size_t const wordLetters = strlen(word);   // "yes " or "pick "
 
-		if (size != yesLetters + 2 * kServersTrustHashBytes || memcmp(line, "yes ", yesLetters) != 0)
+		if (size != wordLetters + 2 * kServersTrustHashBytes || memcmp(line, word, wordLetters) != 0)
 		{
 			return kLineBad;
 		}
 
 		for (size_t i = 0; i < kServersTrustHashBytes; i++)
 		{
-			int const high = HexValue(line[yesLetters + 2 * i]);
-			int const low = HexValue(line[yesLetters + 2 * i + 1]);
+			int const high = HexValue(line[wordLetters + 2 * i]);
+			int const low = HexValue(line[wordLetters + 2 * i + 1]);
 
 			if (high < 0 || low < 0)
 			{
@@ -121,7 +126,9 @@ bool ServersTrust_HashInput(uint32_t address, int listPort, int relayPort, const
 	return true;
 }
 
-ServersTrustRefusal ServersTrust_Read(const char *text, size_t bytes, ServersTrustYeses *out, int *badLine)
+// Reads either file's text: notes, and lines of word and a hash, at most most of them, into out (modified 2026-11-10 by Melanikus for the
+// AvP port, #175 2b: it was ServersTrust_Read's own, and the pick's file is read the same way). servers_trust.h says what's refused.
+static ServersTrustRefusal ReadHashes(const char *text, size_t bytes, const char *word, int most, ServersTrustYeses *out, int *badLine)
 {
 	if (badLine)
 	{
@@ -175,7 +182,7 @@ ServersTrustRefusal ServersTrust_Read(const char *text, size_t bytes, ServersTru
 		}
 
 		uint8_t hash[kServersTrustHashBytes];
-		LineKind const kind = ReadLine(text + start, size, hash);
+		LineKind const kind = ReadLine(text + start, size, word, hash);
 
 		if (kind == kLineBad)
 		{
@@ -191,7 +198,8 @@ ServersTrustRefusal ServersTrust_Read(const char *text, size_t bytes, ServersTru
 				return kServersTrustTwice;
 			}
 
-			if (read.count >= kServersTrustMostYeses)
+			// (never more than the yeses' room, whatever most says)
+			if (read.count >= most || read.count >= kServersTrustMostYeses)
 			{
 				if (badLine) { *badLine = lineNumber; }
 				return kServersTrustTooMany;
@@ -206,6 +214,91 @@ ServersTrustRefusal ServersTrust_Read(const char *text, size_t bytes, ServersTru
 
 	*out = read;
 	return kServersTrustRead;
+}
+
+ServersTrustRefusal ServersTrust_Read(const char *text, size_t bytes, ServersTrustYeses *out, int *badLine)
+{
+	return ReadHashes(text, bytes, "yes ", kServersTrustMostYeses, out, badLine);
+}
+
+// ---- The pick (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see servers_trust.h.
+
+ServersTrustRefusal ServersTrust_ReadPick(const char *text, size_t bytes, ServersTrustPick *out, int *badLine)
+{
+	if (!out)
+	{
+		if (badLine) { *badLine = 0; }
+		return kServersTrustBadLine;
+	}
+
+	out->there = false;
+	memset(out->hash, 0, sizeof(out->hash));
+
+	// At most one pick: a second, the same or another, refuses the file. Off the stack for its size; only the main thread reads it.
+	static ServersTrustYeses picks;
+	ServersTrustRefusal const read = ReadHashes(text, bytes, "pick ", 1, &picks, badLine);
+
+	if (read == kServersTrustTooMany || read == kServersTrustTwice)
+	{
+		return kServersTrustTwoPicks;
+	}
+
+	if (read != kServersTrustRead)
+	{
+		return read;
+	}
+
+	if (picks.count == 1)
+	{
+		out->there = true;
+		memcpy(out->hash, picks.hashes[0], kServersTrustHashBytes);
+	}
+
+	return kServersTrustRead;
+}
+
+size_t ServersTrust_WritePick(const uint8_t hash[kServersTrustHashBytes], char *out, size_t room)
+{
+	size_t const noteBytes = sizeof(kThePickNote) - 1;
+	size_t const need = noteBytes + 5 + 2 * kServersTrustHashBytes + 1;   // the note, "pick ", the digits, the newline
+
+	if (!hash || !out || room < need)
+	{
+		return 0;
+	}
+
+	memcpy(out, kThePickNote, noteBytes);
+	size_t at = noteBytes;
+	memcpy(out + at, "pick ", 5);
+	at += 5;
+
+	for (size_t b = 0; b < kServersTrustHashBytes; b++)
+	{
+		out[at++] = kHexDigits[hash[b] >> 4];
+		out[at++] = kHexDigits[hash[b] & 0x0F];
+	}
+
+	out[at++] = '\n';
+	return at;
+}
+
+int ServersTrust_LineToUse(const uint8_t (*hashes)[kServersTrustHashBytes], const bool *hashed, int count, const ServersTrustPick &pick)
+{
+	if (!hashes || !hashed || count <= 0)
+	{
+		return -1;
+	}
+
+	// Two good lines never have the same hash: it's over the address, and servers.cfg refuses two lines with one address (servers_cfg.h)
+	for (int i = 0; pick.there && i < count; i++)
+	{
+		if (hashed[i] && Same(hashes[i], pick.hash))
+		{
+			return i;
+		}
+	}
+
+	return 0;
 }
 
 bool ServersTrust_Has(const ServersTrustYeses &yeses, const uint8_t hash[kServersTrustHashBytes])
@@ -293,6 +386,8 @@ const char *ServersTrust_Words(ServersTrustRefusal why)
 		return "it holds more yeses than the game ever keeps";
 	case kServersTrustTwice:
 		return "it holds the same yes twice, which the game never writes";
+	case kServersTrustTwoPicks:
+		return "it holds more than one pick, which the game never writes";
 	}
 
 	return "it couldn't be read";

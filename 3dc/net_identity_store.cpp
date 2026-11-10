@@ -285,6 +285,13 @@ namespace
 	const char *const kTrustNotThisUsers = "servers-trusted.cfg isn't owned by this Windows user, so it may not be theirs";
 	const char *const kTrustIsALink = "servers-trusted.cfg is a link, and the game only ever writes a plain file";
 	const char *const kTrustCantRead = "servers-trusted.cfg couldn't be read";
+
+	// And the pick's (#175 2b)
+	const wchar_t *const kPickFileName = L"servers-picked.cfg";
+	const wchar_t *const kPickSecondCopyFileName = L"servers-picked-second-copy.cfg";
+	const char *const kPickNotThisUsers = "servers-picked.cfg isn't owned by this Windows user, so it may not be theirs";
+	const char *const kPickIsALink = "servers-picked.cfg is a link, and the game only ever writes a plain file";
+	const char *const kPickCantRead = "servers-picked.cfg couldn't be read";
 }
 
 const wchar_t *NetIdentityStore_FileName(bool hudsonRun, bool secondCopy)
@@ -479,6 +486,66 @@ const wchar_t *NetIdentityStore_TrustFileName(bool secondCopy)
 	return secondCopy ? kTrustSecondCopyFileName : kTrustFileName;
 }
 
+// The words for a kept file of hashes that the game didn't write, or couldn't read: the yeses' file's, or the pick's (#175 2b)
+struct KeptHashesWords
+{
+	const char *notThisUsers;
+	const char *isALink;
+	const char *cantRead;
+};
+
+// A kept file of hashes, the yeses' or the pick's, read whole into keptText, as the identity is read: through one handle, a plain file
+// owned by this Windows user. Read, with size set, or why not. Modified 2026-11-10 by Melanikus for the AvP port (#175 2b): this was the
+// yeses' loader's own, and now the pick's loader shares it.
+// One byte more than the most a good file can be, so a bigger one is read only that far and refused as too big. Off the stack for its
+// size; only the main thread reads it.
+static uint8_t keptText[kServersTrustMostBytes + 1];
+
+static NetTrustStoreResult ReadKeptHashes(const wchar_t *path, const KeptHashesWords &words, size_t *size, const char **said)
+{
+	*size = 0;
+
+	if (!path || !path[0])
+	{
+		*said = words.cantRead;
+		return kNetTrustStoreCantRead;
+	}
+
+	bool gone = false;
+	const char *refused = NULL;
+
+	if (!ReadWholeFile(path, keptText, sizeof(keptText), size, &gone, &refused))
+	{
+		if (gone)
+		{
+			return kNetTrustStoreNoFile;
+		}
+
+		if (refused)
+		{
+			*said = refused == kIsALink ? words.isALink : words.notThisUsers;
+			return kNetTrustStoreRefused;
+		}
+
+		*said = words.cantRead;
+		return kNetTrustStoreCantRead;
+	}
+
+	return kNetTrustStoreRead;
+}
+
+// What servers_trust.cpp's reader made of a kept file's text, as this file says it: read, or refused with its words
+static NetTrustStoreResult TextRead(ServersTrustRefusal read, const char **said)
+{
+	if (read != kServersTrustRead)
+	{
+		*said = ServersTrust_Words(read);
+		return kNetTrustStoreRefused;
+	}
+
+	return kNetTrustStoreRead;
+}
+
 NetTrustStoreResult NetIdentityStore_LoadTrustFrom(const wchar_t *path, ServersTrustYeses *out, const char **why)
 {
 	const char *unused = NULL;
@@ -491,46 +558,16 @@ NetTrustStoreResult NetIdentityStore_LoadTrustFrom(const wchar_t *path, ServersT
 	}
 
 	out->count = 0;
-
-	if (!path || !path[0])
-	{
-		*said = kTrustCantRead;
-		return kNetTrustStoreCantRead;
-	}
-
-	// One byte more than the most a good file can be, so a bigger one is read only that far and refused as too big. Off the stack for its
-	// size; only the main thread reads it.
-	static uint8_t bytes[kServersTrustMostBytes + 1];
+	KeptHashesWords const words = { kTrustNotThisUsers, kTrustIsALink, kTrustCantRead };
 	size_t size = 0;
-	bool gone = false;
-	const char *refused = NULL;
+	NetTrustStoreResult const kept = ReadKeptHashes(path, words, &size, said);
 
-	if (!ReadWholeFile(path, bytes, sizeof(bytes), &size, &gone, &refused))
+	if (kept != kNetTrustStoreRead)
 	{
-		if (gone)
-		{
-			return kNetTrustStoreNoFile;
-		}
-
-		if (refused)
-		{
-			*said = refused == kIsALink ? kTrustIsALink : kTrustNotThisUsers;
-			return kNetTrustStoreRefused;
-		}
-
-		*said = kTrustCantRead;
-		return kNetTrustStoreCantRead;
+		return kept;
 	}
 
-	ServersTrustRefusal const read = ServersTrust_Read(reinterpret_cast<const char *>(bytes), size, out, NULL);
-
-	if (read != kServersTrustRead)
-	{
-		*said = ServersTrust_Words(read);
-		return kNetTrustStoreRefused;
-	}
-
-	return kNetTrustStoreRead;
+	return TextRead(ServersTrust_Read(reinterpret_cast<const char *>(keptText), size, out, NULL), said);
 }
 
 bool NetIdentityStore_KeepTrustTo(const wchar_t *path, const ServersTrustYeses &yeses)
@@ -571,4 +608,78 @@ NetTrustStoreResult NetIdentityStore_LoadTrust(ServersTrustYeses *out, const cha
 bool NetIdentityStore_KeepTrust(const ServersTrustYeses &yeses)
 {
 	return !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepTrustTo(KeptPath(NetIdentityStore_TrustFileName(SaveFolder_IsTheSecondCopy()), true).c_str(), yeses);
+}
+
+// ---- The player's pick of a servers.cfg line (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see net_identity_store.h. The
+// same reading and writing as the yeses', with the pick's own rules (servers_trust.h) for what's inside.
+
+const wchar_t *NetIdentityStore_PickFileName(bool secondCopy)
+{
+	return secondCopy ? kPickSecondCopyFileName : kPickFileName;
+}
+
+NetTrustStoreResult NetIdentityStore_LoadPickFrom(const wchar_t *path, ServersTrustPick *out, const char **why)
+{
+	const char *unused = NULL;
+	const char **const said = why ? why : &unused;
+	*said = NULL;
+
+	if (!out)
+	{
+		return kNetTrustStoreCantRead;
+	}
+
+	out->there = false;
+	memset(out->hash, 0, sizeof(out->hash));
+	KeptHashesWords const words = { kPickNotThisUsers, kPickIsALink, kPickCantRead };
+	size_t size = 0;
+	NetTrustStoreResult const kept = ReadKeptHashes(path, words, &size, said);
+
+	if (kept != kNetTrustStoreRead)
+	{
+		return kept;
+	}
+
+	return TextRead(ServersTrust_ReadPick(reinterpret_cast<const char *>(keptText), size, out, NULL), said);
+}
+
+bool NetIdentityStore_KeepPickTo(const wchar_t *path, const uint8_t hash[kServersTrustHashBytes])
+{
+	if (!path || !path[0] || !hash)
+	{
+		return false;
+	}
+
+	char text[512];
+	size_t const size = ServersTrust_WritePick(hash, text, sizeof(text));
+
+	if (size == 0)
+	{
+		return false;
+	}
+
+	// Written whole under a name of its own, made sure of on the disk, then put in place of the old one in a single step
+	return KeepWholeFile(path, reinterpret_cast<const uint8_t *>(text), size);
+}
+
+NetTrustStoreResult NetIdentityStore_LoadPick(ServersTrustPick *out, const char **why)
+{
+	// A Hudson run reads no pick, as it reads no yes: its servers.cfg is its own copy's
+	if (SaveFolder_IsAHudsonRun())
+	{
+		if (out)
+		{
+			out->there = false;
+			memset(out->hash, 0, sizeof(out->hash));
+		}
+
+		return kNetTrustStoreNoFile;
+	}
+
+	return NetIdentityStore_LoadPickFrom(KeptPath(NetIdentityStore_PickFileName(SaveFolder_IsTheSecondCopy()), false).c_str(), out, why);
+}
+
+bool NetIdentityStore_KeepPick(const uint8_t hash[kServersTrustHashBytes])
+{
+	return !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepPickTo(KeptPath(NetIdentityStore_PickFileName(SaveFolder_IsTheSecondCopy()), true).c_str(), hash);
 }
