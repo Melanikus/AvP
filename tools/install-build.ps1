@@ -6,22 +6,36 @@ same steps by hand.
 Needs the GitHub CLI (gh), signed in. From a copy of this repository:
 
   powershell -ExecutionPolicy Bypass -File tools\install-build.ps1 -GameFolder C:\Games\AvP-test
+  powershell -ExecutionPolicy Bypass -File tools\install-build.ps1 -GameFolder C:\Games\AvP-test -Commit <all 40 digits>
+
+Without -Commit it takes the newest build. With it, only a build of that very commit: when you've been told which commit to test,
+give it, and the script checks the build is that one, so nobody has to compare 40 digits by eye.
 
 What the checks mean:
 - It only takes a build that the project's owner started from avpx_main. A run from a fork's pull request can carry the same
   workflow name and the same branch name, but only someone with write access to this repository can start one of these.
-- The hashes show that the download is complete and undamaged. They do NOT show who made it: the list of hashes comes inside
-  the same download, so anyone who could replace a file could replace the list too.
+- The hashes show that the download is complete and undamaged. On their own they don't show who made it: the list of hashes
+  comes inside the same download, so anyone who could replace a file could replace the list too. So before the list is
+  believed, GitHub must vouch for it: build.yml records which workflow made the list, from which commit, and this asks GitHub
+  for that record (gh attestation verify). A build made before that record was added (2026-11-09) has none, and is refused.
 
 Your previous files are copied to a new <GameFolder>-previous-build-<date and time> folder first, so you can go back. If the
 install fails part of the way through, they are put back.
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$GameFolder
+    [Parameter(Mandatory = $true)][string]$GameFolder,
+    [string]$Commit = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = 'Melanikus/AvP'
 $branch = 'avpx_main'
+
+# Added 2026-11-09 by Melanikus for the AvP port (Secondary's dry run of the weekend, R2-5): the commit the build must be of, typed by a
+# person, so it's held to its one form before anything is asked: all 40 hex digits, never a short one that several commits could share
+if ($Commit) {
+    if ($Commit -cnotmatch '\A[0-9a-fA-F]{40}\z') { throw '-Commit must be the whole commit: all 40 hex digits. Nothing was installed.' }
+    $Commit = $Commit.ToLowerInvariant()
+}
 
 # The script replaces the game's files, so it refuses the real Steam folder and anything that isn't a game folder. This guards
 # against a slip, not against someone determined: a mapped drive, for one, still looks like any other folder. It walks up
@@ -39,11 +53,32 @@ for ($folder = $targetItem; $folder; $folder = $folder.Parent) {
 $target = $targetItem.FullName.TrimEnd('\')
 if (-not (Test-Path -LiteralPath (Join-Path $target 'avp_rifs'))) { throw "$target has no avp_rifs folder, so it is not a copy of the game." }
 
-# The newest build the owner started from avpx_main.
-$found = gh run list -R $repo --workflow build.yml --branch $branch --event workflow_dispatch --status success --limit 1 --json 'databaseId,headSha,createdAt' --jq '.[0]'
+# Added 2026-11-09 by Melanikus for the AvP port (Secondary's read of #187, B-2): gh must know every flag the checks below use. An older
+# gh refuses one it doesn't know, and that would read as "not signed in" or "GitHub can't vouch". Nobody here knows which gh release
+# brought each, so each flag is looked for in gh's own help, which asks nothing of GitHub.
+if (-not (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue)) { throw "gh, the GitHub CLI, isn't installed (winget install GitHub.cli). Nothing was installed." }
+$listHelp = (gh run list --help) -join "`n"
+$verifyHelp = (gh attestation verify --help) -join "`n"
+foreach ($flag in @(@($listHelp, '--commit'), @($verifyHelp, '--cert-identity'), @($verifyHelp, '--source-ref'), @($verifyHelp, '--source-digest'), @($verifyHelp, '--deny-self-hosted-runners'))) {
+    if (-not $flag[0].Contains($flag[1])) { throw "This gh is too old for the checks. Update it (winget upgrade GitHub.cli), then run this again. Nothing was installed." }
+}
+
+# The newest build the owner started from avpx_main, or with -Commit, the newest of that commit
+$which = @('run', 'list', '-R', $repo, '--workflow', 'build.yml', '--branch', $branch, '--event', 'workflow_dispatch', '--status', 'success', '--limit', '1', '--json', 'databaseId,headSha,createdAt', '--jq', '.[0]')
+if ($Commit) { $which += @('--commit', $Commit) }
+$found = gh @which
 if ($LASTEXITCODE -ne 0) { throw 'Could not ask GitHub for the builds. Is gh installed and signed in?' }
+if ((-not $found -or "$found" -eq 'null') -and $Commit) { throw "No build of commit $Commit was found: the owner hasn't started one from $branch, or it didn't pass. Nothing was installed." }
 if (-not $found -or "$found" -eq 'null') { throw "No build found. Builds are made only when the project's owner starts one (see PLAYTEST.md)." }
 $run = ($found -join "`n") | ConvertFrom-Json
+
+# Added 2026-11-09 by Melanikus for the AvP port: what GitHub answered is checked before it's used in a command or an address (AvP
+# Tao #3): a run's number is digits, and a commit is 40 small hex digits.
+if ("$($run.databaseId)" -cnotmatch '\A[1-9][0-9]{0,19}\z') { throw "GitHub's answer has no run number. Nothing was installed." }
+if ("$($run.headSha)" -cnotmatch '\A[0-9a-f]{40}\z') { throw "GitHub's answer has no commit. Nothing was installed." }
+
+# And with -Commit, the build GitHub named must be of that commit: its answer is checked, not trusted to have filtered
+if ($Commit -and $run.headSha -cne $Commit) { throw "GitHub named a build of another commit, $($run.headSha), not $Commit. Nothing was installed." }
 
 # The commit must be part of avpx_main. "ahead" means avpx_main has moved on since: it is still on the branch, but newer code exists.
 $compare = gh api "repos/$repo/compare/$($run.headSha)...$branch" --jq '.status + " " + (.ahead_by | tostring)'
@@ -63,6 +98,15 @@ try {
     # so a file can't be slipped in unlisted, and an empty list proves nothing.
     $sums = Join-Path $download 'SHA256SUMS.txt'
     if (-not (Test-Path -LiteralPath $sums)) { throw 'The build has no SHA256SUMS.txt. Nothing was installed.' }
+
+    # Added 2026-11-09 by Melanikus for the AvP port: who made the list. GitHub must vouch that this very file came from this
+    # repository's Build workflow (build.yml) run on avpx_main, at the commit GitHub named above, on GitHub's own machines. build.yml
+    # records that only once a job that builds nothing has checked every file against the list. --cert-identity is the workflow
+    # and branch exactly, where --signer-workflow would also let through a workflow whose name only starts the same.
+    gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners
+    if ($LASTEXITCODE -ne 0) { throw "GitHub can't vouch that this build's list came from $repo's Build workflow at commit $($run.headSha). Nothing was installed." }
+    "GitHub vouches for the list: $repo's Build workflow made it, from commit $($run.headSha)."
+
     $expected = @{}
     foreach ($line in Get-Content -LiteralPath $sums) {
         $hash, $file = $line -split '  ', 2
@@ -70,7 +114,8 @@ try {
     }
     if ($expected.Count -eq 0) { throw 'SHA256SUMS.txt lists no files. Nothing was installed.' }
     $names = @()
-    foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File) {
+    # -Force, so a hidden file is looked at too: one left out here would be a file nobody listed
+    foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File -Force) {
         $name = $item.FullName.Substring($download.Length + 1).Replace('\', '/')
         if ($name -eq 'SHA256SUMS.txt') { continue }
         if (-not $expected.ContainsKey($name)) { throw "The build holds a file its list doesn't mention: $name. Nothing was installed." }
