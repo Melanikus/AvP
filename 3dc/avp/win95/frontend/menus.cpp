@@ -2456,6 +2456,17 @@ static void RenderMenu(void)
 			y = layout.rowsTop;
 			coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;
 		}
+		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
+		{
+			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's picture: the code was drawn over the title, with an empty gap
+			// above the rows): the Online access pages draw their own parts under the title, and their rows start right under those
+			// (access_page_rules.h, "Where the page's parts go")
+			y = AccessPage_DrawTop(AvPMenus.MenuHeight);
+		}
+		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+		{
+			y = AccessPage_DrawQuestion(AvPMenus.MenuHeight);
+		}
 		else
 		{
 			y = MENU_CENTREY - AvPMenus.MenuHeight / 2;
@@ -2474,16 +2485,6 @@ static void RenderMenu(void)
 	if (gamesPage)
 	{
 		OnlinePage_DrawTop();
-	}
-
-	// The Online access pages: what Request access does, then the code and the server's answer, above and under the rows
-	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
-	{
-		AccessPage_DrawTop(y + AvPMenus.MenuHeight);
-	}
-	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
-	{
-		AccessPage_DrawQuestion();
 	}
 
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words

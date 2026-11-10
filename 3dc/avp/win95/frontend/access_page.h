@@ -49,11 +49,12 @@ void AccessPage_Frame(AVPMENU_ELEMENT *rows);
 bool AccessPage_Pressed(int row, enum AVPMENU_ID *page);
 
 // The drawing above the rows, and the line under them: what Request access does before anything is sent, then the code and what the
-// server said. rowsBottom is where the rows end on the screen.
-void AccessPage_DrawTop(int rowsBottom);
+// server said. rowsHeight is all the rows' height together. Gives back where the first row goes: right under the words
+// (access_page_rules.h, "Where the page's parts go"; modified 2026-11-10 by Melanikus for the AvP port).
+int AccessPage_DrawTop(int rowsHeight);
 
-// The question's words, above its two rows
-void AccessPage_DrawQuestion(void);
+// The question's words, above its two rows. Gives back where the first row goes, as AccessPage_DrawTop does.
+int AccessPage_DrawQuestion(int rowsHeight);
 
 // Whether a call to the list is on its way, its answer not come yet: for a Hudson run pressing the page's rows (hudson_plan.h's access=),
 // which pictures the page once the answer is on it. Added 2026-11-09 by Melanikus for the AvP port.

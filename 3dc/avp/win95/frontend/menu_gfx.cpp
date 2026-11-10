@@ -667,9 +667,13 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 	return sx;
 }
 
-extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
+// The first of RenderSmallFontString_Wrapped's two passes: where the text would end, word by word, in the area, with nothing drawn.
+// *end_x is where its last line ends, and *end_y is the top of its last line. Modified 2026-11-10 by Melanikus for the AvP port: moved
+// out of RenderSmallFontString_Wrapped as it was, so the Online access page can count its lines by the very same rule, before it lays
+// out the page (SmallFontString_WrappedLines, below). The area must be at least 1 pixel wide: a word wider than a whole line is
+// divided by the line's width.
+static void WrappedTextEnd(const char *textPtr, const RECT *area, int *end_x, int *end_y)
 {
-	// text on menus in bottom black space
 	int wordWidth;
 	int sx = area->left;
 	int sy = area->top;
@@ -678,7 +682,7 @@ extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, 
 Determine area used by text , so we can draw it centrally
 */
 	const char *textPtr2 = textPtr;
-	while (*textPtr2) 
+	while (*textPtr2)
 	{
 		int widthFromSpaces;
 
@@ -732,8 +736,41 @@ Determine area used by text , so we can draw it centrally
 		}
 		sx = AddCappedWidth(sx, wordWidth);
 	}
-	
-	if (sy == area->top) 
+
+	*end_x = sx;
+	*end_y = sy;
+}
+
+// How many lines of the small font the text takes when it's wrapped into a box this wide: the same rule as
+// RenderSmallFontString_Wrapped, from the same first pass. 0 for no text, or a box with no width. Added 2026-11-10 by Melanikus for
+// the AvP port: the Online access page lays its rows out right under its words, so it counts their lines first.
+extern int SmallFontString_WrappedLines(const char *textPtr, int width)
+{
+	if (!textPtr || !*textPtr || width <= 0)
+	{
+		return 0;
+	}
+
+	// A box far taller than any text could need, so its bottom never cuts the count short. HUD_FONT_HEIGHT is added to a line's top
+	// before it's compared with this, and a text of a million pixels' width (MAX_COUNTED_TEXT_WIDTH) is at most a million lines of 15,
+	// both far below what an int holds.
+	RECT const area = { 0, 0, width, 0x3FFFFFFF };
+	int endX = 0;
+	int endY = 0;
+	WrappedTextEnd(textPtr, &area, &endX, &endY);
+	return endY / HUD_FONT_HEIGHT + 1;
+}
+
+extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
+{
+	// text on menus in bottom black space
+	int wordWidth;
+	int sx = area->left;
+	int sy = area->top;
+
+	WrappedTextEnd(textPtr, area, &sx, &sy);
+
+	if (sy == area->top)
 	{
 		sx = area->left + (area->right-sx)/2;
 	} 

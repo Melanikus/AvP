@@ -6,6 +6,7 @@
 #include "module.h"
 #include "menus.h"
 #include "menu_gfx.hpp"
+#include "hud_layout.h"     // HUD_FONT_HEIGHT, the small font's height
 #include "language.h"
 #include "user_profile.h"
 #include "relay_list.h"
@@ -279,41 +280,76 @@ bool AccessPage_Pressed(int row, enum AVPMENU_ID *page)
 	return false;
 }
 
-void AccessPage_DrawTop(int rowsBottom)
+// access_page_rules.h's copies of the menus' numbers must be the menus' own: it can't include menus.h, so these checks are here, where
+// the game is built
+static_assert(kAccessPageTop == MENU_TOPYEDGE, "the access page starts where every page's rows may start, MENU_TOPYEDGE");
+static_assert(kAccessPageBottom == MENU_BOTTOMYEDGE, "the access page ends where every page's rows must end, MENU_BOTTOMYEDGE");
+static_assert(kAccessPageBigLine == MENU_FONT_HEIGHT, "the big font's height is MENU_FONT_HEIGHT");
+static_assert(kAccessPageSmallLine == HUD_FONT_HEIGHT, "the small font's height is HUD_FONT_HEIGHT");
+
+// The words drawn into their place: a box exactly as tall as the lines given, so RenderSmallFontString_Wrapped starts them at its top
+static void DrawWords(char *words, AccessPageLayout const &at)
 {
+	if (!words || at.wordsLines <= 0)
+	{
+		return;
+	}
+
 	int x = 0;
 	int y = 0;
+	RECT area = { kAccessPageWordsLeft, at.wordsTop, kAccessPageWordsRight, at.wordsTop + at.wordsLines * kAccessPageSmallLine };
+	RenderSmallFontString_Wrapped(words, &area, ONE_FIXED, &x, &y);
+}
+
+// Modified 2026-11-10 by Melanikus for the AvP port, after the owner's picture: the title, "Your access code" and the code were drawn on
+// top of each other, and an empty gap sat above the rows. The page now lays itself out under the title, top to bottom, by
+// AccessPage_Layout (access_page_rules.h), and gives back where the rows start.
+int AccessPage_DrawTop(int rowsHeight)
+{
+	char paragraph[420];
+	char *words = NULL;
+	bool codeShown = false;
 
 	if (!sentThisRun)
 	{
 		// Before anything is sent: what Request access does, in plain words, above the rows (the owner's spec). Two lines of the text
 		// table, which holds at most 199 characters a line, made one paragraph here.
-		char paragraph[420];
 		snprintf(paragraph, sizeof(paragraph), "%s %s", GetTextString(TEXTSTRING_ACCESS_EXPLAIN), GetTextString(TEXTSTRING_ACCESS_EXPLAIN_MORE));
-		RECT area = { 60, 56, 580, 170 };
-		RenderSmallFontString_Wrapped(paragraph, &area, ONE_FIXED, &x, &y);
+		words = paragraph;
 	}
 	else if (ourCode[0])
 	{
 		// After: the code, large, and what to do with it
-		RenderSmallMenuText(GetTextString(TEXTSTRING_ACCESS_YOUR_CODE), MENU_CENTREX, 56, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		RenderMenuText(ourCode, MENU_CENTREX, 76, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		RECT area = { 60, 118, 580, 170 };
-		RenderSmallFontString_Wrapped(GetTextString(TEXTSTRING_ACCESS_TELL_US), &area, ONE_FIXED, &x, &y);
+		words = GetTextString(TEXTSTRING_ACCESS_TELL_US);
+		codeShown = true;
 	}
+
+	int const lines = words ? SmallFontString_WrappedLines(words, kAccessPageWordsRight - kAccessPageWordsLeft) : 0;
+	AccessPageLayout const at = AccessPage_Layout(codeShown, lines, rowsHeight);
+
+	if (codeShown)
+	{
+		RenderSmallMenuText(GetTextString(TEXTSTRING_ACCESS_YOUR_CODE), MENU_CENTREX, at.labelTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		RenderMenuText(ourCode, MENU_CENTREX, at.codeTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
+	DrawWords(words, at);
 
 	if (stateLine != TEXTSTRING_BLANK)
 	{
-		RenderSmallMenuText(GetTextString(stateLine), MENU_CENTREX, rowsBottom + 16, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		RenderSmallMenuText(GetTextString(stateLine), MENU_CENTREX, at.underTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
+
+	return at.rowsTop;
 }
 
-void AccessPage_DrawQuestion(void)
+// The question before a new identity: its words under the title, and its two rows right under them, by the same layout
+int AccessPage_DrawQuestion(int rowsHeight)
 {
-	int x = 0;
-	int y = 0;
-	RECT area = { 60, 56, 580, 170 };
-	RenderSmallFontString_Wrapped(GetTextString(TEXTSTRING_ACCESS_NEWID_EXPLAIN), &area, ONE_FIXED, &x, &y);
+	char *words = GetTextString(TEXTSTRING_ACCESS_NEWID_EXPLAIN);
+	AccessPageLayout const at = AccessPage_Layout(false, SmallFontString_WrappedLines(words, kAccessPageWordsRight - kAccessPageWordsLeft), rowsHeight);
+	DrawWords(words, at);
+	return at.rowsTop;
 }
 
 bool AccessPage_CallOnItsWay(void)

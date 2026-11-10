@@ -12,6 +12,9 @@
 //    - the pages themselves send a player without -dev straight back;
 //    - relay_list.cpp refuses the call without -dev, whatever asks it.
 //    And the pages' only way to the network is that one call. What a row does on a real screen needs a run of the game with -dev.
+// 3. Beta.2's words, by reading the text table.
+// 4. Where the page's parts go (the owner's picture of 2026-11-10): under the title, in order, nothing on anything, inside the menus'
+//    edges, with the rows right under the words. What the words look like on a real screen needs Hudson's picture of the page.
 //
 // HOW IT RUNS
 //
@@ -235,12 +238,87 @@ static void TestTheBeta2Words()
 		"a profile's letters left out of the name to send are said, under the rows");
 }
 
+// Where the page's parts go (access_page_rules.h). Added 2026-11-10 by Melanikus for the AvP port, after the owner's picture: the page's
+// title, "Your access code" and the code were drawn on top of each other, so the code couldn't be read, with an empty gap above the rows.
+// The numbers are the menus' 640 by 480 grid, which is stretched to the screen, so what holds here holds at 16:9 and at 4:3 alike.
+static void TestWhereThePartsGo()
+{
+	puts("5. where the page's parts go");
+
+	// A row of the small font is HUD_FONT_HEIGHT + 4 high (menus.cpp, HeightOfMenuElement): the access page has 4 rows, the question 2
+	int const row = kAccessPageSmallLine + 4;
+	int const titleBottom = kAccessPageTitleTop + kAccessPageBigLine;
+
+	// The title's letters can hang below its line: menus.cpp starts a picture under a title at 106, "a few pixels clear of the tails"
+	Check(kAccessPageTop >= titleBottom + kAccessPageSmallLine, "the page starts well under the title, clear of its letters' tails");
+
+	bool allInside = true;
+	bool inOrder = true;
+	bool wordsWholeWhenTheyFit = true;
+
+	for (int shown = 0; shown < 2; shown++)
+	{
+		for (int rows = 0; rows <= 6; rows++)
+		{
+			for (int lines = -1; lines <= 40; lines++)
+			{
+				AccessPageLayout const at = AccessPage_Layout(shown != 0, lines, rows * row);
+				int const first = shown ? at.labelTop : at.wordsTop;
+				int const wordsBottom = at.wordsTop + at.wordsLines * kAccessPageSmallLine;
+
+				allInside = allInside && first >= kAccessPageTop && at.underTop + kAccessPageSmallLine <= kAccessPageBottom && at.wordsLines >= 0;
+
+				if (shown)
+				{
+					inOrder = inOrder && at.labelTop + kAccessPageSmallLine <= at.codeTop && at.codeTop + kAccessPageBigLine <= at.wordsTop;
+				}
+				else
+				{
+					inOrder = inOrder && at.labelTop == -1 && at.codeTop == -1;
+				}
+
+				inOrder = inOrder && wordsBottom <= at.rowsTop && at.rowsTop + rows * row <= at.underTop;
+
+				// Words are cut only when there's no room for them: the lines drawn are all of them, or as many as fit
+				AccessPageLayout const oneMore = AccessPage_Layout(shown != 0, at.wordsLines + 1, rows * row);
+				wordsWholeWhenTheyFit = wordsWholeWhenTheyFit && (lines < 0 || at.wordsLines == lines ||
+					(at.wordsLines < lines && oneMore.underTop + kAccessPageSmallLine > kAccessPageBottom));
+			}
+		}
+	}
+
+	Check(allInside, "every part, for any number of lines and up to 6 rows, sits between MENU_TOPYEDGE (130) and MENU_BOTTOMYEDGE (390)");
+	Check(inOrder, "top to bottom, nothing on anything: Your access code, the code, the words, the rows, the line under them");
+	Check(wordsWholeWhenTheyFit, "and the words are cut only when there's no room left for another line");
+
+	// The three pages as they are: room for at least 6 lines of words on each, about twice what their longest words take
+	Check(AccessPage_Layout(false, 99, 4 * row).wordsLines >= 6, "before a request is sent, there's room for 6 lines of words above the 4 rows");
+	Check(AccessPage_Layout(true, 99, 4 * row).wordsLines >= 6, "with the code shown, too");
+	Check(AccessPage_Layout(false, 99, 2 * row).wordsLines >= 6, "and on the question before a new identity, above its 2 rows");
+
+	// The gap the owner saw is gone: the rows start right under the words
+	AccessPageLayout const asked = AccessPage_Layout(true, 2, 4 * row);
+	Check(asked.rowsTop == asked.wordsTop + 2 * kAccessPageSmallLine + kAccessPageRowsGap, "the first row is right under the words, with no gap but its own");
+
+	// And the menus use it, by reading their source: the title is where this file says, a row is as high, and the rows start where the page
+	// says
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const render = SourceSlice(menus, "static void RenderMenu(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(render, "RenderMenuText(textPtr, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);") && kAccessPageTitleTop == 70,
+		"RenderMenu draws the title at y 70, where this page's rule says it is");
+	Check(Has(menus, "h = HUD_FONT_HEIGHT+4;"), "a row of the small font is HUD_FONT_HEIGHT + 4 high, as this test counts it");
+	Check(Has(render, "y = AccessPage_DrawTop(AvPMenus.MenuHeight);") && Has(render, "y = AccessPage_DrawQuestion(AvPMenus.MenuHeight);") &&
+		CountOf(menus, "AccessPage_DrawTop(") == 1 && CountOf(menus, "AccessPage_DrawQuestion(") == 1,
+		"and RenderMenu starts both pages' rows where the page puts them, in one place each");
+}
+
 int main()
 {
 	TestWhenItAsks();
 	TestTheWords();
 	TestOnlyWithDev();
 	TestTheBeta2Words();
+	TestWhereThePartsGo();
 
 	if (checksFailed)
 	{
