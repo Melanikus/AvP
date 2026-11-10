@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity.h",
-					"from": "good = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'a' && hex[i] <= 'f');",
-					"to": "good = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'A' && hex[i] <= 'f');"
+					"from": "for (size_t i = 0; good && i < 2 * kNetIdentityFingerprintBytes; i++)\n\t{\n\t\tgood = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'a' && hex[i] <= 'f');",
+					"to": "for (size_t i = 0; good && i < 2 * kNetIdentityFingerprintBytes; i++)\n\t{\n\t\tgood = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'A' && hex[i] <= 'f');"
 				}
 			]
 		},
@@ -55,11 +55,11 @@
 			]
 		},
 		{
-			"name": "the prologue leaves out the host's fingerprint",
+			"name": "the prologue leaves out the host's id",
 			"changes": [
 				{
 					"file": "3dc/net_handshake_b.h",
-					"from": "\n\t\t&& NetNoise_MixHash(noise, hostFingerprint, kNetIdentityFingerprintBytes);",
+					"from": "\n\t\t&& NetNoise_MixHash(noise, hostId, kNetIdentityIdBytes);",
 					"to": ";"
 				}
 			]
@@ -105,12 +105,12 @@
 			]
 		},
 		{
-			"name": "the host's keys aren't held to the listing's fingerprint (10)",
+			"name": "the host's keys aren't held to the listing's id (10)",
 			"changes": [
 				{
 					"file": "3dc/net_handshake_b.h",
-					"from": "if (!NetHandshakeB_Same(theirFingerprint, expectedHost, sizeof(expectedHost)))",
-					"to": "if (false)"
+					"from": "bool const theHostNamed = NetHandshakeB_Same(theirId, expectedHost, sizeof(expectedHost));",
+					"to": "bool const theHostNamed = true;"
 				}
 			]
 		},
@@ -391,6 +391,46 @@
 					"file": "3dc/net_peer_v2.h",
 					"from": "\t\tNetCrypto_Wipe(joinerFingerprint, sizeof(joinerFingerprint));\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the prologue mixes only the id's first 16 bytes, the fingerprint, as before item 6",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "\t\t&& NetNoise_MixHash(noise, hostId, kNetIdentityIdBytes);",
+					"to": "\t\t&& NetNoise_MixHash(noise, hostId, kNetIdentityFingerprintBytes);"
+				}
+			]
+		},
+		{
+			"name": "the host's own prologue mixes its fingerprint, not its whole id",
+			"changes": [
+				{
+					"file": "3dc/net_handshake_b.h",
+					"from": "bool const read = NetHandshakeB_Start(&noise, region, relayPort, me->id)",
+					"to": "bool const read = NetHandshakeB_Start(&noise, region, relayPort, me->fingerprint)"
+				}
+			]
+		},
+		{
+			"name": "a listing's id may have capitals (item 6)",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "for (size_t i = 0; good && i < 2 * kNetIdentityIdBytes; i++)\n\t{\n\t\tgood = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'a' && hex[i] <= 'f');",
+					"to": "for (size_t i = 0; good && i < 2 * kNetIdentityIdBytes; i++)\n\t{\n\t\tgood = (hex[i] >= '0' && hex[i] <= '9') || (hex[i] >= 'A' && hex[i] <= 'f');"
+				}
+			]
+		},
+		{
+			"name": "a listing's id may run on past 96 digits (item 6)",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "good = good && hex[2 * kNetIdentityIdBytes] == 0;",
+					"to": "good = good;"
 				}
 			]
 		}

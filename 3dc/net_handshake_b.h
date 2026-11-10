@@ -3,7 +3,7 @@
 // repository). Written 2026-11-09 by Melanikus for the AvP port.
 //
 // WHAT IT DOES, in plain words. Before a joiner and a host trade a single game byte, they swap five messages, B1 to B5. By the end:
-//   - the joiner knows it's talking to the host the list named (the host's keys match the fingerprint in the listing), and nobody else;
+//   - the joiner knows it's talking to the host the list named (the host's keys match the id in the listing), and nobody else;
 //   - the host knows the joiner holds the keys it showed;
 //   - both have two fresh keys, one for each direction, that only they know, made from classical (P-384) and post-quantum (ML-KEM-1024)
 //     secrets together, so the keys hold unless both kinds are broken;
@@ -23,7 +23,8 @@
 //   B5  joiner -> host  nJ                   nJ, sealed: this tag proves the joiner holds every key it claimed, and nJ must be what B1
 //                                            promised, or the host ends it (refusal 21)
 // Before any message, both sides mix in the "prologue": the region's name and a 0 byte, the joiner's relay port (2 bytes, little-endian)
-// and the host's fingerprint as the listing gives it (5.1 point 17). So a B made for one relay, port or host can't be used for another.
+// and the host's whole id, 48 bytes, as the listing gives it (5.1 point 17). So a B made for one relay, port or host can't be used for
+// another. (Modified 2026-11-10 by Melanikus for the AvP port, SERVER-BLOCKERS item 6: it was the host's 16-byte fingerprint.)
 //
 // WHY THE PROMISE (5.1 point 19). The check code is made from the transcript. Without B1's promise, someone in the middle could try a
 // million fresh values before sending its last message, until both screens happened to show the same 6 digits. With it, every choice it
@@ -81,7 +82,7 @@ uint8_t const kNetHandshakeBKindB5 = 20;
 int const kNetHandshakeBFine = 0;
 int const kNetHandshakeBWrongSize = 1;        // a message of the wrong size
 int const kNetHandshakeBBadTag = 8;           // a tag that fails: changed on the way, or made with other keys
-int const kNetHandshakeBWrongHost = 10;       // the host's keys aren't the ones the listing's fingerprint names ("this isn't the host the
+int const kNetHandshakeBWrongHost = 10;       // the host's keys aren't the ones the listing's id names ("this isn't the host the
                                               // list named")
 int const kNetHandshakeBBrokenPromise = 21;   // B5's nJ isn't what B1's commitment promised
 int const kNetHandshakeBNotAKey = 100;        // a P-384 key that isn't on the curve, or that agrees to nothing (or CNG refused the ECDH)
@@ -144,7 +145,7 @@ inline size_t NetHandshakeB_RegionLength(const char *region)
 }
 
 // The start, the same on both sides: h = SHA-384 of the protocol's name, ck = h, then the prologue's three MixHashes (5.1 point 17)
-inline bool NetHandshakeB_Start(NetNoiseState *noise, const char *region, uint16_t relayPort, const uint8_t hostFingerprint[kNetIdentityFingerprintBytes])
+inline bool NetHandshakeB_Start(NetNoiseState *noise, const char *region, uint16_t relayPort, const uint8_t hostId[kNetIdentityIdBytes])
 {
 	size_t const regionBytes = NetHandshakeB_RegionLength(region);
 	uint8_t named[kNetHandshakeBMostRegionBytes + 1];
@@ -155,7 +156,7 @@ inline bool NetHandshakeB_Start(NetNoiseState *noise, const char *region, uint16
 	return NetNoise_Start(noise, kNetNoiseNamePeers)
 		&& NetNoise_MixHash(noise, named, regionBytes + 1)
 		&& NetNoise_MixHash(noise, port, sizeof(port))
-		&& NetNoise_MixHash(noise, hostFingerprint, kNetIdentityFingerprintBytes);
+		&& NetNoise_MixHash(noise, hostId, kNetIdentityIdBytes);
 }
 
 // One ECDH, mixed into the chain at once, and wiped: ee, es and se
@@ -274,10 +275,10 @@ public:
 	NetHandshakeBJoiner(const NetHandshakeBJoiner &) = delete;   // it holds a CNG key, so it's never copied
 	NetHandshakeBJoiner &operator=(const NetHandshakeBJoiner &) = delete;
 
-	// B1, to the host the listing named (by its fingerprint), on this joiner's port of that region's relay. me must last until the
+	// B1, to the host the listing named (by its whole id), on this joiner's port of that region's relay. me must last until the
 	// handshake is over. It always takes ephemeral (and destroys it when done), even when it refuses. ephemeralKemPrivate is copied in;
 	// the caller wipes its own copy, and nJ's.
-	bool WriteB1(const char *region, uint16_t relayPort, const uint8_t hostFingerprint[kNetIdentityFingerprintBytes], const NetIdentity *identity,
+	bool WriteB1(const char *region, uint16_t relayPort, const uint8_t hostId[kNetIdentityIdBytes], const NetIdentity *identity,
 		NetEcdhKey *ephemeral, const uint8_t ephemeralPublic[kNetCryptoP384PublicBytes], const uint8_t ephemeralKemPublic[kNetPqKemPublicBytes],
 		const uint8_t ephemeralKemPrivate[kNetPqKemPrivateBytes], const uint8_t nJ[kNetHandshakeBNonceBytes], uint8_t b1Out[kNetHandshakeBB1Bytes])
 	{
@@ -295,7 +296,7 @@ public:
 		}
 
 		me = identity;
-		memcpy(expectedHost, hostFingerprint, sizeof(expectedHost));
+		memcpy(expectedHost, hostId, sizeof(expectedHost));
 		memcpy(ekPrivate, ephemeralKemPrivate, sizeof(ekPrivate));
 		memcpy(promised, nJ, sizeof(promised));
 
@@ -354,7 +355,7 @@ public:
 			return Fail(kNetHandshakeBCouldnt, NULL, 0);
 		}
 
-		// s: the host's own keys, which must be the ones whose fingerprint the listing gave (refusal 10)
+		// s: the host's own keys, which must be the ones whose id the listing gave (refusal 10): all 48 bytes are compared
 		uint8_t statics[kNetIdentityStaticBytes];
 		size_t written = 0;
 
@@ -364,14 +365,17 @@ public:
 			return Fail(kNetHandshakeBBadTag, NULL, 0);
 		}
 
-		uint8_t theirFingerprint[kNetIdentityFingerprintBytes];
+		uint8_t theirId[kNetIdentityIdBytes];
 
-		if (!NetIdentity_Fingerprint(statics, statics + kNetCryptoP384PublicBytes, theirFingerprint))
+		if (!NetIdentity_Id(statics, statics + kNetCryptoP384PublicBytes, theirId))
 		{
 			return Fail(kNetHandshakeBCouldnt, NULL, 0);
 		}
 
-		if (!NetHandshakeB_Same(theirFingerprint, expectedHost, sizeof(expectedHost)))
+		bool const theHostNamed = NetHandshakeB_Same(theirId, expectedHost, sizeof(expectedHost));
+		NetCrypto_Wipe(theirId, sizeof(theirId));
+
+		if (!theHostNamed)
 		{
 			return Fail(kNetHandshakeBWrongHost, NULL, 0);
 		}
@@ -480,7 +484,7 @@ public:
 		// B5: nJ, as B1 promised
 		bool const done = NetNoise_EncryptAndHash(&noise, promised, sizeof(promised), b5Out, kNetHandshakeBB5Bytes, &written)
 			&& written == kNetHandshakeBB5Bytes
-			&& NetHandshakeB_Finish(&noise, expectedHost, keysOut);
+			&& NetHandshakeB_Finish(&noise, expectedHost, keysOut);   // the id's first 16 bytes are the host's fingerprint (net_identity.h)
 
 		if (!done)
 		{
@@ -557,7 +561,7 @@ private:
 	NetEcdhKey *e;                                          // the joiner's fresh P-384 key, until es
 	uint8_t ekPrivate[kNetPqKemPrivateBytes];               // the joiner's fresh ML-KEM private key, until ekem
 	uint8_t promised[kNetHandshakeBNonceBytes];             // nJ, until B5
-	uint8_t expectedHost[kNetIdentityFingerprintBytes];     // the listing's fingerprint
+	uint8_t expectedHost[kNetIdentityIdBytes];              // the listing's id of the host
 	uint8_t hostEphemeral[kNetCryptoP384PublicBytes];       // the host's fresh P-384 key, for se
 	uint8_t hostKem[kNetPqKemPublicBytes];                  // the host's own ML-KEM key, for B3's encapsulation
 	int step;
@@ -608,8 +612,8 @@ public:
 		memcpy(joinerEphemeralKem, b1 + kNetCryptoP384PublicBytes, sizeof(joinerEphemeralKem));
 		memcpy(commitment, b1 + kNetCryptoP384PublicBytes + kNetPqKemPublicBytes, sizeof(commitment));
 
-		// The prologue names this host's own fingerprint: a joiner that expected another host has a different h from here on
-		bool const read = NetHandshakeB_Start(&noise, region, relayPort, me->fingerprint)
+		// The prologue names this host's own id: a joiner that expected another host has a different h from here on
+		bool const read = NetHandshakeB_Start(&noise, region, relayPort, me->id)
 			&& NetNoise_MixHash(&noise, joinerEphemeral, sizeof(joinerEphemeral))       // e
 			&& NetNoise_MixHash(&noise, joinerEphemeralKem, sizeof(joinerEphemeralKem))
 			&& NetNoise_MixHash(&noise, commitment, sizeof(commitment));                // the promise
