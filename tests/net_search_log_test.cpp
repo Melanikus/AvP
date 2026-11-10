@@ -202,7 +202,9 @@ int main()
 	std::string const net = ReadSourceFile("3dc/networking.cpp");
 	Check(Has(net, "#include \"net_search_log.h\"") && Has(net, "static_assert(kNetSearchPort == broadcastPort,"), "networking.cpp uses the header, and checks it names the same port");
 
-	std::string const hosting = Between(net, "NetResult Net_HostGame(", "\n}\n");
+	// Modified 2026-11-10 by Melanikus for the AvP port (#188): every host is HostGame's since Net_HostGame and Net_HostAtHome became its two
+	// ways in, so that's where the search port opens (for a home game alone)
+	std::string const hosting = Between(net, "static NetResult HostGame(", "\n}\n");
 	Check(Has(hosting, "if (OpenDiscoverySocket())\n\t\t\t{\n\t\t\t\tchar line[160];\n\t\t\t\tNetSearchLog_Opened(&searchLog, enet_time_get(), line, sizeof(line));\n\t\t\t\tLogString(line);"),
 		"a host starts counting only once its search port is open, and says so");
 	Check(Has(hosting, "LogString(\"net: this game can't answer searches: UDP port \" + std::to_string(broadcastPort) + \" couldn't be opened, so a search won't find it\");"),
