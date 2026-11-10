@@ -7,7 +7,7 @@
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
 //   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
 //   (AVPMENU_ELEMENT_FINDAGAIN)
-//   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
+//   SESSION_DESC keeps a relay game's host's whole id from the list, for protocol version 2's handshake B
 //   the Online access pages and their rows (server #24), only with -dev for now
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
@@ -359,7 +359,7 @@ typedef struct
 	bool throughRelay;                               // a game from the relay server's list, joined through its region's relay (relay_list.h)
 	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
 	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
-	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // its host's fingerprint, from the list: who handshake B must find it's talking to
+	uint8_t relayHostId[kNetIdentityIdBytes];   // its host's whole id, from the list: who handshake B must find it's talking to
 	// What the games page shows (online_screens.h). The host sent these, so they're hostile: the page draws the name only after
 	// OnlineScreens_SafeName, and checks the numbers before it uses them.
 	char levelName[kRelayListLevelLetters + 1];      // the level's name, as the host said it

@@ -48,11 +48,11 @@ const char *Relay_ServerShownName(void);
 
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
-// This run's identity's fingerprint (net_identity.h), which every listing carries so a joiner knows which host to expect. networking.cpp
+// This run's identity's whole id (net_identity.h), which every listing carries so a joiner knows which host to expect. networking.cpp
 // gives it once the identity is made, before the room opens: a room that opens before then isn't put on the list, and the log says why.
-// The fingerprint is kept with each listing from the moment its room opens, so the list sees the same one for the listing's whole life.
-// Added 2026-11-09 by Melanikus for the AvP port.
-void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
+// The id is kept with each listing from the moment its room opens, so the list sees the same one for the listing's whole life.
+// Added 2026-11-09 by Melanikus for the AvP port; the whole id, not its 16-byte fingerprint, since 2026-11-10 (SERVER-BLOCKERS item 6).
+void RelayList_HostIdentity(const uint8_t hostId[kNetIdentityIdBytes]);
 
 // The relay has given the host its room: the game goes on the list. region is the relay's (from RelayList_Relays), pass and passTime
 // what HOST_OPENED gave, and hostMs the host's round trip to that relay, 0 if it wasn't measured.

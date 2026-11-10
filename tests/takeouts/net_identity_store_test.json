@@ -159,7 +159,7 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity.h",
-					"from": "\t\t&& NetIdentity_HalvesMatch(out)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);",
+					"from": "\t\t&& NetIdentity_HalvesMatch(out)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint)\n\t\t&& NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id);",
 					"to": "\t\t&& NetIdentity_HalvesMatch(out);"
 				}
 			]
@@ -169,8 +169,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity.h",
-					"from": "\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);\n\n\tif (!made)\n\t{\n\t\tNetIdentity_Free(out);\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number",
-					"to": "\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);\n\n\tif (!made)\n\t{\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number"
+					"from": "\t\t&& NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id);\n\n\tif (!made)\n\t{\n\t\tNetIdentity_Free(out);\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number",
+					"to": "\t\t&& NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id);\n\n\tif (!made)\n\t{\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number"
 				}
 			]
 		},
@@ -331,6 +331,26 @@
 					"file": "3dc/utilities.cpp",
 					"from": "\treturn HudsonRunIsOn;\n}",
 					"to": "\treturn false;\n}"
+				}
+			]
+		},
+		{
+			"name": "a kept identity's whole id isn't worked out again (item 6)",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_HalvesMatch(out)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint)\n\t\t&& NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id);",
+					"to": "\t\t&& NetIdentity_HalvesMatch(out)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);"
+				}
+			]
+		},
+		{
+			"name": "a new identity's whole id isn't worked out (item 6)",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetPq_KemKeypair(out->statics + kNetCryptoP384PublicBytes, out->kemPrivate)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint)\n\t\t&& NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id);",
+					"to": "\t\t&& NetPq_KemKeypair(out->statics + kNetCryptoP384PublicBytes, out->kemPrivate)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);"
 				}
 			]
 		}

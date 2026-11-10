@@ -3086,11 +3086,11 @@
 			]
 		},
 		{
-			"name": "a draft's host doesn't hand the list its fingerprint",
+			"name": "a draft's host doesn't hand the list its id",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();\n\t\tRelayList_HostIdentity(runIdentity.fingerprint);",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();\n\t\tRelayList_HostIdentity(runIdentity.id);",
 					"to": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();"
 				}
 			]

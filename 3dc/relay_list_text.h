@@ -12,9 +12,11 @@
 //
 // tests/relay_list_test.cpp tries every refusal, and the bodies.
 //
-// Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's fingerprint, the short name of the identity
-// that host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A
-// host sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
+// Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's id, the whole name of the identity that
+// host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A host
+// sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
+// (Modified 2026-11-10 by Melanikus for the AvP port, SERVER-BLOCKERS item 6: the field is "id", the 48-byte id as 96 hex digits, in
+// place of "fingerprint", its first 16 bytes. The list refuses the old field.)
 
 #ifndef RELAY_LIST_TEXT_H
 #define RELAY_LIST_TEXT_H
@@ -23,7 +25,7 @@
 #include <stdint.h>
 
 #include "relay_shared.h"
-#include "net_identity.h"   // a fingerprint's size, and the one rule for its 32 hex digits, which the joining code uses too
+#include "net_identity.h"   // an id's size, and the one rule for its 96 hex digits, which the joining code uses too
 
 enum
 {
@@ -38,7 +40,7 @@ enum
 	kRelayListMostSeconds = 31536000,    // how long a game has been listed: a year at most
 	kRelayListMostHostMs = 9999,         // the host's round trip to its relay, in ms; 0 if it wasn't measured
 	kRelayListMostLevelNumber = 100,     // 0 to 99 for a stock level, 100 for a custom one, found by its name
-	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 46,011 bytes)
+	kRelayListMostGamesBytes = 57344,    // an answer to GET /v1/games: 56 KB at most (the protocol's worst case is 51,511 bytes, with ids)
 	kRelayListMostRelaysBytes = 4096,    // an answer to GET /v1/relays: 4 KB at most (its worst case is 1,868 bytes)
 	kRelayListMostOwnerBytes = 1024,     // an answer to POST: {"owner"}, far less than this
 	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
@@ -78,7 +80,7 @@ struct RelayListGame
 	int version;
 	int hostMs;
 	long seconds;
-	uint8_t fingerprint[kNetIdentityFingerprintBytes];   // the host's identity for this run, which handshake B must find it holds
+	uint8_t hostId[kNetIdentityIdBytes];   // the host's whole id for this run, which handshake B must find it holds
 };
 
 // One region's relay: where a game of that region is joined. networking.cpp reads these (RelayList_Relays).
@@ -127,7 +129,7 @@ struct RelayListListing
 	int maxPlayers;
 	int version;
 	int hostMs;
-	const uint8_t *fingerprint;                // this run's identity's fingerprint (net_identity.h): there has to be one, and not all 0
+	const uint8_t *hostId;                     // this run's identity's whole id (net_identity.h): there has to be one, and not all 0
 };
 
 // Why an answer was refused. Each has its own words, for the log and for the tests.
@@ -157,7 +159,8 @@ enum RelayListRefusal
 	kRelayListEndsTooSoon,     // the text stops before its end
 	kRelayListNotWhatComesNext, // something else where a , : } or ] has to be
 	kRelayListMoreAfterTheEnd, // more after the closing }
-	kRelayListBadFingerprint,  // a game's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadFingerprint,  // an access answer's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadHostId,       // a game's host id that isn't 96 hex digits, small letters (added 2026-11-10, SERVER-BLOCKERS item 6)
 	kRelayListBadStatus,       // an access request's answer with an HTTP status the protocol never gives it
 	kRelayListBadWord,         // a state or an error that isn't one of the protocol's words for its status
 	kRelayListNotOurKey        // an answer to an access request that isn't about this PC's own key
@@ -168,10 +171,10 @@ const char *RelayList_RefusalWords(RelayListRefusal why);
 
 // Reads a GET /v1/games answer. games has room for kRelayListMostGames. ourVersion is the version that was asked for. On a refusal,
 // count is 0 and nothing in games is to be used.
-// Modified 2026-11-09 by Melanikus for the AvP port: fingerprints says whether the games carry their host's fingerprint, which only a v2
-// draft's do (networking.h, Net_V2DraftOn). Then a game without one is refused. Without it, the answer is read as version 1's, with no
-// fingerprint field, and each game's fingerprint is left all 0.
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count);
+// Modified 2026-11-09 by Melanikus for the AvP port: hostIds says whether the games carry their host's id, which only a v2 draft's do
+// (networking.h, Net_V2DraftOn). Then a game without one is refused. Without it, the answer is read as version 1's, with no id field, and
+// each game's id is left all 0.
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool hostIds, RelayListGame *games, int *count);
 
 // Reads a GET /v1/relays answer. relays has room for kRelayListMostRelays.
 RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count);
@@ -192,10 +195,10 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const c
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
-// With withFingerprint (a v2 draft's listing, Net_V2DraftOn), a listing with no fingerprint, or one that's all 0 (no identity was made for
-// this run), is one of those. Without it (modified 2026-11-09 by Melanikus for the AvP port), the body is version 1's, with no fingerprint
-// field at all, whatever the listing holds.
-bool RelayList_ListingBody(const RelayListListing &listing, bool withFingerprint, const uint8_t *owner, char *body, size_t room);
+// With withHostId (a v2 draft's listing, Net_V2DraftOn), a listing with no host id, or one that's all 0 (no identity was made for this
+// run), is one of those. Without it (modified 2026-11-09 by Melanikus for the AvP port), the body is version 1's, with no id field at
+// all, whatever the listing holds.
+bool RelayList_ListingBody(const RelayListListing &listing, bool withHostId, const uint8_t *owner, char *body, size_t room);
 
 // The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
 bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room);

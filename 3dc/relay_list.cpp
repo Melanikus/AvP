@@ -188,7 +188,7 @@ namespace
 		int players;
 		int maxPlayers;
 		int version;
-		uint8_t fingerprint[kNetIdentityFingerprintBytes];   // this run's identity, as it was when the room opened
+		uint8_t hostId[kNetIdentityIdBytes];   // this run's identity's whole id, as it was when the room opened
 	};
 
 	// Added 2026-11-09 by Melanikus for the AvP port: whether two of the list's text fields of the same size say the same, read only within
@@ -250,7 +250,7 @@ namespace
 		INTERNET_PORT port;
 		bool developer;                  // -dev: a relay on this machine or this network may be used, for a test
 		int version;                     // the version this copy speaks (Net_OurVersion), whose games it lists and asks for
-		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a fingerprint
+		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a host's id
 
 		// A relay's keys, asked for by the v2 draft (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
 		// has a number, and an answer says which asking it's for, so an answer to an older one is never taken for the newest.
@@ -665,7 +665,7 @@ namespace
 		out.maxPlayers = l.maxPlayers;
 		out.version = l.version;
 		out.hostMs = l.hostMs;
-		out.fingerprint = l.fingerprint;
+		out.hostId = l.hostId;
 		return out;
 	}
 
@@ -1174,8 +1174,8 @@ namespace
 	// The page asked with no list to ask: its answer, which needs no thread
 	bool noListAnswerWaiting = false;
 
-	// This run's identity's fingerprint, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
-	uint8_t hostIdentity[kNetIdentityFingerprintBytes];
+	// This run's identity's whole id, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
+	uint8_t hostIdentity[kNetIdentityIdBytes];
 	bool hostIdentityGiven = false;
 }
 
@@ -1247,16 +1247,16 @@ int Relay_ListPort(void)
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: see relay_list.h
-void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+void RelayList_HostIdentity(const uint8_t hostId[kNetIdentityIdBytes])
 {
 	hostIdentityGiven = false;
 
-	if (!fingerprint)
+	if (!hostId)
 	{
 		return;
 	}
 
-	memcpy(hostIdentity, fingerprint, sizeof(hostIdentity));
+	memcpy(hostIdentity, hostId, sizeof(hostIdentity));
 
 	// All 0 is what an identity never made looks like, so it counts as none
 	for (size_t i = 0; i < sizeof(hostIdentity); i++)
@@ -1274,8 +1274,8 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 		return;
 	}
 
-	// A listing without the host's fingerprint would send its joiners to a host they can't check, so it isn't sent at all. Modified
-	// 2026-11-09 by Melanikus for the AvP port: only with the v2 draft (networking.h). Version 1's listing has no fingerprint.
+	// A listing without the host's id would send its joiners to a host they can't check, so it isn't sent at all. Modified 2026-11-09 by
+	// Melanikus for the AvP port: only with the v2 draft (networking.h). Version 1's listing has no id.
 	if (Net_V2DraftOn() && !hostIdentityGiven)
 	{
 		LogString("Relay list: this run has no identity to show joiners yet, so the game isn't put on the list");
@@ -1294,7 +1294,7 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 	memcpy(l.pass, pass, sizeof(l.pass));
 	l.passTime = passTime;
 	l.hostMs = hostMs;
-	memcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));
+	memcpy(l.hostId, hostIdentity, sizeof(l.hostId));
 	ShowSession(session, l);
 
 	EnterCriticalSection(&shared->lock);

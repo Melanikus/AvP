@@ -66,15 +66,16 @@ jobs:
           "tests/vectors/relay-v1.json is the relay's file at 26d0580"
 
       # net_v2_parts_test and net_v2a_test read protocol version 2's test vectors, which the relay's Java makes from its own code
-      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 2b8dcd6, Split's 48-byte secrets, made by java/test/avpx/v2/CryptoV2Vectors.java). As
+      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 2694c87, the host named by its whole id: SERVER-BLOCKERS item 6, made by
+      # java/test/avpx/v2/CryptoV2Vectors.java). As
       # relay-v1.json's: byte for byte, or it proves nothing. Added 2026-11-09 by Melanikus for the AvP port.
       - name: Check protocol version 2's test vectors are the relay's own
         shell: pwsh
         run: |
-          $expected = '08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17'
+          $expected = '06b40f269a6940761074d77b92125e678bed259e1d5b4c07218ea8ef8db32720'
           $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/crypto-v2.json).Hash.ToLowerInvariant()
           if ($found -ne $expected) { throw "tests/vectors/crypto-v2.json isn't the relay's file: its sha256 is $found, not $expected" }
-          "tests/vectors/crypto-v2.json is the relay's file at 2b8dcd6"
+          "tests/vectors/crypto-v2.json is the relay's file at 2694c87"
 
       # net_crypto_test reads the published known answers for protocol v2's primitives (NIST CAVP and ACVP, and Wycheproof), copied byte
       # for byte from the relay's repository (AVPx-Dedicated-Server crypto-kat-java 0c4755cf, test-vectors/crypto-kat/; the folder's

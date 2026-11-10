@@ -279,7 +279,7 @@ static_assert(kNetRelayRegionLetters == static_cast<size_t>(kRelayListRegionLett
 // (CRYPTO.md sections 8 and 9, in the AVPx-Dedicated-Server repository; net_peer_v2.h does the work, and this is where the game meets it.)
 // Through a relay, the host and each joiner run handshake B over the joiner's own port on the relay, and from then on every datagram ENet
 // sends between them is sealed, so the relay only passes on what it can neither read nor change. The joiner checks the host is the one
-// the list named (by the fingerprint the listing carries). The relay's own small messages ('AVPR') are as they were.
+// the list named (by the whole id the listing carries: SERVER-BLOCKERS item 6). The relay's own small messages ('AVPR') are as they were.
 // The rules, Primary's three among them (agreed 2026-11-09):
 //   - No game byte ever goes to the relay unsealed. Once a game has used a relay, ENet's every datagram to the relay's address goes
 //     through RelaySealedSend, which seals it or drops it; nothing else sends ENet's datagrams there.
@@ -592,7 +592,7 @@ static const char *relayEndToEndJoinFailed = NULL;
 // keys are in; otherwise the game's own words for why not. While it waits, the window keeps answering and the player can give up (the
 // menu's hook), as in the relay's own handshake. The joiner's schedule gives up after 7.5 s (net_peer_v2.h); this loop ends a little past
 // that by the clock, and by its number of turns in case the clock stands still.
-static const char *RelayEndToEndJoin(const char *region, uint16_t port, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+static const char *RelayEndToEndJoin(const char *region, uint16_t port, const uint8_t hostId[kNetIdentityIdBytes])
 {
 	if (!host || port == 0 || !RelayIdentityReady())
 	{
@@ -604,7 +604,7 @@ static const char *RelayEndToEndJoin(const char *region, uint16_t port, const ui
 	relaySealing = true;
 	host->sendHook = RelaySealedSend;
 
-	if (!relayEndToEndJoiner.Start(region, port, fingerprint, &runIdentity, started))
+	if (!relayEndToEndJoiner.Start(region, port, hostId, &runIdentity, started))
 	{
 		return RelayEndToEndWhyText(relayEndToEndJoiner.Why());
 	}
@@ -1443,7 +1443,7 @@ static bool RelayHostStart()
 		return false;
 	}
 
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose fingerprint the listing carries and
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose whole id the listing carries and
 	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game is open on this network only. Only with the v2
 	// draft (networking.h): without it, the host is version 1's, with no identity, no handshake and nothing sealed.
 	bool const draft = Net_V2DraftOn();
@@ -1458,7 +1458,7 @@ static bool RelayHostStart()
 	if (draft)
 	{
 		RelayEndToEndForget();
-		RelayList_HostIdentity(runIdentity.fingerprint);
+		RelayList_HostIdentity(runIdentity.id);
 	}
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the draft's relay is the one whose region the
@@ -2207,9 +2207,9 @@ static uint16_t RelayJoin(const char *region, const char *code)
 // names' lengths, a slot left, and the level, which has to be one this machine has, picked by its number, its name and its game style, as a
 // game found on this network is (GetLocalMultiplayerLevelIndex). Gives back whether it went on the list.
 static bool AddRelaySession(const char *code, const char *region, const char *name, int players, int maxPlayers, int version, uint16_t gameStyle,
-	uint16_t levelNumber, const char *levelName, uint8_t coopLobby, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+	uint16_t levelNumber, const char *levelName, uint8_t coopLobby, const uint8_t hostId[kNetIdentityIdBytes])
 {
-	if (!code || !NetRelay_CodeIsGood(code) || !fingerprint || !region || !name || !levelName || !CoopLobby_StateIsReal(coopLobby))
+	if (!code || !NetRelay_CodeIsGood(code) || !hostId || !region || !name || !levelName || !CoopLobby_StateIsReal(coopLobby))
 	{
 		LogDroppedMessage("a game on the relays' list wasn't one this game can join");
 		return false;
@@ -2257,8 +2257,8 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.Guid.Data3 = 1;
 	memcpy(entry.Guid.Data4, code, kNetRelayCodeLetters);
 	memcpy(entry.relayCode, code, kNetRelayCodeLetters);
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host's fingerprint, which handshake B checks the host by
-	memcpy(entry.relayFingerprint, fingerprint, sizeof(entry.relayFingerprint));
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host's whole id, which handshake B checks the host by
+	memcpy(entry.relayHostId, hostId, sizeof(entry.relayHostId));
 	memcpy(entry.relayRegion, region, regionLetters);
 	entry.relayRegion[regionLetters] = 0;
 	entry.coopLobby = (char)coopLobby;
@@ -2318,7 +2318,7 @@ bool Net_AddRelaySession(const RelayListGame &game)
 	}
 
 	return AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
-		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.fingerprint);
+		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.hostId);
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
@@ -4427,7 +4427,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): handshake B with the host the list named, before ENet
 		// sends a byte. A failure ends the join: nothing is ever sent through the relay unsealed. Only with the v2 draft (networking.h):
 		// without it, the join is version 1's.
-		relayEndToEndJoinFailed = Net_V2DraftOn() ? RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayFingerprint) : NULL;
+		relayEndToEndJoinFailed = Net_V2DraftOn() ? RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayHostId) : NULL;
 
 		if (relayEndToEndJoinFailed)
 		{

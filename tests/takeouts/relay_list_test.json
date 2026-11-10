@@ -1305,57 +1305,57 @@
 			]
 		},
 		{
-			"name": "a game's fingerprint isn't one of its fields, so every game with one is refused",
+			"name": "a game's host id isn't one of its fields, so every game with one is refused",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"fingerprint\", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }",
+					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"id\", kKindHostId, 0, 0, 0, NULL, NULL, game.hostId }",
 					"to": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }"
 				}
 			]
 		},
 		{
-			"name": "a fingerprint is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
+			"name": "a host id is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
+					"from": "(why == kRelayListAccepted && !NetIdentity_IdFromHex(hex, rule.bytes))",
 					"to": "false"
 				}
 			]
 		},
 		{
-			"name": "a bad fingerprint is called a bad text",
+			"name": "a bad host id is called a bad text",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "return kRelayListBadFingerprint;",
+					"from": "return kRelayListBadHostId;",
 					"to": "return kRelayListBadText;"
 				}
 			]
 		},
 		{
-			"name": "a listing whose fingerprint is all 0 is sent",
+			"name": "a listing whose host id is all 0 is sent",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (fingerprint[i] != 0)",
-					"to": "if (fingerprint[i] == fingerprint[i])"
+					"from": "if (hostId[i] != 0)",
+					"to": "if (hostId[i] == hostId[i])"
 				}
 			]
 		},
 		{
-			"name": "the body leaves the host's fingerprint out",
+			"name": "the body leaves the host's id out",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tAddName(w, \"fingerprint\");\n\t\tAddFingerprint(w, l.fingerprint);\n",
+					"from": "\t\tAddName(w, \"id\");\n\t\tAddHostId(w, l.hostId);\n",
 					"to": ""
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a fingerprint given to the host counts even when it's all 0",
+			"name": "SOURCE: a host id given to the list counts even when it's all 0",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
@@ -1375,31 +1375,31 @@
 			]
 		},
 		{
-			"name": "SOURCE: a listing doesn't keep the fingerprint its room opened with",
+			"name": "SOURCE: a listing doesn't keep the host id its room opened with",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tmemcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));\n",
+					"from": "\tmemcpy(l.hostId, hostIdentity, sizeof(l.hostId));\n",
 					"to": ""
 				}
 			]
 		},
 		{
-			"name": "SOURCE: what the session says later changes a listing's fingerprint, which the list refuses on a PUT",
+			"name": "SOURCE: what the session says later changes a listing's host id, which the list refuses on a PUT",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\tl.version = static_cast<int>(session.version);\n",
-					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.fingerprint, 0, sizeof(l.fingerprint));\n"
+					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.hostId, 0, sizeof(l.hostId));\n"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a POST or PUT doesn't send the listing's fingerprint",
+			"name": "SOURCE: a POST or PUT doesn't send the listing's host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tout.fingerprint = l.fingerprint;\n",
+					"from": "\t\tout.hostId = l.hostId;\n",
 					"to": ""
 				}
 			]
@@ -1675,42 +1675,42 @@
 			]
 		},
 		{
-			"name": "without the draft, a game must still carry a fingerprint",
+			"name": "without the draft, a game must still carry a host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": " - (g.fingerprints ? 0 : 1);",
+					"from": " - (g.hostIds ? 0 : 1);",
 					"to": ";"
 				}
 			]
 		},
 		{
-			"name": "without the draft, a game keeps whatever was in its fingerprint",
+			"name": "without the draft, a game keeps whatever was in its host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\tmemset(game.fingerprint, 0, sizeof(game.fingerprint));\n",
+					"from": "\t\t\tmemset(game.hostId, 0, sizeof(game.hostId));\n",
 					"to": ""
 				}
 			]
 		},
 		{
-			"name": "a listing without the draft carries the fingerprint",
+			"name": "a listing without the draft carries the host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\tif (withFingerprint)\n\t{\n\t\tAddName(w, \"fingerprint\");",
-					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"fingerprint\");"
+					"from": "\tif (withHostId)\n\t{\n\t\tAddName(w, \"id\");",
+					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"id\");"
 				}
 			]
 		},
 		{
-			"name": "a listing without the draft needs a fingerprint",
+			"name": "a listing without the draft needs a host id",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "(withFingerprint && !IsAFingerprint(l.fingerprint))",
-					"to": "!IsAFingerprint(l.fingerprint)"
+					"from": "(withHostId && !IsAHostId(l.hostId))",
+					"to": "!IsAHostId(l.hostId)"
 				}
 			]
 		},
@@ -1735,7 +1735,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: the list reads and writes fingerprints without the draft",
+			"name": "SOURCE: the list reads and writes hosts' ids without the draft",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
@@ -1861,6 +1861,56 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");",
 					"to": "\t\tif (true)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");"
+				}
+			]
+		},
+		{
+			"name": "an access answer's fingerprint is taken without the joining code's rule (the one reader of a fingerprint left, since item 6)",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "an access answer's bad fingerprint is called a bad text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return kRelayListBadFingerprint;",
+					"to": "return kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "a game's host id is read as the 16-byte fingerprint of before item 6, so every game's 96 digits are too long",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "why = ReadString(r, hex, kNetIdentityIdHexBytes - 1, &length);",
+					"to": "why = ReadString(r, hex, kNetIdentityFingerprintHexBytes - 1, &length);"
+				}
+			]
+		},
+		{
+			"name": "the body names the host's id \"fingerprint\", as before item 6, which the list refuses",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tAddName(w, \"id\");\n",
+					"to": "\t\tAddName(w, \"fingerprint\");\n"
+				}
+			]
+		},
+		{
+			"name": "the games are read into 48 KB again, under the largest list with ids (51,511 bytes)",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.h",
+					"from": "\tkRelayListMostGamesBytes = 57344,",
+					"to": "\tkRelayListMostGamesBytes = 49152,"
 				}
 			]
 		}

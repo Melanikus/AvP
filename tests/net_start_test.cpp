@@ -135,13 +135,13 @@ void RelayList_HostRoomClosed(void)
 	roomsUnlisted++;
 }
 
-// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): the fingerprint a host hands the list for its listing, which
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): the whole id a host hands the list for its listing, which
 // only a v2 draft's host does (TestTheV2Draft)
 static int identitiesListed = 0;
 
-void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+void RelayList_HostIdentity(const uint8_t hostId[kNetIdentityIdBytes])
 {
-	identitiesListed += fingerprint ? 1 : 0;
+	identitiesListed += hostId ? 1 : 0;
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the list's side of a relay's keys, and handshake A's
@@ -960,7 +960,7 @@ static bool AllZeroBytes(const uint8_t *bytes, size_t size)
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay, as far as handshake B goes. A joiner runs
 // B over its port on the relay before ENet connects, so a join through the relay needs a host that answers: this is the real host's side
-// of B (net_peer_v2.h), with an identity of its own, whose fingerprint the test's games on the list carry. Whatever the game sends to that
+// of B (net_peer_v2.h), with an identity of its own, whose whole id the test's games on the list carry. Whatever the game sends to that
 // port as a handshake datagram it reads, and its answers arrive from that port, as through a real relay.
 static NetIdentity scriptedHostIdentity;
 static NetPeerHostSide scriptedHostSide;
@@ -1344,8 +1344,8 @@ static RelayListGame AGameOnTheList(const char *code)
 	game.players = 1;
 	game.maxPlayers = 4;
 	game.version = Net_OurVersion();
-	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay's fingerprint, as a listing carries it
-	memcpy(game.fingerprint, scriptedHostIdentity.fingerprint, sizeof(game.fingerprint));
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay's whole id, as a listing carries it
+	memcpy(game.hostId, scriptedHostIdentity.id, sizeof(game.hostId));
 	return game;
 }
 
@@ -4620,10 +4620,10 @@ static void TestTheV2Draft()
 	// When it's on, and what the log says
 	Check(Net_V2DraftOn() && Net_OurVersion() == kNetV2DraftVersion, "with -dev, -netv2 and a build that knows its commit, the draft is on, at version 115");
 
-	// On: a host through the relay hands the list its identity's fingerprint, for its listing
+	// On: a host through the relay hands the list its identity's whole id, for its listing
 	relayNamed = true;
 	int const identitiesBeforeOn = identitiesListed;
-	Check(HostAGame() == NET_OK && identitiesListed == identitiesBeforeOn + 1, "with the draft on, a game hosted through the relay hands the list its fingerprint");
+	Check(HostAGame() == NET_OK && identitiesListed == identitiesBeforeOn + 1, "with the draft on, a game hosted through the relay hands the list its id");
 	EndTheGame();
 	relayNamed = false;
 	RestartTheNetworkForTheDraft();
@@ -4700,7 +4700,7 @@ static void TestTheV2Draft()
 	size_t const sentBeforeHosting = datagramsSentBytes.size();
 	int const identitiesBeforeOff = identitiesListed;
 	Check(HostAGame() == NET_OK && theHost.sendHook == NULL, "with the draft off, a game hosted through the relay sends ENet's datagrams itself, unsealed, as version 1 does");
-	Check(identitiesListed == identitiesBeforeOff, "and hands the list no fingerprint: version 1's listing has none");
+	Check(identitiesListed == identitiesBeforeOff, "and hands the list no id: version 1's listing has none");
 	HostThroughTheRelayUntilItsRoomIsOpen();
 	uint8_t game[48];
 	memset(game, 0x47, sizeof(game));
