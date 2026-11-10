@@ -29,14 +29,40 @@ Written 2026-11-09 by Melanikus, at the owner's word: "20 years from now, we won
 
 The game trusts a server only through what it carries itself. Nobody's word over the network counts, and no company's signature does either.
 
-- **servers.cfg [BETA.2, issue #175]:** one line a server, every field required:
-  - the server's address;
-  - the **list's pin:** the SHA-256 of its certificate's public key (SPKI);
-  - the **relay's id:** 96 hex digits, the SHA-384 of the relay's two static public keys (CRYPTO.md section 12.1).
-  A release ships the lines of the servers it vouches for, and a player may add a line for any other server. **A public server's address may be in a shipped file. A person's home address never is.**
-- **The pin alone** (the owner's ruling, 2026-11-09): with a pin, the game ignores the certificate's dates, name and issuer, and checks only that its key is the pinned one. **Why:** a date can only end a server, never save one. In 20 years nobody may be there to make a new certificate, and a date would stop every copy of the game reaching the server on that day, for good, with the key still safe. A key that's stolen or changed is answered by a new servers.cfg line, and for a server a release ships, a new release.
-- **The relay's keys** come from the list (`GET /v1/relay-keys`), and the game uses that relay only if they hash to the line's relay id.
-- **Your own server:** run one as the server repository's TAKING-OVER.md says. It ends with your servers.cfg line. Ship it in your release, or give it to your players.
+- **servers.cfg [BETA.2, issue #175]: the game's whole list of servers, in one file beside `bin\`** (the owner's ruling, 2026-11-10:
+  one file, so that years from now anyone can replace our servers with theirs in one place). One short line a server, its fields
+  separated by spaces or tabs:
+
+      address  fingerprint  name
+
+  - **address:** one plain IPv4 address, never a name. The list is at port 443 and the relay's control port at 27500, unless the line
+    says `address:listport:relayport`.
+  - **fingerprint:** 64 lowercase hex digits, the SHA-256 of the text `AVPx servers.cfg line 1`, one zero byte, the list certificate's
+    public key (its SubjectPublicKeyInfo, as DER) and the relay's 48-byte id (CRYPTO.md section 12.1). One number covers both of the
+    server's keys. The `line 1` is the format's version: a later format would be `line 2`, and a game refuses a format it doesn't know.
+  - **name:** the rest of the line, 1 to 31 plain characters, as the game shows it.
+  - A line starting `#` is a comment. Two lines may not share a name or an address. Example: `203.0.113.7  <64 hex digits>  New York`
+- **How the game checks a line:** it opens TLS to the list at the line's address, takes the public key it was served, asks that same
+  list for the relay's keys (`GET /v1/relay-keys`), works out the relay's id from them, and compares the fingerprint. If anything
+  differs, nothing more goes to that address, and the player is told "this server's keys don't match its line". Before that, only the
+  TLS handshake and that one request have gone out, with no name, key or secret in either.
+- **Every line asks the player once,** the first time it's used: its name, its addresses, its keys shortened, and "This server approves
+  its own players, and will see your name, your key and your address. Use it?". A changed line asks again. No line counts as ours
+  because of where it came from: the game reads every line by the same rules, whoever wrote the file.
+- **The key alone** (the owner's ruling, 2026-11-09): the game checks only that the certificate's public key is the one in the line's
+  fingerprint, and ignores its dates, name and issuer. **Why:** a date can only end a server, never save one. In 20 years nobody may be
+  there to make a new certificate, and a date would stop every copy of the game reaching the server on that day, for good, with the key
+  still safe. A key that's stolen or changed is answered by a new line in servers.cfg, and for a server a release ships, a new release.
+- **Your own server:** run one as the server repository's TAKING-OVER.md says. On it, `Smoke --installed --servers-line` prints the
+  server's own line, in this format. Put it in your release's servers.cfg, or give it to your players.
+- **How a player switches to your server:** there's no server discovery, so you tell them: "open servers.cfg in the game folder with
+  Notepad, replace the line (or add yours under it), save". They then ask for access on your server, as section 4 says.
+- **A new release replaces servers.cfg** when it's unzipped over an old copy. Anyone who edited the file keeps a copy of it first, and
+  the release's text says so.
+- **Addresses:** a line may name a server on the same PC or the same home network, and the game says so in plain words before it's
+  used ("this server is on this PC", "this server is on your own network"). 100.64/10 is refused everywhere. The release check refuses
+  a private address in the repository's own servers.cfg, so one is never shipped by mistake. **A person's home address is never in a
+  shipped file.**
 - **For tests only,** `-dev` reads a list address, a pin and a relay id from the settings file instead (docs/online-play.md). A release never takes them from there.
 
 ## 4. Players, and how they're let in
@@ -127,7 +153,7 @@ The design is the server repository's CRYPTO.md, and its TAKING-OVER.md section 
 
 | Ours | Yours |
 |---|---|
-| our servers.cfg lines | keep the ones whose servers still run and whose keys you trust; add your own |
+| our lines in servers.cfg | keep the ones whose servers still run and whose keys you trust; replace the rest with your own servers' lines (section 3) |
 | our signing certificate and attestation identity | your own (section 5) |
 | our GitHub settings, tokens and environments | your own host's, or the rules in section 6 |
 | our names in the code and the docs | leave them: they say who wrote what, and when. The 1999 authors' names stay too |
