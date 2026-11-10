@@ -5079,6 +5079,11 @@ bool Hudson_JoinsThroughFindGames()
 	return HudsonRunIsOn ? plan.findGames : false;
 }
 
+bool Hudson_MenuPictures()
+{
+	return HudsonRunIsOn ? plan.menuPictures : false;
+}
+
 void Hudson_PictureThisFrame(const char *name)
 {
 	if (!HudsonRunIsOn)
