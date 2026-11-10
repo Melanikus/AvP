@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the limit is never reached",
+			"changes": [
+				{
+					"file": "3dc/avp/far_ai_hops.h",
+					"from": "if (!logged || *logged > kFarAiHopsALevel)",
+					"to": "if (!logged)"
+				}
+			]
+		},
+		{
+			"name": "the line saying the rest are not written is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/far_ai_hops.h",
+					"from": "if (*logged == kFarAiHopsALevel)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a module name is not cut short",
+			"changes": [
+				{
+					"file": "3dc/avp/far_ai_hops.h",
+					"from": "(int)kFarAiHopsLongestName, hop.from ? hop.from : \"(no name)\",",
+					"to": "(int)1000, hop.from ? hop.from : \"(no name)\","
+				}
+			]
+		},
+		{
+			"name": "out is left as it was when there is no line",
+			"changes": [
+				{
+					"file": "3dc/avp/far_ai_hops.h",
+					"from": "\tout[0] = 0;",
+					"to": "\t;"
+				}
+			]
+		},
+		{
+			"name": "a far location is said to be the entry point",
+			"changes": [
+				{
+					"file": "3dc/avp/far_ai_hops.h",
+					"from": "hop.entryPoint ? \"onto the entry point\" : \"onto a far location\",",
+					"to": "\"onto the entry point\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shape is looked up by any number",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_far.cpp",
+					"from": "(sbPtr->shapeIndex >= 0 && sbPtr->shapeIndex < maxshapes) ? mainshapelist[sbPtr->shapeIndex] : 0",
+					"to": "mainshapelist[sbPtr->shapeIndex]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a far location is not said to be one",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_far.cpp",
+					"from": "\t\t\tontoEntryPoint = false;",
+					"to": "\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the hop is never written",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_far.cpp",
+					"from": "SayWhereTheFarAIPutIt(sbPtr, targetModule, temp_Pos, ontoEntryPoint, goesIntoView);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level start does not count from 0 again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_far.cpp",
+					"from": "\tfarAiHopsLogged = 0;",
+					"to": "\tfarAiHopsLogged = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: game.cpp never starts the count again",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tFarAiHops_LevelStarts();",
+					"to": "\t;"
+				}
+			]
+		}
+	]
+}

@@ -7,6 +7,8 @@
 //   a level's start asks d3d_hud.cpp how big the HUD is drawn, for every species, in place of the motion tracker's width / 640
 //   (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 //   the lift's change of environment, which could never be asked for, is no longer looked for each frame (#135)
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   a level's start counts the far AI's hops from 0 again, for their lines in the log (#109, far_ai_hops.h)
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -21,6 +23,7 @@
 #include "bh_alien.h"
 #include "pheromone.h"
 #include "pfarlocs.h"
+#include "far_ai_hops.h"
 #include "bh_generator.h"
 #include "pvisible.h"
 #include "lighting.h"
@@ -259,6 +262,7 @@ void StartGame(void)
 	InitObjectVisibilities();
 	InitPheromoneSystem();
 	BuildFarModuleLocs();
+	FarAiHops_LevelStarts();
 	InitHive();
 //	InitSquad();
 

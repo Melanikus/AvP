@@ -1163,6 +1163,9 @@
     <ClInclude Include="..\..\3dc\avp\ai_module_door.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\far_ai_hops.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\pheromone.h">
       <Filter>Header Files</Filter>
     </ClInclude>

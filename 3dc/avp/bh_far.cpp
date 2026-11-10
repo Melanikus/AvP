@@ -1,3 +1,5 @@
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   each far-AI hop says in the log where the NPC was put, and how its shape sits about that point (#109, far_ai_hops.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   only an alien sends the message about moving while far, because that message reads an alien's block
 /*------------------------Patrick 26/11/96-----------------------------
@@ -32,6 +34,8 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "dxlog.h"
+#include "far_ai_hops.h"
+#include "logString.h"
 
 /* prototypes for this file */
 static void Execute_AFS_Hunt(STRATEGYBLOCK *sbPtr);
@@ -753,6 +757,44 @@ void LocateFarNPCInModule(STRATEGYBLOCK *sbPtr, MODULE *targetModule)
 	sbPtr->containingModule = targetModule;
 }
 
+// The far AI's hops, in the log (#109; far_ai_hops.h says why and what). Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static int farAiHopsLogged = 0;
+
+// A level's start: its hops are counted from 0 again
+void FarAiHops_LevelStarts(void)
+{
+	farAiHopsLogged = 0;
+}
+
+// One hop's line: at is where the NPC's position is being put, in the world. Its shape is looked up only if its number is one the shape
+// list has, and the module names are the level's own, which far_ai_hops.h cuts short.
+static void SayWhereTheFarAIPutIt(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule, VECTORCH const &at, bool ontoEntryPoint, bool goesIntoView)
+{
+	extern int maxshapes;
+
+	MODULE *const to = targetModule->m_module_ptrs ? *(targetModule->m_module_ptrs) : 0;
+	SHAPEHEADER *const shape = (sbPtr->shapeIndex >= 0 && sbPtr->shapeIndex < maxshapes) ? mainshapelist[sbPtr->shapeIndex] : 0;
+	FarAiHop hop;
+	char line[320];
+
+	hop.kind = sbPtr->I_SBtype == I_BehaviourAlien ? "alien" : sbPtr->I_SBtype == I_BehaviourMarine ? "marine"
+		: sbPtr->I_SBtype == I_BehaviourPredator ? "predator" : "npc";
+	hop.from = sbPtr->containingModule ? sbPtr->containingModule->name : 0;
+	hop.to = to ? to->name : 0;
+	hop.entryPoint = ontoEntryPoint;
+	hop.inView = goesIntoView;
+	hop.x = at.vx;
+	hop.y = at.vy;
+	hop.z = at.vz;
+	hop.shapeLowestY = shape ? shape->shapeminy : 0;
+	hop.shapeHighestY = shape ? shape->shapemaxy : 0;
+
+	if (FarAiHops_Line(hop, &farAiHopsLogged, line, sizeof(line)))
+	{
+		LogString(line);
+	}
+}
+
 void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 {
 	int noOfAuxLocs;
@@ -805,8 +847,13 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 	if it's not visible, use an auxilary location. If there aren't any auxilary
 	locations, use the entry point. */
 
+	// Which it was, for the hop's line in the log (#109, far_ai_hops.h): the entry point unless a far location is chosen below, and
+	// whether the module it goes to is in view. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+	bool const goesIntoView = AIModuleIsVisible(targetModule) != 0;
+	bool ontoEntryPoint = true;
+
 	//if(ModuleCurrVisArray[(*(targetModule->m_module_ptrs))->m_index])
-	if (AIModuleIsVisible(targetModule)) 
+	if (goesIntoView)
 	{
 		newPosition = targetEntryPoint->position;
 		targetLocInx=-1;
@@ -821,10 +868,11 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 			#endif
 			targetLocInx = FastRandom() % noOfAuxLocs;
 			newPosition = auxLocsList[targetLocInx];
+			ontoEntryPoint = false;
 			/* move up 1/2 npc height, plus a bit more(100). this only applies
 			to auxilary locations, not eps */
 			#if 0
-			npcHeight = (mainshapelist[sbPtr->shapeIndex]->shapemaxy 
+			npcHeight = (mainshapelist[sbPtr->shapeIndex]->shapemaxy
 				- mainshapelist[sbPtr->shapeIndex]->shapeminy)/2;
 			if(npcHeight>1000) npcHeight = 1000;
 			newPosition.vy -=(npcHeight + 100); 
@@ -873,6 +921,9 @@ void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 			#endif
 			return;
 		}
+
+		// The hop is going ahead: its line in the log (#109)
+		SayWhereTheFarAIPutIt(sbPtr, targetModule, temp_Pos, ontoEntryPoint, goesIntoView);
 	}
 
 	/* now set the alien's new position and current module. 
