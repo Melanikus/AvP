@@ -616,72 +616,212 @@
 			]
 		},
 		{
-			"name": "LIFT: the wider call works outside the mode too",
+			"name": "LIFT: the call reaches further than 5 m",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
-					"to": "if (liftRadius <= 0)"
+					"from": "int const kNetLiftCallReach = 5000;",
+					"to": "int const kNetLiftCallReach = 5001;"
 				}
 			]
 		},
 		{
-			"name": "LIFT: the wider call never works",
+			"name": "LIFT: outside the mode, the place is looked at as in the mode",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
-					"to": "if (true)"
+					"from": "if (!sameAsSinglePlayer)\n\t{\n\t\treturn distanceToTheFarEnd < kNetLiftCallReach;\n\t}",
+					"to": ""
 				}
 			]
 		},
 		{
-			"name": "LIFT: a size below nothing is used",
+			"name": "LIFT: in the mode, the game's distance calls the car too",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
-					"to": "if (!sameAsSinglePlayer)"
+					"from": "if (!sameAsSinglePlayer)\n\t{\n\t\treturn distanceToTheFarEnd < kNetLiftCallReach;",
+					"to": "if (!sameAsSinglePlayer || distanceToTheFarEnd < kNetLiftCallReach)\n\t{\n\t\treturn distanceToTheFarEnd < kNetLiftCallReach;"
 				}
 			]
 		},
 		{
-			"name": "LIFT: the 5 m changes",
+			"name": "LIFT: a car with no travel has a far end",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "int const fromTheMiddle = 5000;",
-					"to": "int const fromTheMiddle = 5001;"
+					"from": "if (farEndY == nearEndY)\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
 				}
 			]
 		},
 		{
-			"name": "LIFT: any size is used, so the sum can overflow",
+			"name": "LIFT: which half of the shaft he is on is not asked (#189)",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "liftRadius < widestRealLift ? liftRadius : widestRealLift",
-					"to": "liftRadius"
+					"from": "if (!onTheFarHalf)\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
 				}
 			]
 		},
 		{
-			"name": "LIFT: the limit is off by one",
+			"name": "LIFT: the middle of the shaft counts as the far half",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "liftRadius < widestRealLift ? liftRadius : widestRealLift",
-					"to": "liftRadius < widestRealLift - 1 ? liftRadius : widestRealLift"
+					"from": "bool const onTheFarHalf = farEndIsBelow ? playerY > middleY : playerY < middleY;",
+					"to": "bool const onTheFarHalf = farEndIsBelow ? playerY >= middleY : playerY <= middleY;"
 				}
 			]
 		},
 		{
-			"name": "LIFT: the limit is lower",
+			"name": "LIFT: the halves of the shaft are the wrong way round",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "int const widestRealLift = 100000;",
-					"to": "int const widestRealLift = 99999;"
+					"from": "bool const onTheFarHalf = farEndIsBelow ? playerY > middleY : playerY < middleY;",
+					"to": "bool const onTheFarHalf = farEndIsBelow ? playerY < middleY : playerY > middleY;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the far end's height is not asked",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (belowTheFarEnd >= kNetLiftCallReach || -belowTheFarEnd >= kNetLiftCallReach)\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIFT: the height reaches 1 mm further",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (belowTheFarEnd >= kNetLiftCallReach || -belowTheFarEnd >= kNetLiftCallReach)",
+					"to": "if (belowTheFarEnd > kNetLiftCallReach || -belowTheFarEnd > kNetLiftCallReach)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the flat reach is from the car's middle, not its edge",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "long long const flatReach = kNetLiftCallReach + footprint;",
+					"to": "long long const flatReach = kNetLiftCallReach + 0 * footprint;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: seen from above, the reach is a square, not a circle",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return awayX * awayX + awayZ * awayZ < flatReach * flatReach;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a footprint of any size is used",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "footprintRadius <= 0 ? 0 : footprintRadius < widestFootprint ? footprintRadius : widestFootprint",
+					"to": "footprintRadius <= 0 ? 0 : footprintRadius < widestFootprint ? footprintRadius : footprintRadius"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a footprint below nothing is used",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "footprintRadius <= 0 ? 0 : footprintRadius < widestFootprint",
+					"to": "footprintRadius < widestFootprint"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the biggest footprint is smaller",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "long long const widestFootprint = 141422;",
+					"to": "long long const widestFootprint = 141421;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint takes the nearer side along x",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "long long halfX = leftX > rightX ? leftX : rightX;",
+					"to": "long long halfX = leftX < rightX ? leftX : rightX;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint takes the nearer side along z",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "long long halfZ = leftZ > rightZ ? leftZ : rightZ;",
+					"to": "long long halfZ = leftZ < rightZ ? leftZ : rightZ;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint has no limit along x",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "halfX = halfX < kNetLiftWidestHalf ? halfX : kNetLiftWidestHalf;",
+					"to": "halfX = halfX < kNetLiftWidestHalf ? halfX : halfX;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint has no limit along z",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "halfZ = halfZ < kNetLiftWidestHalf ? halfZ : kNetLiftWidestHalf;",
+					"to": "halfZ = halfZ < kNetLiftWidestHalf ? halfZ : halfZ;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint's limit is lower",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "int const kNetLiftWidestHalf = 100000;",
+					"to": "int const kNetLiftWidestHalf = 99999;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the footprint's corner is rounded one too far",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (middle * middle < squared)",
+					"to": "if (middle * middle <= squared)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a side below the middle counts as itself",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "long long const leftX = minX < 0 ? -(long long)minX : (long long)minX;",
+					"to": "long long const leftX = (long long)minX;"
 				}
 			]
 		},
@@ -902,6 +1042,46 @@
 					"file": "3dc/avp/bh_platform_lift.cpp",
 					"from": "int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), NormalFrameTime);",
 					"to": "int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), RealFrameTime);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's player doesn't call a car he sees from the other half",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "if(ActivatedByPlayer(dynPtr) || HostSeesTheCarFromTheOtherHalf(sbPtr))",
+					"to": "if(ActivatedByPlayer(dynPtr))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's player calls a car he sees outside the mode too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "if (!SameAsSinglePlayer() || !sbPtr->SBdptr ||",
+					"to": "if (!sbPtr->SBdptr ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the car's whole shape calls it again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "NetLiftFootprintRadius(liftShape->shapeminx, liftShape->shapemaxx, liftShape->shapeminz, liftShape->shapemaxz)",
+					"to": "liftShape->shaperadius"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner is never waiting at the far end",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "/* remote player */\n\t\t\t\tLOCALASSERT(sbPtr->DynPtr);\n\t\t\t\tif(WaitingAtTheFarEnd(",
+					"to": "/* remote player */\n\t\t\t\tLOCALASSERT(sbPtr->DynPtr);\n\t\t\t\tif(0 && WaitingAtTheFarEnd("
 				}
 			]
 		}
