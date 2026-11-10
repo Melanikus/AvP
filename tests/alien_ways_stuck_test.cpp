@@ -238,7 +238,7 @@ static void TestTheGameUsesIt()
 		"an alien let go is a line, up to the most a level has, and then one line says so");
 
 	std::string const steer = Between(ways, "bool AlienWays_Steer(", "bool AlienWays_Following(");
-	Check(ComesBefore(steer, "Watched *const w = WatchedFor(ask.who, true);", "if (!theGuide.Steer(map, ask, &towards))") && Has(steer, "\tw->goal = *goal;\n"),
+	Check(ComesBefore(steer, "Watched *const w = WatchedFor(ask.who, true);", "if (theGuide.Steer(map, ask, &towards))") && Has(steer, "\tw->goal = *goal;\n"),
 		"an alien that asks for a way is watched, with the game's own goal for it");
 
 	// The cut stops just before the function's closing "\n}", so its last line has no line end in it: the lines looked for here don't end in one,

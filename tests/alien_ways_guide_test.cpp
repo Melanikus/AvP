@@ -1127,7 +1127,8 @@ static void SourceOfTheGame()
 	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");
 
 	std::string const guidedNow = Between(ways, "bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)", "size_t AlienWays_WaysToShow(");
-	Check(Has(ways, "\tdetails += polygons;\n\tLogString(std::string(text) + details);") && Has(ways, "polygons = \". Polygons:\";"), "SOURCE: a search's line lists the polygons its way is on");
+	Check(Has(ways, "\tdetails += polygons;\n\tLogString(std::string(text) + details);") && Has(ways, "polygons = line.onGrid ? \". Cells:\" : \". Polygons:\";"),
+		"SOURCE: a search's line lists the polygons its way is on, or the grid's cells on a way found on the grid");
 	Check(Has(ways, "\tif (clockMs / 1000 != placesSecond)\n\t{\n\t\tplacesSecond = clockMs / 1000;"), "SOURCE: and once a second a line says where the guided aliens are");
 	Check(Has(guidedNow, "return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));"),
 		"SOURCE: an alien is guided in this frame only with the switch on, on a machine that runs the aliens, with a map, and as the guide says");
