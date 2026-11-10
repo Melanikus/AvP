@@ -1,0 +1,188 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "KEY EXCHANGE: a missing buffer is used",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "return bytes != NULL && length == wanted;",
+					"to": "return length == wanted;"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a key pair is made into buffers of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(publicKey, publicKeyLength, kPqPublicKeyBytes) && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes))",
+					"to": "if (publicKey != NULL && secretKey != NULL)"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a public key of the wrong size goes to the library",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(publicKey, publicKeyLength, kPqPublicKeyBytes) && IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&",
+					"to": "if (publicKey != NULL && IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a ciphertext is encapsulated into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) &&\n\t    IsExactly(sharedSecret",
+					"to": "ciphertext != NULL &&\n\t    IsExactly(sharedSecret"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: an encapsulated secret goes into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(sharedSecret, sharedSecretLength, kPqSharedSecretBytes))\n\t{\n\t\tbool const apart = !Overlap(publicKey",
+					"to": "sharedSecret != NULL)\n\t{\n\t\tbool const apart = !Overlap(publicKey"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: the library refusing a public key is taken as done",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "avpx_mlkem1024_enc(ciphertext, sharedSecret, publicKey) == 0",
+					"to": "avpx_mlkem1024_enc(ciphertext, sharedSecret, publicKey) <= 0"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused encapsulation leaves its ciphertext as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(ciphertext, ciphertextLength, kPqCiphertextBytes);",
+					"to": "Wipe(ciphertext, 0, kPqCiphertextBytes);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused encapsulation leaves its secret as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(ciphertext, ciphertextLength, kPqCiphertextBytes);\n\tWipe(sharedSecret, sharedSecretLength, kPqSharedSecretBytes);",
+					"to": "Wipe(ciphertext, ciphertextLength, kPqCiphertextBytes);\n\tWipe(sharedSecret, 0, kPqSharedSecretBytes);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a ciphertext of the wrong size is decapsulated",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "if (IsExactly(ciphertext, ciphertextLength, kPqCiphertextBytes) && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&",
+					"to": "if (ciphertext != NULL && IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a secret key of the wrong size is used",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(secretKey, secretKeyLength, kPqSecretKeyBytes) &&\n\t    IsExactly(sharedSecret",
+					"to": "secretKey != NULL &&\n\t    IsExactly(sharedSecret"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a decapsulated secret goes into room of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "IsExactly(sharedSecret, sharedSecretLength, kPqSharedSecretBytes))\n\t{\n\t\t// The ciphertext and the secret key are only read",
+					"to": "sharedSecret != NULL)\n\t{\n\t\t// The ciphertext and the secret key are only read"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: the library refusing a secret key is taken as done",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "avpx_mlkem1024_dec(sharedSecret, ciphertext, secretKey) == 0",
+					"to": "avpx_mlkem1024_dec(sharedSecret, ciphertext, secretKey) <= 0"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused decapsulation leaves its secret as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "\t}\n\n\tWipe(sharedSecret, sharedSecretLength, kPqSharedSecretBytes);",
+					"to": "\t}\n\n\tWipe(sharedSecret, 0, kPqSharedSecretBytes);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused key pair leaves its public key as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(publicKey, publicKeyLength, kPqPublicKeyBytes);",
+					"to": "Wipe(publicKey, 0, kPqPublicKeyBytes);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refused key pair leaves its secret key as it was",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "Wipe(secretKey, secretKeyLength, kPqSecretKeyBytes);",
+					"to": "Wipe(secretKey, 0, kPqSecretKeyBytes);"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: buffers that share a byte are taken (Fourth's cold read, finding 3)",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "return aStart < bStart + bLength && bStart < aStart + aLength;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: buffers that only touch are refused",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "return aStart < bStart + bLength && bStart < aStart + aLength;",
+					"to": "return aStart <= bStart + bLength && bStart <= aStart + aLength;"
+				}
+			]
+		},
+		{
+			"name": "KEY EXCHANGE: a refusal's wipe goes past ML-KEM's own size (Fourth's cold read, finding 1)",
+			"changes": [
+				{
+					"file": "3dc/pq_key_exchange.cpp",
+					"from": "size_t const size = length < most ? length : most;",
+					"to": "size_t const size = length;"
+				}
+			]
+		}
+	]
+}

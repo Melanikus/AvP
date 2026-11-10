@@ -1,0 +1,17 @@
+{
+  "about": "The libraries whose known vulnerabilities come from their projects' own GitHub security advisories, because Snyk can't recognise them (#174; the owner's decision, 2026-11-09). tools/check-advisories.ps1 reads this, and says in full what it checks. An advisory is 'read' when a person has opened it on the project's page, compared what it affects and what fixed it with the version below, found that version not affected, and added it to that library's 'read' as {\"id\": the advisory's GHSA id, \"version\": the version it was read for, \"why\": why that version isn't affected, \"readBy\": who, \"readOn\": \"YYYY-MM-DD\"}. An entry for another version doesn't count. An advisory that affects the version is never added: build a fixed release or patch the port instead. A library leaves this file when Snyk recognises it.",
+  "libraries": [
+    {
+      "port": "mlkem-native",
+      "repository": "pq-code-package/mlkem-native",
+      "version": "2.0.0",
+      "read": []
+    },
+    {
+      "port": "mldsa-native",
+      "repository": "pq-code-package/mldsa-native",
+      "version": "2.0.0",
+      "read": []
+    }
+  ]
+}
