@@ -16,6 +16,10 @@
 // #ifdef USE_D3DVIEWTRANSFORM, which nothing defines, so the game never compiled it. This test read only the text, found the 3/4, and
 // passed, while the game Bobblen147 played on beta.1 still drew the triangle 4/3 out. The copy is gone now, and this test checks that
 // every line it reads is one the game compiles.
+// And the zoom: the 1999 game zoomed by multiplying every depth in its world by CameraZoomScale (TranslationSetup's view matrix,
+// kshape.cpp), the triangle's too. This port zooms through the projection's field of view instead (UpdateProjectionMatrix), and took the
+// zoom out of the world's depths, but left it on the triangle's: zoomed in, the triangle stood 1/CameraZoomScale times as far out as its
+// target. Its depth has no zoom now, as the world's hasn't.
 //
 // WHAT IT TESTS
 //   - SOURCE: the game's sums are the ones this test works through: the sight's 4/3 (SmartTarget), the aim's 3/4, the triangle's 3/4,
@@ -25,10 +29,13 @@
 //     #define of it, and no project file naming it). Any other #if, an #elif, or a line found twice fails the check, so whoever moves a
 //     line this test reads into one has to come and look. A take-out row puts the triangle's line back under the #ifdef, as the first
 //     fix had it, and another defines USE_D3DVIEWTRANSFORM: both must be noticed.
+//   - THE ZOOM: the zoom is in the projection's field of view (UpdateProjectionMatrix), the world's depths have none (TranslationSetup),
+//     and the triangle's code has none either (its comments aside). A take-out row for each.
 //   - THE SUMS: for targets all over the screen, on 4:3, 16:9 and 21:9 screens and at three fields of view, worked through in the game's
 //     own fixed-point steps (MUL_FIXED and WideMulNarrowDiv, as mathline.cpp has them): the aim points at the target to within a pixel,
 //     and the triangle lands on the target's own place on the screen to within 2 pixels. The same sums without the 3/4 miss, so the
-//     test can tell the two apart.
+//     test can tell the two apart. And zoomed in, at two of the Predator's zoom levels: the triangle still lands on every target, to
+//     within 2 of the sight's own pixels as the zoom magnifies them, where with its depth times the zoom it missed.
 //
 // WHAT IT DOESN'T: the smart gun's box is drawn flat on the screen at the sight's point (hud.cpp), not through the projection; whether
 // that matches the world on a wide screen needs a look in the game, and isn't changed here. Nor does it prove what the game shows: that
@@ -92,6 +99,36 @@ static std::string ReadSourceFile(const char *name)
 static bool Has(const std::string &text, const char *what)
 {
 	return text.find(what) != std::string::npos;
+}
+
+// The text with its comments taken out (// to the end of its line, and /* to */), for a check that a word is NOT in the code: a comment
+// that names the word, such as the one saying why it's gone, mustn't count. It doesn't know string literals, and none of the code this
+// test reads that way has one.
+static std::string CodeOnly(const std::string &text)
+{
+	std::string code;
+	std::string::size_type i = 0;
+
+	while (i < text.size())
+	{
+		if (text.compare(i, 2, "//") == 0)
+		{
+			std::string::size_type const lineEnd = text.find('\n', i);
+			i = lineEnd == std::string::npos ? text.size() : lineEnd;   // the line break itself is kept
+		}
+		else if (text.compare(i, 2, "/*") == 0)
+		{
+			std::string::size_type const commentEnd = text.find("*/", i + 2);
+			i = commentEnd == std::string::npos ? text.size() : commentEnd + 2;
+		}
+		else
+		{
+			code += text[i];
+			i++;
+		}
+	}
+
+	return code;
 }
 
 // ---- Whether a line this test reads is compiled
@@ -322,6 +359,25 @@ static void TheSource()
 	Check(projectionHas,
 		"SOURCE: and the projection the world and the triangle go through is the one worked through here: its height fixed by the field of view, its width by the screen's shape");
 	Check(projectionCompiled, "COMPILED: and the projection's lines are compiled");
+
+	// The zoom: in the projection's field of view, and in no depth, the world's or the triangle's
+	char const *const zoomOfView = "float fovY = D3DXToRadian(d3d.fieldOfView * CameraZoomScale);";
+	Check(Has(projection, zoomOfView) && IsCompiled(render, projection, zoomOfView),
+		"ZOOM: the zoom narrows the projection's field of view, which the world and the triangle both go through (and that line is compiled)");
+	std::string const setup = SourceSlice(kshape, "extern void TranslationSetup(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	char const *const depthParts[] = { "\tViewMatrix[8]  = (float)(Global_VDB_Ptr->VDB_Mat.mat13) / 65536.0f;\n",
+		"\tViewMatrix[9]  = (float)(Global_VDB_Ptr->VDB_Mat.mat23) / 65536.0f;\n", "\tViewMatrix[10] = (float)(Global_VDB_Ptr->VDB_Mat.mat33) / 65536.0f;\n",
+		"\tViewMatrix[11] = ((float)-v.vz);// * CameraZoomScale;\n" };
+	bool depthHas = true;
+
+	for (const char *part : depthParts)
+	{
+		depthHas = depthHas && Has(setup, part) && IsCompiled(kshape, setup, part);
+	}
+
+	Check(depthHas, "ZOOM: the world's depths aren't multiplied by the zoom, as the 1999 game's were (TranslationSetup's view matrix, compiled lines)");
+	Check(!triangle.empty() && !Has(CodeOnly(triangle), "CameraZoomScale"),
+		"ZOOM: and nor is the triangle's depth (its code names CameraZoomScale nowhere, comments aside), so the two stay together when zoomed");
 }
 
 // ---- The sums, worked through
@@ -353,10 +409,11 @@ static void AimOf(const Screen &screen, int sightX, int sightY, bool withTheThre
 	*aimY = withTheThreeQuarters ? (((sightY - (screen.height << 15)) / projY) * 3) / 4 : (sightY - (screen.height << 15)) / projY;
 }
 
-// Where the triangle's middle lands on the screen, in pixels from the middle, drawn as RenderPredatorTargetingSegment draws it with no
-// zoom, through a projection with these two scales
-static void TriangleOnTheScreen(const Screen &screen, int sightX, int sightY, bool withTheThreeQuarters, double xScale, double yScale, double *x,
-	double *y)
+// Where the triangle's middle lands on the screen, in pixels from the middle, drawn as RenderPredatorTargetingSegment draws it, through
+// a projection with these two scales (a zoom is already in them). depthZoom is what its depth is multiplied by: 1 as it is now, or the
+// zoom, as the port drew it before (z = (float)z*CameraZoomScale, the float cut back to a whole number as the game's int z is).
+static void TriangleOnTheScreen(const Screen &screen, int sightX, int sightY, bool withTheThreeQuarters, double xScale, double yScale,
+	float depthZoom, double *x, double *y)
 {
 	int const projX = screen.width / 2;
 	int const projY = screen.height / 2;
@@ -366,8 +423,9 @@ static void TriangleOnTheScreen(const Screen &screen, int sightX, int sightY, bo
 	int const centredY = sightY - (screen.height << 15);
 	int const centreY = withTheThreeQuarters ? MulFixed(((centredY / projY) * 3) / 4, z) : MulFixed(centredY / projY, z);
 	int const centreX = MulFixed(centredX / projX, z);
-	*x = static_cast<double>(centreX) * xScale / z * (screen.width / 2.0);
-	*y = static_cast<double>(centreY) * yScale / z * (screen.height / 2.0);
+	int const depth = static_cast<int>(static_cast<float>(z) * depthZoom);
+	*x = static_cast<double>(centreX) * xScale / depth * (screen.width / 2.0);
+	*y = static_cast<double>(centreY) * yScale / depth * (screen.height / 2.0);
 }
 
 static void TheSums()
@@ -436,11 +494,11 @@ static void TheSums()
 						double const targetY = static_cast<double>(vy) / vz * yScale * (screen.height / 2.0);
 						double x = 0.0;
 						double y = 0.0;
-						TriangleOnTheScreen(screen, sightX, sightY, true, xScale, yScale, &x, &y);
+						TriangleOnTheScreen(screen, sightX, sightY, true, xScale, yScale, 1.0f, &x, &y);
 						double const triangleOff = fmax(fabs(x - targetX), fabs(y - targetY));
 						worstTriangle = fmax(worstTriangle, triangleOff);
 						triangleMisses += triangleOff > 2.0 ? 1 : 0;
-						TriangleOnTheScreen(screen, sightX, sightY, false, xScale, yScale, &x, &y);
+						TriangleOnTheScreen(screen, sightX, sightY, false, xScale, yScale, 1.0f, &x, &y);
 						oldTriangleMisses += fmax(fabs(x - targetX), fabs(y - targetY)) > 2.0 ? 1 : 0;
 					}
 				}
@@ -459,11 +517,72 @@ static void TheSums()
 	Check(oldAimMisses > targets / 2 && oldTriangleMisses > targets / 2, line);
 }
 
+// Zoomed in. The zoom narrows the projection's field of view for the world and the triangle alike, and SmartTarget still works the sight
+// out with no zoom, so one of the sight's pixels covers several of the screen's: as many as the zoom magnifies the world. The triangle is
+// held to 2 of the sight's pixels, magnified so.
+static void TheZoomedSums()
+{
+	printf("The triangle, zoomed in\n");
+	Screen const screen = { 1280, 720, "1280x720" };
+	double const pi = 3.14159265358979323846;
+	float const zooms[] = { 0.4f, 0.1f };   // two of the Predator's zoom levels (ZoomLevels, hud.cpp)
+	int const fov = 75;                     // the Predator's own
+	int targets = 0;
+	int misses = 0;
+	int oldMisses = 0;
+	double worst = 0.0;
+
+	for (float zoom : zooms)
+	{
+		double const unzoomedYScale = 1.0 / tan(fov * pi / 360.0);
+		double const yScale = 1.0 / tan(fov * zoom * pi / 360.0);   // UpdateProjectionMatrix: the field of view times the zoom
+		double const xScale = yScale / (static_cast<double>(screen.width) / screen.height);
+		double const magnified = yScale / unzoomedYScale;
+
+		for (int vz = 3000; vz <= 30000; vz += 9000)
+		{
+			for (int across = -6; across <= 6; across += 3)
+			{
+				for (int up = -6; up <= 6; up += 2)
+				{
+					double const wantX = across / 15.0;
+					double const wantY = up / 15.0;
+					int const vx = static_cast<int>(wantX / xScale * vz);
+					int const vy = static_cast<int>(wantY / yScale * vz);
+					int sightX = 0;
+					int sightY = 0;
+					SightOf(screen, vx, vy, vz, &sightX, &sightY);
+					targets++;
+					double const targetX = static_cast<double>(vx) / vz * xScale * (screen.width / 2.0);
+					double const targetY = static_cast<double>(vy) / vz * yScale * (screen.height / 2.0);
+					double x = 0.0;
+					double y = 0.0;
+					TriangleOnTheScreen(screen, sightX, sightY, true, xScale, yScale, 1.0f, &x, &y);
+					double const off = fmax(fabs(x - targetX), fabs(y - targetY)) / magnified;
+					worst = fmax(worst, off);
+					misses += off > 2.0 ? 1 : 0;
+					TriangleOnTheScreen(screen, sightX, sightY, true, xScale, yScale, zoom, &x, &y);
+					oldMisses += fmax(fabs(x - targetX), fabs(y - targetY)) / magnified > 2.0 ? 1 : 0;
+				}
+			}
+		}
+	}
+
+	char line[200];
+	snprintf(line, sizeof(line), "%d targets at zoom 0.4 and 0.1, 1280x720, field of view 75, were worked through", targets);
+	Check(targets > 100, line);
+	snprintf(line, sizeof(line), "zoomed in, the triangle lands on every one, to within 2 of the sight's pixels (the worst: %.2f)", worst);
+	Check(misses == 0, line);
+	snprintf(line, sizeof(line), "with its depth times the zoom, as before, it misses %d of them: the sums can tell the two apart", oldMisses);
+	Check(oldMisses > targets / 2, line);
+}
+
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);   // every line out at once, so a test that stops still shows how far it got
 	TheSource();
 	TheSums();
+	TheZoomedSums();
 
 	if (checksFailed > 0)
 	{

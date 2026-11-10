@@ -4510,7 +4510,11 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 		centreX = MUL_FIXED((SmartTargetSightX-(ScreenDescriptorBlock.SDB_Width<<15)) / Global_VDB_Ptr->VDB_ProjX, z);
 	}
 
-	z = (float)z*CameraZoomScale;
+	// Modified 2026-11-10 by Melanikus for the AvP port (#179): the triangle's depth isn't multiplied by the zoom. The 1999 game zoomed by
+	// multiplying every depth in its world by CameraZoomScale (TranslationSetup's view matrix), and this triangle's with them, so the two
+	// stayed together. This game zooms through the projection's field of view instead (UpdateProjectionMatrix, d3d_render.cpp), for the
+	// world and for this triangle alike, and TranslationSetup no longer multiplies the world's depths. Multiplying this one alone put the
+	// triangle 1/CameraZoomScale times as far out as its target, and drew it that much bigger, whenever the Predator zoomed in.
 
 	{
 		int a = 160;

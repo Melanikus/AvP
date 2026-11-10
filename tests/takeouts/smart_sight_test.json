@@ -89,6 +89,36 @@
 					"to": "<PreprocessorDefinitions>USE_D3DVIEWTRANSFORM;USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;"
 				}
 			]
+		},
+		{
+			"name": "ZOOM: the triangle's depth is multiplied by the zoom again (the line beta.1 was built with)",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\n\t{\n\t\tint a = 160;\n",
+					"to": "\n\tz = (float)z*CameraZoomScale;\n\n\t{\n\t\tint a = 160;\n"
+				}
+			]
+		},
+		{
+			"name": "ZOOM: the world's depths are multiplied by the zoom again, as the 1999 game's were",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tViewMatrix[11] = ((float)-v.vz);// * CameraZoomScale;\n",
+					"to": "\tViewMatrix[11] = ((float)-v.vz) * CameraZoomScale;\n"
+				}
+			]
+		},
+		{
+			"name": "ZOOM: the projection's field of view stops following the zoom",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "float fovY = D3DXToRadian(d3d.fieldOfView * CameraZoomScale);",
+					"to": "float fovY = D3DXToRadian(d3d.fieldOfView);"
+				}
+			]
 		}
 	]
 }
