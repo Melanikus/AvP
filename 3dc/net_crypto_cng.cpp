@@ -416,37 +416,6 @@ void NetCrypto_EcdhFree(NetEcdhKey *key)
 	delete key;
 }
 
-bool NetCrypto_EcdsaVerify(const uint8_t publicKey[kNetCryptoP384PublicBytes], const uint8_t hash[kNetCryptoHashBytes], const uint8_t signature[kNetCryptoEcdsaBytes])
-{
-	if (!hash || !signature)
-	{
-		return false;
-	}
-
-	EccPublicBlob blob;
-	BCRYPT_ALG_HANDLE algorithm = NULL;
-	BCRYPT_KEY_HANDLE key = NULL;
-	bool ok = ToBlob(publicKey, BCRYPT_ECDSA_PUBLIC_P384_MAGIC, &blob);
-	ok = ok && NT_SUCCESS(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_ECDSA_P384_ALGORITHM, NULL, 0));
-	ok = ok && NT_SUCCESS(BCryptImportKeyPair(algorithm, NULL, BCRYPT_ECCPUBLIC_BLOB, &key, reinterpret_cast<PUCHAR>(&blob), sizeof(blob), 0));
-
-	// Only STATUS_SUCCESS (0) is a good signature: any other answer, a refusal or an error, is not
-	ok = ok && BCryptVerifySignature(key, NULL, const_cast<PUCHAR>(hash), static_cast<ULONG>(kNetCryptoHashBytes), const_cast<PUCHAR>(signature),
-		static_cast<ULONG>(kNetCryptoEcdsaBytes), 0) == 0;
-
-	if (key)
-	{
-		BCryptDestroyKey(key);
-	}
-
-	if (algorithm)
-	{
-		BCryptCloseAlgorithmProvider(algorithm, 0);
-	}
-
-	return ok;
-}
-
 bool NetCrypto_AesGcmSeal(const uint8_t key[kNetCryptoAesKeyBytes], const uint8_t nonce[kNetCryptoNonceBytes], const uint8_t *aad, size_t aadSize,
 	const uint8_t *text, size_t size, uint8_t *out, uint8_t tag[kNetCryptoTagBytes])
 {

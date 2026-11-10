@@ -220,8 +220,43 @@ namespace
 		kKindCode,
 		kKindHost,
 		kKindNumber,   // a whole number from least to most
-		kKindFingerprint   // a host's fingerprint: 32 hex digits, small letters, kept as its 16 bytes
+		kKindFingerprint,  // a host's fingerprint: 32 hex digits, small letters, kept as its 16 bytes
+		kKindHexBytes      // exactly mostLetters hex digits, small letters, kept as half as many bytes (a relay's keys; added 2026-11-09)
 	};
+
+	// The longest hex a field can be: an ML-KEM-1024 public key's 1,568 bytes (added 2026-11-09 by Melanikus for the AvP port)
+	size_t const kMostHexLetters = 2 * kNetPqKemPublicBytes;
+
+	// Whether text is exactly letters hex digits in small letters. Only then is it written into bytes, half as many, so a text that's
+	// refused leaves bytes as it was (added 2026-11-09 by Melanikus for the AvP port)
+	bool HexInto(const char *text, size_t letters, uint8_t *bytes)
+	{
+		if (letters % 2 != 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < letters; i++)
+		{
+			char const c = text[i];
+
+			if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+			{
+				return false;
+			}
+		}
+
+		for (size_t i = 0; i < letters; i += 2)
+		{
+			char const high = text[i];
+			char const low = text[i + 1];
+			int const h = high <= '9' ? high - '0' : high - 'a' + 10;
+			int const l = low <= '9' ? low - '0' : low - 'a' + 10;
+			bytes[i / 2] = static_cast<uint8_t>((h << 4) | l);
+		}
+
+		return true;
+	}
 
 	// One field an entry has to have: its name, its kind, its limits, and where what it holds goes
 	struct FieldRule
@@ -276,6 +311,27 @@ namespace
 				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes)))
 				{
 					return kRelayListBadFingerprint;
+				}
+
+				return why;
+			}
+
+			case kKindHexBytes:
+			{
+				// Added 2026-11-09 by Melanikus for the AvP port: exactly mostLetters hex digits, small letters, as the server writes them. A
+				// text one letter longer than that is read as too long, and anything not exactly right is refused, with nothing of it kept.
+				char hex[kMostHexLetters + 1];
+
+				if (rule.mostLetters > kMostHexLetters)
+				{
+					return kRelayListBadText;
+				}
+
+				why = ReadString(r, hex, rule.mostLetters, &length);
+
+				if (why == kRelayListAccepted && (length != rule.mostLetters || !HexInto(hex, length, rule.bytes)))
+				{
+					return kRelayListBadText;
 				}
 
 				return why;
@@ -964,6 +1020,67 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 	if (why == kRelayListAccepted)
 	{
 		memcpy(owner, read, sizeof(read));
+	}
+
+	return why;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): see relay_list_text.h
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes])
+{
+	memset(p384, 0, kNetCryptoP384PublicBytes);
+	memset(kem, 0, kNetPqKemPublicBytes);
+
+	if (!region || !RelayList_IsRegion(region))
+	{
+		return kRelayListBadRegion;
+	}
+
+	if (bytes > kRelayKeysMostAnswerBytes)
+	{
+		return kRelayListTooBig;
+	}
+
+	if (!body)
+	{
+		return kRelayListEndsTooSoon;
+	}
+
+	if (bytes > 0 && memchr(body, 0, bytes) != NULL)
+	{
+		return kRelayListHasAZero;
+	}
+
+	// The whole answer is one entry with exactly these three fields, in any order, and nothing after it
+	char answered[kRelayListRegionLetters + 1] = {};
+	uint8_t readP384[kNetCryptoP384PublicBytes];
+	uint8_t readKem[kNetPqKemPublicBytes];
+	FieldRule const rules[] =
+	{
+		{ "region", kKindRegion, 0, 0, 0, answered, NULL },
+		{ "p384", kKindHexBytes, 2 * kNetCryptoP384PublicBytes, 0, 0, NULL, NULL, readP384 },
+		{ "mlkem", kKindHexBytes, 2 * kNetPqKemPublicBytes, 0, 0, NULL, NULL, readKem }
+	};
+
+	Reader r = { body, body + bytes };
+	RelayListRefusal why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+
+	if (why == kRelayListAccepted && Next(r) != 0)
+	{
+		why = kRelayListMoreAfterTheEnd;
+	}
+
+	// Keys about another region than the one asked about are no use, and are never taken for this one's
+	if (why == kRelayListAccepted && strcmp(answered, region) != 0)
+	{
+		why = kRelayListBadRegion;
+	}
+
+	if (why == kRelayListAccepted)
+	{
+		memcpy(p384, readP384, sizeof(readP384));
+		memcpy(kem, readKem, sizeof(readKem));
 	}
 
 	return why;

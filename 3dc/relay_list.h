@@ -113,4 +113,26 @@ bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char 
 // It compares the why with this file's own words, never what anybody sent; NULL and "no relay server is set" are neither, so false.
 bool RelayList_WhyIsNoConnection(const char *why);
 
+// ---- A relay's keys, for protocol version 2's draft (step 7). Added 2026-11-09 by Melanikus for the AvP port.
+//
+// Handshake A proves a relay to the game only with the relay's real static public keys. Until there's a signed directory of them, the
+// game asks the list server for them (GET /v1/relay-keys, CRYPTO.md 12.1) and networking.cpp holds them to a fingerprint the tester types
+// into the -dev settings (RelayKey=<region>:<96 hex digits>, net_relay_keys.h) before anything goes to that relay. Only the v2 draft asks,
+// and only with a list server set, which only -dev can do: a player's game never asks.
+
+// Asks the list for a region's relay's keys. The answer comes a moment later, through RelayList_RelayKeysCame. False if the region isn't
+// one or the list can't start (no server is set).
+bool RelayList_AskForRelayKeys(const char *region);
+
+// What came for the newest asking: waiting, the keys (into p384 and kem), or refused, with why in fixed words of the game's own. p384 and
+// kem are all 0 unless the keys came.
+int const kRelayKeysWaiting = 0;
+int const kRelayKeysCame = 1;
+int const kRelayKeysRefused = 2;
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why);
+
+// The settings' RelayKey fingerprint for a region (all 48 bytes): false, with fingerprint all 0, without -dev, with no setting or one that
+// isn't one, or for another region than the one the setting names.
+bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes]);
+
 #endif

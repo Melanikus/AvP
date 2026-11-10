@@ -179,6 +179,17 @@ RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListR
 // Reads a POST's answer, {"owner"}: the 16 bytes a host proves its listing with afterwards
 RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes]);
 
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, the answer to
+// GET /v1/relay-keys?region=<region> (CRYPTO.md 12.1): {"region", "p384", "mlkem"}, the P-384 key's 97 bytes and the ML-KEM-1024 key's
+// 1,568, each as exactly twice as many hex digits in small letters. Read as hostile, as every answer is.
+// - Only the relay asked about is taken: an answer about another region is refused.
+// - On a refusal, p384 and kem are left all 0, and nothing of the answer is kept.
+// - Only the keys' form is checked here. Whether they're the relay's real keys is checked after, against the fingerprint the -dev settings
+//   give (net_relay_keys.h); until then, nothing is sent to that relay.
+size_t const kRelayKeysMostAnswerBytes = 8192;   // the answer is about 3,370 bytes
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes]);
+
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
 // With withFingerprint (a v2 draft's listing, Net_V2DraftOn), a listing with no fingerprint, or one that's all 0 (no identity was made for

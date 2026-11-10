@@ -643,6 +643,7 @@ public:
 		keepMs = -1;
 		memset(hellos, 0, sizeof(hellos));
 		sendCount = 0;
+		memset(sends, 0, sizeof(sends));   // the messages still here hold the token and the cookie (added 2026-11-09 by Melanikus for the AvP port)
 		sendsDropped = 0;
 		memset(notMessages, 0, sizeof(notMessages));
 		memset(unused, 0, sizeof(unused));
@@ -1078,6 +1079,7 @@ public:
 		failedWhy = kNetRelayFine;
 		startedAt = askedAt = portAt = helloAt = 0;
 		sendCount = 0;
+		memset(sends, 0, sizeof(sends));   // the messages still here hold the ticket and the cookie (added 2026-11-09 by Melanikus for the AvP port)
 		sendsDropped = 0;
 		memset(notMessages, 0, sizeof(notMessages));
 		memset(unused, 0, sizeof(unused));

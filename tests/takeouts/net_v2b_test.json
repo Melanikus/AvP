@@ -195,12 +195,12 @@
 			]
 		},
 		{
-			"name": "the joiner seals with the host's key",
+			"name": "the joiner seals with the host's secret",
 			"changes": [
 				{
 					"file": "3dc/net_sealed_game.h",
-					"from": "NetV2_DirectionStart(&sending, joiner ? split.initiatorToResponderKey : split.responderToInitiatorKey,",
-					"to": "NetV2_DirectionStart(&sending, joiner ? split.responderToInitiatorKey : split.initiatorToResponderKey,"
+					"from": "NetV2_DirectionStart(&sending, joiner ? split.initiatorToResponderSecret : split.responderToInitiatorSecret,",
+					"to": "NetV2_DirectionStart(&sending, joiner ? split.responderToInitiatorSecret : split.initiatorToResponderSecret,"
 				}
 			]
 		},

@@ -4,11 +4,12 @@
 // WHAT THIS IS. Version 2 (CRYPTO.md, in the AVPx-Dedicated-Server repository) seals everything the game says to the relay, and later
 // everything a joiner and a host say to each other. It uses one fixed suite, with no choices (CRYPTO.md section 2): a classical half,
 // here, and a post-quantum half (net_pq.h). Every key that seals anything depends on both halves, so a session holds unless both are
-// broken. This file is the classical half:
+// broken. This file is the classical half (ECDSA's signature check isn't here: nothing in the game checks a signature until the signed
+// relays directory, CRYPTO.md section 12, and it comes back with that and its caller. Removed 2026-11-09 by Melanikus for the AvP port,
+// by Tao 2's "dead code goes"; git keeps it, with its test):
 //   - SHA-384 and HMAC-SHA-384, for the transcript and the keys;
 //   - HKDF-SHA-384 (RFC 5869), written below over HMAC;
 //   - ECDH on the P-384 curve, the classical key agreement;
-//   - ECDSA P-384 signature checks (the game checks signatures and never makes one: CRYPTO.md section 4);
 //   - AES-256-GCM, which seals a message and proves it wasn't changed;
 //   - random bytes, from the operating system.
 //
@@ -36,7 +37,6 @@ size_t const kNetCryptoNonceBytes = 12;         // AES-GCM's nonce
 size_t const kNetCryptoTagBytes = 16;           // AES-GCM's tag, the proof a sealed message wasn't changed
 size_t const kNetCryptoP384PublicBytes = 97;    // a P-384 public key as it goes on the wire: 0x04, then X and Y, 48 bytes each, big-endian
 size_t const kNetCryptoP384ScalarBytes = 48;    // a P-384 private key, or a shared secret (the agreed point's X, big-endian)
-size_t const kNetCryptoEcdsaBytes = 96;         // an ECDSA P-384 signature: r then s, 48 bytes each, big-endian (IEEE P1363)
 size_t const kNetCryptoMostHkdfBytes = 255 * 48;// the most HKDF-SHA-384 can give (RFC 5869 section 2.3)
 
 // Wipes bytes so the compiler can't leave the wiping out: SecureZeroMemory, in net_crypto_cng.cpp
@@ -81,10 +81,6 @@ bool NetCrypto_EcdhAgree(NetEcdhKey *mine, const uint8_t theirs[kNetCryptoP384Pu
 
 // Destroys the key, inside CNG, and wipes what held it. NULL is allowed.
 void NetCrypto_EcdhFree(NetEcdhKey *key);
-
-// Whether signature is publicKey's ECDSA P-384 signature of hash, the SHA-384 of what was signed. CRYPTO.md section 12 says what's signed:
-// the game passes SHA-384(D) here.
-bool NetCrypto_EcdsaVerify(const uint8_t publicKey[kNetCryptoP384PublicBytes], const uint8_t hash[kNetCryptoHashBytes], const uint8_t signature[kNetCryptoEcdsaBytes]);
 
 // AES-256-GCM. Seal: size bytes of text into out (also size bytes), and the tag. Open: the same backwards, and true only if the tag
 // proves that the bytes, the aad and the nonce are exactly as sealed. On false, out is wiped. text and out may be the same bytes.

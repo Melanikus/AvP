@@ -315,3 +315,8 @@ void AccessPage_DrawQuestion(void)
 	RECT area = { 60, 56, 580, 170 };
 	RenderSmallFontString_Wrapped(GetTextString(TEXTSTRING_ACCESS_NEWID_EXPLAIN), &area, ONE_FIXED, &x, &y);
 }
+
+bool AccessPage_CallOnItsWay(void)
+{
+	return onItsWay;
+}

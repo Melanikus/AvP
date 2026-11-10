@@ -34,6 +34,7 @@
 #include "networking.h"
 #include "coop_lobby.h"
 #include "relay_list.h"
+#include "net_relay_keys.h"
 
 #include <ws2tcpip.h>
 #include <winhttp.h>
@@ -250,6 +251,16 @@ namespace
 		bool developer;                  // -dev: a relay on this machine or this network may be used, for a test
 		int version;                     // the version this copy speaks (Net_OurVersion), whose games it lists and asks for
 		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a fingerprint
+
+		// A relay's keys, asked for by the v2 draft (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
+		// has a number, and an answer says which asking it's for, so an answer to an older one is never taken for the newest.
+		bool keysWanted;
+		char keysRegion[kRelayListRegionLetters + 1];
+		int keysAsked;                   // how many askings there have been
+		int keysAnswered;                // which asking the answer below is for: 0 while none has come
+		const char *keysWhy;             // NULL: the keys came, whole; or fixed words saying why not
+		uint8_t keysP384[kNetCryptoP384PublicBytes];
+		uint8_t keysKem[kNetPqKemPublicBytes];
 
 		// -dev's test server (relay_list.h), set before the thread starts, and never changed: the pin, and the list's own address, when
 		// the settings gave one instead of a name (network byte order, as RelayListRelay.address keeps it)
@@ -777,6 +788,41 @@ namespace
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, from GET
+	// /v1/relay-keys?region= (CRYPTO.md 12.1), read as hostile (relay_list_text.h). They're only their form here: networking.cpp holds
+	// them to the -dev RelayKey fingerprint before anything goes to that relay. The region is the list's own kind of name, small letters,
+	// digits and - (RelayList_IsRegion, checked when it was asked for), so it goes into the path as it is.
+	char keysAnswer[kRelayKeysMostAnswerBytes];
+
+	void ReadTheRelayKeys(const char *region, int asking)
+	{
+		wchar_t path[64];
+		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/relay-keys?region=%hs", region);
+
+		Answer const a = Call(L"GET", path, NULL, keysAnswer, sizeof(keysAnswer));
+		const char *why = a.why;
+		uint8_t p384[kNetCryptoP384PublicBytes] = {};
+		uint8_t kem[kNetPqKemPublicBytes] = {};
+
+		if (a.worked && a.status != 200)
+		{
+			why = kSaidNo;
+		}
+		else if (a.worked)
+		{
+			RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);
+			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+		}
+
+		EnterCriticalSection(&shared->lock);
+		shared->keysAnswered = asking;
+		shared->keysWhy = why;
+		memcpy(shared->keysP384, p384, sizeof(p384));
+		memcpy(shared->keysKem, kem, sizeof(kem));
+		LeaveCriticalSection(&shared->lock);
+		Tell(why ? why : "a relay's keys came, to be held to the fingerprint the settings give");
+	}
+
 	// Looks a relay's name up, as ENet does: IPv4 only. The first address the name service gives, in network byte order, as ENetAddress.host
 	// keeps it. False if the name gives none.
 	bool LookUp(const char *name, uint32_t *address)
@@ -930,6 +976,12 @@ namespace
 			bool const find = shared->findWanted;
 			shared->findWanted = false;
 
+			// A relay's keys, for the v2 draft (added 2026-11-09 by Melanikus for the AvP port)
+			bool const keys = shared->keysWanted;
+			shared->keysWanted = false;
+			char keysRegion[kRelayListRegionLetters + 1];
+			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
+			int const keysAsking = shared->keysAsked;
 			bool const access = shared->accessWanted;
 			shared->accessWanted = false;
 			char accessBody[kRelayAccessMostBodyBytes + 1];
@@ -987,6 +1039,11 @@ namespace
 			if (find)
 			{
 				ReadTheGames();
+			}
+
+			if (keys)
+			{
+				ReadTheRelayKeys(keysRegion, keysAsking);
 			}
 
 			if (access)
@@ -1462,6 +1519,95 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
 
 	LeaveCriticalSection(&shared->lock);
 	return ready;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): see relay_list.h
+bool RelayList_AskForRelayKeys(const char *region)
+{
+	if (!region || !RelayList_IsRegion(region) || !Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->keysWanted = true;
+	memcpy(shared->keysRegion, region, strlen(region) + 1);
+	shared->keysAsked++;
+	LeaveCriticalSection(&shared->lock);
+
+	Wake();
+	return true;
+}
+
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
+{
+	memset(p384, 0, kNetCryptoP384PublicBytes);
+	memset(kem, 0, kNetPqKemPublicBytes);
+	*why = NULL;
+
+	if (!shared)
+	{
+		*why = "no relay server is set";
+		return kRelayKeysRefused;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	int came = kRelayKeysWaiting;
+
+	// Only the answer to the newest asking counts: one to an older asking is still waiting, as far as this one goes
+	if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)
+	{
+		came = shared->keysWhy ? kRelayKeysRefused : kRelayKeysCame;
+		*why = shared->keysWhy;
+
+		if (came == kRelayKeysCame)
+		{
+			memcpy(p384, shared->keysP384, kNetCryptoP384PublicBytes);
+			memcpy(kem, shared->keysKem, kNetPqKemPublicBytes);
+		}
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return came;
+}
+
+// The settings' RelayKey is read once, and only with -dev: a player's game never has a relay's fingerprint, so it uses no relay of
+// version 2. A setting that isn't a region, a colon and 96 hex digits is no setting, and the log says so once.
+// ONCE A RUN, ON PURPOSE (Secondary's finding 6.1; added 2026-11-09 by Melanikus for the AvP port): it's what the relay's keys are checked
+// against, so it stays the same for the whole run, and a setting edited while the game runs can't change it halfway through a game. A
+// tester who changes it starts the game again, and the steps for testers say so.
+bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes])
+{
+	static bool read = false;
+	static bool given = false;
+	static char keyRegion[kRelayListRegionLetters + 1];
+	static uint8_t keyFingerprint[kNetCryptoHashBytes];
+
+	if (!read)
+	{
+		read = true;
+
+		if (DevMode)
+		{
+			std::string const setting = Config_GetString("[Network]", "RelayKey", "");
+			given = NetRelayKeys_ReadSetting(setting.c_str(), keyRegion, keyFingerprint);
+
+			if (!setting.empty() && !given)
+			{
+				LogString("Relay list: the settings' RelayKey isn't a region, a colon and 96 hex digits, so no relay's keys can be checked");
+			}
+		}
+	}
+
+	memset(fingerprint, 0, kNetCryptoHashBytes);
+
+	if (!given || !region || strcmp(region, keyRegion) != 0)
+	{
+		return false;
+	}
+
+	memcpy(fingerprint, keyFingerprint, kNetCryptoHashBytes);
+	return true;
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: see relay_list.h (the page of games found's failure screen)

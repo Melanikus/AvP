@@ -1,7 +1,8 @@
 // Protocol version 2's handshake datagrams: every handshake message cut into, and put back together from, datagrams of exactly 1,200
 // bytes. Written 2026-11-09 by Melanikus for the AvP port.
 //
-// WHY. A handshake message is 1.6 to 3.4 KB, more than one datagram should carry. So each one travels as "fragments", and every
+// WHY. A handshake message is 1.6 to 4.9 KB (A1, with pqIK's sealed static keys, is the biggest: 4,930 bytes in 5 datagrams), more than
+// one datagram should carry. So each one travels as "fragments", and every
 // handshake datagram, either way, is exactly 1,200 bytes: the smallest size the internet carries whole (QUIC uses it too). Nothing is
 // ever cut in two on the way, and nobody can be sent more than they sent. CRYPTO.md section 5 (in the AVPx-Dedicated-Server repository)
 // says it, and its section 5.1 point 10 says how strictly a fragment is read. The relay's Java (java/src/avpx/v2/Fragments.java) reads
@@ -12,7 +13,7 @@
 //   byte  4        the version, 2
 //   byte  5        the kind (below)
 //   byte  6        this fragment's number, from 0
-//   byte  7        how many fragments the message has, 1 to 4
+//   byte  7        how many fragments the message has, 1 to 5
 //   bytes 8-15     the handshake's id: 8 random bytes the side that starts it chose
 //   bytes 16-31    the relay's cookie, or 16 zero bytes where there's none
 //   bytes 32-33    the whole message's length, little-endian
@@ -21,7 +22,7 @@
 //
 // READ ONLY ONE WAY (point 10), so that no two readers can ever disagree about what a datagram says:
 //   - every fragment but the last carries exactly 1,164 bytes of the message, and fragment k starts at k x 1,164;
-//   - the count is the length divided by 1,164, rounded up (1 for a message of no bytes), from 1 to 4;
+//   - the count is the length divided by 1,164, rounded up (1 for a message of no bytes), from 1 to 5;
 //   - every fragment of one message says the same kind, id, count and length;
 //   - every byte after a fragment's part is 0.
 // Anything else isn't a fragment at all: refusal 6. Everything that comes in is hostile (AvP Tao 3): nothing is read from a datagram
@@ -43,8 +44,9 @@
 size_t const kNetV2DatagramBytes = 1200;                                     // every handshake datagram, exactly
 size_t const kNetV2HeaderBytes = 36;
 size_t const kNetV2PartBytes = kNetV2DatagramBytes - kNetV2HeaderBytes;      // 1,164: the most of the message one datagram carries
-size_t const kNetV2MostFragments = 4;
-size_t const kNetV2MostMessageBytes = kNetV2MostFragments * kNetV2PartBytes;  // 4,656
+// 5 since pqIK (CRYPTO.md section 6's kMostFragments; modified 2026-11-09 by Melanikus for the AvP port): A1 is 4,930 bytes
+size_t const kNetV2MostFragments = 5;
+size_t const kNetV2MostMessageBytes = kNetV2MostFragments * kNetV2PartBytes;  // 5,820 (kMostHandshakeBytes)
 size_t const kNetV2IdBytes = 8;
 size_t const kNetV2CookieBytes = 16;
 size_t const kNetV2CookieAnswerBytes = 64;                                   // A0', the relay's answer to a COOKIE_ASK

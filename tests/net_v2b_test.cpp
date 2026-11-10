@@ -540,21 +540,22 @@ static void TestTheGamesHandshake(Run *run)
 	BCheck(host.ReadB5(run->b5, sizeof(run->b5), &run->hostKeys) && host.Done(),
 		"the host reads it: the joiner's key confirmation, and nJ is what B1 promised");
 
+	// Modified 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3, the relay's file at 2b8dcd6): a 48-byte secret each way
 	NetNoiseSplit expected;
-	Bytes const k1 = BHex("split", "keyJoinerToHost"), k2 = BHex("split", "keyHostToJoiner");
+	Bytes const s1 = BHex("split", "secretJoinerToHost"), s2 = BHex("split", "secretHostToJoiner");
 	Bytes const iv1 = BHex("split", "ivJoinerToHost"), iv2 = BHex("split", "ivHostToJoiner");
-	bool const sized = k1.size() == 32 && k2.size() == 32 && iv1.size() == 12 && iv2.size() == 12;
+	bool const sized = s1.size() == kNetNoiseSecretBytes && s2.size() == kNetNoiseSecretBytes && iv1.size() == 12 && iv2.size() == 12;
 
 	if (sized)
 	{
-		memcpy(expected.initiatorToResponderKey, k1.data(), 32);
-		memcpy(expected.responderToInitiatorKey, k2.data(), 32);
+		memcpy(expected.initiatorToResponderSecret, s1.data(), kNetNoiseSecretBytes);
+		memcpy(expected.responderToInitiatorSecret, s2.data(), kNetNoiseSecretBytes);
 		memcpy(expected.initiatorToResponderIv, iv1.data(), 12);
 		memcpy(expected.responderToInitiatorIv, iv2.data(), 12);
 	}
 
 	BCheck(sized && SameSplit(expected, run->joinerKeys.split) && SameSplit(expected, run->hostKeys.split),
-		"both sides have the file's keys and IVs, joiner-to-host as Split's \"initiator to responder\"");
+		"both sides have the file's secrets (48 bytes each) and IVs, joiner-to-host as Split's \"initiator to responder\"");
 	BCheck(Equal(BHex("transcript"), run->joinerKeys.transcript, kNetCryptoHashBytes) && Equal(BHex("transcript"), run->hostKeys.transcript, kNetCryptoHashBytes),
 		"both have the file's transcript, h after B5");
 	BCheck(memcmp(run->joinerKeys.theirFingerprint, hostId.fingerprint, kNetIdentityFingerprintBytes) == 0
@@ -1060,10 +1061,10 @@ static void TestFresh()
 
 // ---- 7. Sealed game datagrams
 
-// A datagram sealed by hand from section 9's table, with the direction's Split key and IV: 'AVPG', the counter little-endian, the
-// text sealed with the 12 bytes in front as the associated data, then the tag. The epoch's key and the nonce come straight from
-// net_noise.h's NetNoise_EpochKey and NetNoise_Nonce, not from the class under test.
-static Bytes SealByHand(const uint8_t key[kNetCryptoAesKeyBytes], const uint8_t iv[kNetCryptoNonceBytes], uint64_t counter, const Bytes &text)
+// A datagram sealed by hand from section 9's table, with the direction's Split secret and IV: 'AVPG', the counter little-endian, the
+// text sealed with the 12 bytes in front as the associated data, then the tag. The epoch's key (from the secret, epoch 0's too) and the
+// nonce come straight from net_noise.h's NetNoise_EpochKey and NetNoise_Nonce, not from the class under test.
+static Bytes SealByHand(const uint8_t secret[kNetNoiseSecretBytes], const uint8_t iv[kNetCryptoNonceBytes], uint64_t counter, const Bytes &text)
 {
 	Bytes out(kNetSealedGameOverheadBytes + text.size(), 0);
 	memcpy(out.data(), "AVPG", 4);
@@ -1075,7 +1076,7 @@ static Bytes SealByHand(const uint8_t key[kNetCryptoAesKeyBytes], const uint8_t 
 
 	uint8_t epochKey[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
 	static const uint8_t kNothing[1] = { 0 };
-	bool const sealed = NetNoise_EpochKey(key, static_cast<uint32_t>(counter >> 20), epochKey) && (NetNoise_Nonce(iv, counter, nonce), true)
+	bool const sealed = NetNoise_EpochKey(secret, static_cast<uint32_t>(counter >> 20), epochKey) && (NetNoise_Nonce(iv, counter, nonce), true)
 		&& NetCrypto_AesGcmSeal(epochKey, nonce, out.data(), 12, text.empty() ? kNothing : text.data(), text.size(), out.data() + 12,
 			out.data() + 12 + text.size());
 	return sealed ? out : Bytes();
@@ -1147,8 +1148,8 @@ static void TestSealedGame(const Run &run)
 			size_t written = 0;
 			uint64_t const counter = from.Sent();
 			bool const made = from.Seal(text.empty() ? NULL : text.data(), text.size(), sealed.data(), sealed.size(), &written, now) && written == sealed.size();
-			Bytes const byHand = way == 0 ? SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, counter, text)
-				: SealByHand(split.responderToInitiatorKey, split.responderToInitiatorIv, counter, text);
+			Bytes const byHand = way == 0 ? SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, counter, text)
+				: SealByHand(split.responderToInitiatorSecret, split.responderToInitiatorIv, counter, text);
 			same = same && made && sealed == byHand;
 			Bytes back;
 			openedAll = openedAll && Opens(&to, sealed, &back, now) && back == text;
@@ -1195,24 +1196,45 @@ static void TestSealedGame(const Run &run)
 		Bytes back;
 		Bytes const text = Pattern(64, 3);
 		uint64_t const last0 = (static_cast<uint64_t>(1) << 20) - 1;
-		Bytes const inEpoch0 = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, last0, text);
-		Bytes const inEpoch1 = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, last0 + 1, text);
-		BCheck(Opens(&fresh, inEpoch0, &back, now) && back == text, "the last datagram of epoch 0 (counter 2^20 - 1) opens with Split's key");
+		Bytes const inEpoch0 = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, last0, text);
+		Bytes const inEpoch1 = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, last0 + 1, text);
+		BCheck(Opens(&fresh, inEpoch0, &back, now) && back == text, "the last datagram of epoch 0 (counter 2^20 - 1) opens with epoch 0's key");
 		BCheck(Opens(&fresh, inEpoch1, &back, now) && back == text, "the first of epoch 1 (counter 2^20) opens with epoch 1's key");
 
-		// The same counter sealed with epoch 0's key doesn't: the key really changed
+		// The same counter sealed with epoch 0's key doesn't: the key really changed. Modified 2026-11-09 by Melanikus for the AvP port:
+		// epoch 0's key is made from the secret (CRYPTO.md 5.1 point 3), so it's made here too
 		Bytes wrongKey = inEpoch1;
-		uint8_t nonce[kNetCryptoNonceBytes];
+		uint8_t nonce[kNetCryptoNonceBytes], epoch0Key[kNetCryptoAesKeyBytes];
 		NetNoise_Nonce(split.initiatorToResponderIv, last0 + 2, nonce);
 		wrongKey[4] = static_cast<uint8_t>((last0 + 2) & 0xFF);
 		wrongKey[5] = static_cast<uint8_t>(((last0 + 2) >> 8) & 0xFF);
 		wrongKey[6] = static_cast<uint8_t>(((last0 + 2) >> 16) & 0xFF);
-		BCheck(NetCrypto_AesGcmSeal(split.initiatorToResponderKey, nonce, wrongKey.data(), 12, text.data(), text.size(), wrongKey.data() + 12,
+		BCheck(NetNoise_EpochKey(split.initiatorToResponderSecret, 0, epoch0Key)
+			&& NetCrypto_AesGcmSeal(epoch0Key, nonce, wrongKey.data(), 12, text.data(), text.size(), wrongKey.data() + 12,
 			wrongKey.data() + 12 + text.size()) && !Opens(&fresh, wrongKey, &back, now) && fresh.Why() == kNetSealedGameBadTag,
 			"counter 2^20 + 1 sealed with epoch 0's key fails its tag (8)");
+		NetCrypto_Wipe(epoch0Key, sizeof(epoch0Key));
 
-		Bytes const past = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, static_cast<uint64_t>(1) << 32, text);
+		Bytes const past = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, static_cast<uint64_t>(1) << 32, text);
 		BCheck(!Opens(&fresh, past, &back, now) && fresh.Why() == kNetSealedGamePastTheEnd, "counter 2^32 is past a session's end, and refused");
+	}
+
+	// Added 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3): nothing seals with the secret itself. A datagram sealed with
+	// the secret's own first 32 bytes, as epoch 0 was before, fails its tag; and it doesn't use its counter up, so the honest one opens.
+	{
+		NetSealedGame fresh;
+		fresh.Start(split, false, now);
+		Bytes back;
+		Bytes const text = Pattern(16, 9);
+		Bytes asBefore(kNetSealedGameOverheadBytes + text.size(), 0);
+		memcpy(asBefore.data(), "AVPG", 4);
+		uint8_t nonce[kNetCryptoNonceBytes];
+		NetNoise_Nonce(split.initiatorToResponderIv, 0, nonce);
+		BCheck(NetCrypto_AesGcmSeal(split.initiatorToResponderSecret, nonce, asBefore.data(), 12, text.data(), text.size(), asBefore.data() + 12,
+			asBefore.data() + 12 + text.size()) && !Opens(&fresh, asBefore, &back, now) && fresh.Why() == kNetSealedGameBadTag,
+			"a datagram sealed with the secret itself, as epoch 0 was before, fails its tag (8): the secret never seals");
+		BCheck(Opens(&fresh, SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, 0, text), &back, now) && back == text,
+			"and the honest counter 0, sealed with epoch 0's own key, still opens");
 	}
 
 	// The replay window: the highest taken, and the 1,023 below it, never more
@@ -1221,7 +1243,7 @@ static void TestSealedGame(const Run &run)
 		fresh.Start(split, false, now);
 		Bytes back;
 		Bytes const text = Pattern(8, 5);
-		const uint8_t *const key = split.initiatorToResponderKey;
+		const uint8_t *const key = split.initiatorToResponderSecret;
 		const uint8_t *const iv = split.initiatorToResponderIv;
 		BCheck(Opens(&fresh, SealByHand(key, iv, 5000, text), &back, now), "counter 5,000 is taken first: datagrams may come in any order");
 		BCheck(Opens(&fresh, SealByHand(key, iv, 5000 - 1023, text), &back, now), "then 3,977, the oldest still in the window");
@@ -1241,7 +1263,7 @@ static void TestSealedGame(const Run &run)
 	// One bit changed in every byte of a sealed datagram
 	{
 		Bytes const text = Pattern(100, 7);
-		Bytes const good = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 77, text);
+		Bytes const good = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, 77, text);
 		size_t wrong = 0;
 
 		for (size_t i = 0; i < good.size(); i++)
@@ -1271,7 +1293,7 @@ static void TestSealedGame(const Run &run)
 	{
 		NetSealedGame fresh;
 		fresh.Start(split, false, now);
-		Bytes forged = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 1, Pattern(4, 1));
+		Bytes forged = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, 1, Pattern(4, 1));
 		forged[forged.size() - 1] ^= 0x01;
 		Bytes back;
 		bool allBad = true;
@@ -1284,7 +1306,7 @@ static void TestSealedGame(const Run &run)
 		BCheck(allBad && fresh.Live() && fresh.BadTags() == kNetSealedGameMostBadTags - 1, "65,535 forgeries are refused (8), and the session goes on");
 		BCheck(!Opens(&fresh, forged, &back, now) && !fresh.Live() && fresh.Ended() == kNetSealedGameTooManyBad,
 			"the 65,536th ends it: too many bad packets (16)");
-		Bytes const honest = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 2, Pattern(4, 1));
+		Bytes const honest = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, 2, Pattern(4, 1));
 		BCheck(!Opens(&fresh, honest, &back, now) && fresh.Why() == kNetSealedGameNotLive, "and then even an honest datagram is refused: no session");
 		Bytes room(4 + kNetSealedGameOverheadBytes);
 		size_t written = 0;
@@ -1312,7 +1334,7 @@ static void TestSealedGame(const Run &run)
 	{
 		NetSealedGame never;
 		Bytes back;
-		Bytes const good = SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, 0, Pattern(4, 1));
+		Bytes const good = SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, 0, Pattern(4, 1));
 		BCheck(!Opens(&never, good, &back, now) && never.Why() == kNetSealedGameNotLive, "a side never started opens nothing");
 		NetSealedGame ended;
 		ended.Start(split, false, now);
@@ -1398,8 +1420,8 @@ static void TestTheRelaysSealedGame(const Run &run)
 		BCheck(from && (fromJoiner || from->text == "host") && epoch && epoch->kind == kJsonNumber && epoch->number == (n >> 20),
 			which + ": its side is named, and its epoch is the counter's (2^20 to an epoch)");
 
-		Bytes const byHand = fromJoiner ? SealByHand(split.initiatorToResponderKey, split.initiatorToResponderIv, n, message)
-			: SealByHand(split.responderToInitiatorKey, split.responderToInitiatorIv, n, message);
+		Bytes const byHand = fromJoiner ? SealByHand(split.initiatorToResponderSecret, split.initiatorToResponderIv, n, message)
+			: SealByHand(split.responderToInitiatorSecret, split.responderToInitiatorIv, n, message);
 		BCheck(!byHand.empty() && byHand == sealed, which + ": the relay's bytes are exactly what section 9 seals by hand");
 
 		Bytes text;

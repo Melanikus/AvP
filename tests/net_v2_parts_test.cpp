@@ -84,7 +84,7 @@ static void TheDatagrams(const JsonValue &all)
 		size_t count;
 	};
 
-	Message const messages[3] = { { "a1", kNetV2KindA1, cookie.data(), 3 }, { "a2", kNetV2KindA2, kNoCookie, 2 }, { "a3", kNetV2KindA3, cookie.data(), 1 } };
+	Message const messages[3] = { { "a1", kNetV2KindA1, cookie.data(), 5 }, { "a2", kNetV2KindA2, kNoCookie, 3 }, { "a3", kNetV2KindA3, cookie.data(), 1 } };
 
 	for (const Message &m : messages)
 	{
@@ -274,7 +274,7 @@ static void TheFragmentRules()
 
 	Change const changes[] = {
 		{ 0, 'X', "another magic" }, { 4, 3, "version 3" }, { 4, 1, "version 1" }, { 6, 3, "fragment 3 of 3" }, { 6, 4, "fragment 4 of 3" },
-		{ 7, 0, "a count of 0" }, { 7, 5, "a count of 5" }, { 7, 2, "a count of 2 for 3,249 bytes" }, { 7, 4, "a count of 4 for 3,249 bytes" },
+		{ 7, 0, "a count of 0" }, { 7, 5, "a count of 5" }, { 7, 6, "a count of 6, past the most" }, { 7, 2, "a count of 2 for 3,249 bytes" }, { 7, 4, "a count of 4 for 3,249 bytes" },
 		{ 32, 0x31, "a length past the most (0x1231, 4,657)" }, { 33, 0xFF, "a length of 65,000 or so" }, { 34, 0x00, "fragment 2 starting at 0" },
 		{ 35, 0x00, "fragment 2 starting at 0x48 (72)" },
 	};
@@ -299,11 +299,11 @@ static void TheFragmentRules()
 	uint8_t out[kNetV2DatagramBytes];
 	std::vector<uint8_t> tooLong(kNetV2MostMessageBytes + 1, 0x11);
 	PartsCheck(!NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), tooLong.size(), 0, out) && AllZero(out, sizeof(out)),
-		"a message of 4,657 bytes isn't cut, and nothing is left in the datagram");
+		"a message of 5,821 bytes isn't cut, and nothing is left in the datagram");
 	PartsCheck(!NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, message.data(), message.size(), 3, out),
 		"nor fragment 3 of a message that has 3");
-	PartsCheck(NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), kNetV2MostMessageBytes, 3, out),
-		"4,656 bytes, the most, is 4 fragments");
+	PartsCheck(NetV2_CutFragment(kNetV2MagicRelay, kNetV2KindA1, kId, kCookie, tooLong.data(), kNetV2MostMessageBytes, 4, out),
+		"5,820 bytes, the most, is 5 fragments (pqIK's A1 needs 5)");
 
 	// Putting together: a fragment that doesn't belong changes nothing
 	uint8_t d0[kNetV2DatagramBytes], d1[kNetV2DatagramBytes], other[kNetV2DatagramBytes];
@@ -376,15 +376,17 @@ static void TheDirection(const JsonValue &all)
 {
 	const JsonValue *const nonces = all.Member("nonces");
 	const JsonValue *const epochs = all.Member("epochKeys");
-	PartsCheck(nonces && nonces->kind == kJsonList && nonces->items.size() == 6 && epochs && epochs->kind == kJsonList && epochs->items.size() == 3,
-		"the file's 6 nonces and 3 epoch keys are there");
+	// Modified 2026-11-09 by Melanikus for the AvP port (CRYPTO.md 5.1 point 3, the relay's file at 2b8dcd6): each epoch's key comes from a
+	// 48-byte secret, and epoch 0 is in the file too, since it's made like the others
+	PartsCheck(nonces && nonces->kind == kJsonList && nonces->items.size() == 6 && epochs && epochs->kind == kJsonList && epochs->items.size() == 4,
+		"the file's 6 nonces and 4 epoch keys (0, 1, 2 and 4095) are there");
 
 	if (!nonces || !epochs || nonces->kind != kJsonList || epochs->kind != kJsonList)
 	{
 		return;
 	}
 
-	static const uint8_t kKey[kNetCryptoAesKeyBytes] = { 0x42 };
+	static const uint8_t kSecret[kNetNoiseSecretBytes] = { 0x42 };
 	int nonceRight = 0;
 
 	for (const JsonValue &n : nonces->items)
@@ -396,7 +398,7 @@ static void TheDirection(const JsonValue &all)
 
 		if (iv.size() == kNetCryptoNonceBytes && counter && counter->kind == kJsonNumber)
 		{
-			NetV2_DirectionStart(&d, kKey, iv.data());
+			NetV2_DirectionStart(&d, kSecret, iv.data());
 			nonceRight += NetV2_DirectionFor(&d, counter->number, key, nonce) && Same(want, nonce, sizeof(nonce)) ? 1 : 0;
 			NetV2_DirectionWipe(&d);
 		}
@@ -408,32 +410,35 @@ static void TheDirection(const JsonValue &all)
 
 	for (const JsonValue &e : epochs->items)
 	{
-		Bytes const splitKey = HexOf(&e, "key"), want = HexOf(&e, "epochKey");
+		Bytes const secret = HexOf(&e, "secret"), want = HexOf(&e, "epochKey");
 		const JsonValue *const epoch = e.Member("epoch");
 		static const uint8_t kIv[kNetCryptoNonceBytes] = {};
 		NetV2Direction d;
 		uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
 
-		if (splitKey.size() == kNetCryptoAesKeyBytes && epoch && epoch->kind == kJsonNumber)
+		if (secret.size() == kNetNoiseSecretBytes && epoch && epoch->kind == kJsonNumber)
 		{
-			NetV2_DirectionStart(&d, splitKey.data(), kIv);
+			NetV2_DirectionStart(&d, secret.data(), kIv);
 			uint64_t const first = epoch->number << kNetV2EpochShift;
 			uint8_t lastKey[kNetCryptoAesKeyBytes];
+			// Epoch 0 has no epoch before it, so its "another just before" is the next epoch's first key instead
+			uint64_t const other = first == 0 ? first + (1u << kNetV2EpochShift) : first - 1;
 			bool const right = NetV2_DirectionFor(&d, first, key, nonce) && Same(want, key, sizeof(key)) &&
 				NetV2_DirectionFor(&d, first + (1u << kNetV2EpochShift) - 1, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) == 0 &&
-				NetV2_DirectionFor(&d, first - 1, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) != 0;
+				NetV2_DirectionFor(&d, other, lastKey, nonce) && memcmp(key, lastKey, sizeof(key)) != 0;
 			epochRight += right ? 1 : 0;
 			NetV2_DirectionWipe(&d);
 		}
 	}
 
-	PartsCheck(epochRight == 3, std::to_string(epochRight) + " of 3 epoch keys are the relay's, the same key all through its epoch, another just before it");
+	PartsCheck(epochRight == 4, std::to_string(epochRight) + " of 4 epoch keys are the relay's, the same key all through its epoch, another next to it");
 
 	NetV2Direction d;
 	uint8_t key[kNetCryptoAesKeyBytes], nonce[kNetCryptoNonceBytes];
 	static const uint8_t kIv[kNetCryptoNonceBytes] = {};
-	NetV2_DirectionStart(&d, kKey, kIv);
-	PartsCheck(NetV2_DirectionFor(&d, 0, key, nonce) && memcmp(key, kKey, sizeof(key)) == 0, "epoch 0's key is Split's key itself");
+	NetV2_DirectionStart(&d, kSecret, kIv);
+	PartsCheck(NetV2_DirectionFor(&d, 0, key, nonce) && memcmp(key, kSecret, sizeof(key)) != 0,
+		"epoch 0's key is made from the secret, and isn't the secret's own bytes: nothing seals with the secret itself");
 
 	memset(key, 0x5A, sizeof(key));
 	memset(nonce, 0x5A, sizeof(nonce));

@@ -267,6 +267,57 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siege=a siegefrom=a siegefrom=a", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siegefrom=a", kHudsonRefusedSiegeFromWithoutSiege);
 
+	// access= and answer= (the presses a player makes, for the local rehearsal of beta.2's flow, 2026-11-09)
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5", &plan) == 0 && plan.accessPress == kHudsonAccessNone &&
+			plan.answerPress == kHudsonAnswerNone, "a run presses nothing on the menus unless it asks");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=request", &plan) == 0 && plan.accessPress == kHudsonAccessRequest &&
+			plan.accessWaitSeconds == kHudsonDefaultAccessWaitSeconds, "access=request presses Request access");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=check accesswait=90", &plan) == 0 && plan.accessPress == kHudsonAccessCheck &&
+			plan.accessWaitSeconds == 90, "access=check presses Check again, accesswait= seconds later");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=newid", &plan) == 0 && plan.accessPress == kHudsonAccessNewId,
+			"access=newid makes a new identity");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0 &&
+			plan.answerPress == kHudsonAnswerLetIn && plan.answerAfterSeconds == kHudsonDefaultAnswerAfterSeconds, "answer=letin: the host presses Let in");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host answer=no answerafter=10", &plan) == 0 &&
+			plan.answerPress == kHudsonAnswerSayNo && plan.answerAfterSeconds == 10, "answer=no presses Say no, answerafter= seconds after the rows come");
+	}
+	Refused("-hudson level=invasion frames=5 access=yes", kHudsonRefusedAccessWord);
+	Refused("-hudson level=invasion frames=5 access=request access=check", kHudsonRefusedAskedTwice);
+	// An access run stays at the menus: it never starts a network game
+	Refused("-hudson level=invasion frames=5 machine=shared net=host access=request", kHudsonRefusedAccessWithNet);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join access=check", kHudsonRefusedAccessWithNet);
+	// The list takes one call a minute from one address, so Check again is never pressed within it
+	Refused("-hudson level=invasion frames=5 access=check accesswait=60", kHudsonRefusedAccessWaitOutOfRange);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=3601", kHudsonRefusedAccessWaitOutOfRange);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=soon", kHudsonRefusedAccessWaitNotANumber);
+	Refused("-hudson level=invasion frames=5 access=check accesswait=90 accesswait=90", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 access=request accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
+	Refused("-hudson level=invasion frames=5 accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=maybe", kHudsonRefusedAnswerWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answer=no", kHudsonRefusedAskedTwice);
+	// The answer is a host's
+	Refused("-hudson level=invasion frames=5 machine=shared net=join answer=letin", kHudsonRefusedAnswerWithoutHost);
+	Refused("-hudson level=invasion frames=5 answer=letin", kHudsonRefusedAnswerWithoutHost);
+	// Well inside the 20 s a Hudson joiner waits for the host's word
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=0", kHudsonRefusedAnswerAfterOutOfRange);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=16", kHudsonRefusedAnswerAfterOutOfRange);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answerafter=x", kHudsonRefusedAnswerAfterNotANumber);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host answerafter=3", kHudsonRefusedAnswerAfterWithoutAnswer);
+	// findgames=yes: a joiner's way in, as a player's, through Find Games
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes", &plan) == 0 && plan.findGames,
+			"findgames=yes: the joiner presses Find Games and the list's game");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join", &plan) == 0 && !plan.findGames,
+			"and without it the list's game is joined from the code, as before");
+	}
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=no", kHudsonRefusedFindGamesWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes findgames=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
+	Refused("-hudson level=invasion frames=5 findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
+
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): a server's name in small letters, once, with net=
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
 	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayName + 1, 'a')).c_str(), kHudsonRefusedRemoteRelayTooLong);
@@ -1926,9 +1977,11 @@ static void TestTourAndSharedMachine()
 			"server #14 beyond this machine: the address towards the one relay is a real one of this machine's, never 0.0.0.0");
 		Check(Has(networking, "if (OnTheRemoteRoute(on->address) && on->receivedAddress.host != remoteRelayAddress)\n\t{\n\t\trelayStrangersDropped++;\n\t\treturn 1;"),
 			"and every socket there drops whatever isn't from that relay, before ENet reads it");
-		Check(Has(hudsonFile, "\t\t// A run is a test with nobody at the host to answer, so the host lets every joiner in without asking (the request to join, version 114)\n\t\tNet_LetEveryJoinerIn(true);")
-			&& ComesBefore(hudsonFile, "NetLoopbackOnly = true;", "\t\tNet_LetEveryJoinerIn(true);"),
-			"a run's host lets every joiner in without asking: nobody is there to answer");
+		// Modified 2026-11-09 by Melanikus for the AvP port (Fifth, merging Fourth's presses): unless the run answers as a player does (answer=)
+		Check(Has(hudsonFile, "\t\t// A run is a test with nobody at the host to answer, so the host lets every joiner in without asking (the request to join, version 114).")
+			&& Has(hudsonFile, "\t\tNet_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);")
+			&& ComesBefore(hudsonFile, "NetLoopbackOnly = true;", "\t\tNet_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);"),
+			"a run's host lets every joiner in without asking, as nobody is there to answer, unless the run answers as a player does (answer=)");
 		Check(Has(hudsonFile, "if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))") && Has(hudsonFile, "fprintf(file, \"remote_relay_address=%u.%u.%u.%u\\n\""),
 			"remoterelay= goes to the networking code, and the result says which one address it let through");
 		Check(Has(networking, "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))\n\t{\n\t\tCon_PrintError(\"Net_ConnectToSession - a Hudson run with net= joins only a game on this machine\");\n\t\treturn NET_FAIL;"),
@@ -1965,6 +2018,18 @@ static void TestTourAndSharedMachine()
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
 		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
 			"and each game is told the relay's name (remoterelay=), and has it as its relays' list, at HTTPS's own port");
+		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
+		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
+		// with the list on this machine pinned, it's reached by its address
+		Check(Has(oneRun, "if ($NetV2) { $relaySwitch += ' -netv2' }") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
+			&& ComesBefore(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }", "$arguments = \"-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson"),
+			"SOURCE: -NetV2 and -SecondCopy are the game's own switches, -netv2 and -secondcopy, before -hudson");
+		Check(Has(oneRun, "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }") && Has(oneRun, "@('RelayServer = 127.0.0.1', \"RelayListPort = $RelayListPort\", \"RelayListPin = $LocalRelayPin\")")
+			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
+			"SOURCE: the relay's key line goes in the run's settings, the pinned list on this machine by its address, and the second copy's files are read from its own folder");
+		Check(Has(oneRun, "if ($NetV2 -and -not $RelayKey) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
+			&& Has(pairScript, "$said = Get-HudsonV2WordsRefusal $case[0] $case[1]"),
+			"SOURCE: -NetV2 needs the key line, the pair's joiner is always the second copy, and -CheckTheWatch tries the v2 words' every refusal");
 		Check(Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen')\n    {\n        return $remoteAddress -notmatch $thisMachine\n    }\n\n    return $localAddress -notmatch $thisMachine"),
 			"a TCP connection the game made is judged by its far end, and UDP and a TCP listener by their own address (server #14: the relays' list's HTTPS shows :: while it's connecting)");
 		Check(Has(pairScript, "$noAddress = '^(0\\.0\\.0\\.0|::)$'") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)\n    {\n        return $false\n    }"),

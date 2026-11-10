@@ -12,12 +12,20 @@
 #define AVPX_MLDSA_CONFIG_H
 
 // ML-DSA-87, the largest of FIPS 204's three sizes, the one network protocol version 2 uses. The project's own default is 44, the
-// smallest, so leaving this out would check signatures at the lowest level without a word. avpx_mldsa.h refuses to compile if it's
-// anything else.
+// smallest, so leaving this out would check signatures at the lowest level without a word. The check just below stops any build that
+// reads this file, the library's own and the game's alike, if it's ever anything else; avpx_mldsa.h and the wrapper's sizes check it
+// again. (Modified 2026-11-09 by Melanikus for the AvP port, Fourth's cold read, finding 2: the check was only in avpx_mldsa.h, which the
+// library's own build never reads.)
 #define MLD_CONFIG_PARAMETER_SET 87
 
+#if MLD_CONFIG_PARAMETER_SET != 87
+#error "The game's ML-DSA is ML-DSA-87: MLD_CONFIG_PARAMETER_SET has to be 87"
+#endif
+
 // Every name the library makes public starts with this, so none can clash with any other library's names in the game:
-// avpx_mldsa87_verify and the rest. With the size in the name, a game built against a library of another size can't link at all.
+// avpx_mldsa87_verify and the rest. The "87" in it is only text: in a build of one size, as this is, the library uses this prefix as it
+// is and adds no size of its own (mldsa_native.h, MLD_API_NAMESPACE_PREFIX), so the name alone can't tell a library of another size.
+// What does is the check above, and the wrapper's sizes (pq_signature_check.cpp).
 #define MLD_CONFIG_NAMESPACE_PREFIX avpx_mldsa87
 
 // The library is built from one file, so its own helper functions can all be private to that file (static). Only the functions in
@@ -29,6 +37,11 @@
 #define MLD_CONFIG_NO_KEYPAIR_API
 #define MLD_CONFIG_NO_SIGN_API
 #define MLD_CONFIG_NO_RANDOMIZED_API
+
+// And the same for the library's own build, which reads only this file (Fourth's cold read, finding 2)
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API) || !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_RANDOMIZED_API)
+#error "The game only checks signatures: key making, signing and randomness stay out of the library"
+#endif
 
 // No assembly: the library is built from its portable C alone. Microsoft's compiler can't build the project's assembly files anyway,
 // and has no inline assembly in the form the project writes it, so this only makes certain of what would happen.
