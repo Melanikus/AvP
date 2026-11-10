@@ -76,7 +76,8 @@ enum HudsonExitCode
 	kHudsonExitNetworkGame = 35,       // strategies are only looked at or asked in a game with nobody else in it
 	kHudsonExitNoEnemy = 36,           // combat= couldn't make its alien, or there was nowhere in sight of him to put it
 	kHudsonExitNetStopped = 50,        // net=: the two games couldn't get as far as playing together, and the result's net_stage says where it stopped
-	kHudsonExitStoppedEarly = 37       // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedEarly = 37,      // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedByHand = 38      // someone asked the run to end, with a hudson-stop file (#198): it ended as at its time limit, so its film is finished
 };
 
 // With gun= on the command line, presses the player's keys for this frame. The game calls this straight after reading the real ones. playerStatus is the PLAYER_STATUS. See hudson.cpp.

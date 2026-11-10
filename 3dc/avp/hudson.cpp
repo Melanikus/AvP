@@ -766,8 +766,51 @@ static void WatchForFramesStopping()
 	LogString(line);
 }
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): whether a hudson-stop file in the run's own folder
+// asks the run to end (hudson_plan.h, HudsonPlan_StopFileCounts says which files count). Only the file's kind and date are looked at,
+// never what's in it. One that doesn't count is said once in the log, and left alone.
+static long long runStartedFileTime = 0;
+
+static bool AStopFileAsksToEnd()
+{
+	static bool saidIgnored = false;
+	char const *const folder = GetSaveFolderPath();
+
+	// Before the run's start is known, no file can be shown to be newer than it, so none counts
+	if (!folder || folder[0] == 0 || runStartedFileTime == 0)
+	{
+		return false;
+	}
+
+	WIN32_FILE_ATTRIBUTE_DATA file;
+
+	if (!GetFileAttributesExA((std::string(folder) + kHudsonStopFileName).c_str(), GetFileExInfoStandard, &file))
+	{
+		return false;
+	}
+
+	bool const isFolder = (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	bool const isLink = (file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+	long long const writtenAt = ((long long)file.ftLastWriteTime.dwHighDateTime << 32) | file.ftLastWriteTime.dwLowDateTime;
+
+	if (HudsonPlan_StopFileCounts(true, isFolder, isLink, writtenAt, runStartedFileTime))
+	{
+		return true;
+	}
+
+	if (!saidIgnored)
+	{
+		saidIgnored = true;
+		LogErrorString(std::string("hudson: a ") + kHudsonStopFileName + " is in the run's folder, but it's a folder, a link, or older than this run, so it doesn't stop it");
+	}
+
+	return false;
+}
+
 static unsigned __stdcall WatchdogThread(void *)
 {
+	DWORD stopLookedAt = 0;
+
 	for (;;)
 	{
 		Sleep(kWatchdogLooksEveryMilliseconds);
@@ -791,6 +834,18 @@ static unsigned __stdcall WatchdogThread(void *)
 		if (GetTickCount() - startedAt > (DWORD)plan.seconds * 1000)
 		{
 			EndAtOnce("it went past its time limit", kHudsonExitOutOfTime);
+		}
+
+		// #198: someone asked it to end, with a hudson-stop file. It ends the same way as at its time limit: the result written and the
+		// film finished (WriteResult), then the game ended. Looked for once a second, not every turn, since it asks the disk.
+		if (GetTickCount() - stopLookedAt >= 1000)
+		{
+			stopLookedAt = GetTickCount();
+
+			if (AStopFileAsksToEnd())
+			{
+				EndAtOnce("it was stopped by hand: a hudson-stop file asked it to end", kHudsonExitStoppedByHand);
+			}
 		}
 	}
 }
@@ -822,6 +877,11 @@ void Hudson_ReadCommandLine(const char *commandLine)
 	HudsonBreaksPrisms = plan.breakPrisms;
 	HudsonWayOfDying = plan.deathWay;
 	startedAt = GetTickCount();
+
+	// When the run started, as Windows dates a file, so a hudson-stop file left from an earlier run is too old to count (#198)
+	FILETIME now;
+	GetSystemTimeAsFileTime(&now);
+	runStartedFileTime = ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;
 }
 
 // The part of the first screen that isn't the main one left free by any taskbar, in the game's own numbers. False if there's only one screen. Defined further down.

@@ -10,6 +10,8 @@ param([string]$FunctionFile = (Join-Path (Split-Path -Parent $PSScriptRoot) 'too
 $ErrorActionPreference = 'Stop'
 
 . $FunctionFile
+# #198's stop file, which a run's folder can hold and the clearing has to take away (added 2026-11-10 by Melanikus (Third))
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools\hudson\stop-file.ps1')
 
 $top = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'AvP-test-out' }
 $root = Join-Path $top "hudson-clear-test-$PID"
@@ -301,6 +303,56 @@ try
     $game = New-GameFolder 'third copy'
     Add-File (Join-Path $game 'HudsonRun\My Games\Aliens versus Predator (third copy)\avp_log.txt')
     Refused $game '*a folder a run wouldn''t have made' 'a folder named like a copy the game doesn''t have'
+
+    # ---- #198: the stop file (stop-file.ps1), written only in a run's own folders ----
+
+    $game = New-GameFolder 'stop one'
+    $said = Add-HudsonStopFile $game
+    $stop = Join-Path (SavesOf $game) 'hudson-stop'
+    Check ($null -eq $said) "a running game's folder gets a stop file [$said]"
+    Check ((Test-Path -LiteralPath $stop -PathType Leaf) -and (Get-Item -LiteralPath $stop).Length -eq 0) 'an empty plain file, in its run folder'
+    Check (-not (Test-Path -LiteralPath (Join-Path $game 'hudson-stop'))) 'and nowhere else'
+    $before = (Get-Item -LiteralPath $stop).LastWriteTimeUtc
+    Start-Sleep -Milliseconds 1100
+    Check ($null -eq (Add-HudsonStopFile $game)) 'asking again is fine'
+    Check ((Get-Item -LiteralPath $stop).LastWriteTimeUtc -gt $before) 'and the file is written again, so its date is new, as the game wants'
+    Check ($null -eq (Clear-HudsonRunFolder $game)) 'the next run''s clearing'
+    Check (-not (Test-Path -LiteralPath $stop)) 'takes the stop file away, so it can''t stop that run'
+
+    $game = New-GameFolder 'stop both copies'
+    Add-SecondCopyFiles $game
+    Check ($null -eq (Add-HudsonStopFile $game)) 'a folder both copies run in'
+    Check ((Test-Path -LiteralPath (Join-Path (SavesOf $game) 'hudson-stop')) -and (Test-Path -LiteralPath (Join-Path (SecondSavesOf $game) 'hudson-stop'))) 'gets one in each copy''s folder'
+
+    $game = Join-Path $root 'stop second only'
+    Add-File (Join-Path $game 'AvPx.exe')
+    Add-SecondCopyFiles $game
+    Check ($null -eq (Add-HudsonStopFile $game)) 'a joiner''s folder, the second copy''s alone'
+    Check ((Test-Path -LiteralPath (Join-Path (SecondSavesOf $game) 'hudson-stop')) -and -not (Test-Path -LiteralPath (SavesOf $game))) 'gets one there, and no folder is made for the other'
+
+    $fresh = Join-Path $root 'stop no run'
+    Add-File (Join-Path $fresh 'AvPx.exe')
+    Check ((Add-HudsonStopFile $fresh) -like '*has no run folder*') 'a game with no run folder is refused'
+    Check (-not (Test-Path -LiteralPath (Join-Path $fresh 'HudsonRun'))) 'and nothing is made'
+    Check ((Add-HudsonStopFile (Join-Path $root 'stop nothing here')) -like '*isn''t a folder') 'a folder that isn''t there is refused'
+    Check ((Add-HudsonStopFile (New-GameFolder 'steamapps\stop')) -like '*looks like a Steam folder') 'a Steam folder is refused'
+
+    $game = New-GameFolder 'stop that is a folder'
+    New-Item -ItemType Directory -Force (Join-Path (SavesOf $game) 'hudson-stop') | Out-Null
+    Check ((Add-HudsonStopFile $game) -like '*a folder or a link*') 'a hudson-stop that''s a folder is refused'
+
+    $farSide = New-GameFolder 'stop far side'
+    $game = Join-Path $root 'stop through a link'
+    Add-File (Join-Path $game 'AvPx.exe')
+    Add-Link (Join-Path $game 'HudsonRun') (Join-Path $farSide 'HudsonRun')
+    Check ((Add-HudsonStopFile $game) -like '*is a link to somewhere else') 'a run folder that''s a link is refused'
+    Check (-not (Test-Path -LiteralPath (Join-Path (SavesOf $farSide) 'hudson-stop'))) 'and nothing is written on its far side'
+
+    $farSide = New-GameFolder 'stop far side of the copy'
+    $game = New-GameFolder 'stop copy is a link'
+    Add-Link (SecondSavesOf $game) (SavesOf $farSide)
+    Check ((Add-HudsonStopFile $game) -like '*is a link to somewhere else') 'a copy''s folder that''s a link is refused'
+    Check (-not (Test-Path -LiteralPath (Join-Path (SavesOf $farSide) 'hudson-stop')) -and -not (Test-Path -LiteralPath (Join-Path (SavesOf $game) 'hudson-stop'))) 'and nothing is written anywhere, not even in the other folder'
 }
 catch
 {

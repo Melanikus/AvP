@@ -313,6 +313,21 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=maybe", kHudsonRefusedAnswerWord);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answer=no", kHudsonRefusedAskedTwice);
+	// #195 (added 2026-11-10 by Melanikus (Third)): -relayhost lets every joiner in without asking, so answer='s rows would never come.
+	// The nyc3 pair of 2026-11-10 had both, and its host answered nobody. -askjoiners hosts the same way and asks.
+	Refused("-dev -relayhost -netv2 -hudson level=invasion frames=5 machine=shared net=host answer=letin", kHudsonRefusedAnswerWithRelayHost);
+	Refused("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host answer=no", kHudsonRefusedAnswerWithRelayHost);
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-dev -askjoiners -netv2 -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0 && plan.answerPress == kHudsonAnswerLetIn,
+			"#195: a host started with -askjoiners may answer");
+		Check(HudsonPlan_Read("-dev -relayhost -askjoiners -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0,
+			"and so may one with -relayhost and -askjoiners, which asks too (relay_auto.h)");
+		Check(HudsonPlan_Read("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host", &plan) == 0 && plan.answerPress == kHudsonAnswerNone,
+			"and -relayhost alone, with no answer=, still lets every joiner in, as before");
+		Check(HudsonPlan_Read("-dev -relayhostx -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0,
+			"only -relayhost as a word of its own counts, as the game reads it");
+	}
 	// The answer is a host's
 	Refused("-hudson level=invasion frames=5 machine=shared net=join answer=letin", kHudsonRefusedAnswerWithoutHost);
 	Refused("-hudson level=invasion frames=5 answer=letin", kHudsonRefusedAnswerWithoutHost);
@@ -2149,6 +2164,32 @@ static void TestTourAndSharedMachine()
 		Check(Has(menusFrame, "if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)"), "SOURCE: pagehold= holds a page to be pictured first");
 		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "MenuFrameForARun(picture, !letIn);"), "SOURCE: but never the joiner's let in, which the host is waiting on");
 		Check(Has(hudson, "return HudsonRunIsOn && plan.filmMenus ? plan.pageHoldSeconds : 0;"), "SOURCE: and only in a run with film=menus");
+	}
+	// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): which hudson-stop files end a run
+	Check(HudsonPlan_StopFileCounts(true, false, false, 100, 100), "#198: a plain hudson-stop written as the run started ends it");
+	Check(HudsonPlan_StopFileCounts(true, false, false, 101, 100), "and so does one written after");
+	Check(!HudsonPlan_StopFileCounts(false, false, false, 101, 100), "none there ends nothing");
+	Check(!HudsonPlan_StopFileCounts(true, true, false, 101, 100), "a folder of that name doesn't");
+	Check(!HudsonPlan_StopFileCounts(true, false, true, 101, 100), "nor a link, which could be anyone's file");
+	Check(!HudsonPlan_StopFileCounts(true, false, false, 99, 100), "nor one older than the run, left from an earlier one");
+	{
+		std::string const watchdog = Between(hudson, "static unsigned __stdcall WatchdogThread(void *)", "void Hudson_ReadCommandLine(const char *commandLine)");
+		std::string const looking = Between(hudson, "static bool AStopFileAsksToEnd()", "static unsigned __stdcall WatchdogThread(void *)");
+		std::string const stopFile = ReadSourceFile("tools/hudson/stop-file.ps1");
+
+		Check(Has(watchdog, "if (AStopFileAsksToEnd())\n\t\t\t{\n\t\t\t\tEndAtOnce(\"it was stopped by hand: a hudson-stop file asked it to end\", kHudsonExitStoppedByHand);"),
+			"SOURCE: a stop file ends the run as its time limit does, through EndAtOnce, so the result is written and the film finished");
+		Check(Has(Between(hudson, "static void EndAtOnce(const char *howItEnded, int code)", "TerminateProcess"), "WriteResult(howItEnded, code);"), "SOURCE: and EndAtOnce writes the result, which finishes the film, before the game ends");
+		Check(Has(watchdog, "if (GetTickCount() - stopLookedAt >= 1000)"), "SOURCE: it's looked for once a second, not every turn");
+		Check(Has(looking, "if (!folder || folder[0] == 0 || runStartedFileTime == 0)"), "SOURCE: and never before the run's start is known");
+		Check(Has(looking, "GetFileAttributesExA((std::string(folder) + kHudsonStopFileName).c_str(), GetFileExInfoStandard, &file)") && !Has(looking, "CreateFile") && !Has(looking, "fopen"),
+			"SOURCE: only its kind and date are read, in the run's own folder, never what's in it");
+		Check(Has(looking, "(file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0") && Has(looking, "HudsonPlan_StopFileCounts(true, isFolder, isLink, writtenAt, runStartedFileTime)"),
+			"SOURCE: and a link or a folder is told apart, and the rule above decides");
+		Check(Has(hudson, "runStartedFileTime = ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;"), "SOURCE: the run's start is noted as Windows dates a file");
+		Check(ComesBefore(stopFile, "if ($targets.Count -eq 0)", "[IO.File]::WriteAllText($stop, '')"), "SOURCE: stop-file.ps1 writes nothing until every folder on the way is looked at");
+		Check(Has(ReadSourceFile("tools/hudson/stop-run.ps1"), ". (Join-Path $PSScriptRoot 'stop-file.ps1')"), "SOURCE: and stop-run.ps1 uses it, the one tests/hudson_clear_folder_test.ps1 tries");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "  38       stopped by hand"), "SOURCE: run-hudson.ps1 says what exit 38 means");
 	}
 	{
 		std::string const taking = Between(hudson, "void Hudson_TakePictureIfDue()", "if (visionIsDue)");

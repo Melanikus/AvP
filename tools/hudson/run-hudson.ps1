@@ -94,6 +94,7 @@ The exit code here is the game's own, so another script can read it:
   35       strategies were asked for in a network game
   36       -Combat couldn't make its alien, or there was nowhere in sight of him to put it
   37       the game stopped before the run had finished: its window was closed, or the graphics card failed
+  38       stopped by hand: tools\hudson\stop-run.ps1 asked it to end (#198). It ended as at its time limit, so its result and film are whole
   0x3421   the level didn't load
   0xffff   an assert failed
   anything else is a crash, as Windows reports it, or from this script:

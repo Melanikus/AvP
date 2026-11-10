@@ -368,6 +368,16 @@ double HudsonPlan_OnePictureCovers(double wallLength, double pictureCoordinatesR
 // Is a run being asked for? It needs both words, each on its own. Without them, none of this exists.
 bool HudsonPlan_IsAskedFor(const char *commandLine);
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port). A file of this name in the run's own folder
+// (HudsonRun\My Games\Aliens versus Predator, or the second copy's) asks the run to end, as if it had reached its time: so its result is
+// written and its film finished, which closing the window doesn't promise. tools\hudson\stop-run.ps1 makes it.
+static const char *const kHudsonStopFileName = "hudson-stop";
+
+// Whether a hudson-stop file ends the run. It has to be there, a plain file (never a folder, and never a link, which could be anyone's
+// file), and written after the run started (in the same units as runStartedAt), so one left from an earlier run can't end this one at
+// once. Only that it's there counts, never what's in it, so nothing in it is ever read.
+bool HudsonPlan_StopFileCounts(bool there, bool isFolder, bool isLink, long long writtenAt, long long runStartedAt);
+
 // Reads what comes after -hudson, up to the next word starting with a dash. Gives back 0 if it's all good, or one of the reasons below.
 const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan);
 
@@ -388,6 +398,7 @@ extern const char *const kHudsonRefusedAnswerWithoutHost;
 extern const char *const kHudsonRefusedAnswerAfterNotANumber;
 extern const char *const kHudsonRefusedAnswerAfterOutOfRange;
 extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
+extern const char *const kHudsonRefusedAnswerWithRelayHost;
 extern const char *const kHudsonRefusedFindGamesWord;
 extern const char *const kHudsonRefusedFindGamesWithoutJoin;
 extern const char *const kHudsonRefusedBotWeapon;

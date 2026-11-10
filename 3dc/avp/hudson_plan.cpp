@@ -86,6 +86,7 @@ const char *const kHudsonRefusedAnswerWithoutHost = "answer= is the host's answe
 const char *const kHudsonRefusedAnswerAfterNotANumber = "answerafter= is a number of seconds";
 const char *const kHudsonRefusedAnswerAfterOutOfRange = "answerafter= is from 1 to 15 seconds, well inside the joiner's 20 s wait";
 const char *const kHudsonRefusedAnswerAfterWithoutAnswer = "answerafter= says when the host answers, so it needs answer=";
+const char *const kHudsonRefusedAnswerWithRelayHost = "answer= presses the host's rows when a player asks to join, and -relayhost lets every joiner in without asking, so they'd never come: start the host with -askjoiners";
 const char *const kHudsonRefusedFindGamesWord = "findgames= can only be yes";
 const char *const kHudsonRefusedFindGamesWithoutJoin = "findgames= is a joiner's way in, through Find Games, so it needs net=join";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
@@ -359,6 +360,11 @@ static const char *FindHudsonWord(const char *commandLine)
 	}
 
 	return 0;
+}
+
+bool HudsonPlan_StopFileCounts(bool there, bool isFolder, bool isLink, long long writtenAt, long long runStartedAt)
+{
+	return there && !isFolder && !isLink && writtenAt >= runStartedAt;
 }
 
 bool HudsonPlan_IsAskedFor(const char *commandLine)
@@ -2882,6 +2888,15 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenAnswerAfter && !seenAnswer)
 	{
 		return kHudsonRefusedAnswerAfterWithoutAnswer;
+	}
+
+	// #195 (added 2026-11-10 by Melanikus (Third) for the AvP port): answer= presses the host's rows when a player asks to join, and
+	// -relayhost lets every joiner in without asking (relay_auto.cpp), so those rows would never come. Which won used to depend on which
+	// was read last (-relayhost, in winmain.cpp), and the run said nothing. A host that answers is started with -askjoiners, which hosts
+	// the same way and asks (relay_auto.h); -relayhost with -askjoiners asks too.
+	if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, "-relayhost") && !CommandLineHasWord(commandLine, "-askjoiners"))
+	{
+		return kHudsonRefusedAnswerWithRelayHost;
 	}
 
 	if (seenFindGames && plan->netMode != kHudsonNetJoin)

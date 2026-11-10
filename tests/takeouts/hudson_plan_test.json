@@ -4731,8 +4731,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "seenFilm = true;\n\n\t\t\tif (!WordIs(value, valueLength, \"no\"))",
-					"to": "seenFilm = true;\n\n\t\t\tif (false)"
+					"from": "else if (!WordIs(value, valueLength, \"no\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFilmUnknown;",
+					"to": "else if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFilmUnknown;"
 				}
 			]
 		},
@@ -4751,7 +4751,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->recordVideo && seenFilm)",
+					"from": "if (plan->recordVideo && seenFilm && !plan->filmMenus)",
 					"to": "if (false)"
 				}
 			]
@@ -4761,7 +4761,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
 					"to": "if (false)"
 				}
 			]
@@ -4771,8 +4771,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
-					"to": "if (!seenFilm && !saidOnlyNumbers)"
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
+					"to": "if ((!seenFilm || plan->filmMenus) && !saidOnlyNumbers)"
 				}
 			]
 		},
@@ -4781,8 +4781,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
-					"to": "if (plan->machineShared && !seenFilm)"
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
+					"to": "if (plan->machineShared && (!seenFilm || plan->filmMenus))"
 				}
 			]
 		},
@@ -4791,7 +4791,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
 					"to": "if (plan->machineShared && !saidOnlyNumbers)"
 				}
 			]
@@ -10243,6 +10243,116 @@
 					"file": "tools/hudson/run-net-pair.ps1",
 					"from": "if ($FilmMenus) { $words += '-FilmMenus' }",
 					"to": "if ($FilmMenus) { }"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file that's a folder counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isLink && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file that's a link counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file older than the run counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && !isLink;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file written as the run started doesn't count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && !isLink && writtenAt > runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: no stop file counts as one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return !isFolder && !isLink && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: the watchdog never ends the run for a stop file",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndAtOnce(\"it was stopped by hand: a hudson-stop file asked it to end\", kHudsonExitStoppedByHand);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file is looked for before the run's start is known",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!folder || folder[0] == 0 || runStartedFileTime == 0)",
+					"to": "if (!folder || folder[0] == 0)"
+				}
+			]
+		},
+		{
+			"name": "#198: the stop file is looked for every turn",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (GetTickCount() - stopLookedAt >= 1000)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "#195: answer= with -relayhost is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, \"-relayhost\") && !CommandLineHasWord(commandLine, \"-askjoiners\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "#195: -askjoiners beside -relayhost doesn't count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "CommandLineHasWord(commandLine, \"-relayhost\") && !CommandLineHasWord(commandLine, \"-askjoiners\"))",
+					"to": "CommandLineHasWord(commandLine, \"-relayhost\"))"
+				}
+			]
+		},
+		{
+			"name": "#195: -relayhost refuses a host with no answer= too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, \"-relayhost\")",
+					"to": "if (CommandLineHasWord(commandLine, \"-relayhost\")"
 				}
 			]
 		}
