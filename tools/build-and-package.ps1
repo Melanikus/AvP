@@ -147,6 +147,11 @@ do {
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
+# The servers the game plays online through (#175), beside bin, where the game looks for them (3dc/servers_cfg_file.h). The one at the
+# repository's root is the release's, held to its rules by tools/check-online-play.ps1. Added 2026-11-10 by Melanikus for the AvP port.
+if (-not (Test-Path -LiteralPath 'servers.cfg' -PathType Leaf)) { throw 'servers.cfg is missing from the repository, so the package would have no servers file' }
+Copy-Item -LiteralPath 'servers.cfg' -Destination (Join-Path $OutFolder 'servers.cfg')
+
 # --- Each library's own licence, in the folder licences, copied from the very files the build used. licences/README.txt names each
 # program and library in bin, says what it is and which licences go with it, and, for the ones under the GNU licences, where their
 # source is. The libraries ask for this: a copy of a program has to come with their notices. The build stops if something in bin

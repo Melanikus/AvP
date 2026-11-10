@@ -1,0 +1,4 @@
+# servers.cfg goes into the package byte for byte, and the one we ship has plain line ends only (tools/check-online-play.ps1 refuses a
+# carriage return in it). So git keeps it that way on every machine, whatever the machine's own setting. Written 2026-11-10 by Melanikus
+# for the AvP port (#175).
+/servers.cfg text eol=lf
