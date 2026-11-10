@@ -265,12 +265,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a second copy of the game shares the first copy's identity",
+			"name": "a second copy of the game shares the first copy's identity",
 			"changes": [
 				{
 					"file": "3dc/net_identity_store.cpp",
-					"from": "SaveFolder_IsTheSecondCopy() ? kSecondCopyFileName : kFileName",
-					"to": "kFileName"
+					"from": "return secondCopy ? kSecondCopyFileName : kFileName;",
+					"to": "return kFileName;"
 				}
 			]
 		},
@@ -291,6 +291,46 @@
 					"file": "3dc/net_identity_store.cpp",
 					"from": "if ((about.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)",
 					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a Hudson run uses the player's own files",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "return secondCopy ? kHudsonSecondCopyFileName : kHudsonFileName;",
+					"to": "return secondCopy ? kSecondCopyFileName : kFileName;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kept file ignores whether this is a Hudson run",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy())",
+					"to": "NetIdentityStore_FileName(false, SaveFolder_IsTheSecondCopy())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game doesn't say whether it's the second copy, so it can't link",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "bool SaveFolder_IsTheSecondCopy()\n{\n\treturn saveFolderIsTheSecondCopy;\n}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never says it's a Hudson run",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "\treturn HudsonRunIsOn;\n}",
+					"to": "\treturn false;\n}"
 				}
 			]
 		}
