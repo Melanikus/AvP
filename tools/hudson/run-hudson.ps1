@@ -207,7 +207,12 @@ param(
     [int]$RelayListPort = 8443, # and the relays' list's HTTPS port on this machine
     [string]$RemoteRelay = '',  # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name or one IPv4 address. Needs -Relay
     [string]$RelayListPin = '', # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name (relay-words.ps1)
-    [string]$RelayServerName = '' # -RemoteRelay's server as the game shows it, such as "New York (Mel's server)"
+    [string]$RelayServerName = '', # -RemoteRelay's server as the game shows it, such as "New York (Mel's server)"
+    # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a run on protocol version 2's draft, through the relay (relay-words.ps1)
+    [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay and -RelayKey
+    [string]$RelayKey = '',       # the settings' RelayKey for that relay, "<region>:<the relay's id, 96 small hex digits>"
+    [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
+    [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
 )
 $ErrorActionPreference = 'Stop'
 
@@ -242,6 +247,14 @@ if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 # No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
+# Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port): each word to its shape first
+$v2WordsRefusal = Get-HudsonV2WordsRefusal $RelayKey $LocalRelayPin
+if ($v2WordsRefusal) { Stop-Here $v2WordsRefusal }
+if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay" }
+if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the relay's key line, the game sends the relay nothing" }
+if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
+if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
+if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -322,6 +335,9 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 # -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
 # starts with -, and one in among them would cut them short
 $relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+# -netv2 and -secondcopy are the game's own switches too, so they go before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
+if ($NetV2) { $relaySwitch += ' -netv2' }
+if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }
 if ($Views -gt 0) { $arguments += " views=$Views" }
@@ -426,13 +442,23 @@ $settingsFingerprint = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).H
 $refusal = Clear-HudsonRunFolder $folder
 if ($refusal) { Stop-Here "the run's folder can't be cleared: $refusal" }
 
-$saves = Join-Path $folder 'HudsonRun\My Games\Aliens versus Predator'
+# -SecondCopy: the game keeps the second copy's files in a folder of its own name (save_folder.h, kSaveFolderSecondCopyName), inside the
+# run's folder too, so everything here is read from there (modified 2026-11-09 by Melanikus (Fifth) for the AvP port)
+$saves = Join-Path $folder $(if ($SecondCopy) { 'HudsonRun\My Games\Aliens versus Predator (second copy)' } else { 'HudsonRun\My Games\Aliens versus Predator' })
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
 
+# With -NetV2, the relay's key line goes in with the rest (added 2026-11-09 by Melanikus (Fifth) for the AvP port). All were checked to
+# their shapes above.
+$v2Words = @()
+if ($RelayKey) { $v2Words += "RelayKey = $RelayKey" }
+
 # -Relay: the relays' list on this machine, as the game reads it only with -dev, which a run always has. Added to this run's own copy, so
-# no other run has it.
-if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value @('', '[Network]', 'RelayServer = localhost', "RelayListPort = $RelayListPort") }
+# no other run has it. With -LocalRelayPin (modified 2026-11-09 by Melanikus (Fifth)): the list by its address, 127.0.0.1, and checked by
+# that pin before a byte is sent, as a list with a certificate Windows doesn't know needs; a name could also give ::1, where a list on
+# 127.0.0.1 alone isn't.
+$localWords = if ($LocalRelayPin) { @('RelayServer = 127.0.0.1', "RelayListPort = $RelayListPort", "RelayListPin = $LocalRelayPin") } else { @('RelayServer = localhost', "RelayListPort = $RelayListPort") }
+if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]') + $localWords + $v2Words) }
 
 # -RemoteRelay: the one relay beyond this machine, whose list has the same name, at HTTPS's own port. The game is told the name with
 # remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay). With an address
@@ -441,7 +467,7 @@ if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 
 $relayListWords = @()
 if ($RelayListPin) { $relayListWords += "RelayListPin = $RelayListPin" }
 if ($RelayServerName) { $relayListWords += "RelayServerName = $RelayServerName" }
-if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') + $relayListWords) }
+if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') + $relayListWords + $v2Words) }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru

@@ -34,6 +34,7 @@
 #include "networking.h"
 #include "coop_lobby.h"
 #include "relay_list.h"
+#include "net_relay_keys.h"
 
 #include <ws2tcpip.h>
 #include <winhttp.h>
@@ -187,6 +188,7 @@ namespace
 		int players;
 		int maxPlayers;
 		int version;
+		uint8_t fingerprint[kNetIdentityFingerprintBytes];   // this run's identity, as it was when the room opened
 	};
 
 	// Added 2026-11-09 by Melanikus for the AvP port: whether two of the list's text fields of the same size say the same, read only within
@@ -247,6 +249,18 @@ namespace
 		wchar_t server[256];             // the list's name and port, set before the thread starts, and never changed
 		INTERNET_PORT port;
 		bool developer;                  // -dev: a relay on this machine or this network may be used, for a test
+		int version;                     // the version this copy speaks (Net_OurVersion), whose games it lists and asks for
+		bool v2Draft;                    // the v2 draft is on (Net_V2DraftOn): only then do listings and games carry a fingerprint
+
+		// A relay's keys, asked for by the v2 draft (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
+		// has a number, and an answer says which asking it's for, so an answer to an older one is never taken for the newest.
+		bool keysWanted;
+		char keysRegion[kRelayListRegionLetters + 1];
+		int keysAsked;                   // how many askings there have been
+		int keysAnswered;                // which asking the answer below is for: 0 while none has come
+		const char *keysWhy;             // NULL: the keys came, whole; or fixed words saying why not
+		uint8_t keysP384[kNetCryptoP384PublicBytes];
+		uint8_t keysKem[kNetPqKemPublicBytes];
 
 		// -dev's test server (relay_list.h), set before the thread starts, and never changed: the pin, and the list's own address, when
 		// the settings gave one instead of a name (network byte order, as RelayListRelay.address keeps it)
@@ -283,6 +297,16 @@ namespace
 		RelayListGame games[kRelayListMostGames];
 		int count;
 		const char *why;
+
+		// Asking for online access: a request wanted, with its body and the fingerprint its answer must be about, and an answer waiting
+		// for the main thread (added 2026-11-09, server #24)
+		bool accessWanted;
+		char accessBody[kRelayAccessMostBodyBytes + 1];
+		uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
+		bool accessReady;
+		bool accessAnswered;
+		RelayAccessAnswer accessAnswer;
+		const char *accessWhy;
 
 		// News for the main thread to write in the log: the last kMostNews pieces, each a fixed text of the game's own, kept in turn round
 		// the ring. newsNumber is how many pieces there have ever been, so piece n is at news[n % kMostNews].
@@ -641,6 +665,7 @@ namespace
 		out.maxPlayers = l.maxPlayers;
 		out.version = l.version;
 		out.hostMs = l.hostMs;
+		out.fingerprint = l.fingerprint;
 		return out;
 	}
 
@@ -653,7 +678,7 @@ namespace
 		// A new listing is POSTed. If a PUT finds the list has forgotten it (404), it's POSTed again, once.
 		for (int tries = 0; tries < 2; tries++)
 		{
-			if (!RelayList_ListingBody(send, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
+			if (!RelayList_ListingBody(send, shared->v2Draft, onTheList.listed ? onTheList.owner : NULL, body, sizeof(body)))
 			{
 				Tell("the game's own words couldn't be made into a listing, so it isn't on the list");
 				return false;
@@ -739,7 +764,7 @@ namespace
 	void ReadTheGames(void)
 	{
 		wchar_t path[64];
-		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/games?version=%d", kMultiplayerVersion);
+		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/games?version=%d", shared->version);
 
 		Answer const a = Call(L"GET", path, NULL, gamesAnswer, sizeof(gamesAnswer));
 		int count = 0;
@@ -751,7 +776,7 @@ namespace
 		}
 		else if (a.worked)
 		{
-			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, kMultiplayerVersion, gamesRead, &count);
+			RelayListRefusal const refusal = RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, shared->v2Draft, gamesRead, &count);
 			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
 		}
 
@@ -761,6 +786,41 @@ namespace
 		shared->why = why;
 		shared->answerReady = true;
 		LeaveCriticalSection(&shared->lock);
+	}
+
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, from GET
+	// /v1/relay-keys?region= (CRYPTO.md 12.1), read as hostile (relay_list_text.h). They're only their form here: networking.cpp holds
+	// them to the -dev RelayKey fingerprint before anything goes to that relay. The region is the list's own kind of name, small letters,
+	// digits and - (RelayList_IsRegion, checked when it was asked for), so it goes into the path as it is.
+	char keysAnswer[kRelayKeysMostAnswerBytes];
+
+	void ReadTheRelayKeys(const char *region, int asking)
+	{
+		wchar_t path[64];
+		swprintf(path, sizeof(path) / sizeof(path[0]), L"/v1/relay-keys?region=%hs", region);
+
+		Answer const a = Call(L"GET", path, NULL, keysAnswer, sizeof(keysAnswer));
+		const char *why = a.why;
+		uint8_t p384[kNetCryptoP384PublicBytes] = {};
+		uint8_t kem[kNetPqKemPublicBytes] = {};
+
+		if (a.worked && a.status != 200)
+		{
+			why = kSaidNo;
+		}
+		else if (a.worked)
+		{
+			RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);
+			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+		}
+
+		EnterCriticalSection(&shared->lock);
+		shared->keysAnswered = asking;
+		shared->keysWhy = why;
+		memcpy(shared->keysP384, p384, sizeof(p384));
+		memcpy(shared->keysKem, kem, sizeof(kem));
+		LeaveCriticalSection(&shared->lock);
+		Tell(why ? why : "a relay's keys came, to be held to the fingerprint the settings give");
 	}
 
 	// Looks a relay's name up, as ENet does: IPv4 only. The first address the name service gives, in network byte order, as ENetAddress.host
@@ -858,6 +918,33 @@ namespace
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	// The answer to an access request: read as hostile (relay_list_text.h), about this PC's own fingerprint, and kept only if all of it is
+	// right. Added 2026-11-09 by Melanikus for the AvP port (server #24).
+	char accessAnswerText[kRelayAccessMostAnswerBytes];
+
+	void AskForAccess(const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+	{
+		Answer const a = Call(L"POST", L"/v1/access-requests", body, accessAnswerText, sizeof(accessAnswerText));
+		RelayAccessAnswer answer = kRelayAccessWaiting;
+		const char *why = a.why;
+
+		if (a.worked)
+		{
+			RelayListRefusal const refusal = RelayList_ReadAccess(static_cast<int>(a.status), accessAnswerText, a.bytes, fingerprint, &answer);
+			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+		}
+
+		// Only fixed words go in the log: what the answer was, or why there was none
+		Tell(why ? why : RelayAccess_AnswerWords(answer));
+
+		EnterCriticalSection(&shared->lock);
+		shared->accessAnswered = (why == NULL);
+		shared->accessAnswer = answer;
+		shared->accessWhy = why;
+		shared->accessReady = true;
+		LeaveCriticalSection(&shared->lock);
+	}
+
 	DWORD WINAPI ListThread(void *)
 	{
 		bool tryAgainLater = false;
@@ -888,6 +975,19 @@ namespace
 			shared->relaysWanted = false;
 			bool const find = shared->findWanted;
 			shared->findWanted = false;
+
+			// A relay's keys, for the v2 draft (added 2026-11-09 by Melanikus for the AvP port)
+			bool const keys = shared->keysWanted;
+			shared->keysWanted = false;
+			char keysRegion[kRelayListRegionLetters + 1];
+			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
+			int const keysAsking = shared->keysAsked;
+			bool const access = shared->accessWanted;
+			shared->accessWanted = false;
+			char accessBody[kRelayAccessMostBodyBytes + 1];
+			uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
+			memcpy(accessBody, shared->accessBody, sizeof(accessBody));
+			memcpy(accessFingerprint, shared->accessFingerprint, sizeof(accessFingerprint));
 			LeaveCriticalSection(&shared->lock);
 
 			// The game that ended comes off the list, if it's the one on it
@@ -940,6 +1040,16 @@ namespace
 			{
 				ReadTheGames();
 			}
+
+			if (keys)
+			{
+				ReadTheRelayKeys(keysRegion, keysAsking);
+			}
+
+			if (access)
+			{
+				AskForAccess(accessBody, accessFingerprint);
+			}
 		}
 	}
 
@@ -986,6 +1096,10 @@ namespace
 		uint32_t hostOrder = 0;
 		made->atAnAddress = RelayList_ReadIPv4(name, &hostOrder);
 		made->serverAddress = htonl(hostOrder);
+		// The version and the v2 draft are fixed for the run, so they're read once here, on the main thread (added 2026-11-09 by Melanikus
+		// for the AvP port; networking.h)
+		made->version = Net_OurVersion();
+		made->v2Draft = Net_V2DraftOn();
 
 		// The name service is Windows' sockets', which have to be started on this thread's behalf too. ENet starts them as well. Each start
 		// is counted by Windows, and this one is kept for as long as the game runs, as the thread is.
@@ -1059,6 +1173,10 @@ namespace
 
 	// The page asked with no list to ask: its answer, which needs no thread
 	bool noListAnswerWaiting = false;
+
+	// This run's identity's fingerprint, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
+	uint8_t hostIdentity[kNetIdentityFingerprintBytes];
+	bool hostIdentityGiven = false;
 }
 
 // The list's name built into the game: the relay server's own, once its domain is bought. It's empty until then, and then there's no relay.
@@ -1128,11 +1246,43 @@ int Relay_ListPort(void)
 	return port;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: see relay_list.h
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	hostIdentityGiven = false;
+
+	if (!fingerprint)
+	{
+		return;
+	}
+
+	memcpy(hostIdentity, fingerprint, sizeof(hostIdentity));
+
+	// All 0 is what an identity never made looks like, so it counts as none
+	for (size_t i = 0; i < sizeof(hostIdentity); i++)
+	{
+		hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;
+	}
+}
+
 void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,
 	int hostMs, const SessionDescription &session)
 {
 	// What networking.cpp hands over is checked here too: a room the list couldn't take isn't sent
-	if (!RelayList_IsRegion(region) || !code || !Relay_IsCode(code, kRelayCodeLetters) || !pass || !Start())
+	if (!RelayList_IsRegion(region) || !code || !Relay_IsCode(code, kRelayCodeLetters) || !pass)
+	{
+		return;
+	}
+
+	// A listing without the host's fingerprint would send its joiners to a host they can't check, so it isn't sent at all. Modified
+	// 2026-11-09 by Melanikus for the AvP port: only with the v2 draft (networking.h). Version 1's listing has no fingerprint.
+	if (Net_V2DraftOn() && !hostIdentityGiven)
+	{
+		LogString("Relay list: this run has no identity to show joiners yet, so the game isn't put on the list");
+		return;
+	}
+
+	if (!Start())
 	{
 		return;
 	}
@@ -1144,6 +1294,7 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 	memcpy(l.pass, pass, sizeof(l.pass));
 	l.passTime = passTime;
 	l.hostMs = hostMs;
+	memcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));
 	ShowSession(session, l);
 
 	EnterCriticalSection(&shared->lock);
@@ -1370,10 +1521,155 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
 	return ready;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): see relay_list.h
+bool RelayList_AskForRelayKeys(const char *region)
+{
+	if (!region || !RelayList_IsRegion(region) || !Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->keysWanted = true;
+	memcpy(shared->keysRegion, region, strlen(region) + 1);
+	shared->keysAsked++;
+	LeaveCriticalSection(&shared->lock);
+
+	Wake();
+	return true;
+}
+
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
+{
+	memset(p384, 0, kNetCryptoP384PublicBytes);
+	memset(kem, 0, kNetPqKemPublicBytes);
+	*why = NULL;
+
+	if (!shared)
+	{
+		*why = "no relay server is set";
+		return kRelayKeysRefused;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	int came = kRelayKeysWaiting;
+
+	// Only the answer to the newest asking counts: one to an older asking is still waiting, as far as this one goes
+	if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)
+	{
+		came = shared->keysWhy ? kRelayKeysRefused : kRelayKeysCame;
+		*why = shared->keysWhy;
+
+		if (came == kRelayKeysCame)
+		{
+			memcpy(p384, shared->keysP384, kNetCryptoP384PublicBytes);
+			memcpy(kem, shared->keysKem, kNetPqKemPublicBytes);
+		}
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return came;
+}
+
+// The settings' RelayKey is read once, and only with -dev: a player's game never has a relay's fingerprint, so it uses no relay of
+// version 2. A setting that isn't a region, a colon and 96 hex digits is no setting, and the log says so once.
+// ONCE A RUN, ON PURPOSE (Secondary's finding 6.1; added 2026-11-09 by Melanikus for the AvP port): it's what the relay's keys are checked
+// against, so it stays the same for the whole run, and a setting edited while the game runs can't change it halfway through a game. A
+// tester who changes it starts the game again, and the steps for testers say so.
+bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes])
+{
+	static bool read = false;
+	static bool given = false;
+	static char keyRegion[kRelayListRegionLetters + 1];
+	static uint8_t keyFingerprint[kNetCryptoHashBytes];
+
+	if (!read)
+	{
+		read = true;
+
+		if (DevMode)
+		{
+			std::string const setting = Config_GetString("[Network]", "RelayKey", "");
+			given = NetRelayKeys_ReadSetting(setting.c_str(), keyRegion, keyFingerprint);
+
+			if (!setting.empty() && !given)
+			{
+				LogString("Relay list: the settings' RelayKey isn't a region, a colon and 96 hex digits, so no relay's keys can be checked");
+			}
+		}
+	}
+
+	memset(fingerprint, 0, kNetCryptoHashBytes);
+
+	if (!given || !region || strcmp(region, keyRegion) != 0)
+	{
+		return false;
+	}
+
+	memcpy(fingerprint, keyFingerprint, kNetCryptoHashBytes);
+	return true;
+}
+
 // Modified 2026-11-09 by Melanikus for the AvP port: see relay_list.h (the page of games found's failure screen)
 bool RelayList_WhyIsNoConnection(const char *why)
 {
 	// The very words this file hands out, compared as the same words (each is one of the constants above), so no rewording elsewhere
 	// can make it say something else
 	return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;
+}
+
+// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+
+bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	// Without -dev, nothing: the page isn't there, and this says no too, so no other way can reach the server either
+	if (!DevMode || !fingerprint)
+	{
+		return false;
+	}
+
+	// The body is made here, on the game's thread, so a name or key that can't be sent is refused before anything starts
+	char body[kRelayAccessMostBodyBytes + 1];
+
+	if (!RelayList_AccessBody(name, statics, body, sizeof(body)) || !Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	memcpy(shared->accessBody, body, sizeof(body));
+	memcpy(shared->accessFingerprint, fingerprint, kNetIdentityFingerprintBytes);
+	shared->accessWanted = true;
+	LeaveCriticalSection(&shared->lock);
+
+	Wake();
+	return true;
+}
+
+bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why)
+{
+	*answered = false;
+	*answer = kRelayAccessWaiting;
+	*why = NULL;
+
+	if (!shared)
+	{
+		return false;
+	}
+
+	WriteTheNews();
+
+	EnterCriticalSection(&shared->lock);
+	bool const ready = shared->accessReady;
+
+	if (ready)
+	{
+		shared->accessReady = false;
+		*answered = shared->accessAnswered;
+		*answer = shared->accessAnswer;
+		*why = shared->accessWhy;
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return ready;
 }

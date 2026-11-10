@@ -1,0 +1,178 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a file one byte bigger than the most is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (size > kNetIdentityFileMostBytes)",
+					"to": "if (size > kNetIdentityFileMostBytes + 1)"
+				}
+			]
+		},
+		{
+			"name": "a file a byte short of its heading is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "size < kNetIdentityFileHeadBytes)",
+					"to": "size < kNetIdentityFileHeadBytes - 1)"
+				}
+			]
+		},
+		{
+			"name": "only seven bytes of the mark are looked at",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (memcmp(bytes, kNetIdentityFileMark, sizeof(kNetIdentityFileMark)) != 0)",
+					"to": "if (memcmp(bytes, kNetIdentityFileMark, 7) != 0)"
+				}
+			]
+		},
+		{
+			"name": "only the version's lowest byte is looked at",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (NetIdentityFile_ReadNumber(bytes + at) != kNetIdentityFileVersion)",
+					"to": "if (bytes[at] != kNetIdentityFileVersion)"
+				}
+			]
+		},
+		{
+			"name": "a number's highest byte is read as 0",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": " | ((uint32_t)at[3] << 24);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a number's highest byte is written as 0",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "at[3] = (uint8_t)((value >> 24) & 0xFF);",
+					"to": "at[3] = 0;"
+				}
+			]
+		},
+		{
+			"name": "a sealed part a byte smaller than any sealed identity is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (sealedBytes < kNetIdentitySealedLeast ||",
+					"to": "if (sealedBytes < kNetIdentitySealedLeast - 1 ||"
+				}
+			]
+		},
+		{
+			"name": "a sealed part a byte bigger than any sealed identity is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "sealedBytes > kNetIdentitySealedMost)\n\t{\n\t\treturn kNetIdentityFileSealedSize;",
+					"to": "sealedBytes > kNetIdentitySealedMost + 1)\n\t{\n\t\treturn kNetIdentityFileSealedSize;"
+				}
+			]
+		},
+		{
+			"name": "a file with bytes after its sealed part is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (size != at + sealedBytes)",
+					"to": "if (size < at + sealedBytes)"
+				}
+			]
+		},
+		{
+			"name": "a file a byte short of the sealed part it says it has is read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (size != at + sealedBytes)",
+					"to": "if (size > at + sealedBytes)"
+				}
+			]
+		},
+		{
+			"name": "a refused file's view keeps what was in it",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "\t\tview->statics = NULL;\n\t\tview->sealed = NULL;\n\t\tview->sealedBytes = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the writer writes a sealed part too small for any sealed identity",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "!out || sealedBytes < kNetIdentitySealedLeast || ",
+					"to": "!out || "
+				}
+			]
+		},
+		{
+			"name": "the writer writes a sealed part too big for any sealed identity",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": " || sealedBytes > kNetIdentitySealedMost)\n\t{\n\t\treturn 0;",
+					"to": ")\n\t{\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "the writer writes a byte past the room it's given",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "if (total > room)",
+					"to": "if (total > room + 1)"
+				}
+			]
+		},
+		{
+			"name": "the writer writes a version the reader doesn't know",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "NetIdentityFile_PutNumber(out + at, kNetIdentityFileVersion);",
+					"to": "NetIdentityFile_PutNumber(out + at, 2);"
+				}
+			]
+		},
+		{
+			"name": "the writer writes the wrong sealed size",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "NetIdentityFile_PutNumber(out + at, (uint32_t)sealedBytes);",
+					"to": "NetIdentityFile_PutNumber(out + at, (uint32_t)sealedBytes + 1);"
+				}
+			]
+		},
+		{
+			"name": "a refusal has no words of its own",
+			"changes": [
+				{
+					"file": "3dc/net_identity_file.h",
+					"from": "\t\tcase kNetIdentityFileWrongSize: return \"the identity file isn't the size its heading says\";\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

@@ -2,6 +2,9 @@
 //
 // Everything here is in the menus' own 640 by 480 (the drawing code scales it to the screen), in the game's small font, with the tail
 // lit by the menus' own highlight glow (Menus/glowy_middle.RIM), drawn the way the HUD draws the motion tracker's turning disc.
+//
+// Modified 2026-11-09 by Melanikus for the AvP port: the check code on the joiner's asking screen and for the host's waiting request
+// (CRYPTO.md section 8), and the words for a host that's another v2 test build (JBLD).
 
 #include "3dc.h"
 #include "inline.h"
@@ -895,6 +898,28 @@ void OnlinePage_Joining(int menuRow)
 	joinDrewFrames = false;
 }
 
+// This joiner's check code, under the two lines, once its handshake with the host is done (CRYPTO.md section 8: always shown on the join
+// screen). Nothing is drawn before then, or in a game on this network, which has no handshake. Added 2026-11-09 by Melanikus for the AvP
+// port.
+static void DrawTheCheckCode(void)
+{
+	char digits[kNetRelayCheckCodeBytes];
+	char line[48];
+
+	if (!Net_RelayCheckCodeNow(digits))
+	{
+		return;
+	}
+
+	OnlineScreens_CheckCodeWords(digits, line, sizeof(line));
+
+	if (line[0])
+	{
+		Words(line, MENU_CENTREX, kWordsTop + 50, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), MENU_CENTREX, kWordsTop + 70, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+}
+
 bool OnlinePage_DrawAsking(void)
 {
 	int const answer = Net_JoinAnswerNow();
@@ -910,12 +935,14 @@ bool OnlinePage_DrawAsking(void)
 		char line[96];
 		OnlineScreens_WordsWithSeconds(kOnlineWordsAsking, OnlineScreens_SecondsLeft(askedAt, Now(), kNetJoinAnswerWithinMs), line, sizeof(line));
 		TwoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);
+		DrawTheCheckCode();
 		return true;
 	}
 
 	if (answer == kNetJoinAnswerYes)
 	{
 		TwoLines(OnlineScreens_Words(kOnlineWordsLetIn), "", false);
+		DrawTheCheckCode();
 		return true;
 	}
 
@@ -936,6 +963,9 @@ bool OnlinePage_JoinEnded(void)
 			return true;
 		case kNetJoinAnswerNoAnswer:
 			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));
+			return true;
+		case kNetJoinAnswerOtherBuild:
+			SayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));
 			return true;
 		case kNetJoinAnswerWaiting:
 			// The host's no, busy and no answer all come as answers (networking.h), so a request still waiting when the join ends was Esc
@@ -978,6 +1008,26 @@ bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft)
 	OnlineScreens_SafeName(raw, sizeof(raw), safeName, size);
 	*secondsLeft = OnlineScreens_SecondsLeft(hostAskedAt, Now(), kNetJoinAnswerWithinMs);
 	return true;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: see online_screens_page.h
+bool OnlineHost_AskCheckCode(char *line, size_t size)
+{
+	if (size == 0)
+	{
+		return false;
+	}
+
+	line[0] = '\0';
+	char digits[kNetRelayCheckCodeBytes];
+
+	if (!hostIsAsked || !Net_JoinRequestCheckCode(askingWho, digits))
+	{
+		return false;
+	}
+
+	OnlineScreens_CheckCodeWords(digits, line, size);
+	return line[0] != '\0';
 }
 
 void OnlineHost_Answer(bool yes)
@@ -1069,12 +1119,20 @@ static bool NewsHasCome(void)
 	return true;
 }
 
-bool OnlineHost_NewsLine(char *line, size_t size)
+bool OnlineHost_NewsLine(char *line, size_t size, bool held)
 {
 	NewsHasCome();
 
 	if (!newsCame || HasCome(Now(), newsAt + kFailedLineMs))
 	{
+		return false;
+	}
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: while a join request's rows are up, the news waits, its 8 s starting again each
+	// frame, so it never covers the check code (online_screens_page.h)
+	if (held)
+	{
+		newsAt = Now();
 		return false;
 	}
 

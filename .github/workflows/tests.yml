@@ -65,6 +65,40 @@ jobs:
           if ($found -ne $expected) { throw "tests/vectors/relay-v1.json isn't the relay's file: its sha256 is $found, not $expected" }
           "tests/vectors/relay-v1.json is the relay's file at 26d0580"
 
+      # net_v2_parts_test and net_v2a_test read protocol version 2's test vectors, which the relay's Java makes from its own code
+      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 2b8dcd6, Split's 48-byte secrets, made by java/test/avpx/v2/CryptoV2Vectors.java). As
+      # relay-v1.json's: byte for byte, or it proves nothing. Added 2026-11-09 by Melanikus for the AvP port.
+      - name: Check protocol version 2's test vectors are the relay's own
+        shell: pwsh
+        run: |
+          $expected = '08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17'
+          $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/crypto-v2.json).Hash.ToLowerInvariant()
+          if ($found -ne $expected) { throw "tests/vectors/crypto-v2.json isn't the relay's file: its sha256 is $found, not $expected" }
+          "tests/vectors/crypto-v2.json is the relay's file at 2b8dcd6"
+
+      # net_crypto_test reads the published known answers for protocol v2's primitives (NIST CAVP and ACVP, and Wycheproof), copied byte
+      # for byte from the relay's repository (AVPx-Dedicated-Server crypto-kat-java 0c4755cf, test-vectors/crypto-kat/; the folder's
+      # COPIED.md says what and why). Every file's sha256 is in that folder's SHA256SUMS, and nothing unlisted may be there: a copy
+      # changed to suit the game's code would prove nothing. Added 2026-11-09 by Melanikus for the AvP port.
+      - name: Check the copied known answers are the relay's own
+        shell: pwsh
+        run: |
+          $folder = 'tests/vectors/crypto-kat'
+          $listed = @{}
+          foreach ($line in Get-Content -LiteralPath "$folder/SHA256SUMS") {
+            if ($line -notmatch '^([0-9a-f]{64})  (\S+)$') { throw "SHA256SUMS has a line that isn't a sum and a name: $line" }
+            $expected = $Matches[1]
+            $name = $Matches[2]
+            $found = (Get-FileHash -Algorithm SHA256 -LiteralPath "$folder/$name").Hash.ToLowerInvariant()
+            if ($found -ne $expected) { throw "$folder/$name isn't the relay's copy: its sha256 is $found, not $expected" }
+            $listed[$name] = $true
+          }
+          # Nothing else is in the folder but these, the note and the list itself
+          $root = (Resolve-Path -LiteralPath $folder).Path
+          $extra = @(Get-ChildItem -LiteralPath $folder -Recurse -File | ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace('\', '/') } | Where-Object { -not $listed[$_] -and $_ -ne 'SHA256SUMS' -and $_ -ne 'COPIED.md' })
+          if ($extra.Count -gt 0) { throw "tests/vectors/crypto-kat has files SHA256SUMS doesn't list: $($extra -join ', ')" }
+          "$($listed.Count) copied known-answer files are the relay's own (crypto-kat-java 0c4755cf)"
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1

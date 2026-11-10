@@ -499,7 +499,10 @@ static const char *const kWords[] =
 	"Finding the nearest relay",                                  // kOnlineWordsRelayFinding
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
-	"Your game's room on the relay has gone"                      // kOnlineWordsRelayGone
+	"Your game's room on the relay has gone",                     // kOnlineWordsRelayGone
+	"The host runs another test build of the v2 draft",           // kOnlineWordsOtherBuild
+	"Read it to the host: the same 6 digits on both screens means nobody is in between",  // kOnlineWordsCheckCodeMeans
+	"Ask the player for theirs: the same 6 digits on both screens means nobody is in between"   // kOnlineWordsCheckCodeMeansHost
 };
 
 static_assert(sizeof(kWords) / sizeof(kWords[0]) == kOnlineWordsCount, "kWords needs one line for each of OnlineWords, in its order");
@@ -645,5 +648,33 @@ void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size)
 	Put(why, sizeof(why), safeWhy);
 
 	_snprintf(words, size - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsRelayGone), why);
+	words[size - 1] = '\0';
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: see online_screens.h
+void OnlineScreens_CheckCodeWords(const char *digits, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	words[0] = '\0';
+
+	// Exactly 6 digits, and the 0 after them: anything else is no code at all
+	for (int i = 0; i < 6; i++)
+	{
+		if (!digits || digits[i] < '0' || digits[i] > '9')
+		{
+			return;
+		}
+	}
+
+	if (digits[6] != '\0')
+	{
+		return;
+	}
+
+	_snprintf(words, size - 1, "Check code: %.3s %.3s", digits, digits + 3);
 	words[size - 1] = '\0';
 }

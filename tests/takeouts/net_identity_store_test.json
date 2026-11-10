@@ -1,0 +1,338 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "something there that can't be opened is taken for no file, and would be replaced",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "*gone = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;",
+					"to": "*gone = true;"
+				}
+			]
+		},
+		{
+			"name": "a file bigger than any good one is cut to fit and looked at",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if (!ReadFile(file, bytes + got, static_cast<DWORD>(room - got), &read, NULL))",
+					"to": "if (!ReadFile(file, bytes + got, static_cast<DWORD>(room - got - 1), &read, NULL))"
+				}
+			]
+		},
+		{
+			"name": "a file that can't be used leaves the identity as it was",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\tmemset(out, 0, sizeof(*out));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a sealed part that opens to a byte more than the private halves is used",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if (plain.cbData != kNetIdentitySealedPlainBytes)",
+					"to": "if (plain.cbData < kNetIdentitySealedPlainBytes)"
+				}
+			]
+		},
+		{
+			"name": "private halves that don't belong to the public ones are taken as read",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "else if (!NetIdentity_FromKept(view.statics, plain.pbData, plain.pbData + kNetCryptoP384ScalarBytes, out))",
+					"to": "else if (!NetIdentity_FromKept(view.statics, plain.pbData, plain.pbData + kNetCryptoP384ScalarBytes, out) && false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the unsealed private halves aren't wiped before their memory goes back to Windows",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\tSecureZeroMemory(plain.pbData, plain.cbData);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sealing is for everyone on this PC, not only this Windows user",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "CryptProtectData(&plain, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &sealed)",
+					"to": "CryptProtectData(&plain, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN | CRYPTPROTECT_LOCAL_MACHINE, &sealed)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Windows may ask the player something when it unseals",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "CryptUnprotectData(&sealed, NULL, &entropy, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain)",
+					"to": "CryptUnprotectData(&sealed, NULL, &entropy, NULL, NULL, 0, &plain)"
+				}
+			]
+		},
+		{
+			"name": "the game's own words aren't added to what's sealed",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "entropy.cbData = static_cast<DWORD>(sizeof(kSealWords) - 1);",
+					"to": "entropy.cbData = 0;"
+				}
+			]
+		},
+		{
+			"name": "keeping again can't put the new file in place of the old",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH",
+					"to": "MOVEFILE_WRITE_THROUGH"
+				}
+			]
+		},
+		{
+			"name": "a keeping that fails leaves what it wrote beside the file",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\tDeleteFileW(fresh.c_str());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "two secrets are the same when their last bytes are",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "differ |= (uint8_t)(a[i] ^ b[i]);",
+					"to": "differ = (uint8_t)(a[i] ^ b[i]);"
+				}
+			]
+		},
+		{
+			"name": "another identity's P-384 private key matches",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_SameSecret(one, two, sizeof(one));",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "another identity's ML-KEM private key matches",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_SameSecret(sealed, opened, sizeof(sealed));",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "a kept identity's halves aren't checked against each other",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_HalvesMatch(out)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kept identity's fingerprint isn't worked out again",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_HalvesMatch(out)\n\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);",
+					"to": "\t\t&& NetIdentity_HalvesMatch(out);"
+				}
+			]
+		},
+		{
+			"name": "a kept identity that's refused is left half made",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);\n\n\tif (!made)\n\t{\n\t\tNetIdentity_Free(out);\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number",
+					"to": "\t\t&& NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint);\n\n\tif (!made)\n\t{\n\t\treturn false;\n\t}\n\n\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number"
+				}
+			]
+		},
+		{
+			"name": "a kept identity isn't marked whole",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\tout->made = true;\n\treturn true;\n}\n\n// The P-384 private number",
+					"to": "\treturn true;\n}\n\n// The P-384 private number"
+				}
+			]
+		},
+		{
+			"name": "an identity never made leaves what was in out",
+			"changes": [
+				{
+					"file": "3dc/net_identity.h",
+					"from": "\tif (!id || !id->made)\n\t{\n\t\tNetCrypto_Wipe(out, kNetCryptoP384ScalarBytes);\n",
+					"to": "\tif (!id || !id->made)\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "CNG's export gives back the key's Y, not its private number",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "memcpy(privateOut, blob.xyd + 2 * kNetCryptoP384ScalarBytes, kNetCryptoP384ScalarBytes);",
+					"to": "memcpy(privateOut, blob.xyd + kNetCryptoP384ScalarBytes, kNetCryptoP384ScalarBytes);"
+				}
+			]
+		},
+		{
+			"name": "CNG's export that's refused leaves what was in out",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "\telse\n\t{\n\t\tNetCrypto_Wipe(privateOut, kNetCryptoP384ScalarBytes);\n\t}\n\n\tNetCrypto_Wipe(&blob, sizeof(blob));",
+					"to": "\n\tNetCrypto_Wipe(&blob, sizeof(blob));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the new file is put in place without being flushed to the disk itself",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\tok = ok && FlushFileBuffers(file) != FALSE;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a file owned by someone else is read as this user's",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if (!OwnedByThisUser(file))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a kept file takes the folder's list of who may read it",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t\t\t!SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED, SE_DACL_PROTECTED))",
+					"to": "\t\t\tfalse)"
+				}
+			]
+		},
+		{
+			"name": "a kept file may be read by everyone",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "!SetSecurityDescriptorDacl(&descriptor, TRUE, list, FALSE) ||",
+					"to": "!SetSecurityDescriptorDacl(&descriptor, TRUE, NULL, FALSE) ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the file is kept where Windows copies it to the player's other PCs",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &local)",
+					"to": "SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &local)"
+				}
+			]
+		},
+		{
+			"name": "a second copy of the game shares the first copy's identity",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "return secondCopy ? kSecondCopyFileName : kFileName;",
+					"to": "return kFileName;"
+				}
+			]
+		},
+		{
+			"name": "a link at the file's place is followed to what it points at",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);",
+					"to": "FILE_ATTRIBUTE_NORMAL, NULL);"
+				}
+			]
+		},
+		{
+			"name": "a link at the file's place is read as if it were the file",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "if ((about.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a Hudson run uses the player's own files",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "return secondCopy ? kHudsonSecondCopyFileName : kHudsonFileName;",
+					"to": "return secondCopy ? kSecondCopyFileName : kFileName;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kept file ignores whether this is a Hudson run",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy())",
+					"to": "NetIdentityStore_FileName(false, SaveFolder_IsTheSecondCopy())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game doesn't say whether it's the second copy, so it can't link",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "bool SaveFolder_IsTheSecondCopy()\n{\n\treturn saveFolderIsTheSecondCopy;\n}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never says it's a Hudson run",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "\treturn HudsonRunIsOn;\n}",
+					"to": "\treturn false;\n}"
+				}
+			]
+		}
+	]
+}

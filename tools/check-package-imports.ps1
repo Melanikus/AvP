@@ -31,7 +31,8 @@ $ErrorActionPreference = 'Stop'
 # games and relays over HTTPS with it (added 2026-11-09). crypt32.dll is Windows' own certificate library, part of Windows 10 and 11, in
 # the same folder and signed by Microsoft: the game links it because relay_list.cpp, with -dev's RelayListPin, reads the list's
 # certificate from WinHTTP to check it against the pin, and must give it back with CertFreeCertificateContext (added 2026-11-09, PO's
-# approval; the hash itself is bcrypt's).
+# approval; the hash itself is bcrypt's). It's also how net_identity_store.cpp keeps a player's identity sealed for that Windows user, with
+# CryptProtectData (DPAPI, #21; added 2026-11-09).
 $partOfWindows = @(
     'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'crypt32.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll',
     'user32.dll', 'winhttp.dll', 'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'

@@ -8841,7 +8841,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "\t\tNet_LetEveryJoinerIn(true);\n",
+					"from": "\t\tNet_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);\n",
 					"to": ""
 				}
 			]
@@ -9713,6 +9713,156 @@
 					"file": "3dc/avp/hudson.cpp",
 					"from": "\t// The log is full (kGhostLogMostNpcs), and this is a new one\n\tif (!entry)\n\t{\n\t\treturn;\n\t}\n\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a -NetV2 run doesn't tell the game -netv2",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($NetV2) { $relaySwitch += ' -netv2' }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a -SecondCopy run doesn't tell the game -secondcopy",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a -NetV2 run's settings have no RelayKey",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the second copy's files are looked for in the first copy's folder",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'",
+					"to": "'HudsonRun\\My Games\\Aliens versus Predator'"
+				}
+			]
+		},
+		{
+			"name": "the pair's joiner isn't the second copy, so both games are one player",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "    if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "access= is taken on a net= run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (seenAccess && plan->netMode != kHudsonNetNone)\n\t{\n\t\treturn kHudsonRefusedAccessWithNet;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "accesswait= takes less than the list's minute",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->accessWaitSeconds < kHudsonLeastAccessWaitSeconds || plan->accessWaitSeconds > kHudsonMostAccessWaitSeconds)",
+					"to": "if (plan->accessWaitSeconds > kHudsonMostAccessWaitSeconds)"
+				}
+			]
+		},
+		{
+			"name": "accesswait= is taken without access=check",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenAccessWait && plan->accessPress != kHudsonAccessCheck)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "access=newid is read as a request",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->accessPress = kHudsonAccessNewId;",
+					"to": "\t\t\t\tplan->accessPress = kHudsonAccessRequest;"
+				}
+			]
+		},
+		{
+			"name": "answer= is taken on a joiner's run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenAnswer && plan->netMode != kHudsonNetHost)",
+					"to": "if (seenAnswer && plan->netMode == kHudsonNetNone)"
+				}
+			]
+		},
+		{
+			"name": "answerafter= takes more than the joiner waits",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerAfterSeconds < 1 || plan->answerAfterSeconds > kHudsonMostAnswerAfterSeconds)",
+					"to": "if (plan->answerAfterSeconds < 1)"
+				}
+			]
+		},
+		{
+			"name": "answer=no is read as Let in",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->answerPress = kHudsonAnswerSayNo;",
+					"to": "\t\t\t\tplan->answerPress = kHudsonAnswerLetIn;"
+				}
+			]
+		},
+		{
+			"name": "a run's accesswait= starts at 0, not 70",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tplan->accessWaitSeconds = kHudsonDefaultAccessWaitSeconds;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "findgames= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\tif (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFindGamesWord;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "findgames= is taken on a host's run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFindGames && plan->netMode != kHudsonNetJoin)",
+					"to": "if (seenFindGames && plan->netMode == kHudsonNetNone)"
 				}
 			]
 		}

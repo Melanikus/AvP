@@ -13,6 +13,10 @@
 #include "networking.h"
 #include "net_checks.h"
 #include "net_relay.h"
+#include "net_peer_v2.h"
+#include "net_relay_v2.h"     // this test's stand-in (net_start_test_stubs), not 3dc's: see there
+#include "net_relay_keys.h"
+#include "net_identity_run.h"
 #include "relay_list.h"
 
 #include <algorithm>
@@ -60,6 +64,19 @@ void Con_AddCommand(char *commandName, funcPointer)
 void Con_PrintError(const std::string &)
 {
 	errorLines++;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: the v2 draft's stand-ins (networking.h), for -dev and the commit this build was made from,
+// which the game has from d3d_render.cpp and build_identity.cpp. The tests run with the draft on, because the relay's tests need handshake
+// B; TestTheV2Draft turns each part off, and shows that off is version 1.
+int DevMode = 1;
+static uint32_t const kTestCommitWord = 0x5a1e7c03u;
+static bool testCommitKnown = true;
+
+bool BuildIdentity_CommitWord(uint32_t *out)
+{
+	*out = testCommitKnown ? kTestCommitWord : 0;
+	return testCommitKnown;
 }
 
 void Con_PrintMessage(const std::string &)
@@ -116,6 +133,97 @@ void RelayList_HostSessionNow(const SessionDescription &)
 void RelayList_HostRoomClosed(void)
 {
 	roomsUnlisted++;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): the fingerprint a host hands the list for its listing, which
+// only a v2 draft's host does (TestTheV2Draft)
+static int identitiesListed = 0;
+
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	identitiesListed += fingerprint ? 1 : 0;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the list's side of a relay's keys, and handshake A's
+// draws. The list gives the test's own made-up keys, and the settings' RelayKey is their fingerprint, for every region unless a test says
+// otherwise. So with the draft on, the channel to the relay opens by itself (with the stand-in session, net_start_test_stubs/net_relay_v2.h),
+// and the relay tests from before step 7 still mean what they meant. TestTheRelayChannel says otherwise, to see each rule.
+static NetRelayStaticKeys testRelayKeys;
+static uint8_t testRelayKeyFingerprint[kNetCryptoHashBytes];
+static std::string relayKeyRegion = "*";     // the region the settings' RelayKey names: "*" for every region, "" for none
+static int relayKeysGive = kRelayKeysCame;   // what the list answers: the keys, still waiting, or refused
+static bool relayKeysWrong = false;          // the list's keys aren't the ones RelayKey names
+static int relayKeysAsked = 0;
+static int drawsMade = 0;
+
+static void MakeTheTestRelayKeys()
+{
+	for (size_t i = 0; i < sizeof(testRelayKeys.p384); i++)
+	{
+		testRelayKeys.p384[i] = static_cast<uint8_t>(4 + i * 7);
+	}
+
+	for (size_t i = 0; i < sizeof(testRelayKeys.kem); i++)
+	{
+		testRelayKeys.kem[i] = static_cast<uint8_t>(9 + i * 3);
+	}
+
+	NetRelayKeys_Fingerprint(&testRelayKeys, testRelayKeyFingerprint);
+}
+
+bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes])
+{
+	memset(fingerprint, 0, kNetCryptoHashBytes);
+	bool const named = region != NULL && (relayKeyRegion == "*" || relayKeyRegion == region);
+
+	if (named)
+	{
+		memcpy(fingerprint, testRelayKeyFingerprint, kNetCryptoHashBytes);
+	}
+
+	return named;
+}
+
+bool RelayList_AskForRelayKeys(const char *region)
+{
+	relayKeysAsked++;
+	return region != NULL;
+}
+
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
+{
+	memset(p384, 0, kNetCryptoP384PublicBytes);
+	memset(kem, 0, kNetPqKemPublicBytes);
+	*why = relayKeysGive == kRelayKeysRefused ? "the list wouldn't give the relay's keys" : NULL;
+
+	if (relayKeysGive == kRelayKeysCame)
+	{
+		memcpy(p384, testRelayKeys.p384, kNetCryptoP384PublicBytes);
+		memcpy(kem, testRelayKeys.kem, kNetPqKemPublicBytes);
+		kem[0] ^= relayKeysWrong ? 1 : 0;
+	}
+
+	return relayKeysGive;
+}
+
+bool NetHandshakeA_Draw(const NetRelayStaticKeys *, NetHandshakeADraws *out)
+{
+	drawsMade++;
+
+	if (out)
+	{
+		memset(out, 0, sizeof(*out));
+	}
+
+	return out != NULL;
+}
+
+void NetHandshakeA_WipeDraws(NetHandshakeADraws *draws)
+{
+	if (draws)
+	{
+		memset(draws, 0, sizeof(*draws));
+	}
 }
 
 void Con_PrintDebugMessage(const std::string &)
@@ -267,6 +375,7 @@ int GetLocalMultiplayerLevelIndex(int, char *, int)
 // ENet, counting
 static int socketsCreated = 0, socketsDestroyed = 0, socketsOpen = 0;
 static int waitsOnASocket = 0, waitsOnNoSocket = 0, datagramsSent = 0;
+static int channelSends = 0, sealedSends = 0;   // the stand-in channel's own datagrams, and the messages it sealed (step 7)
 static bool socketCreateFails = false, socketBindFails = false, datagramSendFails = false, hostCreateFails = false, packetCreateFails = false;
 static std::vector<ENetAddress> socketsBoundTo, datagramsSentTo;
 
@@ -399,6 +508,7 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	theHost.olderConnectsRefused = 0;
 	theHost.socket = 77;
 	theHost.intercept = NULL;
+	theHost.sendHook = NULL;   // patch 007's hook: none until the game sets one (added 2026-11-09 by Melanikus for the AvP port)
 	theHost.address.host = address ? address->host : ENET_HOST_ANY;
 	theHost.address.port = address ? address->port : 0;
 
@@ -449,10 +559,12 @@ void enet_host_destroy(ENetHost *)
 }
 
 static ENetAddress lastConnectTo;   // where the game last connected to (the relay's tests)
+static enet_uint32 lastConnectData = 0xFFFFFFFFu;   // and what its CONNECT said: the v2 draft's commit, or 0 (TestTheV2Draft)
 
-ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *address, size_t channelCount, enet_uint32)
+ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *address, size_t channelCount, enet_uint32 data)
 {
 	channelsAsked = channelCount;
+	lastConnectData = data;
 
 	if (address)
 	{
@@ -791,6 +903,97 @@ static std::deque<WaitingDatagram> datagramsWaiting;
 // The last thing the game sent from that socket, byte for byte
 static std::vector<uint8_t> lastDatagramSent;
 
+// Added 2026-11-09 by Melanikus for the AvP port (#21): the identity store's stand-in (net_identity_store.h). It finds what the test says,
+// and gives back a whole identity, made fresh, where the real store would give the kept one or a new one it has kept. The real store, with
+// Windows' sealing and the file, is net_identity_store_test's: here the test sees what networking.cpp does with each answer.
+static NetIdentityStoreResult storeFinds = kNetIdentityStoreNoFile;
+static bool storeKeepFails = false;
+static int storeLoads = 0, storeMakes = 0;
+
+NetIdentityStoreResult NetIdentityStore_Load(NetIdentity *out, const char **why)
+{
+	storeLoads++;
+
+	if (why)
+	{
+		*why = storeFinds == kNetIdentityStoreLoaded || storeFinds == kNetIdentityStoreNoFile ? NULL : "the test's stand-in says so";
+	}
+
+	if (storeFinds == kNetIdentityStoreLoaded)
+	{
+		return NetIdentity_Make(out) ? kNetIdentityStoreLoaded : kNetIdentityStoreCantRead;
+	}
+
+	return storeFinds;
+}
+
+bool NetIdentityStore_MakeAndKeep(NetIdentity *out)
+{
+	storeMakes++;
+
+	if (storeKeepFails || !NetIdentity_Make(out))
+	{
+		return false;
+	}
+
+	storeFinds = kNetIdentityStoreLoaded;   // kept, so the next run finds it
+	return true;
+}
+
+const char *NetIdentityStore_Words(NetIdentityStoreResult result)
+{
+	return result == kNetIdentityStoreNoFile ? "none is kept yet" : "the kept one can't be used";
+}
+
+static bool AllZeroBytes(const uint8_t *bytes, size_t size)
+{
+	for (size_t i = 0; i < size; i++)
+	{
+		if (bytes[i] != 0)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay, as far as handshake B goes. A joiner runs
+// B over its port on the relay before ENet connects, so a join through the relay needs a host that answers: this is the real host's side
+// of B (net_peer_v2.h), with an identity of its own, whose fingerprint the test's games on the list carry. Whatever the game sends to that
+// port as a handshake datagram it reads, and its answers arrive from that port, as through a real relay.
+static NetIdentity scriptedHostIdentity;
+static NetPeerHostSide scriptedHostSide;
+static uint16_t const kScriptedHostPort = 27501;
+
+static void ScriptedHostAnswers(const ENetAddress *to, const uint8_t *bytes, size_t size)
+{
+	if (!to || to->host != kRelayHost || to->port != kScriptedHostPort || size < 4 || memcmp(bytes, "AVPE", 4) != 0 || !scriptedHostIdentity.made)
+	{
+		return;
+	}
+
+	if (scriptedHostSide.Port() == 0)
+	{
+		scriptedHostSide.Start("virginia", kScriptedHostPort, &scriptedHostIdentity, enetClock);
+	}
+
+	static uint8_t opened[kNetSealedGameMostBytes];
+	size_t written = 0;
+	scriptedHostSide.Hear(bytes, size, opened, sizeof(opened), &written, enetClock);
+	NetPeerSend sends[kNetPeerMostSends];
+	size_t const count = scriptedHostSide.TakeSends(sends, kNetPeerMostSends);
+
+	for (size_t i = 0; i < count; i++)
+	{
+		WaitingDatagram answer;
+		answer.bytes.assign(sends[i].bytes, sends[i].bytes + sends[i].size);
+		answer.from.host = kRelayHost;
+		answer.from.port = kScriptedHostPort;
+		datagramsWaiting.push_back(answer);
+	}
+}
+
 int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32)
 {
 	if (socket == ENET_SOCKET_NULL)
@@ -826,18 +1029,38 @@ int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *b
 		return -1;
 	}
 
-	// A relay message (net_relay.h) has no game header to look at: its kind is where a header's gap is
-	if (buffers && buffers->data && buffers->dataLength >= sizeof(MessageHeader)
-		&& NetRelay_Read((const uint8_t *)buffers->data, buffers->dataLength, NULL) != kNetRelayIsAMessage)
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the stand-in channel's own datagrams. A
+	// handshake datagram or a cookie ask ('AVPR' 'H' or 'C') is counted apart, so the checks of what the game sends keep their meaning. A
+	// sealed message ('AVPR' 'S') is recorded as the message inside it, as the relay sees it once opened, and counted as sealed.
+	uint8_t const *bytes = buffers ? (uint8_t const *)buffers->data : NULL;
+	size_t size = buffers ? buffers->dataLength : 0;
+
+	if (bytes && size >= 5 && memcmp(bytes, "AVPR", 4) == 0 && (bytes[4] == 'H' || bytes[4] == 'C'))
 	{
-		LookAtTheGapInAHeader(buffers->data);
+		channelSends++;
+		return static_cast<int>(size);
 	}
 
-	if (buffers && buffers->data)
+	if (bytes && size == kNetRelayV2StandInBytes && memcmp(bytes, "AVPR", 4) == 0 && bytes[4] == 'S')
 	{
-		uint8_t const *const bytes = (uint8_t const *)buffers->data;
+		sealedSends++;
+		bytes += 5;
+		size = kNetSealedControlMessageBytes;
+	}
 
-		lastDatagramSent.assign(bytes, bytes + buffers->dataLength);
+	// A relay message (net_relay.h) has no game header to look at: its kind is where a header's gap is. Nor has a handshake datagram or a
+	// sealed one (protocol version 2, 'AVPE' and 'AVPG'), modified 2026-11-09 by Melanikus for the AvP port.
+	bool const endToEnd = bytes && size >= 4 && (memcmp(bytes, "AVPE", 4) == 0 || memcmp(bytes, "AVPG", 4) == 0);
+
+	if (bytes && size >= sizeof(MessageHeader) && !endToEnd && NetRelay_Read(bytes, size, NULL) != kNetRelayIsAMessage)
+	{
+		LookAtTheGapInAHeader(bytes);
+	}
+
+	if (bytes)
+	{
+		lastDatagramSent.assign(bytes, bytes + size);
+		ScriptedHostAnswers(address, bytes, size);
 	}
 
 	datagramsSent++;
@@ -920,13 +1143,14 @@ static void EndTheGame()
 {
 	Net_Disconnect();
 	AvP.Network = I_No_Network;
+	scriptedHostSide.Reset();   // the host behind the relay's handshake goes with the game too (protocol version 2)
 }
 
 // Modified 2026-11-08 by Melanikus for the AvP port: hosting through a relay (net_relay.h, PROTOCOL.md 7014de1), with the list naming one.
 // The host times it with echoes from the game's own socket, asks it for a room, listens to it alone, takes its messages off ENet's hands,
 // puts the room on the list with its region and round trip, hands the list each newer pass, and closes the room on leaving. With no relay
 // answering, the game is open on this network instead; with none named, hosting is as it always was.
-static void TellTheHost(enet_uint32 fromHost, uint16_t fromPort, uint8_t *bytes, size_t size)
+static void TellTheHostPlain(enet_uint32 fromHost, uint16_t fromPort, uint8_t *bytes, size_t size)
 {
 	theHost.receivedAddress.host = fromHost;
 	theHost.receivedAddress.port = fromPort;
@@ -934,9 +1158,31 @@ static void TellTheHost(enet_uint32 fromHost, uint16_t fromPort, uint8_t *bytes,
 	theHost.receivedDataLength = size;
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): with the draft, a relay message from the relay comes
+// sealed, as through the channel to it ('AVPR' 'S' and the message, which the stand-in session opens), so the tests from before step 7 mean
+// what they meant. TellTheHostPlain gives it as it is, as a version 1 relay would send it, for the checks that it's never read.
+static uint8_t sealedForTheHost[kNetRelayV2StandInBytes];
+
+static void TellTheHost(enet_uint32 fromHost, uint16_t fromPort, uint8_t *bytes, size_t size)
+{
+	if (Net_V2DraftOn() && fromHost == kRelayHost && bytes && size == kNetRelayMessageBytes && NetRelay_Read(bytes, size, NULL) == kNetRelayIsAMessage)
+	{
+		memcpy(sealedForTheHost, "AVPR", 4);
+		sealedForTheHost[4] = 'S';
+		memcpy(sealedForTheHost + 5, bytes, size);
+		TellTheHostPlain(fromHost, fromPort, sealedForTheHost, sizeof(sealedForTheHost));
+		return;
+	}
+
+	TellTheHostPlain(fromHost, fromPort, bytes, size);
+}
+
 static void TestHostingThroughTheRelay()
 {
 	printf("Hosting through a relay\n");
+	// Modified 2026-11-09 by Melanikus for the AvP port (step 7): version 1's relay, so without the v2 draft, which the tests otherwise
+	// run with. With the draft, the relay is reached only through the channel to it (TestTheRelayChannel).
+	NetV2DraftAsked = false;
 	relayNamed = true;
 	int const openBefore = socketsOpen;
 	int const sentBefore = datagramsSent;
@@ -996,7 +1242,9 @@ static void TestHostingThroughTheRelay()
 	uint8_t gamePacket[40];
 	memset(gamePacket, 0x11, sizeof(gamePacket));
 	TellTheHost(kRelayHost, 27501, gamePacket, sizeof(gamePacket));
-	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's packet, through its port on the relay, is the game's: ENet reads it");
+	// Modified 2026-11-09 by Melanikus for the AvP port (step 7): this test is version 1's (no draft, above), and version 1 seals nothing, so
+	// a joiner's packet through the relay is ENet's, as it always was. With the draft, the same packet is dropped (TestTheRelayChannel).
+	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's packet, through its port on the relay, is the game's: ENet reads it, as version 1 always did");
 	TellTheHost(0x0200007F, 27501, gamePacket, sizeof(gamePacket));
 	Check(theHost.intercept(&theHost, NULL) == 1, "and anything from anywhere but the relay is dropped");
 
@@ -1071,6 +1319,7 @@ static void TestHostingThroughTheRelay()
 		"SOURCE: the game's own thread never looks a relay's name up: the list hands its address over (Fourth's cold read, finding 1)");
 
 	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "+ relayRegion"), "SOURCE: no line the game writes holds the list's region: the words are the game's own (Fourth's cold read, finding 3)");
+	NetV2DraftAsked = true;   // as the tests after this expect
 }
 
 // Words into one of a listing's fields, cut to its room, and always ended with a 0, whatever is handed in
@@ -1094,7 +1343,9 @@ static RelayListGame AGameOnTheList(const char *code)
 	PutWords(game.mode, "Cooperative");
 	game.players = 1;
 	game.maxPlayers = 4;
-	game.version = kMultiplayerVersion;
+	game.version = Net_OurVersion();
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): the host behind the relay's fingerprint, as a listing carries it
+	memcpy(game.fingerprint, scriptedHostIdentity.fingerprint, sizeof(game.fingerprint));
 	return game;
 }
 
@@ -1120,7 +1371,7 @@ static void TestRelayGamesOnTheList()
 	Check(!Net_AddRelaySession(outOfRange) && NumberOfSessionsFound == 1, "nor one whose level number is past 100");
 
 	RelayListGame older = AGameOnTheList("ABCD2347");
-	older.version = kMultiplayerVersion - 1;
+	older.version = Net_OurVersion() - 1;
 	Check(Net_AddRelaySession(older) && NumberOfSessionsFound == 2 && !SessionData[1].AllowedToJoin && strstr(SessionData[1].Name, "(V ") != NULL,
 		"another version is listed with its version, and can't be joined, as on this network");
 	RelayListGame full = AGameOnTheList("ABCD2348");
@@ -1187,11 +1438,30 @@ static bool NoteTheStep(void)
 	return true;
 }
 
-static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
+static void ArrivesFromTheRelayPlain(const NetRelayMessage &m, uint16_t fromPort)
 {
 	WaitingDatagram waiting;
 	waiting.bytes.resize(kNetRelayMessageBytes);
 	NetRelay_Write(m, waiting.bytes.data());
+	waiting.from.host = kRelayHost;
+	waiting.from.port = fromPort;
+	datagramsWaiting.push_back(waiting);
+}
+
+// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): with the draft, sealed, as TellTheHost's are
+static void ArrivesFromTheRelay(const NetRelayMessage &m, uint16_t fromPort)
+{
+	if (!Net_V2DraftOn())
+	{
+		ArrivesFromTheRelayPlain(m, fromPort);
+		return;
+	}
+
+	WaitingDatagram waiting;
+	waiting.bytes.resize(kNetRelayV2StandInBytes);
+	memcpy(waiting.bytes.data(), "AVPR", 4);
+	waiting.bytes[4] = 'S';
+	NetRelay_Write(m, waiting.bytes.data() + 5);
 	waiting.from.host = kRelayHost;
 	waiting.from.port = fromPort;
 	datagramsWaiting.push_back(waiting);
@@ -1232,8 +1502,36 @@ static void TestJoiningThroughTheRelay()
 	TellTheHost(0x0200007F, 27501, notTheRelays, sizeof(notTheRelays));
 	Check(theHost.intercept(&theHost, NULL) == 1, "a packet from anywhere but the relay is dropped before ENet reads it");
 	TellTheHost(kRelayHost, 27501, notTheRelays, sizeof(notTheRelays));
-	Check(theHost.intercept(&theHost, NULL) == 0, "while the game's own, from its port on the relay, are ENet's to read");
-	EndTheGame();
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): a plain one from its port too; the game's own come sealed
+	Check(theHost.intercept(&theHost, NULL) == 1, "and so is a plain one from its port on the relay: the game's own come sealed");
+	{
+		// The host behind the relay has the keys too (B5 went), so what it seals opens here, and ENet reads the opened bytes
+		uint8_t plain[40];
+		memset(plain, 0x5C, sizeof(plain));
+		static uint8_t sealed[kNetSealedGameMostBytes];
+		size_t sealedSize = 0;
+		bool const sealedIt = scriptedHostSide.Ready() && scriptedHostSide.Seal(plain, sizeof(plain), sealed, sizeof(sealed), &sealedSize, enetClock);
+		TellTheHost(kRelayHost, 27501, sealed, sealedSize);
+		Check(sealedIt && theHost.intercept(&theHost, NULL) == 0 && theHost.receivedDataLength == sizeof(plain) && memcmp(theHost.receivedData, plain, sizeof(plain)) == 0,
+			"handshake B ran with the host the list named, and a game datagram it sealed opens here, for ENet to read as it was");
+		TellTheHost(kRelayHost, 27501, sealed, sealedSize);
+		Check(theHost.intercept(&theHost, NULL) == 1, "the same sealed datagram again is dropped: none is taken twice");
+
+		// The check code (CRYPTO.md section 8): the joiner has the same 6 digits as the host behind the relay, for the players to compare
+		char code[kNetRelayCheckCodeBytes];
+		bool const shown = Net_RelayCheckCodeNow(code);
+		bool allDigits = strlen(code) == 6;
+
+		for (size_t i = 0; i < 6 && allDigits; i++)
+		{
+			allDigits = isdigit(static_cast<unsigned char>(code[i])) != 0;
+		}
+
+		Check(shown && allDigits && strcmp(code, scriptedHostSide.CheckCode()) == 0,
+			"the joiner has the check code to show: 6 digits, the same the host behind the relay worked out");
+		EndTheGame();
+		Check(!Net_RelayCheckCodeNow(code) && code[0] == 0, "and once the game is left, it has none");
+	}
 
 	// The relay says no
 	NumberOfSessionsFound = 0;
@@ -1306,14 +1604,25 @@ static void TestJoiningThroughTheRelay()
 // Modified 2026-11-09 by Melanikus for the AvP port: THE RELAY ON THE SCREEN (Fourth's online screens). The host's news about its relay,
 // once each time it changes, and the line in play saying which relay the game goes through and how far away it is, for a host and for a
 // joiner. Asking changes nothing.
-// A host that has just started hosting through the relay: the relay answers its first echo, the echoes end, and the relay opens its room
+// A host that has just started hosting through the relay: the relay answers its first echo, the echoes end, and the relay opens its room.
+// Modified 2026-11-09 by Melanikus for the AvP port (step 7): with the v2 draft there are no echoes. The channel to the relay opens by
+// itself on the first turn (the stand-in list's keys, the cookie round and the stand-in session), and the room is asked for through it.
+// The clock goes on as it did, so what comes after keeps its times.
 static void HostThroughTheRelayUntilItsRoomIsOpen()
 {
-	uint8_t back[kNetRelayMessageBytes];
-	memcpy(back, lastDatagramSent.data(), sizeof(back));
-	back[5] = kNetRelayEchoBack;
-	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, back, sizeof(back));
-	theHost.intercept(&theHost, NULL);
+	if (Net_V2DraftOn())
+	{
+		Net_ServiceNetwork();
+	}
+	else
+	{
+		uint8_t back[kNetRelayMessageBytes];
+		memcpy(back, lastDatagramSent.data(), sizeof(back));
+		back[5] = kNetRelayEchoBack;
+		TellTheHost(kRelayHost, kNetRelayDefaultControlPort, back, sizeof(back));
+		theHost.intercept(&theHost, NULL);
+	}
+
 	enetClock += 100;
 	Net_ServiceNetwork();
 	enetClock += 100;
@@ -1336,6 +1645,9 @@ static void HostThroughTheRelayUntilItsRoomIsOpen()
 static void TestTheRelayOnTheScreen()
 {
 	printf("The relay on the screen\n");
+	// Modified 2026-11-09 by Melanikus for the AvP port (step 7): version 1's relay, so without the v2 draft, which the tests otherwise
+	// run with. With the draft, the relay is reached only through the channel to it (TestTheRelayChannel).
+	NetV2DraftAsked = false;
 	relayNamed = true;
 	NetRelayHostState news;
 	NetRelayHostState again;
@@ -1422,7 +1734,9 @@ static void TestTheRelayOnTheScreen()
 	Check(news.what == kNetRelayHostNone && news.changes == again.changes, "and has no relay news at all");
 	EndTheGame();
 
-	// A joiner through a relay: ENet's round trip to the host, once ENet has timed one
+	// A joiner through a relay: ENet's round trip to the host, once ENet has timed one. Its join goes through B, so with the v2 draft, through
+	// the channel to the relay (step 7)
+	NetV2DraftAsked = true;
 	relayNamed = true;
 	datagramsWaiting.clear();
 	NumberOfSessionsFound = 0;
@@ -1487,6 +1801,11 @@ uint32_t Net_RemoteRelayAddress();
 static void TestARunsOneRelayBeyondThisMachine()
 {
 	printf("A Hudson run with net=, and its one relay beyond this machine\n");
+
+	// Modified 2026-11-09 by Melanikus for the AvP port: this is version 1's relay (server #14's run), so it's tried without the v2 draft,
+	// which the tests otherwise run with. With the draft, a joiner's plain packet through the relay is never ENet's: only a sealed one that
+	// opens is (TestTheV2Draft shows both).
+	NetV2DraftAsked = false;
 	enet_uint32 const kThisMachine = 0x0100007F;   // 127.0.0.1, as ENet keeps it
 	enet_uint32 const kRoute = 0x0A01A8C0;         // 192.168.1.10: this machine's address towards the relay
 	enet_uint32 const kElsewhere = 0x0B0C0B0A;     // a machine that isn't the relay
@@ -1594,14 +1913,41 @@ static void TestARunsOneRelayBeyondThisMachine()
 	relayNamed = false;
 	NumberOfSessionsFound = 0;
 	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	NetV2DraftAsked = true;   // as the tests after this expect
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the joiner's round trip to each relay, for the games page's ping column, against a
 // scripted relay. Nothing is timed until the list names relays; the echoes go to the relay's control port from a socket of their own; an
 // answer from anywhere else is dropped, though it holds the same bytes; and the socket is closed once the timing is done.
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, Primary's read of the wiring, finding 1): a host asks the start limit
+// (net_peer_v2.h, NetPeerStartLimit) before it starts each handshake, forgets a port the relay doesn't name any more, and forgets
+// everything when its game through the relay ends. The limit itself is net_v2b_test's; this reads where networking.cpp uses it.
+static void TestTheStartLimitIsAsked()
+{
+	printf("A host asks before it starts a handshake (protocol version 2)\n");
+	std::string const source = ReadSourceFile("3dc/networking.cpp");
+	size_t const sideAt = source.find("static NetPeerHostSide *RelayEndToEndSide(");
+	size_t const sideEnd = sideAt == std::string::npos ? std::string::npos : source.find("\n}\n", sideAt);
+	std::string const side = sideEnd == std::string::npos ? std::string() : source.substr(sideAt, sideEnd - sideAt);
+	size_t const named = side.find("relayHost.NamedJoinerPort(port)");
+	size_t const asked = side.find("if (!relayEndToEndStarts.Allow(port, now))\n\t{\n\t\treturn NULL;\n\t}");
+	size_t const started = side.find("return unused->Start(");
+	Check(named != std::string::npos && asked != std::string::npos && started != std::string::npos && named < asked && asked < started,
+		"SOURCE: a host starts a handshake only for a named port, and only if the start limit allows it");
+	Check(Has(source, "if (counted != 0 && !relayHost.NamedJoinerPort(counted))\n\t\t{\n\t\t\trelayEndToEndStarts.Forget(counted);"),
+		"SOURCE: and each frame forgets a port the relay doesn't name any more, so it starts afresh when it's named again");
+	size_t const forgetAt = source.find("static void RelayEndToEndForget()");
+	size_t const forgetEnd = forgetAt == std::string::npos ? std::string::npos : source.find("\n}\n", forgetAt);
+	Check(forgetEnd != std::string::npos && Has(source.substr(forgetAt, forgetEnd - forgetAt), "relayEndToEndStarts.Reset();"),
+		"SOURCE: and a game through the relay that ends forgets every count");
+}
+
 static void TestTimingTheRelaysForJoining()
 {
 	printf("Timing the relays for the games page\n");
+	// Modified 2026-11-09 by Melanikus for the AvP port (step 7): version 1's relay, so without the v2 draft, which the tests otherwise
+	// run with. With the draft, the relay is reached only through the channel to it (TestTheRelayChannel).
+	NetV2DraftAsked = false;
 	datagramsWaiting.clear();
 	relayNamed = false;
 	Net_ForgetRelayTimes();
@@ -1671,6 +2017,7 @@ static void TestTimingTheRelaysForJoining()
 	// test after it hosted through the relay without saying so, and the one that checks a host's own limits (TestLettingPeopleIn) saw the
 	// relay's.
 	relayNamed = false;
+	NetV2DraftAsked = true;   // as the tests after this expect
 }
 
 static void TestStartingTheGame()
@@ -2319,11 +2666,15 @@ static std::vector<uint8_t> AGameMessage(NetID from)
 // The game's buffer holds kMostMessageBytes. The rest is so that a test can see something too big without it doing any harm.
 static uint8_t received[kMostMessageBytes + 64];
 
+// What a joiner's CONNECT says (modified 2026-11-09 by Melanikus for the AvP port): the test's commit, as a v2 draft of the same commit
+// says it, unless a test says otherwise (TestTheV2Draft)
+static enet_uint32 connectSays = kTestCommitWord;
+
 static void Connects(int n)
 {
 	peers[n].state = ENET_PEER_STATE_CONNECTED;
 
-	ENetEvent const event = { ENET_EVENT_TYPE_CONNECT, &peers[n], NULL };
+	ENetEvent const event = { ENET_EVENT_TYPE_CONNECT, &peers[n], NULL, connectSays };
 
 	eventsWaiting.push_back(event);
 }
@@ -2413,6 +2764,16 @@ static void TestTheRequestToJoin()
 	Hears(1, AskingToJoin("Ripley"));
 	Check(playersInGame.empty() && IDOf(1) == 0 && Net_JoinRequestWaiting(name, sizeof(name), &who) && strcmp(name, "Ripley") == 0 && who.connection == 1,
 		"a joiner asks: it isn't let in yet, and the host has its request, with its name");
+	{
+		// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2): a joiner on this network had no handshake, so no check code
+		char code[kNetRelayCheckCodeBytes];
+		memset(code, 'X', sizeof(code));
+		Check(!Net_JoinRequestCheckCode(who, code) && code[0] == 0, "a joiner on this network has no check code to show: it had no handshake");
+		std::string const source = ReadSourceFile("3dc/networking.cpp");
+		Check(Has(source, "|| !PeerIsThroughRelay(asking))\n\t{\n\t\treturn false;") &&
+			Has(source, "NetPeerHostSide *const side = RelayEndToEndSide(asking->address.port, false, enet_time_get());\n\treturn side && side->Ready() && CopyCheckCode(side->CheckCode(), out);"),
+			"SOURCE: the host shows a code only for the waiting joiner through the relay, from its own handshake, once that's done");
+	}
 
 	int const gentleBefore = closedGently;
 	Connects(2);
@@ -2504,7 +2865,7 @@ static void TestTheRequestToJoin()
 
 	if (older.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
 	{
-		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+		((PlayerDetails *)(older.data() + sizeof(MessageHeader)))->version = Net_OurVersion() - 1;
 	}
 
 	Hears(1, older);
@@ -2829,7 +3190,7 @@ static void TestWhoDoesntGetIn()
 
 	if (oldVersion.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
 	{
-		((PlayerDetails *)(oldVersion.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+		((PlayerDetails *)(oldVersion.data() + sizeof(MessageHeader)))->version = Net_OurVersion() - 1;
 	}
 
 	Connects(1);
@@ -2890,7 +3251,7 @@ static void TestANameWithNoEnd()
 	PlayerDetails details;
 
 	memset(&details, 'A', sizeof(details));
-	details.version = kMultiplayerVersion;
+	details.version = Net_OurVersion();
 	Connects(1);
 	TakeEverything();
 	Hears(1, AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details)));
@@ -3567,6 +3928,826 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: or the next level starts");
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: THE CHANNEL TO THE RELAY (protocol version 2's draft, step 7; AvP-docs/engine/
+// v2-step7-design.md, agreed with Primary). With the draft:
+// - a relay is used only once its keys have come from the list and match the settings' RelayKey in all 48 bytes, and a relay whose region
+//   has no RelayKey is sent nothing at all;
+// - every version 1 message to the relay goes sealed, through the session, and only messages the session opened are read;
+// - a plain version 1 message from the relay, a READY sent again among them, is dropped and never read, and so is a sealed one that
+//   doesn't open;
+// - what the relay sends is sorted by its first four bytes;
+// - a channel that can't go on ends the room or the join, with the player told why.
+// The session is this test's stand-in (net_start_test_stubs/net_relay_v2.h): the real one is net_v2a_test's.
+static size_t SentToTheRelayFrom(size_t first)
+{
+	size_t count = 0;
+
+	for (size_t i = first; i < datagramsSentTo.size(); i++)
+	{
+		count += datagramsSentTo[i].host == kRelayHost ? 1 : 0;
+	}
+
+	return count;
+}
+
+// The channel as every test but this one has it: it opens by itself (net_start_test_stubs/net_relay_v2.h)
+static void ResetTheStandInChannel()
+{
+	netRelayV2StandIn = NetRelayV2StandIn();
+	netRelayV2StandIn.goReady = true;
+	netRelayV2StandIn.pickerMs = 41;
+	relayKeyRegion = "*";
+	relayKeysGive = kRelayKeysCame;
+	relayKeysWrong = false;
+}
+
+static NetRelayMessage TheRoomOpened()
+{
+	NetRelayMessage opened = NetRelay_Message(kNetRelayHostOpened);
+	memset(opened.secret, 0x5A, sizeof(opened.secret));
+	memcpy(opened.code, "ABCD2345", 8);
+	memset(opened.pass, 0x33, sizeof(opened.pass));
+	opened.passTime = 1700000000u;
+	return opened;
+}
+
+static bool LogMentions(const char *words);   // further down, with the draft's own tests
+
+// Added 2026-11-09 by Melanikus for the AvP port (Secondary's review of step 7): a join through the relay with the v2 draft, its channel
+// opening first, as the joiner's checks in TestTheRelayChannel have it, with the relay's answers waiting before it starts. Gives back
+// what Net_ConnectToSession gave.
+static NetResult JoinThroughTheChannel()
+{
+	ResetTheStandInChannel();
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memset(given.secret, 0x6B, sizeof(given.secret));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memset(ready.secret, 0x6B, sizeof(ready.secret));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	return Net_ConnectToSession(0, playerName);
+}
+
+// Whether a log line holding words was written from logLines[from] on (added 2026-11-09 by Melanikus for the AvP port), so a check sees its
+// own step's lines and not an earlier test's
+static bool LoggedSince(size_t from, const char *words)
+{
+	for (size_t i = from; i < logLines.size(); i++)
+	{
+		if (logLines[i].find(words) != std::string::npos)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// The number a game through a relay writes in the log as it ends, of the packets it dropped as not the game's (Net_Disconnect), looked for
+// from logLines[from] on. 0 when there's no such line, as none is written for 0.
+static int DroppedFromElsewhereLogged(size_t from)
+{
+	std::string const before = "net: while going through a relay, ";
+	std::string const after = " packet(s) from elsewhere were dropped";
+
+	for (size_t i = from; i < logLines.size(); i++)
+	{
+		std::string const &line = logLines[i];
+		size_t const at = line.find(before);
+
+		if (at == std::string::npos || line.find(after) == std::string::npos)
+		{
+			continue;
+		}
+
+		int count = 0;
+
+		for (size_t c = at + before.size(); c < line.size() && isdigit(static_cast<unsigned char>(line[c])); c++)
+		{
+			count = count * 10 + (line[c] - '0');
+		}
+
+		return count;
+	}
+
+	return 0;
+}
+
+static void TestTheRelayChannel()
+{
+	printf("The channel to the relay, with the v2 draft (step 7)\n");
+	NetRelayHostState news;
+	NetRelayPlayState play;
+	relayNamed = true;
+
+	// Keys before anything: no RelayKey for the relay's region
+	ResetTheStandInChannel();
+	relayKeyRegion = "";
+	int const asksAtFirst = relayKeysAsked;
+	size_t sentFirst = datagramsSentTo.size();
+	int channelFirst = channelSends;
+	Check(HostAGame() == NET_OK, "a game hosts, with no RelayKey for its relay's region");
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(relayKeysAsked == asksAtFirst && SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && news.what == kNetRelayHostNoRelay,
+		"with no RelayKey for its region, the relay's keys aren't asked for, nothing at all is sent to it, and the game is open on this network only");
+	EndTheGame();
+
+	// Keys that aren't the ones RelayKey names
+	ResetTheStandInChannel();
+	relayKeysWrong = true;
+	sentFirst = datagramsSentTo.size();
+	channelFirst = channelSends;
+	Check(HostAGame() == NET_OK && relayKeysAsked == asksAtFirst + 1, "with a RelayKey, the host asks the list for its relay's keys");
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && netRelayV2StandIn.pickerStarts == 0 && netRelayV2StandIn.starts == 0
+		&& news.what == kNetRelayHostNoRelay,
+		"keys one bit away from the ones RelayKey names: nothing is sent to the relay, not even the cookie round, and the game is open on this network only");
+	EndTheGame();
+
+	// Keys that haven't come, then keys the list won't give
+	ResetTheStandInChannel();
+	relayKeysGive = kRelayKeysWaiting;
+	sentFirst = datagramsSentTo.size();
+	channelFirst = channelSends;
+	Check(HostAGame() == NET_OK, "a game hosts, its relay's keys still to come");
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	Check(SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && netRelayV2StandIn.pickerStarts == 0, "while the keys haven't come, nothing is sent to the relay");
+	relayKeysGive = kRelayKeysRefused;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostNoRelay && SentToTheRelayFrom(sentFirst) == 0, "and keys the list won't give: nothing is sent, and the game is open on this network only");
+	EndTheGame();
+
+	// The right keys: the cookie round, then handshake A with this run's identity, then the room through the sealed channel
+	ResetTheStandInChannel();
+	netRelayV2StandIn.goReady = false;
+	sentFirst = datagramsSentTo.size();
+	channelFirst = channelSends;
+	int const sealedFirst = sealedSends;
+	int const roomsFirst = roomsListed;
+	int const unlistedFirst = roomsUnlisted;
+	Check(HostAGame() == NET_OK, "a game hosts, with its relay's right keys to come");
+	Net_ServiceNetwork();
+	Check(netRelayV2StandIn.pickerStarts == 1 && netRelayV2StandIn.pickerPort == kNetRelayDefaultControlPort && netRelayV2StandIn.starts == 1
+		&& netRelayV2StandIn.region == "virginia" && memcmp(&netRelayV2StandIn.keys, &testRelayKeys, sizeof(testRelayKeys)) == 0
+		&& netRelayV2StandIn.controlPort == kNetRelayDefaultControlPort && netRelayV2StandIn.drawsGiven,
+		"keys that match: the relay is timed with the cookie round, then handshake A starts with those keys, at its control port, in its region");
+	Check(netRelayV2StandIn.playerP384 != NULL && netRelayV2StandIn.playerStatics != NULL && netRelayV2StandIn.playerKemPrivate != NULL,
+		"and with this run's identity, which the session borrows: its P-384 key, its public halves and its ML-KEM private key");
+	Check(channelSends == channelFirst + 2 && SentToTheRelayFrom(sentFirst) == 0 && sealedSends == sealedFirst,
+		"what has gone to the relay is the cookie ask and the handshake's first datagram: no version 1 message yet, plain or sealed");
+
+	netRelayV2StandIn.goReady = true;
+	enetClock += 10;
+	Net_ServiceNetwork();
+	Check(!netRelayV2StandIn.sealed.empty() && netRelayV2StandIn.sealed[0][5] == kNetRelayHostOpen && netRelayV2StandIn.sealedTo[0] == kNetRelayDefaultControlPort,
+		"once the channel is open, the room is asked for through it: HOST_OPEN, sealed, to the relay's control port");
+	Check(sealedSends > sealedFirst && SentToTheRelayFrom(sentFirst) == static_cast<size_t>(sealedSends - sealedFirst),
+		"and nothing goes to the relay plain: every version 1 message to it was sealed");
+
+	// The relay's answer, HOST_OPENED: plain, it's dropped and never read; sealed and not opening, the same; sealed, it opens the room
+	uint8_t plain[kNetRelayMessageBytes];
+	NetRelay_Write(TheRoomOpened(), plain);
+	TellTheHostPlain(kRelayHost, kNetRelayDefaultControlPort, plain, sizeof(plain));
+	Check(theHost.intercept(&theHost, NULL) == 1, "a plain version 1 message from the relay is taken off ENet's hands");
+	Net_ServiceNetwork();
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay && roomsListed == roomsFirst, "with the v2 draft, a plain version 1 message from the relay is dropped and never read: a plain HOST_OPENED opens no room");
+	uint8_t notOpening[kNetRelayV2StandInBytes];
+	memcpy(notOpening, "AVPR", 4);
+	notOpening[4] = 'X';
+	memcpy(notOpening + 5, plain, sizeof(plain));
+	TellTheHostPlain(kRelayHost, kNetRelayDefaultControlPort, notOpening, sizeof(notOpening));
+	Check(theHost.intercept(&theHost, NULL) == 1, "a sealed message that doesn't open is taken off ENet's hands too");
+	Net_ServiceNetwork();
+	Net_RelayPlayStateNow(&play);
+	Check(!play.throughRelay && roomsListed == roomsFirst, "and is dropped: a HOST_OPENED that doesn't open opens no room");
+	TellTheHost(kRelayHost, kNetRelayDefaultControlPort, plain, sizeof(plain));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.back() == kNetRelayDefaultControlPort, "the same HOST_OPENED, sealed, goes to the channel");
+	Net_ServiceNetwork();
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay && roomsListed == roomsFirst + 1 && hostMsListed == 41,
+		"which opens it, and the room opens and goes on the list, at the cookie round's round trip");
+
+	// Sorting by the first four bytes
+	size_t const heardBefore = netRelayV2StandIn.heardFrom.size();
+	uint8_t junk[40];
+	memset(junk, 0x47, sizeof(junk));
+	TellTheHostPlain(kRelayHost, 27777, junk, sizeof(junk));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore,
+		"anything from the relay that's neither the channel's ('AVPR') nor the end to end's ('AVPE', 'AVPG') is dropped");
+	// Added 2026-11-09 by Melanikus for the AvP port: the same from a joiner's port, as a game packet plain would come (version 1's
+	// TestHostingThroughTheRelay has ENet read it): with the draft, it never reaches ENet
+	uint8_t plainGame[40];
+	memset(plainGame, 0x11, sizeof(plainGame));
+	TellTheHostPlain(kRelayHost, 27501, plainGame, sizeof(plainGame));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore,
+		"with the draft, a plain packet from a joiner's port on the relay is dropped before ENet reads it: only a sealed one that opens is the game's");
+	TellTheHostPlain(0x04030201u, kNetRelayDefaultControlPort, sealedForTheHost, sizeof(sealedForTheHost));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == heardBefore, "and from anywhere but the relay, even an 'AVPR' is never heard");
+
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's finding 4.1): a player in the game who came through the relay, and a
+	// connection from somewhere else. While hosting through a relay nothing else is heard, so the second can't really be there, but what
+	// ends with the relay must be only the relay's.
+	ENetPeer &throughTheRelay = peers[3];
+	throughTheRelay.state = ENET_PEER_STATE_CONNECTED;
+	throughTheRelay.address.host = kRelayHost;
+	throughTheRelay.address.port = 27501;
+	throughTheRelay.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4242));
+	// Each is a player (data is their id): a connection with none is closed by the game's own sweep once its time to say who it is has
+	// gone (ForgetConnectionsNotLetIn), which this test's clock has long passed, and that would hide what's tried here
+	ENetPeer &fromElsewhere = peers[5];
+	fromElsewhere.state = ENET_PEER_STATE_CONNECTED;
+	fromElsewhere.address.host = 0x0200007F;
+	fromElsewhere.address.port = 27502;
+	fromElsewhere.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4343));
+	FakePlayer hicks;
+	hicks.id = 4242;
+	hicks.name = "Hicks";
+	playersInGame.push_back(hicks);
+	netSession.nPlayers++;
+	int const playersThen = netSession.nPlayers;
+	int const resetThen = peersReset;
+	size_t const goneThen = playersGone.size();
+
+	// The channel ending ends the room, with its words
+	int const wipesBefore = netRelayV2StandIn.wipes;
+	size_t const giveUpLogFrom = logLines.size();
+	netRelayV2StandIn.failWith = kNetRelayV2NoAnswer;
+	enetClock += 10;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Net_RelayPlayStateNow(&play);
+	Check(news.what == kNetRelayHostRoomGone && news.why != NULL && strstr(news.why, "ask for access on the online page") != NULL && !play.throughRelay
+		&& roomsUnlisted == unlistedFirst + 1 && netRelayV2StandIn.wipes > wipesBefore,
+		"the channel ending ends the room: it comes off the list, the news says why in the game's own words (pointing at the access request), and the session's keys are wiped");
+	Check(throughTheRelay.state == ENET_PEER_STATE_DISCONNECTED && throughTheRelay.data == NULL && peersReset == resetThen + 1,
+		"and every connection through the relay ends with it, at once: nothing from the relay's address reaches ENet unsealed after it");
+	Check(playersGone.size() == goneThen + 1 && playersGone.back() == 4242 && netSession.nPlayers == playersThen - 1,
+		"the player who came through it has left the game, as when a connection closes, and their seat is free");
+	Check(fromElsewhere.data == reinterpret_cast<void *>(static_cast<uintptr_t>(4343)),
+		"a connection from anywhere else isn't touched: it keeps its player, and the counts above are the relay's one alone");
+	fromElsewhere.state = ENET_PEER_STATE_DISCONNECTED;
+	fromElsewhere.data = NULL;
+	// Added 2026-11-09 by Melanikus for the AvP port: a host that loses its relay (as a revoke ends a room: the relay just stops answering)
+	// says what went sealed until then, once
+	Check(LoggedSince(giveUpLogFrom, "net: through the relay, ") && LoggedSince(giveUpLogFrom, " datagram(s) went out sealed, and "),
+		"a host that loses its relay says, as it gives it up, how many datagrams went out sealed and came in and opened: counts only");
+	size_t const hostEndFrom = logLines.size();
+	EndTheGame();
+	Check(!LoggedSince(hostEndFrom, "net: through the relay, "), "and leaving after that doesn't say them twice");
+
+	// Version 1's host, without the draft, gives the relay up as it always did, its connections left to ENet: ending them is the draft's
+	// alone, as v2 changes nothing in a player's game (added 2026-11-09 by Melanikus for the AvP port). Its room is lost as in
+	// TestHostingThroughTheRelay: no HOST_KEPT for 45 s.
+	NetV2DraftAsked = false;
+	Check(HostAGame() == NET_OK, "without the draft, a game hosts through the relay, as version 1");
+	uint8_t echoBack[kNetRelayMessageBytes];
+	memcpy(echoBack, lastDatagramSent.data(), sizeof(echoBack));
+	echoBack[5] = kNetRelayEchoBack;
+	TellTheHostPlain(kRelayHost, kNetRelayDefaultControlPort, echoBack, sizeof(echoBack));
+	theHost.intercept(&theHost, NULL);
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 100;
+	Net_ServiceNetwork();
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	NetRelay_Write(TheRoomOpened(), plain);
+	TellTheHostPlain(kRelayHost, kNetRelayDefaultControlPort, plain, sizeof(plain));
+	theHost.intercept(&theHost, NULL);
+	Net_ServiceNetwork();
+	Net_RelayPlayStateNow(&play);
+	Check(play.throughRelay, "and the relay opens its room");
+	throughTheRelay.state = ENET_PEER_STATE_CONNECTED;
+	throughTheRelay.address.host = kRelayHost;
+	throughTheRelay.address.port = 27501;
+	throughTheRelay.data = reinterpret_cast<void *>(static_cast<uintptr_t>(4242));   // a player, so the game's sweep leaves it (above)
+	int const versionOneResets = peersReset;
+	enetClock += kNetRelayKeptWithinMs;
+	Net_ServiceNetwork();
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostRoomGone && throughTheRelay.state == ENET_PEER_STATE_CONNECTED && peersReset == versionOneResets,
+		"its room lost, it gives the relay up and leaves the connection through it to ENet, as version 1 always did");
+	throughTheRelay.state = ENET_PEER_STATE_DISCONNECTED;
+	throughTheRelay.data = NULL;
+	EndTheGame();
+	NetV2DraftAsked = true;
+
+	// The joiner: the channel opens first, then the join goes through it
+	ResetTheStandInChannel();
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	size_t const joinLogFrom = logLines.size();
+	Check(Net_ConnectToSession(0, playerName) == NET_OK, "a game joined through the relay, with the v2 draft");
+	// Added 2026-11-09 by Melanikus for the AvP port: the joiner's log proves its own steps, in fixed words with no key, code or address
+	Check(LoggedSince(joinLogFrom, "net: the joiner's sealed channel to the relay is open")
+		&& LoggedSince(joinLogFrom, "net: handshake B with the host is done: from here the game is sealed end to end"),
+		"the joiner's log says its sealed channel to the relay is open, and that handshake B with the host is done");
+	Check(netRelayV2StandIn.starts == 1 && netRelayV2StandIn.pickerStarts == 0 && !netRelayV2StandIn.sealed.empty() && netRelayV2StandIn.sealed[0][5] == kNetRelayJoin
+		&& netRelayV2StandIn.sealedTo[0] == kNetRelayDefaultControlPort,
+		"the joiner opens the channel first (handshake A, with no timing: only a host needs that), then asks to join through it, sealed");
+	uint8_t readyPlain[kNetRelayMessageBytes];
+	NetRelay_Write(ready, readyPlain);
+	// Modified 2026-11-09 by Melanikus for the AvP port: a plain one starts 'AVPR' as the channel's own datagrams do, so the channel hears it
+	// too, and opens nothing of it (Secondary's read of step 7, section 2). What reaches the relay's machines is only what it opened.
+	size_t const joinerHeard = netRelayV2StandIn.heardFrom.size();
+	int const joinerOpened = netRelayV2StandIn.openedGiven;
+	TellTheHostPlain(kRelayHost, 27501, readyPlain, sizeof(readyPlain));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == joinerHeard + 1 && netRelayV2StandIn.openedGiven == joinerOpened,
+		"with the v2 draft, a READY sent again plain is dropped and never read: the channel hears it, as it starts 'AVPR', and opens nothing of it");
+	TellTheHost(kRelayHost, 27501, readyPlain, sizeof(readyPlain));
+	Check(theHost.intercept(&theHost, NULL) == 1 && netRelayV2StandIn.heardFrom.size() == joinerHeard + 2 && netRelayV2StandIn.heardFrom.back() == 27501
+		&& netRelayV2StandIn.openedGiven == joinerOpened + 1,
+		"sealed, from the joiner's own port, the channel opens it and hands it on: it hears the relay on every port");
+	size_t const joinEndFrom = logLines.size();
+	EndTheGame();
+	Check(LoggedSince(joinEndFrom, "net: through the relay, ") && LoggedSince(joinEndFrom, " datagram(s) went out sealed, and ")
+		&& LoggedSince(joinEndFrom, " came in and opened"),
+		"and as the game ends, its log says how many datagrams went out sealed through the relay and how many came in and opened: counts only");
+
+	// A joiner whose game's region has no RelayKey: no join, and nothing sent
+	ResetTheStandInChannel();
+	relayKeyRegion = "";
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	AvP.Network = I_Peer;
+	sentFirst = datagramsSentTo.size();
+	channelFirst = channelSends;
+	int const joinAsks = relayKeysAsked;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && relayKeysAsked == joinAsks
+		&& strstr(Net_RelayJoinFailedWhy(), "RelayKey") != NULL,
+		"a join through a relay whose region has no RelayKey: its keys aren't even asked for, nothing is sent to it, and the player is told why");
+	EndTheGame();
+
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's finding 2.1): ONCE A JOINER'S CHANNEL HAS ENDED, its game goes on over B's
+	// sealed datagrams, and the relay is still heard sealed-only until that game ends. Nothing shows that from outside but a count: what's
+	// dropped as not the game's goes in the log as the game ends. So the same game is played twice, once with nothing more from the relay
+	// after its channel has ended, and once with three datagrams then: a plain READY and a sealed-looking one, which must both be dropped
+	// (there's no channel to open the second), and one of B's ('AVPG'), which must still go to B. B opens nothing of it, so ENet gets
+	// nothing, and it isn't counted as dropped.
+	int droppedWithNothing = 0;
+	int droppedWithThree = 0;
+
+	for (int run = 0; run < 2; run++)
+	{
+		Check(JoinThroughTheChannel() == NET_OK, run == 0 ? "a game joined through the relay, whose channel will end" : "and the same game again");
+		size_t const logFrom = logLines.size();
+		netRelayV2StandIn.failWith = kNetRelayV2NoAnswer;
+		enetClock += 10;
+		Net_ServiceNetwork();
+		Net_RelayPlayStateNow(&play);
+		Check(LogMentions("net: the joiner's channel to the relay has ended") && play.throughRelay,
+			"its channel to the relay ends, the log says so, and the game goes on through the relay");
+
+		if (run == 1)
+		{
+			uint8_t lateReady[kNetRelayMessageBytes];
+			NetRelay_Write(ready, lateReady);
+			size_t const heardThen = netRelayV2StandIn.heardFrom.size();
+			int const openedThen = netRelayV2StandIn.openedGiven;
+			TellTheHostPlain(kRelayHost, 27501, lateReady, sizeof(lateReady));
+			int const plainTaken = theHost.intercept(&theHost, NULL);
+			TellTheHost(kRelayHost, 27501, lateReady, sizeof(lateReady));
+			int const sealedTaken = theHost.intercept(&theHost, NULL);
+			uint8_t gameDatagram[60];
+			memset(gameDatagram, 0x21, sizeof(gameDatagram));
+			memcpy(gameDatagram, "AVPG", 4);
+			TellTheHostPlain(kRelayHost, 27501, gameDatagram, sizeof(gameDatagram));
+			int const gameTaken = theHost.intercept(&theHost, NULL);
+			Check(plainTaken == 1 && sealedTaken == 1 && gameTaken == 1 && netRelayV2StandIn.heardFrom.size() == heardThen && netRelayV2StandIn.openedGiven == openedThen,
+				"after the channel has ended, nothing from the relay reaches ENet as it came, and the channel, which has gone, hears none of it");
+		}
+
+		EndTheGame();
+		(run == 0 ? droppedWithNothing : droppedWithThree) = DroppedFromElsewhereLogged(logFrom);
+	}
+
+	Check(droppedWithThree == droppedWithNothing + 2,
+		"the plain READY and the sealed-looking one are dropped, never read by the relay's machines, and B's datagram still goes to B: the game goes on over B");
+
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's finding 4.2): EVERY WAY A JOIN THROUGH THE RELAY FAILS FORGETS AND WIPES:
+	// when ENet can't start the connection, and when the request to join can't be sent. The channel that was going ends, its keys wiped,
+	// and the ENet host is let go of, so nothing goes on talking to the relay after the player has been told the join failed.
+	const char *const failures[] = { "ENet can't start the connection", "the request to join can't be sent" };
+
+	for (int failure = 0; failure < 2; failure++)
+	{
+		int const createdBefore = hostsCreated;
+		int const destroyedBefore = hostsDestroyed;
+		connectCantStart = failure == 0;
+		packetCreateFails = failure == 1;
+		NetResult const joined = JoinThroughTheChannel();
+		connectCantStart = false;
+		packetCreateFails = false;
+		size_t const sentAfter = datagramsSentTo.size();
+		int const channelAfter = channelSends;
+		enetClock += 1000;
+		Net_ServiceNetwork();
+		Net_RelayPlayStateNow(&play);
+		Check(joined == NET_FAIL && netRelayV2StandIn.liveWipes == 1 && hostsDestroyed - destroyedBefore == hostsCreated - createdBefore
+			&& SentToTheRelayFrom(sentAfter) == 0 && channelSends == channelAfter && !play.throughRelay,
+			std::string("a join through the relay that fails as ") + failures[failure] + ": the channel's keys are wiped, the host is let go of, and nothing more goes to the relay");
+		EndTheGame();
+	}
+
+	// And in the code, every way out of a join that fails once it has begun with the relay, those two and the three before them: each forgets
+	// and wipes, and lets the host go. Each is a block of its own, so what's looked at is from the brace that opens it to its return.
+	std::string const joinCode = Between(ReadSourceFile("3dc/networking.cpp"), "NetResult Net_ConnectToSession(int sessionNumber, char *playerName)\n{", "\n}\n");
+	size_t const throughFrom = joinCode.find("if (SessionData[sessionNumber].throughRelay)");
+	int failurePaths = 0;
+	int failuresThatForget = 0;
+
+	for (size_t at = joinCode.find("return NET_FAIL;", throughFrom == std::string::npos ? joinCode.size() : throughFrom); at != std::string::npos;
+		at = joinCode.find("return NET_FAIL;", at + 1))
+	{
+		size_t const opens = joinCode.rfind('{', at);
+		std::string const block = opens == std::string::npos ? std::string() : joinCode.substr(opens, at - opens);
+		failurePaths++;
+		failuresThatForget += Has(block, "RelayEndToEndForget();") && Has(block, "enet_host_destroy(host);") && Has(block, "host = NULL;") ? 1 : 0;
+	}
+
+	Check(failurePaths == 5 && failuresThatForget == failurePaths,
+		"SOURCE: each of a join's 5 ways to fail once it has begun with the relay forgets and wipes, and lets the host go");
+
+	// A join that starts while the last one through the relay is still open (Net_ConnectToSession lets go of that one's host first): the
+	// last one's channel ends then too, so nothing of it goes on with the new host (added 2026-11-09 by Melanikus for the AvP port)
+	Check(JoinThroughTheChannel() == NET_OK, "a game joined through the relay, and not left");
+	SessionData[0].throughRelay = false;
+	size_t const sentStale = datagramsSentTo.size();
+	int const channelStale = channelSends;
+	Check(JoinAGame() == NET_OK && netRelayV2StandIn.liveWipes == 1,
+		"then a game on this network, without leaving the first: the first one's channel to the relay ends, its keys wiped");
+	enetClock += 1000;
+	Net_ServiceNetwork();
+	Check(SentToTheRelayFrom(sentStale) == 0 && channelSends == channelStale, "and nothing more goes to the relay");
+	EndTheGame();
+
+	// What can't be seen from outside, read in the code: with the draft, the relay's plain messages are never read anywhere the game reads
+	// the relay (the intercept, a joiner's handshake with the relay, and B's join), and only what the channel opened reaches net_relay.h's
+	// machines
+	std::string const networking = ReadSourceFile("3dc/networking.cpp");
+	// Modified 2026-11-09 by Melanikus for the AvP port (Secondary's finding 2.1): and after the channel has ended, until the game ends
+	std::string const sorting = Between(networking, "if (Net_V2DraftOn() && (channelOn || relayV2Used))", "return RelayEndToEndHeard(on, now);\n\t}");
+	Check(!sorting.empty() && !Has(sorting, "RelayControlDatagram(") && Has(sorting, "if (channelOn)\n\t\t\t{\n\t\t\t\tRelayV2Hear(on->receivedAddress.port"),
+		"SOURCE: with the channel in use, or once it has been, the intercept hands the relay's messages to the channel alone, never to the relay's machines plain");
+	std::string const beginning = Between(networking, "static bool RelayV2Begin(const ENetAddress &relay, const char *region, bool times, const char **why)\n{", "\n}\n");
+	std::string const forgetting = Between(networking, "static void RelayEndToEndForget()\n{", "\n}\n");
+	Check(Has(beginning, "relayV2Step = kRelayV2Keys;\n\trelayV2Used = true;\n\treturn true;") && Has(forgetting, "relayV2Used = false;"),
+		"SOURCE: a game that has begun a channel is heard that way until its end forgets it");
+
+	// Added 2026-11-09 by Melanikus for the AvP port (Secondary's findings 5.1 and 4.3): the copies of the relay's messages networking.cpp
+	// makes on its stack, before sealing and once opened, are wiped, and so are version 1's two machines, with the messages still waiting
+	// in them, when a game through the relay ends. None of that can be seen from outside, so it's read in the code.
+	std::string const sendingAll = Between(networking, "static void RelayControlSendAll(ENetHost *on, End &end)\n{", "\n}\n");
+	std::string const takingOpened = Between(networking, "static void RelayV2TakeOpened(uint32_t now)\n{", "\n}\n");
+	Check(Has(sendingAll, "NetCrypto_Wipe(sends, sizeof(sends));\n\tRelayV2SendAll(on);") && Has(takingOpened, "\n\tNetCrypto_Wipe(opened, sizeof(opened));"),
+		"SOURCE: the version 1 messages held on the stack, plain, are wiped once they've been sealed or read");
+
+	// Added 2026-11-09 by Melanikus for the AvP port: what this test's stand-ins can't show (no scripted joiner finishes B with a host here, and
+	// the stand-in ENet sends nothing through the hook), read in the code: the host's line for a joiner's B, and the two counts behind the
+	// end-of-game line
+	std::string const endToEndHearing = Between(networking, "static int RelayEndToEndHeard(ENetHost *on, uint32_t now)\n{", "\n}\n");
+	std::string const endToEndSealing = Between(networking, "static int ENET_CALLBACK RelaySealedSend(ENetHost *from, const ENetAddress *address, const ENetBuffer *buffers, size_t bufferCount)\n{", "\n}\n");
+	Check(Has(endToEndHearing, "bool const wasReady = side->Ready();")
+		&& Has(endToEndHearing, "if (!wasReady && side->Ready())\n\t\t{\n\t\t\tLogString(\"net: a joiner's handshake B is done: from here its game is sealed end to end\");")
+		&& Has(endToEndHearing, "relayEndToEndOpened++;\n\ton->receivedData = relayOpened;")
+		&& Has(endToEndSealing, "int const sent = enet_socket_send(from->socket, address, &buffer, 1);\n\trelayEndToEndSealed += sent < 0 ? 0 : 1;"),
+		"SOURCE: the host logs once when a joiner's handshake B is done, and every datagram sealed out or opened in is counted for the end-of-game line");
+	std::string const relayMachines = ReadSourceFile("3dc/net_relay.h");
+	Check(Has(forgetting, "relayHost.Reset();\n\trelayJoiner.Reset();")
+		&& Has(relayMachines, "\t\tmemset(hellos, 0, sizeof(hellos));\n\t\tsendCount = 0;\n\t\tmemset(sends, 0, sizeof(sends));")
+		&& Has(relayMachines, "\t\tstartedAt = askedAt = portAt = helloAt = 0;\n\t\tsendCount = 0;\n\t\tmemset(sends, 0, sizeof(sends));"),
+		"SOURCE: a game through the relay that ends wipes the room's token and pass, a joiner's ticket, and the messages still waiting with them");
+	std::string const handshake = Between(networking, "static uint16_t RelayHandshake(const char *region, const char *code)", "relayJoinStep = kNetRelayJoinStepNone;\n\n\tif (!relayJoiner.Ready())");
+	Check(Has(handshake, "if (from.host == relayAddress.host && draft && HasMagic(packet, static_cast<size_t>(got), \"AVPR\"))")
+		&& Has(handshake, "else if (from.host == relayAddress.host && !draft)"),
+		"SOURCE: a joiner's handshake with the relay hears only the channel with the draft, and the relay plain only without it");
+	std::string const bJoin = Between(networking, "static const char *RelayEndToEndJoin(", "\n}\n");
+	Check(!bJoin.empty() && !Has(bJoin, "RelayControlDatagram(") && Has(bJoin, "if (HasMagic(packet, static_cast<size_t>(got), \"AVPR\"))"),
+		"SOURCE: B's join hears the relay's own messages through the channel alone");
+	std::string const hearing = Between(networking, "static void RelayV2Hear(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)\n{", "\n}\n");
+	Check(Has(hearing, "relayV2Session.Hear(fromPort, data, size, now);\n\t\tRelayV2TakeOpened(now);") && !Has(hearing, "RelayControlDatagram("),
+		"SOURCE: only the messages the channel opened go on to the relay's machines");
+
+	// As the tests after this expect
+	ResetTheStandInChannel();
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (#21): THIS RUN'S IDENTITY, KEPT BETWEEN RUNS (net_identity_run.h). The store's stand-in
+// says what it found. On the first run, one is made and kept. On the next, the kept one is used. A kept one that can't be used is never
+// replaced without the player's yes, and until then nothing goes to a relay. The player's yes is refused while a game is open.
+static void RestartTheNetwork()
+{
+	EndTheGame();
+	Net_Deinitialise();
+	logLines.clear();
+	Net_Initialise();
+}
+
+static size_t SentToTheRelaySince(size_t first)
+{
+	size_t count = 0;
+
+	for (size_t i = first; i < datagramsSentTo.size(); i++)
+	{
+		count += datagramsSentTo[i].host == kRelayHost ? 1 : 0;
+	}
+
+	return count;
+}
+
+static void TestTheKeptIdentity()
+{
+	printf("This run's identity, kept between runs (#21)\n");
+
+	// It needs the v2 draft on, as main has it (Fifth, 2026-11-09): its check that a kept identity that can't be used sends nothing to the
+	// relay relies on a draft host asking for its identity first. Without the draft, a host through the relay is version 1's, needs no
+	// identity, and sends its echoes, so that check would fail. Keep it before TestTheV2Draft, and the draft on at the top of main.
+	uint8_t statics[kNetIdentityStaticBytes];
+	uint8_t fingerprint[kNetIdentityFingerprintBytes];
+	uint8_t worked[kNetIdentityFingerprintBytes];
+
+	// The first run: none is kept, so one is made and kept, once
+	storeFinds = kNetIdentityStoreNoFile;
+	int const loadsAtFirst = storeLoads;
+	int const makesAtFirst = storeMakes;
+	RestartTheNetwork();
+	Check(storeLoads == loadsAtFirst && storeMakes == makesAtFirst, "starting the network doesn't look for the identity: only a relay's first use, or the page, does");
+	Check(Net_KeptIdentityResult() == kNetIdentityStoreNoFile && storeLoads == loadsAtFirst + 1 && storeMakes == makesAtFirst + 1
+		&& LogHas("net: a new identity was made for this player and kept"), "the first run: none is kept, so one is made and kept, and the log says so");
+	memset(statics, 0xA5, sizeof(statics));
+	memset(fingerprint, 0xA5, sizeof(fingerprint));
+	Check(Net_OurIdentity(statics, fingerprint) && storeLoads == loadsAtFirst + 1 && storeMakes == makesAtFirst + 1,
+		"the page gets this run's identity, without looking again");
+	Check(NetIdentity_Fingerprint(statics, statics + kNetCryptoP384PublicBytes, worked) && memcmp(worked, fingerprint, sizeof(worked)) == 0,
+		"and the fingerprint it gets is the one its public halves make");
+	Check(!Net_OurIdentity(NULL, fingerprint) && !Net_OurIdentity(statics, NULL), "nowhere to put them is refused");
+
+	// The next run: the kept one, and nothing new made
+	RestartTheNetwork();
+	Check(Net_KeptIdentityResult() == kNetIdentityStoreLoaded && storeMakes == makesAtFirst + 1 && LogHas("net: this player's identity is the one kept from earlier runs"),
+		"the next run uses the kept one, and makes none");
+
+	// A kept one that can't be used: none is made, and nothing goes to a relay, until the player's yes
+	NetIdentityStoreResult const unusable[] = { kNetIdentityStoreRefused, kNetIdentityStoreCantUnseal, kNetIdentityStoreCantRead };
+
+	for (NetIdentityStoreResult const found : unusable)
+	{
+		std::string const which = " (" + std::string(found == kNetIdentityStoreRefused ? "refused" : found == kNetIdentityStoreCantUnseal ? "not opened for this user" : "not read") + ")";
+		storeFinds = found;
+		RestartTheNetwork();
+		int const loads = storeLoads;
+		int const makes = storeMakes;
+		memset(statics, 0xA5, sizeof(statics));
+		memset(fingerprint, 0xA5, sizeof(fingerprint));
+		Check(!Net_OurIdentity(statics, fingerprint) && AllZeroBytes(statics, sizeof(statics)) && AllZeroBytes(fingerprint, sizeof(fingerprint))
+			&& Net_KeptIdentityResult() == found && storeLoads == loads + 1 && storeMakes == makes,
+			"a kept identity that can't be used" + which + ": none is made, the page gets only 0s, and it's looked for once");
+		Check(LogHas("net: the kept identity: the kept one can't be used (the test's stand-in says so)")
+			&& LogHas("net: so there's no identity this run until the player chooses to make a new one, and nothing goes through a relay"),
+			"and the log says what was found, and what it means" + which);
+		relayNamed = true;
+		size_t const sentBefore = datagramsSentTo.size();
+		Check(HostAGame() == NET_OK && SentToTheRelaySince(sentBefore) == 0, "a game hosted then sends nothing to the relay: it's open on this network only" + which);
+		EndTheGame();
+		relayNamed = false;
+	}
+
+	// The player's yes: refused while a game is open, then a new one made and kept, and nothing left to ask
+	Check(HostAGame() == NET_OK, "a game hosted on this network");
+	int const makesBeforeYes = storeMakes;
+	Check(!Net_MakeNewIdentity() && storeMakes == makesBeforeYes && LogHas("net: a new identity isn't made while a network game is open"),
+		"the player's yes is refused while a network game is open, and nothing is made");
+	EndTheGame();
+	Check(Net_MakeNewIdentity() && storeMakes == makesBeforeYes + 1 && Net_KeptIdentityResult() == kNetIdentityStoreLoaded && Net_OurIdentity(statics, fingerprint),
+		"once it's over, the player's yes makes a new one and keeps it, and there's nothing left to ask");
+
+	// A yes whose new identity can't be kept: none this run
+	storeKeepFails = true;
+	Check(!Net_MakeNewIdentity() && !Net_OurIdentity(statics, fingerprint) && AllZeroBytes(fingerprint, sizeof(fingerprint)),
+		"a yes whose new identity can't be kept leaves none this run");
+
+	// The first run, with an identity that can't be kept: none this run, and it's tried once
+	storeFinds = kNetIdentityStoreNoFile;
+	RestartTheNetwork();
+	int const makesUnkept = storeMakes;
+	Check(!Net_OurIdentity(statics, fingerprint) && !Net_OurIdentity(statics, fingerprint) && storeMakes == makesUnkept + 1
+		&& LogHas("net: a new identity couldn't be made and kept, so there's none this run, and nothing goes through a relay"),
+		"an identity that can't be kept on the first run: none this run, tried once, and the log says so");
+	storeKeepFails = false;
+
+	// As the tests after this expect: the network started, with an identity to use
+	storeFinds = kNetIdentityStoreLoaded;
+	RestartTheNetwork();
+	Check(Net_OurIdentity(statics, fingerprint), "the network started again, with the kept identity");
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: PROTOCOL VERSION 2'S DRAFT (networking.h, Secondary's ruling). It's on only with -dev,
+// -netv2 and a build that knows its commit, at version 115. Off, every part of version 2 is off and the version is 114, as before: no
+// identity, no handshake, nothing sealed, and a CONNECT that says 0. Two 115 copies play only if they're the same commit: the joiner says
+// its commit in its CONNECT, and the host closes any other at once with JBLD. A 114 host doesn't look at a CONNECT's data at all.
+static void RestartTheNetworkForTheDraft()
+{
+	EndTheGame();
+	Net_Deinitialise();
+	logLines.clear();
+	Net_Initialise();
+}
+
+static bool LogMentions(const char *words)
+{
+	for (std::string const &line : logLines)
+	{
+		if (line.find(words) != std::string::npos)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Whether anything sent since first was version 2's own (a handshake datagram, AVPE, or a sealed one, AVPG)
+static bool SentAnyV2Datagram(size_t first)
+{
+	for (size_t i = first; i < datagramsSentBytes.size(); i++)
+	{
+		std::vector<uint8_t> const &sent = datagramsSentBytes[i];
+
+		if (sent.size() >= 4 && sent[0] == 'A' && sent[1] == 'V' && sent[2] == 'P' && (sent[3] == 'E' || sent[3] == 'G'))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void TestTheV2Draft()
+{
+	printf("Protocol version 2's draft, for tests only (-dev -netv2)\n");
+
+	// When it's on, and what the log says
+	Check(Net_V2DraftOn() && Net_OurVersion() == kNetV2DraftVersion, "with -dev, -netv2 and a build that knows its commit, the draft is on, at version 115");
+
+	// On: a host through the relay hands the list its identity's fingerprint, for its listing
+	relayNamed = true;
+	int const identitiesBeforeOn = identitiesListed;
+	Check(HostAGame() == NET_OK && identitiesListed == identitiesBeforeOn + 1, "with the draft on, a game hosted through the relay hands the list its fingerprint");
+	EndTheGame();
+	relayNamed = false;
+	RestartTheNetworkForTheDraft();
+	Check(LogHas("net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit"),
+		"and the log says so when the network starts");
+	DevMode = 0;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == kMultiplayerVersion && LogHas("net: -netv2 needs -dev, so this copy speaks version 114, without the v2 draft"),
+		"without -dev, -netv2 does nothing: version 114, and the log says why");
+	DevMode = 1;
+	testCommitKnown = false;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == kMultiplayerVersion
+		&& LogHas("net: -netv2 needs a copy made by tools/build-and-package.ps1, which knows the commit it was made from, so this copy speaks version 114, without the v2 draft"),
+		"in a build that doesn't know its commit, -netv2 does nothing either, and the log says why");
+	testCommitKnown = true;
+	NetV2DraftAsked = false;
+	RestartTheNetworkForTheDraft();
+	Check(!Net_V2DraftOn() && Net_OurVersion() == 114 && !LogMentions("v2 draft") && !LogMentions("-netv2"),
+		"without -netv2, a player's game: version 114, and the log says nothing of the draft");
+
+	// Off: a joiner says 114, and its CONNECT says 0, as before
+	Check(JoinAGame() == NET_OK && thisClientPlayer.version == kMultiplayerVersion && lastConnectData == 0,
+		"with the draft off, a joiner says version 114, and its CONNECT says nothing (0), as before");
+	EndTheGame();
+
+	// Off: a host doesn't look at a CONNECT's data, so a 115 joiner meets a clean "another version" there instead
+	HostWithClients(0);
+	int const closedBeforeOff = closedGently;
+	connectSays = kTestCommitWord ^ 1u;
+	Connects(1);
+	TakeEverything();
+	Check(closedGently == closedBeforeOff, "a host with the draft off doesn't look at a CONNECT's data: a joiner that says something there isn't closed for it");
+	EndTheGame();
+	connectSays = kTestCommitWord;
+
+	// On: the joiner's CONNECT says its commit
+	NetV2DraftAsked = true;
+	Check(JoinAGame() == NET_OK && thisClientPlayer.version == kNetV2DraftVersion && lastConnectData == kTestCommitWord,
+		"with the draft on, a joiner says version 115, and its CONNECT says its commit");
+	EndTheGame();
+
+	// On: the host closes a joiner of another commit at once, with JBLD, before anything is shown; one of the same commit goes on as before
+	HostWithClients(0);
+	size_t const shownBefore = screenLines.size();
+	int const closedBeforeOn = closedGently;
+	static int whoeverHadThePlace = 0;
+	peers[1].data = &whoeverHadThePlace;   // as if a player had had this place before
+	connectSays = kTestCommitWord ^ 1u;
+	Connects(1);
+	TakeEverything();
+	Check(closedGently == closedBeforeOn + 1 && lastDisconnectData == kNetJoinRefusedOtherBuild && screenLines.size() == shownBefore && peers[1].data == NULL,
+		"a host with the draft on closes a joiner of another commit as its CONNECT arrives, with JBLD; nothing is shown, and its place is nobody's");
+	connectSays = kTestCommitWord;
+	Connects(2);
+	TakeEverything();
+	Check(closedGently == closedBeforeOn + 1 && screenLines.size() == shownBefore + 1, "a joiner of the same commit isn't closed: it's shown joining, as before");
+	EndTheGame();
+
+	// The joiner's side: closed with JBLD, its answer says why
+	Check(JoinAGame() == NET_OK && Net_JoinAnswerNow() == kNetJoinAnswerWaiting, "a draft joins a host, and waits for its answer");
+	{
+		ENetEvent const closed = { ENET_EVENT_TYPE_DISCONNECT, &peers[0], NULL, kNetJoinRefusedOtherBuild };
+		peers[0].state = ENET_PEER_STATE_DISCONNECTED;
+		eventsWaiting.push_back(closed);
+		TakeEverything();
+	}
+	Check(Net_JoinAnswerNow() == kNetJoinAnswerOtherBuild, "a joiner the host closed with JBLD knows why: the host is a draft of another commit");
+	EndTheGame();
+
+	// Off means version 1 through a relay too: no identity, no handshake, nothing sealed, and the game's datagrams are ENet's
+	NetV2DraftAsked = false;
+	relayNamed = true;
+	size_t const sentBeforeHosting = datagramsSentBytes.size();
+	int const identitiesBeforeOff = identitiesListed;
+	Check(HostAGame() == NET_OK && theHost.sendHook == NULL, "with the draft off, a game hosted through the relay sends ENet's datagrams itself, unsealed, as version 1 does");
+	Check(identitiesListed == identitiesBeforeOff, "and hands the list no fingerprint: version 1's listing has none");
+	HostThroughTheRelayUntilItsRoomIsOpen();
+	uint8_t game[48];
+	memset(game, 0x47, sizeof(game));
+	TellTheHost(kRelayHost, 27777, game, sizeof(game));
+	Check(theHost.intercept(&theHost, NULL) == 0, "a joiner's datagram through the relay goes to ENet, as in version 1");
+	Check(!SentAnyV2Datagram(sentBeforeHosting), "and nothing the host sent was version 2's");
+	EndTheGame();
+
+	datagramsWaiting.clear();
+	NumberOfSessionsFound = 0;
+	Net_AddRelaySession(AGameOnTheList("ABCD2345"));
+	uint8_t ticket[kNetRelaySecretBytes];
+	memset(ticket, 0x6B, sizeof(ticket));
+	NetRelayMessage given = NetRelay_Message(kNetRelayJoinPort);
+	memcpy(given.secret, ticket, sizeof(ticket));
+	memcpy(given.code, "ABCD2345", 8);
+	given.port = 27501;
+	NetRelayMessage ready = NetRelay_Message(kNetRelayReady);
+	memcpy(ready.secret, ticket, sizeof(ticket));
+	ready.port = 27501;
+	ArrivesFromTheRelay(given, kNetRelayDefaultControlPort);
+	ArrivesFromTheRelay(ready, 27501);
+	AvP.Network = I_Peer;
+	size_t const sentBeforeJoining = datagramsSentBytes.size();
+	Check(Net_ConnectToSession(0, playerName) == NET_OK && theHost.sendHook == NULL && lastConnectData == 0 && !SentAnyV2Datagram(sentBeforeJoining),
+		"with the draft off, a join through the relay is version 1's: no handshake B, nothing sealed, and a CONNECT that says 0");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (Take-outs, #191): a version 1 joiner through the relay hears the relay alone, by its own
+	// check. With the draft on, the channel's check drops a stranger first, and in a Hudson run beyond this machine, the run's own does, so
+	// this is the one place the joiner's own check is seen.
+	uint8_t stranger[40];
+	memset(stranger, 0x22, sizeof(stranger));
+	TellTheHost(0x0200007F, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "and a packet from anywhere but the relay is dropped before ENet reads it");
+	TellTheHost(kRelayHost, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept(&theHost, NULL) == 0, "while the same from the host's port on the relay is ENet's to read, as in version 1");
+	EndTheGame();
+
+	// As the tests after this expect
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+	memset(SessionData, 0, sizeof(SessionData[0]) * MAX_NO_OF_SESSIONS);
+	datagramsWaiting.clear();
+	NetV2DraftAsked = true;
+	RestartTheNetworkForTheDraft();
+}
+
 // The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
 // to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
 // The three numbers the settings file holds, one per line, as a player's file has them
@@ -3614,9 +4795,20 @@ static void TestNoHeaderLeftAnything()
 
 int main()
 {
+	// The relay's tests need handshake B, so the tests run with the v2 draft on (-dev -netv2, networking.h). TestTheV2Draft shows that off is
+	// version 1. (Added 2026-11-09 by Melanikus for the AvP port.)
+	NetV2DraftAsked = true;
+
+	// The channel to the relay opens by itself with the draft, with the test's own relay keys (step 7, added 2026-11-09 by Melanikus for the AvP port)
+	MakeTheTestRelayKeys();
+	ResetTheStandInChannel();
+
 	// The tests written before the request to join (version 114) let their joiners in at once, as a test's host does. TestTheRequestToJoin
 	// is the one that asks.
 	Net_LetEveryJoinerIn(true);
+
+	// The host behind the relay's identity (protocol version 2), made once, as the game makes one each run
+	Check(NetIdentity_Make(&scriptedHostIdentity), "the host behind the test's relay has an identity, for handshake B");
 
 	TestStartingTheGame();
 	TestNobodyToSendTo();
@@ -3634,6 +4826,7 @@ int main()
 	TestTheRelayOnTheScreen();
 	TestARunsOneRelayBeyondThisMachine();
 	TestTimingTheRelaysForJoining();
+	TestTheStartLimitIsAsked();
 	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
@@ -3671,6 +4864,9 @@ int main()
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
+	TestTheKeptIdentity();
+	TestTheRelayChannel();
+	TestTheV2Draft();
 	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();

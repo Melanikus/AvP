@@ -153,6 +153,9 @@ extern bool NetLoopbackOnly;                                        // networkin
 extern bool Net_AllowOneRemoteRelay(const char *name);              // networking.cpp: the one relay beyond this machine a run with net= may use
 extern uint32_t Net_RemoteRelayAddress();                           // networking.cpp: the one address that let through, 0 if none
 extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.cpp
+extern bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft); // online_screens_page.cpp: a player waiting to be let in
+extern void AvP_TriggerInGameMenus(void);                           // menus.cpp: the menu Esc brings up in a game
+extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "dynblock.h"
 #include "bh_marine.h"
 #include "bh_predator.h"
@@ -896,8 +899,9 @@ int Hudson_CheckBeforeStarting()
 			return kHudsonExitNoSuchLevel;
 		}
 
-		// A run is a test with nobody at the host to answer, so the host lets every joiner in without asking (the request to join, version 114)
-		Net_LetEveryJoinerIn(true);
+		// A run is a test with nobody at the host to answer, so the host lets every joiner in without asking (the request to join, version 114).
+		// Modified 2026-11-09 by Melanikus for the AvP port: unless the run asks to answer as a player does, with answer= (hudson_plan.h)
+		Net_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);
 
 		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its name (hudson_plan.h)
 		if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))
@@ -5044,11 +5048,76 @@ void Hudson_SaveThePage(const char *name)
 	}
 }
 
+// ---- The presses a player makes (access= and answer=, hudson_plan.h). Added 2026-11-09 by Melanikus for the AvP port.
+
+// A picture asked for in the middle of a frame, taken at its end, once it's drawn whole. Its name is one of the menus' own fixed names.
+static char pictureThisFrame[64] = "";
+
+int Hudson_AccessPress()
+{
+	return HudsonRunIsOn ? plan.accessPress : kHudsonAccessNone;
+}
+
+int Hudson_AccessWaitSeconds()
+{
+	return HudsonRunIsOn ? plan.accessWaitSeconds : 0;
+}
+
+int Hudson_AnswerPress()
+{
+	return HudsonRunIsOn ? plan.answerPress : kHudsonAnswerNone;
+}
+
+int Hudson_AnswerAfterSeconds()
+{
+	return HudsonRunIsOn ? plan.answerAfterSeconds : 0;
+}
+
+bool Hudson_JoinsThroughFindGames()
+{
+	return HudsonRunIsOn ? plan.findGames : false;
+}
+
+void Hudson_PictureThisFrame(const char *name)
+{
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	if (!name)
+	{
+		return;
+	}
+
+	_snprintf(pictureThisFrame, sizeof(pictureThisFrame) - 1, "%s", name);
+	pictureThisFrame[sizeof(pictureThisFrame) - 1] = '\0';
+}
+
+void Hudson_AccessRunEnds(const char *howItEnded, bool asAsked)
+{
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	EndAtOnce(howItEnded, asAsked ? kHudsonExitFinished : kHudsonExitNetStopped);
+}
+
 void Hudson_TakePictureIfDue()
 {
 	if (!HudsonRunIsOn)
 	{
 		return;
+	}
+
+	// A picture the menus asked for in this frame (Hudson_PictureThisFrame): the frame is whole now
+	if (pictureThisFrame[0])
+	{
+		char name[sizeof(pictureThisFrame)];
+		memcpy(name, pictureThisFrame, sizeof(name));
+		pictureThisFrame[0] = '\0';
+		Hudson_SaveThePage(name);
 	}
 
 	SayTheHostIsReady();
@@ -6020,6 +6089,20 @@ void Hudson_EndOfFrame()
 
 	HoldToTheFrameRate();
 	NoteHowFastThisFrameWent();
+
+	// answer=: a player asks to join, and this host answers as a player does: the menu Esc brings up, which shows the answer rows and the
+	// check code. menus.cpp presses the row once they've been up answerafter= seconds. Added 2026-11-09 by Melanikus for the AvP port.
+	if (plan.answerPress != kHudsonAnswerNone && !InGameMenusAreRunning())
+	{
+		char name[64];
+		int seconds = 0;
+
+		if (OnlineHost_AskWaiting(name, sizeof(name), &seconds))
+		{
+			LogString("hudson: a player asks to join, so the host opens its menu to answer, as a player presses Esc");
+			AvP_TriggerInGameMenus();
+		}
+	}
 
 	LONG const done = InterlockedIncrement(&framesDone);
 
