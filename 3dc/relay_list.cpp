@@ -16,8 +16,8 @@
 // Modified 2026-11-10 by Melanikus for the AvP port (#175): THE SERVER IS A servers.cfg LINE. The game's one server is the first good line
 // of servers.cfg in the game's folder (servers_cfg.h, servers_cfg_file.h): one address, where the list answers HTTPS and the relay takes
 // the game's messages, and one fingerprint for both of the server's keys (net_server_fingerprint.h). Nothing is looked up by name, and
-// nothing goes anywhere but that address. Until protocol version 2 is on for players, the list is started only with -dev, so a player's
-// game reaches no server at all.
+// nothing goes anywhere but that address. Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3b): -dev decides nothing here, so
+// a player's game uses that line just as a developer's does.
 //
 // HTTPS: WinHTTP, Windows' own. TLS 1.2 or newer. Redirects, cookies and sign-ins are all turned off, since the list never needs them, and a
 // redirect could send the game somewhere else. Each step has 5 seconds.
@@ -54,9 +54,6 @@
 // (CertFreeCertificateContext)
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "crypt32.lib")
-
-// -dev, the developer tools (d3d_render.cpp, set from the command line before the menus start)
-extern int DevMode;
 
 // RelayList_ModeWords has the game styles in the order of NETGAME_TYPE. If that order ever changes, this stops the build.
 static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStanding == 2 && NGT_PredatorTag == 3 && NGT_Coop == 4 &&
@@ -1122,15 +1119,11 @@ namespace
 }
 
 // Modified 2026-11-10 by Melanikus for the AvP port (#175): the server's name is its servers.cfg line's, and there's no server setting in
-// AliensVsPredator.cfg at all, which is a text file people share and anyone can edit (tests/settings_file_test.cpp). Until protocol version
-// 2 is on for players, there's a server only with -dev, so a player's game reaches none: without -dev, the file isn't even read.
+// AliensVsPredator.cfg at all, which is a text file people share and anyone can edit (tests/settings_file_test.cpp). Modified again the
+// same day (#175 PR 3b): every game has the file's first good line as its server, with -dev or without, as protocol version 2 is on for
+// players. What keeps it safe is the line itself: the server is trusted by its fingerprint alone (CheckTheServer, above).
 const char *Relay_ServerName(void)
 {
-	if (!DevMode)
-	{
-		return "";
-	}
-
 	const ServersCfgServer *const line = Server();
 	return line ? line->name : "";
 }
@@ -1513,8 +1506,9 @@ bool RelayList_WhyIsNoConnection(const char *why)
 
 bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
 {
-	// Without -dev, nothing: the page isn't there, and this says no too, so no other way can reach the server either
-	if (!DevMode || !fingerprint)
+	// Without the fingerprint the answer has to be about, nothing. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: -dev
+	// decides nothing online, so this no longer asks it. Only the Online access page calls this, and the page has its own way in.)
+	if (!fingerprint)
 	{
 		return false;
 	}

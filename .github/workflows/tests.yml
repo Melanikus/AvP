@@ -33,12 +33,12 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
-      # The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release".
-      # The code that talks to our servers comes in as it's written, and runs only with -dev; this proves a player's game can reach none
-      # of them. Only the owner lifts it.
-      - name: Refuse any way a player's game could reach one of our servers
+      # The owner's rulings, 2026-11-09 and 2026-11-10 (#175): a player's game plays online only the safe way: only with the servers its
+      # servers.cfg names, trusted by their fingerprints alone, only by protocol version 2, only sealed, plain only at home, and -dev
+      # weakens none of it (tools/check-online-play.ps1 says each rule). Only the owner changes them.
+      - name: Refuse any way a player's game could play online but the safe way
         shell: pwsh
-        run: ./tools/check-servers-dev-only.ps1
+        run: ./tools/check-online-play.ps1
 
       # Hudson's words for a run through a relay server, and the servers.cfg a run writes beside bin\ (tools/hudson/relay-words.ps1): each
       # word's every refusal, the pair's watch on every kind of socket, and the file written only into a copy made for Hudson's runs, never
@@ -474,9 +474,9 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
-      - name: Refuse any way a player's game could reach one of our servers
+      - name: Refuse any way a player's game could play online but the safe way
         shell: pwsh
-        run: ./tools/check-servers-dev-only.ps1
+        run: ./tools/check-online-play.ps1
 
       - name: Test the new-function check
         shell: pwsh

@@ -14,4 +14,5 @@ RELEASING.md says how a release is made.
 
 ## What's in the way
 
-Nothing.
+- #175 part 3: the game uses the first server in servers.cfg without asking. A release must show the player the server and use it only
+  after the player says yes.
