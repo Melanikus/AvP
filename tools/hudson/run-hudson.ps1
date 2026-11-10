@@ -249,7 +249,8 @@ if (-not (Test-Path -LiteralPath $settings)) { Stop-Here "there's no $settings" 
 if (-not (Test-Path -LiteralPath $exePath)) { Stop-Here "there's no $Exe in $folder" }
 
 if ($Net -and -not $WhileInUse) { Stop-Here "-Net is two games at once on one machine, so it needs -TimingsDontMatter and -WhileInUse" }
-if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for a network run's host or joiner, so it needs -Net host or -Net join" }
+# Modified 2026-11-10 by Melanikus (Third): or an -Access run, which asks the relays' list alone (the presses, below)
+if ($Relay -and $Net -ne 'host' -and $Net -ne 'join' -and -not $Access) { Stop-Here "-Relay is for a network run's host or joiner, or an -Access run, so it needs -Net host, -Net join or -Access" }
 if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
 # A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
 if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
@@ -278,7 +279,6 @@ if ($Answer -and $Net -ne 'host') { Stop-Here "-Answer is the host's answer to a
 if ($AnswerAfter -ne 0 -and -not $Answer) { Stop-Here "-AnswerAfter says when the host answers, so it needs -Answer" }
 if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15)) { Stop-Here "-AnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
 if ($FindGames -and $Net -ne 'join') { Stop-Here "-FindGames is a joiner's way in, through Find Games, so it needs -Net join" }
-if ($Relay -and -not $Net -and -not $Access) { Stop-Here "-Relay hosts or joins through the relay, so it needs -Net, or -Access for the relays' list alone" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
