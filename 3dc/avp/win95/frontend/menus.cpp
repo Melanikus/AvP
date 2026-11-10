@@ -892,6 +892,68 @@ static void RunTheAccessPagesForHudson(void)
 		: "a press on the Online access page couldn't be made, or the server's answer never came", asAsked);
 }
 
+// One frame of one of the intro's two still pictures, drawn as intro.cpp draws it at full brightness, and its picture (menus=pictures):
+// the copyright screen (Show_CopyrightInfo), or the Aliens versus Predator logo over the starfield (Show_AvPLogo). The logos' film
+// between them keeps the screen's whole width, as every film does, so it isn't pictured. Added 2026-11-10 by Melanikus for the AvP port.
+static void IntroFrameForARun(bool copyright, const char *picture)
+{
+	CheckForWindowsMessages();
+	ThisFramesRenderingHasBegun();
+
+	if (copyright)
+	{
+		DrawAvPMenuGfx_Faded(AVPMENUGFX_COPYRIGHT_SCREEN, 0, 0, ONE_FIXED, AVPMENUFORMAT_LEFTJUSTIFIED);
+	}
+	else
+	{
+		uint32_t width = 0;
+		uint32_t height = 0;
+		Tex_GetDimensions(AVPMENUGFX_ALIENSVPREDATOR, width, height);
+		int const tall = height > 480 ? 480 : static_cast<int>(height);
+
+		DrawMainMenusBackdrop();
+		DrawAvPMenuGfx(AVPMENUGFX_ALIENSVPREDATOR, MENU_CENTREX, (480 - tall) / 2, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
+	ThisFramesRenderingHasFinished();
+	Hudson_SaveThePage(picture);
+	FlipBuffers();
+	Sleep(SKIP_TICKS);
+}
+
+// menus=pictures: four of the menus' pages as a player sees them, and the intro's two still pictures, each pictured, so how the menus
+// are drawn can be seen at any screen size (menu_shape.h). The only row pressed is Multiplayer's Online access; the page opening sends
+// nothing, since it asks the list only once a request has been sent, which a new run never has. Added 2026-11-10 by Melanikus for the
+// AvP port.
+static void RunTheMenuPicturesForHudson(void)
+{
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+
+	SetupNewMenu(AVPMENU_MAIN);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-main.png");
+
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-multiplayer.png");
+
+	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-access.png");
+
+	SetupNewMenu(AVPMENU_OPTIONS);
+	MenuSecondsForARun(1);
+	MenuFrameForARun("menu-options.png");
+
+	IntroFrameForARun(true, "menu-copyright.png");
+	IntroFrameForARun(false, "menu-logo.png");
+
+	ReleaseAllAvPMenuGfx();
+	Hudson_AccessRunEnds(accessOpened ? "four of the menus' pages and the intro's two still pictures were pictured"
+		: "the Online access row couldn't be pressed, so it wasn't pictured", accessOpened);
+}
+
 static int StartLevelForHudsonRun(void)
 {
 	static bool levelStarted = false;
@@ -925,6 +987,13 @@ static int StartLevelForHudsonRun(void)
 	if (Hudson_AccessPress() != kHudsonAccessNone)
 	{
 		RunTheAccessPagesForHudson();
+		return 0;
+	}
+
+	// menus=pictures: the run stays at the menus, pictures four pages, and ends there (added 2026-11-10, hudson_plan.h)
+	if (Hudson_MenuPictures())
+	{
+		RunTheMenuPicturesForHudson();
 		return 0;
 	}
 
@@ -6161,7 +6230,13 @@ extern void DrawMainMenusBackdrop(void)
 {
 	if (!PlayMenuBackgroundFmv())
 	{
+		// Modified 2026-11-10 by Melanikus for the AvP port (the owner's choice, "true shape, starfield full width"): on a wide screen the
+		// menus keep their true shape, and the starfield alone still fills the screen's width (menu_shape.h; d3d_render.cpp,
+		// MenuBackdropFullWidth)
+		extern bool MenuBackdropFullWidth;
+		MenuBackdropFullWidth = true;
 		DrawAvPMenuGfx(AVPMENUGFX_BACKDROP, 0, 0, ONE_FIXED+1, AVPMENUFORMAT_LEFTJUSTIFIED);
+		MenuBackdropFullWidth = false;
 	}
 	/* PlayMenuBackgroundFmv takes care of rendering to screen */
 }
