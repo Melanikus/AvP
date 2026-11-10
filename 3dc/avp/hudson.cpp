@@ -9248,39 +9248,86 @@ static bool Hudson_WayIsClear(STRATEGYBLOCK *me, STRATEGYBLOCK *target)
 	return Hudson_WayIsClearTo(me, middle, target->SBdptr);
 }
 
-// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, on the first side with room, and Hudson_SmokeTest puts him back after it.
+// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, to a spot beside him, and Hudson_SmokeTest puts him back after it.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port (#203): a spot used to need only a clear way to it, and on jockey one put the joiner's eyes somewhere dark, with nothing on the
+// screen. Now it also needs floor not far below, room above, and a clear view of the host's middle (HudsonPlan_SmokeSpotIsGood), and eight directions are tried, at 3 m and then 5 m.
 static void Hudson_SmokeGoOver(STRATEGYBLOCK *me, STRATEGYBLOCK *other)
 {
 	static const int kCloseEnoughToSee = 8000; // millimetres
-	static const int kStandsThisFarAway = 3000;
-	static const int kSides[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+	static const int kDistances[2] = { 3000, 5000 };
+	static const int kSides[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
 
 	if (plan.netMode != kHudsonNetJoin || VectorDistance(&me->DynPtr->Position, &other->DynPtr->Position) <= kCloseEnoughToSee)
 	{
 		return;
 	}
 
-	VECTORCH there = other->DynPtr->Position;
+	VECTORCH const there = other->DynPtr->Position;
+	VECTORCH middle;
 
-	for (int side = 0; side < 4; side++)
+	GetTargetingPointOfObject_Far(other, &middle);
+
+	for (int d = 0; d < 2; d++)
 	{
-		VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
-
-		FindPolygonInLineOfSight(&direction, &there, 0, other->SBdptr);
-
-		if (!LOS_ObjectHitPtr || LOS_Lambda > kStandsThisFarAway + 1000)
+		for (int side = 0; side < 8; side++)
 		{
-			VECTORCH place = { there.vx + kSides[side][0] * kStandsThisFarAway, there.vy, there.vz + kSides[side][1] * kStandsThisFarAway };
+			VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
+			VECTORCH from = there;
+
+			Normalise(&direction);
+
+			// Nothing in the way to the spot, and a metre past it
+			FindPolygonInLineOfSight(&direction, &from, 0, other->SBdptr);
+
+			if (LOS_ObjectHitPtr && LOS_Lambda <= kDistances[d] + 1000)
+			{
+				continue;
+			}
+
+			VECTORCH place = { there.vx + MUL_FIXED(direction.vx, kDistances[d]), there.vy, there.vz + MUL_FIXED(direction.vz, kDistances[d]) };
+
+			// Something to stand on below it (y goes down), and room above it
+			VECTORCH down = { 0, ONE_FIXED, 0 };
+			VECTORCH up = { 0, -ONE_FIXED, 0 };
+			VECTORCH at = place;
+
+			FindPolygonInLineOfSight(&down, &at, 0, other->SBdptr);
+			bool const floorHit = LOS_ObjectHitPtr != 0;
+			int const floorBelow = LOS_Lambda;
+
+			at = place;
+			FindPolygonInLineOfSight(&up, &at, 0, other->SBdptr);
+			bool const ceilingHit = LOS_ObjectHitPtr != 0;
+			int const ceilingAbove = LOS_Lambda;
+
+			// And nothing between it and his middle, but him
+			VECTORCH toHim = { middle.vx - place.vx, middle.vy - place.vy, middle.vz - place.vz };
+			int const howFar = VectorDistance(&place, &middle);
+
+			at = place;
+			Normalise(&toHim);
+			FindPolygonInLineOfSight(&toHim, &at, 0, me->SBdptr);
+			bool const wayClear = !LOS_ObjectHitPtr || LOS_ObjectHitPtr == other->SBdptr || LOS_Lambda >= howFar;
+
+			if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))
+			{
+				continue;
+			}
+
+			char line[300];
 
 			smokeCameFrom = me->DynPtr->Position;
 			smokeWentOver = true;
 			MoveThePlayerTo(place);
-			LogString("smoke: they started too far apart to see each other, so the joiner has gone over to the host");
+			_snprintf(line, sizeof(line) - 1, "smoke: they started too far apart to see each other, so the joiner has gone over to the host, %d mm to one side, with floor %d mm below, %s above, and a clear view of him",
+				kDistances[d], floorBelow, ceilingHit ? "room" : "open sky");
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
 			return;
 		}
 	}
 
-	LogString("smoke: they started too far apart to see each other, and the joiner found no room beside the host");
+	LogString("smoke: they started too far apart to see each other, and the joiner found no spot beside the host, 3 or 5 m away in 8 directions, with floor, room and a clear view of him");
 }
 
 // The user's rule: "if 2 hudsons join they should always look at each other as a 'smoke test' before acting". On every first join and each level's start, in any mode, each player turns to the other, one right and one left

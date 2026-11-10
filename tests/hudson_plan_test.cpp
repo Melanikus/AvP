@@ -442,6 +442,16 @@ static void TestBadPlans()
 			facts.millisecondsSeen = 1;
 			Check(HudsonPlan_SmokeVerdict(facts, &why) == kHudsonSmokeFailed && strcmp(why, "he died before it was done") == 0, "dying fails it at once");
 		}
+		// #203: a spot beside the other player, for a joiner that started too far away, needs floor, room and a clear view. Added 2026-11-10
+		// by Melanikus (Third) for the AvP port
+		Check(HudsonPlan_SmokeSpotIsGood(true, 1000, true, 1500, true), "#203: a spot with floor 1 m below, room above and a clear view will do");
+		Check(HudsonPlan_SmokeSpotIsGood(true, 0, false, 0, true) && HudsonPlan_SmokeSpotIsGood(true, kHudsonSmokeMostDrop, true, kHudsonSmokeLeastHeadroom, true),
+			"and so will one on the floor under open sky, or with the most drop and the least room");
+		Check(!HudsonPlan_SmokeSpotIsGood(false, 0, false, 0, true), "but not one over nothing, where he'd fall out of the level");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, kHudsonSmokeMostDrop + 1, false, 0, true), "nor one over a drop deeper than 2.5 m");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, -1, false, 0, true), "nor one whose floor ray says less than nothing");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, 1000, true, kHudsonSmokeLeastHeadroom - 1, true), "nor one under a ceiling nearer than 1 m");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, 1000, false, 0, false), "nor one with something between it and the other player");
 		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && !plan.windowOnMainScreen && plan.windowSlot == 0 && plan.windowsTogether == 1, "a run's window goes on the second screen unless it says otherwise, alone there");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 screen=main", &plan) == 0 && plan.windowOnMainScreen, "screen=main keeps it on the main screen");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 screen=second", &plan) == 0 && !plan.windowOnMainScreen, "and screen=second is the same as saying nothing");
@@ -1457,6 +1467,15 @@ static void TestTheRealGame()
 			"SOURCE: a Hudson host's co-op game is numbered by its campaign level's place on the co-op list, as a player's host menu numbers it");
 		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/coop_menu.cpp"), "netGameData.levelNumber = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);"),
 			"SOURCE: and that's the number the player's own co-op host menu gives");
+		// #203: the smoke test's spot beside the other player, and the pair's DirectX error lines. Added 2026-11-10 by Melanikus (Third)
+		std::string const goOver = Between(ReadSourceFile("3dc/avp/hudson.cpp"), "static void Hudson_SmokeGoOver(STRATEGYBLOCK *me, STRATEGYBLOCK *other)", "\n}\n");
+		Check(Has(goOver, "static const int kSides[8][2]") && Has(goOver, "static const int kDistances[2] = { 3000, 5000 };"), "SOURCE: a far joiner tries eight directions beside the host, at 3 m and then 5 m");
+		Check(Has(goOver, "VECTORCH down = { 0, ONE_FIXED, 0 };") && Has(goOver, "VECTORCH up = { 0, -ONE_FIXED, 0 };"), "SOURCE: looking down for floor and up for room, y going down");
+		Check(Has(goOver, "bool const wayClear = !LOS_ObjectHitPtr || LOS_ObjectHitPtr == other->SBdptr || LOS_Lambda >= howFar;"), "SOURCE: and at the host's middle, the host alone counting as no wall");
+		Check(ComesBefore(goOver, "if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))", "MoveThePlayerTo(place);"), "SOURCE: and goes only to a spot the rule passes");
+		Check(Has(runPair, "$errors = @(Get-Content -LiteralPath $gameLog | Where-Object { $_ -like '*DirectX Error!*' })") && Has(runPair, "$lines += \"d3d_errors_$game=$($errors.Count)\"")
+			&& Has(runPair, "$lines += \"d3d_first_$game=$($errors[0].Trim())\""), "SOURCE: the pair counts each game's DirectX error lines in pair.txt, with the first word for word");
+		Check(ComesBefore(runPair, "if ($smokeFailed) { exit 111 }", "if ($directXErrors -gt 0) { exit 112 }"), "SOURCE: and any of them fails the pair, 112, after the smoke test's 111");
 		// film=menus and pagehold= reach a run through both scripts (the owner's showcase, 2026-11-10)
 		Check(Has(runHudson, "if ($FilmMenus) { $arguments += \" film=menus\" }") && Has(runHudson, "if ($PageHold -ne 0) { $arguments += \" pagehold=$PageHold\" }"),
 			"SOURCE: the script can ask for film=menus and pagehold=");

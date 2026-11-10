@@ -18,7 +18,7 @@ It won't start without a claude process, so that nothing is left starting games 
 
 THE SMOKE TEST: every game starts by turning to the other player and checking it can see them, before anything else it does. pair.txt says how each one went in its smoke_host=, smoke_join= and smoke_third= lines, and so does what this prints, first. A run whose smoke test failed doesn't count as a pass, whatever else it did.
 
-Exit code: 0 if both runs ended with 0, or the first that didn't. 100 means it didn't start, 110 means a game had something open on another address, and 111 means every run ended with 0 but a smoke test failed.
+Exit code: 0 if both runs ended with 0, or the first that didn't. 100 means it didn't start, 110 means a game had something open on another address, and 111 means every run ended with 0 but a smoke test failed. 112 means every run ended with 0 and the smoke tests passed, but a game's log has a "DirectX Error!" line: pair.txt's d3d_errors_ and d3d_first_ lines say which game, how many and the first (#203).
 
 CHECKING THE WATCH ITSELF: -CheckTheWatch starts no game. It puts the watch's rule (Test-SocketIsOffThisMachine, below) through every kind of socket it has to tell apart, and says which, if any, it got wrong. Exit code 0 if none, 1 if any.
 
@@ -597,6 +597,39 @@ foreach ($game in @('host', 'join', 'third'))
     }
 }
 
+# #203, with Primary (#202): a DirectX call that fails is said once in that game's own log ("DirectX Error! : ..."), and nothing else
+# shows it: a join once lost a frame that way on every run, unseen. So each game's log is read for those lines, wherever its run was
+# kept (its output's "Kept in" line), and pair.txt says how many there were and the first, word for word. Any at all fails the pair
+# (exit 112), even when everything else passed. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+$directXErrors = 0
+
+foreach ($game in @('host', 'join', 'third'))
+{
+    $file = Join-Path $kept "$game-output.txt"
+
+    if (-not (Test-Path -LiteralPath $file)) { continue }
+
+    $keptLine = @(Get-Content -LiteralPath $file | Where-Object { $_ -match '^run-hudson: exit code .*Kept in (.+)$' }) | Select-Object -First 1
+    $runFolder = if ($keptLine -and $keptLine -match 'Kept in (.+)$') { $Matches[1].Trim() } else { '' }
+    $gameLog = if ($runFolder) { Join-Path $runFolder 'avp_log.txt' } else { '' }
+
+    if (-not $gameLog -or -not (Test-Path -LiteralPath $gameLog -PathType Leaf))
+    {
+        $lines += "d3d_errors_$game=unknown: its log wasn't found"
+        continue
+    }
+
+    $errors = @(Get-Content -LiteralPath $gameLog | Where-Object { $_ -like '*DirectX Error!*' })
+    $lines += "d3d_errors_$game=$($errors.Count)"
+
+    if ($errors.Count -gt 0)
+    {
+        $lines += "d3d_first_$game=$($errors[0].Trim())"
+        Write-Host "run-net-pair: FINDING: the $game game's log has $($errors.Count) DirectX error line(s), the first: $($errors[0].Trim())"
+        $directXErrors += $errors.Count
+    }
+}
+
 if ($rulesAfter.Count -ne $rulesBefore.Count)
 {
     Write-Host "run-net-pair: FINDING: the firewall has new rules for these programs, so Windows asked and someone answered: $($rulesAfter.Count - $rulesBefore.Count)"
@@ -616,4 +649,5 @@ if ($hostExit -ne 0) { exit $hostExit }
 if ($joinExit -is [int] -and $joinExit -ne 0) { exit $joinExit }
 if ($null -eq $joinRun) { exit 100 }
 if ($smokeFailed) { exit 111 }
+if ($directXErrors -gt 0) { exit 112 }
 exit 0

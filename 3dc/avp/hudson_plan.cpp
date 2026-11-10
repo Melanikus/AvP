@@ -3294,6 +3294,14 @@ void HudsonPlan_WindowPart(int areaLeft, int areaTop, int areaWidth, int areaHei
 	*height = areaHeight;
 }
 
+bool HudsonPlan_SmokeSpotIsGood(bool floorHit, int floorBelow, bool ceilingHit, int ceilingAbove, bool wayClear)
+{
+	bool const standsOnSomething = floorHit && floorBelow >= 0 && floorBelow <= kHudsonSmokeMostDrop;
+	bool const hasRoom = !ceilingHit || ceilingAbove >= kHudsonSmokeLeastHeadroom;
+
+	return standsOnSomething && hasRoom && wayClear;
+}
+
 int HudsonPlan_SmokeVerdict(const HudsonSmokeFacts &facts, const char **why)
 {
 	*why = "";

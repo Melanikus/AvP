@@ -681,4 +681,16 @@ enum
 // Whether the test is still going on, or has passed or failed. If it failed, *why says what was wrong, the first thing that was. It's only passed when all of it is true at once.
 int HudsonPlan_SmokeVerdict(const HudsonSmokeFacts &facts, const char **why);
 
+// #203: when the two start too far apart to see each other (a big deathmatch map), the joiner goes to a spot beside the other player.
+// A spot only did if the way to it was clear, and on jockey one put the joiner's eyes somewhere dark, where nothing was on the screen.
+// Now a spot also needs something to stand on not far below it, room for a body above it, and nothing between it and the other player's
+// middle. Distances are millimetres along a ray from the spot, at the other player's own height; a ray that hit nothing says hit = false.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+enum
+{
+	kHudsonSmokeMostDrop = 2500,      // the floor at most this far below the spot
+	kHudsonSmokeLeastHeadroom = 1000  // and nothing nearer than this above it
+};
+bool HudsonPlan_SmokeSpotIsGood(bool floorHit, int floorBelow, bool ceilingHit, int ceilingAbove, bool wayClear);
+
 #endif
