@@ -287,6 +287,26 @@ static void EveryChangedA2(const Vectors &v)
 	ACheck(refused == all, std::to_string(refused) + " of A2's 3,257 bytes, each with a bit changed, are refused");
 	ACheck(rightReason == all, std::to_string(rightReason) + " of them for the reason they must be: the first 97 as a key that isn't one, the rest at the seal");
 	ACheck(wiped == all, "and every time, A3, the keys and the handshake's chain are left wiped");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (Take-outs, #191): a relay key that isn't on the curve ends the handshake at the first
+	// ECDH, ee, and nothing after it runs (net_handshake_a.cpp's own rule). The second ECDH, se, uses the same key and would refuse it too,
+	// with the same words, so only the trace can tell: A2's key is hashed (step 13), and no step comes after it, so ee's answer is never
+	// mixed in.
+	NetHandshakeA hs;
+	NetHandshakeATrace trace;
+	NetHandshakeADraws d;
+	memset(&hs, 0, sizeof(hs));
+	memset(&trace, 0, sizeof(trace));
+	bool const started = FileDraws(v, &d) && NetHandshakeA_WriteA1(&hs, v.region.c_str(), &v.relay, &gPlayer, &d, &trace) == kNetHandshakeAOk;
+	size_t const afterA1 = trace.count;
+	Bytes offTheCurve = v.a2;
+	offTheCurve[10] ^= 0x01;
+	uint8_t a3[kNetHandshakeA3Bytes];
+	NetHandshakeAKeys keys;
+	int const why = started ? NetHandshakeA_ReadA2(&hs, offTheCurve.data(), offTheCurve.size(), a3, &keys, &trace) : -1;
+	ACheck(started && why == kNetHandshakeABadKey && trace.count == afterA1 + 1,
+		"a relay key off the curve is refused at ee, with A2's key hashed and no step after it (" + std::to_string(trace.count - afterA1) + " step(s) after A1)");
+	NetCrypto_Wipe(&trace, sizeof(trace));
 }
 
 // ----- What else can be wrong

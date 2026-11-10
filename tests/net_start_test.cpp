@@ -4681,6 +4681,16 @@ static void TestTheV2Draft()
 	size_t const sentBeforeJoining = datagramsSentBytes.size();
 	Check(Net_ConnectToSession(0, playerName) == NET_OK && theHost.sendHook == NULL && lastConnectData == 0 && !SentAnyV2Datagram(sentBeforeJoining),
 		"with the draft off, a join through the relay is version 1's: no handshake B, nothing sealed, and a CONNECT that says 0");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (Take-outs, #191): a version 1 joiner through the relay hears the relay alone, by its own
+	// check. With the draft on, the channel's check drops a stranger first, and in a Hudson run beyond this machine, the run's own does, so
+	// this is the one place the joiner's own check is seen.
+	uint8_t stranger[40];
+	memset(stranger, 0x22, sizeof(stranger));
+	TellTheHost(0x0200007F, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "and a packet from anywhere but the relay is dropped before ENet reads it");
+	TellTheHost(kRelayHost, 27501, stranger, sizeof(stranger));
+	Check(theHost.intercept(&theHost, NULL) == 0, "while the same from the host's port on the relay is ENet's to read, as in version 1");
 	EndTheGame();
 
 	// As the tests after this expect

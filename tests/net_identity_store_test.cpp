@@ -582,6 +582,14 @@ static void TestWhoseFile()
 	Check(onlyThisUser && (control & SE_DACL_PROTECTED) != 0, "and only this user may read or change it, with nothing added from the folder it's in");
 	LocalFree(descriptor);
 
+	// Added 2026-11-10 by Melanikus for the AvP port (Take-outs, #191): Windows protects a new file's list of who may use it when the file is
+	// made with a list of its own, whether the game asks for that or not, so the check above can't tell that it asked. It must still ask:
+	// a file made some other way later (written over in place, its list set after) would take the folder's list. So it's read as written.
+	std::string const writer = SourceSlice(ReadSource("3dc/net_identity_store.cpp"), "bool WriteWholeFile(const wchar_t *path,", "\n\t}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	Check(writer.find("!SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED, SE_DACL_PROTECTED))") != std::string::npos,
+		"SOURCE: the file is made with its list marked protected, so nothing from the folder is ever added to it");
+
 	// Given to the Administrators group, as a file someone else had put there would be: refused, though its keys hold together
 	SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
 	PSID administrators = NULL;

@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_identity_store.cpp",
-					"from": "while (got < room)",
-					"to": "while (got < room - 1)"
+					"from": "if (!ReadFile(file, bytes + got, static_cast<DWORD>(room - got), &read, NULL))",
+					"to": "if (!ReadFile(file, bytes + got, static_cast<DWORD>(room - got - 1), &read, NULL))"
 				}
 			]
 		},
