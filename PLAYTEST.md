@@ -40,6 +40,18 @@ VirusTotal's report on the zip.
    ```
    Nothing printed means every file matches.
 
+**A test build instead of a release** (the owner's Build workflow, kept for 30 days as the artifact `avp-avpx_main`):
+`tools\install-build.ps1` downloads the newest one, or with `-Commit <all 40 digits>` only a build of that commit, and makes all
+these checks itself. When you've been told which commit to test, give it. To check one by hand, unzip it into a new,
+empty folder. There is no zip hash to compare, so step 1 is skipped. Step 2 is made on the list of hashes inside it instead, with
+the commit you expect (all 40 digits) in place of `<commit>`:
+```
+gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-ref refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners
+```
+Without `--source-digest`, any older build of avpx_main would pass too. Then step 3, in that folder. Also check that it holds no file
+the list doesn't name: a release's record covers its whole zip, but here only the list is recorded. Last, `BUILD.txt` (which is on
+the list) must say `avpx_main` and that same commit.
+
 ## 2. Where to unzip (Steam)
 Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, inside your Steam library. It holds `bin`,
 `avp_rifs`, `avp_huds` and the rest. The zip is laid out the same way.
