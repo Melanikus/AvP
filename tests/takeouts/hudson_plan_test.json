@@ -9865,6 +9865,16 @@
 					"to": "if (seenFindGames && plan->netMode == kHudsonNetNone)"
 				}
 			]
+		},
+		{
+			"name": "menus=pictures goes with a network run or an access run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (seenMenus && (plan->netMode != kHudsonNetNone || seenAccess))",
+					"to": "\tif (false)"
+				}
+			]
 		}
 	]
 }
