@@ -261,8 +261,9 @@ static void TestFields(void)
 	Check(OneLine(Line("203.0.113.7", std::string(32, 'n'))) == kServersCfgBadName, "a name of 32 letters");
 	Check(OneLine(Line("203.0.113.7", "a" + std::string(40, ' ') + "b")) == kServersCfgLineGood && strcmp(read.servers[0].name, "a b") == 0,
 		"a name is counted after its runs of spaces are one space each");
-	Check(OneLine(Line("203.0.113.7", std::string(16, 'n') + " " + std::string(15, 'n'))) == kServersCfgLineGood, "31 letters with a space in them");
-	Check(OneLine(Line("203.0.113.7", std::string(16, 'n') + " " + std::string(16, 'n'))) == kServersCfgBadName, "and 32");
+	// (Modified 2026-11-10 by Melanikus for the AvP port: the first was 16 + 1 + 15, which is 32, so it failed against a right rule)
+	Check(OneLine(Line("203.0.113.7", std::string(15, 'n') + " " + std::string(15, 'n'))) == kServersCfgLineGood, "31 letters with a space in them");
+	Check(OneLine(Line("203.0.113.7", std::string(16, 'n') + " " + std::string(15, 'n'))) == kServersCfgBadName, "and 32");
 	Check(OneLine(Line("203.0.113.7", "#hash")) == kServersCfgBadName, "a name starting with #, which would look like a note");
 	Check(OneLine("#" + Line("203.0.113.7")) == static_cast<ServersCfgLineRefusal>(-2) && read.serverCount == 0 && read.refusedCount == 0,
 		"a line starting with # is a note, never a server");
