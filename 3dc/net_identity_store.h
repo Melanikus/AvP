@@ -55,6 +55,10 @@ enum NetIdentityStoreResult
 // The words for a result, for the log and the page that asks the player
 const char *NetIdentityStore_Words(NetIdentityStoreResult result);
 
+// The kept identity's file name in %LOCALAPPDATA%\AVPx: the player's own, the second copy's, or a Hudson run's own two, so a Hudson run
+// never reads, replaces or sends the player's identity (Fifth's read, 2026-11-09). Added 2026-11-09 by Melanikus for the AvP port.
+const wchar_t *NetIdentityStore_FileName(bool hudsonRun, bool secondCopy);
+
 // Reads the identity kept at path into out. why, if it's given, is fixed words saying what was wrong when the answer isn't Loaded (never
 // anything from the file). out is whole only for Loaded; for any other answer nothing of it is left.
 NetIdentityStoreResult NetIdentityStore_LoadFrom(const wchar_t *path, NetIdentity *out, const char **why);

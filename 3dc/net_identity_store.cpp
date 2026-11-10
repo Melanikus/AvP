@@ -18,16 +18,23 @@
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
 
-// Whether this is the game's second copy on this PC (utilities.cpp, -dev -secondcopy). Named here alone, rather than through utilities.h,
-// so that net_identity_store_test can build this file with a stand-in for it.
+// Whether this is the game's second copy on this PC (-dev -secondcopy), and whether it's a Hudson run (-dev -hudson), both from
+// utilities.cpp. Named here alone, rather than through utilities.h, so that net_identity_store_test can build this file with stand-ins.
+// Modified 2026-11-09 by Melanikus for the AvP port: the first had no definition in the game at all (only the test had one), so the
+// game couldn't link; utilities.cpp defines both now, and the test checks it does.
 bool SaveFolder_IsTheSecondCopy();
+bool SaveFolder_IsAHudsonRun();
 
 namespace
 {
-	// The folder in %LOCALAPPDATA%, and the file's name in it: one for the game, and one for its second copy
+	// The folder in %LOCALAPPDATA%, and the file's name in it: one for the game, and one for its second copy. Modified 2026-11-09 by
+	// Melanikus for the AvP port (Fifth's read): a Hudson run has two of its own, so a run of the test marine never reads, replaces or
+	// sends the player's own identity, whose approvals are the player's. Making a new identity in a run would have lost them.
 	const wchar_t *const kFolderName = L"AVPx";
 	const wchar_t *const kFileName = L"identity-v2.bin";
 	const wchar_t *const kSecondCopyFileName = L"identity-v2-second-copy.bin";
+	const wchar_t *const kHudsonFileName = L"identity-v2-hudson.bin";
+	const wchar_t *const kHudsonSecondCopyFileName = L"identity-v2-hudson-second-copy.bin";
 
 	// What only this game adds to what it seals (DPAPI's "entropy"), so another program sealing for the same user can't be handed this blob
 	// and open it as its own
@@ -245,8 +252,18 @@ namespace
 			return std::wstring();
 		}
 
-		return folder + L"\\" + (SaveFolder_IsTheSecondCopy() ? kSecondCopyFileName : kFileName);
+		return folder + L"\\" + NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy());
 	}
+}
+
+const wchar_t *NetIdentityStore_FileName(bool hudsonRun, bool secondCopy)
+{
+	if (hudsonRun)
+	{
+		return secondCopy ? kHudsonSecondCopyFileName : kHudsonFileName;
+	}
+
+	return secondCopy ? kSecondCopyFileName : kFileName;
 }
 
 const char *NetIdentityStore_Words(NetIdentityStoreResult result)
