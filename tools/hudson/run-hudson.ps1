@@ -207,7 +207,7 @@ param(
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
     [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
     [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
-    # (-NetV2 went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
+    # (The v2 draft's switch went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
     [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
 )
 $ErrorActionPreference = 'Stop'
