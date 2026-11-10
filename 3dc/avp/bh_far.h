@@ -1,3 +1,5 @@
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   LocateFarNPCInModule is taken out: nothing called it (REMOVED-CODE.md)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   how many NPCs may be near at once comes from NearNpcLimit, which gives each player a share in a game that plays the same as single player
 
@@ -30,7 +32,6 @@ extern void FarAlienBehaviour(STRATEGYBLOCK *sbPtr);
 extern void BuildFarModuleLocs(void);
 extern void KillFarModuleLocs(void);
 
-extern void LocateFarNPCInModule(STRATEGYBLOCK *sbPtr, MODULE *targetModule);
 extern void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule);
 extern NPC_TARGETMODULESTATUS GetTargetAIModuleStatus(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule, int alien);
 

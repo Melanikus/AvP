@@ -1,5 +1,6 @@
 // Modified 2026-11-10 by Melanikus (Third) for the AvP port:
 //   each far-AI hop says in the log where the NPC was put, and how its shape sits about that point (#109, far_ai_hops.h)
+//   LocateFarNPCInModule is taken out: nothing called it (REMOVED-CODE.md); its 1997 note is over LocateFarNPCInAIModule now
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   only an alien sends the message about moving while far, because that message reads an alien's block
 /*------------------------Patrick 26/11/96-----------------------------
@@ -651,112 +652,6 @@ static int ProcessFarAlienTargetModule(STRATEGYBLOCK *sbPtr, AIMODULE* targetMod
 -------------------------------------------------------------------------*/
 
 
-/*--------------------Patrick 27/1/97----------------------
-  This function relocates an NPC into a target module.
-  If the module is visible it uses the entry point. If not
-  it uses an auxilary location, or the entry point if there
-  aren't any.
-
-  2/7/97: added a bit to update the npc orientation when
-  moving. This orientation is used for wandering behaviour
-  ----------------------------------------------------------*/
-void LocateFarNPCInModule(STRATEGYBLOCK *sbPtr, MODULE *targetModule)
-{
-	int noOfAuxLocs;
-	VECTORCH *auxLocsList; 
-	int noOfEntryPoints;
-	FARENTRYPOINT *entryPointsList;
-	FARENTRYPOINT *targetEntryPoint;
-	VECTORCH newPosition;
-
-	/* a pre-condition... */
-	GLOBALASSERT(ModuleIsPhysical(targetModule));
-
-	/* now: a few tests for npc's that are generated... (aliens and marines) */
-	if ((sbPtr->I_SBtype==I_BehaviourAlien)||(sbPtr->I_SBtype==I_BehaviourMarine))
-	{
-		if ((PherAi_Buf[(targetModule->m_index)]) >= MAX_GENERATORNPCSPERMODULE)
-		{
-			/* do nothing (since there are only a few auxilary locs per module) */
-			return;
-		}
-
-		if (ModuleCurrVisArray[(targetModule->m_index)])
-		{
-			/* the target is visible... */
-			if (NumGeneratorNPCsVisible() >= NearNpcLimit())
-			{
-				/* do nothing: there are already enough visible npcs */
-				return;
-			}
-		}
-	}
-
-	/* now move the npc to it's target... */
-	noOfAuxLocs = FALLP_AuxLocs[(targetModule->m_index)].numLocations;
-	auxLocsList = FALLP_AuxLocs[(targetModule->m_index)].locationsList;  
-	noOfEntryPoints = FALLP_EntryPoints[(targetModule->m_index)].numEntryPoints;
-	entryPointsList = FALLP_EntryPoints[(targetModule->m_index)].entryPointsList;  
-
-	/* find the entry point for the target */
-	LOCALASSERT(sbPtr->containingModule);
-	targetEntryPoint = GetModuleEP(targetModule,(sbPtr->containingModule));
-	LOCALASSERT(targetEntryPoint);
-
-	/* if it's visible, use the entry point.
-	if it's not visible, use an auxilary location. If there aren't any auxilary
-	locations, use the entry point. */
-
-	if (ModuleCurrVisArray[(targetModule->m_index)])
-	{
-		newPosition = targetEntryPoint->position;
-	}
-	else
-	{
-		/* pick an auxilary location: if there aren't any, use the entry point */
-		if (noOfAuxLocs)
-		{
-			int targetLocInx;
-			int npcHeight;
-			targetLocInx = FastRandom() % noOfAuxLocs;
-			newPosition = auxLocsList[targetLocInx];
-			/* move up 1/2 npc height, plus a bit more(100). this only applies
-			to auxilary locations, not eps */
-			npcHeight = (mainshapelist[sbPtr->shapeIndex]->shapemaxy
-				- mainshapelist[sbPtr->shapeIndex]->shapeminy)/2;
-			if (npcHeight>1000) npcHeight = 1000;
-			newPosition.vy -=(npcHeight + 100);
-		}
-		else newPosition = targetEntryPoint->position;
-	}
-	
-	/* now set the alien's new position and current module. 
-	   NB this is world position + alien height in y + a little extra in y to make sure */
-	{
-		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
-		LOCALASSERT(dynPtr);
-
-		dynPtr->Position = newPosition;
-		dynPtr->Position.vx += targetModule->m_world.vx;
-		dynPtr->Position.vy += targetModule->m_world.vy;
-		dynPtr->Position.vz += targetModule->m_world.vz;
-		dynPtr->PrevPosition = dynPtr->Position;
-
-		dynPtr->OrientEuler.EulerX = 0;
-		dynPtr->OrientEuler.EulerZ = 0;
-		{
-			VECTORCH vec;
-			vec.vx = targetModule->m_world.vx - sbPtr->containingModule->m_world.vx;
-			vec.vz = targetModule->m_world.vz - sbPtr->containingModule->m_world.vz;
-			vec.vy = 0;
-			Normalise(&vec);
-			dynPtr->OrientEuler.EulerY = ArcTan(vec.vx, vec.vz);
-		}
-	}
-	/* finally, update the alien's module */
-	sbPtr->containingModule = targetModule;
-}
-
 // The far AI's hops, in the log (#109; far_ai_hops.h says why and what). Added 2026-11-10 by Melanikus (Third) for the AvP port.
 static int farAiHopsLogged = 0;
 
@@ -795,6 +690,18 @@ static void SayWhereTheFarAIPutIt(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule, 
 	}
 }
 
+/*--------------------Patrick 27/1/97----------------------
+  This function relocates an NPC into a target module.
+  If the module is visible it uses the entry point. If not
+  it uses an auxilary location, or the entry point if there
+  aren't any.
+
+  2/7/97: added a bit to update the npc orientation when
+  moving. This orientation is used for wandering behaviour
+  ----------------------------------------------------------*/
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port: Patrick's note above was over LocateFarNPCInModule, the same move into a
+// MODULE, which nothing called; it's gone (REMOVED-CODE.md), and the note is over the one the far AI uses. Neither place is lifted here:
+// 1999 switched the far location's lift off with #if 0 below. Each hop says in the log where the NPC went (#109, far_ai_hops.h).
 void LocateFarNPCInAIModule(STRATEGYBLOCK *sbPtr, AIMODULE *targetModule)
 {
 	int noOfAuxLocs;
