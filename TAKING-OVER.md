@@ -54,32 +54,76 @@ The game trusts a server only through what it carries itself. Nobody's word over
 
 ## 6. The gates: what each proves, and what can replace it
 
-A gate's tool may be gone by the time you read this. **The rule for that, which you keep:** a gate whose tool can't be reached **fails**, and says so, with "<tool> is unreachable: replace it with an equivalent, see TAKING-OVER.md". It never passes silently. [BETA.2: the game's gates say that; until then, a gate whose tool is gone simply fails.] AGENTS.md says the same for an AI that works here.
+A gate's tool may be gone by the time you read this. **The rule for that, which you keep:** a gate whose tool can't be reached **fails**, and says so: "<tool> is unreachable (<what failed>): this gate can't pass without it. Replace it with an equivalent: see TAKING-OVER.md, section 7.<n>". It never passes silently. Today every gate already fails closed, but with the tool's own error, not those words. [BETA.2: each outside call gets that message, and a test that it does.] AGENTS.md says the same for an AI that works here.
 
-| Gate | What it proves | If its tool is gone |
+| Gate (its workflow) | What it proves | What it needs from outside (section 7) |
 |---|---|---|
-| **Unit tests** (tests.yml) | every test program passes | Needs only Visual Studio |
-| **Tests under the address sanitizer** | the tests touch no memory they shouldn't: out of bounds, after it's freed, and the like | Needs only Visual Studio's AddressSanitizer. Clang's, on another toolchain, finds the same kinds |
-| **Release checks on Ubuntu** | our scripts' own refusals, and the code forms the scanners can't read (CODING-STANDARD.md rule 1) | Ours |
-| **Build the game** (game-build.yml) | the game builds on a clean machine, from source | Visual Studio and vcpkg |
-| **Take-outs** (takeouts.yml) | the tests notice every check in tests/takeouts/ being taken out | Ours |
-| **Snyk Code** | static analysis of our own C++ finds nothing, and reads every file | Needs a Snyk token, which will have expired. Replace it with open-source static analysis that fails on a finding and on a file it can't read: CodeQL for C++, clang-tidy's security checks, cppcheck |
-| **Snyk Open Source** | no known vulnerability in vendored code, and no precompiled code in the repository | OSV-Scanner over the vendored code and the vcpkg ports' versions, against the OSV database. And a check of our own that no .dll, .lib, .exe or .obj is committed |
-| **Snyk on the vcpkg libraries** | the libraries' source, as really compiled, has no finding | The same two, run on the libraries' built source tree |
-| **The VirusTotal scan** (release.yml) | antivirus makers don't flag the package before it's published | Needs an API key, in the `release` environment, which will have expired. Replace it with the scanning services of your day, or several engines' own command-line scanners, and fail on any flag |
-| **The attestation** | a published file came out of this repository's workflow | See section 5 |
-| **Branch protection** (GitHub's) | nothing reaches avpx_main without every gate, for everyone, admins too | On another host: a protected branch with every gate required. On none: a rule you keep, that the branch moves only to a commit whose gates you ran and saw pass |
+| **Unit tests** (tests.yml) | every test passes; Hudson can't run in a player's game; online play happens only the safe way; every shader compiles with no warning; the release checks' own tests pass | the Windows runner image (7.6), Visual Studio (7.7), vcpkg's downloads (7.5) |
+| **Tests under the address sanitizer** (tests.yml) | the tests pass with every memory error caught (out of bounds, after it's freed, and the like), with the network libraries built with the sanitizer too | the same |
+| **Release checks on Ubuntu** (tests.yml) | the same release checks on Linux; the code forms the scanners can't read are refused (CODING-STANDARD.md rule 1) | the Ubuntu runner image (7.6) |
+| **Take-outs** (takeouts.yml) | every take-out row's guard is noticed when it's taken out | the Windows image, vcpkg |
+| **Build the game** (game-build.yml) | it builds on a clean machine, from source, and the package is exactly what a release ships | the Windows image, Visual Studio, vcpkg |
+| **Snyk Code** (snyk.yml) | no known kind of bug in our code, no comment or file telling a scanner to look away, and every C and C++ file read | Snyk (7.1) |
+| **Snyk Open Source** (snyk.yml) | no published vulnerability in what the repository holds, and no precompiled code in it | Snyk (7.1) |
+| **The vcpkg libraries, built and scanned** (snyk.yml) | every library builds from its pinned source, each download checked by its hash; and no finding or published vulnerability in each library's source as we build it. A library Snyk doesn't know fails, unless its own project's advisories were checked | vcpkg's downloads (7.5), Snyk (7.1), GitHub's API for the advisories (7.4) |
+| **Build** (build.yml, test builds) | only avpx_main is built, only once its required checks passed on that commit, and what was built is attested | GitHub's API (7.4), the attestation service (7.3) |
+| **Release** (release.yml) | the commit may be released (RELEASE-BLOCKERS.md), the package, at least 20 antivirus engines' answers read as hostile and none flagging it, and a draft only, which a person publishes | VirusTotal (7.2), the attestation service (7.3), GitHub's API (7.4) |
+| **Branch protection** (GitHub's) | nothing reaches avpx_main without every gate, for everyone, admins too | GitHub. On another host: a protected branch with every gate required. On none: a rule you keep, that the branch moves only to a commit whose gates you ran and saw pass |
 
 **`.github/snyk-accepted.json`** holds the only exceptions: reports where Snyk's own data is wrong, which no code change can clear. Each names the report and has an end date, and when the date passes, the gate fails again until someone checks it afresh. Keep it that way: an exception that never ends is a hole.
 
-## 7. How the crypto gets upgraded
+## 7. Each outside tool, and what can replace it
+
+A replacement must prove at least what the tool did, fail on a finding, and fail when it can't run. Treat it as untrusted until checked: get it from its makers, check its signature or hash, pin its version and hash, and show it fails on a copy with a known problem put in on purpose (AGENTS.md).
+
+### 7.1 Snyk
+
+- **What it does for us:** static analysis of our code (Snyk Code), known vulnerabilities in what we hold (Snyk Open Source), and both for every library's source as we build it.
+- **What it needs:** its command-line tool, downloaded at a pinned version and checked by sha256; Snyk's service; and the `SNYK_TOKEN` secret. The token will have expired.
+- **Replace it with:** for our code, open-source static analysis that fails on a finding and on a file it can't read, such as CodeQL for C and C++, clang-tidy's security checks, or cppcheck. Two different tools see different things. For known vulnerabilities, OSV-Scanner against the OSV database, over the vendored code and every vcpkg port's version and source. Keep the blind-spot rule: a file or library the tool didn't read fails the gate.
+
+### 7.2 VirusTotal
+
+- **What it does for us:** at least 20 antivirus engines look at the package before the owner publishes, and their answers are read as hostile.
+- **What it needs:** VirusTotal's service, and its API key in the `release` environment. The key will have expired.
+- **Replace it with:** the multi-engine scanning service of your day, or several engines' own command-line scanners, and fail on any flag. A flag is reported to the engine's maker as a false positive only once you've checked it is one. A flagged package is never published while the flag stands.
+
+### 7.3 The attestation service
+
+- **What it does for us:** GitHub's attestation (Sigstore, through GitHub) says that a file came out of this repository's own workflow. `gh attestation verify` checks it.
+- **Replace it with:** a list of every published file's SHA-256, signed with a key of your own, with the public key published where your players can find it. That signature, not a service, then says the files are yours (section 5).
+
+### 7.4 GitHub's API
+
+- **What it does for us:** a build checks, through it, that the commit's required checks passed. The library check reads its security advisories.
+- **Replace it with:** your host's own way of asking the same, or with no host, the rule in the branch protection row above. For the advisories: the projects' own advisory pages, or OSV, read as hostile.
+
+### 7.5 vcpkg's downloads
+
+- **What it does for us:** each library is built from its source archive, fetched from its project's release, and checked by the hash in its port. vcpkg itself comes from its repository at the manifest's baseline.
+- **When it's gone:** upstream archives may disappear. vcpkg stops on a missing download or a wrong hash, so the build fails, and it never builds from something else.
+- **Replace it with:** the archived copies, each checked by the same hash. [BETA.2: every library's source archive, kept with its hash beside each release and in an archive repository; until then, RELEASING.md's "Building on a machine without vcpkg".] A copy of the archive you found anywhere is the right one if its hash is the port's.
+
+### 7.6 The runner images
+
+- **What they do for us:** the workflows run on images pinned by name (`windows-2025-vs2026`, `ubuntu-24.04`).
+- **When one is retired:** GitHub has no runner for the name, and the job doesn't start. [BETA.2: what GitHub shows then is being checked, so that a retirement is said plainly once.]
+- **Replace it with:** the next image, pinned by name, and the toolchain's own pin (7.7), so the same compiler is proven.
+
+### 7.7 Visual Studio
+
+- **What it does for us:** the compiler and its libraries, for every build and test.
+- **The pin:** [BETA.2: the exact version, where to get it, how to check it, and the compiler's version recorded in each build's BUILD.txt; today the workflows take the newest one installed.]
+- **When it's gone:** a later Visual Studio. Run every test, the sanitizer and the take-outs on it before anything ships, and record its version.
+
+## 8. How the crypto gets upgraded
 
 The design is the server repository's CRYPTO.md, and its TAKING-OVER.md section 8 says how a new version is made. In short: one suite, never negotiated. A new version is a new design, a new number in every message's header, new labels, new test vectors and new proofs, all at once, and a version never accepts another's messages. **What it means here:**
 - The game holds the same vectors file as the server, byte for byte (`tests/vectors/crypto-v2.json` [BETA.2, with the version 2 pull requests]). Its SHA-256 must match the server's, or the two don't speak the same protocol.
 - A game of a new version is a new release with a new network version number (section 5), and servers.cfg lines for servers of that version.
 - **A player's identity** carries its version in its id (`"AVPX-ID-2"`). A new version makes new identities, and players ask to play again.
 
-## 8. What you inherit, and what you replace
+## 9. What you inherit, and what you replace
 
 | Ours | Yours |
 |---|---|
