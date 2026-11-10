@@ -52,6 +52,8 @@
 //   the page of games found is the online-play screens' (online_screens_page.h): a table of each game's name, level, players, region and
 //   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
 //   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
+//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, only with -dev
+//   a host asked to let someone in through a relay sees the check code under the asking line (CRYPTO.md section 8)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
 //   Bobblen's avp-forever (ec6446f), rewritten
@@ -95,6 +97,7 @@
 #include "OnScreenKeyboard.h"
 #include "logString.h"
 #include "hudson.h"
+#include "hudson_plan.h"
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
@@ -103,6 +106,10 @@
 #include "online_screens.h"
 #include "online_screens_page.h"
 #include "connection_page.h"
+#include "access_page.h"
+
+// -dev (d3d_render.cpp): the Online access row and pages are there only with it
+extern int DevMode;
 #include "credits_roll.h"
 
 #if defined(_MSC_VER)
@@ -442,6 +449,8 @@ static void StartTheCoopCampaign(void)
 	}
 }
 
+static bool JoinThroughFindGamesForARun(void);   // findgames=yes, below with the other presses a player makes
+
 // A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
 // A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
 // Everything is on this machine's own address: see NetLoopbackOnly in networking.cpp. If it can't get as far as starting a level, the run ends here, and its result says how far it got.
@@ -513,7 +522,19 @@ static void StartNetworkGameForHudsonRun(void)
 
 		// -dev -relayjoin (server #14, relay_auto.h): the list's first game of this version, joined through its relay, the way a player
 		// picks one on the page of games found. Nothing else is tried: a run that asked for the relay and can't reach it stops, and says why.
-		if (RelayAuto_Mode() == kRelayAutoJoin)
+		// Modified 2026-11-09 by Melanikus for the AvP port: with findgames=yes, as a player does it, by Find Games and the game's row
+		if (RelayAuto_Mode() == kRelayAutoJoin && Hudson_JoinsThroughFindGames())
+		{
+			Hudson_NetSay("the joiner goes to Find Games, as a player does, to join the list's game through the relay");
+			connected = JoinThroughFindGamesForARun();
+
+			if (!connected)
+			{
+				Hudson_NetStopBecause("the join through Find Games failed, or the host didn't let it in");
+				return;
+			}
+		}
+		else if (RelayAuto_Mode() == kRelayAutoJoin)
 		{
 			int const session = RelayAuto_FindAGame();
 
@@ -674,6 +695,206 @@ static void ShowTheCustomMapsPageForHudsonRun(void)
 	ReleaseAllAvPMenuGfx();
 }
 
+// ---- The presses a player makes, by Hudson (hudson_plan.h's access= and answer=), for the local rehearsal of beta.2's flow. Added
+// 2026-11-09 by Melanikus for the AvP port. Each press is a row selected and Enter, as a player does, and one fixed line in the log.
+
+// The row on this page of that kind, leading to that page or with that value (the two share a place: AVPMENU_ELEMENT's union), pressed
+// as a player does: selected, then Enter. False, with a line in the log, if the page has no such row.
+static bool PressTheRowForARun(enum AVPMENU_ELEMENT_ID kind, int value, const char *what)
+{
+	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
+	{
+		if (AvPMenus.MenuElements[row].ElementID == kind && AvPMenus.MenuElements[row].MaxValue == value)
+		{
+			AvPMenus.CurrentlySelectedElement = row;
+			InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+			LogString(std::string("hudson: pressed ") + what);
+			return true;
+		}
+	}
+
+	LogErrorString(std::string("hudson: there's no row to press for ") + what + " on this page");
+	return false;
+}
+
+// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown
+static void MenuFrameForARun(const char *picture)
+{
+	CheckForWindowsMessages();
+	ThisFramesRenderingHasBegun();
+	DrawMainMenusBackdrop();
+	ReadUserInput();
+	AvP_UpdateMenus();
+	FrameCounterHandler();
+	ThisFramesRenderingHasFinished();
+
+	if (picture)
+	{
+		Hudson_SaveThePage(picture);
+	}
+
+	FlipBuffers();
+	Sleep(SKIP_TICKS);
+}
+
+// Some seconds of the menus as they are. Taking one time from the other works across GetTickCount going round to 0.
+static void MenuSecondsForARun(int seconds)
+{
+	DWORD const started = GetTickCount();
+
+	while (bRunning && (DWORD)(GetTickCount() - started) < (DWORD)seconds * 1000u)
+	{
+		MenuFrameForARun(NULL);
+	}
+}
+
+// After a press that calls the list: frames until its answer is on the page, at most 30 s, then two seconds more, and the page's picture.
+// False if the answer never came.
+static bool PictureTheAnswerForARun(const char *picture)
+{
+	DWORD const started = GetTickCount();
+	bool came = true;
+
+	while (bRunning && AccessPage_CallOnItsWay())
+	{
+		if ((DWORD)(GetTickCount() - started) > 30000u)
+		{
+			came = false;
+			break;
+		}
+
+		MenuFrameForARun(NULL);
+	}
+
+	MenuSecondsForARun(2);
+	MenuFrameForARun(picture);
+	return came;
+}
+
+// findgames=yes: a joiner through the relay joins as a player does (PO's ruling, 2026-11-09: the rehearsal proves the player's path).
+// Join Game, Find Games, then, once the list shows a game this version may join through a relay, its row, pressed. The row's own code
+// joins it (Net_ConnectToSession, drawing the joining screen meanwhile). Then the joining page, drawn as a player sees it, is pictured
+// asking the host with its check code (join-asking.png), and let in (join-letin.png). True once the host has let it in.
+static bool JoinThroughFindGamesForARun(void)
+{
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);
+	MenuSecondsForARun(1);
+
+	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	int row = -1;
+	DWORD const started = GetTickCount();
+
+	// The list's games come within a few seconds of the page opening; at most 30 s
+	while (joined && bRunning && row < 0 && (DWORD)(GetTickCount() - started) < 30000u)
+	{
+		MenuFrameForARun(NULL);
+
+		for (int r = 0; r < AvPMenus.NumberOfElementsInMenu && row < 0; r++)
+		{
+			int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
+
+			if (s >= 0 && SessionData[s].AllowedToJoin && SessionData[s].throughRelay)
+			{
+				row = r;
+			}
+		}
+	}
+
+	if (row < 0)
+	{
+		LogErrorString("hudson: Find Games showed no game this version may join through a relay");
+		joined = false;
+	}
+
+	if (joined)
+	{
+		MenuFrameForARun("join-list.png");
+		AvPMenus.CurrentlySelectedElement = row;
+		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+		LogString("hudson: pressed the list's game");
+
+		// A row that joined goes on to the joining page (its MenuToGoTo); one that didn't stays on the games page, saying why
+		joined = AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING;
+	}
+
+	bool askingPictured = false;
+	bool letIn = false;
+	DWORD const asked = GetTickCount();
+
+	// Asking the host (J4), then let in (J5): at most 40 s, past the host's 30 s for an answer
+	while (joined && bRunning && !letIn && (DWORD)(GetTickCount() - asked) < 40000u)
+	{
+		int const answer = Net_JoinAnswerNow();
+		char digits[kNetRelayCheckCodeBytes];
+		const char *picture = NULL;
+
+		if (answer == kNetJoinAnswerYes)
+		{
+			picture = "join-letin.png";
+			letIn = true;
+		}
+		else if (answer != kNetJoinAnswerWaiting && answer != kNetJoinAnswerNone)
+		{
+			// The host said no, was answering someone else, didn't answer, or is another build: the page says which. (None is a request
+			// not under way yet, which is still waiting.)
+			LogErrorString("hudson: the host didn't let this joiner in");
+			MenuSecondsForARun(2);
+			break;
+		}
+		else if (!askingPictured && Net_RelayCheckCodeNow(digits) && (DWORD)(GetTickCount() - asked) > 1000u)
+		{
+			picture = "join-asking.png";
+			askingPictured = true;
+		}
+
+		MenuFrameForARun(picture);
+	}
+
+	ReleaseAllAvPMenuGfx();
+	return letIn;
+}
+
+// access=: Multiplayer, Online access, then Request access (and Check again after accesswait=), or Make a new identity and Yes. The run
+// stays at the menus, and ends once the presses are done: it plays no level. Its kept identity is a Hudson run's own (the store's
+// NetIdentityStore_FileName), never the player's.
+static void RunTheAccessPagesForHudson(void)
+{
+	int const press = Hudson_AccessPress();
+
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+
+	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	MenuSecondsForARun(2);
+
+	if (asAsked && press == kHudsonAccessNewId)
+	{
+		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS_NEW, "Make a new identity");
+		MenuSecondsForARun(2);
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowNewYes, "Yes, make a new identity");
+		MenuSecondsForARun(2);
+		MenuFrameForARun("access-newid.png");
+	}
+	else if (asAsked)
+	{
+		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Request access") && PictureTheAnswerForARun("access-asked.png");
+
+		if (asAsked && press == kHudsonAccessCheck)
+		{
+			MenuSecondsForARun(Hudson_AccessWaitSeconds());
+			asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Check again") && PictureTheAnswerForARun("access-checked.png");
+		}
+	}
+
+	ReleaseAllAvPMenuGfx();
+	Hudson_AccessRunEnds(asAsked ? "the Online access page's rows were pressed, and the server's answers pictured"
+		: "a press on the Online access page couldn't be made, or the server's answer never came", asAsked);
+}
+
 static int StartLevelForHudsonRun(void)
 {
 	static bool levelStarted = false;
@@ -702,6 +923,13 @@ static int StartLevelForHudsonRun(void)
 	CheatMode_Active = CHEATMODE_NONACTIVE;
 	LoadGameRequest = SAVELOAD_REQUEST_NONE;
 	AvP.LevelCompleted = 0;
+
+	// access=: the run stays at the menus, presses the Online access page's rows, and ends there (added 2026-11-09, hudson_plan.h)
+	if (Hudson_AccessPress() != kHudsonAccessNone)
+	{
+		RunTheAccessPagesForHudson();
+		return 0;
+	}
 
 	if (Hudson_NetIsOn())
 	{
@@ -1162,12 +1390,21 @@ extern void AvP_TriggerInGameMenus(void)
 	if (IOFOCUS_AcceptTyping()) IOFOCUS_Toggle();
 }
 
+static void AnswerTheRequestForARun(void);
+
 extern int AvP_InGameMenus(void)
 {
 	if (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
 	{
 		D3D_FadeDownScreen(ONE_FIXED/8,0);
 		AvP_UpdateMenus();
+
+		// answer=: a Hudson host answers a player asking to join, as a player does (added 2026-11-09, hudson_plan.h)
+		if (HudsonRunIsOn)
+		{
+			AnswerTheRequestForARun();
+		}
+
 		UpdateGammaSettings();
 		ViewSettings_MenuFrame();
 		Reverb_MenuFrame();
@@ -1189,6 +1426,7 @@ extern int InGameMenusAreRunning(void)
 static AVPMENU_ELEMENT answerRows[2 + 31 + 1];
 static bool answerRowsShown = false;
 static char letInRow[96], sayNoRow[96], askingLine[96];
+static char checkCodeLine[48];   // the request's check code, once the joiner's handshake through the relay is done; "" before or without one
 
 static bool ThePageAnswersRequests(enum AVPMENU_ID page)
 {
@@ -1221,6 +1459,7 @@ static void UpdateTheAnswerRows(void)
 	OnlineScreens_LetInWords(name, letInRow, sizeof(letInRow));
 	OnlineScreens_SayNoWords(name, sayNoRow, sizeof(sayNoRow));
 	OnlineScreens_AskingWords(name, seconds, askingLine, sizeof(askingLine));
+	OnlineHost_AskCheckCode(checkCodeLine, sizeof(checkCodeLine));
 
 	// Each row keeps how bright it was last frame, so the copy made again doesn't flicker
 	int const room = (int)(sizeof(answerRows) / sizeof(answerRows[0]));
@@ -1267,6 +1506,52 @@ static void UpdateTheAnswerRows(void)
 	answerRowsShown = true;
 }
 
+// answer=: the host's answer rows are up (Hudson_EndOfFrame opened this menu when a player asked, as a player presses Esc). Once they've
+// been up answerafter= seconds: a picture of this frame, with the asking line, the check code and the rows; on the next frame the press,
+// Let in or Say no; then Resume, as a player goes back to the game. Added 2026-11-09 by Melanikus for the AvP port.
+static void AnswerTheRequestForARun(void)
+{
+	static DWORD rowsUpSince = 0;
+	static bool pictured = false;
+	int const press = Hudson_AnswerPress();
+
+	if (press == kHudsonAnswerNone || !(answerRowsShown && AvPMenus.MenuElements == answerRows))
+	{
+		rowsUpSince = 0;
+		pictured = false;
+		return;
+	}
+
+	DWORD const now = GetTickCount();
+
+	if (rowsUpSince == 0)
+	{
+		rowsUpSince = now != 0 ? now : 1;
+		return;
+	}
+
+	if ((DWORD)(now - rowsUpSince) < (DWORD)Hudson_AnswerAfterSeconds() * 1000u)
+	{
+		return;
+	}
+
+	// The picture first, of this frame as it's drawn; the press a frame later, so the picture never misses the rows
+	if (!pictured)
+	{
+		Hudson_PictureThisFrame("host-asked.png");
+		pictured = true;
+		return;
+	}
+
+	bool const letIn = press == kHudsonAnswerLetIn;
+	PressTheRowForARun(AVPMENU_ELEMENT_JOINANSWER, letIn ? 1 : 0, letIn ? "Let in" : "Say no");
+	rowsUpSince = 0;
+	pictured = false;
+
+	// Back to the game, by the menu's own Resume row
+	PressTheRowForARun(AVPMENU_ELEMENT_RESUMEGAME, 0, "Resume");
+}
+
 extern void AvP_UpdateMenus(void)
 {
 	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
@@ -1306,6 +1591,11 @@ extern void AvP_UpdateMenus(void)
 		{
 			CountTheRowsOnThisPage();
 		}
+	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	{
+		// The server's answer comes on the list's own thread, and the page shows it as it comes
+		AccessPage_Frame(AvPMenus.MenuElements);
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
@@ -1944,6 +2234,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
+			// The Online access row is on this page only with -dev (the owner's ruling, 2026-11-09: nothing a release game does may reach
+			// a server yet). It's set before the page's rows are counted.
+			MenuData_ShowOnlineAccessRow(DevMode != 0);
+
 			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
 			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
 			RelayList_FindRelays();
@@ -1965,6 +2259,27 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				{
 					SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
 				}
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_ONLINE_ACCESS:
+		{
+			// Only with -dev. Without it nothing leads here, and if anything ever did, it goes straight back.
+			if (!AccessPage_Opened(AvPMenus.MenuElements))
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_ONLINE_ACCESS_NEW:
+		{
+			if (!AccessPage_QuestionOpened())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
 				return;
 			}
 			break;
@@ -2177,6 +2492,16 @@ static void RenderMenu(void)
 		ConnectionPage_DrawLines(y, y + AvPMenus.MenuHeight);
 	}
 
+	// The Online access pages: what Request access does, then the code and the server's answer, above and under the rows
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
+	{
+		AccessPage_DrawTop(y + AvPMenus.MenuHeight);
+	}
+	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	{
+		AccessPage_DrawQuestion();
+	}
+
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
 	// instead of the page's own row
 	bool const askingPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_JOINING && OnlinePage_DrawAsking();
@@ -2185,14 +2510,27 @@ static void RenderMenu(void)
 	if (answerRowsShown && AvPMenus.MenuElements == answerRows)
 	{
 		RenderSmallMenuText(askingLine, MENU_CENTREX, 40, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+
+		// And, through a relay, the check code for the two players to read to each other (CRYPTO.md section 8)
+		if (checkCodeLine[0])
+		{
+			RenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)), MENU_CENTREX, 74, ONE_FIXED / 2,
+				AVPMENUFORMAT_CENTREJUSTIFIED);
+			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,
+				AVPMENUFORMAT_CENTREJUSTIFIED);
+		}
 	}
 
-	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes
+	// The relay's news on the co-op lobby page, where the host waits before play (H2): for a few seconds after it comes. Modified
+	// 2026-11-09 by Melanikus for the AvP port: while a join request's rows are up it waits, and is shown once they've gone, so it never
+	// covers the check code drawn above them (it used to be drawn at y 56, over the code at 58)
 	char relayNews[128];
+	bool const answering = answerRowsShown && AvPMenus.MenuElements == answerRows;
 
-	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews)))
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST && OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))
 	{
-		RenderSmallMenuText(relayNews, MENU_CENTREX, (answerRowsShown && AvPMenus.MenuElements == answerRows) ? 56 : 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		RenderSmallMenuText(relayNews, MENU_CENTREX, 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
 	// The Connection check's line on the co-op host page (connection_page.h): only when the last check found something that stops AVPx
@@ -3846,6 +4184,16 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_ONLINE_ACCESS:
+		{
+			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
+
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AccessPage_Pressed(elementPtr->MaxValue, &page))
+			{
+				SetupNewMenu(page);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_COOP_START:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -4475,6 +4823,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
 		case AVPMENU_ELEMENT_CUSTOMMAP_START:
 		case AVPMENU_ELEMENT_COOP_START:
+		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		case AVPMENU_ELEMENT_JOINLOBBIED:
 		case AVPMENU_ELEMENT_CONNECTIONCHOICE :
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:

@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (bytes > 0 && memchr(body, 0, bytes) != NULL)",
-					"to": "if (false)"
+					"from": "\t\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "\t\tif (false)"
 				}
 			]
 		},
@@ -269,8 +269,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
-					"to": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
+					"from": "\t\tif (host[i] != '.' && (host[i] < '0' || host[i] > '9'))\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
+					"to": "\t\tif (host[i] != '.' && (host[i] < '0' || host[i] > '9'))\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
 				}
 			]
 		},
@@ -329,8 +329,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (!w.fits || w.used > kRelayListMostBodyBytes)",
-					"to": "if (w.used > kRelayListMostBodyBytes)"
+					"from": "if (!w.fits || w.used > most)",
+					"to": "if (w.used > most)"
 				}
 			]
 		},
@@ -1301,6 +1301,576 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\t\tpiece[kMostNewsLetters] = 0;\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game's fingerprint isn't one of its fields, so every game with one is refused",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"fingerprint\", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }",
+					"to": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a bad fingerprint is called a bad text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return kRelayListBadFingerprint;",
+					"to": "return kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "a listing whose fingerprint is all 0 is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (fingerprint[i] != 0)",
+					"to": "if (fingerprint[i] == fingerprint[i])"
+				}
+			]
+		},
+		{
+			"name": "the body leaves the host's fingerprint out",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tAddName(w, \"fingerprint\");\n\t\tAddFingerprint(w, l.fingerprint);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fingerprint given to the host counts even when it's all 0",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;",
+					"to": "hostIdentityGiven = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room that opens with no identity is listed anyway",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (Net_V2DraftOn() && !hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listing doesn't keep the fingerprint its room opened with",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tmemcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the session says later changes a listing's fingerprint, which the list refuses on a PUT",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tl.version = static_cast<int>(session.version);\n",
+					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.fingerprint, 0, sizeof(l.fingerprint));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a POST or PUT doesn't send the listing's fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tout.fingerprint = l.fingerprint;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an access answer with any HTTP status is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (status != 200 && status != 400 && status != 429 && status != 503)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer of any size is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > kRelayAccessMostAnswerBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer with a 0 byte isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (!body || !answer)\n\t{\n\t\treturn kRelayListEndsTooSoon;\n\t}\n\n\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)",
+					"to": "\tif (!body || !answer)\n\t{\n\t\treturn kRelayListEndsTooSoon;\n\t}\n\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "an access answer's version isn't held to 1",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "{ \"v\", kKindNumber, 0, 1, 1, NULL, &version, NULL },\n\t\t\t{ \"fp\"",
+					"to": "{ \"v\", kKindNumber, 0, 0, 9, NULL, &version, NULL },\n\t\t\t{ \"fp\""
+				}
+			]
+		},
+		{
+			"name": "a word too long for any of the protocol's is called bad text, not a bad word",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (why == kRelayListBadText)\n\t{\n\t\treturn kRelayListBadWord;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "more after an access answer is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (Next(r) != 0)\n\t{\n\t\treturn kRelayListMoreAfterTheEnd;",
+					"to": "\tif (false)\n\t{\n\t\treturn kRelayListMoreAfterTheEnd;"
+				}
+			]
+		},
+		{
+			"name": "a word is taken with any status",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (kAccessWords[i].status == status && strcmp(kAccessWords[i].word, word) == 0)",
+					"to": "if (strcmp(kAccessWords[i].word, word) == 0)"
+				}
+			]
+		},
+		{
+			"name": "an answer about another key is taken for this PC's",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (status == 200 && (!ours || memcmp(fingerprint, ours, sizeof(fingerprint)) != 0))",
+					"to": "if (status == 200 && !ours)"
+				}
+			]
+		},
+		{
+			"name": "the access code's bits are taken lowest first",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "value = value * 2 + ((fingerprint[bit / 8] >> (7 - bit % 8)) & 1);",
+					"to": "value = value * 2 + ((fingerprint[bit / 8] >> (bit % 8)) & 1);"
+				}
+			]
+		},
+		{
+			"name": "the access code has no dashes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (letter > 0 && letter % 4 == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name of 16 letters can be sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (length > kRelayAccessNameMostBytes)",
+					"to": "if (length > kRelayAccessNameMostBytes + 1)"
+				}
+			]
+		},
+		{
+			"name": "a name can have a \"",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return byte >= 0x20 && byte <= 0x7E && c != '\"' && c != '\\\\';",
+					"to": "return byte >= 0x20 && byte <= 0x7E && c != '\\\\';"
+				}
+			]
+		},
+		{
+			"name": "a name can have a \\",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return byte >= 0x20 && byte <= 0x7E && c != '\"' && c != '\\\\';",
+					"to": "return byte >= 0x20 && byte <= 0x7E && c != '\"';"
+				}
+			]
+		},
+		{
+			"name": "a name can start with a space",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[length - 1] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a name can end with a space",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[0] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a profile's name keeps the spaces at its start",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (IsAccessNameLetter(c) && !(c == ' ' && n == 0))",
+					"to": "if (IsAccessNameLetter(c))"
+				}
+			]
+		},
+		{
+			"name": "a profile's name keeps the spaces at its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "while (n > 0 && to[n - 1] == ' ')",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "a profile's name is read past its room",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "profile && i < profileBytes && profile[i] && n < kRelayAccessNameMostBytes",
+					"to": "profile && profile[i] && n < kRelayAccessNameMostBytes"
+				}
+			]
+		},
+		{
+			"name": "an access request is sent with a name that breaks the rule",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (RelayAccess_NameRefusal(name) != kRelayAccessNameGood || !statics",
+					"to": "if (!statics"
+				}
+			]
+		},
+		{
+			"name": "an access request is sent for an identity never made",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || !statics || statics[0] != 0x04)",
+					"to": " || !statics)"
+				}
+			]
+		},
+		{
+			"name": "an access request is held to the other calls' 1 KB",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return Finish(w, kRelayAccessMostBodyBytes);",
+					"to": "return Finish(w, kRelayListMostBodyBytes);"
+				}
+			]
+		},
+		{
+			"name": "the key is written in base64's web letters, - and _",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"",
+					"to": "\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\""
+				}
+			]
+		},
+		{
+			"name": "the key's last three bytes aren't written",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "for (size_t i = 0; i + 3 <= size; i += 3)",
+					"to": "for (size_t i = 0; i + 3 < size; i += 3)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept without its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tkept[letters] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is kept whole, however long",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "size_t const letters = strnlen(news, kMostNewsLetters);",
+					"to": "size_t const letters = strlen(news);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news is copied past its end",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "memcpy(kept, news, letters);",
+					"to": "memcpy(kept, news, kMostNewsLetters);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a piece of news isn't ended again before it's written",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tpiece[kMostNewsLetters] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "without the draft, a game must still carry a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " - (g.fingerprints ? 0 : 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "without the draft, a game keeps whatever was in its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\t\tmemset(game.fingerprint, 0, sizeof(game.fingerprint));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a listing without the draft carries the fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tif (withFingerprint)\n\t{\n\t\tAddName(w, \"fingerprint\");",
+					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"fingerprint\");"
+				}
+			]
+		},
+		{
+			"name": "a listing without the draft needs a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(withFingerprint && !IsAFingerprint(l.fingerprint))",
+					"to": "!IsAFingerprint(l.fingerprint)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list asks for the players' version's games, draft or not",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "L\"/v1/games?version=%d\", shared->version);",
+					"to": "L\"/v1/games?version=%d\", kMultiplayerVersion);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's version isn't this copy's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "made->version = Net_OurVersion();",
+					"to": "made->version = kMultiplayerVersion;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list reads and writes fingerprints without the draft",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "made->v2Draft = Net_V2DraftOn();",
+					"to": "made->v2Draft = true;"
+				}
+			]
+		},
+		{
+			"name": "keys about another region are taken for the one asked about",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListAccepted && strcmp(answered, region) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a key a digit or a byte short is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(length != rule.mostLetters || !HexInto(hex, length, rule.bytes))",
+					"to": "!HexInto(hex, length, rule.bytes)"
+				}
+			]
+		},
+		{
+			"name": "a key in capitals is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))",
+					"to": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))"
+				}
+			]
+		},
+		{
+			"name": "each key byte is made from its digits the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "bytes[i / 2] = static_cast<uint8_t>((h << 4) | l);",
+					"to": "bytes[i / 2] = static_cast<uint8_t>((l << 4) | h);"
+				}
+			]
+		},
+		{
+			"name": "a refused answer about keys leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tmemset(p384, 0, kNetCryptoP384PublicBytes);\n\tmemset(kem, 0, kNetPqKemPublicBytes);\n\n\tif (!region || !RelayList_IsRegion(region))",
+					"to": "\tif (!region || !RelayList_IsRegion(region))"
+				}
+			]
+		},
+		{
+			"name": "something after the keys' answer is taken",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (why == kRelayListAccepted && Next(r) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a keys' answer bigger than 8 KB is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (bytes > kRelayKeysMostAnswerBytes)\n\t{\n\t\treturn kRelayListTooBig;",
+					"to": "if (false)\n\t{\n\t\treturn kRelayListTooBig;"
+				}
+			]
+		},
+		{
+			"name": "a keys' answer with a 0 byte is read",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\n\tif (!body)\n\t{\n\t\treturn kRelayListEndsTooSoon;\n\t}\n\n\tif (bytes > 0 && memchr(body, 0, bytes) != NULL)\n\t{\n\t\treturn kRelayListHasAZero;",
+					"to": "\n\tif (!body)\n\t{\n\t\treturn kRelayListEndsTooSoon;\n\t}\n\n\tif (false)\n\t{\n\t\treturn kRelayListHasAZero;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay's keys aren't read through the hostile reader",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);",
+					"to": "RelayListRefusal const refusal = kRelayListAccepted;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keys from an older asking are taken for the newest",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)",
+					"to": "if (shared->keysAnswered > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: keys that were refused are handed over anyway",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (came == kRelayKeysCame)\n\t\t{",
+					"to": "\t\tif (true)\n\t\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings' RelayKey is read without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");"
+				}
+			]
+		},
+		{
+			"name": "a profile's name never has letters left out, by the page's reckoning",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn true;\n\t\t}",
+					"to": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}"
 				}
 			]
 		}

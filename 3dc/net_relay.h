@@ -643,6 +643,7 @@ public:
 		keepMs = -1;
 		memset(hellos, 0, sizeof(hellos));
 		sendCount = 0;
+		memset(sends, 0, sizeof(sends));   // the messages still here hold the token and the cookie (added 2026-11-09 by Melanikus for the AvP port)
 		sendsDropped = 0;
 		memset(notMessages, 0, sizeof(notMessages));
 		memset(unused, 0, sizeof(unused));
@@ -844,6 +845,27 @@ public:
 				hellos[i].port = 0;
 			}
 		}
+	}
+
+	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, agreed with Primary): whether the relay has said a joiner is
+	// coming on relayPort (NEW_JOINER), and that joiner's game hasn't connected yet. It's the one moment a host starts handshake B for a
+	// port (networking.cpp): a datagram from any other port of the relay starts nothing. It only reads.
+	bool NamedJoinerPort(uint16_t relayPort) const
+	{
+		if (relayPort == 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < kNetRelayMostJoiners; i++)
+		{
+			if (hellos[i].port == relayPort)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	// The game is over: HOST_CLOSE, so the relay ends the room at once
@@ -1057,6 +1079,7 @@ public:
 		failedWhy = kNetRelayFine;
 		startedAt = askedAt = portAt = helloAt = 0;
 		sendCount = 0;
+		memset(sends, 0, sizeof(sends));   // the messages still here hold the ticket and the cookie (added 2026-11-09 by Melanikus for the AvP port)
 		sendsDropped = 0;
 		memset(notMessages, 0, sizeof(notMessages));
 		memset(unused, 0, sizeof(unused));

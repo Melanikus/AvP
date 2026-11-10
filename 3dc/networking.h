@@ -139,11 +139,23 @@ Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's a
 Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in a game's description
 Version 113 - 112, and whether a marine player's shoulder lamp is on, in a spare bit after landingNoise in a player's state, for the mode that plays like single player
 Version 114 - 113, and a joiner asks the host first: its request to join (its "let me in", with its name) is held until the host answers yes, or closes it with no, busy or no answer
+Version 115 - a -dev v2 draft (-dev -netv2), for good: two 115 copies play only if they're the same build (JBLD); never a players' number. Players' v2 will take the next free number (116 or later).
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
 const int kMultiplayerVersion = 114; // bjd - my version, not directplay compatible
+
+// Added 2026-11-09 by Melanikus for the AvP port: PROTOCOL VERSION 2'S DRAFT, for tests only (Secondary's ruling, accepted by PO). Version 2
+// (the relays' handshakes and sealed datagrams) is written but not finished, so a player's game never uses it: it's on only in a copy
+// started with -dev -netv2, made by tools/build-and-package.ps1 (so it knows the commit it was made from). That copy speaks 115, and every
+// other speaks kMultiplayerVersion, the players' number, exactly as before: with the draft off, nothing of version 2 runs at all. Two 115
+// copies play only if they were made from the same commit, because drafts change what they send: the joiner puts its commit in ENet's
+// CONNECT, and the host closes any other at once with kNetJoinRefusedOtherBuild.
+int const kNetV2DraftVersion = 115;
+extern bool NetV2DraftAsked;   // the command line had -netv2 (winmain.cpp). It counts only with -dev, in a build that knows its commit.
+bool Net_V2DraftOn(void);      // whether this copy runs the draft: -dev, -netv2, and a build that knows its commit
+int Net_OurVersion(void);      // kNetV2DraftVersion with the draft on, else kMultiplayerVersion: the version this copy says and asks for
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -273,6 +285,7 @@ void Net_LetEveryJoinerIn(bool yes);
 unsigned int const kNetJoinRefusedNo = 0x4A4E4F2Eu;         // "JNO.": the host said no
 unsigned int const kNetJoinRefusedBusy = 0x4A425359u;       // "JBSY": the host was answering another joiner
 unsigned int const kNetJoinRefusedNoAnswer = 0x4A4E4141u;   // "JNAA": nobody answered in time
+unsigned int const kNetJoinRefusedOtherBuild = 0x4A424C44u; // "JBLD": a v2 draft made from another commit (added 2026-11-09 by Melanikus for the AvP port)
 
 // The joiner's side: where its request has got to
 int const kNetJoinAnswerNone = 0;       // no request: not joining, or not yet connected
@@ -281,7 +294,20 @@ int const kNetJoinAnswerYes = 2;        // let in: the host gave it its player I
 int const kNetJoinAnswerNo = 3;
 int const kNetJoinAnswerBusy = 4;
 int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
+int const kNetJoinAnswerOtherBuild = 6; // the host is a v2 draft made from another commit (JBLD), so the two can't play (added 2026-11-09 by Melanikus for the AvP port)
 int Net_JoinAnswerNow();
+
+// THE CHECK CODE. Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, CRYPTO.md section 8: "always shown on the join
+// screen"). Through a relay, the joiner and its host each work out the same 6 digits from their handshake. The two players read them to
+// each other: if they match, nobody sat in the middle. Both calls only read, so a screen can ask every frame.
+//   - Net_RelayCheckCodeNow: a joiner's own code, once its handshake with the host is done. False, with "" written, before, after, or
+//     in a game that didn't come through a relay.
+//   - Net_JoinRequestCheckCode: the host's code for the joiner whose request to join waits (who, as Net_JoinRequestWaiting gave it).
+//     False, with "" written, for a joiner on this network (it has no handshake), or a request that's gone or somebody else's.
+// out has room for the 6 digits and the 0 that ends them.
+size_t const kNetRelayCheckCodeBytes = 7;
+bool Net_RelayCheckCodeNow(char out[kNetRelayCheckCodeBytes]);
+bool Net_JoinRequestCheckCode(NetJoinWho who, char out[kNetRelayCheckCodeBytes]);
 
 // THE RELAY ON THE SCREEN. Added 2026-11-09 by Melanikus for the AvP port, for Fourth's online screens: the host's news about its relay,
 // and the line in play saying which relay the game goes through and how far away it is. Both are read only: asking changes nothing, so a

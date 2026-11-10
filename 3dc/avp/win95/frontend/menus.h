@@ -7,6 +7,8 @@
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
 //   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
 //   (AVPMENU_ELEMENT_FINDAGAIN)
+//   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
+//   the Online access pages and their rows (server #24), only with -dev for now
 //   the Connection check page and its rows (beta.2's "nobody blocked silently", connection_page.h)
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
@@ -140,6 +142,8 @@ enum AVPMENU_ID
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
 	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
+	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
+	AVPMENU_ONLINE_ACCESS_NEW, // the question before a new identity is made
 	AVPMENU_CONNECTION_CHECK   // what on this PC could stop AVPx playing online, and Windows' own pages: see connection_page.h
 };
 
@@ -228,6 +232,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
+	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 	AVPMENU_ELEMENT_CONNECTION_CHECK, // a row of the Connection check page (connection_page.h). Its MaxValue is which (kConnRow...)
 };
@@ -357,6 +362,7 @@ typedef struct
 	bool throughRelay;                               // a game from the relay server's list, joined through its region's relay (relay_list.h)
 	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
 	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
+	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // its host's fingerprint, from the list: who handshake B must find it's talking to
 	// What the games page shows (online_screens.h). The host sent these, so they're hostile: the page draws the name only after
 	// OnlineScreens_SafeName, and checks the numbers before it uses them.
 	char levelName[kRelayListLevelLetters + 1];      // the level's name, as the host said it

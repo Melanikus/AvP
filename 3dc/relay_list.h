@@ -48,6 +48,12 @@ const char *Relay_ServerShownName(void);
 
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
+// This run's identity's fingerprint (net_identity.h), which every listing carries so a joiner knows which host to expect. networking.cpp
+// gives it once the identity is made, before the room opens: a room that opens before then isn't put on the list, and the log says why.
+// The fingerprint is kept with each listing from the moment its room opens, so the list sees the same one for the listing's whole life.
+// Added 2026-11-09 by Melanikus for the AvP port.
+void RelayList_HostIdentity(const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
+
 // The relay has given the host its room: the game goes on the list. region is the relay's (from RelayList_Relays), pass and passTime
 // what HOST_OPENED gave, and hostMs the host's round trip to that relay, 0 if it wasn't measured.
 void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,
@@ -89,10 +95,44 @@ void RelayList_FindGames(void);
 // no games, and why says why in words for the page, fixed words of the game's own, never the list's. False while there's no new answer.
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 
+// ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
+// AvP port. Only the Online access page calls these, and that page is only there with -dev (the owner's ruling: nothing a release game
+// does may reach a server yet), so these refuse without -dev as well, whatever calls them.
+
+// Sends the request: the player's name, this PC's public halves, and the fingerprint the answer has to be about. Only when the player has
+// pressed the page's row for it, or (PO's ruling) when the page opens after the player has sent one this run. False, with nothing sent,
+// without -dev, with no list set, or if the name or key can't be sent (RelayList_AccessBody). The answer comes a moment later.
+bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
+
+// Once for each answer: true, with answered true and what the list said, or answered false and why in fixed words of the game's own (never
+// the list's). False while there's no new answer. The log gets only those words: never the name, the key, the fingerprint or the code.
+bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why);
 // Modified 2026-11-09 by Melanikus for the AvP port: for the page of games found's failure screen. Whether a why from RelayList_FoundGames
 // means the game never got a connection to the list's server (it couldn't be reached, took too long, its certificate wasn't accepted, or
 // the call couldn't start), rather than that it connected and couldn't fetch the games (an answer too big, a no, or an answer refused).
 // It compares the why with this file's own words, never what anybody sent; NULL and "no relay server is set" are neither, so false.
 bool RelayList_WhyIsNoConnection(const char *why);
+
+// ---- A relay's keys, for protocol version 2's draft (step 7). Added 2026-11-09 by Melanikus for the AvP port.
+//
+// Handshake A proves a relay to the game only with the relay's real static public keys. Until there's a signed directory of them, the
+// game asks the list server for them (GET /v1/relay-keys, CRYPTO.md 12.1) and networking.cpp holds them to a fingerprint the tester types
+// into the -dev settings (RelayKey=<region>:<96 hex digits>, net_relay_keys.h) before anything goes to that relay. Only the v2 draft asks,
+// and only with a list server set, which only -dev can do: a player's game never asks.
+
+// Asks the list for a region's relay's keys. The answer comes a moment later, through RelayList_RelayKeysCame. False if the region isn't
+// one or the list can't start (no server is set).
+bool RelayList_AskForRelayKeys(const char *region);
+
+// What came for the newest asking: waiting, the keys (into p384 and kem), or refused, with why in fixed words of the game's own. p384 and
+// kem are all 0 unless the keys came.
+int const kRelayKeysWaiting = 0;
+int const kRelayKeysCame = 1;
+int const kRelayKeysRefused = 2;
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why);
+
+// The settings' RelayKey fingerprint for a region (all 48 bytes): false, with fingerprint all 0, without -dev, with no setting or one that
+// isn't one, or for another region than the one the setting names.
+bool RelayList_RelayKeyFingerprint(const char *region, uint8_t fingerprint[kNetCryptoHashBytes]);
 
 #endif

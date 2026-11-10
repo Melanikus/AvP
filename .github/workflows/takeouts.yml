@@ -134,7 +134,7 @@ jobs:
         if: steps.libraries.outputs.links == 'yes'
         uses: ./.github/actions/fetch-test-libraries
         with:
-          ports: dxsdk-d3dx enet
+          ports: dxsdk-d3dx enet mldsa-native mlkem-native
 
       # The runner says how each row went, and gives back a non-zero result if any row wasn't noticed or couldn't be run. A list
       # whose test isn't here at all can't be run either, and fails the same way.

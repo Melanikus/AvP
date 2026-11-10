@@ -219,8 +219,44 @@ namespace
 		kKindRegion,
 		kKindCode,
 		kKindHost,
-		kKindNumber    // a whole number from least to most
+		kKindNumber,   // a whole number from least to most
+		kKindFingerprint,  // a host's fingerprint: 32 hex digits, small letters, kept as its 16 bytes
+		kKindHexBytes      // exactly mostLetters hex digits, small letters, kept as half as many bytes (a relay's keys; added 2026-11-09)
 	};
+
+	// The longest hex a field can be: an ML-KEM-1024 public key's 1,568 bytes (added 2026-11-09 by Melanikus for the AvP port)
+	size_t const kMostHexLetters = 2 * kNetPqKemPublicBytes;
+
+	// Whether text is exactly letters hex digits in small letters. Only then is it written into bytes, half as many, so a text that's
+	// refused leaves bytes as it was (added 2026-11-09 by Melanikus for the AvP port)
+	bool HexInto(const char *text, size_t letters, uint8_t *bytes)
+	{
+		if (letters % 2 != 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < letters; i++)
+		{
+			char const c = text[i];
+
+			if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+			{
+				return false;
+			}
+		}
+
+		for (size_t i = 0; i < letters; i += 2)
+		{
+			char const high = text[i];
+			char const low = text[i + 1];
+			int const h = high <= '9' ? high - '0' : high - 'a' + 10;
+			int const l = low <= '9' ? low - '0' : low - 'a' + 10;
+			bytes[i / 2] = static_cast<uint8_t>((h << 4) | l);
+		}
+
+		return true;
+	}
 
 	// One field an entry has to have: its name, its kind, its limits, and where what it holds goes
 	struct FieldRule
@@ -232,9 +268,10 @@ namespace
 		long most;
 		char *text;
 		long *number;
+		uint8_t *bytes;   // a fingerprint's 16 bytes; every other kind leaves it out, which makes it NULL
 	};
 
-	// The longest field name is 11 (levelNumber). A name longer than this is no field the protocol has.
+	// The longest field names are 11 (levelNumber, fingerprint). A name longer than this is no field the protocol has.
 	const size_t kMostFieldNameLetters = 16;
 	const int kMostFields = 16;
 
@@ -263,6 +300,42 @@ namespace
 
 			case kKindNumber:
 				return ReadNumber(r, rule.least, rule.most, rule.number);
+
+			case kKindFingerprint:
+			{
+				// Read as a text first, then taken by net_identity.h's own rule, the one the joining code uses, so the two can never disagree:
+				// exactly 32 hex digits, small letters, and nothing after them
+				char hex[kNetIdentityFingerprintHexBytes];
+				why = ReadString(r, hex, kNetIdentityFingerprintHexBytes - 1, &length);
+
+				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes)))
+				{
+					return kRelayListBadFingerprint;
+				}
+
+				return why;
+			}
+
+			case kKindHexBytes:
+			{
+				// Added 2026-11-09 by Melanikus for the AvP port: exactly mostLetters hex digits, small letters, as the server writes them. A
+				// text one letter longer than that is read as too long, and anything not exactly right is refused, with nothing of it kept.
+				char hex[kMostHexLetters + 1];
+
+				if (rule.mostLetters > kMostHexLetters)
+				{
+					return kRelayListBadText;
+				}
+
+				why = ReadString(r, hex, rule.mostLetters, &length);
+
+				if (why == kRelayListAccepted && (length != rule.mostLetters || !HexInto(hex, length, rule.bytes)))
+				{
+					return kRelayListBadText;
+				}
+
+				return why;
+			}
 		}
 
 		return kRelayListUnknownField;
@@ -522,6 +595,7 @@ namespace
 	{
 		RelayListGame *games;
 		int ourVersion;
+		bool fingerprints;   // whether each game carries its host's fingerprint: only a v2 draft's do (RelayList_ReadGames)
 	};
 
 	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
@@ -530,6 +604,8 @@ namespace
 		RelayListGame &game = g.games[place];
 		long gameStyle = 0, levelNumber = 0, coopLobby = 0, players = 0, maxPlayers = 0, version = 0, hostMs = 0, seconds = 0;
 
+		// Every game carries its host's fingerprint (net_identity.h), so a joiner knows which host to expect: a game without one is refused,
+		// as a game missing any of its fields is, and the whole answer with it
 		FieldRule const rules[] =
 		{
 			{ "region", kKindRegion, 0, 0, 0, game.region, NULL },
@@ -544,10 +620,20 @@ namespace
 			{ "maxPlayers", kKindNumber, 0, 1, kRelayMostPlayers, NULL, &maxPlayers },
 			{ "version", kKindNumber, 0, 1, kRelayListMostVersion, NULL, &version },
 			{ "hostMs", kKindNumber, 0, 0, kRelayListMostHostMs, NULL, &hostMs },
-			{ "seconds", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }
+			{ "seconds", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },
+			{ "fingerprint", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }
 		};
 
-		RelayListRefusal const why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+		// Modified 2026-11-09 by Melanikus for the AvP port: the fingerprint is the last rule, and only a v2 draft's games have it. Without,
+		// the rules are version 1's, so a game is read exactly as version 1 reads it, and its fingerprint is left all 0.
+		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0])) - (g.fingerprints ? 0 : 1);
+
+		if (!g.fingerprints)
+		{
+			memset(game.fingerprint, 0, sizeof(game.fingerprint));
+		}
+
+		RelayListRefusal const why = ReadEntry(r, rules, ruleCount);
 
 		if (why != kRelayListAccepted)
 		{
@@ -740,10 +826,10 @@ namespace
 		return n >= 1;
 	}
 
-	// The end of a body: false, with an empty body, if it didn't fit or is past what the list takes
-	bool Finish(Writer &w)
+	// The end of a body: false, with an empty body, if it didn't fit or is past the most bytes the list takes for that call
+	bool Finish(Writer &w, size_t most)
 	{
-		if (!w.fits || w.used > kRelayListMostBodyBytes)
+		if (!w.fits || w.used > most)
 		{
 			if (w.room > 0)
 			{
@@ -775,6 +861,86 @@ namespace
 	{
 		return code && Relay_IsCode(code, strnlen(code, kRelayCodeLetters + 1));
 	}
+
+	// A fingerprint a host can list its game with: one was given, and it isn't all 0, which is what one never made looks like. A real one is
+	// the start of a SHA-384 sum, which is all 0 so rarely that it never happens.
+	bool IsAFingerprint(const uint8_t *fingerprint)
+	{
+		if (!fingerprint)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
+		{
+			if (fingerprint[i] != 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// A fingerprint as the list wants it, written by net_identity.h's own writer: 32 hex digits, small letters, in quotes
+	void AddFingerprint(Writer &w, const uint8_t *fingerprint)
+	{
+		char hex[kNetIdentityFingerprintHexBytes];
+		NetIdentity_FingerprintHex(fingerprint, hex);
+
+		AddChar(w, '"');
+		Add(w, hex);
+		AddChar(w, '"');
+	}
+
+	// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+
+	// Bytes in base64, as the list wants a key: the standard letters (A to Z, a to z, 0 to 9, + and /), each three bytes written as four
+	// letters of 6 bits each, highest bits first. Only for a whole number of threes, so there's never an = at the end, and one key can be
+	// written only one way.
+	void AddBase64(Writer &w, const uint8_t *bytes, size_t size)
+	{
+		static const char kLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+		for (size_t i = 0; i + 3 <= size; i += 3)
+		{
+			uint32_t const three = (static_cast<uint32_t>(bytes[i]) << 16) | (static_cast<uint32_t>(bytes[i + 1]) << 8) | bytes[i + 2];
+			AddChar(w, kLetters[(three >> 18) & 63]);
+			AddChar(w, kLetters[(three >> 12) & 63]);
+			AddChar(w, kLetters[(three >> 6) & 63]);
+			AddChar(w, kLetters[three & 63]);
+		}
+	}
+
+	// A byte a name may have: printable ASCII, but never " or \, so that a name never needs escaping, in JSON or in the owner's window
+	bool IsAccessNameLetter(char c)
+	{
+		unsigned char const byte = static_cast<unsigned char>(c);
+		return byte >= 0x20 && byte <= 0x7E && c != '"' && c != '\\';
+	}
+
+	// The protocol's words in an answer, with what each means and the HTTP status it comes with
+	struct AccessWord
+	{
+		const char *word;
+		int status;
+		RelayAccessAnswer answer;
+	};
+
+	const AccessWord kAccessWords[] = {
+		{ "waiting", 200, kRelayAccessWaiting },
+		{ "approved", 200, kRelayAccessApproved },
+		{ "refused", 200, kRelayAccessRefused },
+		{ "revoked", 200, kRelayAccessRevoked },
+		{ "name", 400, kRelayAccessBadName },
+		{ "key", 400, kRelayAccessBadKey },
+		{ "shape", 400, kRelayAccessBadShape },
+		{ "busy", 429, kRelayAccessBusy },
+		{ "closed", 503, kRelayAccessClosed }
+	};
+
+	// The longest of those words: "approved"
+	const size_t kAccessWordMostLetters = 8;
 }
 
 const char *RelayList_RefusalWords(RelayListRefusal why)
@@ -805,17 +971,21 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 		case kRelayListEndsTooSoon: return "the answer stops before its end";
 		case kRelayListNotWhatComesNext: return "the answer has something else where a , : } or ] has to be";
 		case kRelayListMoreAfterTheEnd: return "the answer has more after its end";
+		case kRelayListBadFingerprint: return "a game's fingerprint isn't 32 hex digits";
+		case kRelayListBadStatus: return "the answer has an HTTP status the protocol never gives an access request";
+		case kRelayListBadWord: return "the answer's state or error isn't one of the protocol's words for its status";
+		case kRelayListNotOurKey: return "the answer is about another key than this PC's";
 	}
 
 	return "the answer was refused for a reason with no words";
 }
 
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count)
 {
 	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
 	*count = 0;
 	int n = 0;
-	GamesInto into = { games, ourVersion };
+	GamesInto into = { games, ourVersion, fingerprints };
 	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
 
 	if (why == kRelayListAccepted)
@@ -855,7 +1025,68 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 	return why;
 }
 
-bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): see relay_list_text.h
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes])
+{
+	memset(p384, 0, kNetCryptoP384PublicBytes);
+	memset(kem, 0, kNetPqKemPublicBytes);
+
+	if (!region || !RelayList_IsRegion(region))
+	{
+		return kRelayListBadRegion;
+	}
+
+	if (bytes > kRelayKeysMostAnswerBytes)
+	{
+		return kRelayListTooBig;
+	}
+
+	if (!body)
+	{
+		return kRelayListEndsTooSoon;
+	}
+
+	if (bytes > 0 && memchr(body, 0, bytes) != NULL)
+	{
+		return kRelayListHasAZero;
+	}
+
+	// The whole answer is one entry with exactly these three fields, in any order, and nothing after it
+	char answered[kRelayListRegionLetters + 1] = {};
+	uint8_t readP384[kNetCryptoP384PublicBytes];
+	uint8_t readKem[kNetPqKemPublicBytes];
+	FieldRule const rules[] =
+	{
+		{ "region", kKindRegion, 0, 0, 0, answered, NULL },
+		{ "p384", kKindHexBytes, 2 * kNetCryptoP384PublicBytes, 0, 0, NULL, NULL, readP384 },
+		{ "mlkem", kKindHexBytes, 2 * kNetPqKemPublicBytes, 0, 0, NULL, NULL, readKem }
+	};
+
+	Reader r = { body, body + bytes };
+	RelayListRefusal why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
+
+	if (why == kRelayListAccepted && Next(r) != 0)
+	{
+		why = kRelayListMoreAfterTheEnd;
+	}
+
+	// Keys about another region than the one asked about are no use, and are never taken for this one's
+	if (why == kRelayListAccepted && strcmp(answered, region) != 0)
+	{
+		why = kRelayListBadRegion;
+	}
+
+	if (why == kRelayListAccepted)
+	{
+		memcpy(p384, readP384, sizeof(readP384));
+		memcpy(kem, readKem, sizeof(readKem));
+	}
+
+	return why;
+}
+
+bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, const uint8_t *owner, char *body, size_t room)
 {
 	Writer w = { body, room, 0, room > 0 };
 
@@ -868,7 +1099,7 @@ bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char
 		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
 		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
 		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
-		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs)
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || (withFingerprint && !IsAFingerprint(l.fingerprint)))
 	{
 		return false;
 	}
@@ -910,11 +1141,19 @@ bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char
 	AddNumber(w, static_cast<unsigned long long>(l.maxPlayers));
 	AddName(w, "version");
 	AddNumber(w, static_cast<unsigned long long>(l.version));
+
+	// Only a v2 draft's listing carries the fingerprint (modified 2026-11-09 by Melanikus for the AvP port): version 1's has no such field
+	if (withFingerprint)
+	{
+		AddName(w, "fingerprint");
+		AddFingerprint(w, l.fingerprint);
+	}
+
 	AddName(w, "hostMs");
 	AddNumber(w, static_cast<unsigned long long>(l.hostMs));
 	AddChar(w, '}');
 
-	return Finish(w);
+	return Finish(w, kRelayListMostBodyBytes);
 }
 
 bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room)
@@ -943,7 +1182,7 @@ bool RelayList_EndingBody(const char *region, const char *code, const uint8_t ow
 	AddSecret(w, owner);
 	AddChar(w, '}');
 
-	return Finish(w);
+	return Finish(w, kRelayListMostBodyBytes);
 }
 
 void RelayList_FitText(const char *from, const char *fallback, char *to, size_t most)
@@ -1295,4 +1534,252 @@ RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name)
 bool RelayList_IsShownName(const char *name)
 {
 	return RelayList_ShownNameRefusal(name) == kRelayShownNameGood;
+}
+
+// ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
+
+RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name)
+{
+	if (!name || name[0] == '\0')
+	{
+		return kRelayAccessNameEmpty;
+	}
+
+	// Looks one byte past the most, so a name that's too long is known without reading the rest of it
+	size_t const length = strnlen(name, kRelayAccessNameMostBytes + 1);
+
+	if (length > kRelayAccessNameMostBytes)
+	{
+		return kRelayAccessNameTooLong;
+	}
+
+	for (size_t i = 0; i < length; i++)
+	{
+		if (!IsAccessNameLetter(name[i]))
+		{
+			return kRelayAccessNameBadLetter;
+		}
+	}
+
+	if (name[0] == ' ' || name[length - 1] == ' ')
+	{
+		return kRelayAccessNameSpaceAtAnEnd;
+	}
+
+	return kRelayAccessNameGood;
+}
+
+void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char *to)
+{
+	size_t n = 0;
+
+	for (size_t i = 0; profile && i < profileBytes && profile[i] && n < kRelayAccessNameMostBytes; i++)
+	{
+		char const c = profile[i];
+
+		// A letter the rule doesn't take is left out, and so is a space before the name has started
+		if (IsAccessNameLetter(c) && !(c == ' ' && n == 0))
+		{
+			to[n++] = c;
+		}
+	}
+
+	// Spaces at the end are taken off last, since cutting it to 15 can leave one there
+	while (n > 0 && to[n - 1] == ' ')
+	{
+		n--;
+	}
+
+	to[n] = '\0';
+}
+
+bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes)
+{
+	for (size_t i = 0; profile && i < profileBytes && profile[i]; i++)
+	{
+		if (!IsAccessNameLetter(profile[i]))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes])
+{
+	static_assert(sizeof(kNetRelayCodeAlphabet) == 33, "32 code letters, so each is exactly 5 bits");
+	static_assert(kRelayAccessCodeLetters * 5 <= kNetIdentityFingerprintBytes * 8, "the code's 80 bits are all in the fingerprint");
+
+	size_t at = 0;
+
+	for (int letter = 0; letter < kRelayAccessCodeLetters; letter++)
+	{
+		if (letter > 0 && letter % 4 == 0)
+		{
+			out[at++] = '-';
+		}
+
+		// The letter's 5 bits, one at a time: bit 0 is the highest bit of the fingerprint's first byte
+		int value = 0;
+
+		for (int b = 0; b < 5; b++)
+		{
+			int const bit = letter * 5 + b;
+			value = value * 2 + ((fingerprint[bit / 8] >> (7 - bit % 8)) & 1);
+		}
+
+		out[at++] = kNetRelayCodeAlphabet[value];
+	}
+
+	out[at] = '\0';
+}
+
+bool RelayList_AccessBody(const char *name, const uint8_t statics[kNetIdentityStaticBytes], char *body, size_t room)
+{
+	Writer w = { body, room, 0, room > 0 };
+
+	if (room > 0)
+	{
+		body[0] = '\0';
+	}
+
+	// The public halves start with the P-384 key, and a P-384 key starts with 04: all 0 is an identity never made
+	if (RelayAccess_NameRefusal(name) != kRelayAccessNameGood || !statics || statics[0] != 0x04)
+	{
+		return false;
+	}
+
+	AddName(w, "v");
+	AddNumber(w, 1);
+	AddName(w, "name");
+	AddText(w, name);
+	AddName(w, "key");
+	AddChar(w, '"');
+	AddBase64(w, statics, kNetIdentityStaticBytes);
+	AddChar(w, '"');
+	AddChar(w, '}');
+
+	return Finish(w, kRelayAccessMostBodyBytes);
+}
+
+const char *RelayAccess_AnswerWords(RelayAccessAnswer answer)
+{
+	switch (answer)
+	{
+		case kRelayAccessWaiting: return "the request is waiting for a person to look at it";
+		case kRelayAccessApproved: return "the request was approved";
+		case kRelayAccessRefused: return "the request was refused";
+		case kRelayAccessRevoked: return "the approval was taken back";
+		case kRelayAccessBadName: return "the list wouldn't take the name";
+		case kRelayAccessBadKey: return "the list wouldn't take the key";
+		case kRelayAccessBadShape: return "the list wouldn't take the request";
+		case kRelayAccessBusy: return "the list is busy: try again in a minute";
+		case kRelayAccessClosed: return "the list isn't taking requests just now";
+	}
+
+	return "the list's answer has no words";
+}
+
+RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes, const uint8_t ours[kNetIdentityFingerprintBytes],
+	RelayAccessAnswer *answer)
+{
+	if (status != 200 && status != 400 && status != 429 && status != 503)
+	{
+		return kRelayListBadStatus;
+	}
+
+	if (bytes > kRelayAccessMostAnswerBytes)
+	{
+		return kRelayListTooBig;
+	}
+
+	if (!body || !answer)
+	{
+		return kRelayListEndsTooSoon;
+	}
+
+	if (bytes > 0 && memchr(body, 0, bytes) != NULL)
+	{
+		return kRelayListHasAZero;
+	}
+
+	Reader r = { body, body + bytes };
+	char const first = Next(r);
+
+	if (first == 0)
+	{
+		return kRelayListEndsTooSoon;
+	}
+
+	if (first != '{')
+	{
+		return kRelayListNotAnObject;
+	}
+
+	// A 200 is about the key: its version, its fingerprint and its state. Every other status is an error, with its version and its word.
+	long version = 0;
+	char word[kAccessWordMostLetters + 1];
+	uint8_t fingerprint[kNetIdentityFingerprintBytes];
+	RelayListRefusal why = kRelayListAccepted;
+
+	if (status == 200)
+	{
+		FieldRule const rules[] = {
+			{ "v", kKindNumber, 0, 1, 1, NULL, &version, NULL },
+			{ "fp", kKindFingerprint, 0, 0, 0, NULL, NULL, fingerprint },
+			{ "state", kKindText, kAccessWordMostLetters, 0, 0, word, NULL, NULL }
+		};
+		why = ReadEntry(r, rules, 3);
+	}
+	else
+	{
+		FieldRule const rules[] = {
+			{ "v", kKindNumber, 0, 1, 1, NULL, &version, NULL },
+			{ "error", kKindText, kAccessWordMostLetters, 0, 0, word, NULL, NULL }
+		};
+		why = ReadEntry(r, rules, 2);
+	}
+
+	// A word too long for any of the protocol's is one it doesn't have
+	if (why == kRelayListBadText)
+	{
+		return kRelayListBadWord;
+	}
+
+	if (why != kRelayListAccepted)
+	{
+		return why;
+	}
+
+	if (Next(r) != 0)
+	{
+		return kRelayListMoreAfterTheEnd;
+	}
+
+	// The word has to be one of the protocol's, and one that comes with this status: "busy" with a 200 is as wrong as an unknown word
+	int found = -1;
+
+	for (size_t i = 0; i < sizeof(kAccessWords) / sizeof(kAccessWords[0]); i++)
+	{
+		if (kAccessWords[i].status == status && strcmp(kAccessWords[i].word, word) == 0)
+		{
+			found = static_cast<int>(i);
+		}
+	}
+
+	if (found < 0)
+	{
+		return kRelayListBadWord;
+	}
+
+	// The fingerprint the list worked out has to be this PC's own. That catches a list and a game that work it out differently. It's no
+	// defence against someone in the middle, who would change this as well: the access code on the player's screen is.
+	if (status == 200 && (!ours || memcmp(fingerprint, ours, sizeof(fingerprint)) != 0))
+	{
+		return kRelayListNotOurKey;
+	}
+
+	*answer = kAccessWords[found].answer;
+	return kRelayListAccepted;
 }

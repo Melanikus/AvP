@@ -290,7 +290,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = kMultiplayerVersion;\n",
+					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = Net_OurVersion();\n",
 					"to": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n"
 				}
 			]
@@ -990,8 +990,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "Failed to connect to server host\");\n\t\tenet_host_destroy(host);\n\t\thost = NULL;",
-					"to": "Failed to connect to server host\");"
+					"from": "\t\trelayJoinedThrough = false;\n\t\tenet_host_destroy(host);\n\t\thost = NULL;\n\t\treturn NET_FAIL;\n\t}\n\n\tenet_peer_timeout(ServerPeer",
+					"to": "\t\trelayJoinedThrough = false;\n\t\treturn NET_FAIL;\n\t}\n\n\tenet_peer_timeout(ServerPeer"
 				}
 			]
 		},
@@ -1965,8 +1965,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);",
-					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);"
+					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, Net_V2DraftOn() ? OurCommitWord() : 0);"
 				}
 			]
 		},
@@ -2305,7 +2305,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "relayJoinStep = relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
+					"from": "relayJoinStep = joinerStarted && relayJoiner.Introducing() ? kNetRelayJoinStepIntroducing : kNetRelayJoinStepReaching;",
 					"to": "relayJoinStep = kNetRelayJoinStepReaching;"
 				}
 			]
@@ -2425,8 +2425,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": " || who.connectID != joinRequestConnectID",
-					"to": ""
+					"from": " || who.connectID != joinRequestConnectID)\n\t{\n\t\treturn;",
+					"to": ")\n\t{\n\t\treturn;"
 				}
 			]
 		},
@@ -2525,7 +2525,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));",
+					"from": "RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));",
 					"to": "RelayHostNews(kNetRelayHostRoomGone, NULL);"
 				}
 			]
@@ -2626,56 +2626,6 @@
 			]
 		},
 		{
-			"name": "a run given a relay beyond this machine still puts its sockets on 127.0.0.1",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\taddress->host = remoteRelayRoute;\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "the relay's name may point anywhere later",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
-					"to": "\tif (false)\n\t{"
-				}
-			]
-		},
-		{
-			"name": "a relay by any name is let through",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
-					"to": ": false)"
-				}
-			]
-		},
-		{
-			"name": "a lost room leaves the host on the way to the relay hearing anyone",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
-					"to": "host->intercept = NULL;"
-				}
-			]
-		},
-		{
-			"name": "a run's host on the way to the relay hears anyone when no relay is used",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a network game still waits while its window isn't in front",
 			"changes": [
 				{
@@ -2736,11 +2686,831 @@
 			]
 		},
 		{
+			"name": "SOURCE: a host starts handshakes without asking the start limit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!relayEndToEndStarts.Allow(port, now))\n\t{\n\t\treturn NULL;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a port the relay doesn't name any more keeps its count",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\trelayEndToEndStarts.Forget(counted);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game through the relay that ends keeps the start counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\trelayEndToEndStarts.Reset();\n}\n",
+					"to": "\n}\n"
+				}
+			]
+		},
+		{
+			"name": "a joiner's check code is never shown",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return relayEndToEndPort != 0 && relayEndToEndJoiner.Ready() && CopyCheckCode(relayEndToEndJoiner.CheckCode(), out);",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "a joiner's check code call leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tout[0] = 0;\n\treturn relayEndToEndPort != 0",
+					"to": "\treturn relayEndToEndPort != 0"
+				}
+			]
+		},
+		{
+			"name": "the host's check code call leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tout[0] = 0;\n\tENetPeer *const asking = JoinRequestPeer();",
+					"to": "\tENetPeer *const asking = JoinRequestPeer();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host shows a check code before the handshake is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return side && side->Ready() && CopyCheckCode(side->CheckCode(), out);",
+					"to": "return side && CopyCheckCode(side->CheckCode(), out);"
+				}
+			]
+		},
+		{
+			"name": "a kept identity that can't be used is replaced without the player's yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityKept != kNetIdentityStoreNoFile)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the kept identity is looked for again at every use",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityLookedFor)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kept identity that loads isn't used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (runIdentityKept == kNetIdentityStoreLoaded)\n\t{\n\t\tLogString(\"net: this player's identity is the one kept from earlier runs\");\n\t\treturn true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the kept identity isn't looked for again when the network starts again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trunIdentityLookedFor = false;\n\trunIdentityKept = kNetIdentityStoreNoFile;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the player's yes is taken while a network game is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (host)\n\t{\n\t\tLogString(\"net: a new identity isn't made while a network game is open\");",
+					"to": "\tif (false)\n\t{\n\t\tLogString(\"net: a new identity isn't made while a network game is open\");"
+				}
+			]
+		},
+		{
+			"name": "after the player's yes, the page still has something to ask",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trunIdentityKept = kNetIdentityStoreLoaded;\n\tLogString(\"net: a new identity was made for this player, as they asked",
+					"to": "\tLogString(\"net: a new identity was made for this player, as they asked"
+				}
+			]
+		},
+		{
+			"name": "the page gets a fingerprint that isn't the identity's",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tmemcpy(fingerprint, runIdentity.fingerprint, kNetIdentityFingerprintBytes);\n\treturn true;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "with no identity, the page gets whatever was in its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tmemset(fingerprint, 0, kNetIdentityFingerprintBytes);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the page's call with nowhere to put the identity isn't refused",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!statics || !fingerprint)\n\t{\n\t\treturn false;\n\t}\n\n\tif (!RelayIdentityReady())",
+					"to": "\tif (!RelayIdentityReady())"
+				}
+			]
+		},
+		{
+			"name": "the first run never makes an identity",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!NetIdentityStore_MakeAndKeep(&runIdentity))\n\t{\n\t\tLogString(\"net: a new identity couldn't be made and kept, so there's none this run, and nothing",
+					"to": "if (true)\n\t{\n\t\tLogString(\"net: a new identity couldn't be made and kept, so there's none this run, and nothing"
+				}
+			]
+		},
+		{
+			"name": "the page's question doesn't look for the kept identity first",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n\tRelayIdentityReady();\n",
+					"to": "NetIdentityStoreResult Net_KeptIdentityResult(void)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on without -dev",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return NetV2DraftAsked && BuildIdentity_CommitWord(&word);"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on in a build that doesn't know its commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return NetV2DraftAsked && DevMode != 0;"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft is on without -netv2",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return NetV2DraftAsked && DevMode != 0 && BuildIdentity_CommitWord(&word);",
+					"to": "return DevMode != 0 && BuildIdentity_CommitWord(&word);"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft says the players' version",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return Net_V2DraftOn() ? kNetV2DraftVersion : kMultiplayerVersion;",
+					"to": "return kMultiplayerVersion;"
+				}
+			]
+		},
+		{
+			"name": "the v2 draft isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogString(\"net: the v2 draft is on (-dev -netv2): this copy speaks version 115, and plays only copies made from the same commit\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a draft's CONNECT doesn't say its commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "kNetChannels, 0);"
+				}
+			]
+		},
+		{
+			"name": "a CONNECT says the commit without the draft",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kNetChannels, Net_V2DraftOn() ? OurCommitWord() : 0);",
+					"to": "kNetChannels, OurCommitWord());"
+				}
+			]
+		},
+		{
+			"name": "a draft host lets in a joiner of another commit",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Host && Net_V2DraftOn() && eEvent.data != OurCommitWord())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a host without the draft looks at a CONNECT's data",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Host && Net_V2DraftOn() && eEvent.data != OurCommitWord())",
+					"to": "if (AvP.Network == I_Host && eEvent.data != OurCommitWord())"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit is closed with no reason",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);",
+					"to": "enet_peer_disconnect(eEvent.peer, 0);"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit leaves its place to whoever had it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\teEvent.peer->data = NULL;\n\t\t\t\t\t\tenet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);",
+					"to": "\t\t\t\t\t\tenet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);"
+				}
+			]
+		},
+		{
+			"name": "a joiner of another commit is closed and shown joining too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);\n\t\t\t\t\t\tbreak;",
+					"to": "enet_peer_disconnect(eEvent.peer, kNetJoinRefusedOtherBuild);"
+				}
+			]
+		},
+		{
+			"name": "a joiner closed with JBLD doesn't know why",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\t\tjoinAnswer = kNetJoinAnswerOtherBuild;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a relay host without the draft seals what it sends",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\thost->sendHook = RelaySealedSend;",
+					"to": "\tif (true)\n\t{\n\t\thost->sendHook = RelaySealedSend;"
+				}
+			]
+		},
+		{
+			"name": "a relay host without the draft drops its joiners' game datagrams",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\treturn Net_V2DraftOn() ? RelayEndToEndHeard(on, now) : 0;\n\t}",
+					"to": "\t\treturn RelayEndToEndHeard(on, now);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a join through the relay without the draft does handshake B",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayEndToEndJoinFailed = Net_V2DraftOn() ? RelayEndToEndJoin(",
+					"to": "relayEndToEndJoinFailed = true ? RelayEndToEndJoin("
+				}
+			]
+		},
+		{
+			"name": "a run given a relay beyond this machine still puts its sockets on 127.0.0.1",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\taddress->host = remoteRelayRoute;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the relay's name may point anywhere later",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relay.address != remoteRelayAddress)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a relay by any name is let through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": ": _stricmp(relay.host, remoteRelayName) != 0)",
+					"to": ": false)"
+				}
+			]
+		},
+		{
+			"name": "a lost room leaves the host on the way to the relay hearing anyone",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
+					"to": "host->intercept = NULL;"
+				}
+			]
+		},
+		{
+			"name": "a run's host on the way to the relay hears anyone when no relay is used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (OnTheRemoteRoute(ServerAddress))\n\t\t\t{\n\t\t\t\thost->intercept = RelayIntercept;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a run given the relay by address knows it by name only",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
 					"from": "givenAnAddress ? relay.address != givenAsENetKeepsIt : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a draft's host doesn't hand the list its fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();\n\t\tRelayList_HostIdentity(runIdentity.fingerprint);",
+					"to": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
+		},
+		{
+			"name": "a host without the draft hands the list a fingerprint",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tRelayEndToEndForget();",
+					"to": "\tif (true)\n\t{\n\t\tRelayEndToEndForget();"
+				}
+			]
+		},
+		{
+			"name": "with the v2 draft, a plain version 1 message from the relay is read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tif (channelOn)\n\t\t\t{\n\t\t\t\tRelayV2Hear(on->receivedAddress.port",
+					"to": "\t\tif (RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now))\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))\n\t\t{\n\t\t\tif (channelOn)\n\t\t\t{\n\t\t\t\tRelayV2Hear(on->receivedAddress.port"
+				}
+			]
+		},
+		{
+			"name": "a sealed message that doesn't open is read anyway",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\trelayV2Session.Hear(fromPort, data, size, now);\n\t\tRelayV2TakeOpened(now);",
+					"to": "\t\trelayV2Session.Hear(fromPort, data, size, now);\n\t\tRelayV2TakeOpened(now);\n\n\t\tif (size >= 5 + kNetSealedControlMessageBytes)\n\t\t{\n\t\t\tRelayControlDatagram(fromPort, data + 5, kNetSealedControlMessageBytes, now);\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: B's join reads the relay's own messages plain",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (HasMagic(packet, static_cast<size_t>(got), \"AVPR\"))\n\t\t\t{\n\t\t\t\tRelayV2Hear(from.port, packet, static_cast<size_t>(got), now);\n\t\t\t\tcontinue;\n\t\t\t}",
+					"to": "\t\t\tif (RelayControlDatagram(from.port, packet, static_cast<size_t>(got), now))\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's handshake with the relay reads it plain with the draft",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (from.host == relayAddress.host && !draft)",
+					"to": "else if (from.host == relayAddress.host)"
+				}
+			]
+		},
+		{
+			"name": "the relay's keys aren't held to RelayKey",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!RelayList_RelayKeyFingerprint(relayV2Region, fingerprint) || !NetRelayKeys_AreThese(&relayV2Keys, fingerprint))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a relay's keys are asked for with no RelayKey for its region",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!region || !RelayList_RelayKeyFingerprint(region, fingerprint))",
+					"to": "if (!region)"
+				}
+			]
+		},
+		{
+			"name": "with the v2 draft, the relay's machines send plain",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_V2DraftOn())\n\t{\n\t\tRelaySendAll(on, end, &relayAddress, 1);\n\t\treturn;\n\t}",
+					"to": "if (true)\n\t{\n\t\tRelaySendAll(on, end, &relayAddress, 1);\n\t\treturn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "handshake A isn't given this run's identity",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetHandshakeAPlayer const me = { runIdentity.p384, runIdentity.statics, runIdentity.kemPrivate };",
+					"to": "NetHandshakeAPlayer const me = { NULL, runIdentity.statics, runIdentity.kemPrivate };"
+				}
+			]
+		},
+		{
+			"name": "the channel ending leaves the room open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (step == kRelayV2None)\n\t\t{\n\t\t\tbool const wasOpen = !relayPicking;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tbool const wasOpen = !relayPicking;"
+				}
+			]
+		},
+		{
+			"name": "the channel's session keeps its keys when it ends",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayV2Session.Wipe();\n\trelayV2Picker.Reset();",
+					"to": "\trelayV2Picker.Reset();"
+				}
+			]
+		},
+		{
+			"name": "the host doesn't time its relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayV2Step = relayV2Times ? kRelayV2Timing : kRelayV2Handshake;",
+					"to": "relayV2Step = kRelayV2Handshake;"
+				}
+			]
+		},
+		{
+			"name": "a joiner times the relay as a host does",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "relayV2Step = relayV2Times ? kRelayV2Timing : kRelayV2Handshake;",
+					"to": "relayV2Step = kRelayV2Timing;"
+				}
+			]
+		},
+		{
+			"name": "the channel hears an AVPR from anywhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (on->receivedAddress.host != (channelOn ? relayV2Address.host : relayAddress.host))\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 1;\n\t\t}\n\n\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))",
+					"to": "\t\tif (HasMagic(on->receivedData, on->receivedDataLength, \"AVPR\"))"
+				}
+			]
+		},
+		{
+			"name": "giving up the relay leaves its connections to ENet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && host)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "version 1's host ends its connections through the relay too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && host)\n",
+					"to": "\tif (wasOpen && host)\n"
+				}
+			]
+		},
+		{
+			"name": "connections from elsewhere end with the relay too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (peer->state == ENET_PEER_STATE_DISCONNECTED || peer->address.host != relayAddress.host)",
+					"to": "if (peer->state == ENET_PEER_STATE_DISCONNECTED)"
+				}
+			]
+		},
+		{
+			"name": "a connection that ends with the relay is left open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tenet_peer_reset(peer);\n\t\t\tended++;\n",
+					"to": "\t\t\tended++;\n"
+				}
+			]
+		},
+		{
+			"name": "a connection that ends with the relay keeps its player in the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (id != 0)\n\t\t\t{\n\t\t\t\tnetSession.nPlayers--;\n\t\t\t\tNet_PlayerHasGone(id);\n\t\t\t}\n\t\t}\n\n\t\tif (ended > 0)",
+					"to": "\t\t}\n\n\t\tif (ended > 0)"
+				}
+			]
+		},
+		{
+			"name": "after a channel has ended, the relay's plain messages are read again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_V2DraftOn() && (channelOn || relayV2Used))",
+					"to": "if (Net_V2DraftOn() && channelOn)"
+				}
+			]
+		},
+		{
+			"name": "after a joiner's channel has ended, B's datagrams are dropped",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const gameGoesOn = channelOn ? relayV2Step == kRelayV2Ready && !(relayHosting && relayPicking) : !relayHosting;",
+					"to": "bool const gameGoesOn = channelOn ? relayV2Step == kRelayV2Ready && !(relayHosting && relayPicking) : false;"
+				}
+			]
+		},
+		{
+			"name": "a game that begins a channel isn't marked as having used one",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayV2Step = kRelayV2Keys;\n\trelayV2Used = true;\n",
+					"to": "\trelayV2Step = kRelayV2Keys;\n"
+				}
+			]
+		},
+		{
+			"name": "a game's end doesn't forget that it used a channel",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayV2Forget();\n\trelayV2Used = false;\n",
+					"to": "\tRelayV2Forget();\n"
+				}
+			]
+		},
+		{
+			"name": "a join that ENet can't start keeps the channel and B's keys",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayEndToEndForget();   // B's keys and the channel go too (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a join whose request can't be sent keeps the channel and B's keys",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!Net_CreatePlayer(playerName)) {\n\t\tRelayEndToEndForget();\n",
+					"to": "\tif (!Net_CreatePlayer(playerName)) {\n"
+				}
+			]
+		},
+		{
+			"name": "a join whose request can't be sent keeps its ENet host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\trelayJoinedThrough = false;\n\t\tenet_host_destroy(host);\n\t\thost = NULL;\n\t\tServerPeer = NULL;\n\t\treturn NET_FAIL;\n\t}\n\n\tInitAVPNetGameForJoin();",
+					"to": "\t\trelayJoinedThrough = false;\n\t\treturn NET_FAIL;\n\t}\n\n\tInitAVPNetGameForJoin();"
+				}
+			]
+		},
+		{
+			"name": "a join the relay refused keeps what the relay's handshake left",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tRelayEndToEndForget();   // every way a join fails forgets and wipes (Secondary's finding 4.2; added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new join keeps the last one's channel going",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tRelayEndToEndForget();   // the last game's handshakes and channel, if anything kept them (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lost room's why is read after giving up has wiped it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tRelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));",
+					"to": "\t\tRelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(relayHost.LostWhy()));"
+				}
+			]
+		},
+		{
+			"name": "a game's end keeps the room's token and a joiner's ticket",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayHost.Reset();\n\trelayJoiner.Reset();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host machine's reset keeps the messages still waiting",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\tmemset(sends, 0, sizeof(sends));   // the messages still here hold the token and the cookie (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the joiner machine's reset keeps the messages still waiting",
+			"changes": [
+				{
+					"file": "3dc/net_relay.h",
+					"from": "\t\tmemset(sends, 0, sizeof(sends));   // the messages still here hold the ticket and the cookie (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the plain messages are left on the stack once sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tNetCrypto_Wipe(sends, sizeof(sends));\n\tRelayV2SendAll(on);",
+					"to": "\tRelayV2SendAll(on);"
+				}
+			]
+		},
+		{
+			"name": "the opened messages are left on the stack once read",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\n\tNetCrypto_Wipe(opened, sizeof(opened));\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "with the draft, anything from the relay that isn't the channel's or the end to end's reaches ENet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (!gameGoesOn || !endToEnd)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 1;\n\t\t}",
+					"to": "\t\tif (!gameGoesOn || !endToEnd)\n\t\t{\n\t\t\trelayStrangersDropped++;\n\t\t\treturn 0;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "the joiner's log never says its sealed channel to the relay is open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\tLogString(\"net: the joiner's sealed channel to the relay is open\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the joiner's log never says handshake B is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tLogString(\"net: handshake B with the host is done: from here the game is sealed end to end\");   // fixed words (added 2026-11-09 by Melanikus for the AvP port)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the host's log never says a joiner's handshake B is done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tLogString(\"net: a joiner's handshake B is done: from here its game is sealed end to end\");",
+					"to": "\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "a host that loses its relay doesn't say what went sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (Net_V2DraftOn() && wasOpen && relaySealing)\n\t{\n\t\tRelayLogSealedCounts();\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a joiner's game ends without saying what went sealed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (relayEndToEndPort != 0)\n\t{\n\t\tRelayLogSealedCounts();\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "datagrams that came in and opened aren't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayEndToEndOpened++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "datagrams that went out sealed aren't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\trelayEndToEndSealed += sent < 0 ? 0 : 1;\n",
 					"to": ""
 				}
 			]

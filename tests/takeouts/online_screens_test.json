@@ -405,16 +405,6 @@
 			]
 		},
 		{
-			"name": "a name is never cut in play",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "char place[kRelayListShownNameLetters + 1];",
-					"to": "char place[64];"
-				}
-			]
-		},
-		{
 			"name": "a region is never cut to its 16 letters",
 			"changes": [
 				{
@@ -531,6 +521,106 @@
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
 					"from": "piece.corner[2].y = Pixel(atY + aheadY * length * 0.60);",
 					"to": "piece.corner[2].y = Pixel(atY - aheadY * length * 0.60);"
+				}
+			]
+		},
+		{
+			"name": "a check code of 7 digits is shown",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\tif (digits[6] != '\\0')\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a letter in a check code is taken for a digit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (!digits || digits[i] < '0' || digits[i] > '9')",
+					"to": "if (!digits || digits[i] == '\\0')"
+				}
+			]
+		},
+		{
+			"name": "the check code isn't split in two threes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"Check code: %.3s %.3s\", digits, digits + 3",
+					"to": "\"Check code: %.6s\", digits"
+				}
+			]
+		},
+		{
+			"name": "a check code's line that's cut isn't ended",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\t_snprintf(words, size - 1, \"Check code: %.3s %.3s\", digits, digits + 3);\n\twords[size - 1] = '\\0';\n",
+					"to": "\t_snprintf(words, size - 1, \"Check code: %.3s %.3s\", digits, digits + 3);\n"
+				}
+			]
+		},
+		{
+			"name": "a host that's another v2 test build has no words",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "\"The host runs another test build of the v2 draft\",",
+					"to": "\"\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen asking the host doesn't show the joiner's check code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tTwoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);\n\t\tDrawTheCheckCode();\n",
+					"to": "\t\tTwoLines(line, OnlineScreens_Words(kOnlineWordsEscGivesUp), true);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host is shown the check code of no joiner in particular",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "!Net_JoinRequestCheckCode(askingWho, digits)",
+					"to": "!Net_JoinRequestCheckCode(NetJoinWho(), digits)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's check code isn't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host that's another v2 test build is taken for a join that just failed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tcase kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));\n\t\t\treturn true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name is never cut in play",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "char place[kRelayListShownNameLetters + 1];",
+					"to": "char place[64];"
 				}
 			]
 		},
@@ -821,6 +911,46 @@
 					"file": "3dc/avp/win95/frontend/online_screens.cpp",
 					"from": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tBetween(ms, 0, kRelayListMostHostMs));",
 					"to": "through server)\", OnlineScreens_Words(start), place,\n\t\t\tms);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relay's news is shown while a join request is answered, over the check code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tif (held)\n\t{\n\t\tnewsAt = Now();\n\t\treturn false;\n\t}",
+					"to": "\tif (held && false)\n\t{\n\t\tnewsAt = Now();\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the co-op host page never holds the relay's news back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))",
+					"to": "OnlineHost_NewsLine(relayNews, sizeof(relayNews), false))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the relay's news is drawn at y 56 again, over the check code at 58",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "RenderSmallMenuText(relayNews, MENU_CENTREX, 40,",
+					"to": "RenderSmallMenuText(relayNews, MENU_CENTREX, answering ? 56 : 40,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's screen doesn't say what not comparing the code means",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tRenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped)), MENU_CENTREX, 84, ONE_FIXED / 2,\n\t\t\t\tAVPMENUFORMAT_CENTREJUSTIFIED);\n",
+					"to": ""
 				}
 			]
 		},
