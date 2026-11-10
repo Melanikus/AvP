@@ -141,6 +141,19 @@ bool SaveFolder_UseTheSecondCopy()
 	return true;
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: what the kept online identity's file is named by (net_identity_store.cpp), which lives
+// outside the save folder and needs a name of its own for each. The first was asked for there and defined nowhere, so the game couldn't
+// link; net_identity_store_test now checks both are here.
+bool SaveFolder_IsTheSecondCopy()
+{
+	return saveFolderIsTheSecondCopy;
+}
+
+bool SaveFolder_IsAHudsonRun()
+{
+	return HudsonRunIsOn;
+}
+
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one
