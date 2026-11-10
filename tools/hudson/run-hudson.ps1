@@ -212,7 +212,9 @@ param(
     [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay and -RelayKey
     [string]$RelayKey = '',       # the settings' RelayKey for that relay, "<region>:<the relay's id, 96 small hex digits>"
     [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
-    [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    # Added 2026-11-10 by Melanikus for the AvP port, to see how the menus are drawn at a screen size (menu_shape.h):
+    [switch]$MenuPictures         # menus=pictures: a run with no -Net that stays at the menus, pictures main, Multiplayer, Online access and Options, and the intro's copyright screen and logo, and ends
 )
 $ErrorActionPreference = 'Stop'
 
@@ -255,6 +257,7 @@ if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the
 if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
 if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
 if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
+if ($MenuPictures -and $Net) { Stop-Here "-MenuPictures stays at the menus and pictures them, so it's a run with no -Net" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -339,6 +342,7 @@ $relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' 
 if ($NetV2) { $relaySwitch += ' -netv2' }
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
+if ($MenuPictures) { $arguments += ' menus=pictures' }
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }
 if ($Views -gt 0) { $arguments += " views=$Views" }
 if ($Hold -gt 0) { $arguments += " hold=$Hold" }
