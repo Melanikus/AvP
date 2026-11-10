@@ -162,6 +162,9 @@
     <ClCompile Include="..\..\3dc\servers_cfg_file.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\net_server_key.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_pq_native.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1407,6 +1410,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_server_fingerprint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_server_key.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_b.h">

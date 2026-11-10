@@ -473,6 +473,7 @@
     <ClCompile Include="..\..\3dc\net_handshake_a.cpp" />
     <ClCompile Include="..\..\3dc\servers_cfg.cpp" />
     <ClCompile Include="..\..\3dc\servers_cfg_file.cpp" />
+    <ClCompile Include="..\..\3dc\net_server_key.cpp" />
     <ClCompile Include="..\..\3dc\net_pq_native.cpp" />
     <ClCompile Include="..\..\3dc\pq_key_exchange.cpp" />
     <ClCompile Include="..\..\3dc\pq_signature_check.cpp" />
@@ -758,6 +759,7 @@
     <ClInclude Include="..\..\3dc\servers_cfg.h" />
     <ClInclude Include="..\..\3dc\servers_cfg_file.h" />
     <ClInclude Include="..\..\3dc\net_server_fingerprint.h" />
+    <ClInclude Include="..\..\3dc\net_server_key.h" />
     <ClInclude Include="..\..\3dc\net_handshake_b.h" />
     <ClInclude Include="..\..\3dc\net_sealed_game.h" />
     <ClInclude Include="..\..\3dc\net_peer_v2.h" />

@@ -8,10 +8,15 @@
 // - the -dev setting is read as a region and 96 hex digits, and nothing else;
 // - (added 2026-11-10 by Melanikus for the AvP port, #175) a server's servers.cfg fingerprint (3dc/net_server_fingerprint.h): nyc3's known
 //   answer, the same list key with the vectors' relay, and that a change to any byte of the list's key, the relay's keys or the line's
-//   number is refused.
-// It uses Windows' own SHA-384 and SHA-256 (CNG), so it's built and run on GitHub only, as the other cryptography tests are.
+//   number is refused;
+// - (the same) the list's key taken from a real certificate (3dc/net_server_key.h), byte for byte as another implementation reads it,
+//   and PO's three cases: out of date with the right key is the line's server, in date with another key isn't, the right key under
+//   another name is.
+// It uses Windows' own SHA-384 and SHA-256 (CNG) and its certificate code (crypt32), so it's built and run on GitHub only, as the other
+// cryptography tests are.
 #include "net_relay_keys.h"
 #include "net_server_fingerprint.h"
+#include "net_server_key.h"
 
 #include "json_reader.h"
 
@@ -282,12 +287,137 @@ static void TestTheServersCfgFingerprint()
 		&& !NetServerFingerprint_IsTheLines(listKey.data(), listKey.size(), &keys, NULL), "no list key, no relay keys or no line is never a match");
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (#175): the list's key from a real certificate (net_server_key.h), and PO's three cases:
+// a certificate out of date with the right key is the right list, one in date with another key isn't, and the right key under another
+// name is. The three test certificates were made for this test with Git for Windows' OpenSSL 3.5.9, from two P-256 keys made for it and
+// thrown away after (nothing here signs anything):
+//   openssl ecparam -name prime256v1 -genkey -noout -out a.key            (and b.key the same way)
+//   openssl req -x509 -new -key a.key -subj "/CN=list.example" -not_before 20200101000000Z -not_after 20200201000000Z -outform DER -out a-expired.der
+//   openssl req -x509 -new -key b.key -subj "/CN=list.example" -not_before 20260101000000Z -not_after 20460101000000Z -outform DER -out b-valid.der
+//   openssl req -x509 -new -key a.key -subj "/CN=another.example" -not_before 20260101000000Z -not_after 20460101000000Z -outform DER -out a-othername.der
+// Their keys and fingerprints (with the vectors' relay id, fc352802...) were worked out apart from Windows, with Node's own crypto.
+// nyc3's is the certificate its list served on 2026-11-10, whose key is kNyc3ListKey.
+static const char kExpiredWithKeyA[] =
+	"3082018430820129a0030201020214767e9fa20fe803044d332c771bc284bb05492afc300a06082a8648ce3d04030230173115301306035504030c0c"
+	"6c6973742e6578616d706c65301e170d3230303130313030303030305a170d3230303230313030303030305a30173115301306035504030c0c6c6973"
+	"742e6578616d706c653059301306072a8648ce3d020106082a8648ce3d030107034200049121bc0a01024cb6da8fee145c4260fcdecb20d87fd603c9"
+	"81fa0cab886d36312ca0fe29cf9102c3994d673faf962370fb8a519059edd80b6505b0c36697368ca3533051301d0603551d0e041604147ff6971f18"
+	"e95d61ecb1fbb6e103be3c626a52ef301f0603551d230418301680147ff6971f18e95d61ecb1fbb6e103be3c626a52ef300f0603551d130101ff0405"
+	"30030101ff300a06082a8648ce3d0403020349003046022100afdd4b54dce103f14eb3f740c308c6489f12391cbd6c99c7e1ad9826e635e62f022100"
+	"89249eac4b3f371c591319dda719a413a9ee6216be36d0277f4559865417117c";
+static const char kInDateWithKeyB[] =
+	"3082018330820129a00302010202142d852aea44a9e4fdd4fa670ff678772cadf03871300a06082a8648ce3d04030230173115301306035504030c0c"
+	"6c6973742e6578616d706c65301e170d3236303130313030303030305a170d3436303130313030303030305a30173115301306035504030c0c6c6973"
+	"742e6578616d706c653059301306072a8648ce3d020106082a8648ce3d030107034200045fc8ffa261acc608195308269fd4ccd221609cac3e3f6629"
+	"1ba97f4545a78366099872fbd78c0c8c20da89e259e5cc17cb9ffcbfe8027315fb737f30b73ab076a3533051301d0603551d0e041604144336e4b983"
+	"3cb79af47aac7ed1f4e86b7fd0d1ba301f0603551d230418301680144336e4b9833cb79af47aac7ed1f4e86b7fd0d1ba300f0603551d130101ff0405"
+	"30030101ff300a06082a8648ce3d040302034800304502203d23485615a8f82ab38ed5d2a8338497d5d6cad3288149b6fcbab04b8ea84cec022100ab"
+	"650c68b7edbc4df5bc1761b6b0b472ad57eed058fce759dfb2c71047cfa0be";
+static const char kOtherNameWithKeyA[] =
+	"3082018a3082012fa00302010202143b09b8380f081a24ec78e5c671afb54d633471c3300a06082a8648ce3d040302301a3118301606035504030c0f"
+	"616e6f746865722e6578616d706c65301e170d3236303130313030303030305a170d3436303130313030303030305a301a3118301606035504030c0f"
+	"616e6f746865722e6578616d706c653059301306072a8648ce3d020106082a8648ce3d030107034200049121bc0a01024cb6da8fee145c4260fcdecb"
+	"20d87fd603c981fa0cab886d36312ca0fe29cf9102c3994d673faf962370fb8a519059edd80b6505b0c36697368ca3533051301d0603551d0e041604"
+	"147ff6971f18e95d61ecb1fbb6e103be3c626a52ef301f0603551d230418301680147ff6971f18e95d61ecb1fbb6e103be3c626a52ef300f0603551d"
+	"130101ff040530030101ff300a06082a8648ce3d0403020349003046022100e1b3b8be39ff77bcecf9754bf5d34f1d0b5bdb77e5465f6ac9e6d2d5ea"
+	"b72d2f022100e17050154a6d8cc394496273259e93e18d912653f4ff38d54a864ff075ae7711";
+static const char kNyc3Certificate[] =
+	"308201c83082016ea0030201020214781107462be3eed7e82440c077b00e2650fb8863300a06082a8648ce3d040302301f311d301b06035504030c14"
+	"6e7963332e72656c61792e617670782e74657374301e170d3236313130393035313235355a170d3236313230393035313235355a301f311d301b0603"
+	"5504030c146e7963332e72656c61792e617670782e746573743059301306072a8648ce3d020106082a8648ce3d030107034200046860ab37215b80bc"
+	"818041605b4dc15b0f553ff8e0294ef67e0145059ab4fe9fb670e3b138d4fbef7c9a82ae095b32dc647e20fc0840c56c1edf1402f51515f8a3818730"
+	"8184301d0603551d0e04160414517cd7f473ce72e3173f4c37b89023222708a80a301f0603551d23041830168014517cd7f473ce72e3173f4c37b890"
+	"23222708a80a301f0603551d110418301682146e7963332e72656c61792e617670782e74657374300c0603551d130101ff0402300030130603551d25"
+	"040c300a06082b06010505070301300a06082a8648ce3d040302034800304502200369232c0a1f991ee0c673029669d979d8ea09ef7d093b0bf77b1e"
+	"e32a30e37002210097aba6e9085634d9a2cdf24beb2d515cf462b663e03cf844e51b95542b9a093d";
+static const char kKeyAWithVectorRelay[] = "7379c24691eb7c3af1add347f1f9a2726d820d6bd0fd446755ea9148187f2fea";
+static const char kKeyBWithVectorRelay[] = "b5c39025e8781d5719378af3ad9c9c772c51667011d93a0c423d0641852a4757";
+
+// The key of a certificate given as hex, as the game takes it
+static bool KeyOf(const char *certificateHex, std::vector<uint8_t> *key)
+{
+	std::vector<uint8_t> certificate;
+	uint8_t room[kNetServerFingerprintMostKeyBytes];
+	size_t size = 0;
+
+	if (!FromHex(certificateHex, &certificate) || !NetServerKey_OfCertificate(certificate.data(), certificate.size(), room, sizeof(room), &size))
+	{
+		return false;
+	}
+
+	key->assign(room, room + size);
+	return true;
+}
+
+static void TestTheListsKey()
+{
+	printf("4. the list's key, from the certificate it shows\n");
+	std::vector<uint8_t> nyc3Key, expected, keyA, keyB, keyAOtherName;
+	FromHex(kNyc3ListKey, &expected);
+	Check(KeyOf(kNyc3Certificate, &nyc3Key) && nyc3Key == expected, "nyc3's certificate gives its 91-byte key, byte for byte as Node read it");
+	Check(KeyOf(kExpiredWithKeyA, &keyA) && keyA.size() == 91, "a certificate out of date since 2020 still gives its key");
+	Check(KeyOf(kOtherNameWithKeyA, &keyAOtherName) && keyAOtherName == keyA, "a certificate for another name with the same key gives the same key");
+	Check(KeyOf(kInDateWithKeyB, &keyB) && keyB.size() == 91 && keyB != keyA, "and one in date with another key gives that other key");
+
+	if (keyA.empty() || keyB.empty())
+	{
+		return;
+	}
+
+	// PO's three cases, through the check the game makes: a line made from key A, with the vectors' relay
+	JsonValue file;
+	std::string const all = ReadRepositoryFile("tests/vectors/crypto-v2.json");
+	JsonReader reader(all);
+	bool const read = !all.empty() && reader.ReadAll(&file) && file.kind == kJsonObject;
+	const JsonValue *const a = read ? file.Member("handshakeA") : NULL;
+	const JsonValue *const relay = a ? a->Member("relayStatic") : NULL;
+	const JsonValue *const p384 = relay ? TextMember(*relay, "p384Public") : NULL;
+	const JsonValue *const kem = relay ? TextMember(*relay, "mlkemPublic") : NULL;
+	std::vector<uint8_t> p384Bytes, kemBytes, lineA, lineB;
+	bool const haveKeys = p384 && kem && FromHex(p384->text, &p384Bytes) && FromHex(kem->text, &kemBytes) && p384Bytes.size() == kNetCryptoP384PublicBytes
+		&& kemBytes.size() == kNetPqKemPublicBytes && FromHex(kKeyAWithVectorRelay, &lineA) && FromHex(kKeyBWithVectorRelay, &lineB);
+	Check(haveKeys, "the vectors' relay keys, and the two lines' fingerprints, are read");
+
+	if (!haveKeys)
+	{
+		return;
+	}
+
+	NetRelayStaticKeys keys;
+	memcpy(keys.p384, p384Bytes.data(), sizeof(keys.p384));
+	memcpy(keys.kem, kemBytes.data(), sizeof(keys.kem));
+	Check(NetServerFingerprint_IsTheLines(keyA.data(), keyA.size(), &keys, lineA.data()), "an expired certificate with the right key: the line's server");
+	Check(!NetServerFingerprint_IsTheLines(keyB.data(), keyB.size(), &keys, lineA.data()), "a certificate in date with the wrong key: not the line's server");
+	Check(NetServerFingerprint_IsTheLines(keyAOtherName.data(), keyAOtherName.size(), &keys, lineA.data()), "the right key under another name: the line's server");
+	Check(NetServerFingerprint_IsTheLines(keyB.data(), keyB.size(), &keys, lineB.data()), "(and key B is the line made from key B)");
+
+	// What isn't a certificate gives no key
+	std::vector<uint8_t> certificate;
+	FromHex(kInDateWithKeyB, &certificate);
+	uint8_t room[kNetServerFingerprintMostKeyBytes];
+	size_t size = 99;
+	memset(room, 0xA5, sizeof(room));
+	Check(!NetServerKey_OfCertificate(certificate.data(), certificate.size() - 1, room, sizeof(room), &size) && size == 0 && AllZero(room, sizeof(room)),
+		"a certificate a byte short gives no key, and leaves nothing behind");
+	std::vector<uint8_t> broken = certificate;
+	broken[0] = 0x31;
+	Check(!NetServerKey_OfCertificate(broken.data(), broken.size(), room, sizeof(room), &size) && size == 0, "nor does one that doesn't start as DER's sequence");
+	Check(!NetServerKey_OfCertificate(certificate.data(), certificate.size(), room, 90, &size) && size == 0 && AllZero(room, 90),
+		"nor does a key with no room for all of it (91 bytes into 90)");
+	Check(NetServerKey_OfCertificate(certificate.data(), certificate.size(), room, 91, &size) && size == 91, "but 91 bytes of room take it");
+	std::vector<uint8_t> huge(kNetServerKeyMostCertificateBytes + 1, 0x30);
+	Check(!NetServerKey_OfCertificate(huge.data(), huge.size(), room, sizeof(room), &size) && size == 0, "a certificate over 64 KB isn't read");
+	Check(!NetServerKey_OfCertificate(NULL, 10, room, sizeof(room), &size) && !NetServerKey_OfCertificate(certificate.data(), certificate.size(), NULL, 91, &size)
+		&& !NetServerKey_OfCertificate(certificate.data(), certificate.size(), room, sizeof(room), NULL), "no certificate, or nowhere to put the key, is refused");
+}
+
 int main()
 {
 	printf("A relay's keys and their fingerprint\n");
 	TestTheFingerprint();
 	TestTheSetting();
 	TestTheServersCfgFingerprint();
+	TestTheListsKey();
 
 	if (checksFailed > 0)
 	{

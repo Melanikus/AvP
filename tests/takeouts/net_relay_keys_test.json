@@ -173,6 +173,36 @@
 					"to": "differences |= static_cast<uint8_t>(i == 0 ? made[i] ^ lines[i] : 0);"
 				}
 			]
+		},
+		{
+			"name": "the list's key is written even when it has no room",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "needed > 0 && needed <= room;",
+					"to": "needed > 0;"
+				}
+			]
+		},
+		{
+			"name": "a refusal leaves what was in the key's room",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "NetCrypto_Wipe(key, room);\n\n\tif (!certificate || certificateSize == 0",
+					"to": "\n\tif (!certificate || certificateSize == 0"
+				}
+			]
+		},
+		{
+			"name": "a refusal leaves the key's size as it was",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "*keySize = 0;",
+					"to": ";"
+				}
+			]
 		}
 	]
 }
