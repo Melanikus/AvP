@@ -9865,6 +9865,146 @@
 					"to": "if (seenFindGames && plan->netMode == kHudsonNetNone)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the script never asks for access=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" access=$Access\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Access takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "'\\A(request|check|newid)\\z'",
+					"to": "'\\A(request|check|newid|yes)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Access goes with -Net",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Access -and $Net) {",
+					"to": "if ($false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for accesswait=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" accesswait=$AccessWait\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -AccessWait takes 60 seconds, inside the list's minute",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$AccessWait -lt 61",
+					"to": "$AccessWait -lt 60"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for answer=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" answer=$Answer\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Answer takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$Answer -cnotmatch '\\A(letin|no)\\z'",
+					"to": "$Answer -cnotmatch '\\A(letin|no|maybe)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for answerafter=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" answerafter=$AnswerAfter\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -AnswerAfter takes 16 seconds",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$AnswerAfter -gt 15",
+					"to": "$AnswerAfter -gt 16"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for findgames=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" findgames=yes\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an -Access run gets -relayjoin",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if (-not $Relay -or -not $Net) { '' }",
+					"to": "if (-not $Relay) { '' }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's host never gets its answer",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$words += @('-Answer', $HostAnswer)",
+					"to": "$words += @()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's -HostAnswer takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$HostAnswer -cnotmatch '\\A(letin|no)\\z'",
+					"to": "$HostAnswer -cnotmatch '\\A(letin|no|maybe)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's joiner never gets Find Games",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$JoinFindGames) { $words += '-FindGames' }",
+					"to": "$JoinFindGames) { }"
+				}
+			]
 		}
 	]
 }

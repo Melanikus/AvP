@@ -1392,6 +1392,24 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.cpp"), "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())"), "SOURCE: a host who is out alone starts the level again after dieat=, as single player does");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Follow) { $arguments += \" follow=$Follow\" }"), "SOURCE: and follow=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WalkFrom) { $arguments += \" walkfrom=$($WalkFrom -replace 'm', '-')\" }"), "SOURCE: and a walk");
+		// Added 2026-11-10 by Melanikus (Third) for the AvP port: the presses reach a run through both scripts, each to Hudson's own words and
+		// ranges, so a bad one stops at the script with its reason rather than at the game
+		std::string const runHudson = ReadSourceFile("tools/hudson/run-hudson.ps1");
+		std::string const runPair = ReadSourceFile("tools/hudson/run-net-pair.ps1");
+		Check(Has(runHudson, "if ($Access) { $arguments += \" access=$Access\" }"), "SOURCE: the script can ask for access=");
+		Check(Has(runHudson, "if ($Access -and $Access -cnotmatch '\\A(request|check|newid)\\z')"), "SOURCE: only request, check or newid, in small letters as Hudson takes them");
+		Check(Has(runHudson, "if ($Access -and $Net) {"), "SOURCE: and only in a run with no -Net, as Hudson says");
+		Check(Has(runHudson, "if ($AccessWait -ne 0) { $arguments += \" accesswait=$AccessWait\" }"), "SOURCE: and accesswait=");
+		Check(Has(runHudson, "if ($AccessWait -ne 0 -and ($AccessWait -lt 61 -or $AccessWait -gt 3600))"), "SOURCE: only from 61 to 3600 seconds, Hudson's range");
+		Check(Has(runHudson, "if ($Answer) { $arguments += \" answer=$Answer\" }"), "SOURCE: and answer=");
+		Check(Has(runHudson, "if ($Answer -and $Answer -cnotmatch '\\A(letin|no)\\z')"), "SOURCE: only letin or no");
+		Check(Has(runHudson, "if ($AnswerAfter -ne 0) { $arguments += \" answerafter=$AnswerAfter\" }"), "SOURCE: and answerafter=");
+		Check(Has(runHudson, "if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15))"), "SOURCE: only from 1 to 15 seconds, Hudson's range");
+		Check(Has(runHudson, "if ($FindGames) { $arguments += \" findgames=yes\" }"), "SOURCE: and findgames=");
+		Check(Has(runHudson, "$relaySwitch = if (-not $Relay -or -not $Net) { '' }"), "SOURCE: an -Access run gets the list's lines, and neither -relayhost nor -relayjoin");
+		Check(Has(runPair, "if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }"), "SOURCE: the pair's host gets its answer");
+		Check(Has(runPair, "if ($HostAnswer -and $HostAnswer -cnotmatch '\\A(letin|no)\\z')"), "SOURCE: only letin or no");
+		Check(Has(runPair, "if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }"), "SOURCE: and the pair's joiner Find Games");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
 		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");

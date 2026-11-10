@@ -30,6 +30,10 @@ every second and a half. -LampKind real makes it a real light with real shadows,
 -Flare has him throw a flare as each hold starts, on a run that looks round and doesn't compare what's on the screen. Give it a -HoldSeconds long enough for the flare to land. hudson-result.txt says how many really went.
 -Net host or -Net join makes this one of two games on this machine, on its own address only. tools\hudson\run-net-pair.ps1 runs both, and that's the way to use it. -NetPartner is the other game's folder: it's the only other game this will start alongside.
 
+Asking the relays' list for access, as a player does, in a run of its own with no -Net: it stays at the menus, presses the Online access page, saves a picture of it, and ends there. -Access request, -Access check (with -AccessWait, seconds to wait first, 61 or more) or -Access newid. It needs -Relay for the list's lines (with -LocalRelayPin for the list on this machine), and -SecondCopy for the second copy's own identity. The host of a pair can answer a player asking to join with -Answer letin or no (-AnswerAfter, its seconds), and the joiner can find the host through Find Games with -FindGames; run-net-pair.ps1 passes those as -HostAnswer and -JoinFindGames:
+
+  powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level derelict -Frames 6000 -Relay -LocalRelayPin <64 hex digits> -Access request
+
 The window goes on the second screen, where it covers nothing anyone's using, and the game does that itself from the moment the window is made. -Screen main leaves it on the main screen, which is for comparing the two. With no second screen, it stays on the main one, and the log says so. The log's "the window is at" line says where it went. -WindowSlot and -WindowsTogether are for several games at once, and run-net-pair.ps1 sets them.
 
 A run with -WhileInUse makes a film of itself, an mp4 kept with the run's other files, and the film= line of hudson-result.txt says where. -Record pictures keeps a film as well. -NoFilm or -Record numbers stops it. A film's pictures slow the frames, so a run that measures time has none, and -Record video, which asks for one by name, needs -TimingsDontMatter and -WhileInUse. Nothing deletes a film: one left behind by a run that was cut short goes to runs\films-left-behind when the next run clears the way.
@@ -212,7 +216,14 @@ param(
     [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay and -RelayKey
     [string]$RelayKey = '',       # the settings' RelayKey for that relay, "<region>:<the relay's id, 96 small hex digits>"
     [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
-    [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the presses Hudson knows (hudson_plan.cpp's access=, accesswait=, answer=,
+    # answerafter= and findgames=), so a run can use them. Each is checked below to the shape and range Hudson itself takes
+    [string]$Access = '',         # request, check or newid: a run with no -Net that stays at the menus and presses the Online access page's Request access, Check again, or Make a new identity. Needs -Relay, for the list's lines
+    [int]$AccessWait = 0,         # with -Access check: seconds before Check again is pressed, 61 to 3600, past the list's minute between calls
+    [string]$Answer = '',         # letin or no: with -Net host, the host's answer to a player asking to join, pressed on the page's own rows
+    [int]$AnswerAfter = 0,        # with -Answer: seconds before the host answers, 1 to 15, well inside the joiner's 20 s wait. Left out, Hudson's own 3
+    [switch]$FindGames            # with -Net join: the joiner finds the host through Find Games, as a player does
 )
 $ErrorActionPreference = 'Stop'
 
@@ -254,7 +265,20 @@ if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it n
 if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the relay's key line, the game sends the relay nothing" }
 if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
 if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
-if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
+if ($SecondCopy -and $Net -ne 'join' -and -not $Access) { Stop-Here "-SecondCopy is the joiner of a pair on this machine, or the second copy's own -Access run, so it needs -Net join or -Access" }
+# The presses (added 2026-11-10 by Melanikus (Third) for the AvP port): each to Hudson's own words and ranges (hudson_plan.cpp), and only
+# with the kind of run it belongs to. -cmatch, because Hudson's words are small letters and PowerShell's -match ignores case
+if ($Access -and $Access -cnotmatch '\A(request|check|newid)\z') { Stop-Here "-Access is request, check or newid" }
+if ($Access -and $Net) { Stop-Here "-Access stays at the menus to press the Online access page, so it's a run with no -Net" }
+if ($Access -and -not $Relay) { Stop-Here "-Access asks the relays' list, so it needs -Relay, for the list's lines in the run's settings" }
+if ($AccessWait -ne 0 -and $Access -cne 'check') { Stop-Here "-AccessWait says when Check again is pressed, so it needs -Access check" }
+if ($AccessWait -ne 0 -and ($AccessWait -lt 61 -or $AccessWait -gt 3600)) { Stop-Here "-AccessWait is from 61 seconds, past the list's minute between calls, to 3600" }
+if ($Answer -and $Answer -cnotmatch '\A(letin|no)\z') { Stop-Here "-Answer is letin or no" }
+if ($Answer -and $Net -ne 'host') { Stop-Here "-Answer is the host's answer to a player asking to join, so it needs -Net host" }
+if ($AnswerAfter -ne 0 -and -not $Answer) { Stop-Here "-AnswerAfter says when the host answers, so it needs -Answer" }
+if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15)) { Stop-Here "-AnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
+if ($FindGames -and $Net -ne 'join') { Stop-Here "-FindGames is a joiner's way in, through Find Games, so it needs -Net join" }
+if ($Relay -and -not $Net -and -not $Access) { Stop-Here "-Relay hosts or joins through the relay, so it needs -Net, or -Access for the relays' list alone" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -334,7 +358,8 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 
 # -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
 # starts with -, and one in among them would cut them short
-$relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+# An -Access run has the list's lines in its settings and no game to host or join, so it gets neither switch
+$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
 # -netv2 and -secondcopy are the game's own switches too, so they go before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($NetV2) { $relaySwitch += ' -netv2' }
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
@@ -398,6 +423,11 @@ if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { St
 if ($StepSeconds -ne 0 -and -not $Play) { Stop-Here "-StepSeconds is how long a step of -Play may take, so it needs -Play" }
 if ($StepSeconds -gt 0) { $arguments += " stepseconds=$StepSeconds" }
 if ($Coop) { $arguments += " coop=yes" }
+if ($Access) { $arguments += " access=$Access" }
+if ($AccessWait -ne 0) { $arguments += " accesswait=$AccessWait" }
+if ($Answer) { $arguments += " answer=$Answer" }
+if ($AnswerAfter -ne 0) { $arguments += " answerafter=$AnswerAfter" }
+if ($FindGames) { $arguments += " findgames=yes" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
 if ($RemoteRelay) { $arguments += " remoterelay=$RemoteRelay" }

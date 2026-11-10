@@ -90,7 +90,13 @@ param(
     [int]$JoinGun = 0,
     [int]$StepSeconds = 0,  # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600: for a film that should move on. 0 is 180
     [int]$HostFilmSkip = 0,
-    [int]$JoinFilmSkip = 0
+    [int]$JoinFilmSkip = 0,
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host answers a player asking to join on the page's own rows, and the joiner
+    # finds the host through Find Games, as players do (run-hudson.ps1's -Answer, -AnswerAfter and -FindGames, Hudson's answer=,
+    # answerafter= and findgames=). Without them the host lets every joiner in, and the joiner joins by its own way, as before
+    [string]$HostAnswer = '',     # letin or no
+    [int]$HostAnswerAfter = 0,    # with -HostAnswer: seconds before the host answers, 1 to 15. Left out, Hudson's own 3
+    [switch]$JoinFindGames
 )
 
 $ErrorActionPreference = 'Stop'
@@ -307,6 +313,11 @@ if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the
 if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
 if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
 if ($NetV2 -and $ThirdFolder) { Stop-Here "-NetV2 is two players, the host and the second copy, and -ThirdFolder would be a third copy with no folder of its own" }
+# The host's answer and the joiner's Find Games (added 2026-11-10 by Melanikus (Third)): to Hudson's own words and ranges, and run-hudson.ps1
+# checks them again for each game. -cmatch, because Hudson's words are small letters and PowerShell's -match ignores case
+if ($HostAnswer -and $HostAnswer -cnotmatch '\A(letin|no)\z') { Stop-Here "-HostAnswer is letin or no" }
+if ($HostAnswerAfter -ne 0 -and -not $HostAnswer) { Stop-Here "-HostAnswerAfter says when the host answers, so it needs -HostAnswer" }
+if ($HostAnswerAfter -ne 0 -and ($HostAnswerAfter -lt 1 -or $HostAnswerAfter -gt 15)) { Stop-Here "-HostAnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -423,6 +434,10 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($NetV2) { $words += @('-NetV2', '-RelayKey', $RelayKey) }
     if ($LocalRelayPin) { $words += @('-LocalRelayPin', $LocalRelayPin) }
     if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }
+    # The host's answer and the joiner's way in through Find Games (added 2026-11-10 by Melanikus (Third) for the AvP port)
+    if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }
+    if ($word -eq 'host' -and $HostAnswerAfter -ne 0) { $words += @('-AnswerAfter', "$HostAnswerAfter") }
+    if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 
