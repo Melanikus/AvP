@@ -164,8 +164,9 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 // ---- Every agreed line's games (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling). For the page of games found.
 
 // One game, and the good line it was listed on: its place among the good lines, as RelayList_LineAt numbers them. The page names the
-// server by that line (RelayList_LineAt's line.name, made safe), never by anything the server sent. Only a game whose line is the one in
-// use (RelayListLineShown.inUse) can be joined tonight; one on another line says to pick that line on the Servers page.
+// server by that line (RelayList_LineAt's line.name, made safe), never by anything the server sent. A game is joined through its own line
+// (RelayList_RelayOf and RelayList_AskForRelayKeysOn with that place; modified 2026-11-11, one model for every line), once the player's
+// access on that line is approved.
 struct RelayListServerGame
 {
 	RelayListGame game;
