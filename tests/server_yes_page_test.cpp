@@ -261,6 +261,15 @@ static void TestEveryHostIsOnline()
 		Has(runChoice, "if (choice == 0)\n\t{") && !Has(runChoice, "MP_HostOnChoice = 1;") &&
 		Has(SourceSlice(menus, "static int HostOnChoiceNamed(const char *name)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "strcmp(now.line.name, name) == 0"),
 		"a Hudson run's choice is the line hoston= names, letter for letter, waited for; with no such line nothing is chosen, never the first by default");
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port: a Hudson joiner comes to Find Games as a player does, through the Multiplayer
+	// page, whose opening asks every line with the yes where this PC stands, and its list is pictured once every answer has come
+	std::string const runJoin = SourceSlice(menus, "static bool JoinThroughFindGamesForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const joinFromMultiplayer = runJoin.find("SetupNewMenu(AVPMENU_MULTIPLAYER);");
+	size_t const joinRow = runJoin.find("AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")");
+	size_t const findRow = runJoin.find("AVPMENU_MULTIPLAYERSELECTSESSION, \"Find Games\")");
+	Check(joinFromMultiplayer != std::string::npos && joinRow != std::string::npos && findRow != std::string::npos && joinFromMultiplayer < joinRow &&
+		joinRow < findRow && !Has(runJoin, "SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);") && Has(runJoin, "&& !ALineIsStillAskingForARun())"),
+		"a Hudson joiner goes Multiplayer, Join Game, Find Games, as a player does, so the lines are asked where it stands, and waits for every answer");
 	std::string const choices = SourceSlice(menus, "static char **HostOnChoices(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(choices, "int const approved = RelayList_ApprovedLines(hostOnPlaces, kServersCfgMostLines);") &&
 		Has(choices, "GetTextString(hostOnCount > 0 ? TEXTSTRING_HOSTON_CHOOSE : TEXTSTRING_HOSTON_NONE)") &&
