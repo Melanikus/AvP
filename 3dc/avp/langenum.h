@@ -1575,7 +1575,8 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ONLINE_OURS,                        // a line the game ships with, told from what the game holds
 	TEXTSTRING_ONLINE_NOT_OURS,
 	TEXTSTRING_ONLINE_MS,                          // after a line's round trip
-	TEXTSTRING_ONLINE_NO_PING,
+	TEXTSTRING_ONLINE_PING_ASKING,                // in a line's ping's place while it's being asked (2026-11-11)
+	TEXTSTRING_ONLINE_PING_NOANSWER,              // and once it didn't answer
 	TEXTSTRING_ONLINE_NOYES,                       // a line's state, in words (online_page_rules.h, OnlineLines_StateLine)
 	TEXTSTRING_ONLINE_REFUSED,
 	TEXTSTRING_ONLINE_WAITING,                     // then the code

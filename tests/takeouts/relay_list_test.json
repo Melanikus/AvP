@@ -2104,6 +2104,36 @@
 					"to": "\t\t\tif (visit)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a relay keys' visit files no ping",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (place >= 0 && place < kServersCfgMostLines)\n\t\t{\n\t\t\tshared->linePings[place] = visit ? visit->pingMs : -1;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request's visit files no ping",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tshared->linePings[place] = visit ? visit->pingMs : -1;   // the line's ping, from this visit as from any (added 2026-11-11)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes doesn't start a find",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tRelayList_FindGames();\n\treturn true;\n}\n\n// ---- Every servers.cfg line",
+					"to": "\treturn true;\n}\n\n// ---- Every servers.cfg line"
+				}
+			]
 		}
 	]
 }

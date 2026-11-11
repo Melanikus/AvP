@@ -32,14 +32,15 @@ int const kOnlinePageLineRowFirst = 300;      // a line row's MaxValue is this p
 int const kOnlinePageSmallLine = 15;          // the small font's height (HUD_FONT_HEIGHT; online_page.cpp checks it)
 int const kOnlinePageBigLine = 21;            // the big font's (MENU_FONT_HEIGHT)
 int const kOnlinePageTitleTop = 70;           // every page's title (menus.cpp, RenderMenu)
-int const kOnlinePageCodeTop = kOnlinePageTitleTop + kOnlinePageBigLine + 5;
+int const kOnlinePageTitleGap = 12;          // between the title and the code's line (the owner, 2026-11-11: they were "almost glued")
+int const kOnlinePageCodeTop = kOnlinePageTitleTop + kOnlinePageBigLine + kOnlinePageTitleGap;
 int const kOnlinePageStatusTop = kOnlinePageCodeTop + kOnlinePageSmallLine + 2;   // the page's answer to the last press
 int const kOnlinePageRowsTop = kOnlinePageStatusTop + kOnlinePageSmallLine + 4;
 int const kOnlinePageRowHeight = 2 * kOnlinePageSmallLine + 4;   // a line's two small lines and a gap
 int const kOnlinePageMostShown = 4;
 int const kOnlinePageCountTop = kOnlinePageRowsTop + kOnlinePageMostShown * kOnlinePageRowHeight + 2;
 int const kOnlinePageRefusedTop = kOnlinePageCountTop + kOnlinePageSmallLine + 3;
-int const kOnlinePageMostRefused = 2;
+int const kOnlinePageMostRefused = 1;        // one line, and "N more" past it: the room went to the title's gap (2026-11-11)
 int const kOnlinePageOwnRowsTop = kOnlinePageRefusedTop + kOnlinePageMostRefused * kOnlinePageSmallLine + 4;
 int const kOnlinePageOwnRows = 4;             // the name to send, Copy access code, Make a new identity, Back
 int const kOnlinePageOwnRowHeight = kOnlinePageBigLine + 3;
@@ -49,7 +50,7 @@ int const kOnlinePageRight = 610;
 int const kOnlinePageRowNotChosenOutOf100 = 60;   // a row not chosen, brighter than the menus' quarter, so it's read against the starfield
 int const kOnlineQuestionRowsApart = 5;         // added between the new identity's question's two rows, as the access page had them
 
-static_assert(kOnlinePageCodeTop >= kOnlinePageTitleTop + kOnlinePageBigLine, "the code's line starts under the title");
+static_assert(kOnlinePageCodeTop >= kOnlinePageTitleTop + kOnlinePageBigLine + kOnlinePageTitleGap, "the code's line starts a gap under the title");
 static_assert(kOnlinePageStatusTop >= kOnlinePageCodeTop + kOnlinePageSmallLine, "the answer's line starts under the code's line");
 static_assert(kOnlinePageRowsTop >= kOnlinePageStatusTop + kOnlinePageSmallLine, "the first line's row starts under the answer's line");
 static_assert(kOnlinePageCountTop + kOnlinePageSmallLine <= kOnlinePageRefusedTop, "the count's line ends before the refused lines start");
@@ -296,8 +297,45 @@ inline void OnlineLines_NameLine(const char *safeName, bool ours, int pingMs, co
 	}
 
 	ping[sizeof(ping) - 1] = 0;
-	snprintf(out, room, "%s (%s) - %s", safeName ? safeName : "", ours ? (oursWords ? oursWords : "") : (notOursWords ? notOursWords : ""), ping);
+	const char *const which = ours ? (oursWords ? oursWords : "") : (notOursWords ? notOursWords : "");
+
+	// A line never visited has no ping, and its second line says why: its first line ends with whether it's ours (2026-11-11)
+	if (ping[0])
+	{
+		snprintf(out, room, "%s (%s) - %s", safeName ? safeName : "", which, ping);
+	}
+	else
+	{
+		snprintf(out, room, "%s (%s)", safeName ? safeName : "", which);
+	}
+
 	out[room - 1] = 0;
+}
+
+// What a line's first line says in its ping's place while it has no ping (added 2026-11-11 by Melanikus for the AvP port, the owner:
+// "show the server ping to the user if no games are up"; the same words as the host page's and Find games'): nothing for a line
+// never visited (no yes, or past the first kRelayListMostVisits), its second line says why; "no answer" for one that didn't answer;
+// "Asking..." only while it's really being asked. A line with a ping shows the ping, whatever its games.
+enum OnlinePagePingSays
+{
+	kOnlinePagePingNothing,
+	kOnlinePagePingAsking,
+	kOnlinePagePingNoAnswer
+};
+
+inline OnlinePagePingSays OnlineLines_PingSays(int lineState, int access)
+{
+	if (lineState == kRelayLineNoYes || lineState == kRelayLineNotAsked)
+	{
+		return kOnlinePagePingNothing;
+	}
+
+	if (lineState == kRelayLineNoAnswer || access == kRelayAccessNoAnswer)
+	{
+		return kOnlinePagePingNoAnswer;
+	}
+
+	return kOnlinePagePingAsking;
 }
 
 // A refused line, as "servers.cfg line 4: its fingerprint isn't 64 small hex digits": the line's number and the game's own words for why,

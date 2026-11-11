@@ -543,6 +543,26 @@
 					"to": "if (row >= 0 && linesWithAGame >= approved)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a line with no games shows no ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tOnlineLines_NameLine(name, now.ours, now.pingMs,",
+					"to": "\tOnlineLines_NameLine(name, now.ours, now.games > 0 ? now.pingMs : -1,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an approval isn't found until the player leaves the page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (approvedNow)\n\t{\n\t\tRelayList_FindGames();",
+					"to": "\tif (false)\n\t{\n\t\tRelayList_FindGames();"
+				}
+			]
 		}
 	]
 }

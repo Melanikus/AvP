@@ -924,6 +924,21 @@ static void TestTheCalls()
 		Has(lineNow, "out->region[kRelayListRegionLetters] = 0;"),
 		"a line's relay region comes only from a visit that answered with keys matching the line, is cleared as a find starts, and is copied out ended");
 
+	// Each line's ping (added 2026-11-11 by Melanikus for the AvP port, after the owner's picture run: lines asked only for their keys or
+	// their access showed "no ping yet"): every visit to a line files its round trip, a find's, a relay keys' and an access request's, and a
+	// find no longer wipes the last one before it measures again
+	std::string const keysVisit = SourceSlice(source, "void ReadTheRelayKeysOn(", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const accessVisit = SourceSlice(source, "void AskForAccessOn(int place, const ServersCfgServer &line, const char *body,", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(visitAll, "shared->linePings[place] = visit ? visit->pingMs : -1;") &&
+		Has(keysVisit, "if (place >= 0 && place < kServersCfgMostLines)\n\t\t{\n\t\t\tshared->linePings[place] = visit ? visit->pingMs : -1;") &&
+		Has(accessVisit, "shared->linePings[place] = visit ? visit->pingMs : -1;") && CountOf(source, "shared->linePings[place] = ") == 3,
+		"every visit to a line files that line's ping, and nothing else writes it");
+
+	// A line just given its yes is found at once, so its games and its ping come without leaving the page (the owner's "all authorized ones
+	// show up")
+	std::string const yesGiven = SourceSlice(source, "bool RelayList_AgreeToTheLineAt(int place)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(yesGiven, "\tRelayList_FindGames();\n\treturn true;\n"), "a yes starts a find, as it's given");
+
 	std::string const agreed =SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
 	// held for that run alone (hudson_plan_test reads where that Yes goes, and that it's never kept). Modified 2026-11-11 by Melanikus for

@@ -167,8 +167,33 @@ int main()
 	char name[128];
 	OnlineLines_NameLine("New York", true, 42, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
 	Check(strcmp(name, "New York (ours) - 42 ms") == 0, "a line's first line: its name, ours, and its ping");
-	OnlineLines_NameLine("Friends", false, -1, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
-	Check(strcmp(name, "Friends (not ours) - no ping yet") == 0, "and not ours, with no ping yet");
+	OnlineLines_NameLine("Friends", false, -1, "ours", "not ours", "ms", "Asking...", name, sizeof(name));
+	Check(strcmp(name, "Friends (not ours) - Asking...") == 0, "and not ours, being asked, with no ping yet");
+
+	// THE PING (added 2026-11-11 by Melanikus for the AvP port, the owner: "show the server ping to the user if no games are up"): a line
+	// with a ping shows it, whatever its games; without one, "Asking..." only while it's asked, "no answer" once it didn't answer, and
+	// nothing for a line never visited, whose second line says why
+	OnlineLines_NameLine("Friends", false, -1, "ours", "not ours", "ms", "", name, sizeof(name));
+	Check(strcmp(name, "Friends (not ours)") == 0, "a line with no ping and nothing to say in its place ends with whether it's ours, never with \" - \"");
+	bool neverVisited = true;
+
+	for (int access : accesses)
+	{
+		neverVisited = neverVisited && OnlineLines_PingSays(kRelayLineNoYes, access) == kOnlinePagePingNothing &&
+			OnlineLines_PingSays(kRelayLineNotAsked, access) == kOnlinePagePingNothing;
+	}
+
+	Check(neverVisited, "a line never visited (no yes, or past the find's first 8) says nothing in its ping's place, whatever access says");
+	Check(OnlineLines_PingSays(kRelayLineNoAnswer, kRelayAccessIsApproved) == kOnlinePagePingNoAnswer &&
+		OnlineLines_PingSays(kRelayLineAsking, kRelayAccessNoAnswer) == kOnlinePagePingNoAnswer,
+		"a line that didn't answer, its find or its request, says \"no answer\" there");
+	Check(OnlineLines_PingSays(kRelayLineAsking, kRelayAccessAsking) == kOnlinePagePingAsking && OnlineLines_PingSays(kRelayLineAsking, kRelayAccessNotAsked) == kOnlinePagePingAsking,
+		"and a line being asked says \"Asking...\" there");
+
+	// THE TITLE'S GAP (the owner, 2026-11-11: "'Online' is almost glued to the message below"): the code's line starts at least the gap
+	// under the title's box
+	Check(kOnlinePageTitleGap >= 10 && kOnlinePageCodeTop - (kOnlinePageTitleTop + kOnlinePageBigLine) >= kOnlinePageTitleGap,
+		"the access code's line starts at least 10 pixels under the title's box");
 
 	char refused[128];
 	OnlineLines_RefusedLine("servers.cfg line", 4, "its fingerprint isn't 64 small hex digits", refused, sizeof(refused));

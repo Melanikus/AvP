@@ -1213,6 +1213,14 @@ namespace
 		EnterCriticalSection(&shared->lock);
 		shared->keysAnswered = asking;
 		shared->keysAnsweredPlace = place;
+
+		// Its round trip, the line's ping as the pages show it, from this visit as from any (added 2026-11-11 by Melanikus for the AvP port:
+		// only a find's visits gave one, so a line asked only for its keys or its access showed "no ping yet" whatever it had answered)
+		if (place >= 0 && place < kServersCfgMostLines)
+		{
+			shared->linePings[place] = visit ? visit->pingMs : -1;
+		}
+
 		shared->keysWhy = why;
 		memcpy(shared->keysP384, p384, sizeof(p384));
 		memcpy(shared->keysKem, kem, sizeof(kem));
@@ -1254,6 +1262,7 @@ namespace
 		}
 
 		EnterCriticalSection(&shared->lock);
+		shared->linePings[place] = visit ? visit->pingMs : -1;   // the line's ping, from this visit as from any (added 2026-11-11)
 		shared->accessAnsweredOn[place] = (why == NULL);
 		shared->accessAnswerOn[place] = answer;
 		shared->accessWhyOn[place] = why;
@@ -1925,6 +1934,9 @@ bool RelayList_AgreeToTheLineAt(int place)
 		LeaveCriticalSection(&shared->lock);
 	}
 
+	// A line just given its yes is found at once (added 2026-11-11 by Melanikus for the AvP port, the owner's "all authorized ones show
+	// up"): a find from before the yes didn't visit it, so its games and its ping come now, not when the player next leaves the page
+	RelayList_FindGames();
 	return true;
 }
 
@@ -2084,7 +2096,6 @@ void RelayList_FindGames(void)
 	for (int place = 0; place < count; place++)
 	{
 		shared->lineStates[place] = states[place];
-		shared->linePings[place] = -1;   // until this find measures it again
 		shared->lineGames[place] = 0;
 		shared->lineRegions[place][0] = 0;
 		shared->lineWhys[place] = NULL;

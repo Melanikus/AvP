@@ -350,11 +350,20 @@ bool OnlineLines_QuestionOpened(void)
 
 void OnlineLines_Frame(void)
 {
-	// Each answer that has come: its row reads it from relay_list.cpp as it's drawn (RelayList_LineNow), so here it's only taken
+	// Each answer that has come: its row reads it from relay_list.cpp as it's drawn (RelayList_LineNow). An approval is found at once
+	// (added 2026-11-11 by Melanikus for the AvP port, the owner's "all authorized ones show up"): one find for every answer of the frame.
 	int place = -1;
+	bool approvedNow = false;
 
 	while (RelayList_AccessCameOn(&place))
 	{
+		RelayListLineNow line;
+		approvedNow = approvedNow || (RelayList_LineNow(place, &line) && line.access == kRelayAccessIsApproved);
+	}
+
+	if (approvedNow)
+	{
+		RelayList_FindGames();
 	}
 }
 
@@ -534,8 +543,11 @@ bool OnlineLines_DrawLineRow(const AVPMENU_ELEMENT *row, int brightness, int cho
 	char name[sizeof(now.line.name) + 1];
 	OnlineScreens_SafeName(now.line.name, sizeof(now.line.name), name, sizeof(name));
 	char first[200];
+	OnlinePagePingSays const pingSays = OnlineLines_PingSays(now.state, now.access);
+	const char *const noPing = pingSays == kOnlinePagePingAsking ? GetTextString(TEXTSTRING_ONLINE_PING_ASKING) :
+		(pingSays == kOnlinePagePingNoAnswer ? GetTextString(TEXTSTRING_ONLINE_PING_NOANSWER) : "");
 	OnlineLines_NameLine(name, now.ours, now.pingMs, GetTextString(TEXTSTRING_ONLINE_OURS), GetTextString(TEXTSTRING_ONLINE_NOT_OURS),
-		GetTextString(TEXTSTRING_ONLINE_MS), GetTextString(TEXTSTRING_ONLINE_NO_PING), first, sizeof(first));
+		GetTextString(TEXTSTRING_ONLINE_MS), noPing, first, sizeof(first));
 	SmallLine(first, top, brightness);
 
 	// Where it stands, in words. A why is the game's own fixed words (relay_list.cpp), never anything a server sent, and is made safe all

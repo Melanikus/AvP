@@ -220,6 +220,16 @@ static void TestTheOneWayIn()
 	Check(Has(menus, "uint64_t const approvedNow = TheApprovedLines();\n\n\t\tif (approvedNow != approvedWhenPut)\n\t\t{\n\t\t\tNet_FindAvPSessions();\n\t\t\tlistChanged = true;\n\t\t}") &&
 		Has(menus, "\t\t\tPutTheRelayGamesOnThePage();\n\t\t\tapprovedWhenPut = approvedNow;\n"),
 		"and the moment a line's approval comes or goes, the list is put on the page again, so each game is greyed or joinable as its line stands now");
+
+	// The Online page's rows (added 2026-11-11 by Melanikus for the AvP port, the owner: "show the server ping to the user if no games are
+	// up"): every row shows its line's own ping, whatever its games, with the state's words in its place while it has none; and an approval
+	// that comes is found at once
+	std::string const lineRow = SourceSlice(online, "bool OnlineLines_DrawLineRow(const AVPMENU_ELEMENT *row, int brightness, int chosen)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const frame = SourceSlice(online, "void OnlineLines_Frame(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(lineRow, "OnlinePagePingSays const pingSays = OnlineLines_PingSays(now.state, now.access);") &&
+		Has(lineRow, "OnlineLines_NameLine(name, now.ours, now.pingMs, GetTextString(TEXTSTRING_ONLINE_OURS)") && !Has(lineRow, "now.games > 0 ?"),
+		"each Online page row shows its line's ping, whatever its games, and the state's own words in its place while it has none");
+	Check(Has(frame, "if (approvedNow)\n\t{\n\t\tRelayList_FindGames();\n\t}"), "an approval that comes to the Online page is found at once");
 }
 
 // NO HOST ROW: EVERY GAME IS HOSTED ONLINE (the owner's ruling for beta.2, 2026-11-10: "Remove At home from beta.2", "Everything over

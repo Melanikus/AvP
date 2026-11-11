@@ -83,6 +83,46 @@
 					"to": "\tsnprintf(out, room, \"%s: %s\", lineWords ? lineWords : \"\", why ? why : \"\");\n"
 				}
 			]
+		},
+		{
+			"name": "a line never visited says Asking... in its ping's place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (lineState == kRelayLineNoYes || lineState == kRelayLineNotAsked)\n\t{\n\t\treturn kOnlinePagePingNothing;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line that didn't answer says Asking... in its ping's place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (lineState == kRelayLineNoAnswer || access == kRelayAccessNoAnswer)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a name line with nothing in its ping's place ends with \" - \"",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (ping[0])\n\t{\n\t\tsnprintf(out, room, \"%s (%s) - %s\"",
+					"to": "\tif (true)\n\t{\n\t\tsnprintf(out, room, \"%s (%s) - %s\""
+				}
+			]
+		},
+		{
+			"name": "the title and the code's line are glued",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "int const kOnlinePageTitleGap = 12;",
+					"to": "int const kOnlinePageTitleGap = 0;"
+				}
+			]
 		}
 	]
 }
