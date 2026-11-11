@@ -7,7 +7,8 @@
 # On a pull request this runs the lists the pull request can affect: those whose list, test, settings or stand-ins it changes, or which
 # break a file it changes. A pull request that changes this file, the runner, tests/every_test/, or any header (a .h or .hpp file) runs
 # every list. By hand (Actions, Take-outs, Run workflow)
-# it runs the lists named, or all of them. Each list runs on its own machine, at the same time as the others, because a list can take an hour.
+# it runs the lists named, or all of them. The lists are shared into a few batches, one machine each, by tests/takeouts/share.ps1, and a long
+# list is cut into pieces of its rows; tests/takeouts/run-batch.ps1 runs a batch.
 #
 # The job that decides whether this passes is the last one, "Take-outs": it fails if choosing the lists failed, or any list did.
 
@@ -43,6 +44,7 @@ jobs:
     outputs:
       lists: ${{ steps.choose.outputs.lists }}
       count: ${{ steps.choose.outputs.count }}
+      batches: ${{ steps.choose.outputs.batches }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -82,9 +84,9 @@ jobs:
             $changed = @(git diff --name-only "$($env:BASE)...HEAD")
             if ($LASTEXITCODE -ne 0) { throw "Couldn't see what this pull request changes" }
 
-            # A change to this check, to the runner, or to the guard every test reads first (tests/every_test/, #140) is tried on every
+            # A change to this check, to the runner (run.ps1, and share.ps1 and run-batch.ps1, added 2026-11-11), or to the guard every test reads first (tests/every_test/, #140) is tried on every
             # list, so none of them is ever changed untested. (The rule for tests/every_test/ is from the unmerged branch stl-harden, 28767cc3.)
-            $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' -or $_.StartsWith('tests/every_test/') }).Count -gt 0
+            $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' -or $_ -ceq 'tests/takeouts/share.ps1' -or $_ -ceq 'tests/takeouts/run-batch.ps1' -or $_.StartsWith('tests/every_test/') }).Count -gt 0
 
             # A header can change what any test compiles, or the code a test checks, and the lists below are chosen by the files they
             # name, which never follow an #include. On avpx_main a2b5a253, 93 of the 129 lists would have been left out by a pull
@@ -114,24 +116,30 @@ jobs:
           "lists=[$(($chosen | ForEach-Object { '"' + $_ + '"' }) -join ',')]" >> $env:GITHUB_OUTPUT
           "count=$($chosen.Count)" >> $env:GITHUB_OUTPUT
 
+          # The lists, shared into a few batches, one machine each (tests/takeouts/share.ps1 says how). Its last line is the output.
+          if ($chosen.Count -gt 0) {
+            $shared = @(& ./tests/takeouts/share.ps1 -Lists ($chosen -join ' '))
+            $shared | Select-Object -SkipLast 1
+            $last = $shared[-1]
+            if ("$last" -cnotmatch '^batches=\[\{') { throw "share.ps1 didn't end with the batches: $last" }
+            $last >> $env:GITHUB_OUTPUT
+          }
+          else { 'batches=[]' >> $env:GITHUB_OUTPUT }
+
   run:
-    name: Take-outs for ${{ matrix.list }}
+    name: Take-outs, batch ${{ matrix.batch.n }} of ${{ matrix.batch.of }}
     needs: choose
     if: needs.choose.outputs.count != '0'
     runs-on: windows-2025-vs2026
-    # About three times each list's slowest known time, so a runner that's lost frees its place sooner, not after 5 hours. On
-    # 2026-11-11 (run 43079767129) hudson_plan_test took 85 minutes, net_v2b_test 37, and no other list over 27; 116 of the 148 took
-    # under 2. A list that outgrows its limit fails, and says so, and its limit is raised here. Modified 2026-11-11 by Melanikus for the
-    # AvP port (it was 300 for every list).
-    timeout-minutes: ${{ matrix.list == 'hudson_plan_test' && 255 || matrix.list == 'net_v2b_test' && 120 || 90 }}
+    # share.ps1 gives each batch about three times its minutes, at least 30, from the time each list took when it last ran on a machine
+    # of its own (.github/takeouts-minutes.json), so a runner that's lost frees its place, never after GitHub's 6 hours. A batch that
+    # outgrows its limit fails, and its log says which list it was on. Modified 2026-11-11 by Melanikus for the AvP port (it was one
+    # machine a list).
+    timeout-minutes: ${{ matrix.batch.limit }}
     strategy:
-      fail-fast: false   # one list failing doesn't stop the others, so a run shows every list that needs work
-      # GitHub Pro runs up to 40 jobs at once for this account. 30 leaves room for the other checks of the same pull request
-      # (build, tests, Snyk), so the take-out lists, which are the slowest part of a run, finish sooner. It costs nothing more on a
-      # public repository.
-      max-parallel: 30
+      fail-fast: false   # one batch failing doesn't stop the others, so a run shows every list that needs work
       matrix:
-        list: ${{ fromJSON(needs.choose.outputs.lists) }}
+        batch: ${{ fromJSON(needs.choose.outputs.batches) }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -140,34 +148,37 @@ jobs:
 
       # A test that links one of the game's own libraries names vcpkg_installed in its settings (net_close_test links our ENet),
       # and the runner copies exactly those files into its copy of the code. So they're fetched first, by the same action and with
-      # the same ports as the Tests check, so both checks build a test against the same libraries. A list whose test names
-      # nothing there skips this.
-      - name: See whether this list's test links the game's libraries
+      # the same ports as the Tests check, so both checks build a test against the same libraries. A batch none of whose tests
+      # names anything there skips this.
+      - name: See whether any list in this batch links the game's libraries
         id: libraries
         shell: pwsh
         env:
-          LIST: ${{ matrix.list }}
+          ITEMS: ${{ matrix.batch.items }}
         run: |
-          $settings = "tests/$($env:LIST).args"
-          $links = (Test-Path -LiteralPath $settings) -and ((Get-Content -LiteralPath $settings -Raw) -match 'vcpkg_installed')
-          "It links the game's libraries: $links"
+          $links = $false
+          foreach ($item in @("$env:ITEMS" -split '\s+' | Where-Object { $_ })) {
+            if ($item -cnotmatch '^([A-Za-z0-9_]+):') { throw "An item is a list's name, its first row and its last, and this isn't: $item" }
+            $settings = "tests/$($Matches[1]).args"
+            if ((Test-Path -LiteralPath $settings) -and ((Get-Content -LiteralPath $settings -Raw) -match 'vcpkg_installed')) { $links = $true }
+          }
+          "A test in this batch links the game's libraries: $links"
           "links=$(if ($links) { 'yes' } else { 'no' })" >> $env:GITHUB_OUTPUT
 
-      - name: Fetch the game's libraries the test links
+      - name: Fetch the game's libraries the tests link
         if: steps.libraries.outputs.links == 'yes'
         uses: ./.github/actions/fetch-test-libraries
         with:
           ports: dxsdk-d3dx enet mldsa-native mlkem-native
 
-      # The runner says how each row went, and gives back a non-zero result if any row wasn't noticed or couldn't be run. A list
-      # whose test isn't here at all can't be run either, and fails the same way.
-      - name: Run the list
+      # run-batch.ps1 runs each list of the batch through run.ps1, in a PowerShell of its own, every one even after one fails, and
+      # gives back 1 if any row wasn't noticed or couldn't be run, naming each list. A list whose test isn't here fails the same way.
+      - name: Run this batch's lists
         shell: pwsh
         env:
-          LIST: ${{ matrix.list }}
+          ITEMS: ${{ matrix.batch.items }}
         run: |
-          if (-not (Test-Path "tests/$($env:LIST).args")) { throw "tests/takeouts/$($env:LIST).json is a list for a test that isn't here: there's no tests/$($env:LIST).args" }
-          ./tests/takeouts/run.ps1 $env:LIST
+          ./tests/takeouts/run-batch.ps1 -Items "$env:ITEMS"
           exit $LASTEXITCODE
 
   # One job with one name, to make a required check of. It passes only if the lists were chosen, and every list that ran passed.
@@ -187,7 +198,7 @@ jobs:
           echo "Choosing the lists: $CHOSE. Running them: $RAN."
           if [ "$CHOSE" != "success" ]; then echo "The lists couldn't be chosen"; exit 1; fi
           if [ "$RAN" != "success" ] && [ "$RAN" != "skipped" ]; then
-            echo "At least one list has a row its test didn't notice, or couldn't run. The failed list's own job says which row, and why."
+            echo "At least one list has a row its test didn't notice, or couldn't run. The failed batch's own job says which list and row, and why."
             echo "tests/takeouts/README.md, under \"When the Take-outs check fails\", says what to do."
             exit 1
           fi

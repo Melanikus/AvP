@@ -32,11 +32,24 @@ The log names the list, the row (counted from 0), the file and the text, and say
 - **NOT NOTICED:** the test still passes with that broken. Make the test notice it, or, if it truly doesn't matter any more, remove the row and say why.
 - **It didn't build:** a row's `"to"` has to leave code that builds, so the only thing broken is what the row is about.
 
-On GitHub the same words are in the job's log (Take-outs for `<list>`, Run the list), and each failed row is a note on the pull request's page.
+On GitHub the same words are in the batch's log (Take-outs, batch N of M, Run this batch's lists), with a line `take-outs: <list>, rows ...: passed` or
+`DIDN'T PASS` for each list, and each failed row is a note on the pull request's page.
 
-**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs the lists a pull request can affect, each on a clean machine, and fails if
-any row isn't noticed or can't be run. A pull request that changes the check or `run.ps1` runs every list. Anyone who can run workflows can run any of them, or
-all, by hand: Actions, Take-outs, Run workflow.
+**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs the lists a pull request can affect, on clean machines, and fails if any row
+isn't noticed or can't be run. A pull request that changes the check, `run.ps1`, `share.ps1`, `run-batch.ps1`, `tests/every_test/` or any header runs
+every list. Anyone who can run workflows can run any of them, or all, by hand: Actions, Take-outs, Run workflow.
+
+### How the lists are shared out
+Changed 2026-11-11: until then each list had a machine of its own, which made 150 jobs a run, most of them a machine starting up for a list of under 2
+minutes. On 2026-11-11 runs on six heads at once took every runner the account has, and no new run could start.
+- `share.ps1` shares the lists a run is to try out into at most 8 batches, one machine each, keeping each near 25 minutes.
+- A list over 20 minutes is cut into pieces of its rows (`run.ps1 -From -To`); `hudson_plan_test` is cut into 5.
+- Each batch has a time limit of about three times its minutes, at least 30.
+- `run-batch.ps1` runs a batch's lists one after another, each in a PowerShell of its own, and every one even after one fails.
+- The minutes come from `.github/takeouts-minutes.json`: what each list took when it last ran on a machine of its own. It only balances the batches:
+  a list missing from it counts as 2 minutes, and runs all the same.
+- When a batch runs out of time, find the list it was on in its log, and put that list's real minutes in the file (the `take-outs:` lines say how long
+  each took).
 
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
