@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [avpx_main]
   workflow_dispatch:
+  # Every night, on avpx_main: it reuses nothing and runs every test, and checks that each result a run WOULD have reused passes again
+  # here (tests/reuse/record.ps1 -Compare). If one doesn't, a key missed something, and the night run fails, naming it. Added 2026-11-11
+  # by Melanikus for the AvP port (the CI plan's step 4).
+  schedule:
+    - cron: "41 5 * * *"
 
 permissions:
   contents: read
@@ -30,11 +35,17 @@ jobs:
     # A test that hangs fails here. Without a limit, it would hold up a runner for 6 hours.
     timeout-minutes: 30
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    # actions: read, to list this workflow's earlier runs and download their records (tests/reuse/lookup.ps1). Nothing here can write or
+    # record anything: the records are attested by the job "Record the tests' results", which runs none of this code.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0   # the whole history, so lookup.ps1 can see which earlier commits this one was made from
 
       # Hudson is the team's test bot. Since 2026-11-09 it's in the game (the owner: "Hudson goes into avpx_main"), and this proves a player's
       # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. It comes first, before anything is
@@ -109,21 +120,58 @@ jobs:
           if ($extra.Count -gt 0) { throw "tests/vectors/crypto-kat has files SHA256SUMS doesn't list: $($extra -join ', ')" }
           "$($listed.Count) copied known-answer files are the relay's own (crypto-kat-java 0c4755cf)"
 
+      # The CI plan's step 4 (added 2026-11-11 by Melanikus for the AvP port; tests/reuse/Reuse.psm1 says what a key is). A test whose
+      # earlier result is found, attested by this workflow and checked again here is not built or run, and the log says where it ran. Any
+      # doubt, and it runs. The nightly run (schedule) reuses nothing: it only writes down what it WOULD have reused, to check it below.
+      - name: Find earlier results to reuse
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY: ${{ github.event_name == 'schedule' }}
+        run: |
+          if ($env:DRY -eq 'true') { ./tests/reuse/lookup.ps1 -Work "$env:RUNNER_TEMP\reuse" -Dry } else { ./tests/reuse/lookup.ps1 -Work "$env:RUNNER_TEMP\reuse" }
+          exit $LASTEXITCODE
+
       - name: Build the tests
         shell: pwsh
-        run: ./tests/build.ps1
+        run: ./tests/build.ps1 -ShowIncludes -Skip "$env:RUNNER_TEMP\reuse\skip.txt"
 
-      # With no tests at all this fails, so a broken build script can't pass as "every test passed".
+      # Every test runs, even after one fails, and the step fails at the end naming each. With no tests built and none reused it fails, so
+      # a broken build script can't pass as "every test passed".
       - name: Run every test
         shell: pwsh
+        run: ./tests/reuse/run-tests.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" -Plan "$env:RUNNER_TEMP\reuse\plan.json"
+
+      # One record a test that really ran, for a later run to reuse once it's attested. The nightly run checks here that every result it
+      # would have reused passed again.
+      - name: Write down each test's result and key
+        shell: pwsh
+        env:
+          COMPARE: ${{ github.event_name == 'schedule' }}
         run: |
-          $tests = @(Get-ChildItem "$env:RUNNER_TEMP\avp-tests\*.exe")
-          if ($tests.Count -eq 0) { throw 'No tests were built' }
-          foreach ($test in $tests) {
-            "Running $($test.Name)"
-            & $test.FullName
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          }
+          if ($env:COMPARE -eq 'true') { ./tests/reuse/record.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" -Compare }
+          else { ./tests/reuse/record.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" }
+          exit $LASTEXITCODE
+
+      # The key's own rows: one change at a time must change the key, and lookup.ps1's checks must refuse what they should. Never reused.
+      - name: Prove the reuse key notices each change, and the lookup refuses what it should
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $verified = "$((Get-Content -LiteralPath "$env:RUNNER_TEMP\reuse\plan.json" -Raw | ConvertFrom-Json).verifiedFile)"
+          ./tests/reuse/key-rows.ps1 -Verified $verified
+          exit $LASTEXITCODE
+
+      # Only a run started by a push or by hand can be a source (lookup.ps1), so only those keep their records, for 30 days
+      - name: Keep the records
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reuse-records
+          path: ${{ runner.temp }}/reuse/records.json
+          retention-days: 30
+          if-no-files-found: error
 
       # Not a program like the others: it runs the release checks on made-up folders, and reads the release workflow.
       - name: Test the release checks
@@ -456,6 +504,49 @@ jobs:
           if [ "$PARTS" != "success" ]; then echo "At least one test didn't pass under the sanitizer. The failed part's own job says which, and why."; exit 1; fi
           if [ "$REFUSALS" != "success" ]; then echo "One of sanitize.ps1's own refusals didn't happen as it should, or a broken test wasn't failed. That job says which."; exit 1; fi
           echo "Every test passes under the address sanitizer"
+
+  # The records the Unit tests job kept, attested, so a later run can ask GitHub whether they came from this workflow, at that branch and
+  # commit, on GitHub's own runners (tests/reuse/lookup.ps1, gh attestation verify). This is the only job here that can record anything,
+  # and it runs none of our code: no checkout, only the file, a check of its shape, and the attestation, as build.yml's attest job does.
+  # The job that builds and runs the tests can record nothing. Added 2026-11-11 by Melanikus for the AvP port (the CI plan's step 4).
+  record-results:
+    name: Record the tests' results
+    needs: unit-tests
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes this
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write       # to prove to the attestation service which workflow this is
+      attestations: write   # to record where the records came from
+    steps:
+      - name: Get the records
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: reuse-records
+          path: reuse
+
+      # Only a file in the shape record.ps1 writes, said to be from this very run and commit, is attested
+      - name: Refuse records that aren't this run's, or aren't in their shape
+        env:
+          RUN: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(ls -A reuse)" = "records.json" || { echo "The records folder holds more than records.json"; exit 1; }
+          jq -e --arg run "$RUN" --arg sha "$SHA" '
+            .schema == 1 and .run.id == $run and .run.sha == $sha and (.run.event == "push" or .run.event == "workflow_dispatch") and
+            (.records | type == "array") and
+            all(.records[]; (.test | test("^[A-Za-z0-9_]+$")) and (.key | test("^[0-9a-f]{64}$")) and .kind == "unit" and .status == "ran" and
+              (.class == "A" or .class == "B" or .class == "C") and (.result == "passed" or .result == "failed") and
+              all(.parts[]; length == 2 and (.[0] | test("^[A-Za-z0-9_:./+-]+$")) and (.[1] | test("^[0-9a-f]{40,64}$"))) and
+              all(.includes[]; test("^[A-Za-z0-9_./+-]+$")))' reuse/records.json > /dev/null
+          echo "The records are this run's, in their shape: $(jq '.records | length' reuse/records.json) of them"
+
+      - name: Record where the records came from
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: reuse/records.json
 
   # A release's first job runs on this machine, not on the Windows one above, so pull requests try its checks here too. Otherwise their first real run here
   # would be the day of a release. tools/check-new-functions.ps1 reads the real code as well and says what it found, but only the test's own rows can fail

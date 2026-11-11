@@ -25,7 +25,11 @@
 #   every test is built with the standard library's own bounds checks, and the guard that refuses to compile one without them, and a test
 #   whose settings leave either out, or turn the checks off again, is refused with the reason (STL-HARDEN-1, #140)
 
-param([string]$Only = '')
+# Modified 2026-11-11 by Melanikus for the AvP port (the CI plan's step 4, tests/reuse/Reuse.psm1):
+#   -ShowIncludes keeps, beside each program, the list of the repository's files the compiler read for it (<test>.includes.txt), which a
+#   reused result's key is made from. The compiler is asked for them in English (VSLANG), so the lines can be read on any machine
+#   -Skip names a file of tests not to build, one a line: those whose earlier result tests/reuse/lookup.ps1 found and checked
+param([string]$Only = '', [switch]$ShowIncludes, [string]$Skip = '')
 
 $ErrorActionPreference = 'Stop'
 
@@ -70,8 +74,57 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
 $tests = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '*.args') | Where-Object { -not $Only -or $_.BaseName -ceq $Only })
 if ($tests.Count -eq 0) { Write-Error 'No tests found to build' }
 
+# The tests whose earlier result is reused, one name a line: only names a test has, or nothing is skipped at all
+$skipped = @{}
+if ($Skip)
+{
+    foreach ($name in @(Get-Content -LiteralPath $Skip | ForEach-Object { $_.Trim() } | Where-Object { $_ }))
+    {
+        if ($name -cnotmatch '^[A-Za-z0-9_]+$' -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "$name.args"))) { Write-Error "$Skip names $name, which isn't a test here" }
+        $skipped[$name] = $true
+    }
+}
+
+# What the compiler read, for -ShowIncludes: the repository's files by their names from its top, with / between folders. A file of
+# Visual Studio's, of Windows' SDK, or under vcpkg_installed is left out, as a reused result's key covers those another way; any other
+# file outside the repository is written as "outside:" and its path, and then that test's result is never reused.
+$repositoryFull = [System.IO.Path]::GetFullPath($repository).TrimEnd('\') + '\'
+$kits = [System.IO.Path]::GetFullPath((Join-Path ${env:ProgramFiles(x86)} 'Windows Kits')).TrimEnd('\') + '\'
+$studioFull = [System.IO.Path]::GetFullPath($visualStudio).TrimEnd('\') + '\'
+if ($ShowIncludes) { $env:VSLANG = '1033' }
+
+function Write-Includes([string]$says, [string]$to)
+{
+    $files = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($line in @(Get-Content -LiteralPath $says -ErrorAction SilentlyContinue))
+    {
+        if ($line -cnotmatch '^Note: including file:\s*(.+?)\s*$') { continue }
+        # A name the compiler gives from the folder it ran in, the top of the repository, is made whole from there, not from this window's
+        $full = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($repository, $Matches[1]))
+        if ($full.StartsWith($repositoryFull, [StringComparison]::OrdinalIgnoreCase))
+        {
+            $relative = $full.Substring($repositoryFull.Length).Replace('\', '/')
+            if (-not $relative.StartsWith('vcpkg_installed/', [StringComparison]::OrdinalIgnoreCase)) { [void]$files.Add($relative) }
+        }
+        elseif (-not $full.StartsWith($studioFull, [StringComparison]::OrdinalIgnoreCase) -and -not $full.StartsWith($kits, [StringComparison]::OrdinalIgnoreCase))
+        {
+            [void]$files.Add("outside:$full")
+        }
+    }
+    # Every test reads tests/every_test/every_test.h first (/FIevery_test.h), so a list without it means the compiler's words weren't
+    # read: in another language, or said another way. Then that test's result is never reused, rather than reused on a list that's short.
+    if (-not $files.Contains('tests/every_test/every_test.h')) { [void]$files.Add("outside:the compiler's list of what it read for this test couldn't be read") }
+    [System.IO.File]::WriteAllLines($to, [string[]]@($files))
+}
+
 foreach ($test in $tests)
 {
+    if ($skipped.ContainsKey($test.BaseName))
+    {
+        Write-Host "Not built: $($test.BaseName), whose earlier result is reused (tests/reuse/lookup.ps1 says where it ran)"
+        continue
+    }
+
     # STATIC-UNDO-1: a test is built the way the game is, with the C runtime as DLLs (/MD), so it runs the runtime the game runs. Not with the
     # runtime inside it (/MT), and not with the debug runtime (/MDd, /MTd), which no player has. The game's own settings are in
     # win32/VS2026/AvP.vcxproj. It's checked before anything is built, so the reason is plain, and a test copied from an older branch, still
@@ -118,10 +171,15 @@ foreach ($test in $tests)
     New-Item -ItemType Directory -Force $objectDir | Out-Null
 
     $saysTo = Join-Path $outputDir ($test.BaseName + '_build.txt')
-    $exitCode = Invoke-Tool 'cl.exe' "/nologo `"/Fe:$outputDir\$($test.BaseName).exe`" `"/Fo:$objectDir/`" `"@$($test.FullName)`"" $repository $saysTo
+    # /showIncludes before the settings, which can end with /link
+    # (PowerShell reads $ShowIncludes and $showIncludes as one name, so this one has another)
+    $askForIncludes = if ($ShowIncludes) { '/showIncludes ' } else { '' }
+    $exitCode = Invoke-Tool 'cl.exe' "/nologo $askForIncludes`"/Fe:$outputDir\$($test.BaseName).exe`" `"/Fo:$objectDir/`" `"@$($test.FullName)`"" $repository $saysTo
 
-    # What the compiler said goes on the screen too, so that the automatic check's log has it
-    Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue
+    # What the compiler said goes on the screen too, so that the automatic check's log has it: all but its list of what it read, which
+    # goes in the test's own file instead
+    Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue | Where-Object { $_ -cnotmatch '^Note: including file:' }
+    if ($ShowIncludes -and $exitCode -eq 0) { Write-Includes $saysTo (Join-Path $outputDir ($test.BaseName + '.includes.txt')) }
 
     if ($exitCode -ne 0)
     {
@@ -130,5 +188,5 @@ foreach ($test in $tests)
     }
 }
 
-Write-Host "Built $($tests.Count) test(s) into $outputDir"
+Write-Host "Built $($tests.Count - $skipped.Count) test(s) into $outputDir$(if ($skipped.Count) { ', and left out ' + $skipped.Count + ' whose result is reused' })"
 exit 0
