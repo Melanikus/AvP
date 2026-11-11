@@ -807,6 +807,30 @@ void Net_FindAvPSessions()
 '@ + "`n"); '3dc/relay_list.cpp' = (@'
 namespace
 {
+	struct Shared
+	{
+		CRITICAL_SECTION lock;
+		wchar_t server[64];
+		INTERNET_PORT port;
+		uint8_t lineFingerprint[kNetServerFingerprintBytes];
+		uint32_t relayAddress;
+		int keyState;
+		uint8_t goodKey[kNetServerFingerprintMostKeyBytes];
+		size_t goodKeySize;
+		KeyCheck firstCheck;
+		KeyCheck laterCheck;
+		int newsNumber;
+		const char *serverWhy;
+		char keysAnswer[4096];
+		char gamesAnswer[65536];
+		int visitCount;
+		ServersCfgServer visitLines[kRelayListMostVisits];
+		int visitPlaces[kRelayListMostVisits];
+		int lineStates[kServersCfgMostLines];
+	};
+
+	Shared *shared = NULL;
+
 	const ServersCfgServer *Server(void)
 	{
 		static ServersCfgFileRead file;
@@ -814,9 +838,36 @@ namespace
 		return file.serverCount > 0 ? &file.servers[0] : NULL;
 	}
 
+	void Tell(Shared *s, const char *news)
+	{
+		if (!news || !s)
+		{
+			return;
+		}
+
+		EnterCriticalSection(&s->lock);
+		s->newsNumber++;
+		LeaveCriticalSection(&s->lock);
+	}
+
+	const char *CantUse(Shared *s, const char *why)
+	{
+		EnterCriticalSection(&s->lock);
+		s->serverWhy = why;
+		LeaveCriticalSection(&s->lock);
+		return why;
+	}
+
 	void CALLBACK CheckTheKey(HINTERNET request, DWORD_PTR context, DWORD status, LPVOID, DWORD)
 	{
 		KeyCheck *const check = reinterpret_cast<KeyCheck *>(context);
+
+		if (status != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST || !check || check->closed || !check->owner)
+		{
+			return;
+		}
+
+		Shared const *const server = check->owner;
 		bool const read = ReadTheKey(request, check);
 
 		if (check->keepIt)
@@ -825,12 +876,12 @@ namespace
 		}
 		else
 		{
-			bool const sameSize = read && check->shownSize == shared->goodKeySize;
+			bool const sameSize = read && check->shownSize == server->goodKeySize;
 			uint8_t differences = 0;
 
 			for (size_t i = 0; sameSize && i < check->shownSize; i++)
 			{
-				differences |= static_cast<uint8_t>(check->shown[i] ^ shared->goodKey[i]);
+				differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);
 			}
 
 			check->matched = sameSize && differences == 0;
@@ -843,18 +894,19 @@ namespace
 		}
 	}
 
-	Answer CallChecked(const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)
+	Answer CallChecked(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)
 	{
 		Answer a = { false, 0, kCantStart, 0 };
+		check.owner = s;
 
 		// Nothing goes to a server whose keys didn't match its line
-		if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood))
+		if (s->keyState == kKeyRefused || (!check.keepIt && s->keyState != kKeyGood))
 		{
 			return a;
 		}
 
 		HINTERNET session = WinHttpOpen(L"AVPx", 0, NULL, NULL, 0);
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+		HINTERNET connection = WinHttpConnect(session, s->server, s->port, 0);
 		HINTERNET request = WinHttpOpenRequest(connection, method, path, NULL, NULL, NULL, WINHTTP_FLAG_SECURE);
 
 		if (WinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)
@@ -877,25 +929,39 @@ namespace
 		return a;
 	}
 
-	const char *CheckTheServer(void)
+	const char *CheckTheServer(Shared *s)
 	{
-		static KeyCheck first;
+		if (s->keyState != kKeyNotChecked)
+		{
+			return s->keyState == kKeyGood ? NULL : "the keys don't match";
+		}
+
+		KeyCheck &first = s->firstCheck;
+		memset(&first, 0, sizeof(first));
 		first.keepIt = true;
-		Answer const a = CallChecked(L"GET", L"/v1/relay-keys", NULL, keysAnswer, sizeof(keysAnswer), first);
-		bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint);
+		Answer const a = CallChecked(s, L"GET", L"/v1/relay-keys", NULL, s->keysAnswer, sizeof(s->keysAnswer), first);
+
+		if (!a.worked)
+		{
+			Tell(s, a.why);
+			return CantUse(s, a.why);
+		}
+
+		bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);
 
 		if (good)
 		{
-			memcpy(shared->goodKey, first.shown, first.shownSize);
+			memcpy(s->goodKey, first.shown, first.shownSize);
+			s->goodKeySize = first.shownSize;
 		}
 
-		shared->keyState = good ? kKeyGood : kKeyRefused;
+		s->keyState = good ? kKeyGood : kKeyRefused;
 		return good ? NULL : "the keys don't match";
 	}
 
-	Answer Call(const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)
+	Answer Call(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)
 	{
-		const char *const unchecked = CheckTheServer();
+		const char *const unchecked = CheckTheServer(s);
 
 		if (unchecked)
 		{
@@ -903,9 +969,67 @@ namespace
 			return none;
 		}
 
-		static KeyCheck check;
+		KeyCheck &check = s->laterCheck;
+		memset(&check, 0, sizeof(check));
 		check.keepIt = false;
-		return CallChecked(method, path, body, answer, room, check);
+		return CallChecked(s, method, path, body, answer, room, check);
+	}
+
+	Shared *NewServer(const ServersCfgServer &line);
+	void ForgetTheVisit(Shared *visit);
+
+	const char *VisitTheLine(Shared *visit, int *count)
+	{
+		*count = 0;
+		Answer const a = Call(visit, L"GET", L"/v1/games", NULL, visit->gamesAnswer, sizeof(visit->gamesAnswer));
+
+		if (!a.worked)
+		{
+			return a.why;
+		}
+
+		*count = 1;
+		return NULL;
+	}
+
+	void PassOnTheNews(const Shared *visit, int lineNumber)
+	{
+		for (int n = 0; n < visit->newsNumber; n++)
+		{
+			Tell(shared, "a visit's news");
+		}
+	}
+
+	void VisitEveryLine(void)
+	{
+		ServersCfgServer lines[kRelayListMostVisits];
+		int places[kRelayListMostVisits];
+		EnterCriticalSection(&shared->lock);
+		int const count = shared->visitCount;
+		memcpy(lines, shared->visitLines, sizeof(lines));
+		memcpy(places, shared->visitPlaces, sizeof(places));
+		LeaveCriticalSection(&shared->lock);
+
+		for (int v = 0; v < count; v++)
+		{
+			int const place = places[v] >= 0 && places[v] < kServersCfgMostLines ? places[v] : -1;
+			Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;
+			int got = 0;
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+
+			if (place >= 0)
+			{
+				EnterCriticalSection(&shared->lock);
+				shared->lineStates[place] = why ? kRelayLineNoAnswer : kRelayLineAnswered;
+				LeaveCriticalSection(&shared->lock);
+			}
+
+			if (visit)
+			{
+				PassOnTheNews(visit, lines[v].lineNumber);
+				ForgetTheVisit(visit);
+			}
+		}
 	}
 }
 
@@ -928,8 +1052,40 @@ namespace
 		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
 	}
 
+	Shared *NewServer(const ServersCfgServer &line)
+	{
+		Shared *made = new (std::nothrow) Shared;
+
+		if (!made)
+		{
+			return NULL;
+		}
+
+		memset(made, 0, sizeof(*made));
+		InitializeCriticalSection(&made->lock);
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line.address >> 24) & 0xFFu,
+			(line.address >> 16) & 0xFFu, (line.address >> 8) & 0xFFu, line.address & 0xFFu);
+		made->port = static_cast<INTERNET_PORT>(line.listPort);
+		memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));
+		made->relayAddress = htonl(line.address);
+		made->keyState = kKeyNotChecked;
+		return made;
+	}
+
+	void ForgetTheVisit(Shared *visit)
+	{
+		DeleteCriticalSection(&visit->lock);
+		SecureZeroMemory(visit, sizeof(*visit));
+		delete visit;
+	}
+
 	bool Start(void)
 	{
+		if (shared)
+		{
+			return true;
+		}
+
 		if (!Relay_ServerName()[0])
 		{
 			return false;
@@ -942,11 +1098,14 @@ namespace
 			return false;
 		}
 
-		Shared *made = new Shared;
-		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
-			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
-		made->relayAddress = htonl(line->address);
-		made->keyState = kKeyNotChecked;
+		Shared *made = NewServer(*line);
+
+		if (!made)
+		{
+			return false;
+		}
+
+		shared = made;
 		return true;
 	}
 }
@@ -974,9 +1133,48 @@ bool RelayList_AgreeToTheLine(void)
 	return true;
 }
 
+void RelayList_FindGames(void)
+{
+	if (!Start())
+	{
+		return;
+	}
+
+	ServersCfgServer lines[kRelayListMostVisits];
+	int places[kRelayListMostVisits];
+	int states[kServersCfgMostLines];
+	int visits = 0;
+
+	for (int place = 0; place < theFile.serverCount && place < kServersCfgMostLines; place++)
+	{
+		if (!TheLineIsAgreed(theFile.servers[place]))
+		{
+			states[place] = kRelayLineNoYes;
+		}
+		else if (visits >= kRelayListMostVisits)
+		{
+			states[place] = kRelayLineNotAsked;
+		}
+		else
+		{
+			lines[visits] = theFile.servers[place];
+			places[visits] = place;
+			visits++;
+			states[place] = kRelayLineAsking;
+		}
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+	memcpy(shared->visitLines, lines, sizeof(ServersCfgServer) * static_cast<size_t>(visits));
+	memcpy(shared->visitPlaces, places, sizeof(int) * static_cast<size_t>(visits));
+	LeaveCriticalSection(&shared->lock);
+}
+
 bool RelayList_Relays(RelayListRelay *relays, int *count)
 {
 	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
+	relays[0].address = shared->relayAddress;
 	return true;
 }
 '@ + "`n"); 'servers.cfg' = (@'
@@ -1061,17 +1259,17 @@ void Fetch(void)
 }
 '@ + "`n") }; Reason = 'N: 3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC: only 3dc/relay_list.cpp may' },
     @{ What = 'N: the list calling another host than the line''s address is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-WinHttpConnect(session, shared->server,
+WinHttpConnect(session, s->server,
 '@); To = (@'
 WinHttpConnect(session, otherServer,
-'@) } }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to shared->server' },
+'@) } }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to s->server' },
     @{ What = 'C: a [Network] setting is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
 
 void ReadThePin(void)
 {
 	std::string const setting = Config_GetString("[Network]", "Anything", "");
 }
-'@ + "`n") } }; Reason = 'C: 3dc/relay_list.cpp line 178 reads Anything from [Network]' },
+'@ + "`n") } }; Reason = 'C: 3dc/relay_list.cpp line 376 reads Anything from [Network]' },
     @{ What = 'C: and a setting about a server in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 void ReadTheKeys(void)
 {
@@ -1122,11 +1320,11 @@ void Peek(void)
 }
 '@ + "`n") }; Reason = 'R: 3dc/menus.cpp reads servers.cfg: only 3dc/relay_list.cpp may' },
     @{ What = 'R: the list''s server written from anything but the line''s four numbers is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
-			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line.address >> 24) & 0xFFu,
+			(line.address >> 16) & 0xFFu, (line.address >> 8) & 0xFFu, line.address & 0xFFu);
 '@ + "`n"); To = (@'
-		wcscpy(made->server, line->wideName);
-'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must write the list''s server in one place only, from the line''s four numbers' },
+		wcscpy(made->server, line.wideName);
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must write a server in one place only, NewServer, from the line''s four numbers' },
     @{ What = 'R: and written a second way'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		made->keyState = kKeyNotChecked;
 '@ + "`n"); To = (@'
@@ -1134,7 +1332,7 @@ void Peek(void)
 		made->server[0] = 0;
 '@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp uses the list''s server in a way this check doesn''t know' },
     @{ What = 'R: the relay at another address than the line''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-made->relayAddress = htonl(line->address);
+made->relayAddress = htonl(line.address);
 '@); To = (@'
 made->relayAddress = htonl(otherAddress);
 '@) } }; Reason = 'R: 3dc/relay_list.cpp must write the relay''s address in one place only' },
@@ -1146,18 +1344,18 @@ made->relayAddress = htonl(otherAddress);
 
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 124) must make nothing when there''s no line' },
+'@) } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 275) must make nothing when there''s no line' },
     @{ What = 'K: a request sent outside CallChecked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-		static KeyCheck check;
+		KeyCheck &check = s->laterCheck;
 '@ + "`n"); To = (@'
 		WinHttpSendRequest(request, NULL, 0, NULL, 0, 0, 0);
-		static KeyCheck check;
-'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 99 calls WinHttpSendRequest outside CallChecked' },
+		KeyCheck &check = s->laterCheck;
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 165 calls WinHttpSendRequest outside CallChecked' },
     @{ What = 'K: a call that goes before the server is checked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-(!check.keepIt && shared->keyState != kKeyGood)
+(!check.keepIt && s->keyState != kKeyGood)
 '@); To = (@'
-(!check.keepIt && shared->keyState == kKeyRefused)
-'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 39) must first send nothing to a server whose keys didn''t match' },
+(!check.keepIt && s->keyState == kKeyRefused)
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 90) must hold its key check to its own server, then send nothing to a server whose keys didn''t match' },
     @{ What = 'K: a body or an answer with no key matched is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		if (!check.matched)
 		{
@@ -1166,7 +1364,7 @@ made->relayAddress = htonl(otherAddress);
 
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 39) must set CheckTheKey going before the request is sent' },
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 90) must set CheckTheKey going before the request is sent' },
     @{ What = 'K: and the key''s check set going after the request is sent'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		if (WinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)
 		{
@@ -1177,24 +1375,24 @@ made->relayAddress = htonl(otherAddress);
 
 '@) } }; Reason = 'must set CheckTheKey going before the request is sent' },
     @{ What = 'K: a key compared until its first difference is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-			bool const sameSize = read && check->shownSize == shared->goodKeySize;
+			bool const sameSize = read && check->shownSize == server->goodKeySize;
 			uint8_t differences = 0;
 
 			for (size_t i = 0; sameSize && i < check->shownSize; i++)
 			{
-				differences |= static_cast<uint8_t>(check->shown[i] ^ shared->goodKey[i]);
+				differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);
 			}
 
 			check->matched = sameSize && differences == 0;
 '@); To = (@'
-			check->matched = read && memcmp(check->shown, shared->goodKey, check->shownSize) == 0;
-'@) } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 10) must compare every byte of the list''s key' },
+			check->matched = read && memcmp(check->shown, server->goodKey, check->shownSize) == 0;
+'@) } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 54) must compare every byte of the list''s key' },
     @{ What = 'K: a call whose key doesn''t match left open is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 			check->closed = true;
 			WinHttpCloseHandle(request);
 '@ + "`n"); To = (@'
 			check->closed = true;
-'@ + "`n") } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 10) must compare every byte' },
+'@ + "`n") } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 54) must compare every byte' },
     @{ What = 'K: CallChecked called from anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
 
 void Sneak(void)
@@ -1205,16 +1403,18 @@ void Sneak(void)
     @{ What = 'K: the list''s key kept without the line''s fingerprint is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		if (good)
 		{
-			memcpy(shared->goodKey, first.shown, first.shownSize);
+			memcpy(s->goodKey, first.shown, first.shownSize);
+			s->goodKeySize = first.shownSize;
 		}
 '@ + "`n"); To = (@'
-		memcpy(shared->goodKey, first.shown, first.shownSize);
-'@ + "`n") } }; Reason = 'K: CheckTheServer (3dc/relay_list.cpp line 73) must keep the list''s key only when it and the relay''s keys make the line''s fingerprint' },
+		memcpy(s->goodKey, first.shown, first.shownSize);
+		s->goodKeySize = first.shownSize;
+'@ + "`n") } }; Reason = 'K: CheckTheServer (3dc/relay_list.cpp line 125) must make its server''s own first check, and keep the list''s key only when it and the relay''s keys make that server''s line''s fingerprint' },
     @{ What = 'K: a call that doesn''t hold the server to its line first is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-		const char *const unchecked = CheckTheServer();
+		const char *const unchecked = CheckTheServer(s);
 '@ + "`n"); To = (@'
 		const char *const unchecked = NULL;
-'@ + "`n") } }; Reason = 'K: Call (3dc/relay_list.cpp line 89) must hold the server to its line first' },
+'@ + "`n") } }; Reason = 'K: Call (3dc/relay_list.cpp line 155) must hold its server to its line first' },
     @{ What = 'K: the server called good anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		made->keyState = kKeyNotChecked;
 '@ + "`n"); To = (@'
@@ -1224,12 +1424,12 @@ void Sneak(void)
 		if (!line || !TheLineIsAgreed(*line))
 '@); To = (@'
 		if (!line)
-'@) } }; Reason = 'Y: the list''s start (3dc/relay_list.cpp line 124) must refuse a line the player hasn''t said yes to' },
+'@) } }; Reason = 'Y: the list''s start (3dc/relay_list.cpp line 275) must refuse a line the player hasn''t said yes to' },
     @{ What = 'Y: a yes taken for any line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
 '@); To = (@'
 		return LineHash(line, hash);
-'@) } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 113) must let a Hudson run past alone' },
+'@) } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 237) must let a Hudson run past alone' },
     @{ What = 'Y: another way past the yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		if (HudsonRunIsOn)
 		{
@@ -1245,21 +1445,21 @@ void Sneak(void)
 		{
 			return true;
 		}
-'@ + "`n") } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 113) must let a Hudson run past alone' },
+'@ + "`n") } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 237) must let a Hudson run past alone' },
     @{ What = 'Y: Hudson''s flag set in the list''s file is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
 
 void Cheat(void)
 {
 	HudsonRunIsOn = true;
 }
-'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 178 changes HudsonRunIsOn' },
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 376 changes HudsonRunIsOn' },
     @{ What = 'Y: a yes added anywhere but the player''s own is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
 
 void Sneak(void)
 {
 	ServersTrust_Add(&yeses, anyHash);
 }
-'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 178 adds a yes: only the player''s own' },
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 376 adds a yes: only the player''s own' },
     @{ What = 'Y: a Hudson run''s yes page, with its guards, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList }; Passes = 'The servers this release ships (servers.cfg): 1' },
     @{ What = 'Y: the yes page''s first line without its flags is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 			return true;
@@ -1279,7 +1479,7 @@ void Sneak(void)
 	if (line && !TheLineIsAgreed(*line))
 '@); To = (@'
 	if (false)
-'@) } }; Reason = 'Y: RelayList_ServerState (3dc/relay_list.cpp line 147) must say a line without the player''s yes needs it' },
+'@) } }; Reason = 'Y: RelayList_ServerState (3dc/relay_list.cpp line 306) must say a line without the player''s yes needs it' },
     @{ What = 'Y: an online host before the yes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
 '@); To = (@'
@@ -1328,6 +1528,172 @@ static bool RelayHostStart
 
 static bool RelayHostStart
 '@) } }; Reason = 'V: RelayIntercept (3dc/networking.cpp line 30) must end by dropping whatever comes without the channel' },
+    # EVERY SERVER THE SAME WAY (added 2026-11-11 by Melanikus for the AvP port: all servers' games, the owner's "same code, for 2 or more
+    # servers"). Each server's state is made from its own line by NewServer, holds its own key checks, and a visit ends wiped: each way of
+    # carrying one server's trust over to another is refused
+    @{ What = 'R: a server''s state made a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+Shared *Spare(void)
+{
+	return new Shared;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new' },
+    @{ What = 'R: and kept as a plain variable'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+Shared spare;
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable' },
+    @{ What = 'R: a server''s state copied whole from the line in use''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void CopyTheTrust(Shared *to)
+{
+	memcpy(to, shared, sizeof(Shared));
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable, and copy none whole' },
+    @{ What = 'R: and by assignment'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void CopyTheTrust(Shared *to)
+{
+	*to = *shared;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable, and copy none whole' },
+    @{ What = 'R: the line in use''s state set anywhere but Start is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Swap(Shared *other)
+{
+	shared = other;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp line 376 sets the line in use''s state to other: only Start may' },
+    @{ What = 'R: and another server''s state called shared, which hides it'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Hide(Shared *shared)
+{
+	Tell(shared, "hidden");
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must start the line in use''s state as nothing, once, and call nothing else shared' },
+    @{ What = 'R: a server''s state made anywhere but Start and VisitEveryLine is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Peek(void)
+{
+	Shared *other = NewServer(theFile.servers[1]);
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp line 376 makes a server''s state: only Start (the line in use) and VisitEveryLine (the lines a find visits) may' },
+    @{ What = 'R: a visit made from lines the find didn''t choose is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+memcpy(lines, shared->visitLines, sizeof(lines));
+'@); To = (@'
+memcpy(lines, theFile.servers, sizeof(lines));
+'@) } }; Reason = 'R: VisitEveryLine (3dc/relay_list.cpp line 196) must make each visit by NewServer from the lines the find chose' },
+    @{ What = 'K: a key check kept for the whole file is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+static KeyCheck lastCheck;
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp keeps a KeyCheck for the whole file' },
+    @{ What = 'K: a key''s size taken from the line in use''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void TrustLikeTheLineInUse(Shared *visit)
+{
+	visit->goodKeySize = shared->goodKeySize;
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp uses a server''s goodKeySize in a way this check doesn''t know' },
+    @{ What = 'K: a line''s fingerprint taken from anything but its line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Pin(Shared *visit, const uint8_t *seen)
+{
+	memcpy(visit->lineFingerprint, seen, 32);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp uses a server''s lineFingerprint in a way this check doesn''t know' },
+    @{ What = 'K: a server made without its line''s fingerprint is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: NewServer (3dc/relay_list.cpp line 248) must take its server''s fingerprint from its own line' },
+    @{ What = 'K: something kept between one call and the next is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		*count = 0;
+		Answer const a = Call(visit,
+'@); To = (@'
+		static int visitsSoFar = 0;
+		visitsSoFar++;
+		*count = 0;
+		Answer const a = Call(visit,
+'@) } }; Reason = 'K: VisitTheLine (3dc/relay_list.cpp line 174) must keep nothing of its own between calls (no static)' },
+    @{ What = 'K: the line in use''s state written in a call to another server is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		s->serverWhy = why;
+'@); To = (@'
+		shared->serverWhy = why;
+'@) } }; Reason = 'K: CantUse (3dc/relay_list.cpp line 46) must keep nothing of its own between calls (no static) and touch only the server it was given, never shared' },
+    @{ What = 'K: another server handed on inside a call is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			Tell(s, a.why);
+'@); To = (@'
+			Tell(first.owner, a.why);
+'@) } }; Reason = 'K: 3dc/relay_list.cpp line 139 hands Tell another server than its own: inside a call it must be s' },
+    @{ What = 'K: and outside one'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void AskAgain(Shared *other)
+{
+	CheckTheServer(other);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 376 hands CheckTheServer another server than its own: inside a call it must be shared' },
+    @{ What = 'K: a visit called anywhere but where it''s made is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Peek(Shared *visit)
+{
+	VisitTheLine(visit, &count);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 376 hands VisitTheLine another server than its own: inside a call it must be shared' },
+    @{ What = 'K: the line in use visited in place of a fresh visit is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+visit ? VisitTheLine(visit, &got) : kCantStart;
+'@); To = (@'
+visit ? VisitTheLine(shared, &got) : kCantStart;
+'@) } }; Reason = 'K: 3dc/relay_list.cpp line 211 hands VisitTheLine another server than its own: inside a call it must be visit' },
+    @{ What = 'K: a visit given back without being wiped is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		SecureZeroMemory(visit, sizeof(*visit));
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: ForgetTheVisit (3dc/relay_list.cpp line 268) must wipe the whole visit and give it back, and do nothing else' },
+    @{ What = 'K: a visit with a way out before its end is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+'@ + "`n"); To = (@'
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+
+			if (!why)
+			{
+				continue;
+			}
+'@ + "`n") } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 196) must end every visit it makes with ForgetTheVisit(visit), with no way out before it' },
+    @{ What = 'K: a visit kept after its end is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+				ForgetTheVisit(visit);
+'@ + "`n"); To = (@'
+				lastVisit = visit;
+				ForgetTheVisit(visit);
+'@ + "`n") } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 196) must end every visit it makes with ForgetTheVisit(visit), with no way out before it, and keep nothing of it' },
+    @{ What = 'K: a visit never forgotten is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+				ForgetTheVisit(visit);
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 196) must end every visit it makes with ForgetTheVisit(visit)' },
+    @{ What = 'K: the line in use''s state forgotten is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Drop(void)
+{
+	ForgetTheVisit(shared);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 376 calls ForgetTheVisit: only VisitEveryLine may, for the visit it made' },
+    @{ What = 'Y: a line visited without the player''s yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (!TheLineIsAgreed(theFile.servers[place]))
+'@); To = (@'
+		if (false)
+'@) } }; Reason = 'Y: RelayList_FindGames (3dc/relay_list.cpp line 329) must choose a line to visit only once the player has said yes to it' },
+    @{ What = 'Y: and a line added to the visits after the choice'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+'@); To = (@'
+	lines[visits] = theFile.servers[0];
+	visits++;
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+'@) } }; Reason = 'Y: RelayList_FindGames (3dc/relay_list.cpp line 329) must choose a line to visit only once the player has said yes to it' },
+    @{ What = 'Y: the lines to visit written anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void VisitAll(void)
+{
+	memcpy(shared->visitLines, theFile.servers, sizeof(shared->visitLines));
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp uses the lines to visit in a way this check doesn''t know' },
     @{ What = 'S: a host through the relay that doesn''t seal is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	host->sendHook = RelaySealedSend;
 '@ + "`n"); To = (@'

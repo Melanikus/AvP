@@ -514,6 +514,49 @@ if ((Get-Count $listFlat 'new (std::nothrow) Shared') -ne 1 -or -not $newServer.
     Stop-Check "R: a server's state must be made in one place only, NewServer ($listFile line $($newServer.Line)), from its line: $madeHere, ... return made;"
 }
 
+# NOTHING ELSE MAKES OR COPIES ONE (added 2026-11-11 by Melanikus for the AvP port, all servers' games). Rule K holds each server's trust
+# in its state: the key that matched, and its line's fingerprint. So a state that came any other way than NewServer, or one copied whole
+# from another server's, could carry one server's trust over to another. There's one new of a state, whatever its form, and no state kept
+# as a plain variable, which could be copied by assignment. No state is copied whole: not by assignment through a pointer, not by the
+# size of a whole state (only made and visit are sized, to be cleared), and no copy call is handed a whole state. (This reads names, not
+# types: a state is reached by the names the file gives it, listed in $stateNames.)
+$listCode = Get-Flat $code[$listFile]
+$stateNames = 'shared|visit|made|s|server|owner'
+$byValue = [regex]::Match($listCode, '\bShared\b(\s+const)?\s+\w+\s*[;=\[({,)]')
+$wholeSizes = @([regex]::Matches($listCode, '[^;{}]*\bsizeof\s*\(\s*(\*\s*\w+|Shared)\s*\)[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() } |
+    Where-Object { $_ -cmatch "sizeof\s*\(\s*(\*\s*($stateNames)|Shared)\s*\)" })
+$knownSizes = @('memset(made, 0, sizeof(*made));', 'SecureZeroMemory(visit, sizeof(*visit));')
+$copies = @([regex]::Matches($listCode, '\b(memcpy|memmove|memcpy_s|memmove_s|CopyMemory|MoveMemory|RtlCopyMemory|RtlMoveMemory|copy)\s*\(([^;]*);') |
+    Where-Object { $_.Groups[2].Value -cmatch "(?<![\w.>])\b($stateNames)\b(?!\s*(->|\.))" } | ForEach-Object { $_.Value })
+
+if (([regex]::Matches($listCode, '\bnew\b[^;]*\bShared\b')).Count -ne 1 -or $byValue.Success -or
+    @($wholeSizes | Where-Object { $knownSizes -cnotcontains $_ }).Count -ne 0 -or $copies.Count -ne 0 -or
+    $listCode -cmatch "=\s*\*\s*\(?\s*($stateNames)\b\s*\)?\s*;" -or $listCode -cmatch "(^|[;{}(]\s*)\*\s*($stateNames)\b\s*=(?!=)")
+{
+    Stop-Check "R: $listFile must make a server's state only by NewServer's one new, keep none as a plain variable, and copy none whole (by assignment, by its whole size, or by a copy call handed one)$(if ($byValue.Success) { ': ' + $byValue.Value })$(if ($copies.Count) { ': ' + ($copies -join ' / ') })"
+}
+
+# The line in use's state is set in one place, Start: to the one it made, or back to nothing. It starts as nothing, and nothing else is
+# ever called shared (a variable or a parameter of that name would hide it)
+$namedShared = [regex]'\b(?!(return|delete|else|case|sizeof|throw|new|goto)\b)[A-Za-z_][\w:<>]*\s*(\*\s*|&\s*|\s)(const\s*)?(\*\s*)?shared\s*[;=,)\[]'
+
+if ((Get-Count $listCode 'Shared *shared = NULL;') -ne 1 -or $namedShared.Matches($listCode).Count -ne 1)
+{
+    Stop-Check "R: $listFile must start the line in use's state as nothing, once, and call nothing else shared: Shared *shared = NULL;"
+}
+
+foreach ($m in [regex]::Matches($code[$listFile], '\bshared\s*=(?!=)\s*([^;]*);'))
+{
+    if ($code[$listFile].Substring(0, $m.Index) -cmatch 'Shared\s*\*\s*$') { continue }
+    $setAt = [pscustomobject]@{ File = $listFile; At = $m.Index; Line = (Get-LineNumber $code[$listFile] $m.Index) }
+    $to = Get-Flat $m.Groups[1].Value
+
+    if (($to -cne 'made' -and $to -cne 'NULL') -or -not (Test-Inside $setAt (@(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile }) | Select-Object -First 1)))
+    {
+        Stop-Check "R: $listFile line $($setAt.Line) sets the line in use's state to $($to): only Start may, to the state it made (shared = made;) or to nothing (shared = NULL;)"
+    }
+}
+
 # The list's own Start, in its file (another file may have a Start of its own)
 $startDefs = @(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile })
 
@@ -660,14 +703,44 @@ if (-not (Test-Before $call.Flat 'const char *const unchecked = CheckTheServer(s
 }
 
 # The key that matched is written there alone, and a server is called good there alone
-$listCode = Get-Flat $code[$listFile]
-
 $stateWrites = @([regex]::Matches($listCode, '\bkeyState\s*=(?!=)\s*([^;]*);') | ForEach-Object { Get-Flat $_.Groups[1].Value })
 $otherStates = @($stateWrites | Where-Object { $_ -cne 'good ? kKeyGood : kKeyRefused' -and $_ -cne 'kKeyNotChecked' })
 
 if ((Get-Count $listCode 'goodKey,') -ne 1 -or (Get-Count $listCode 'memcpy(s->goodKey,') -ne 1 -or (Get-Count $listCode 's->keyState = good ? kKeyGood : kKeyRefused;') -ne 1 -or $otherStates.Count -ne 0)
 {
     Stop-Check "K: $listFile must write the key that matched in CheckTheServer alone, and a server's state only there or as not checked yet"
+}
+
+# A server's trust lives in a few parts of its state: the key that matched and its size, its line's fingerprint, its relay's address and
+# its two key checks. Each is used only in the statements below (added 2026-11-11 by Melanikus for the AvP port, all servers' games), so
+# none can be written from anything but its own server's check or its own line, or read across from another server. A new use fails
+# this check until it's read and added here: a check that names what it allows can't be passed by a shape it didn't think of.
+$trustUses = [ordered]@{
+    'goodKey' = @('uint8_t goodKey[kNetServerFingerprintMostKeyBytes];', 'differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);',
+        'memcpy(s->goodKey, first.shown, first.shownSize);')
+    'goodKeySize' = @('size_t goodKeySize;', 'bool const sameSize = read && check->shownSize == server->goodKeySize;', 's->goodKeySize = first.shownSize;')
+    'lineFingerprint' = @('uint8_t lineFingerprint[kNetServerFingerprintBytes];',
+        'bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);',
+        'memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));')
+    'relayAddress' = @('uint32_t relayAddress;', 'made->relayAddress = htonl(line.address);', 'relays[0].address = shared->relayAddress;')
+    'firstCheck' = @('KeyCheck firstCheck;', 'KeyCheck &first = s->firstCheck;')
+    'laterCheck' = @('KeyCheck laterCheck;', 'KeyCheck &check = s->laterCheck;')
+}
+
+foreach ($member in $trustUses.Keys)
+{
+    $uses = @([regex]::Matches($listCode, '[^;{}]*\b' + $member + '\b[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() })
+    $unknown = @($uses | Where-Object { $trustUses[$member] -cnotcontains $_ })
+
+    if ($unknown.Count -ne 0)
+    {
+        Stop-Check "K: $listFile uses a server's $member in a way this check doesn't know: only $($trustUses[$member] -join ' or ') ($($unknown -join ' / '))"
+    }
+}
+
+if (-not $newServer.Flat.Contains('memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));'))
+{
+    Stop-Check "K: NewServer ($listFile line $($newServer.Line)) must take its server's fingerprint from its own line: memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));"
 }
 
 # NOTHING CARRIED FROM ONE SERVER TO ANOTHER. No key check is kept by the file, and the functions a call goes through touch only the server
@@ -692,7 +765,7 @@ foreach ($name in $chain)
 }
 
 # And each of them hands on the server it was given, never another: inside the chain a call's first word is s (VisitTheLine's, visit);
-# anywhere else it's shared, the line in use, or visit, a line a find visits
+# in VisitEveryLine it's visit, the line it's visiting; anywhere else it's shared, the line in use
 foreach ($name in @('Tell', 'CantUse', 'CallChecked', 'CheckTheServer', 'Call', 'VisitTheLine'))
 {
     foreach ($use in (Get-Calls $name))
@@ -704,7 +777,7 @@ foreach ($name in @('Tell', 'CantUse', 'CallChecked', 'CheckTheServer', 'Call', 
 
         $given = [regex]::Match($code[$listFile].Substring($use.At), '^\w+\s*\(\s*(\w+)\s*[,)]')
         $inside = @($chain | Where-Object { Test-Inside $use $chainParts[$_] })
-        $wanted = if ($inside -contains 'VisitTheLine') { @('visit') } elseif ($inside.Count -gt 0) { @('s') } else { @('shared', 'visit') }
+        $wanted = if ($inside -contains 'VisitTheLine') { @('visit') } elseif ($inside.Count -gt 0) { @('s') } elseif (Test-Inside $use $visits) { @('visit') } else { @('shared') }
 
         if (-not $given.Success -or $wanted -cnotcontains $given.Groups[1].Value)
         {
@@ -720,6 +793,15 @@ $forget = Get-OneDefinition 'ForgetTheVisit' 'K' $listFile 'a visit''s end'
 if ($forget.Flat -cne 'DeleteCriticalSection(&visit->lock); SecureZeroMemory(visit, sizeof(*visit)); delete visit;')
 {
     Stop-Check "K: ForgetTheVisit ($listFile line $($forget.Line)) must wipe the whole visit and give it back, and do nothing else: DeleteCriticalSection(&visit->lock); SecureZeroMemory(visit, sizeof(*visit)); delete visit;"
+}
+
+# Only a visit is forgotten, where it was made: forgetting the line in use's state would leave it pointing at freed memory
+foreach ($forgetting in (Get-Calls 'ForgetTheVisit'))
+{
+    if (-not (Test-Inside $forgetting $visits))
+    {
+        Stop-Check "K: $($forgetting.File) line $($forgetting.Line) calls ForgetTheVisit: only VisitEveryLine may, for the visit it made"
+    }
 }
 
 $madeAt = $visits.Flat.IndexOf('Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;', [System.StringComparison]::Ordinal)
