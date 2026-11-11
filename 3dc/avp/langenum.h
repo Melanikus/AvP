@@ -1566,6 +1566,10 @@ enum TEXTSTRING_ID
 	TEXTSTRING_HOSTPAGE_NOTASKED_AFTER,
 	TEXTSTRING_HOSTPAGE_ASKED_AGAIN,         // Enter on a line that didn't answer
 	TEXTSTRING_HOSTPAGE_CANT,                // a line that lost its yes or approval as it was chosen
+	// A line's ping before its first answer, and an approved line with no games, on the host page and the games page (the owner, 2026-11-11:
+	// "We should show the server ping to the user if no games are up")
+	TEXTSTRING_PING_ASKING,                  // "Asking...", PO's word
+	TEXTSTRING_FINDGAMES_LINE_NOGAMES,       // an approved line whose server has no games up, before its ping
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

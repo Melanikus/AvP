@@ -288,27 +288,32 @@ void HostPage_DrawRow(const AVPMENU_ELEMENT *row, int brightness, int chosenElem
 	char name[kServersCfgNameLetters + 1];
 	SafeNameOf(now, name, sizeof(name));
 
-	// A line that can be chosen: its name, then its numbers and region, at full light
+	// Every line: its name and its own ping, whether or not it has games, and whether or not it can be chosen (modified 2026-11-11 by
+	// Melanikus for the AvP port, the owner's "We should show the server ping to the user if no games are up"). A line that can't be chosen
+	// is dimmed.
+	int const light = says == kHostPageSaysCanHost ? brightness : brightness / 2;
+	char ping[48];
+	HostPage_PingWords(now.pingMs, now.state, GetTextString(TEXTSTRING_HOSTPAGE_MS), GetTextString(TEXTSTRING_PING_ASKING), ping, sizeof(ping));
+	Cell(name, HostPage_Column(kHostPageColumnServer), top, light);
+	Cell(ping, HostPage_Column(kHostPageColumnPing), top, light);
+
+	// A line that can be chosen: then its games, their players and its region
 	if (says == kHostPageSaysCanHost)
 	{
 		// The region is the server's own word: made safe before it's drawn, as everything a server sends is
 		char region[kRelayListRegionLetters + 1];
 		OnlineScreens_SafeName(now.region, sizeof(now.region), region, sizeof(region));
-		HostPageCells const cells = HostPage_Cells(now.pingMs, now.games, linePlayers[place], playersKnown, region,
-			GetTextString(TEXTSTRING_HOSTPAGE_MS));
-		Cell(name, HostPage_Column(kHostPageColumnServer), top, brightness);
-		Cell(cells.ping, HostPage_Column(kHostPageColumnPing), top, brightness);
-		Cell(cells.games, HostPage_Column(kHostPageColumnGames), top, brightness);
-		Cell(cells.players, HostPage_Column(kHostPageColumnPlayers), top, brightness);
-		Cell(cells.region, HostPage_Column(kHostPageColumnRegion), top, brightness);
+		HostPageCells const cells = HostPage_Cells(now.games, linePlayers[place], playersKnown, region);
+		Cell(cells.games, HostPage_Column(kHostPageColumnGames), top, light);
+		Cell(cells.players, HostPage_Column(kHostPageColumnPlayers), top, light);
+		Cell(cells.region, HostPage_Column(kHostPageColumnRegion), top, light);
 		return;
 	}
 
-	// Any other line: dimmed, its name, then why it can't be chosen, across the other columns
+	// Any other line: why it can't be chosen, across the columns after its ping
 	char why[200];
 	HostPage_WhyLine(TheWords(), says, name, now.why, why, sizeof(why));
-	Cell(name, HostPage_Column(kHostPageColumnServer), top, brightness / 2);
-	Cell(why, HostPage_WhyColumn(), top, brightness / 2);
+	Cell(why, HostPage_WhyColumn(), top, light);
 }
 
 int HostPage_RowNamed(const char *name)

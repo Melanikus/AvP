@@ -1028,13 +1028,21 @@ static void TestTheHomeRefusals()
 	std::string const stands = SourceSlice(page, "bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(stands, "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;") && Has(stands, "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;") &&
 		Has(stands, "case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;") && Has(stands, "case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;") &&
-		Has(stands, "default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_NOTAPPROVED_BEFORE; break;"),
-		"NOBODY BLOCKED SILENTLY: a line with no yes, being asked, with no answer, not asked, or not approved each has its words");
+		Has(stands, "words = now.access != kRelayAccessIsApproved ? TEXTSTRING_NOTAPPROVED_BEFORE : now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;"),
+		"NOBODY BLOCKED SILENTLY: a line with no yes, being asked, with no answer, not asked, not approved, or approved with no games up each has its words");
 	// Modified 2026-11-11 by Melanikus for the AvP port (hash 2): a line not approved yet is said in PO's ruling's words (R-SRV-P3), "Not
 	// approved on <name> yet: ask on the Online page", the name between the two parts and never inside a printf form
-	Check(Has(stands, "_snprintf(out, size - 1, \"%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER));") &&
+	Check(Has(stands, "_snprintf(out, size - 1, \"%s%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);") &&
 		Has(names, "\"Not approved on \",\n\t\" yet: ask on the Online page\","),
 		"a line not approved yet: \"Not approved on <name> yet: ask on the Online page\", in PO's words (R-SRV-P3)");
+	// Added 2026-11-11 by Melanikus for the AvP port (the owner: "We should show the server ping to the user if no games are up"): every
+	// line's words end with its own ping when its last visit measured one, in the host page's words, so an approved line with no games still
+	// shows its server's round trip
+	size_t const pingMade = stands.find("HostPage_PingWords(now.pingMs, now.state, GetTextString(TEXTSTRING_HOSTPAGE_MS), GetTextString(TEXTSTRING_PING_ASKING), measured, sizeof(measured));");
+	Check(Has(stands, "if (now.pingMs >= 0)\n\t{") && pingMade != std::string::npos && pingMade < stands.find("if (words == TEXTSTRING_NOTAPPROVED_BEFORE)") &&
+		Has(stands, "snprintf(ping, sizeof(ping), \" - %s\", measured);") &&
+		Has(stands, "_snprintf(out, size - 1, \"%s: %s%s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), ping);") &&
+		Has(names, "\"no games up yet\","), "AN APPROVED LINE WITH NO GAMES SHOWS ITS PING: \"<name>: no games up yet - 42 ms\", and every line's words carry its ping once measured");
 	Check(Has(stands, "OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));") &&
 		Has(stands, "OnlineScreens_SafeName(now.why ? now.why : \"\", sizeof(why), why, sizeof(why));") &&
 		Has(stands, "_snprintf(out, size - 1, \"%s: %s %s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);"),

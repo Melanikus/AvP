@@ -193,6 +193,36 @@
 					"to": "void HostPage_Frame(void)\n{\n\tRelayList_FindGames();\n\tint count = 0;\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a line's ping isn't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page.cpp",
+					"from": "\tCell(ping, HostPage_Column(kHostPageColumnPing), top, light);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line that isn't being asked says Asking...",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\telse if (lineState == kRelayLineAsking)\n",
+					"to": "\telse if (true)\n"
+				}
+			]
+		},
+		{
+			"name": "a line's ping isn't held to 9999",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%d %s\", pingMs > 9999 ? 9999 : pingMs, msWords ? msWords : \"\");\n",
+					"to": "\t\tsnprintf(out, room, \"%d %s\", pingMs, msWords ? msWords : \"\");\n"
+				}
+			]
 		}
 	]
 }

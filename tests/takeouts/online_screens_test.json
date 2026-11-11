@@ -1169,8 +1169,28 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\t_snprintf(out, size - 1, \"%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER));\n",
-					"to": "\t\t_snprintf(out, size - 1, \"%s: %s\", name, GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE));\n"
+					"from": "\t\t_snprintf(out, size - 1, \"%s%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);\n",
+					"to": "\t\t_snprintf(out, size - 1, \"%s: %s%s\", name, GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), ping);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an approved line with no games up shows nothing, not even its ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;",
+					"to": "-1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's words never carry its ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tsnprintf(ping, sizeof(ping), \" - %s\", measured);\n",
+					"to": ""
 				}
 			]
 		}

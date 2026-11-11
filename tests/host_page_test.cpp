@@ -153,8 +153,8 @@ int main()
 
 	Check(columnsFit, "the five columns are inside the menus' edges, left to right, and none overlaps the next");
 	HostPageColumn const why = HostPage_WhyColumn();
-	Check(why.x == HostPage_Column(kHostPageColumnPing).x && why.x + why.width <= kHostPageRight && why.x >= HostPage_Column(kHostPageColumnServer).x +
-		HostPage_Column(kHostPageColumnServer).width, "a line that can't be chosen says why after its name, inside the right edge");
+	Check(why.x == HostPage_Column(kHostPageColumnGames).x && why.x + why.width <= kHostPageRight && why.x >= HostPage_Column(kHostPageColumnPing).x +
+		HostPage_Column(kHostPageColumnPing).width, "a line that can't be chosen says why after its name and its ping, inside the right edge");
 	Check(HostPage_Column(-5).x == HostPage_Column(0).x && HostPage_Column(99).x == HostPage_Column(kHostPageColumns - 1).x,
 		"a column number out of range is held to the first or the last");
 
@@ -221,15 +221,35 @@ int main()
 	Check(sum == kHostPageMostPlayers, "and no number of games can make the sum overflow");
 
 	// THE CELLS
-	HostPageCells const good = HostPage_Cells(42, 3, 7, true, "nyc", "ms");
-	Check(strcmp(good.ping, "42 ms") == 0 && strcmp(good.games, "3") == 0 && strcmp(good.players, "7") == 0 && strcmp(good.region, "\"nyc\"") == 0,
-		"a line that can be chosen: \"42 ms\", its games, its players, and its region in quotes, as the server's own word");
-	HostPageCells const early = HostPage_Cells(-1, -4, 2, false, "", "ms");
-	Check(strcmp(early.ping, "?") == 0 && strcmp(early.games, "0") == 0 && strcmp(early.players, "...") == 0 && strcmp(early.region, "-") == 0,
-		"before it's known: \"?\" for the ping, \"...\" for the players, \"-\" for no region");
-	HostPageCells const huge = HostPage_Cells(123456, 99999, 99999, true, "a-region-of-16ch-and-more", "ms");
-	Check(strcmp(huge.ping, "9999 ms") == 0 && atoi(huge.games) == kRelayListMostGames && atoi(huge.players) == kHostPageMostPlayers &&
-		strlen(huge.region) <= kRelayListRegionLetters + 2, "numbers past their limits are held to them, and a region to its 16 letters");
+	HostPageCells const good = HostPage_Cells(3, 7, true, "nyc");
+	Check(strcmp(good.games, "3") == 0 && strcmp(good.players, "7") == 0 && strcmp(good.region, "\"nyc\"") == 0,
+		"a line that can be chosen: its games, its players, and its region in quotes, as the server's own word");
+	HostPageCells const early = HostPage_Cells(-4, 2, false, "");
+	Check(strcmp(early.games, "0") == 0 && strcmp(early.players, "...") == 0 && strcmp(early.region, "-") == 0,
+		"before they're known: \"...\" for the players, \"-\" for no region");
+	HostPageCells const huge = HostPage_Cells(99999, 99999, true, "a-region-of-16ch-and-more");
+	Check(atoi(huge.games) == kRelayListMostGames && atoi(huge.players) == kHostPageMostPlayers && strlen(huge.region) <= kRelayListRegionLetters + 2,
+		"numbers past their limits are held to them, and a region to its 16 letters");
+
+	// THE PING, on every line, games or none (the owner, 2026-11-11: "We should show the server ping to the user if no games are up")
+	char ping[48];
+	HostPage_PingWords(42, kRelayLineAnswered, "ms", "Asking...", ping, sizeof(ping));
+	Check(strcmp(ping, "42 ms") == 0, "a line that answered shows its round trip, \"42 ms\", whatever its games");
+	HostPage_PingWords(-1, kRelayLineAsking, "ms", "Asking...", ping, sizeof(ping));
+	Check(strcmp(ping, "Asking...") == 0, "before its first answer: \"Asking...\" (PO's word)");
+	HostPage_PingWords(57, kRelayLineAsking, "ms", "Asking...", ping, sizeof(ping));
+	Check(strcmp(ping, "57 ms") == 0, "and while it's asked again, the round trip it had");
+	bool noNumber = true;
+
+	for (int state : { kRelayLineNoYes, kRelayLineNoAnswer, kRelayLineNotAsked, kRelayLineAnswered })
+	{
+		HostPage_PingWords(-1, state, "ms", "Asking...", ping, sizeof(ping));
+		noNumber = noNumber && strcmp(ping, "-") == 0;
+	}
+
+	Check(noNumber, "a line with no round trip that isn't being asked shows \"-\", never \"Asking...\": its row says why");
+	HostPage_PingWords(123456, kRelayLineAnswered, "ms", "Asking...", ping, sizeof(ping));
+	Check(strcmp(ping, "9999 ms") == 0, "and a round trip past 9999 ms is taken as 9999");
 
 	// THE WORDS: never a printf form, and R-SRV-P3's own words for a line not approved yet
 	HostPageWords words = {};
@@ -277,6 +297,11 @@ int main()
 	std::string const askAgain = Slice(pressed, "case kHostPageAskAgain:", "return false;");
 	Check(Count(page, "RelayList_FindGames();") == 2 && Has(opened, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();"),
 		"the page asks the lines only as it opens and when the player presses Enter on a line that didn't answer: never on a timer, never on each answer");
+	std::string const drawRow = Slice(page, "void HostPage_DrawRow(const AVPMENU_ELEMENT *row, int brightness, int chosenElement)\n{", "\n}\n");
+	size_t const pingDrawn = drawRow.find("Cell(ping, HostPage_Column(kHostPageColumnPing), top, light);");
+	size_t const canHostOnly = drawRow.find("if (says == kHostPageSaysCanHost)\n\t{");
+	Check(pingDrawn != std::string::npos && canHostOnly != std::string::npos && pingDrawn < canHostOnly && Count(drawRow, "Cell(ping,") == 1 &&
+		Has(drawRow, "HostPage_PingWords(now.pingMs, now.state, "), "EVERY LINE SHOWS ITS OWN PING, games or none, whether or not it can be chosen (the owner's ask, 2026-11-11)");
 
 	// The menus: Start game and Co-op campaign open the page, every time, and only a choice there goes on
 	std::string const press = Slice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{", "\n\t\t}\n");

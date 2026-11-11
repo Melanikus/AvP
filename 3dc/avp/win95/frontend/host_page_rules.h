@@ -83,10 +83,38 @@ inline HostPageColumn HostPage_Column(int column)
 // Where a line that can't be chosen says why: from the ping column to the right edge
 inline HostPageColumn HostPage_WhyColumn(void)
 {
-	HostPageColumn const ping = HostPage_Column(kHostPageColumnPing);
+	// From the games column on: the ping column shows every line's own round trip, whatever else is true of it (modified 2026-11-11, the
+	// owner's "We should show the server ping to the user if no games are up")
+	HostPageColumn const games = HostPage_Column(kHostPageColumnGames);
 	HostPageColumn const region = HostPage_Column(kHostPageColumnRegion);
-	HostPageColumn const why = { ping.x, region.x + region.width - ping.x };
+	HostPageColumn const why = { games.x, region.x + region.width - games.x };
 	return why;
+}
+
+// A line's ping, on every row, games or none (the owner, 2026-11-11: "We should show the server ping to the user if no games are up"): the
+// round trip of its last visit ("42 ms", taken as 9999 above that), or askingWords ("Asking...", PO's word) while its first answer is still
+// to come, or "-" for a line that has no number and isn't being asked (no yes, not asked, or no answer: its row says why). Always ended.
+inline void HostPage_PingWords(int pingMs, int lineState, const char *msWords, const char *askingWords, char *out, size_t room)
+{
+	if (!out || room == 0)
+	{
+		return;
+	}
+
+	if (pingMs >= 0)
+	{
+		snprintf(out, room, "%d %s", pingMs > 9999 ? 9999 : pingMs, msWords ? msWords : "");
+	}
+	else if (lineState == kRelayLineAsking)
+	{
+		snprintf(out, room, "%s", askingWords ? askingWords : "");
+	}
+	else
+	{
+		snprintf(out, room, "-");
+	}
+
+	out[room - 1] = 0;
 }
 
 // Which lines are shown: a screenful of at most kHostPageMostShown, the one that holds the chosen line. With the question chosen (or
@@ -261,29 +289,19 @@ inline void HostPage_WhyLine(const HostPageWords &words, HostPageSays says, cons
 	out[room - 1] = 0;
 }
 
-// The cells of a line that can be chosen: its last round trip ("42 ms", or "?" when none was measured), how many games its server listed,
-// how many players they have ("..." until the find's games have come), and its relay's region as its server named it (made safe already),
-// in quotes so nobody takes it for the game's own word, or "-" when it gave none. Each always ended.
+// The other cells of a line that can be chosen (its ping is HostPage_PingWords, on every row): how many games its server listed, how many
+// players they have ("..." until the find's games have come), and its relay's region as its server named it (made safe already), in quotes
+// so nobody takes it for the game's own word, or "-" when it gave none. Each always ended.
 struct HostPageCells
 {
-	char ping[24];
 	char games[12];
 	char players[12];
 	char region[kRelayListRegionLetters + 3];
 };
 
-inline HostPageCells HostPage_Cells(int pingMs, int games, int players, bool playersKnown, const char *safeRegion, const char *msWords)
+inline HostPageCells HostPage_Cells(int games, int players, bool playersKnown, const char *safeRegion)
 {
 	HostPageCells cells;
-
-	if (pingMs >= 0)
-	{
-		snprintf(cells.ping, sizeof(cells.ping), "%d %s", pingMs > 9999 ? 9999 : pingMs, msWords ? msWords : "");
-	}
-	else
-	{
-		snprintf(cells.ping, sizeof(cells.ping), "?");
-	}
 
 	snprintf(cells.games, sizeof(cells.games), "%d", games < 0 ? 0 : games > kRelayListMostGames ? kRelayListMostGames : games);
 
@@ -305,7 +323,6 @@ inline HostPageCells HostPage_Cells(int pingMs, int games, int players, bool pla
 		snprintf(cells.region, sizeof(cells.region), "-");
 	}
 
-	cells.ping[sizeof(cells.ping) - 1] = 0;
 	cells.games[sizeof(cells.games) - 1] = 0;
 	cells.players[sizeof(cells.players) - 1] = 0;
 	cells.region[sizeof(cells.region) - 1] = 0;

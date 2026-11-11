@@ -234,6 +234,8 @@ static char OurTextStrings[][200] =
 	" servers in servers.cfg are asked",
 	"Asking every server again...",
 	"That server can't be hosted on now: its row says why.",
+	"Asking...",
+	"no games up yet",
 	"Find Games",
 	"Press ENTER to see the games on the server's online list.",
 	"Search",
