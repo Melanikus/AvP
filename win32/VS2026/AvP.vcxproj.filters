@@ -1103,6 +1103,9 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\floor_is_lava.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\alien_ways_view.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>

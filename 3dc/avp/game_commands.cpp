@@ -15,6 +15,8 @@
 //   only a host can restart a network game
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the NEWDYNAMICCOLLISIONS command, which says whether a slide along a wall goes on at any frame rate (#180)
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the FLOORISLAVA command, which says whether standard aliens climb walls and ceilings to reach you, from the next level's start (#109)
 #include "3dc.h"
 #include "console_command.hpp"
 #include "build_identity.h"
@@ -22,6 +24,7 @@
 #include "fmvCutscenes.h"
 #include "view_switches.h"
 #include "new_dynamic_collisions.h"
+#include "floor_is_lava.h"
 #include "logString.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -351,6 +354,35 @@ static void NewDynamicCollisionsCommand(char *words)
 	LogString(message);
 }
 
+// FLOORISLAVA, the console command: see floor_is_lava.h. A player's setting, not a cheat, and there in a network game too, where only the
+// host's counts, as only the host moves the aliens. It counts from the next level's start, as the aliens' map is built then, so in a level
+// the screen says so too. It isn't kept in the settings. (Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.)
+static void FloorIsLavaCommand(char *words)
+{
+	bool const took = FloorIsLava_FromWords(words, &FloorIsLavaAsked);
+	char const *said = took ? FloorIsLava_Words(FloorIsLavaAsked) : kFloorIsLavaRefused;
+
+	static char message[100];
+	_snprintf(message, sizeof(message) - 1, "%s", said);
+	message[sizeof(message) - 1] = 0;
+
+	// There's no HUD to show it on until a level has started
+	if (AvP.MainLoopRunning)
+	{
+		NewOnScreenMessage(message);
+
+		if (took)
+		{
+			static char fromNext[100];
+			_snprintf(fromNext, sizeof(fromNext) - 1, "%s", kFloorIsLavaFromTheNextLevel);
+			fromNext[sizeof(fromNext) - 1] = 0;
+			NewOnScreenMessage(fromNext);
+		}
+	}
+
+	LogString(message);
+}
+
 void CreateGameSpecificConsoleCommands(void)
 {
 	ShowDebuggingText.FPS = 0;
@@ -413,6 +445,14 @@ void CreateGameSpecificConsoleCommands(void)
 		"NEWDYNAMICCOLLISIONS",
 		"WHETHER A SLIDE ALONG A WALL GOES ON AT ANY FRAME RATE: ON OR OFF. OFF MEETS WALLS AS IN 1999. ON ITS OWN, SWITCHES IT",
 		NewDynamicCollisionsCommand
+	);
+
+	// A player's setting too, there for everyone, so that a player can put 1999's aliens back to compare. See floor_is_lava.h. (#109)
+	ConsoleCommand::Make
+	(
+		"FLOORISLAVA",
+		"WHETHER ALIENS CLIMB WALLS AND CEILINGS TO REACH YOU: ON OR OFF. OFF MOVES THEM AS IN 1999. ON ITS OWN, SWITCHES IT. FROM THE NEXT LEVEL",
+		FloorIsLavaCommand
 	);
 
 	// Only do anything with -dev, and they say so without it. See view_switches.h.
