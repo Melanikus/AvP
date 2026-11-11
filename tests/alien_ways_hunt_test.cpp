@@ -162,9 +162,11 @@ static void TestWandering(const std::string &source)
 	Check(!Has(WithoutSpaces(After(wander, call)), "UseStandardGravity=1"), "SOURCE: nothing after the call puts gravity back on in the same frame, however it's written");
 
 	// It crawls when AlienShouldBeCrawling says so, as a hunting alien does, and that says so for an alien on its way. Before, wandering
-	// never changed whether the alien was crouched, so a wandering alien on a way would have climbed the walls upright. Only with the alien
-	// ways switched on: AlienShouldBeCrawling's older reasons would otherwise change the 1999 game for everyone.
-	Check(Has(wander, "\tif (AlienWaysSwitchedOn)\n\t{\n\t\tint redo=0;"), "SOURCE: a wandering alien's crouching changes only with the alien ways switched on");
+	// never changed whether the alien was crouched, so a wandering alien on a way would have climbed the walls upright. Only for a standard
+	// alien on a way, or clinging between ways: AlienShouldBeCrawling's older reasons would otherwise change the 1999 game for every alien,
+	// predaliens and praetorians too (R-LAVA-2; modified 2026-11-11 by Melanikus (Third) for the AvP port, #109, Secondary's plan, F4).
+	Check(Has(wander, "\tif (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))\n\t{\n\t\tint redo=0;"),
+		"SOURCE: a wandering alien's crouching changes only for a standard alien on a way, or clinging between ways");
 	Check(Has(wander, "if(AlienShouldBeCrawling(sbPtr))\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 1;\n\t\t\t\tredo=1;"),
 		"SOURCE: a standing alien crawls when it should, as one on its way does");
 	Check(Has(wander, "if(!AlienShouldBeCrawling(sbPtr))\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 0;\n\t\t\t\tredo=1;"),

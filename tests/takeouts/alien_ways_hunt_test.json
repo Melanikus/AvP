@@ -195,12 +195,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a wandering alien's crouching changes with the alien ways switched off too",
+			"name": "SOURCE: a wandering alien's crouching changes for every kind of alien",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tif (AlienWaysSwitchedOn)\n\t{\n\t\tint redo=0;",
-					"to": "\tif (1)\n\t{\n\t\tint redo=0;"
+					"from": "\tif (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))\n\t{\n\t\tint redo=0;",
+					"to": "\tif (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tint redo=0;"
 				}
 			]
 		},
@@ -301,6 +301,16 @@
 					"file": "3dc/avp/bh_near.cpp",
 					"from": "\t\tAlienWays_WatchNote(sbPtr, \"Wander knows of its target, so it goes back to Hunt\");\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien's crouching changes for every standard alien, on a way or not",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))\n\t{\n\t\tint redo=0;",
+					"to": "\tif (alienStatusPointer->Type == AT_Standard)\n\t{\n\t\tint redo=0;"
 				}
 			]
 		}

@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a wandering alien's crouching changes only for a standard alien on a way, or clinging between ways, so predaliens, praetorians
+//   and any alien off the ways wander as they did in 1999 (R-LAVA-2; Secondary's plan for floor is lava, F4)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of one if-statement in the alien's jump code, which was never
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
@@ -1430,9 +1433,13 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	//   crawl, or a praetorian that prefers to), and it stands up again when that stops.
 	//   So an alien on a way crawls in every state that steers it, rather than climbing the walls upright. Wandering has no air duct to
 	//   head for, so that's all it asks.
-	//   Only with the alien ways switched on (-dev -alienways, alien_ways.h). Without them, a wandering alien is left as it was in 1999,
-	//   since those older reasons would otherwise change the game for everyone, ways or no ways.
-	if (AlienWaysSwitchedOn)
+	//   Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109; Secondary's plan for floor is lava, F4): only for a standard alien
+	//   on a way, or clinging between ways (KeepsClinging, alien_ways.h). Wander runs for every kind of alien, and the owner's ruling
+	//   R-LAVA-2 is "standard aliens only (predaliens keep today's paths)"; and an alien off the ways is left as it was in 1999, since
+	//   those older reasons would otherwise change the game for every alien, ways or no ways. Its last Steer says whether it's on a way
+	//   (AlienWays_Following), as this comes before Wander asks for its way this frame. It used to be only "the ways switched on", which
+	//   after the flip would have been every alien of every kind.
+	if (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))
 	{
 		int redo=0;
 
