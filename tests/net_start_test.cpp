@@ -3959,7 +3959,7 @@ static void TestTheRelayChannel()
 	std::string const interceptEnd = Between(networking, "return RelayEndToEndHeard(on, now);\n\t}", "\n}\n");
 	Check(Has(interceptEnd, "\n\trelayStrangersDropped++;\n\treturn 1;") && !Has(interceptEnd, "RelayControlDatagram(") && !Has(interceptEnd, "return 0;"),
 		"SOURCE: without the channel, in use or used, the intercept drops whatever a relay sends: version 1's plain path is gone");
-	std::string const beginning = Between(networking, "static bool RelayV2Begin(const ENetAddress &relay, const char *region, bool times, const char **why)\n{", "\n}\n");
+	std::string const beginning = Between(networking, "static bool RelayV2Begin(const ENetAddress &relay, int line, const char *region, bool times, const char **why)\n{", "\n}\n");
 	std::string const forgetting = Between(networking, "static void RelayEndToEndForget()\n{", "\n}\n");
 	Check(Has(beginning, "relayV2Step = kRelayV2Keys;\n\trelayV2Used = true;\n\treturn true;") && Has(forgetting, "relayV2Used = false;"),
 		"SOURCE: a game that has begun a channel is heard that way until its end forgets it");
@@ -3987,7 +3987,7 @@ static void TestTheRelayChannel()
 		&& Has(relayMachines, "\t\tmemset(hellos, 0, sizeof(hellos));\n\t\tsendCount = 0;\n\t\tmemset(sends, 0, sizeof(sends));")
 		&& Has(relayMachines, "\t\tstartedAt = askedAt = portAt = helloAt = 0;\n\t\tsendCount = 0;\n\t\tmemset(sends, 0, sizeof(sends));"),
 		"SOURCE: a game through the relay that ends wipes the room's token and pass, a joiner's ticket, and the messages still waiting with them");
-	std::string const handshake = Between(networking, "static uint16_t RelayHandshake(const char *region, const char *code)", "relayJoinStep = kNetRelayJoinStepNone;\n\n\tif (!relayJoiner.Ready())");
+	std::string const handshake = Between(networking, "static uint16_t RelayHandshake(int line, const char *region, const char *code)", "relayJoinStep = kNetRelayJoinStepNone;\n\n\tif (!relayJoiner.Ready())");
 	Check(Has(handshake, "if (from.host == relayAddress.host && HasMagic(packet, static_cast<size_t>(got), \"AVPR\"))")
 		&& !Has(handshake, "RelayControlDatagram(") && !Has(handshake, "else if (from.host == relayAddress.host"),
 		"SOURCE: a joiner's handshake with the relay hears only the channel, and never reads the relay plain");
