@@ -38,7 +38,7 @@ jobs:
       # Only scanned code on avpx_main gets built. If this step fails there is no build. A skipped or missing scan counts
       # as a failure.
       - name: Refuse anything that is not scanned code on avpx_main
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -53,7 +53,7 @@ jobs:
 
       # The same script every pull request runs (game-build.yml), so this can't be the first time these steps have run.
       - name: Build the game and make its package
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
 
       # The symbols and map of the game and its two film libraries, to name the place of a crash in this build. They're never in the
@@ -80,7 +80,7 @@ jobs:
       # public repository keeps. The log has a SHA-256 for every file and for the list. The next job checks them and records the list's
       # provenance, so a copy downloaded later can be checked with gh attestation verify. Libraries only, kept for a week.
       - name: List the libraries' hashes
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: |
           $root = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x86-windows'
           $list = Join-Path $root 'SHA256SUMS.txt'
@@ -100,7 +100,7 @@ jobs:
           if-no-files-found: error
 
       - name: Say the libraries' artifact hash
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           DIGEST: ${{ steps.libraries.outputs.artifact-digest }}
         run: "\"The artifact's own SHA-256, of the zip GitHub keeps: $env:DIGEST\""
@@ -134,7 +134,7 @@ jobs:
 
       # A list is only worth recording if it's true: every file it names is there with that hash, and nothing else is
       - name: Refuse a package or libraries that don't match their list
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: |
           foreach ($folder in 'package', 'libraries') {
             $root = (Resolve-Path -LiteralPath $folder).Path

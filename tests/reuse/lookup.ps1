@@ -3,7 +3,7 @@
 # reading, C1: a branch's own tests run with every right in the job that records, so nothing there can vouch for a branch's results); the
 # workflow and these scripts byte for byte the same; the attestation checked with --deny-self-hosted-runners.
 #
-#   lookup.ps1 -Root <the repository> -Work <folder> [-Dry]
+#   lookup.ps1 -Root <the repository> -Work <folder> [-Dry]   (it also writes <work>\machine.txt: this machine's words, see Reuse.psm1)
 #
 # It's run from a copy of tests/reuse taken from HEAD, so it's told where the repository is. It writes <work>\plan.json, and
 # <work>\skip.txt for tests/build.ps1 -Skip: the tests not to build, as their result is reused. With -Dry (the nightly run), nothing is
@@ -41,6 +41,11 @@ function Write-Plan([object[]]$reused, [object[]]$notes, [string]$verified)
     [System.IO.File]::WriteAllLines((Join-Path $Work 'skip.txt'), [string[]]@(if (-not $Dry) { $reused | ForEach-Object { $_.test } }))
 }
 
+# This machine's words, written down before any test runs, for the job that works the records out on another machine (record.ps1)
+$machine = Get-MachineWords $Root
+[System.IO.File]::WriteAllText((Join-Path $Work 'machine.txt'), $machine)
+"This machine: $machine"
+
 $notes = [System.Collections.Generic.List[string]]::new()
 try
 {
@@ -62,7 +67,7 @@ try
     $verified = ''
     $decided = @{}
     $reused = [System.Collections.Generic.List[object]]::new()
-    $shared = Get-SharedParts $Root
+    $shared = Get-SharedParts $Root $machine
     $rules = Get-ImportRules $Root
     $sources = 0
     foreach ($run in $candidates)
@@ -93,13 +98,13 @@ try
         $refusal = Get-RecordsRefusal $data $id $sha
         if ($refusal) { $notes.Add("run $id ($sha): its records aren't believed, as $refusal"); continue }
 
-        foreach ($record in @($data.records))
+        foreach ($record in @($data.records | Where-Object { $_ }))
         {
             $test = "$($record.test)"
             if ($decided.ContainsKey($test)) { continue }
             if ($null -eq (Get-HeadBytes $Root "tests/$test.args")) { $decided[$test] = 'gone'; continue }
             if ($record.result -cne 'passed') { $decided[$test] = "it failed in run $id"; continue }
-            try { $mine = Get-ReuseKey $Root $test 'unit' ([string[]]@($record.includes)) ([string[]]@($record.imports)) $shared $rules }
+            try { $mine = Get-ReuseKey $Root $test 'unit' ([string[]]@($record.includes | Where-Object { $null -ne $_ })) ([string[]]@($record.imports | Where-Object { $null -ne $_ })) $shared $rules }
             catch { $decided[$test] = "its key couldn't be worked out here: $_"; continue }
             if ($mine.class -ceq 'C') { $decided[$test] = "class C (text $($mine.textClass), imports $($mine.importClass)): always runs"; continue }
             if ($mine.key -cne "$($record.key)") { $decided[$test] = "run $id's record differs: $(Get-FirstDifference $mine @($record.parts))"; continue }

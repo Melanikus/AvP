@@ -57,7 +57,7 @@ jobs:
       # the command it would be run as part of it.
       - name: Refuse anything that may not be released
         id: refuse
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
@@ -66,18 +66,18 @@ jobs:
       # Hudson is the team's test bot, in the game since 2026-11-09, and a player's game must never run any of it. Every pull request has
       # already run this: this is the last look.
       - name: Refuse any way a player's game could run Hudson
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./tools/check-hudson-asleep.ps1
 
       # The owner's ruling, 2026-11-09: nothing in a release may reach one of our servers; the code for them runs only with -dev. Every
       # pull request has already run this: this is the last look.
       - name: Refuse any way a player's game could reach one of our servers
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./tools/check-servers-dev-only.ps1
 
       # A function added to the game that the game never uses is dead code left behind. It reads the code, so it needs nothing from GitHub.
       - name: Refuse a new function the game does not use
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./tools/check-new-functions.ps1
 
   build:
@@ -95,14 +95,14 @@ jobs:
 
       # The same script every pull request runs (game-build.yml), so this can't be the first time these steps have run.
       - name: Build the game and make its package
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           # So the game's log says which release it is (tools/build-and-package.ps1 writes it into 3dc/build_version.h)
           VERSION: ${{ inputs.version }}
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
 
       - name: Refuse a package with anything missing
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./tools/check-release-package.ps1 -Package "$env:RUNNER_TEMP\package" -Commit $env:GITHUB_SHA
 
       # Once the package is checked: the symbols and map of the game and its two film libraries, to name the place of a crash in
@@ -119,7 +119,7 @@ jobs:
           if-no-files-found: error
 
       - name: Zip the package, and work out its hash
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -186,7 +186,7 @@ jobs:
       # ever shows in the log. A redirect isn't followed, so the header can't be sent anywhere else.
       - name: Ask VirusTotal about the package
         id: ask
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
           VERSION: ${{ inputs.version }}
@@ -307,7 +307,7 @@ jobs:
 
       # The owner may approve this long after the checks ran.
       - name: Refuse if anything has changed since the checks
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           VERSION: ${{ inputs.version }}
           TAG: ${{ needs.check.outputs.tag }}
@@ -361,7 +361,7 @@ jobs:
       # What VirusTotal found goes in the draft's text, with the link to its report. If any scanner flagged the zip, the text starts by
       # saying so, and this step ends red once the draft is made (the user's ruling, 2026-11-08), so the run shows it too.
       - name: Make the draft
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           VERSION: ${{ inputs.version }}
           TAG: ${{ needs.check.outputs.tag }}

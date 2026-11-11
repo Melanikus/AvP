@@ -33,7 +33,7 @@ runs:
     # The names come in through the environment, never pasted into the script. Each one has to be a port's name, and the baseline has to
     # be a commit's full hash: a value starting with a dash would otherwise be read by git or vcpkg as an option.
     - name: Fetch the libraries
-      shell: pwsh
+      shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
       env:
         PORTS: ${{ inputs.ports }}
         SANITIZED_PORTS: ${{ inputs.sanitized-ports }}

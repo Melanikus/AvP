@@ -56,7 +56,7 @@ jobs:
       # pasted into the script itself, so nothing typed can become part of it.
       - name: Choose the lists
         id: choose
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           ASKED: ${{ github.event.inputs.lists }}
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -152,7 +152,7 @@ jobs:
       # names anything there skips this.
       - name: See whether any list in this batch links the game's libraries
         id: libraries
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           ITEMS: ${{ matrix.batch.items }}
         run: |
@@ -174,7 +174,7 @@ jobs:
       # run-batch.ps1 runs each list of the batch through run.ps1, in a PowerShell of its own, every one even after one fails, and
       # gives back 1 if any row wasn't noticed or couldn't be run, naming each list. A list whose test isn't here fails the same way.
       - name: Run this batch's lists
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           ITEMS: ${{ matrix.batch.items }}
         run: |

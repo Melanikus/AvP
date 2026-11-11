@@ -132,6 +132,45 @@ Check ($changed.key -cne $first.key) 'a key made from a shorter list of what the
 $changed = Key 'zz_key_test' $includes ($floor + 'API-MS-WIN-CRT-MATH-L1-1-0.DLL!sqrt')
 Check ($changed.key -cne $first.key -and $changed.class -ceq 'A' -and (Get-FirstDifference $changed $first.parts) -ceq 'imports changed') "another allowed import changes the key, by the imports (it says: $(Get-FirstDifference $changed $first.parts))"
 
+# --- the machine's words given by the Unit tests job, and how git puts the files on the disk
+$given = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
+$givenAgain = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
+$givenOther = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 2.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
+Check ($given.key -ceq $givenAgain.key -and $given.key -cne $givenOther.key -and (Get-FirstDifference $givenOther $given.parts) -ceq 'machine changed') "the machine's words given from the test job make the machine part, and other words change it (it says: $(Get-FirstDifference $givenOther $given.parts))"
+$threw = $false
+try { [void](Get-SharedParts $work "not the machine's words") } catch { $threw = $true }
+Check $threw "words that aren't in the machine's shape are refused"
+
+Write-File '.gitattributes' "*.h text eol=crlf`n"
+Commit 'line endings'
+$changed = Key
+Check ($changed.key -cne $first.key -and (Get-FirstDifference $changed $first.parts) -ceq 'checkout changed') "a .gitattributes changes the key, by how git puts the files on the disk (it says: $(Get-FirstDifference $changed $first.parts))"
+Remove-Item -LiteralPath (Join-Path $work '.gitattributes')
+Commit 'no line endings rule'
+Check ((Key).key -ceq $first.key) '  and with it gone, the key is the first one again'
+
+# --- git's answers are read whole, whatever they are (Secondary's R2), and only plain files are believed (R3)
+Clear-HashCache
+Check ($null -eq (Get-HeadBytes $work '3dc')) "a folder's name gives no file's bytes"
+$after = Get-HeadText $work '3dc/b.h'
+Check ($after -ceq [System.IO.File]::ReadAllText((Join-Path $work '3dc/b.h'))) '  and the next file read after it is read whole and right, as its answer was read to its end'
+Check ($null -eq (Get-HeadBytes $work '3dc/not-there.h')) "a name the commit hasn't got gives no bytes"
+Check ((Get-HeadText $work '3dc/a.h') -ceq [System.IO.File]::ReadAllText((Join-Path $work '3dc/a.h'))) '  and the next one is right too'
+$was = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$blob = "$('3dc/b.h' | & git -C $work hash-object -w --stdin 2>$null)".Trim()
+& git -C $work update-index --add --cacheinfo "120000,$blob,3dc/link.h" 2>&1 | Out-Null
+$ErrorActionPreference = $was
+Invoke-Git -C $work -c user.name=key-rows -c user.email=key-rows@localhost commit -q -m 'a link'
+Clear-HashCache
+Check ((Get-HeadMode $work '3dc/link.h') -ceq '120000') 'the made-up link is a link in the commit'
+$threw = $false
+try { [void](Key 'zz_key_test' @('3dc/a.h', '3dc/b.h', '3dc/link.h')) } catch { $threw = $true }
+Check $threw "a list of what the compiler read that names a link is refused: a link's bytes are only where it points"
+Invoke-Git -C $work rm -q --cached 3dc/link.h
+Invoke-Git -C $work -c user.name=key-rows -c user.email=key-rows@localhost commit -q -m 'no link'
+Clear-HashCache
+Check ((Key).key -ceq $first.key) '  and with the link gone, the key is the first one again'
+
 # --- what's on the disk and not in the commit is never believed
 Clear-HashCache
 $header = Join-Path $work '3dc/b.h'
@@ -218,7 +257,7 @@ foreach ($bad in @(
     Check ($why -cne '') "a source run is refused for $($bad.what) ($why)"
 }
 
-function Good-Records { [pscustomobject]@{ schema = 2; run = [pscustomobject]@{ id = '11'; sha = ('a' * 40); event = 'push'; ref = 'refs/heads/avpx_main' }; records = @(
+function Good-Records { [pscustomobject]@{ schema = 3; run = [pscustomobject]@{ id = '11'; sha = ('a' * 40); event = 'push'; ref = 'refs/heads/avpx_main' }; records = @(
     [pscustomobject]@{ test = 'zz_key_test'; key = ('b' * 64); kind = 'unit'; status = 'ran'; class = 'A'; importClass = 'A'; result = 'passed'; parts = @(, @('schema', ('c' * 64))); includes = @('3dc/a.h'); imports = @('KERNEL32.DLL!QueryPerformanceCounter') }) } }
 Check ((Get-RecordsRefusal (Good-Records) '11' ('a' * 40)) -ceq '') 'a records file in the shape record.ps1 writes is believed'
 foreach ($bad in @(

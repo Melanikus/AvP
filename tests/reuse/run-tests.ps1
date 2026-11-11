@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force $Work | Out-Null
 
 $tests = @(Get-ChildItem -LiteralPath $Programs -Filter '*.exe' -File | Sort-Object Name)
 $reused = @()
-if ($Plan -and (Test-Path -LiteralPath $Plan)) { $reused = @((Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json).reused) }
+if ($Plan -and (Test-Path -LiteralPath $Plan)) { $reused = @((Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json).reused | Where-Object { $_ }) }
 if ($tests.Count -eq 0 -and $reused.Count -eq 0) { throw 'No tests were built, and none is reused' }
 
 # Every process whose parent is one of these, and theirs, as far down as it goes (Windows keeps a child's parent's number after the

@@ -229,7 +229,7 @@ jobs:
       # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
       # bootstrap-vcpkg validates the signature of the vcpkg tool it downloads.
       - name: Get vcpkg at the manifest's baseline
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: |
           $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
           # It goes to git, so it has to be a commit's full hash first: a value starting with a dash would be read by git as an option
@@ -244,7 +244,7 @@ jobs:
           "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Build the pinned libraries, keeping their sources
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
           # --binarysource=clear: always build from source. A library restored from a cache has no sources to scan.
@@ -265,7 +265,7 @@ jobs:
       # fails the step: what it points at wouldn't be scanned at all. Get-ChildItem doesn't walk into links unless it's
       # told to, so nothing behind one is copied twice. Changed 2026-11-09 by Melanikus for the AvP port.
       - name: Collect each library's patched source
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
           $out = Join-Path $env:RUNNER_TEMP 'libsrc'
@@ -366,11 +366,11 @@ jobs:
       # it passes, written to a file, are the only ones the scan below lets through as "not recognised", and only in this run. Added
       # 2026-11-09 by Melanikus for the AvP port.
       - name: Test the advisories check
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         run: ./repo/tests/advisories-test.ps1
 
       - name: Known vulnerabilities from the projects' own advisories, for the libraries Snyk can't recognise
-        shell: pwsh
+        shell: pwsh -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'stop'; . '{0}'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }"
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./repo/tools/check-advisories.ps1 -Repository repo -Passed (Join-Path $env:RUNNER_TEMP 'advisories-passed.txt')

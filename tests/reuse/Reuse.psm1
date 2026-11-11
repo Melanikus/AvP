@@ -30,7 +30,7 @@
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-$script:kSchema = 2
+$script:kSchema = 3
 # The files that make and read the records. A source run must have these byte for byte as this commit has them (lookup.ps1), and they
 # are a part of every key.
 $script:kMachinery = @('.github/workflows/tests.yml', 'tests/build.ps1', 'tests/every_test', 'tests/reuse')
@@ -53,6 +53,12 @@ $script:reader = $null
 $script:readerRoot = ''
 $script:bytes = @{}
 $script:names = $null
+$script:modes = $null
+$kMostBytes = 64MB   # no file of ours is near this; an answer bigger than it isn't believed (Secondary's R2, PO)
+
+# Replacement objects are never followed: a .git/refs/replace entry could make a name give other bytes (Secondary's R1). The records are
+# worked out in a job of their own, on a machine no test has run on, so this is a second line, not the first.
+$env:GIT_NO_REPLACE_OBJECTS = '1'
 
 function Clear-HashCache
 {
@@ -61,6 +67,7 @@ function Clear-HashCache
     $script:readerRoot = ''
     $script:bytes = @{}
     $script:names = $null
+    $script:modes = $null
 }
 
 function Get-HeadBytes([string]$root, [string]$path)
@@ -81,16 +88,21 @@ function Get-HeadBytes([string]$root, [string]$path)
     $script:reader.StandardInput.Write("HEAD:$path`n")
     $script:reader.StandardInput.Flush()
     $out = $script:reader.StandardOutput.BaseStream
-    # The answer's first line: "<object> blob <size>", or "<what was asked> missing"
+    # The answer's first line: "<object> <kind> <size>", followed by that many bytes and a line end; or "<what was asked> missing" alone
     $line = [System.Collections.Generic.List[byte]]::new()
-    while ($true) { $b = $out.ReadByte(); if ($b -lt 0) { throw 'git stopped answering' }; if ($b -eq 10) { break }; $line.Add([byte]$b) }
+    while ($true) { $b = $out.ReadByte(); if ($b -lt 0) { throw 'git stopped answering' }; if ($b -eq 10) { break }; $line.Add([byte]$b); if ($line.Count -gt 300) { throw "git's answer didn't start as it should" } }
     $header = [System.Text.Encoding]::ASCII.GetString($line.ToArray())
-    if ($header -cnotmatch '^[0-9a-f]{40,64} blob ([0-9]+)$') { $script:bytes[$path] = $null; return $null }
-    $size = [int64]$Matches[1]
+    if ($header -cmatch ' missing$') { $script:bytes[$path] = $null; return $null }
+    if ($header -cnotmatch '^[0-9a-f]{40,64} (blob|tree|commit|tag) ([0-9]+)$') { throw "git's answer didn't start as it should: $header" }
+    $kind = $Matches[1]
+    $size = [int64]$Matches[2]
+    if ($size -gt $kMostBytes) { throw "$path is $size bytes, more than any file of ours, so it isn't believed" }
+    # The whole body is read whatever it is, so the next answer starts where it should (Secondary's R2); only a file's is kept
     $data = [byte[]]::new($size)
     $got = 0
-    while ($got -lt $size) { $n = $out.Read($data, $got, [int]($size - $got)); if ($n -le 0) { throw 'git stopped in the middle of a file' }; $got += $n }
+    while ($got -lt $size) { $n = $out.Read($data, $got, [int]($size - $got)); if ($n -le 0) { throw 'git stopped in the middle of an answer' }; $got += $n }
     if ($out.ReadByte() -ne 10) { throw "git's answer didn't end as it should" }
+    if ($kind -cne 'blob') { $script:bytes[$path] = $null; return $null }
     $script:bytes[$path] = $data
     return $data
 }
@@ -124,13 +136,26 @@ function Get-HeadNames([string]$root)
     if ($script:readerRoot -cne $root) { Clear-HashCache; $script:readerRoot = $root }
     if ($null -eq $script:names)
     {
-        $found = @(& git -C $root ls-tree -r --name-only HEAD 2>$null)
+        # "<mode> <kind> <object>`t<name>" a line: the mode says whether it's a plain file (100644, 100755), a link (120000) or another
+        # repository (160000)
+        $found = @(& git -C $root ls-tree -r HEAD 2>$null)
         if ($LASTEXITCODE -ne 0) { throw "git couldn't list this commit's files" }
-        $sorted = [string[]]@($found | Where-Object { $_ })
+        $modes = @{}
+        foreach ($line in $found) { if ($line -cmatch '^([0-7]{6}) \S+ \S+\t(.+)$') { $modes[$Matches[2]] = $Matches[1] } }
+        $sorted = [string[]]@($modes.Keys)
         [Array]::Sort($sorted, [StringComparer]::Ordinal)
         $script:names = $sorted
+        $script:modes = $modes
     }
     return $script:names
+}
+
+# A name's mode in HEAD: 100644 or 100755 for a plain file, 120000 for a link, 160000 for another repository, '' if HEAD hasn't got it
+function Get-HeadMode([string]$root, [string]$path)
+{
+    [void](Get-HeadNames $root)
+    if ($script:modes.ContainsKey($path)) { return $script:modes[$path] }
+    return ''
 }
 
 # Every name in HEAD under some paths (a file or a folder each)
@@ -157,7 +182,10 @@ function Get-DirtyFiles([string]$root)
 
 # ---- The parts every key shares
 
-function Get-SharedParts([string]$root)
+# What machine the tests are built and run on, in one line: the runner's image, Visual Studio's version and tools, the Windows SDKs,
+# and how git puts the files on its disk (its version and core.autocrlf: the compiler reads the files as checked out, not as committed).
+# The Unit tests job writes it down before any test runs; the job that works the records out, on another machine, is given that line.
+function Get-MachineWords([string]$root)
 {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $vsVersion = ''
@@ -171,9 +199,20 @@ function Get-SharedParts([string]$root)
     }
     $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include'
     $sdks = if (Test-Path -LiteralPath $kits) { (@(Get-ChildItem -LiteralPath $kits -Directory | ForEach-Object { $_.Name }) | Sort-Object) -join ',' } else { '' }
-    $machine = "image=$($env:ImageOS) $($env:ImageVersion);vs=$vsVersion;tools=$tools;sdks=$sdks"
+    $gitVersion = "$(& git --version 2>$null)".Trim()
+    $autocrlf = "$(& git -C $root config --get core.autocrlf 2>$null)".Trim()
+    return "image=$($env:ImageOS) $($env:ImageVersion);vs=$vsVersion;tools=$tools;sdks=$sdks;git=$gitVersion;autocrlf=$autocrlf"
+}
+
+# The parts every key shares. $machine is the line Get-MachineWords gave on the machine the tests ran on; left out, it's this machine's.
+function Get-SharedParts([string]$root, [string]$machine = '')
+{
+    if (-not $machine) { $machine = Get-MachineWords $root }
+    if ($machine -cnotmatch '^image=[^\r\n]*$') { throw "The machine's words aren't in their shape: $machine" }
 
     $names = Get-HeadNames $root
+    # How git puts the files on the disk is part of what the compiler reads (line endings, Secondary's R3): every .gitattributes in HEAD
+    $attributes = [string[]]@($names | Where-Object { $_ -ceq '.gitattributes' -or $_.EndsWith('/.gitattributes') })
     $tree = "$(& git -C $root rev-parse 'HEAD^{tree}' 2>$null)".Trim()
     if ($LASTEXITCODE -ne 0 -or $tree -cnotmatch '^[0-9a-f]{40}$') { throw "git couldn't say this commit's tree" }
 
@@ -182,6 +221,7 @@ function Get-SharedParts([string]$root)
         machineSays = $machine
         libraries = Get-FilesHash $root (Get-HeadFiles $root $script:kLibraryInputs)
         machinery = Get-FilesHash $root (Get-HeadFiles $root $script:kMachinery)
+        checkout = Get-FilesHash $root $attributes
         names = Get-TextHash (($names -join "`n") + "`n")
         tree = $tree
     }
@@ -285,6 +325,13 @@ function Get-ReuseKey([string]$root, [string]$test, [string]$kind, [string[]]$in
     }
     foreach ($import in $imports) { if ($import -cnotmatch '^[A-Za-z0-9_.-]+\.[dD][lL][lL]![A-Za-z0-9_?@$.#<>-]+$') { throw "An import isn't a DLL's name and a function's: $import" } }
     $files = [string[]]@($compiled)
+    # Only plain files: a link's bytes are the name of what it points to, and another repository's are only its commit, so neither says
+    # what the compiler read (Secondary's R3)
+    foreach ($file in $files)
+    {
+        $mode = Get-HeadMode $root $file
+        if ($mode -cne '100644' -and $mode -cne '100755') { throw "$file isn't a plain file in this commit (its mode is $mode), so what $test compiled can't be said by its bytes" }
+    }
     $textClass = Get-TextClass $root $test $files
     $importClass = Get-ImportClass $imports $rules
     $class = Get-Stricter $textClass $importClass
@@ -299,6 +346,7 @@ function Get-ReuseKey([string]$root, [string]$test, [string]$kind, [string[]]$in
     $parts.Add(@('machine', $shared.machine))
     $parts.Add(@('libraries', $shared.libraries))
     $parts.Add(@('machinery', $shared.machinery))
+    $parts.Add(@('checkout', $shared.checkout))
     $parts.Add(@('names', $shared.names))
     foreach ($file in $files) { $parts.Add(@("file:$file", (Get-HeadHash $root $file))) }
     $parts.Add(@('imports', (Get-TextHash (($sortedImports -join "`n") + "`n"))))
@@ -349,7 +397,7 @@ function Get-RecordsRefusal($data, [string]$id, [string]$sha)
     if ("$($data.run.id)" -cne $id -or "$($data.run.sha)" -cne $sha) { return "it says it's from another run or commit ($($data.run.id) at $($data.run.sha))" }
     if (@('push', 'schedule') -cnotcontains "$($data.run.event)") { return "it says it was made by a run started by $($data.run.event)" }
     if ("$($data.run.ref)" -cne "refs/heads/$script:kSourceBranch") { return "it says it was made on $($data.run.ref)" }
-    foreach ($record in @($data.records))
+    foreach ($record in @($data.records | Where-Object { $_ }))
     {
         if ("$($record.test)" -cnotmatch '^[A-Za-z0-9_]+$') { return "a record names a test that can't be one: $($record.test)" }
         if ("$($record.key)" -cnotmatch '^[0-9a-f]{64}$') { return "$($record.test)'s key isn't 64 hex digits" }
@@ -359,11 +407,11 @@ function Get-RecordsRefusal($data, [string]$id, [string]$sha)
         {
             if (@($part).Count -ne 2 -or "$($part[0])" -cnotmatch '^[A-Za-z0-9_:./+-]+$' -or "$($part[1])" -cnotmatch '^[0-9a-f]{40,64}$') { return "a part of $($record.test)'s key isn't a name and a hash" }
         }
-        foreach ($include in @($record.includes)) { if ("$include" -cnotmatch '^[A-Za-z0-9_./+-]+$') { return "$($record.test) names something it read that isn't a file's name" } }
-        foreach ($import in @($record.imports)) { if ("$import" -cnotmatch '^[A-Za-z0-9_.-]+\.[dD][lL][lL]![A-Za-z0-9_?@$.#<>-]+$') { return "$($record.test) names an import that isn't a DLL's name and a function's" } }
+        foreach ($include in @($record.includes | Where-Object { $null -ne $_ })) { if ("$include" -cnotmatch '^[A-Za-z0-9_./+-]+$') { return "$($record.test) names something it read that isn't a file's name" } }
+        foreach ($import in @($record.imports | Where-Object { $null -ne $_ })) { if ("$import" -cnotmatch '^[A-Za-z0-9_.-]+\.[dD][lL][lL]![A-Za-z0-9_?@$.#<>-]+$') { return "$($record.test) names an import that isn't a DLL's name and a function's" } }
     }
     return ''
 }
 
-Export-ModuleMember -Function Clear-HashCache, Get-HeadBytes, Get-HeadText, Get-TextHash, Get-BytesHash, Get-HeadHash, Get-HeadNames, Get-HeadFiles, Get-DirtyFiles, Get-SharedParts, Get-OwnFiles, Get-Stricter, Get-TextClass, Get-ImportRules, Get-ImportClass, Get-ReuseKey, Get-FirstDifference, Get-SourceRunRefusal, Get-RecordsRefusal
+Export-ModuleMember -Function Clear-HashCache, Get-HeadBytes, Get-HeadText, Get-HeadMode, Get-MachineWords, Get-TextHash, Get-BytesHash, Get-HeadHash, Get-HeadNames, Get-HeadFiles, Get-DirtyFiles, Get-SharedParts, Get-OwnFiles, Get-Stricter, Get-TextClass, Get-ImportRules, Get-ImportClass, Get-ReuseKey, Get-FirstDifference, Get-SourceRunRefusal, Get-RecordsRefusal
 Export-ModuleMember -Variable kMachinery, kSourceBranch
