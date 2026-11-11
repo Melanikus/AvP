@@ -1,11 +1,11 @@
-// The yes page: the player's yes to the server in servers.cfg, before anything at all goes to it (#175's last part). Written 2026-11-10 by
-// Melanikus for the AvP port.
+// The yes page: the player's yes to one servers.cfg line, before anything at all goes to its server (#175's last part). Written 2026-11-10
+// by Melanikus for the AvP port.
 //
 // WHY. servers.cfg is a file anyone can be told to replace ("put this line in your servers.cfg"), so before the game sends a byte to a line's
-// server, the player sees where it goes and says yes (the owner's ruling, #175). relay_list.cpp holds the list to that: until the yes,
-// it isn't started, so nothing goes to the server or its relay (relay_list.h, RelayList_LineToAgree). This page is where the player
-// answers. The yes is kept (servers_trust.h), so a line is asked about once on a PC; a new address, port or key is a new line, asked about
-// again. Deleting servers-trusted.cfg in %LOCALAPPDATA%\AVPx asks again about every line.
+// server, the player sees where it goes and says yes (the owner's ruling, #175). relay_list.cpp holds every line to that: nothing goes to
+// a line's server or its relay until that line's yes (relay_list.h, ONE MODEL FOR EVERY LINE). This page is where the player answers. The
+// yes is kept (servers_trust.h), so a line is asked about once on a PC; a new address, port or key is a new line, asked about again.
+// Deleting servers-trusted.cfg in %LOCALAPPDATA%\AVPx asks again about every line.
 //
 // WHAT IT SHOWS, in PO's words (2026-11-10; the owner may reword them once he's seen the page in a Hudson picture):
 //   Play online through this server?
@@ -15,11 +15,11 @@
 //   Its owner approves their own players, and sees your name, your key and your address while you play.
 // with two rows under it, "No, not now" first, then "Yes, use this server".
 //
-// THE WAYS IN are the three that would use the line: Find games, Host online and the Online access page. Each asks ServerYesPage_Needed
-// before it goes on (Primary hooks them into his screens; PO, 2026-11-10). A Hudson run doesn't see the page: relay_list.cpp needs no yes
-// in one, as nobody is there to answer. The one exception is a run asked for it with yespage= (hudson_plan.h), which sees it as a player
-// does and presses one of its rows; that yes holds for the run alone and is never kept (relay_list.h, RelayList_AgreeToTheLine).
-// Modified 2026-11-10 by Melanikus (Third) for the AvP port.
+// THE ONE WAY IN. Modified 2026-11-11 by Melanikus for the AvP port (one model for every line; the owner: "UNIFY THE UI"): the page opens
+// only from a line's row on the Online page (online_page.h), for that line, and goes back there after a yes or a no. There's no line "in
+// use" any more, so no other page asks for "the" line's yes: Find games and the host page show a line without its yes as just that, and
+// send it nothing. A Hudson run doesn't see the page unless it was asked for it with yespage= (hudson_plan.h): it sees it as a player
+// does, for each line, and presses one of its rows; that yes holds for the run alone and is never kept (relay_list.h, RelayList_AgreeToTheLineAt).
 
 #ifndef SERVER_YES_PAGE_H
 #define SERVER_YES_PAGE_H
@@ -27,21 +27,15 @@
 #include "menus.h"
 #include "server_yes_rules.h"
 
-// Before a way online: true when the line needs the player's yes first. Then the caller opens AVPMENU_SERVER_YES in its place, and after a
-// yes the page goes on to goTo, after a no back to backTo. False when there's nothing to ask (no line, a yes already given, or a Hudson
-// run): then the caller goes on as it was.
-bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo);
+// A line's row on the Online page was pressed and the line has no yes: true, and the page is ready to open for that line (its place among
+// servers.cfg's good lines). False when there's nothing to ask (no such line, or its yes is already given).
+bool ServerYesPage_OpenFor(int place);
 
-// A row on page from, going to page goTo, has been pressed: the page to open. That's the yes page in goTo's place when the row is one of
-// the ways online (server_yes_rules.h) and the line needs the player's yes first; goTo itself otherwise. hostsOnline is whether a host
-// would host online. Added 2026-11-10 by Melanikus for the AvP port (PO's rulings): menus.cpp asks it for every row that goes to a page.
-enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline);
-
-// The page has opened. False when there's no line waiting for a yes after all, and then menus.cpp goes back to the Multiplayer page.
+// The page has opened. False when its line has no yes waiting after all, and then menus.cpp goes back to the Online page.
 bool ServerYesPage_Opened(void);
 
-// A row was pressed. True, with page set, when the menus should go to another page: goTo after the yes (kept, RelayList_AgreeToTheLine),
-// backTo after the no, with nothing sent.
+// A row was pressed. True, with page set, when the menus should go to another page: the Online page, after the yes (kept,
+// RelayList_AgreeToTheLineAt) or after the no, with nothing sent.
 bool ServerYesPage_Pressed(int row, enum AVPMENU_ID *page);
 
 // The page's words, above its rows, which start at rowsTop (server_yes_rules.h, THE PAGE'S LAYOUT). Modified 2026-11-10 by Melanikus for

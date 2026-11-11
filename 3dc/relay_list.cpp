@@ -298,7 +298,7 @@ namespace
 		uint8_t relayP384[kNetCryptoP384PublicBytes];
 		uint8_t relayKem[kNetPqKemPublicBytes];
 
-		// A relay's keys, asked for by networking.cpp (RelayList_AskForRelayKeys; added 2026-11-09 by Melanikus for the AvP port). Each asking
+		// A relay's keys, asked for by networking.cpp (RelayList_AskForRelayKeysOn; added 2026-11-09 by Melanikus for the AvP port). Each asking
 		// has a number, and an answer says which asking it's for, so an answer to an older one is never taken for the newest.
 		bool keysWanted;
 		char keysRegion[kRelayListRegionLetters + 1];
@@ -773,7 +773,7 @@ namespace
 	// otherwise fixed words saying why not, which the caller hands on.
 	// (Its answer goes into the server's own keysAnswer, in Shared, never a buffer another server's check could share: modified 2026-11-11.)
 
-	// Keeps why the server's check ended without an answer, for RelayList_ServerState, and gives it back (added 2026-11-10, #188)
+	// Keeps why the server's check ended without an answer, and gives it back (added 2026-11-10, #188)
 	const char *CantUse(Shared *s, const char *why)
 	{
 		EnterCriticalSection(&s->lock);
@@ -1400,7 +1400,7 @@ namespace
 	}
 
 	// Makes the store and starts the thread, the first time either is needed. False if there's no server, or it can't start. Modified
-	// 2026-11-10 by Melanikus for the AvP port (#175): the server is its servers.cfg line (Relay_ServerName says when there's one).
+	// 2026-11-10 by Melanikus for the AvP port (#175): the server is a servers.cfg line (Server says when there's one).
 	// THE PLAYER'S YES (#175's last part; servers_trust.h says what it is and how it's kept). Added 2026-11-10 by Melanikus for the AvP
 	// port. Until the line has had it, the list isn't started (Start, below), so nothing at all goes to the line's server or its relay.
 	// Only the main thread reads or changes these, and the list's thread starts only after the yes.
@@ -1489,11 +1489,6 @@ namespace
 		if (shared)
 		{
 			return true;
-		}
-
-		if (!Relay_ServerName()[0])
-		{
-			return false;
 		}
 
 		// Nothing goes to a line's server or its relay before the player's yes to that line (#175's last part). Modified 2026-11-11 by
@@ -1605,16 +1600,6 @@ namespace
 	// This run's identity's whole id, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
 	uint8_t hostIdentity[kNetIdentityIdBytes];
 	bool hostIdentityGiven = false;
-}
-
-// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server's name is its servers.cfg line's, and there's no server setting in
-// AliensVsPredator.cfg at all, which is a text file people share and anyone can edit (tests/settings_file_test.cpp). Modified again the
-// same day (#175 PR 3b): every game has the file's first good line as its server, with -dev or without, as protocol version 2 is on for
-// players. What keeps it safe is the line itself: the server is trusted by its fingerprint alone (CheckTheServer, above).
-const char *Relay_ServerName(void)
-{
-	const ServersCfgServer *const line = Server();
-	return line ? line->name : "";
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: see relay_list.h
@@ -1823,91 +1808,8 @@ void RelayList_BeforeQuitting(unsigned int mostMs)
 	WriteTheNews();
 }
 
-void RelayList_FindRelays(void)
-{
-	if (!Start())
-	{
-		return;
-	}
-
-	EnterCriticalSection(&shared->lock);
-	shared->relaysWanted = true;
-	LeaveCriticalSection(&shared->lock);
-
-	Wake();
-}
-
-// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server's one relay, at its line's address and relay port, with the region the
-// server's check gave. Known only once the server is checked against its line and good.
-bool RelayList_Relays(RelayListRelay *relays, int *count)
-{
-	*count = 0;
-
-	if (!shared)
-	{
-		return false;
-	}
-
-	EnterCriticalSection(&shared->lock);
-	bool const known = shared->keyState == kKeyGood;
-
-	if (known)
-	{
-		memset(&relays[0], 0, sizeof(relays[0]));
-		memcpy(relays[0].region, shared->relayRegion, sizeof(relays[0].region));
-		snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
-		relays[0].port = shared->relayPort;
-		relays[0].address = shared->relayAddress;
-		*count = 1;
-	}
-
-	LeaveCriticalSection(&shared->lock);
-	return known;
-}
-
-// Added 2026-11-10 by Melanikus for the AvP port (#188): see relay_list.h. A list that hasn't started has asked nothing yet.
-int RelayList_ServerState(const char **why)
-{
-	*why = NULL;
-
-	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): a line the player hasn't said yes to is never asked, so there's
-	// no answer to wait for, only the yes
-	const ServersCfgServer *const line = Server();
-
-	if (line && !TheLineIsAgreed(*line))
-	{
-		return kRelayServerNeedsYes;
-	}
-
-	if (!shared)
-	{
-		return kRelayServerAsking;
-	}
-
-	EnterCriticalSection(&shared->lock);
-	int state = kRelayServerAsking;
-
-	if (shared->keyState == kKeyGood)
-	{
-		state = kRelayServerGood;
-	}
-	else if (shared->keyState == kKeyRefused)
-	{
-		state = kRelayServerCantUse;
-		*why = kKeysDontMatch;
-	}
-	else if (shared->serverWhy)
-	{
-		state = kRelayServerCantUse;
-		*why = shared->serverWhy;
-	}
-
-	LeaveCriticalSection(&shared->lock);
-	return state;
-}
-
 // A line as the yes page and the server lists show it: its name, its whole address, where it is, and its key's two ends. False, with out
-// wiped, if the address couldn't be shown whole. Added 2026-11-10 by Melanikus for the AvP port (#175 2b): it was RelayList_LineToAgree's
+// wiped, if the address couldn't be shown whole. Added 2026-11-10 by Melanikus for the AvP port (#175 2b): it was the one-line yes call's
 // own, and the server lists show their lines the same way.
 static bool ShowTheLine(const ServersCfgServer *line, RelayListLineToAgree *out)
 {
@@ -2024,20 +1926,6 @@ bool RelayList_AgreeToTheLineAt(int place)
 	}
 
 	return true;
-}
-
-// The one-line pair, for the yes page until it's asked from the one Online page's rows (Fourth's): the line in use's yes, through the same
-// per-line code. They go with the pick (relay_list.h).
-bool RelayList_LineToAgree(RelayListLineToAgree *out)
-{
-	Server();
-	return RelayList_LineToAgreeAt(theServer.inUse, out);
-}
-
-bool RelayList_AgreeToTheLine(void)
-{
-	Server();
-	return RelayList_AgreeToTheLineAt(theServer.inUse);
 }
 
 // ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see relay_list.h.
@@ -2216,7 +2104,7 @@ bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
 	if (noListAnswerWaiting)
 	{
 		noListAnswerWaiting = false;
-		*why = Relay_ServerName()[0] ? kCantStart : kNoServer;
+		*why = Server() ? kCantStart : kNoServer;
 		return true;
 	}
 
@@ -2383,26 +2271,6 @@ int RelayList_RelayKeysCameOn(int *place, char region[kRelayListRegionLetters + 
 	return came;
 }
 
-// The one-line pair, for networking.cpp until it asks by the game's line (Primary's): the line in use's keys, through the same per-line
-// code. They go with the pick (relay_list.h).
-bool RelayList_AskForRelayKeys(const char *region)
-{
-	if (!region || !RelayList_IsRegion(region))
-	{
-		return false;
-	}
-
-	Server();
-	return RelayList_AskForRelayKeysOn(theServer.inUse, region);
-}
-
-int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
-{
-	int place = -1;
-	char region[kRelayListRegionLetters + 1];
-	return RelayList_RelayKeysCameOn(&place, region, p384, kem, why);
-}
-
 // The line's relay, straight from its servers.cfg line: nothing is looked up, and nothing is sent (added 2026-11-11, one model for every
 // line). The address as ENetAddress.host keeps it: the first number in the lowest byte (network order on x86).
 bool RelayList_RelayOf(int place, uint32_t *address, int *port)
@@ -2520,46 +2388,40 @@ bool RelayList_AccessCameOn(int *place)
 	return *place >= 0;
 }
 
-// The one-line pair, for the access page until it's the one Online page's rows (Fourth's): the line in use's request and answer, through
-// the same per-line code. They go with the pick (relay_list.h).
-bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+// Before a new identity (relay_list.h): every line's answer is forgotten, but never while a request is on its way, as its answer would
+// be about the old identity. No line stays chosen to host on, as none is approved any more. Added 2026-11-11 by Melanikus for the AvP port.
+bool RelayList_ForgetAccess(void)
 {
-	if (!Server())
+	bool asking = false;
+
+	if (shared)
 	{
-		LogString("Relay list: an access request goes only to the server a " SERVERS_CFG_FILE_NAME " line names, and none does, so nothing was sent");
+		EnterCriticalSection(&shared->lock);
+
+		for (int place = 0; place < kServersCfgMostLines; place++)
+		{
+			asking = asking || shared->accessWantedOn[place] || shared->accessAskingOn[place];
+		}
+
+		for (int place = 0; !asking && place < kServersCfgMostLines; place++)
+		{
+			shared->accessAnsweredOn[place] = false;
+			shared->accessAnswerOn[place] = kRelayAccessWaiting;
+			shared->accessWhyOn[place] = NULL;
+			shared->accessReadyOn[place] = false;
+		}
+
+		LeaveCriticalSection(&shared->lock);
+	}
+
+	if (asking)
+	{
+		LogString("Relay list: a new identity waits until every access request's answer has come");
 		return false;
 	}
 
-	return RelayList_AskForAccessOn(theServer.inUse, name, statics, fingerprint);
-}
-
-bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why)
-{
-	*answered = false;
-	*answer = kRelayAccessWaiting;
-	*why = NULL;
-	int const place = theServer.inUse;
-
-	if (!shared || place < 0 || place >= kServersCfgMostLines)
-	{
-		return false;
-	}
-
-	WriteTheNews();
-
-	EnterCriticalSection(&shared->lock);
-	bool const ready = shared->accessReadyOn[place];
-
-	if (ready)
-	{
-		shared->accessReadyOn[place] = false;
-		*answered = shared->accessAnsweredOn[place];
-		*answer = shared->accessAnswerOn[place];
-		*why = shared->accessWhyOn[place];
-	}
-
-	LeaveCriticalSection(&shared->lock);
-	return ready;
+	hostChoice = -1;
+	return true;
 }
 
 // ---- ONE MODEL FOR EVERY LINE: each line's state for the pages, and the line a host hosts on. Added 2026-11-11 by Melanikus for the AvP

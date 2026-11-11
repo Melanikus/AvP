@@ -1503,33 +1503,14 @@ enum TEXTSTRING_ID
 	TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING,
 
 	// The Online access page (server #24, access_page.cpp), only with -dev for now. Added 2026-11-09 by Melanikus for the AvP port.
-	TEXTSTRING_ACCESS_ROW,               // the Multiplayer page's row, and the page's title
-	TEXTSTRING_ACCESS_ROW_HELP,
-	TEXTSTRING_ACCESS_EXPLAIN_ASKS,      // "Request access asks", then the server's name (2026-11-10), then the two lines below
-	TEXTSTRING_ACCESS_EXPLAIN,           // what Request access does, above the rows, before anything is sent: two lines of the table,
-	TEXTSTRING_ACCESS_EXPLAIN_MORE,      // since each holds at most 199 characters, drawn as one paragraph
 	TEXTSTRING_ACCESS_NAME,
 	TEXTSTRING_ACCESS_NAME_HELP,
-	TEXTSTRING_ACCESS_REQUEST,
-	TEXTSTRING_ACCESS_REQUEST_HELP,
-	TEXTSTRING_ACCESS_CHECK,             // the same row once a request has been sent
-	TEXTSTRING_ACCESS_CHECK_HELP,
 	TEXTSTRING_ACCESS_COPY,
 	TEXTSTRING_ACCESS_COPY_HELP,
 	TEXTSTRING_ACCESS_NEWID,             // the row, and the confirmation page's title
-	TEXTSTRING_ACCESS_NEWID_HELP,
 	TEXTSTRING_ACCESS_YOUR_CODE,
-	TEXTSTRING_ACCESS_TELL_US,
 	TEXTSTRING_ACCESS_SENDING,
-	TEXTSTRING_ACCESS_WAITING,
-	TEXTSTRING_ACCESS_APPROVED,
-	TEXTSTRING_ACCESS_REFUSED,
-	TEXTSTRING_ACCESS_REVOKED,
-	TEXTSTRING_ACCESS_NOT_TAKEN,
-	TEXTSTRING_ACCESS_BUSY,
-	TEXTSTRING_ACCESS_CLOSED,
 	TEXTSTRING_ACCESS_CANT_REACH,
-	TEXTSTRING_ACCESS_NO_SERVER,
 	TEXTSTRING_ACCESS_WAIT_A_MINUTE,
 	TEXTSTRING_ACCESS_COPIED,
 	TEXTSTRING_ACCESS_NOT_COPIED,
@@ -1549,20 +1530,11 @@ enum TEXTSTRING_ID
 	TEXTSTRING_HOST_FAILED,                  // a failed online host's line, before the game's own words for why (Q4)
 	TEXTSTRING_HOST_FAILED_PLAIN,            // a failed host's line when there's no why to give
 	TEXTSTRING_HOST_NO_ANSWER,               // the wait gave up: the server didn't answer in kHostWaitMostMs
-	TEXTSTRING_SERVERS_ROW,                  // the Multiplayer page's Servers row, and its help (#175 2b, 2026-11-10)
-	TEXTSTRING_SERVERS_ROW_HELP,
-	TEXTSTRING_SERVERS_TITLE,                // the Servers page (servers_page.h)
-	TEXTSTRING_SERVERS_PICK_HELP,            // a server row's help
 	TEXTSTRING_SERVERS_BACK,
-	TEXTSTRING_SERVERS_IN_USE,               // what's true of a server, after its name
-	TEXTSTRING_SERVERS_NEXT_START,
-	TEXTSTRING_SERVERS_YES_GIVEN,
 	TEXTSTRING_SERVERS_LINE,                 // "servers.cfg line", before a refused line's number
 	TEXTSTRING_SERVERS_MORE_NOT_USED,        // before how many more refused lines there are
 	TEXTSTRING_SERVERS_NONE,
 	TEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)
-	TEXTSTRING_SERVERS_PICKED,               // the pick's two answers
-	TEXTSTRING_SERVERS_NOT_PICKED,
 	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
 	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
 	TEXTSTRING_MULTIPLAYER_HOSTON,           // "Host on", the Multiplayer page's row for the server a game is hosted on (2026-11-11)
@@ -1593,6 +1565,32 @@ enum TEXTSTRING_ID
 	TEXTSTRING_SERVERYES_OWNER,          // what the server's owner does and sees
 	TEXTSTRING_SERVERYES_YES,
 	TEXTSTRING_SERVERYES_NO,
+
+	// The Online page (online_page.h): every servers.cfg line on its own row. Added 2026-11-11 by Melanikus for the AvP port, in place of the
+	// Servers page's and the one-server access page's words, which went with them (one model for every line).
+	TEXTSTRING_ONLINE_ROW,                         // the Multiplayer page's row, and the Online page's title (online_page.h, 2026-11-11)
+	TEXTSTRING_ONLINE_ROW_HELP,
+	TEXTSTRING_ONLINE_LINE_HELP,                   // a line's row
+	TEXTSTRING_ONLINE_CODE_SAME,                   // after the access code, at the page's top
+	TEXTSTRING_ONLINE_OURS,                        // a line the game ships with, told from what the game holds
+	TEXTSTRING_ONLINE_NOT_OURS,
+	TEXTSTRING_ONLINE_MS,                          // after a line's round trip
+	TEXTSTRING_ONLINE_NO_PING,
+	TEXTSTRING_ONLINE_NOYES,                       // a line's state, in words (online_page_rules.h, OnlineLines_StateLine)
+	TEXTSTRING_ONLINE_REFUSED,
+	TEXTSTRING_ONLINE_WAITING,                     // then the code
+	TEXTSTRING_ONLINE_WAITING_AFTER,
+	TEXTSTRING_ONLINE_NOANSWER,                    // then the game's own words for why
+	TEXTSTRING_ONLINE_NOANSWER_AFTER,
+	TEXTSTRING_ONLINE_NOTASKED,
+	TEXTSTRING_ONLINE_APPROVED_GAMES,              // then how many games
+	TEXTSTRING_ONLINE_APPROVED_GAMES_AFTER,
+	TEXTSTRING_ONLINE_APPROVED_FINDING,
+	TEXTSTRING_ONLINE_APPROVED_NOGAMES,            // then the game's own words for why
+	TEXTSTRING_ONLINE_APPROVED_NOTVISITED,         // then the most servers one find asks
+	TEXTSTRING_ONLINE_APPROVED_NOTVISITED_AFTER,
+	TEXTSTRING_ONLINE_NEWID_HELP,                  // Make a new identity's help: R-SRV-P4's words
+	TEXTSTRING_ONLINE_NEWID_WAIT,
 
 	TEXTSTRING_RENDERING_HUDSIZE,
 	TEXTSTRING_RENDERING_HUDSIZE_HELP,

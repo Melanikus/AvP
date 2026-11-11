@@ -954,13 +954,10 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp">
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\server_yes_page.cpp">
-      <Filter>Source Files\menus</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\servers_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp">
@@ -1745,16 +1742,13 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h">
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h">
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page_rules.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_page.h">
-      <Filter>Header Files\menus</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\servers_page.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_rules.h">

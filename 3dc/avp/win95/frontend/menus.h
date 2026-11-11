@@ -141,10 +141,9 @@ enum AVPMENU_ID
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
 	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
-	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
-	AVPMENU_ONLINE_ACCESS_NEW, // the question before a new identity is made
-	AVPMENU_SERVER_YES,        // the player's yes to the server in servers.cfg, before anything goes to it (#175's last part): see server_yes_page.h
-	AVPMENU_SERVERS            // every servers.cfg line, and the player's pick of one for the next start (#175 2b): see servers_page.h
+	AVPMENU_ONLINE,            // every servers.cfg line, each with its yes, its access request and where it stands (2026-11-11): see online_page.h
+	AVPMENU_ONLINE_NEW_IDENTITY, // the question before a new identity is made
+	AVPMENU_SERVER_YES         // the player's yes to one servers.cfg line, before anything goes to its server (#175's last part): see server_yes_page.h
 };
 
 enum AVPMENU_FONT_ID
@@ -232,7 +231,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
-	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
+	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online page, its new identity's question or the yes page (online_page.h, server_yes_page.h). Its MaxValue is which
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };
 

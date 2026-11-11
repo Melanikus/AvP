@@ -380,9 +380,8 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp" />
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\server_yes_page.cpp" />
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\servers_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\user_profile.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.cpp" />
@@ -713,10 +712,9 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page_rules.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_page.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\servers_page.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_rules.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h" />
     <ClInclude Include="..\..\3dc\coop_lobby.h" />

@@ -35,27 +35,8 @@ inline ServerYesChoice ServerYes_Choice(int row)
 	return row == kServerYesRowNo ? kServerYesGoBack : kServerYesNothing;
 }
 
-// THE WAYS ONLINE, and where a No takes each (PO's rulings, 2026-11-10). Added 2026-11-10 by Melanikus for the AvP port. The page is
-// asked for as a way's row is pressed, never as a page opens, so a page can still open after a No without asking again:
-// - the Online access page: it would send the player's request to the server, so it always asks; after a No, back to the Multiplayer page;
-// - a host (Start game, Co-op campaign): it asks only when it hosts online, which is whenever servers.cfg names a server (with none,
-//   nothing is hosted, so there's nothing to ask; modified 2026-11-10, the owner's ruling for beta.2). After a No, back to the
-//   Multiplayer page;
-// - Find games: it would read the server's list, so it always asks. After a No, back to the Multiplayer page too (modified 2026-11-10,
-//   the owner's ruling for beta.2: "Everything over nyc3": there are no games on this network to show without it).
-enum ServerYesWay
-{
-	kServerYesNotAWay,       // any other row: it goes where it always went
-	kServerYesWayAccess,
-	kServerYesWayHost,
-	kServerYesWayFindGames
-};
-
-// Whether a way asks for the yes before it goes on. hostsOnline is whether a host would host online (it asks nothing of the others).
-inline bool ServerYes_WayAsks(ServerYesWay way, bool hostsOnline)
-{
-	return way == kServerYesWayAccess || way == kServerYesWayFindGames || (way == kServerYesWayHost && hostsOnline);
-}
+// (THE WAYS ONLINE, the rows that asked for the one line's yes as they were pressed, went 2026-11-11: with one model for every line the
+// page opens only from that line's row on the Online page. REMOVED-CODE.md has the row.)
 
 // The line saying where the server is: its address as servers.cfg has it, then where that is, as "104.131.35.41, on the internet". Both
 // come from the game (the address was read by servers_cfg.cpp's rules, written out again from its numbers; the place is the game's own

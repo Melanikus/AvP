@@ -52,7 +52,8 @@
 //   the page of games found is the online-play screens' (online_screens_page.h): a table of each game's name, level, players, region and
 //   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
 //   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
-//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, only with -dev
+//   the Online access pages (server #24), and the Multiplayer page's row to them, only with -dev (since 2026-11-11 the Online page,
+//   online_page.h: every servers.cfg line on its own row)
 //   a host asked to let someone in through a relay sees the check code under the asking line (CRYPTO.md section 8)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
@@ -104,11 +105,9 @@
 #include "relay_auto.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
-#include "access_page.h"
+#include "online_page.h"       // every servers.cfg line on its own row, with its yes and its access (2026-11-11)
 #include "server_yes_page.h"
-#include "servers_page.h"      // every servers.cfg line, and the player's pick (#175 2b)
 #include "host_wait_rules.h"   // a host's wait for the server, and a failed host's line (PO's rulings, 2026-11-10)
-#include "access_page_rules.h"   // the Online access pages' rows: how far apart, and how bright when not chosen
 
 #include "credits_roll.h"
 
@@ -786,14 +785,14 @@ static void MenuSecondsForARun(int seconds)
 	}
 }
 
-// After a press that calls the list: frames until its answer is on the page, at most 30 s, then two seconds more, and the page's picture.
-// False if the answer never came.
-static bool PictureTheAnswerForARun(const char *picture)
+// After a press that asks a line's server: frames until its answer is on the page, at most 30 s, then two seconds more, and the page's
+// picture. False if the answer never came. (Modified 2026-11-11 by Melanikus for the AvP port: the answer of the line pressed.)
+static bool PictureTheAnswerForARun(int place, const char *picture)
 {
 	DWORD const started = GetTickCount();
 	bool came = true;
 
-	while (bRunning && AccessPage_CallOnItsWay())
+	while (bRunning && OnlineLines_AskingOn(place))
 	{
 		if ((DWORD)(GetTickCount() - started) > 30000u)
 		{
@@ -895,9 +894,12 @@ static bool JoinThroughFindGamesForARun(void)
 	return letIn;
 }
 
-// access=: Multiplayer, Online access, then Request access (and Check again after accesswait=), or Make a new identity and Yes. The run
-// stays at the menus, and ends once the presses are done: it plays no level. Its kept identity is a Hudson run's own (the store's
-// NetIdentityStore_FileName), never the player's.
+// access=: Multiplayer, Online, then every line's row in the file's order (modified 2026-11-11 by Melanikus for the AvP port: one model
+// for every line, the same presses for each): with yespage=, the line's yes page, pictured, and the run's row on it; then, for a line with
+// its yes, its access request, its answer pictured, and with access=check, after accesswait=, Check again on each, pictured. Or, with
+// access=newid, Make a new identity and Yes, and nothing else. The run stays at the menus, and ends once the presses are done: it plays
+// no level. Its kept identity is a Hudson run's own (the store's NetIdentityStore_FileName), never the player's. Pictures are named by
+// the line's place counted from 1: server-yes-1.png, access-asked-1.png, access-checked-1.png.
 static void RunTheAccessPagesForHudson(void)
 {
 	int const press = Hudson_AccessPress();
@@ -907,66 +909,84 @@ static void RunTheAccessPagesForHudson(void)
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
 
-	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, "Online") && AvPMenus.CurrentMenu == AVPMENU_ONLINE;
 	MenuSecondsForARun(2);
-
-	// yespage= (hudson_plan.h): the Online access row opened the yes page in its place, as a player's first time does
-	// (ServerYesPage_WayIn). It's pictured, and the run's row pressed: Yes goes on to the Online access page, as the row would have; No
-	// goes back to the Multiplayer page, having sent nothing, and the run ends there. The yes holds for this run alone (relay_list.h).
-	// Added 2026-11-10 by Melanikus (Third) for the AvP port.
-	if (asAsked && Hudson_YesPagePress() != kHudsonYesPageNone)
-	{
-		bool const yes = Hudson_YesPagePress() == kHudsonYesPageYes;
-		asAsked = AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;
-
-		if (!asAsked)
-		{
-			LogErrorString("hudson: yespage= asked for the yes page, and the Online access row didn't open it");
-		}
-
-		MenuFrameForARun(asAsked ? "server-yes.png" : NULL);
-		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo, yes ? "Yes, use this server" : "No, not now");
-		MenuSecondsForARun(2);
-
-		if (asAsked && !yes)
-		{
-			bool const back = AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER;
-			MenuFrameForARun("server-yes-no.png");
-			ReleaseAllAvPMenuGfx();
-			Hudson_AccessRunEnds(back ? "the yes page's No was pressed, and the run is back on the Multiplayer page, having asked the server nothing"
-				: "the yes page's No was pressed, and the run isn't back on the Multiplayer page", back);
-			return;
-		}
-
-		if (asAsked && AvPMenus.CurrentMenu != AVPMENU_ONLINE_ACCESS)
-		{
-			LogErrorString("hudson: the yes page's Yes was pressed, and the run isn't on the Online access page");
-			asAsked = false;
-		}
-	}
+	MenuFrameForARun(asAsked ? "online.png" : NULL);
 
 	if (asAsked && press == kHudsonAccessNewId)
 	{
-		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS_NEW, "Make a new identity");
+		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_NEW_IDENTITY, "Make a new identity");
 		MenuSecondsForARun(2);
-		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowNewYes, "Yes, make a new identity");
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlineNewIdentityYes, "Yes, make a new identity");
 		MenuSecondsForARun(2);
 		MenuFrameForARun("access-newid.png");
 	}
 	else if (asAsked)
 	{
-		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Request access") && PictureTheAnswerForARun("access-asked.png");
+		int const lines = OnlineLines_LineCount();
+		char picture[64];
+
+		for (int place = 0; asAsked && place < lines; place++)
+		{
+			// yespage= (hudson_plan.h): the line's row opens its yes page, as a player's first time does. It's pictured, and the run's row
+			// pressed: both go back to the Online page; after a No nothing goes to that line, and the run goes on to the next. The yes holds
+			// for this run alone (relay_list.h). Added 2026-11-10 by Melanikus (Third) for the AvP port; for each line since 2026-11-11.
+			if (Hudson_YesPagePress() != kHudsonYesPageNone && OnlineLines_NeedsTheYes(place))
+			{
+				bool const yes = Hudson_YesPagePress() == kHudsonYesPageYes;
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, for its yes") &&
+					AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;
+
+				if (!asAsked)
+				{
+					LogErrorString("hudson: yespage= asked for the yes page, and the line's row didn't open it");
+					break;
+				}
+
+				snprintf(picture, sizeof(picture), "server-yes-%d.png", place + 1);
+				MenuFrameForARun(picture);
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo, yes ? "Yes, use this server" : "No, not now");
+				MenuSecondsForARun(2);
+
+				if (asAsked && AvPMenus.CurrentMenu != AVPMENU_ONLINE)
+				{
+					LogErrorString("hudson: the yes page's row was pressed, and the run isn't back on the Online page");
+					asAsked = false;
+				}
+			}
+
+			// A line without its yes is asked nothing
+			if (!asAsked || OnlineLines_NeedsTheYes(place))
+			{
+				continue;
+			}
+
+			snprintf(picture, sizeof(picture), "access-asked-%d.png", place + 1);
+			asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, for its access request") &&
+				PictureTheAnswerForARun(place, picture);
+		}
 
 		if (asAsked && press == kHudsonAccessCheck)
 		{
 			MenuSecondsForARun(Hudson_AccessWaitSeconds());
-			asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Check again") && PictureTheAnswerForARun("access-checked.png");
+
+			for (int place = 0; asAsked && place < lines; place++)
+			{
+				if (OnlineLines_NeedsTheYes(place))
+				{
+					continue;
+				}
+
+				snprintf(picture, sizeof(picture), "access-checked-%d.png", place + 1);
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, to check again") &&
+					PictureTheAnswerForARun(place, picture);
+			}
 		}
 	}
 
 	ReleaseAllAvPMenuGfx();
-	Hudson_AccessRunEnds(asAsked ? "the Online access page's rows were pressed, and the server's answers pictured"
-		: "a press on the Online access page couldn't be made, or the server's answer never came", asAsked);
+	Hudson_AccessRunEnds(asAsked ? "the Online page's rows were pressed, each line's, and the servers' answers pictured"
+		: "a press on the Online page couldn't be made, or a server's answer never came", asAsked);
 }
 
 // One frame of one of the intro's two still pictures, drawn as intro.cpp draws it at full brightness, and its picture (menus=pictures):
@@ -999,8 +1019,8 @@ static void IntroFrameForARun(bool copyright, const char *picture)
 }
 
 // menus=pictures: four of the menus' pages as a player sees them, and the intro's two still pictures, each pictured, so how the menus
-// are drawn can be seen at any screen size (menu_shape.h). The only row pressed is Multiplayer's Online access; the page opening sends
-// nothing, since it asks the list only once a request has been sent, which a new run never has. Added 2026-11-10 by Melanikus for the
+// are drawn can be seen at any screen size (menu_shape.h). The only row pressed is Multiplayer's Online; the page opening sends nothing,
+// since it asks a line's server only once this run has sent it a request, which a new run never has. Added 2026-11-10 by Melanikus for the
 // AvP port.
 static void RunTheMenuPicturesForHudson(void)
 {
@@ -1015,9 +1035,9 @@ static void RunTheMenuPicturesForHudson(void)
 	MenuSecondsForARun(1);
 	MenuFrameForARun("menu-multiplayer.png");
 
-	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, "Online");
 	MenuSecondsForARun(1);
-	MenuFrameForARun("menu-access.png");
+	MenuFrameForARun("menu-online.png");
 
 	SetupNewMenu(AVPMENU_OPTIONS);
 	MenuSecondsForARun(1);
@@ -1028,7 +1048,7 @@ static void RunTheMenuPicturesForHudson(void)
 
 	ReleaseAllAvPMenuGfx();
 	Hudson_AccessRunEnds(accessOpened ? "four of the menus' pages and the intro's two still pictures were pictured"
-		: "the Online access row couldn't be pressed, so it wasn't pictured", accessOpened);
+		: "the Online row couldn't be pressed, so it wasn't pictured", accessOpened);
 }
 
 static int StartLevelForHudsonRun(void)
@@ -2067,16 +2087,10 @@ extern void AvP_UpdateMenus(void)
 			CountTheRowsOnThisPage();
 		}
 	}
-	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE || AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY)
 	{
-		// The server's answer comes on the list's own thread, and the page shows it as it comes. Modified 2026-11-10 by Melanikus for the
-		// AvP port: once the code is on the page, the page chooses Copy access code, so one Enter copies it (AccessPage_ChoosesCopy)
-		int const choose = AccessPage_Frame(AvPMenus.MenuElements);
-
-		if (choose >= 0 && choose < AvPMenus.NumberOfElementsInMenu)
-		{
-			AvPMenus.CurrentlySelectedElement = choose;
-		}
+		// The servers' answers come on the list's own thread, and each line's row shows its own as it comes (online_page.h)
+		OnlineLines_Frame();
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
@@ -2741,10 +2755,11 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
-		case AVPMENU_ONLINE_ACCESS:
+		// Every servers.cfg line on its own row (online_page.h): its rows are written before they're counted. Added 2026-11-11 by Melanikus
+		// for the AvP port, in place of the Online access page and the Servers page.
+		case AVPMENU_ONLINE:
 		{
-			// Only when servers.cfg names a server. Without one nothing leads here, and if anything ever did, it goes straight back.
-			if (!AccessPage_Opened(AvPMenus.MenuElements))
+			if (!OnlineLines_Opened(AvPMenus.MenuElements, kOnlinePageRowRoom))
 			{
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
 				return;
@@ -2752,35 +2767,23 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
-		case AVPMENU_ONLINE_ACCESS_NEW:
+		case AVPMENU_ONLINE_NEW_IDENTITY:
 		{
-			if (!AccessPage_QuestionOpened())
+			if (!OnlineLines_QuestionOpened())
 			{
-				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				SetupNewMenu(AVPMENU_ONLINE);
 				return;
 			}
 			break;
 		}
 
-		// The player's yes to the server in servers.cfg (#175's last part, server_yes_page.h): with no line waiting for one, back to the
-		// Multiplayer page
+		// The player's yes to one servers.cfg line (#175's last part, server_yes_page.h): with no yes waiting for that line after all, back to
+		// the Online page
 		case AVPMENU_SERVER_YES:
 		{
 			if (!ServerYesPage_Opened())
 			{
-				SetupNewMenu(AVPMENU_MULTIPLAYER);
-				return;
-			}
-			break;
-		}
-
-		// Every servers.cfg line, and the player's pick (#175 2b, servers_page.h): its rows are written before they're counted. Added
-		// 2026-11-10 by Melanikus for the AvP port.
-		case AVPMENU_SERVERS:
-		{
-			if (!ServersPage_Opened(AvPMenus.MenuElements, kServersPageRowRoom))
-			{
-				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				SetupNewMenu(AVPMENU_ONLINE);
 				return;
 			}
 			break;
@@ -2967,16 +2970,10 @@ static void RenderMenu(void)
 			y = layout.rowsTop;
 			coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;
 		}
-		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
+		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY)
 		{
-			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's picture: the code was drawn over the title, with an empty gap
-			// above the rows): the Online access pages draw their own parts under the title, and their rows start right under those
-			// (access_page_rules.h, "Where the page's parts go")
-			y = AccessPage_DrawTop(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);
-		}
-		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
-		{
-			y = AccessPage_DrawQuestion(AvPMenus.MenuHeight, AvPMenus.NumberOfElementsInMenu);
+			// The question's words under the title, and its two rows right under them (modified 2026-11-11: the Online page's question)
+			y = OnlineLines_DrawQuestion(AvPMenus.MenuHeight);
 		}
 		else
 		{
@@ -2998,16 +2995,16 @@ static void RenderMenu(void)
 		OnlinePage_DrawTop();
 	}
 
-	// The Servers page draws its own rows, a screenful at a time, and its words around them (servers_page.h; #175 2b, added 2026-11-10)
-	bool const serversPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVERS;
+	// The Online page draws its own rows, each line's a screenful at a time and its own four, and its words around them (online_page.h;
+	// added 2026-11-11, in place of the Servers page's)
+	bool const onlinePage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE;
 
-	if (serversPage)
+	if (onlinePage)
 	{
-		ServersPage_DrawTop(AvPMenus.CurrentlySelectedElement);
+		OnlineLines_DrawTop(AvPMenus.CurrentlySelectedElement);
 	}
 
-	// The yes page's words, above its rows (#175's last part). The Online access pages draw their own parts as RenderMenu places their rows,
-	// above (access_page_rules.h)
+	// The yes page's words, above its rows (#175's last part)
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
 	{
 		// The rows' top, as RenderMenu places them on this page (modified 2026-11-10: so its words stay above them)
@@ -3049,10 +3046,10 @@ static void RenderMenu(void)
 		RenderSmallMenuText(relayNews, MENU_CENTREX, 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
-	// The Online access pages: their rows a little further apart, and a row not chosen brighter than the menus' quarter, so it's read
-	// against the starfield (modified 2026-11-10 by Melanikus for the AvP port: the owner couldn't find Copy access code; access_page_rules.h)
+	// The Online page and its question: a row not chosen brighter than the menus' quarter, so it's read against the starfield (modified
+	// 2026-11-10 by Melanikus for the AvP port: the owner couldn't find Copy access code), and the question's rows a little further apart
 	bool const accessPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS &&
-		(AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW);
+		(AvPMenus.CurrentMenu == AVPMENU_ONLINE || AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY);
 
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
@@ -3064,7 +3061,7 @@ static void RenderMenu(void)
 		}
 		else if (accessPage)
 		{
-			targetBrightness = ONE_FIXED * kAccessPageRowNotChosenOutOf100 / 100;
+			targetBrightness = ONE_FIXED * kOnlinePageRowNotChosenOutOf100 / 100;
 		}
 		else
 		{
@@ -3101,16 +3098,25 @@ static void RenderMenu(void)
 				RenderMenuElement(elementPtr, e, OnlinePage_ControlTop(e));
 			}
 		}
-		else if (serversPage)
+		else if (onlinePage)
 		{
-			ServersPage_DrawRow(elementPtr, e, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement);
+			// A line's row is drawn by the page, in its screenful; the page's own rows are the menus' own, each drawn at its place
+			if (!OnlineLines_DrawLineRow(elementPtr, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement))
+			{
+				int const top = OnlineLines_OwnRowTopOf(elementPtr);
+
+				if (top >= 0)
+				{
+					RenderMenuElement(elementPtr, e, top);
+				}
+			}
 		}
 		else if (!askingPage)
 		{
 			RenderMenuElement(elementPtr,e,y);
 		}
 
-		y += HeightOfMenuElement(elementPtr) + (accessPage ? kAccessPageRowsApart : 0);
+		y += HeightOfMenuElement(elementPtr) + (AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY ? kOnlineQuestionRowsApart : 0);
 	}
 
 	// Render Menu Title
@@ -4349,7 +4355,7 @@ static void ActUponUsersInput(void)
 }
 
 // Whether a game hosted now would be hosted online: when servers.cfg names a server, as every game is (networking.cpp, Net_HostGame).
-// Added 2026-11-10 by Melanikus for the AvP port, for the ways online (ServerYesPage_WayIn); modified the same day (the owner's ruling for beta.2: "Everything over nyc3"):
+// Added 2026-11-10 by Melanikus for the AvP port, for the ways online; modified the same day (the owner's ruling for beta.2: "Everything over nyc3"):
 // there's no Host row and no game at home, so with no server named nothing is hosted, and the host says why.
 // Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): online on the line the player
 // chose on the host page, and with none chosen, nothing is hosted, and the host says to choose one.
@@ -4396,9 +4402,8 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					SaveUserProfile(UserProfilePtr);
 				}
 
-				// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part, PO's rulings): a way online asks for the player's yes to
-				// the server in servers.cfg first, as its row is pressed (server_yes_page.h, ServerYesPage_WayIn). Every other row goes where it
-				// always went.
+				// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: a line's yes is said only on its own row of the
+				// Online page, so no row here asks for one: server_yes_page.h, THE ONE WAY IN.)
 				// Added 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): Start game and Co-op campaign
 				// host on the server the Host on row shows, and with none chosen they don't open, and say so
 				if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&
@@ -4408,7 +4413,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					break;
 				}
 
-				enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());
+				enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);
 
 				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)
 				if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
@@ -4726,18 +4731,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		{
-			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
-
-			// The Servers page's rows are this kind too, one for each server (#175 2b, added 2026-11-10): pressing one picks it, for the next
-			// start. Nothing goes to any server.
-			if (AvPMenus.CurrentMenu == AVPMENU_SERVERS)
-			{
-				if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-				{
-					ServersPage_Pressed(elementPtr->MaxValue);
-				}
-				break;
-			}
+			enum AVPMENU_ID page = AVPMENU_ONLINE;
 
 			// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's
 			if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
@@ -4749,7 +4743,8 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				break;
 			}
 
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AccessPage_Pressed(elementPtr->MaxValue, &page))
+			// The Online page's rows and its question's (online_page.h): a line's row, Copy access code, and the question's No and Yes
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && OnlineLines_Pressed(elementPtr->MaxValue, &page))
 			{
 				SetupNewMenu(page);
 			}

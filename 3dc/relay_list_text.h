@@ -86,7 +86,7 @@ struct RelayListGame
 	uint8_t hostId[kNetIdentityIdBytes];   // the host's whole id for this run, which handshake B must find it holds
 };
 
-// One region's relay: where a game of that region is joined. networking.cpp reads these (RelayList_Relays).
+// One region's relay: where a game of that region is joined. (The one-server call that gave these went 2026-11-11: a relay is a line's, RelayList_RelayOf.)
 struct RelayListRelay
 {
 	char region[kRelayListRegionLetters + 1];

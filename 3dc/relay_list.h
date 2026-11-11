@@ -7,8 +7,7 @@
 // and forth is in relay_list_text.h, which reads the answers as hostile.
 //
 // Every call here returns at once. The HTTPS is done on a thread of its own, so the game never waits for the network, and what it says
-// comes back to the game's own thread, through RelayList_Relays and RelayList_FoundGames. All of these are called from the game's main
-// thread only.
+// comes back to the game's own thread, through the calls below that say so. All of these are called from the game's main thread only.
 //
 // Nothing about a call is written to the log except whether it worked: never the list's name, a pass, an owner, a code or a game's name.
 
@@ -21,15 +20,6 @@
 
 struct SessionDescription;
 
-// The server's name, as people see it: its servers.cfg line's (servers_cfg.h). Empty when there's none, and then there's no relay: hosting
-// and joining are as they are without one. Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing in AliensVsPredator.cfg names a
-// server any more. Modified again the same day (#175 PR 3b): -dev decides nothing here, so a player's game has the line as its server.
-//
-// servers.cfg is read the first time this is asked, and kept for the whole run. Only the menus and hosting ask, long after the game has
-// started; relay_list_test checks that winmain.cpp itself never does, as it did when -dev was read with it. The screens make the name
-// safe before drawing it, as they do anything from outside the game.
-const char *Relay_ServerName(void);
-
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
 
 // This run's identity's whole id (net_identity.h), which every listing carries so a joiner knows which host to expect. networking.cpp
@@ -38,7 +28,7 @@ const char *Relay_ServerName(void);
 // Added 2026-11-09 by Melanikus for the AvP port; the whole id, not its 16-byte fingerprint, since 2026-11-10 (SERVER-BLOCKERS item 6).
 void RelayList_HostIdentity(const uint8_t hostId[kNetIdentityIdBytes]);
 
-// The relay has given the host its room: the game goes on the list. region is the relay's (from RelayList_Relays), pass and passTime
+// The relay has given the host its room: the game goes on the list. region is the host's line's relay's, pass and passTime
 // what HOST_OPENED gave, and hostMs the host's round trip to that relay, 0 if it wasn't measured.
 void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLetters], const uint8_t pass[kRelayListSecretBytes], uint64_t passTime,
 	int hostMs, const SessionDescription &session);
@@ -60,30 +50,9 @@ void RelayList_HostRoomClosed(void);
 // never used.
 void RelayList_BeforeQuitting(unsigned int mostMs);
 
-// ---- The relay: the server's own (modified 2026-11-10 by Melanikus for the AvP port, #175)
-
-// Checks the server against its servers.cfg line, if it hasn't been yet (relay_list.cpp, TRUSTED BY ITS KEY ALONE). The answer comes a
-// moment later. The menus ask when the host page and the Find games page open.
-void RelayList_FindRelays(void);
-
-// The server's one relay, into relays (room for kRelayListMostRelays): at its line's address and relay port, with the region the server's
-// check gave. False while the server hasn't been checked and found good. Nothing is looked up by name.
-bool RelayList_Relays(RelayListRelay *relays, int *count);
-
-// Where the server stands (added 2026-11-10 by Melanikus for the AvP port, #188), for networking.cpp's Net_ServerState, so a host can wait
-// for an answer that hasn't come, and is never told "no relay" for that alone. It only reads. why is the game's own fixed words.
-int const kRelayServerAsking = 0;    // not asked yet, or being asked: no answer yet
-int const kRelayServerGood = 1;      // checked against its servers.cfg line, and good: RelayList_Relays names its relay
-int const kRelayServerCantUse = 2;   // why says why: the last asking couldn't reach it, it said no, its answer was refused, or its keys
-                                     // don't match its line (asking again, RelayList_FindRelays, tries again, but not after keys that
-                                     // didn't match: those stay refused until the game restarts)
-int const kRelayServerNeedsYes = 3;  // the line hasn't had the player's yes (#175's last part): nothing has gone to its server, and nothing
-                                     // will until RelayList_AgreeToTheLine (below)
-int RelayList_ServerState(const char **why);
-
-// ---- The player's yes to servers.cfg's line (#175's last part; servers_trust.h says what it is and how it's kept). Added 2026-11-10 by
-// Melanikus for the AvP port. Until the line has had it, the list isn't started, so nothing at all goes to its server or its relay: no
-// call, no listing, no access request, no game found. A Hudson run needs none, as nobody is there to answer (HudsonRunIsOn, which
+// ---- The player's yes to a servers.cfg line (#175's last part; servers_trust.h says what it is and how it's kept). Added 2026-11-10 by
+// Melanikus for the AvP port. Until a line has had it, nothing at all goes to its server or its relay: no call, no listing, no access
+// request, no game found (each line's own yes since 2026-11-11: RelayList_LineToAgreeAt, below). A Hudson run needs none, as nobody is there to answer (HudsonRunIsOn, which
 // tools/check-hudson-asleep.ps1 proves a player's game never sets). Only the main thread calls these.
 
 // What the yes-screen shows of the line, so the player sees where it goes before anything does
@@ -96,15 +65,6 @@ struct RelayListLineToAgree
 	char keyStart[9];                         // its fingerprint's first 8 digits ("bb0e2958"), and its last 8 ("f28d663e"), which a
 	char keyEnd[9];                           // person can hold against what the server's owner gave out
 };
-
-// True, with out filled, when there's a line and it hasn't had the yes. False when there's no line, or it has had it (a Hudson run's
-// always has, unless it asked for the yes page: below).
-bool RelayList_LineToAgree(RelayListLineToAgree *out);
-
-// The player's yes to the line RelayList_LineToAgree showed: kept in servers-trusted.cfg (net_identity_store.h), and from now on the
-// list may start. A yes that couldn't be kept still holds for this run, and the log says so. In a Hudson run the yes holds for that run
-// only and is never kept anywhere. False, with nothing changed, if there's no line.
-bool RelayList_AgreeToTheLine(void);
 
 // ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port. For the Online page
 // and the Find games page: every good line, so the player sees the servers they have and picks one, and every refused line by its number,
@@ -143,7 +103,7 @@ const char *RelayList_FileWords(void);
 bool RelayList_PickLine(int place);
 
 // Hudson's yespage= (hudson_plan.h), called only from Hudson's own files: from now on, this Hudson run's line needs its own Yes on the yes
-// page, as a player's does, before the list starts. That yes is held for the run alone (RelayList_AgreeToTheLine). Added 2026-11-10 by
+// page, as a player's does, before the list starts. That yes is held for the run alone (RelayList_AgreeToTheLineAt). Added 2026-11-10 by
 // Melanikus (Third) for the AvP port.
 void HudsonTest_RelayListShowsTheYesPage(void);
 
@@ -192,9 +152,6 @@ int RelayList_LineGamesState(int place, const char **why);
 // line and no line "in use". Each call to a line's server is a visit of its own (relay_list.cpp, THE VISITS): its state made fresh from the
 // line alone, its key checked against the line's fingerprint before anything else goes, the call made, its result copied out, everything
 // of the visit wiped. Only the main thread calls these, and each returns at once; answers come a moment later.
-// The one-line calls above (RelayList_LineToAgree, RelayList_AgreeToTheLine, RelayList_AskForAccess, RelayList_AccessCame,
-// RelayList_AskForRelayKeys, RelayList_RelayKeysCame) now go through these, for the line in use, until the pages and networking.cpp ask
-// by line; then they go, with the pick.
 
 // Where the player stands with a line's server, from its last answer this run (nothing is kept past the run: PO, 2026-11-11). These are
 // the pages' meanings, not the list's own answers (relay_list_text.h's RelayAccessAnswer), which they're made from.
@@ -241,6 +198,12 @@ bool RelayList_AskForAccessOn(int place, const char *name, const uint8_t statics
 	const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
 bool RelayList_AccessCameOn(int *place);
 
+// Before a new identity is made (the Online page's Make a new identity): every line's answer this run was about the old identity, so
+// each is forgotten, every line is "not asked" again, and no line stays chosen to host on. False, with nothing changed, while any line's
+// request is still on its way: its answer would come back about an identity this PC no longer has. Added 2026-11-11 by Melanikus for
+// the AvP port.
+bool RelayList_ForgetAccess(void);
+
 // Joining any game, through ITS OWN line. RelayOf: that line's relay, its address (as ENetAddress.host keeps it) and relay port, straight
 // from servers.cfg; nothing is looked up. AskForRelayKeysOn: that line's server's relay keys, proved by that line's fingerprint, on a
 // visit to that line; with a region, only if it's that relay's own region; with NULL or "" (a host's asking), the region comes back with
@@ -260,40 +223,22 @@ int RelayList_ApprovedLines(int *places, int most);
 bool RelayList_HostOn(int place);
 int RelayList_HostLine(void);
 
-// ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
-// AvP port. Only the Online access page calls these. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: they no longer ask
-// -dev, which decides nothing online. The page has its own way in.)
-
-// Sends the request: the player's name, this PC's public halves, and the fingerprint the answer has to be about. Only when the player has
-// pressed the page's row for it, or (PO's ruling) when the page opens after the player has sent one this run. False, with nothing sent,
-// with no fingerprint, with no list set, or if the name or key can't be sent (RelayList_AccessBody). The answer comes a moment later.
-bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
-
-// Once for each answer: true, with answered true and what the list said, or answered false and why in fixed words of the game's own (never
-// the list's). False while there's no new answer. The log gets only those words: never the name, the key, the fingerprint or the code.
-bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why);
 // Modified 2026-11-09 by Melanikus for the AvP port: for the page of games found's failure screen. Whether a why from RelayList_FoundGames
 // means the game never got a connection to the list's server (it couldn't be reached, took too long, its secure connection failed, or
 // the call couldn't start), rather than that it connected and couldn't fetch the games (an answer too big, a no, or an answer refused).
 // It compares the why with this file's own words, never what anybody sent; NULL and "no relay server is set" are neither, so false.
 bool RelayList_WhyIsNoConnection(const char *why);
 
-// ---- A relay's keys, for protocol version 2's draft (step 7). Added 2026-11-09 by Melanikus for the AvP port.
+// ---- A relay's keys (protocol version 2, step 7). Added 2026-11-09 by Melanikus for the AvP port. Asked of a line: RelayList_AskForRelayKeysOn.
 //
 // Handshake A proves a relay to the game only with the relay's real static public keys. Modified 2026-11-10 by Melanikus for the AvP port
 // (#175): they're the keys the server's check took (GET /v1/relay-keys, CRYPTO.md 12.1), proved by the server's servers.cfg line together
 // with the list's own key (net_server_fingerprint.h), before anything else is sent to the server.
 
-// Asks for the keys of the server's relay, the one in region (RelayList_Relays gives it). The answer comes a moment later, through
-// RelayList_RelayKeysCame: the keys, or a refusal if the server isn't checked and good, or region isn't its relay's. False if the region
-// isn't one or the list can't start (no server is set).
-bool RelayList_AskForRelayKeys(const char *region);
-
-// What came for the newest asking: waiting, the keys (into p384 and kem), or refused, with why in fixed words of the game's own. p384 and
-// kem are all 0 unless the keys came.
+// What RelayList_RelayKeysCameOn gives for the newest asking: waiting, the keys (into p384 and kem), or refused, with why in fixed words
+// of the game's own. p384 and kem are all 0 unless the keys came.
 int const kRelayKeysWaiting = 0;
 int const kRelayKeysCame = 1;
 int const kRelayKeysRefused = 2;
-int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why);
 
 #endif

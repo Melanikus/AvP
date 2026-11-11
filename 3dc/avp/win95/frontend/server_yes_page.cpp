@@ -1,4 +1,4 @@
-// The yes page: the player's yes to the server in servers.cfg. Written 2026-11-10 by Melanikus for the AvP port (#175's last part).
+// The yes page: the player's yes to one servers.cfg line. Written 2026-11-10 by Melanikus for the AvP port (#175's last part).
 // server_yes_page.h says why, what it shows and how it's reached.
 
 #include "3dc.h"
@@ -25,9 +25,9 @@ static_assert(kServerYesLeft == MENU_LEFTXEDGE && kServerYesRight == MENU_RIGHTX
 
 namespace
 {
-	// Where the page goes after a yes, and after a no: the page the player was on the way to, and the one they came from
-	enum AVPMENU_ID goToAfterYes = AVPMENU_MULTIPLAYER;
-	enum AVPMENU_ID backToAfterNo = AVPMENU_MULTIPLAYER;
+	// The line the page is for: its place among servers.cfg's good lines (modified 2026-11-11 by Melanikus for the AvP port: one model
+	// for every line), or -1 for none
+	int linePlace = -1;
 
 	// What the page shows of the line, taken as it opens
 	RelayListLineToAgree shown;
@@ -47,58 +47,22 @@ namespace
 	}
 }
 
-bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo)
+bool ServerYesPage_OpenFor(int place)
 {
 	RelayListLineToAgree waiting;
 
-	if (!RelayList_LineToAgree(&waiting))
+	if (!RelayList_LineToAgreeAt(place, &waiting))
 	{
 		return false;
 	}
 
-	goToAfterYes = goTo;
-	backToAfterNo = backTo;
+	linePlace = place;
 	return true;
-}
-
-// Which way online a row is, by the page it's on and the page it goes to (added 2026-11-10 by Melanikus for the AvP port). Find games is
-// the Join game page's row.
-static ServerYesWay WayOf(enum AVPMENU_ID from, enum AVPMENU_ID goTo)
-{
-	if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)
-	{
-		return kServerYesWayAccess;
-	}
-
-	if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST))
-	{
-		return kServerYesWayHost;
-	}
-
-	if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)
-	{
-		return kServerYesWayFindGames;
-	}
-
-	return kServerYesNotAWay;
-}
-
-enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline)
-{
-	ServerYesWay const way = WayOf(from, goTo);
-
-	if (!ServerYes_WayAsks(way, hostsOnline))
-	{
-		return goTo;
-	}
-
-	// After a No: back to the Multiplayer page, for every way
-	return ServerYesPage_Needed(goTo, AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;
 }
 
 bool ServerYesPage_Opened(void)
 {
-	haveShown = RelayList_LineToAgree(&shown);
+	haveShown = linePlace >= 0 && RelayList_LineToAgreeAt(linePlace, &shown);
 	return haveShown;
 }
 
@@ -107,18 +71,15 @@ bool ServerYesPage_Pressed(int row, enum AVPMENU_ID *page)
 	switch (ServerYes_Choice(row))
 	{
 		case kServerYesAgreeAndGoOn:
-			// The yes is kept, and from now on the list may start; where the player was going then asks the server as it always would
-			if (!RelayList_AgreeToTheLine())
-			{
-				*page = backToAfterNo;
-				return true;
-			}
-
-			*page = goToAfterYes;
+			// The yes is kept, and from now on that line's server may be asked; the Online page's row for it then says what's next
+			RelayList_AgreeToTheLineAt(linePlace);
+			linePlace = -1;
+			*page = AVPMENU_ONLINE;
 			return true;
 
 		case kServerYesGoBack:
-			*page = backToAfterNo;
+			linePlace = -1;
+			*page = AVPMENU_ONLINE;
 			return true;
 
 		case kServerYesNothing:

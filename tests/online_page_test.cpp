@@ -36,12 +36,12 @@ static void TheRowsFit(int count, const char *what)
 
 	for (int chosen = -1; chosen <= count + kOnlinePageOwnRows; chosen++)
 	{
-		OnlinePageView const view = OnlinePage_View(count, chosen);
+		OnlinePageView const view = OnlineLines_View(count, chosen);
 		int lastBottom = kOnlinePageRowsTop;
 
 		for (int place = 0; place < count; place++)
 		{
-			int const top = OnlinePage_RowTop(place, view);
+			int const top = OnlineLines_RowTop(place, view);
 
 			if (top < 0)
 			{
@@ -54,7 +54,7 @@ static void TheRowsFit(int count, const char *what)
 
 		if (chosen >= 0 && chosen < count)
 		{
-			chosenShown = chosenShown && OnlinePage_RowTop(chosen, view) >= 0;
+			chosenShown = chosenShown && OnlineLines_RowTop(chosen, view) >= 0;
 		}
 
 		fits = fits && view.shown <= kOnlinePageMostShown && view.first >= 0 && view.first + view.shown <= (count < kOnlinePageMostLines ? count : kOnlinePageMostLines);
@@ -89,9 +89,9 @@ int main()
 	printf("Online page\n");
 
 	// WHERE THINGS GO
-	Check(kOnlinePageOwnRowsTop + kOnlinePageOwnRows * kOnlinePageOwnRowHeight <= kOnlinePageHelpTop && OnlinePage_OwnRowTop(kOnlinePageRowBack) + kOnlinePageBigLine <= kOnlinePageHelpTop,
+	Check(kOnlinePageOwnRowsTop + kOnlinePageOwnRows * kOnlinePageOwnRowHeight <= kOnlinePageHelpTop && OnlineLines_OwnRowTop(kOnlinePageRowBack) + kOnlinePageBigLine <= kOnlinePageHelpTop,
 		"the page's own rows, Back the last, end before the help line");
-	Check(OnlinePage_OwnRowTop(-5) == OnlinePage_OwnRowTop(0) && OnlinePage_OwnRowTop(99) == OnlinePage_OwnRowTop(kOnlinePageRowBack),
+	Check(OnlineLines_OwnRowTop(-5) == OnlineLines_OwnRowTop(0) && OnlineLines_OwnRowTop(99) == OnlineLines_OwnRowTop(kOnlinePageRowBack),
 		"and a row out of range is drawn in range, never off the page");
 	TheRowsFit(0, "no lines");
 	TheRowsFit(1, "1 line");
@@ -100,15 +100,15 @@ int main()
 	TheRowsFit(64, "64 lines");
 	TheRowsFit(500, "more lines than servers.cfg is ever read for");
 
-	OnlinePageView const nine = OnlinePage_View(9, 8);
+	OnlinePageView const nine = OnlineLines_View(9, 8);
 	char count[32];
-	OnlinePage_CountLine(9, nine, count, sizeof(count));
+	OnlineLines_CountLine(9, nine, count, sizeof(count));
 	Check(nine.first == 8 && nine.shown == 1 && strcmp(count, "9-9 / 9") == 0, "with 9 lines, the 9th chosen shows the last screenful, and says which");
-	OnlinePage_CountLine(2, OnlinePage_View(2, 0), count, sizeof(count));
+	OnlineLines_CountLine(2, OnlineLines_View(2, 0), count, sizeof(count));
 	Check(count[0] == 0, "and with 2, there's no count: they all fit");
 
-	Check(OnlinePage_RefusedShown(0) == 0 && OnlinePage_RefusedShown(kOnlinePageMostRefused) == kOnlinePageMostRefused &&
-		OnlinePage_RefusedShown(64) == kOnlinePageMostRefused - 1, "refused lines: all of them while they fit, else one fewer and a line saying how many more");
+	Check(OnlineLines_RefusedShown(0) == 0 && OnlineLines_RefusedShown(kOnlinePageMostRefused) == kOnlinePageMostRefused &&
+		OnlineLines_RefusedShown(64) == kOnlinePageMostRefused - 1, "refused lines: all of them while they fit, else one fewer and a line saying how many more");
 
 	// WHAT A ROW SAYS: the yes first, for every line; then access; then, once approved, the last find
 	int const accesses[] = { kRelayAccessNotAsked, kRelayAccessAsking, kRelayAccessWaitingApproval, kRelayAccessIsApproved, kRelayAccessIsRefused, kRelayAccessNoAnswer };
@@ -116,7 +116,7 @@ int main()
 
 	for (int access : accesses)
 	{
-		noYesFirst = noYesFirst && OnlinePage_Says(kRelayLineNoYes, access) == kOnlinePageSaysNoYes;
+		noYesFirst = noYesFirst && OnlineLines_Says(kRelayLineNoYes, access) == kOnlinePageSaysNoYes;
 	}
 
 	Check(noYesFirst, "a line without the yes says so, whatever access says");
@@ -126,51 +126,51 @@ int main()
 
 	for (int state : lineStates)
 	{
-		accessNext = accessNext && OnlinePage_Says(state, kRelayAccessIsRefused) == kOnlinePageSaysRefused &&
-			OnlinePage_Says(state, kRelayAccessAsking) == kOnlinePageSaysAsking && OnlinePage_Says(state, kRelayAccessWaitingApproval) == kOnlinePageSaysWaiting &&
-			OnlinePage_Says(state, kRelayAccessNoAnswer) == kOnlinePageSaysNoAnswer && OnlinePage_Says(state, kRelayAccessNotAsked) == kOnlinePageSaysNotAsked;
+		accessNext = accessNext && OnlineLines_Says(state, kRelayAccessIsRefused) == kOnlinePageSaysRefused &&
+			OnlineLines_Says(state, kRelayAccessAsking) == kOnlinePageSaysAsking && OnlineLines_Says(state, kRelayAccessWaitingApproval) == kOnlinePageSaysWaiting &&
+			OnlineLines_Says(state, kRelayAccessNoAnswer) == kOnlinePageSaysNoAnswer && OnlineLines_Says(state, kRelayAccessNotAsked) == kOnlinePageSaysNotAsked;
 	}
 
 	Check(accessNext, "with the yes, a line not yet approved says where its access stands, whatever the find found");
-	Check(OnlinePage_Says(kRelayLineAnswered, kRelayAccessIsApproved) == kOnlinePageSaysApprovedGames &&
-		OnlinePage_Says(kRelayLineAsking, kRelayAccessIsApproved) == kOnlinePageSaysApprovedFinding &&
-		OnlinePage_Says(kRelayLineNoAnswer, kRelayAccessIsApproved) == kOnlinePageSaysApprovedNoGames &&
-		OnlinePage_Says(kRelayLineNotAsked, kRelayAccessIsApproved) == kOnlinePageSaysApprovedNotVisited,
+	Check(OnlineLines_Says(kRelayLineAnswered, kRelayAccessIsApproved) == kOnlinePageSaysApprovedGames &&
+		OnlineLines_Says(kRelayLineAsking, kRelayAccessIsApproved) == kOnlinePageSaysApprovedFinding &&
+		OnlineLines_Says(kRelayLineNoAnswer, kRelayAccessIsApproved) == kOnlinePageSaysApprovedNoGames &&
+		OnlineLines_Says(kRelayLineNotAsked, kRelayAccessIsApproved) == kOnlinePageSaysApprovedNotVisited,
 		"and an approved line says what the last find found there");
-	Check(OnlinePage_Says(kRelayLineAnswered, 77) == kOnlinePageSaysNotAsked, "an access state the page doesn't know is never called approved");
+	Check(OnlineLines_Says(kRelayLineAnswered, 77) == kOnlinePageSaysNotAsked, "an access state the page doesn't know is never called approved");
 
 	// THE WORDS: the game's own, with the code, the why or a number put between their two parts, never used as a printf form
 	OnlinePageWords const words = TheWords();
 	char line[256];
-	OnlinePage_StateLine(words, kOnlinePageSaysWaiting, "ABCD-EFGH", NULL, 0, line, sizeof(line));
+	OnlineLines_StateLine(words, kOnlinePageSaysWaiting, "ABCD-EFGH", NULL, 0, line, sizeof(line));
 	Check(strcmp(line, "Waiting for approval: give its owner your code ABCD-EFGH. Enter checks again") == 0, "a waiting line names this PC's code");
-	OnlinePage_StateLine(words, kOnlinePageSaysNoAnswer, NULL, "its keys don't match its line in servers.cfg", 0, line, sizeof(line));
+	OnlineLines_StateLine(words, kOnlinePageSaysNoAnswer, NULL, "its keys don't match its line in servers.cfg", 0, line, sizeof(line));
 	Check(strcmp(line, "Didn't answer: its keys don't match its line in servers.cfg. Enter tries again") == 0, "a line that didn't answer says why");
-	OnlinePage_StateLine(words, kOnlinePageSaysApprovedGames, NULL, NULL, 3, line, sizeof(line));
+	OnlineLines_StateLine(words, kOnlinePageSaysApprovedGames, NULL, NULL, 3, line, sizeof(line));
 	Check(strcmp(line, "Approved: 3 games") == 0, "an approved line says how many games");
-	OnlinePage_StateLine(words, kOnlinePageSaysApprovedNotVisited, NULL, NULL, 0, line, sizeof(line));
+	OnlineLines_StateLine(words, kOnlinePageSaysApprovedNotVisited, NULL, NULL, 0, line, sizeof(line));
 	Check(strcmp(line, "Approved: not asked for games (more than 8 servers)") == 0, "and one past the find's first 8 says so");
 
 	OnlinePageWords hostile = {};
 	hostile.before[kOnlinePageSaysWaiting] = "%s%s%s%n%x";
 	hostile.after[kOnlinePageSaysWaiting] = "%d";
-	OnlinePage_StateLine(hostile, kOnlinePageSaysWaiting, "ABCD-EFGH", NULL, 0, line, sizeof(line));
+	OnlineLines_StateLine(hostile, kOnlinePageSaysWaiting, "ABCD-EFGH", NULL, 0, line, sizeof(line));
 	Check(strcmp(line, "%s%s%s%n%xABCD-EFGH%d") == 0, "words with % in them, from a changed text file, are only letters: they're never a printf form");
 
 	char tiny[8];
-	OnlinePage_StateLine(words, kOnlinePageSaysNoYes, NULL, NULL, 0, tiny, sizeof(tiny));
+	OnlineLines_StateLine(words, kOnlinePageSaysNoYes, NULL, NULL, 0, tiny, sizeof(tiny));
 	Check(strlen(tiny) == sizeof(tiny) - 1, "a line longer than its room is cut, and ended");
-	OnlinePage_StateLine(words, static_cast<OnlinePageSays>(99), NULL, NULL, 0, line, sizeof(line));
+	OnlineLines_StateLine(words, static_cast<OnlinePageSays>(99), NULL, NULL, 0, line, sizeof(line));
 	Check(strlen(line) < sizeof(line), "and a state out of range is read in range, never past the words");
 
 	char name[128];
-	OnlinePage_NameLine("New York", true, 42, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
+	OnlineLines_NameLine("New York", true, 42, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
 	Check(strcmp(name, "New York (ours) - 42 ms") == 0, "a line's first line: its name, ours, and its ping");
-	OnlinePage_NameLine("Friends", false, -1, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
+	OnlineLines_NameLine("Friends", false, -1, "ours", "not ours", "ms", "no ping yet", name, sizeof(name));
 	Check(strcmp(name, "Friends (not ours) - no ping yet") == 0, "and not ours, with no ping yet");
 
 	char refused[128];
-	OnlinePage_RefusedLine("servers.cfg line", 4, "its fingerprint isn't 64 small hex digits", refused, sizeof(refused));
+	OnlineLines_RefusedLine("servers.cfg line", 4, "its fingerprint isn't 64 small hex digits", refused, sizeof(refused));
 	Check(strcmp(refused, "servers.cfg line 4: its fingerprint isn't 64 small hex digits") == 0, "a refused line: its number and the game's own words");
 
 	// WHAT ENTER DOES: the yes page for a line without the yes; a request at most once a minute for each line; nothing while one is on its
@@ -179,16 +179,16 @@ int main()
 
 	for (int access : accesses)
 	{
-		yesFirst = yesFirst && OnlinePage_Pressed(OnlinePage_Says(kRelayLineNoYes, access), true, 0, 0) == kOnlinePageOpenTheYes;
+		yesFirst = yesFirst && OnlineLines_Pressed(OnlineLines_Says(kRelayLineNoYes, access), true, 0, 0) == kOnlinePageOpenTheYes;
 	}
 
 	Check(yesFirst, "Enter on a line without the yes opens its yes page, and sends nothing");
-	Check(OnlinePage_Pressed(kOnlinePageSaysNotAsked, false, 5, 0) == kOnlinePageAsk, "with the yes, the first press asks for access");
-	Check(OnlinePage_Pressed(kOnlinePageSaysWaiting, true, 59999, 0) == kOnlinePageWaitAMinute &&
-		OnlinePage_Pressed(kOnlinePageSaysWaiting, true, 60000, 0) == kOnlinePageAsk, "a second press asks again only once a minute has gone");
-	Check(OnlinePage_Pressed(kOnlinePageSaysApprovedGames, true, 10, 0xFFFFFFF0u) == kOnlinePageWaitAMinute,
+	Check(OnlineLines_Pressed(kOnlinePageSaysNotAsked, false, 5, 0) == kOnlinePageAsk, "with the yes, the first press asks for access");
+	Check(OnlineLines_Pressed(kOnlinePageSaysWaiting, true, 59999, 0) == kOnlinePageWaitAMinute &&
+		OnlineLines_Pressed(kOnlinePageSaysWaiting, true, 60000, 0) == kOnlinePageAsk, "a second press asks again only once a minute has gone");
+	Check(OnlineLines_Pressed(kOnlinePageSaysApprovedGames, true, 10, 0xFFFFFFF0u) == kOnlinePageWaitAMinute,
 		"and the clock wrapping round in that minute changes nothing");
-	Check(OnlinePage_Pressed(kOnlinePageSaysAsking, false, 0, 0) == kOnlinePageNothing && OnlinePage_Pressed(kOnlinePageSaysRefused, false, 0, 0) == kOnlinePageNothing,
+	Check(OnlineLines_Pressed(kOnlinePageSaysAsking, false, 0, 0) == kOnlinePageNothing && OnlineLines_Pressed(kOnlinePageSaysRefused, false, 0, 0) == kOnlinePageNothing,
 		"nothing is sent while a request is on its way, or to a line whose owner refused this PC");
 
 	printf(checksFailed ? "Online page: %d FAILED\n" : "Online page: all passed\n", checksFailed);

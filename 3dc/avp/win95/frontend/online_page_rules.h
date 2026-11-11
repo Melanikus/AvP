@@ -8,6 +8,7 @@
 //
 // WHERE THINGS GO, top to bottom, on the menus' 640 by 480 grid, under the title (drawn at 70):
 //   this PC's access code, once: it's made from this PC's one identity, so it's the same for every server;
+//   under it, the page's answer to the last thing pressed, when there is one ("The access code is on the clipboard.");
 //   the lines, at most kOnlinePageMostShown at a time, each two small lines: its name and what's true of it, then where its row stands,
 //   in words. The page shows them a screenful at a time, and the screenful follows the chosen row, so every line can be reached;
 //   when there are more than that, which of them are shown ("5-8 / 9");
@@ -32,8 +33,9 @@ int const kOnlinePageSmallLine = 15;          // the small font's height (HUD_FO
 int const kOnlinePageBigLine = 21;            // the big font's (MENU_FONT_HEIGHT)
 int const kOnlinePageTitleTop = 70;           // every page's title (menus.cpp, RenderMenu)
 int const kOnlinePageCodeTop = kOnlinePageTitleTop + kOnlinePageBigLine + 5;
-int const kOnlinePageRowsTop = kOnlinePageCodeTop + kOnlinePageSmallLine + 5;
-int const kOnlinePageRowHeight = 2 * kOnlinePageSmallLine + 6;   // a line's two small lines and a gap
+int const kOnlinePageStatusTop = kOnlinePageCodeTop + kOnlinePageSmallLine + 2;   // the page's answer to the last press
+int const kOnlinePageRowsTop = kOnlinePageStatusTop + kOnlinePageSmallLine + 4;
+int const kOnlinePageRowHeight = 2 * kOnlinePageSmallLine + 4;   // a line's two small lines and a gap
 int const kOnlinePageMostShown = 4;
 int const kOnlinePageCountTop = kOnlinePageRowsTop + kOnlinePageMostShown * kOnlinePageRowHeight + 2;
 int const kOnlinePageRefusedTop = kOnlinePageCountTop + kOnlinePageSmallLine + 3;
@@ -44,9 +46,12 @@ int const kOnlinePageOwnRowHeight = kOnlinePageBigLine + 3;
 int const kOnlinePageHelpTop = 420;           // where the menus' help line starts
 int const kOnlinePageLeft = 30;               // the menus' edges (MENU_LEFTXEDGE, MENU_RIGHTXEDGE)
 int const kOnlinePageRight = 610;
+int const kOnlinePageRowNotChosenOutOf100 = 60;   // a row not chosen, brighter than the menus' quarter, so it's read against the starfield
+int const kOnlineQuestionRowsApart = 5;         // added between the new identity's question's two rows, as the access page had them
 
 static_assert(kOnlinePageCodeTop >= kOnlinePageTitleTop + kOnlinePageBigLine, "the code's line starts under the title");
-static_assert(kOnlinePageRowsTop >= kOnlinePageCodeTop + kOnlinePageSmallLine, "the first line's row starts under the code's line");
+static_assert(kOnlinePageStatusTop >= kOnlinePageCodeTop + kOnlinePageSmallLine, "the answer's line starts under the code's line");
+static_assert(kOnlinePageRowsTop >= kOnlinePageStatusTop + kOnlinePageSmallLine, "the first line's row starts under the answer's line");
 static_assert(kOnlinePageCountTop + kOnlinePageSmallLine <= kOnlinePageRefusedTop, "the count's line ends before the refused lines start");
 static_assert(kOnlinePageRefusedTop + kOnlinePageMostRefused * kOnlinePageSmallLine <= kOnlinePageOwnRowsTop, "the refused lines end before the page's own rows");
 static_assert(kOnlinePageOwnRowsTop + kOnlinePageOwnRows * kOnlinePageOwnRowHeight <= kOnlinePageHelpTop, "the page's own rows end before the help line starts");
@@ -69,7 +74,7 @@ struct OnlinePageView
 	int shown;   // how many, from it
 };
 
-inline OnlinePageView OnlinePage_View(int count, int chosen)
+inline OnlinePageView OnlineLines_View(int count, int chosen)
 {
 	OnlinePageView view = { 0, 0 };
 
@@ -90,7 +95,7 @@ inline OnlinePageView OnlinePage_View(int count, int chosen)
 }
 
 // Where a line's row starts, or -1 when it isn't in the screenful shown
-inline int OnlinePage_RowTop(int place, OnlinePageView view)
+inline int OnlineLines_RowTop(int place, OnlinePageView view)
 {
 	if (place < view.first || place >= view.first + view.shown)
 	{
@@ -101,7 +106,7 @@ inline int OnlinePage_RowTop(int place, OnlinePageView view)
 }
 
 // Where one of the page's own rows starts
-inline int OnlinePage_OwnRowTop(int row)
+inline int OnlineLines_OwnRowTop(int row)
 {
 	int const at = row < 0 ? 0 : row >= kOnlinePageOwnRows ? kOnlinePageOwnRows - 1 : row;
 	return kOnlinePageOwnRowsTop + at * kOnlinePageOwnRowHeight;
@@ -109,7 +114,7 @@ inline int OnlinePage_OwnRowTop(int row)
 
 // How many refused lines are shown by their number and words: all of them, up to kOnlinePageMostRefused; with more, one fewer, and the
 // last line says how many more there are
-inline int OnlinePage_RefusedShown(int refused)
+inline int OnlineLines_RefusedShown(int refused)
 {
 	if (refused <= 0)
 	{
@@ -136,7 +141,7 @@ enum OnlinePageSays
 	kOnlinePageSaysApprovedNotVisited // approved, and the last find didn't ask it (past kRelayListMostVisits lines)
 };
 
-inline OnlinePageSays OnlinePage_Says(int lineState, int access)
+inline OnlinePageSays OnlineLines_Says(int lineState, int access)
 {
 	if (lineState == kRelayLineNoYes)
 	{
@@ -198,7 +203,7 @@ enum OnlinePagePress
 
 uint32_t const kOnlinePageAskEveryMs = 60 * 1000;
 
-inline OnlinePagePress OnlinePage_Pressed(OnlinePageSays says, bool askedThisRun, uint32_t now, uint32_t lastAskedAt)
+inline OnlinePagePress OnlineLines_Pressed(OnlinePageSays says, bool askedThisRun, uint32_t now, uint32_t lastAskedAt)
 {
 	if (says == kOnlinePageSaysNoYes)
 	{
@@ -231,7 +236,7 @@ struct OnlinePageWords
 // A line's second line: its state in words. code is this PC's access code; why the game's own fixed words for a line that didn't answer
 // (RelayList_LineNow's why or accessWhy, never anything a server sent); games how many of the last find's games are the line's. Cut short
 // at out's end, always ended.
-inline void OnlinePage_StateLine(const OnlinePageWords &words, OnlinePageSays says, const char *code, const char *why, int games, char *out,
+inline void OnlineLines_StateLine(const OnlinePageWords &words, OnlinePageSays says, const char *code, const char *why, int games, char *out,
 	size_t room)
 {
 	if (!out || room == 0)
@@ -271,7 +276,7 @@ inline void OnlinePage_StateLine(const OnlinePageWords &words, OnlinePageSays sa
 // as "New York (ours) - 42 ms" or "Friends' server (not ours) - no ping yet". The ours/not ours label is the one way the rows differ by
 // which line it is, and it comes from what the game holds, never from the file (RelayList_LineNow's ours). msWords follows the number
 // ("ms"); as above, no words are ever a printf form.
-inline void OnlinePage_NameLine(const char *safeName, bool ours, int pingMs, const char *oursWords, const char *notOursWords,
+inline void OnlineLines_NameLine(const char *safeName, bool ours, int pingMs, const char *oursWords, const char *notOursWords,
 	const char *msWords, const char *noPingWords, char *out, size_t room)
 {
 	if (!out || room == 0)
@@ -297,7 +302,7 @@ inline void OnlinePage_NameLine(const char *safeName, bool ours, int pingMs, con
 
 // A refused line, as "servers.cfg line 4: its fingerprint isn't 64 small hex digits": the line's number and the game's own words for why,
 // never anything of the line itself
-inline void OnlinePage_RefusedLine(const char *lineWords, int lineNumber, const char *why, char *out, size_t room)
+inline void OnlineLines_RefusedLine(const char *lineWords, int lineNumber, const char *why, char *out, size_t room)
 {
 	if (!out || room == 0)
 	{
@@ -309,7 +314,7 @@ inline void OnlinePage_RefusedLine(const char *lineWords, int lineNumber, const 
 }
 
 // Which lines the screenful shows, as "5-8 / 9", only when they don't all fit: otherwise nothing
-inline void OnlinePage_CountLine(int count, OnlinePageView view, char *out, size_t room)
+inline void OnlineLines_CountLine(int count, OnlinePageView view, char *out, size_t room)
 {
 	if (!out || room == 0)
 	{

@@ -43,7 +43,7 @@
 //   - every refusal is told with the line's number and a reason in the game's own words, never what the line said, which could be
 //     anything at all (ServersCfg_LineWords), in the log and on the screen, so someone following an instruction can see what to fix;
 //   - reading a line contacts nothing. Until #175's yes-screen, where the player says yes to a line before it's used, only a game started
-//     with -dev uses one at all (relay_list.cpp's Relay_ServerName), so a player's game reaches no server.
+//     with -dev uses one at all (relay_list.cpp's Server), so a player's game reaches no server.
 // Nothing in a line is ever run, followed or used for anything but what's written above.
 
 #ifndef SERVERS_CFG_H
