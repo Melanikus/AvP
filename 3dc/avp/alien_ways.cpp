@@ -1336,20 +1336,26 @@ bool AlienWays_KeepsClinging(STRATEGYBLOCK *alien)
 // THE SLIDE's checks of its end (Secondary's review, S5): whether the alien's box, with its foot at end, is clear of the level and of
 // anything else. The box is CE_ALIEN's crouched (extents.cpp): 450 mm round, 900 tall from its foot, up. Rays go from its middle to each of
 // its faces and corners, and each must reach that far with nothing in the way. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+// Modified 2026-11-11 by Melanikus (Third), #109 (Secondary's read of a923cf1f, P2): to the middles of its 12 edges too, 26 rays in all.
+// A push puts the box close to more faces than before, so a polygon slipping in between two rays is likelier, and an edge's middle is
+// where a face's ray and a corner's are furthest apart.
 // Modified 2026-11-11 by Melanikus (Third), #109 (PUSH CLEAR, alien_ways_guide.h): it gives the rays stopped short, each with its way, how
 // far short and the facing of what it met, and how many; none is a clear box.
-static int const kEndBoxRays = 14;
+static int const kEndBoxRays = 26;
 
 static int EndBoxHits(STRATEGYBLOCK *alien, const double end[3], AlienWaysBoxHit hits[kEndBoxRays])
 {
 	static const int kWays[kEndBoxRays][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }, { 0, 1, 0 },
+		{ 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }, { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+		{ 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
 		{ 1, -1, 1 }, { 1, -1, -1 }, { -1, -1, 1 }, { -1, -1, -1 }, { 1, 1, 1 }, { 1, 1, -1 }, { -1, 1, 1 }, { -1, 1, -1 } };
 	VECTORCH middle = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1] - 450.0)), static_cast<int>(lround(end[2])) };
 	int count = 0;
 
 	for (const int *way : kWays)
 	{
-		// Out to the box's face that way: 450 across and 450 up or down, so a corner is 450 times the square root of how many axes it's on
+		// Out to the box's face that way: 450 across and 450 up or down, so an edge's middle or a corner is 450 times the square root of how
+		// many axes it's on
 		double const axes = static_cast<double>((way[0] != 0 ? 1 : 0) + (way[1] != 0 ? 1 : 0) + (way[2] != 0 ? 1 : 0));
 		double const reach = 450.0 * sqrt(axes);
 		VECTORCH direction = { way[0] * 65536, way[1] * 65536, way[2] * 65536 };

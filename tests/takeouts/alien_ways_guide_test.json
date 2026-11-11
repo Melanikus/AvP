@@ -2194,6 +2194,31 @@
 					"to": "\t\t\tleast[k] += out[k] * by;\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the end box's edges aren't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "static int const kEndBoxRays = 26;\n",
+					"to": "static int const kEndBoxRays = 14;\n"
+				},
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t{ 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }, { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },\n\t\t{ 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pushed end's cell is the nearest of any face",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "grid->CellOver(grid->SheetOf(pointCell), pushed.x, pushed.y, pushed.z) : kNpcGridNoCell;",
+					"to": "kNpcGridNoCell : kNpcGridNoCell;"
+				}
+			]
 		}
 	]
 }

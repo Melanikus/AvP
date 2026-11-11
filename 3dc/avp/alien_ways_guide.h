@@ -380,9 +380,10 @@ public:
 
 	// PUSH CLEAR (above): the game has pushed the slide's end clear of the level by push (mm). The guide makes its own checks again for the
 	// point that gives, as it made them when the slide began: no push of more than kAlienWaysMostPush, the gap from where the alien's box
-	// touched as it set off under kAlienWaysMostSlide, and no THROUGH join (npc_grid.h) on the grid from where it set off onto it. On yes it
-	// keeps the push, and Sliding gives the point moved by it from then on. On no it keeps nothing, why says why in words, and the game
-	// refuses the slide. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	// touched as it set off under kAlienWaysMostSlide, and no THROUGH join (npc_grid.h) on the grid from where it set off onto it, on its
+	// point's own face (modified 2026-11-11 by Melanikus (Third)). On yes it keeps the push, and Sliding gives the point moved by it from
+	// then on. On no it keeps nothing, why says why in words, and the game refuses the slide. Added 2026-11-11 by Melanikus (Third) for
+	// the AvP port, #109.
 	bool PushSlide(const AlienWaysWho &who, AlienWaysXYZ push, const char **why);
 
 	// Whether an alien the guide has is to keep clinging to what it's on when no way steers it this frame: resting after a stuck, waiting

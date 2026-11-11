@@ -1937,6 +1937,10 @@ static void SourceOfTheGame()
 		&& Has(endBox, "hit.inBy = reach - static_cast<double>(LOS_Lambda);"),
 		"SOURCE: the end box's clear by rays from its middle to its faces and corners, the alien itself left out, and each ray stopped short "
 		"says how far short and what it met");
+	// Secondary's read of a923cf1f, P2 (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): its 12 edges' middles too, 26 rays
+	Check(Has(ways, "static int const kEndBoxRays = 26;\n") && Has(endBox,
+		"\t\t{ 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }, { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },\n\t\t{ 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },\n"),
+		"SOURCE: the end box's rays go to its 12 edges' middles too, 26 in all");
 	// PUSH CLEAR (alien_ways_guide.h): the rays sent again after each push, a box not clear after the last refused, and never more than
 	// kAlienWaysMostPush in all (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
 	std::string const pushClear = Between(ways, "static bool PushEndClear(STRATEGYBLOCK *alien, const double end[3], AlienWaysXYZ *push)",
@@ -1957,6 +1961,11 @@ static void SourceOfTheGame()
 	// refused (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
 	Check(Has(guideCode, "if (fromCell != kNpcGridNoCell && toCell != kNpcGridNoCell && grid->JoinOf(fromCell, toCell) == kNpcGridJoinThrough)"),
 		"SOURCE: a slide's end pushed onto a face hidden behind the one it set off from is refused");
+	// Secondary's read of a923cf1f, P3 (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the pushed point's cell is on its
+	// point's own face, the nearest of any face only when that isn't known
+	Check(Has(guideCode, "uint32_t const onItsFace = pointCell != kNpcGridNoCell ? grid->CellOver(grid->SheetOf(pointCell), pushed.x, pushed.y, pushed.z) : kNpcGridNoCell;")
+		&& Has(guideCode, "uint32_t const toCell = onItsFace != kNpcGridNoCell ? onItsFace : grid->NearestCell(pushed.x, pushed.y, pushed.z, kNpcGridAlien, kNpcGridReach);"),
+		"SOURCE: a pushed end's cell, for its THROUGH check, is the one under it on its point's own face");
 	// S4: in Wander too, a climbing alien the guide has keeps clinging when no way steers it
 	Check(Has(near, "\tif (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tdynPtr->UseStandardGravity=0;"),
 		"SOURCE: in Wander, a climbing alien the guide has keeps clinging when no way steers it");

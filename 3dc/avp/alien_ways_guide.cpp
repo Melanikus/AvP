@@ -622,8 +622,13 @@ bool AlienWaysGuide::PushSlide(const AlienWaysWho &who, AlienWaysXYZ push, const
 		}
 		else if (grid)
 		{
+			// Where it ends: the cell under the pushed point on its point's own face (that cell's sheet), as it clings there once it's back,
+			// and at a corner the nearest cell of all can be on the face beside it (Secondary's read of a923cf1f, P3; modified 2026-11-11 by
+			// Melanikus (Third), #109). The nearest of all only when its point's cell isn't known.
 			uint32_t const fromCell = grid->NearestCell(follower.slideFrom.x, follower.slideFrom.y, follower.slideFrom.z, kNpcGridAlien, kNpcGridReach);
-			uint32_t const toCell = grid->NearestCell(pushed.x, pushed.y, pushed.z, kNpcGridAlien, kNpcGridReach);
+			uint32_t const pointCell = follower.pointCells[follower.slidePoint];
+			uint32_t const onItsFace = pointCell != kNpcGridNoCell ? grid->CellOver(grid->SheetOf(pointCell), pushed.x, pushed.y, pushed.z) : kNpcGridNoCell;
+			uint32_t const toCell = onItsFace != kNpcGridNoCell ? onItsFace : grid->NearestCell(pushed.x, pushed.y, pushed.z, kNpcGridAlien, kNpcGridReach);
 
 			if (fromCell != kNpcGridNoCell && toCell != kNpcGridNoCell && grid->JoinOf(fromCell, toCell) == kNpcGridJoinThrough)
 			{
