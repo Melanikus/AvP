@@ -405,6 +405,9 @@
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_view.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\alien_ways.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
@@ -1099,6 +1102,9 @@
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_view.h">
+      <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\alien_ways.h">
       <Filter>Header Files\behaviours</Filter>
