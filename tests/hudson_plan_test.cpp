@@ -372,7 +372,7 @@ static void TestBadPlans()
 			"yespage=no: and No, with access=check too");
 		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=request", &plan) == 0 && plan.yesPage == kHudsonYesPageNone,
 			"and without it a run's line needs no yes, as before");
-		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online", &plan) == 0 && plan.hostRow == kHudsonHostRowOnline,
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York", &plan) == 0 && plan.hostRow == kHudsonHostRowOnline,
 			"hostrow=online: the host hosts online through the Host row");
 		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host", &plan) == 0 && plan.hostRow == kHudsonHostRowNone,
 			"and without it the host hosts from the code, as before");
@@ -391,6 +391,39 @@ static void TestBadPlans()
 	Refused("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
 	Refused("-dev -askjoiners -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes hostrow=online", kHudsonRefusedHostRowWithCoop);
+
+	// hoston= and joinon= (added 2026-11-11 by Melanikus (Third) for the AvP port): the server a host through the rows chooses, and the one
+	// whose game a Find games run joins, each by its servers.cfg name with _ for a space; a host through the rows always names one
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York", &plan) == 0 &&
+			strcmp(plan.hostOn, "New York") == 0 && plan.joinOn[0] == 0,
+			"hoston=New_York: the host chooses \"New York\", its _ a space again, and joins nothing");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=Frankfurt", &plan) == 0 && strcmp(plan.hostOn, "Frankfurt") == 0,
+			"hoston=Frankfurt: a one-word name is itself");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=eu-1.b_c", &plan) == 0 && strcmp(plan.hostOn, "eu-1.b c") == 0,
+			"hoston= takes -, . and digits as they are");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=abcdefghijklmnopqrstuvwxyz01234", &plan) == 0 &&
+			strcmp(plan.hostOn, "abcdefghijklmnopqrstuvwxyz01234") == 0,
+			"hoston= takes a name of 31, servers.cfg's longest");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New_York", &plan) == 0 &&
+			strcmp(plan.joinOn, "New York") == 0 && plan.hostOn[0] == 0,
+			"joinon=New_York: Find games joins only a game New York listed");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes", &plan) == 0 && plan.joinOn[0] == 0,
+			"and without joinon= any game it may join, as before");
+	}
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithoutHostOn);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hoston=New_York", kHudsonRefusedHostOnWithoutHostRow);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=_York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New__York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New/York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=abcdefghijklmnopqrstuvwxyz012345", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York hoston=Frankfurt", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join joinon=New_York", kHudsonRefusedJoinOnWithoutFindGames);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New%York", kHudsonRefusedJoinOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New_York joinon=New_York", kHudsonRefusedAskedTwice);
 
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): its address, once, with net=. Modified 2026-11-10 by
 	// Melanikus for the AvP port (#175): an address's digits and dots, as a servers.cfg line has only an address; a name is refused. Each

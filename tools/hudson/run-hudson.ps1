@@ -229,7 +229,14 @@ param(
     # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens (hudson_plan.h's yespage= and
     # hostrow=)
     [string]$YesPage = '',        # yes or no: with -Access request or check, the run sees the yes page the Online access row opens, as a player's first time does, and presses that row. The yes holds for the run alone
-    [string]$HostRow = ''         # online: with -Net host, the host hosts as a player does, through the Multiplayer page's Start game and Start, with the server's wait if it hasn't answered
+    [string]$HostRow = '',        # online: with -Net host, the host hosts as a player does, through the Multiplayer page's Start game and Start, with the server's wait if it hasn't answered
+    # Added 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game (hudson_plan.h's
+    # hoston= and joinon=; relay-words.ps1's -ShippedServers)
+    [string]$HostOn = '',         # with -HostRow online: the server to choose on the Host on row, by its servers.cfg name ("New York"). Needed: nothing is chosen for a player
+    [string]$JoinOn = '',         # with -FindGames: press only a game that server listed, by its servers.cfg name
+    [switch]$ShippedServers,      # with -Relay: the copy keeps the build's own servers.cfg, every line it ships, in place of one -ServersLine
+    [string]$ServersSha = '',     # with -ShippedServers: the SHA-256 that servers.cfg must have (the build's own file's), or the run doesn't start
+    [int]$PortNumber = 0          # with -Net host: the port it hosts on (the settings' [Networking] PortNumber), 1024 to 65535, so two hosts can play on one PC. Left out: 23513
 )
 $ErrorActionPreference = 'Stop'
 
@@ -262,7 +269,7 @@ $relayWordsRefusal = Get-HudsonRemoteRelayRefusal $RemoteRelay
 if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 # The relay server (modified 2026-11-10 by Melanikus for the AvP port, #175): one servers.cfg line, to its shape, on this machine unless
 # -RemoteRelay gives its address. The game reads it again by its own rules.
-if ($Relay -and -not $ServersLine) { Stop-Here "-Relay needs -ServersLine: the game finds its server only in servers.cfg, and the run writes that one line there" }
+if ($Relay -and -not $ServersLine -and -not $ShippedServers) { Stop-Here "-Relay needs -ServersLine or -ShippedServers: the game finds its server only in servers.cfg, and the run writes that one line there, or keeps the build's own" }
 if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }
 $serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
 if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
@@ -299,6 +306,22 @@ if ($YesPage -and $Access -cne 'request' -and $Access -cne 'check') { Stop-Here 
 if ($HostRow -and $HostRow -cnotmatch '\A(online)\z') { Stop-Here "-HostRow is online: beta.2 hosts online only, through a server's relay" }
 if ($HostRow -and $Net -ne 'host') { Stop-Here "-HostRow is a host's way in, through the Multiplayer page's Start game, so it needs -Net host" }
 if ($HostRow -and -not $Relay) { Stop-Here "-HostRow hosts through the server servers.cfg names, so it needs -Relay and -ServersLine" }
+# hoston=, joinon=, the shipped servers.cfg and a host's port (added 2026-11-11 by Melanikus (Third) for the AvP port): Hudson's own rules
+# for hoston= and joinon= (hudson_plan.cpp, ReadServerName), checked here first so a run that would be refused never empties its folder.
+# A name here is as servers.cfg keeps it, with single spaces; the run writes each space as _ for Hudson.
+$serverNameRule = '\A[A-Za-z0-9.\-]+( [A-Za-z0-9.\-]+)*\z'
+if ($HostRow -and -not $HostOn) { Stop-Here "-HostRow needs -HostOn, the server to choose on the Host on row: nothing is chosen for a player, so a run names its own" }
+if ($HostOn -and -not $HostRow) { Stop-Here "-HostOn chooses on the Host on row, which only -HostRow online goes through, so it needs -HostRow online" }
+if ($HostOn -and ($HostOn.Length -gt 31 -or $HostOn -cnotmatch $serverNameRule)) { Stop-Here "-HostOn is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with single spaces between them" }
+if ($JoinOn -and -not $FindGames) { Stop-Here "-JoinOn chooses among Find games' games, so it needs -FindGames" }
+if ($JoinOn -and ($JoinOn.Length -gt 31 -or $JoinOn -cnotmatch $serverNameRule)) { Stop-Here "-JoinOn is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with single spaces between them" }
+if ($ShippedServers -and -not $Relay) { Stop-Here "-ShippedServers is the servers -Relay goes through, so it needs -Relay" }
+if ($ShippedServers -and $ServersLine) { Stop-Here "-ShippedServers keeps the build's own servers.cfg, so it can't be given one -ServersLine too" }
+if ($ShippedServers -and $ServersSha -cnotmatch '\A[0-9a-f]{64}\z') { Stop-Here "-ShippedServers needs -ServersSha, the 64 small hex digits of the build's own servers.cfg's SHA-256" }
+if ($ServersSha -and -not $ShippedServers) { Stop-Here "-ServersSha is the shipped servers.cfg's SHA-256, so it needs -ShippedServers" }
+if ($ShippedServers -and $Net -and -not $RemoteRelay) { Stop-Here "-ShippedServers with -Net needs -RemoteRelay: a network run's game goes through one relay beyond this machine, one of the shipped lines' addresses" }
+if ($PortNumber -ne 0 -and ($PortNumber -lt 1024 -or $PortNumber -gt 65535)) { Stop-Here "-PortNumber is from 1024 to 65535" }
+if ($PortNumber -ne 0 -and $Net -ne 'host') { Stop-Here "-PortNumber is the port a host plays on, so it needs -Net host" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -457,6 +480,8 @@ if ($AnswerAfter -ne 0) { $arguments += " answerafter=$AnswerAfter" }
 if ($FindGames) { $arguments += " findgames=yes" }
 if ($YesPage) { $arguments += " yespage=$YesPage" }
 if ($HostRow) { $arguments += " hostrow=$HostRow" }
+if ($HostOn) { $arguments += " hoston=$($HostOn -replace ' ', '_')" }
+if ($JoinOn) { $arguments += " joinon=$($JoinOn -replace ' ', '_')" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
 # remoterelay= keeps a network run's game traffic to that one relay, and Hudson takes it only with net=. An -Access run through a server
@@ -508,12 +533,28 @@ $saves = Join-Path $folder $(if ($SecondCopy) { 'HudsonRun\My Games\Aliens versu
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
 
+# -PortNumber (added 2026-11-11 by Melanikus (Third) for the AvP port): a second host on this PC plays on a port of its own, as two games
+# can't both hold 23513. The copied settings' one PortNumber line is changed, and nothing else, and run.txt's settings_sha256 is then that
+# copy's, as it's what the game reads.
+if ($PortNumber -ne 0)
+{
+    $copied = Join-Path $saves 'AliensVsPredator.cfg'
+    $text = [System.IO.File]::ReadAllText($copied, [System.Text.Encoding]::ASCII)
+    $portLines = [regex]::Matches($text, '(?m)^PortNumber = 23513(?=\r?$)')
+    if ($portLines.Count -ne 1) { Stop-Here "the settings file hasn't one line PortNumber = 23513, so -PortNumber can't be set" }
+    $text = $text.Substring(0, $portLines[0].Index) + "PortNumber = $PortNumber" + $text.Substring($portLines[0].Index + $portLines[0].Length)
+    [System.IO.File]::WriteAllText($copied, $text, [System.Text.Encoding]::ASCII)
+    $settingsFingerprint = (Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash
+}
+
 # -Relay's server (modified 2026-11-10 by Melanikus for the AvP port, #175, in place of the -dev settings RelayServer, RelayListPort,
 # RelayListPin, RelayServerName and RelayKey): the one servers.cfg line the game reads, beside bin\, written only into a copy made for
 # Hudson's runs (relay-words.ps1). A run without -Relay takes away the one a run left, so it reaches no server. The line was checked to its
 # shape above. With -RemoteRelay, the game is told the line's address with remoterelay= too, and uses that relay alone (networking.cpp,
 # TheRemoteRelay).
-$serversRefusal = Set-HudsonServersFile $folder $ServersLine
+# With -ShippedServers (added 2026-11-11 by Melanikus (Third)), the build's own servers.cfg stays as it is, checked to its SHA-256, and
+# nothing is written (relay-words.ps1, Get-HudsonShippedServersRefusal).
+$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }
 if ($serversRefusal) { Stop-Here $serversRefusal }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
@@ -571,7 +612,7 @@ $rateLines = @()
 $resultHere = Join-Path $saves 'hudson-result.txt'
 if (Test-Path -LiteralPath $resultHere) { $rateLines = @(Get-Content -LiteralPath $resultHere | Where-Object { $_ -like 'frames_each_second_asked=*' }) }
 
-Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "servers_line=$ServersLine", "exit=$exitCode", "log_errors=$logErrors") + $rateLines + $pictureLines)
+Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "servers_line=$ServersLine", "exit=$exitCode", "log_errors=$logErrors") + $(if ($ShippedServers) { @("servers_shipped_sha256=$ServersSha") } else { @() }) + $(if ($PortNumber -ne 0) { @("port=$PortNumber") } else { @() }) + $rateLines + $pictureLines)
 
 # What a walk keeps of its map and paths. Only a walk has them, so it isn't news if they're not there.
 foreach ($name in @('hudson-map.txt', 'hudson-ways.txt', 'hudson-trail.txt'))

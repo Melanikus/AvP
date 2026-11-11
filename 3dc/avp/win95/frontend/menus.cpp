@@ -813,6 +813,57 @@ static bool PictureTheAnswerForARun(const char *picture)
 // Join Game, Find Games, then, once the list shows a game this version may join through a relay, its row, pressed. The row's own code
 // joins it (Net_ConnectToSession, drawing the joining screen meanwhile). Then the joining page, drawn as a player sees it, is pictured
 // asking the host with its check code (join-asking.png), and let in (join-letin.png). True once the host has let it in.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game: with joinon=, only
+// a game that server listed is pressed (the line servers.cfg names exactly so). And the list is pictured once every server that has
+// approved this copy has a game on it, or at the 30 s, so one picture shows each server's games; the log says how many servers had one.
+
+// Whether the list's game at session is one the server servers.cfg names exactly name listed: any game for an empty name. A game whose
+// line isn't known is no server's.
+static bool GameIsOnTheNamedLine(int session, const char *name)
+{
+	if (!name[0])
+	{
+		return true;
+	}
+
+	RelayListLineNow now;
+	return SessionData[session].serverLine >= 0 && RelayList_LineNow(SessionData[session].serverLine, &now) && strcmp(now.line.name, name) == 0;
+}
+
+// The games page's row of the first game this version may join through a relay, on the named server (GameIsOnTheNamedLine), or -1.
+// linesWithAGame: how many servers have at least one such game on the page, whatever the name.
+static int JoinableGameRowForARun(const char *name, int *linesWithAGame)
+{
+	bool lineHasAGame[kServersCfgMostLines] = {};
+	int row = -1;
+	*linesWithAGame = 0;
+
+	for (int r = 0; r < AvPMenus.NumberOfElementsInMenu; r++)
+	{
+		int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
+
+		if (s < 0 || !SessionData[s].AllowedToJoin || !SessionData[s].throughRelay)
+		{
+			continue;
+		}
+
+		int const line = SessionData[s].serverLine;
+
+		if (line >= 0 && line < kServersCfgMostLines && !lineHasAGame[line])
+		{
+			lineHasAGame[line] = true;
+			(*linesWithAGame)++;
+		}
+
+		if (row < 0 && GameIsOnTheNamedLine(s, name))
+		{
+			row = r;
+		}
+	}
+
+	return row;
+}
+
 static bool JoinThroughFindGamesForARun(void)
 {
 	LoadAllAvPMenuGfx();
@@ -821,34 +872,51 @@ static bool JoinThroughFindGamesForARun(void)
 	MenuSecondsForARun(1);
 
 	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	const char *const joinOn = Hudson_JoinOnName();
+	int approvedPlaces[kServersCfgMostLines];
 	int row = -1;
+	int linesWithAGame = 0;
+	int approved = 0;
 	DWORD const started = GetTickCount();
 
-	// The list's games come within a few seconds of the page opening; at most 30 s
-	while (joined && bRunning && row < 0 && (DWORD)(GetTickCount() - started) < 30000u)
+	// The list's games come within a few seconds of the page opening; at most 30 s. It waits on until the named game is there and every
+	// server that has approved this copy has a game on the page, so the picture shows them all.
+	while (joined && bRunning && (DWORD)(GetTickCount() - started) < 30000u)
 	{
 		MenuFrameForARun(NULL);
+		row = JoinableGameRowForARun(joinOn, &linesWithAGame);
+		approved = RelayList_ApprovedLines(approvedPlaces, kServersCfgMostLines);
 
-		for (int r = 0; r < AvPMenus.NumberOfElementsInMenu && row < 0; r++)
+		if (row >= 0 && linesWithAGame >= approved)
 		{
-			int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
-
-			if (s >= 0 && SessionData[s].AllowedToJoin && SessionData[s].throughRelay)
-			{
-				row = r;
-			}
+			break;
 		}
 	}
 
+	LogString("hudson: Find Games lists games from " + std::to_string(linesWithAGame) + " of the " + std::to_string(approved < 0 ? 0 : approved)
+		+ " server(s) that approved this copy");
+
 	if (row < 0)
 	{
-		LogErrorString("hudson: Find Games showed no game this version may join through a relay");
+		LogErrorString(joinOn[0] ? std::string("hudson: Find Games showed no game this version may join through a relay on the server joinon= names, \"") + joinOn + "\""
+			: std::string("hudson: Find Games showed no game this version may join through a relay"));
 		joined = false;
 	}
 
 	if (joined)
 	{
 		MenuFrameForARun("join-list.png");
+
+		// The picture drew frames, and the list may have changed with them, so the game's row is found again before it's pressed
+		row = JoinableGameRowForARun(joinOn, &linesWithAGame);
+
+		if (row < 0)
+		{
+			LogErrorString("hudson: the list's game went from the page while it was pictured");
+			ReleaseAllAvPMenuGfx();
+			return false;
+		}
+
 		AvPMenus.CurrentlySelectedElement = row;
 		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
 		LogString("hudson: pressed the list's game");
@@ -1849,7 +1917,7 @@ static void DrawTheHostLine(void)
 //    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
 //    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.
 // True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
-static void HostOnChoiceForARun(void);   // below, with the Host on row
+static bool HostOnChoiceForARun(void);   // below, with the Host on row
 
 static bool HostThroughTheRowsForARun(int level)
 {
@@ -1858,8 +1926,14 @@ static bool HostThroughTheRowsForARun(int level)
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
 
-	// A run has nobody to choose a server on the Host on row, so it chooses as a player would (added 2026-11-11)
-	HostOnChoiceForARun();
+	// A run has nobody to choose a server on the Host on row, so it chooses the one hoston= names, as a player would (added 2026-11-11;
+	// by name since the same day, Third). Without it in time, the page is pictured as it is, and nothing is hosted.
+	if (!HostOnChoiceForARun())
+	{
+		MenuFrameForARun("multiplayer.png");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
 
 	// (Modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": there's no Host row to set any more; every game is hosted
 	// online.)
@@ -2000,22 +2074,64 @@ static void HostOnFollowsTheRow(void)
 	}
 }
 
-// A Hudson run's choice on the Host on row (hostrow=): the row's first approved line, as a player could choose it, and the run's log
-// says so. Only HostThroughTheRowsForARun calls this; nothing chooses for a player (added 2026-11-11 by Melanikus for the AvP port).
-static void HostOnChoiceForARun(void)
+// hoston= and joinon= name a line as servers.cfg does, so they can be as long as its longest name
+static_assert(kHudsonLongestServerName == kServersCfgNameLetters, "hoston= and joinon= take a name as long as servers.cfg's longest");
+
+// The Host on row's choice for the line servers.cfg names exactly name, letter for letter (1 to hostOnCount), or 0 if no line on the row has it
+static int HostOnChoiceNamed(const char *name)
 {
+	for (int i = 0; i < hostOnCount; i++)
+	{
+		RelayListLineNow now;
+
+		if (RelayList_LineNow(hostOnPlaces[i], &now) && strcmp(now.line.name, name) == 0)
+		{
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+// A Hudson run's choice on the Host on row (hostrow=online with hoston=, hudson_plan.h): the line hoston= names, chosen as a player
+// chooses it. A line is on the row only once it has approved this copy, so the run waits for it, up to kHudsonMostHostOnSeconds, with the
+// page drawn meanwhile. Nothing is ever chosen by default, not even the row's only line ("No auto choice, they choose", the owner,
+// 2026-11-11): with no such line in time, nothing is chosen and nothing hosted. True once the row shows that line and the game will host on
+// it (RelayList_HostLine). Only HostThroughTheRowsForARun calls this; nothing chooses for a player. Added 2026-11-11 by Melanikus for the
+// AvP port; modified the same day by Melanikus (Third): by name, and waited for, in place of the row's first line.
+static bool HostOnChoiceForARun(void)
+{
+	const char *const name = Hudson_HostOnName();
+	DWORD const started = GetTickCount();
+	int choice = 0;
+
 	HostOnFollowsTheRow();
 
-	if (hostOnCount > 0)
+	while (name[0] && bRunning && (choice = HostOnChoiceNamed(name)) == 0 && (DWORD)(GetTickCount() - started) < (DWORD)kHudsonMostHostOnSeconds * 1000u)
 	{
-		MP_HostOnChoice = 1;
+		MenuFrameForARun(NULL);
 		HostOnFollowsTheRow();
-		LogString("hudson: the run chooses the Host on row's first server, as a player could");
 	}
-	else
+
+	if (choice == 0)
 	{
-		LogString("hudson: the Host on row has no server that has approved this copy, so nothing can be hosted");
+		// The name came from the plan, which takes only letters, digits, -, . and spaces (hudson_plan.cpp, ReadServerName)
+		LogErrorString(std::string("hudson: the Host on row never offered the server hoston= names, \"") + name + "\", in "
+			+ std::to_string(kHudsonMostHostOnSeconds) + " s (" + std::to_string(hostOnCount) + " server(s) approved this copy): nothing is chosen, so nothing is hosted");
+		return false;
 	}
+
+	MP_HostOnChoice = choice;
+	HostOnFollowsTheRow();
+
+	if (RelayList_HostLine() != hostOnPlaces[choice - 1])
+	{
+		LogErrorString(std::string("hudson: the Host on row shows \"") + name + "\", and the game didn't take it as the server to host on: nothing is hosted");
+		return false;
+	}
+
+	LogString(std::string("hudson: the Host on row says \"") + name + "\", the server hoston= names, chosen as a player chooses it");
+	return true;
 }
 
 extern void AvP_UpdateMenus(void)

@@ -503,6 +503,36 @@
 					"to": "(void)RelayList_HostOn(hostOnCount > 0 ? hostOnPlaces[0] : -1);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a Hudson run's Host on choice takes the row's first line again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "(choice = HostOnChoiceNamed(name)) == 0",
+					"to": "(choice = 1) == 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run's Host on choice takes any line, whatever its name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "RelayList_LineNow(hostOnPlaces[i], &now) && strcmp(now.line.name, name) == 0",
+					"to": "RelayList_LineNow(hostOnPlaces[i], &now)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run's choice is set somewhere else too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tMP_HostOnChoice = choice;\n\tHostOnFollowsTheRow();\n",
+					"to": "\tMP_HostOnChoice = choice;\n\tMP_HostOnChoice = choice;\n\tHostOnFollowsTheRow();\n"
+				}
+			]
 		}
 	]
 }

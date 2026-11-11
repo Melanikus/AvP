@@ -251,9 +251,16 @@ static void TestEveryHostIsOnline()
 	// THE HOST ON ROW (the owner's rulings, 2026-11-11: "they will choose their friends' server", "No auto choice, they choose")
 	Check(Has(data, "int MP_HostOnChoice = 0;") && Has(data, "static AVPMENU_ELEMENT const HostOnRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_HOSTON},\t{0},\t{&MP_HostOnChoice},\t{0},\tTEXTSTRING_MULTIPLAYER_HOSTON_HELP};") &&
 		!Has(header, "HostOnChoice =") && CountOf(menus, "MP_HostOnChoice = ") == 1 &&
-		Has(SourceSlice(menus, "static void HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "MP_HostOnChoice = 1;") &&
-		CountOf(menus, "HostOnChoiceForARun();") == 1 && Has(SourceSlice(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "HostOnChoiceForARun();"),
-		"the Host on row starts on its first choice, \"choose a server\", at every start of the game, and nothing sets it for the player: only a Hudson run's own rows choose (hostrow=)");
+		Has(SourceSlice(menus, "static bool HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "MP_HostOnChoice = choice;") &&
+		CountOf(menus, "!HostOnChoiceForARun()") == 1 && Has(SourceSlice(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "if (!HostOnChoiceForARun())"),
+		"the Host on row starts on its first choice, \"choose a server\", at every start of the game, and nothing sets it for the player: only a Hudson run's own rows choose (hostrow= with hoston=)");
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port: a Hudson run chooses by the name hoston= gives, and never the row's first
+	// line by default ("No auto choice, they choose")
+	std::string const runChoice = SourceSlice(menus, "static bool HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(runChoice, "const char *const name = Hudson_HostOnName();") && Has(runChoice, "(choice = HostOnChoiceNamed(name)) == 0") &&
+		Has(runChoice, "if (choice == 0)\n\t{") && !Has(runChoice, "MP_HostOnChoice = 1;") &&
+		Has(SourceSlice(menus, "static int HostOnChoiceNamed(const char *name)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "strcmp(now.line.name, name) == 0"),
+		"a Hudson run's choice is the line hoston= names, letter for letter, waited for; with no such line nothing is chosen, never the first by default");
 	std::string const choices = SourceSlice(menus, "static char **HostOnChoices(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(choices, "int const approved = RelayList_ApprovedLines(hostOnPlaces, kServersCfgMostLines);") &&
 		Has(choices, "GetTextString(hostOnCount > 0 ? TEXTSTRING_HOSTON_CHOOSE : TEXTSTRING_HOSTON_NONE)") &&

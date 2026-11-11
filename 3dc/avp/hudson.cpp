@@ -5309,6 +5309,18 @@ int Hudson_HostRow()
 	return HudsonRunIsOn ? plan.hostRow : kHudsonHostRowNone;
 }
 
+// hoston= and joinon= (hudson_plan.h): the server named, with its spaces back; "" outside a run or when none is named. Added 2026-11-11 by
+// Melanikus (Third) for the AvP port
+const char *Hudson_HostOnName()
+{
+	return HudsonRunIsOn ? plan.hostOn : "";
+}
+
+const char *Hudson_JoinOnName()
+{
+	return HudsonRunIsOn ? plan.joinOn : "";
+}
+
 void Hudson_PictureThisFrame(const char *name)
 {
 	if (!HudsonRunIsOn)
