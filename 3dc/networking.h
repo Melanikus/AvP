@@ -98,9 +98,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 //     waits for it, then hosts again.
 const char *Net_HostFailedWhy(void);
 
-// Where the online server stands, for a host's screen before it hosts, and while it waits. It only reads, so a screen can ask every
-// frame. Net_HostGame asks the server when it hasn't been asked; so does the games page (RelayList_FindRelays).
-int const kNetServerNone = 0;      // no server in servers.cfg: nothing can be hosted or joined
+// Where the line the player chose to host on stands (relay_list.h's RelayList_HostLine, RelayListLineNow), for a host's screen before
+// it hosts, and while it waits. It only reads, so a screen can ask every frame. Modified 2026-11-11 by Melanikus for the AvP port (one
+// model for every line).
+int const kNetServerNone = 0;      // no server chosen to host on: nothing is hosted until the player chooses one
 int const kNetServerAsking = 1;    // the server is being asked, or hasn't been yet, and hasn't answered: wait, then host
 int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
@@ -277,24 +278,20 @@ int Net_RelayJoinStep();
 // before a join, the games page's own timing of the relay (below).
 int Net_JoinerMsToRelay(const char *region);
 
-// The games page's own round trip to the server's relay, before any join (added 2026-11-10 by Melanikus for the AvP port; networking.cpp
-// says how). The page calls the first each frame while it's open, and the timing starts by itself once the list names the relay, which is
-// only after the player's yes to the line. The second ends it whatever it's doing (the page has closed, or opens again). The third says
-// whether a region's relay is being timed, so the page shows "..." for it in the meantime.
-void Net_TimeTheRelayForThePage(void);
-void Net_StopTimingTheRelay(void);
-bool Net_RelayBeingTimed(const char *region);
+// (Removed 2026-11-11 by Melanikus for the AvP port, one model for every line: the games page's own timing of the one server's relay.
+// Each line's round trip is the list's own visit's, relay_list.h's RelayListLineNow.pingMs.)
 
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
 // nothing is ever written past it. Only on the game's main thread, like the list of sessions.
 struct RelayListGame;
-// line: the good line whose server listed it (RelayList_LineAt's place), or -1 for the line this run uses. A game from any other line is
-// on the list, but can't be joined (added 2026-11-11 by Melanikus for the AvP port)
-bool Net_AddRelaySession(const RelayListGame &game, int line = -1);
+// line: the servers.cfg line whose server listed it, by its place (RelayListServerGame.line, which the list's code writes from its own
+// visit). The game is joined through that line's relay, with that line's keys, and a game from no line is dropped (added 2026-11-11 by
+// Melanikus for the AvP port: one model for every line).
+bool Net_AddRelaySession(const RelayListGame &game, int line);
 
 // Where a game from the relays' list is on the list of sessions, by its region and its code's 8 letters; -1 if it isn't there
-int Net_FindRelaySession(const char *region, const char *code);
+int Net_FindRelaySession(int line, const char *region, const char *code);   // by its line too (2026-11-11)
 
 // THE REQUEST TO JOIN (version 114; networking.cpp says how it works). Every joiner asks the host first, and a person at the host answers.
 // The host's side: the oldest request waiting, if there is one, with the joiner's name (as the joiner gave it: hostile, so the screen makes it
@@ -364,6 +361,7 @@ struct NetRelayPlayState
 {
 	bool throughRelay;                        // false: not playing through a relay, so no line, and the rest is empty
 	bool isHost;
+	int line;                                 // the servers.cfg line it's played through (relay_list.h's place), or -1 (added 2026-11-11)
 	char region[kNetRelayRegionLetters + 1];  // the relay's region
 	int ms;   // -1 while nothing is measured. The host: its round trip to its relay, from the last keep and its answer (one every 15 s), or
 	          // from its echoes until the first. A joiner: ENet's round trip to the host, which goes through the relay, so it's what the player

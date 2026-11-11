@@ -212,7 +212,6 @@ static void LogDroppedMessage(const char *why);   // further down: a game on the
 static ENetAddress relayAddress;                                   // the relay the room is on, at its control port
 static char relayRegion[kRelayListRegionLetters + 1];              // and its region, as the list names it
 static ENetAddress relayCandidates[kNetRelayMostRelays];           // the relays the list named, each at its control port, while timing them
-static char relayCandidateRegions[kNetRelayMostRelays][kRelayListRegionLetters + 1];
 static size_t relayCandidateCount = 0;
 static bool relayHosting = false;              // this machine hosts a game that's going, or open, through a relay
 static bool relayPicking = false;              // it's timing the relays, before it asks the nearest for a room
@@ -232,6 +231,7 @@ static int relayJoinStep = kNetRelayJoinStepNone;       // where that join has g
 static NetRelayHostState relayHostNews = {};             // what the host is doing with its relay, as its screen is told it
 static bool relayJoinedThrough = false;                  // this joiner's game is one it joined through a relay
 static char relayJoinedRegion[kRelayListRegionLetters + 1];   // and that relay's region
+static int relayJoinedLine = -1;                                // and that game's servers.cfg line (2026-11-11)
 
 uint32_t const kRelayListEveryMs = 1000;
 size_t const kRelayMostPacketBytes = 1500;     // the most a relay passes on (PROTOCOL.md, section 2)
@@ -756,16 +756,16 @@ uint32_t Net_RemoteRelayAddress()
 }
 
 // Whether a relay from the list is the one the run was given: at the address it was given, and no other
-static bool TheRemoteRelay(const RelayListRelay &relay)
+static bool TheRemoteRelay(uint32_t address)
 {
-	if (remoteRelayGiven == 0 || relay.address != remoteRelayGiven)
+	if (remoteRelayGiven == 0 || address != remoteRelayGiven)
 	{
 		return false;
 	}
 
 	if (remoteRelayAddress == 0)
 	{
-		remoteRelayAddress = relay.address;
+		remoteRelayAddress = address;
 		LogString("net: a Hudson run with net= uses the one relay it was given, at the address it was given (the run's result says which)");
 	}
 
@@ -784,20 +784,16 @@ static void LoopbackOnlyAddress(ENetAddress *address)
 		return;
 	}
 
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): every line's relay, from servers.cfg through the list's
+	// code (RelayList_RelayOf), for the one the run was given
 	if (remoteRelayRoute == 0)
 	{
-		RelayListRelay relays[kRelayListMostRelays];
-		int named = 0;
-
-		// The list's relays as they are now, asked once
-		if (!RelayList_Relays(relays, &named))
+		for (int place = 0; place < RelayList_LineCount(); place++)
 		{
-			named = 0;
-		}
+			uint32_t relayAt = 0;
+			int port = 0;
 
-		for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays); i++)
-		{
-			if (relays[i].port < 1 || relays[i].port > 65535 || !TheRemoteRelay(relays[i]))
+			if (!RelayList_RelayOf(place, &relayAt, &port) || port < 1 || port > 65535 || !TheRemoteRelay(relayAt))
 			{
 				continue;
 			}
@@ -805,7 +801,7 @@ static void LoopbackOnlyAddress(ENetAddress *address)
 			ENetSocket const probe = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
 			ENetAddress to;
 			to.host = remoteRelayAddress;
-			to.port = static_cast<uint16_t>(relays[i].port);
+			to.port = static_cast<uint16_t>(port);
 			ENetAddress mine;
 			mine.host = ENET_HOST_ANY;
 			mine.port = 0;
@@ -841,9 +837,14 @@ static bool OnTheRemoteRoute(const ENetAddress &address)
 // (#175): the relay is at its server's servers.cfg line's address, which the line's reader held to the address rule (servers_cfg.h), so
 // nothing here waits for a name service. This checks the two that must never be sent to again, in case that rule ever changes: "any
 // address" (0.0.0.0) and "everyone on this network" (255.255.255.255). False for those, or for a port that isn't one.
-static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the relay of one servers.cfg line, by its place, as the
+// list's code reads it from that line alone (RelayList_RelayOf); never chosen by a region, which is only a word a server sends.
+static bool RelayLookUp(int line, ENetAddress *out)
 {
-	if (relay.port < 1 || relay.port > 65535 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
+	uint32_t address = 0;
+	int port = 0;
+
+	if (!RelayList_RelayOf(line, &address, &port) || port < 1 || port > 65535 || address == ENET_HOST_ANY || address == ENET_HOST_BROADCAST)
 	{
 		return false;
 	}
@@ -851,14 +852,14 @@ static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 	// Hudson's branch: a run with net= opens nothing beyond this machine, so it uses only a relay on this machine (127.x), hosting or
 	// joining, or the one relay beyond it that the run was given by its address (TheRemoteRelay, above). A relay anywhere
 	// else is left out here, before anything is sent to it.
-	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))
+	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(address) && !TheRemoteRelay(address))
 	{
 		LogString("net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out");
 		return false;
 	}
 
-	out->host = relay.address;
-	out->port = static_cast<uint16_t>(relay.port);
+	out->host = address;
+	out->port = static_cast<uint16_t>(port);
 	return true;
 }
 
@@ -904,6 +905,7 @@ static NetRelayV2Picker relayV2Picker;
 static NetRelayStaticKeys relayV2Keys;       // the relay's keys, once they've come proved by the server's line
 static ENetAddress relayV2Address;           // the relay, at its control port
 static char relayV2Region[kRelayListRegionLetters + 1];
+static int relayV2Line = -1;                 // the servers.cfg line whose relay this is, and whose keys alone it takes (2026-11-11)
 static uint32_t relayV2Ms = 0;               // the cookie round's round trip
 static uint32_t relayV2SealsRefused = 0;     // version 1 messages the session wouldn't seal (not open, or over): never sent plain
 
@@ -920,6 +922,7 @@ static void RelayV2Forget()
 	memset(&relayV2Keys, 0, sizeof(relayV2Keys));
 	memset(&relayV2Address, 0, sizeof(relayV2Address));
 	relayV2Region[0] = 0;
+	relayV2Line = -1;
 	relayV2Step = kRelayV2None;
 	relayV2Started = false;
 	relayV2Ms = 0;
@@ -940,18 +943,21 @@ static const char *RelayV2WhyText(int why)
 // Starts using a relay, by asking the list for its keys. Nothing is sent to the relay yet. False, with why in fixed words, if it can't be
 // used. Modified 2026-11-10 by Melanikus for the AvP port (#175): the keys come proved by the server's servers.cfg line (relay_list.h), so
 // there's no setting to hold them to.
-static bool RelayV2Begin(const ENetAddress &relay, const char *region, bool times, const char **why)
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the keys are asked of that relay's own line, and only its
+// answer is taken (RelayV2Turn)
+static bool RelayV2Begin(const ENetAddress &relay, int line, const char *region, bool times, const char **why)
 {
 	RelayV2Forget();
 
-	if (!region || !RelayList_AskForRelayKeys(region))
+	if (!RelayList_AskForRelayKeysOn(line, region))
 	{
 		*why = "the relay's keys couldn't be asked for";
 		return false;
 	}
 
 	relayV2Address = relay;
-	strncpy(relayV2Region, region, kRelayListRegionLetters);
+	relayV2Line = line;
+	strncpy(relayV2Region, region ? region : "", kRelayListRegionLetters);
 	relayV2Region[kRelayListRegionLetters] = 0;
 	relayV2Times = times;
 	relayV2Step = kRelayV2Keys;
@@ -1009,15 +1015,17 @@ static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
 	if (relayV2Step == kRelayV2Keys)
 	{
 		const char *listWhy = NULL;
-		int const came = RelayList_RelayKeysCame(relayV2Keys.p384, relayV2Keys.kem, &listWhy);
+		int keysLine = -1;
+		int const came = RelayList_RelayKeysCameOn(&keysLine, relayV2Keys.p384, relayV2Keys.kem, &listWhy);
 
 		if (came == kRelayKeysWaiting)
 		{
 			return relayV2Step;
 		}
 
-		// The keys come only proved by the server's line (relay_list.h): anything else, and nothing is sent to the relay
-		if (came != kRelayKeysCame)
+		// The keys come only proved by the server's line (relay_list.h), and only that relay's own line's (modified 2026-11-11): anything
+		// else, and nothing is sent to the relay
+		if (came != kRelayKeysCame || keysLine != relayV2Line)
 		{
 			*why = listWhy ? listWhy : "the relay's keys couldn't be had";
 			RelayV2Forget();
@@ -1194,9 +1202,9 @@ static bool PeerIsThroughRelay(const ENetPeer *peer)
 // Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): there's no plain game, at home or anywhere, so a game
 // not through a server's relay is refused, and so is a host with no server to go through.
 static const char *const kNotThroughTheList = "that game isn't on the online list, and a game is played only through a server's relay, sealed";
-static const char *const kNoServerSet = "no server is set in servers.cfg, and a game is hosted only through a server's relay, sealed";
+static const char *const kNoServerChosen = "choose a server to host on";   // the owner's ruling, 2026-11-11: "No auto choice, they choose"
+static const char *const kNotApprovedThere = "you haven't been approved on that server yet: ask on the Online page";
 static const char *const kServerNotYet = "the server hasn't answered yet";
-static const char *const kOnAnotherServer = "that game is on another server in servers.cfg: pick it on the Servers page, and it's used from the next start";   // 2026-11-11
 static const char *const kServerNotAgreed = "you haven't said yes to the server in servers.cfg yet";   // #175's last part (2026-11-10)
 static const char *const kRelayCantBeUsed = "the server's relay can't be used";
 static const char *const kNoIdentity = "this game's identity couldn't be made";
@@ -1311,34 +1319,24 @@ static bool RelayHostStart(const char **why)
 	relayHostMs = 0;
 	relayRegion[0] = 0;
 
-	RelayListRelay relays[kRelayListMostRelays];
-	int named = 0;
+	// Modified 2026-11-11 by Melanikus for the AvP port (the owner's rulings: "No auto choice, they choose", and every server through the
+	// same code): the relay of the line the player chose to host on, and no other. Nothing is chosen for them: with none chosen, nothing
+	// is hosted.
+	int const line = RelayList_HostLine();
 
-	if (!host || !RelayList_Relays(relays, &named) || named <= 0)
+	if (line < 0)
 	{
-		// The server hasn't answered yet, or can't be used: Net_ServerState tells the two apart, so a host waits for the first (#188)
-		const char *serverWhy = NULL;
-		*why = RelayList_ServerState(&serverWhy) == kRelayServerCantUse && serverWhy ? serverWhy : kServerNotYet;
+		*why = kNoServerChosen;
 		return false;
 	}
 
-	for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays) && relayCandidateCount < kNetRelayMostRelays; i++)
+	if (!host || !RelayLookUp(line, &relayCandidates[0]))
 	{
-		if (RelayLookUp(relays[i], &relayCandidates[relayCandidateCount]))
-		{
-			strncpy(relayCandidateRegions[relayCandidateCount], relays[i].region, kRelayListRegionLetters);
-			relayCandidateRegions[relayCandidateCount][kRelayListRegionLetters] = 0;
-			relayCandidateCount++;
-		}
-	}
-
-	if (relayCandidateCount == 0)
-	{
-		// Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing is looked up now, as the relay is at its server's servers.cfg
-		// line's address, so the words say only that it can't be used
 		*why = kRelayCantBeUsed;
 		return false;
 	}
+
+	relayCandidateCount = 1;
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose whole id the listing carries and
 	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game isn't hosted online at all (#188).
@@ -1354,7 +1352,7 @@ static bool RelayHostStart(const char **why)
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2, step 7): nothing is sent to the relay until its
 	// keys have come (RelayV2Begin, RelayV2Turn). Modified 2026-11-10 (#175): it's the server's one relay, whose keys its servers.cfg line
 	// proves (relay_list.h). Version 1's timing of every relay with plain echoes is gone (#175 PR 3a).
-	if (!RelayV2Begin(relayCandidates[0], relayCandidateRegions[0], true, why))
+	if (!RelayV2Begin(relayCandidates[0], line, NULL, true, why))
 	{
 		*why = *why ? *why : kRelayCantBeUsed;
 		return false;
@@ -1616,7 +1614,7 @@ static void RelayHostLeave()
 // the game's relay. It takes at most the joiner's own limits (10 s for an answer, 15 s for READY), and never more than kRelayJoinMostMs in
 // all. Gives back the relay's port to connect the game to, or 0, with relayJoinFailedWhy saying why. Everything heard from anywhere but the
 // relay is dropped.
-static uint16_t RelayHandshake(const char *region, const char *code)
+static uint16_t RelayHandshake(int line, const char *region, const char *code)
 {
 	uint32_t const started = enet_time_get();
 
@@ -1627,7 +1625,7 @@ static uint16_t RelayHandshake(const char *region, const char *code)
 	bool joinerStarted = false;
 	const char *channelWhy = NULL;
 
-	if (!host || !RelayV2Begin(relayAddress, region, false, &channelWhy))
+	if (!host || !RelayV2Begin(relayAddress, line, region, false, &channelWhy))
 	{
 		relayEndToEndJoinFailed = channelWhy ? channelWhy : "the relay couldn't be used";
 		return 0;
@@ -1768,6 +1766,7 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 
 	memset(state, 0, sizeof(*state));
 	state->ms = -1;
+	state->line = -1;
 
 	// A host whose room on the relay is open: its last keep's round trip, or its echoes' until the first keep has been answered
 	if (relayHosting && !relayPicking && relayHost.Open())
@@ -1775,6 +1774,7 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 		int const keepMs = relayHost.KeepMs();
 		state->throughRelay = true;
 		state->isHost = true;
+		state->line = RelayList_HostLine();
 		memcpy(state->region, relayRegion, sizeof(state->region));
 		state->ms = keepMs >= 0 ? keepMs : (relayHostMs > 0 ? relayHostMs : -1);
 		return;
@@ -1784,6 +1784,7 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 	if (AvP.Network == I_Peer && relayJoinedThrough && ServerPeer && ServerPeer->state == ENET_PEER_STATE_CONNECTED)
 	{
 		state->throughRelay = true;
+		state->line = relayJoinedLine;
 		memcpy(state->region, relayJoinedRegion, sizeof(state->region));
 
 		if (ServerPeer->lastReceiveTime > 0)
@@ -1793,207 +1794,32 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 	}
 }
 
-// THE GAMES PAGE'S OWN ROUND TRIP TO THE RELAY, before any join, for its ping column. Added 2026-11-10 by Melanikus for the AvP port (PO's
-// ruling, from the owner's look at the showcase: the column said "?"). The server's one relay is timed with version 2's cookie round, as a
-// host's channel times it (net_relay_v2.h's NetRelayV2Picker): kNetRelayEchoes COOKIE_ASKs, each 1,200 bytes and answered with 64, which
-// keeps nothing on the relay, opens nothing, and needs no approval. The list names the relay only once the player has said yes to its line
-// and the server's keys have matched it (relay_list.h), so nothing is sent before that. The asks go from a socket of the page's own, open
-// only while they're timed, and closed with the page (Net_StopTimingTheRelay); only an answer from the relay's own address is heard,
-// and the picker takes only a cookie, from its control port, for an ask it sent. Until it's done the page shows "...".
-int const kPageTimingNotYet = 0;     // the list hasn't named the relay yet: before the yes, or before the server's check
-int const kPageTimingMeasuring = 1;
-int const kPageTimingTimed = 2;
-int const kPageTimingCantTime = 3;   // no answer in time, or the socket couldn't be made
-
-static ENetSocket pageTimingSocket = ENET_SOCKET_NULL;
-static NetRelayV2Picker pageTimer;
-static ENetAddress pageTimedRelay;
-static char pageTimedRegion[kRelayListRegionLetters + 1];
-static int pageTiming = kPageTimingNotYet;
-static uint32_t pageTimedMs = 0;
-
-static void ClosePageTimingSocket()
-{
-	if (pageTimingSocket != ENET_SOCKET_NULL)
-	{
-		enet_socket_destroy(pageTimingSocket);
-		pageTimingSocket = ENET_SOCKET_NULL;
-	}
-}
-
-void Net_StopTimingTheRelay(void)
-{
-	ClosePageTimingSocket();
-	pageTimer.Reset();
-	pageTiming = kPageTimingNotYet;
-	pageTimedMs = 0;
-	pageTimedRegion[0] = 0;
-}
-
-void Net_TimeTheRelayForThePage(void)
-{
-	if (pageTiming == kPageTimingTimed || pageTiming == kPageTimingCantTime)
-	{
-		return;
-	}
-
-	uint32_t const now = enet_time_get();
-
-	// The first time the list names the relay: the socket, and the first ask
-	if (pageTiming == kPageTimingNotYet)
-	{
-		RelayListRelay relays[kRelayListMostRelays];
-		int named = 0;
-
-		if (!RelayList_Relays(relays, &named) || named <= 0)
-		{
-			return;
-		}
-
-		if (!RelayLookUp(relays[0], &pageTimedRelay))
-		{
-			pageTiming = kPageTimingCantTime;
-			return;
-		}
-
-		strncpy(pageTimedRegion, relays[0].region, kRelayListRegionLetters);
-		pageTimedRegion[kRelayListRegionLetters] = 0;
-		uint8_t ids[kNetRelayEchoes * kNetV2IdBytes];
-		RelayRandomBytes(ids, sizeof(ids));
-		uint16_t const port = pageTimedRelay.port;
-		pageTimingSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
-
-		ENetAddress any;
-		any.host = ENET_HOST_ANY;
-		any.port = 0;
-
-		// Hudson's branch: a run with net= puts this socket on this machine's own address too, or on the way to its one relay beyond it
-		if (NetLoopbackOnly)
-		{
-			LoopbackOnlyAddress(&any);
-		}
-
-		if (pageTimingSocket == ENET_SOCKET_NULL || enet_socket_set_option(pageTimingSocket, ENET_SOCKOPT_NONBLOCK, 1) < 0
-			|| enet_socket_bind(pageTimingSocket, &any) < 0 || !pageTimer.Start(1, &port, ids, now))
-		{
-			ClosePageTimingSocket();
-			pageTiming = kPageTimingCantTime;
-			return;
-		}
-
-		pageTiming = kPageTimingMeasuring;
-		LogString("net: the games page is timing the server's relay");
-	}
-
-	// What has come: from the relay's own address only. Anything else is dropped unread.
-	static uint8_t packet[kRelayMostPacketBytes];
-
-	for (size_t n = 0; n < kRelayMostPacketsAWait; n++)
-	{
-		enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
-
-		if (enet_socket_wait(pageTimingSocket, &condition, 0) < 0 || !(condition & ENET_SOCKET_WAIT_RECEIVE))
-		{
-			break;
-		}
-
-		ENetAddress from;
-		ENetBuffer buffer;
-		buffer.data = packet;
-		buffer.dataLength = sizeof(packet);
-		int const got = enet_socket_receive(pageTimingSocket, &from, &buffer, 1);
-
-		if (got <= 0)
-		{
-			break;
-		}
-
-		if (from.host == pageTimedRelay.host)
-		{
-			pageTimer.Hear(0, from.port, packet, static_cast<size_t>(got), now);
-		}
-	}
-
-	pageTimer.Tick(now);
-
-	NetRelayV2PickerSend sends[kNetRelayV2MostPickerSends];
-	size_t const sendCount = pageTimer.TakeSends(sends, kNetRelayV2MostPickerSends);
-
-	for (size_t i = 0; i < sendCount; i++)
-	{
-		ENetAddress to = pageTimedRelay;
-		to.port = sends[i].port;
-		ENetBuffer buffer;
-		buffer.data = sends[i].bytes;
-		buffer.dataLength = kNetV2DatagramBytes;
-		enet_socket_send(pageTimingSocket, &to, &buffer, 1);
-	}
-
-	if (pageTimer.Done(now))
-	{
-		uint32_t ms = 0;
-		bool const timed = pageTimer.RelayMs(0, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs);
-		ClosePageTimingSocket();
-		pageTiming = timed ? kPageTimingTimed : kPageTimingCantTime;
-		pageTimedMs = timed ? ms : 0;
-		LogString(timed ? "net: the games page has timed the server's relay" : "net: the server's relay didn't answer the games page's timing in time");
-	}
-}
-
-bool Net_RelayBeingTimed(const char *region)
-{
-	return region && pageTiming == kPageTimingMeasuring && strncmp(region, pageTimedRegion, sizeof(pageTimedRegion)) == 0;
-}
-
-// The page's own time for that region's relay, or -1
-static int PageTimedMs(const char *region)
-{
-	if (!region || pageTiming != kPageTimingTimed || strncmp(region, pageTimedRegion, sizeof(pageTimedRegion)) != 0)
-	{
-		return -1;
-	}
-
-	return static_cast<int>(pageTimedMs);
-}
+// (Removed 2026-11-11 by Melanikus for the AvP port, one model for every line: the games page's own timing of the one server's relay, with
+// its own socket, Net_TimeTheRelayForThePage, Net_StopTimingTheRelay and Net_RelayBeingTimed. Each line's round trip is measured by the
+// list's own visit to it (relay_list.h's RelayListLineNow.pingMs), and the page shows that.)
 
 // Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): the joiner's round trip to its relay, from the channel's own timing (the
 // cookie round, as the host's own is), once a join has made it, for the relay of that region. Version 1's timing of every relay with plain
 // echoes before a join is gone: a version 2 relay answers no plain echo (Primary, beta2-server's RelayCore.java), and a version 2 game sends
-// no plain message. Modified again the same day (PO's ruling): before a join, the games page's own timing of the relay, above; -1 without
-// either, when the page shows "?" (or "..." while it's timing), and for any other region.
+// no plain message. -1 before that, and for any other region.
 int Net_JoinerMsToRelay(const char *region)
 {
 	if (!region || relayV2Ms == 0 || relayV2Ms > static_cast<uint32_t>(kRelayMostHostMs) || strncmp(region, relayV2Region, sizeof(relayV2Region)) != 0)
 	{
-		return PageTimedMs(region);
+		return -1;
 	}
 
 	return static_cast<int>(relayV2Ms);
 }
 
-// A join through a relay: the relay of the game's region, from the relays the list names, looked up, then its handshake (RelayHandshake).
-// Gives back the relay's port to connect the game to, or 0, with relayJoinFailedWhy saying why.
-static uint16_t RelayJoin(const char *region, const char *code)
+// A join through a relay: the relay of the game's own servers.cfg line, then its handshake (RelayHandshake). Gives back the relay's port to
+// connect the game to, or 0, with relayJoinFailedWhy saying why. Modified 2026-11-11 by Melanikus for the AvP port (one model for every
+// line): the relay is the line's, never one found by the game's region, which is only a word its server sent.
+static uint16_t RelayJoin(int line, const char *region, const char *code)
 {
 	relayJoinFailedWhy = kNetRelayNoRelay;
 	relayEndToEndJoinFailed = NULL;
-	RelayListRelay relays[kRelayListMostRelays];
-	int named = 0;
-
-	if (!RelayList_Relays(relays, &named))
-	{
-		return 0;
-	}
-
-	for (int i = 0; i < named && i < static_cast<int>(kRelayListMostRelays); i++)
-	{
-		if (strncmp(relays[i].region, region, sizeof(relays[i].region)) == 0)
-		{
-			return RelayLookUp(relays[i], &relayAddress) ? RelayHandshake(region, code) : 0;
-		}
-	}
-
-	return 0;
+	return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;
 }
 
 // Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list (relay_list.h, PROTOCOL.md 7014de1) goes on the same list
@@ -2001,7 +1827,7 @@ static uint16_t RelayJoin(const char *region, const char *code)
 // to the list and on to us, so each part is checked here, as a search's answer was before the search went: the lobby state, a code, a region, the
 // names' lengths, a slot left, and the level, which has to be one this machine has, picked by its number, its name and its game style, as a
 // game found on this network is (GetLocalMultiplayerLevelIndex). Gives back whether it went on the list.
-static bool AddRelaySession(const char *code, const char *region, const char *name, int players, int maxPlayers, int version, uint16_t gameStyle,
+static bool AddRelaySession(int line, const char *code, const char *region, const char *name, int players, int maxPlayers, int version, uint16_t gameStyle,
 	uint16_t levelNumber, const char *levelName, uint8_t coopLobby, const uint8_t hostId[kNetIdentityIdBytes])
 {
 	if (!code || !NetRelay_CodeIsGood(code) || !hostId || !region || !name || !levelName || !CoopLobby_StateIsReal(coopLobby))
@@ -2026,7 +1852,8 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	// The same game twice is one game
 	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
 	{
-		if (SessionData[i].throughRelay && memcmp(SessionData[i].relayCode, code, kNetRelayCodeLetters) == 0
+		// One game is the same line, code and region (modified 2026-11-11: two lines' games never hide each other, whatever they say)
+		if (SessionData[i].throughRelay && SessionData[i].serverLine == line && memcmp(SessionData[i].relayCode, code, kNetRelayCodeLetters) == 0
 			&& strncmp(SessionData[i].relayRegion, region, sizeof(SessionData[i].relayRegion)) == 0)
 		{
 			return false;
@@ -2036,6 +1863,7 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	SESSION_DESC &entry = SessionData[NumberOfSessionsFound];
 	memset(&entry, 0, sizeof(entry));
 	entry.throughRelay = true;
+	entry.serverLine = line;   // the line whose server listed it: its relay and keys are the join's (2026-11-11)
 
 	// Its GUID, the same each time the page is set up again, so the page keeps its highlight on it (Fourth's cold read, finding 6): the
 	// region's letters summed into the first part (FNV-1a), "RL" and 1 in the next two, so it can't be a GUID a LAN game makes, and the code's
@@ -2104,43 +1932,31 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 
 // The list's own record of a game (relay_list_text.h, Fourth's, checked there to PROTOCOL.md): each number is checked again for the room it's
 // kept in here, before it's narrowed, and the rest goes to AddRelaySession
-// Whether a good line is the one this run uses (-1 is). Added 2026-11-11 by Melanikus for the AvP port: this run has the relay keys of
-// that line alone, so a game listed by another line's server can be shown but not joined.
-static bool OnTheLineInUse(int line)
-{
-	RelayListLineShown shown;
-	return line < 0 || (RelayList_LineAt(line, &shown) && shown.inUse);
-}
-
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): line is the place of the servers.cfg line whose server
+// listed the game (RelayListServerGame.line, which the list's code writes from its own visit, never from anything a server sent). A game
+// from no line is dropped.
 bool Net_AddRelaySession(const RelayListGame &game, int line)
 {
+	if (line < 0 || line >= RelayList_LineCount())
+	{
+		LogDroppedMessage("a game on the relays' list came from no line of servers.cfg");
+		return false;
+	}
+
 	if (game.gameStyle < 0 || game.gameStyle > 255 || game.levelNumber < 0 || game.levelNumber > 100 || game.coopLobby < 0 || game.coopLobby > 255)
 	{
 		LogDroppedMessage("a game on the relays' list had a number out of its range");
 		return false;
 	}
 
-	if (!AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
-		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.hostId))
-	{
-		return false;
-	}
-
-	// The line that listed it, and whether this run can join it (added 2026-11-11 by Melanikus for the AvP port)
-	SESSION_DESC &added = SessionData[NumberOfSessionsFound - 1];
-	added.serverLine = line;
-
-	if (!OnTheLineInUse(line))
-	{
-		added.AllowedToJoin = false;
-	}
-
-	return true;
+	return AddRelaySession(line, game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
+		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.hostId);
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
 // AddRelaySession tells two apart; -1 if it isn't there (relay_auto.cpp)
-int Net_FindRelaySession(const char *region, const char *code)
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): by the game's line too, never by its region alone
+int Net_FindRelaySession(int line, const char *region, const char *code)
 {
 	if (!region || !code)
 	{
@@ -2149,7 +1965,7 @@ int Net_FindRelaySession(const char *region, const char *code)
 
 	for (uint32_t i = 0; i < NumberOfSessionsFound && i < MAX_NO_OF_SESSIONS; i++)
 	{
-		if (SessionData[i].throughRelay && memcmp(SessionData[i].relayCode, code, kRelayCodeLetters) == 0
+		if (SessionData[i].throughRelay && SessionData[i].serverLine == line && memcmp(SessionData[i].relayCode, code, kRelayCodeLetters) == 0
 			&& strncmp(SessionData[i].relayRegion, region, sizeof(SessionData[i].relayRegion)) == 0)
 		{
 			return static_cast<int>(i);
@@ -2359,10 +2175,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 
 	bool const online = !netGameData.skirmishMode;
 
-	if (online && !Relay_ServerName()[0])
+	if (online && RelayList_HostLine() < 0)
 	{
-		hostFailedWhy = kNoServerSet;
-		Con_PrintError(std::string("net: this game can't be hosted: ") + kNoServerSet);
+		hostFailedWhy = kNoServerChosen;
+		Con_PrintError(std::string("net: this game can't be hosted: ") + kNoServerChosen);
 		return NET_FAIL;
 	}
 
@@ -2375,12 +2191,6 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		hostFailedWhy = kServerNotAgreed;
 		Con_PrintError(std::string("net: this game can't be hosted online: ") + kServerNotAgreed);
 		return NET_FAIL;
-	}
-
-	// The server hasn't answered yet: asked now, if it wasn't (relay_list.cpp asks once at a time), and the host waits for it (Net_ServerState)
-	if (online)
-	{
-		RelayList_FindRelays();
 	}
 
 	if (!net_IsInitialised)
@@ -2503,24 +2313,43 @@ const char *Net_HostFailedWhy(void)
 	return hostFailedWhy;
 }
 
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): where the line the player chose to host on stands
+// (relay_list.h's RelayListLineNow): none chosen, no yes yet, being asked, reached and approved, or not usable, with why.
 int Net_ServerState(const char **why)
 {
 	*why = NULL;
+	int const line = RelayList_HostLine();
+	RelayListLineNow now;
 
-	if (!Relay_ServerName()[0])
+	if (line < 0 || !RelayList_LineNow(line, &now))
 	{
 		return kNetServerNone;
 	}
 
-	int const state = RelayList_ServerState(why);
-
-	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): a line without the player's yes is never asked
-	if (state == kRelayServerNeedsYes)
+	if (now.state == kRelayLineNoYes)
 	{
 		return kNetServerNeedsYes;
 	}
 
-	return state == kRelayServerGood ? kNetServerReady : state == kRelayServerCantUse ? kNetServerCantUse : kNetServerAsking;
+	if (now.state == kRelayLineAsking)
+	{
+		return kNetServerAsking;
+	}
+
+	if (now.state != kRelayLineAnswered)
+	{
+		*why = now.why ? now.why : kRelayCantBeUsed;
+		return kNetServerCantUse;
+	}
+
+	// A host goes on only through a line the player is approved on
+	if (now.access != kRelayAccessIsApproved)
+	{
+		*why = kNotApprovedThere;
+		return kNetServerCantUse;
+	}
+
+	return kNetServerReady;
 }
 
 const char *Net_JoinRefusedWhy(void)
@@ -3740,6 +3569,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	joinAnswer = kNetJoinAnswerNone;
 	relayJoinedThrough = false;
 	relayJoinedRegion[0] = 0;
+	relayJoinedLine = -1;
 	relayStrangersDropped = 0;
 	RelayEndToEndForget();   // the last game's handshakes and channel, if anything kept them (added 2026-11-09 by Melanikus for the AvP port)
 
@@ -3765,15 +3595,6 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
-	// Added 2026-11-11 by Melanikus for the AvP port: a game another line's server listed isn't joined tonight, as this run has the relay
-	// keys of the line it uses alone. Refused before anything is opened, with the reason.
-	if (!OnTheLineInUse(SessionData[sessionNumber].serverLine))
-	{
-		joinRefusedWhy = kOnAnotherServer;
-		Con_PrintError(std::string("Net_ConnectToSession - ") + kOnAnotherServer);
-		return NET_FAIL;
-	}
-
 	// One connection, to the host, with the game's limits: see net_host.h
 	host = Net_MakeENetHost(NetLoopbackOnly ? &ourAddress : NULL, 1, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);
 
@@ -3793,7 +3614,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	// host's own socket, and then the game connects to its port on the relay, as if that were the host (net_relay.h).
 	if (SessionData[sessionNumber].throughRelay)
 	{
-		uint16_t const relayPort = RelayJoin(SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);
+		// Through the game's own line's relay, with that line's keys (modified 2026-11-11 by Melanikus for the AvP port)
+		uint16_t const relayPort = RelayJoin(SessionData[sessionNumber].serverLine, SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);
 
 		if (relayPort == 0)
 		{
@@ -3822,6 +3644,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 		// For the line in play saying which relay this game goes through (Net_RelayPlayStateNow)
 		relayJoinedThrough = true;
+		relayJoinedLine = SessionData[sessionNumber].serverLine;
 		strncpy(relayJoinedRegion, SessionData[sessionNumber].relayRegion, kRelayListRegionLetters);
 		relayJoinedRegion[kRelayListRegionLetters] = 0;
 	}

@@ -213,14 +213,19 @@ static bool TheRelayGamesHaveCome(void)
 
 	for (int place = 0; place < RelayList_LineCount(); place++)
 	{
-		const char *lineWhy = NULL;
-		int const state = RelayList_LineGamesState(place, &lineWhy);
-		anyAnswered = anyAnswered || state == kRelayLineAnswered;
+		RelayListLineNow now;
 
-		if (state == kRelayLineNoAnswer && !why)
+		if (!RelayList_LineNow(place, &now))
 		{
-			why = lineWhy;
-			LogString(std::string("Relay list: a server gave no games, because ") + (lineWhy ? lineWhy : "it didn't answer"));
+			continue;
+		}
+
+		anyAnswered = anyAnswered || now.state == kRelayLineAnswered;
+
+		if (now.state == kRelayLineNoAnswer && !why)
+		{
+			why = now.why;
+			LogString(std::string("Relay list: a server gave no games, because ") + (now.why ? now.why : "it didn't answer"));
 		}
 	}
 
@@ -1741,7 +1746,9 @@ static void PressTheStartRowAgain(void)
 }
 
 // A host pressed while the server hasn't answered yet waits for it, on the page it was pressed on. False, with nothing changed, when
-// there's nothing to wait for: no server named, or a server that has answered.
+// there's nothing to wait for: no server chosen, or one that has answered. Modified 2026-11-11 by Melanikus for the AvP port (one model
+// for every line): it waits on the line the player chose to host on, whose visit the list makes (RelayList_FindGames visits every line
+// with a yes; the host page asks it as it opens).
 static bool AHostWaits(HostWaitFor what)
 {
 	const char *why = NULL;
@@ -1751,8 +1758,6 @@ static bool AHostWaits(HostWaitFor what)
 		return false;
 	}
 
-	// Asked now, if it wasn't yet: relay_list.cpp asks once at a time, and never before the player's yes
-	RelayList_FindRelays();
 	hostWaiting = what;
 	hostWaitPage = AvPMenus.CurrentMenu;
 	hostWaitSince = hostWaitRetrySince != 0 ? hostWaitRetrySince : GetTickCount();
@@ -1934,6 +1939,62 @@ static bool HostThroughTheRowsForARun(int level)
 	return hosted;
 }
 
+// THE HOST ON ROW (the owner's rulings, 2026-11-11: "they will choose their friends' server, not least ping", "No auto choice, they
+// choose"): the Multiplayer page's row for the server a game is hosted on. Its choices are "choose a server", then every line that has
+// approved this PC (RelayList_ApprovedLines), in servers.cfg's order, each by its own name, made safe, and its round trip from the list's
+// last visit to it. It starts on "choose a server" at every start of the game, nothing is ever chosen for the player, and nothing hosts
+// until they choose: Start game and Co-op campaign say so here, and Net_HostGame refuses too. With no line approved, its one choice says
+// where to ask. Added 2026-11-11 by Melanikus for the AvP port.
+static int hostOnPlaces[kServersCfgMostLines];
+static int hostOnCount = 0;
+static char hostOnWords[kServersCfgMostLines + 1][64];
+static char *hostOnNames[kServersCfgMostLines + 1];
+
+static char **HostOnChoices(void)
+{
+	int const approved = RelayList_ApprovedLines(hostOnPlaces, kServersCfgMostLines);
+	hostOnCount = approved < 0 ? 0 : approved > kServersCfgMostLines ? kServersCfgMostLines : approved;
+	snprintf(hostOnWords[0], sizeof(hostOnWords[0]), "%s", GetTextString(hostOnCount > 0 ? TEXTSTRING_HOSTON_CHOOSE : TEXTSTRING_HOSTON_NONE));
+	hostOnNames[0] = hostOnWords[0];
+
+	for (int i = 0; i < hostOnCount; i++)
+	{
+		RelayListLineNow now;
+		char name[kServersCfgNameLetters + 1] = "?";
+		bool const known = RelayList_LineNow(hostOnPlaces[i], &now);
+
+		if (known)
+		{
+			OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));
+		}
+
+		if (known && now.pingMs >= 0)
+		{
+			snprintf(hostOnWords[i + 1], sizeof(hostOnWords[i + 1]), "%s, %d ms", name, now.pingMs);
+		}
+		else
+		{
+			snprintf(hostOnWords[i + 1], sizeof(hostOnWords[i + 1]), "%s", name);
+		}
+
+		hostOnNames[i + 1] = hostOnWords[i + 1];
+	}
+
+	return hostOnNames;
+}
+
+// Each frame on the Multiplayer page: the row's choices again, and the line hosted on is the one the row shows, or none for its first
+static void HostOnFollowsTheRow(void)
+{
+	MenuData_SetHostOnChoices(HostOnChoices(), hostOnCount);
+	int const want = MP_HostOnChoice > 0 && MP_HostOnChoice <= hostOnCount ? hostOnPlaces[MP_HostOnChoice - 1] : -1;
+
+	if (RelayList_HostLine() != want)
+	{
+		(void)RelayList_HostOn(want);
+	}
+}
+
 extern void AvP_UpdateMenus(void)
 {
 	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
@@ -1941,6 +2002,12 @@ extern void AvP_UpdateMenus(void)
 
 	// A host waiting for the server, and the line under the rows (added 2026-11-10, PO's rulings Q3 and Q4)
 	HostWaitFrame();
+
+	// The Host on row follows the approved lines, and the line hosted on follows the row (added 2026-11-11)
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER)
+	{
+		HostOnFollowsTheRow();
+	}
 
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
 	{
@@ -2315,14 +2382,6 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
 	AvPMenus.CurrentMenu = menuID;
 
-	// Leaving the page of games found. Nothing else would close what the page has open on the network.
-	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
-	{
-		// And the page's own timing of the server's relay, for its ping column, with its socket (added 2026-11-10 by Melanikus for the AvP
-		// port; networking.h)
-		Net_StopTimingTheRelay();
-	}
-
 	/* set pointer to the start of the menu's element data */
 	AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default
 
@@ -2512,11 +2571,11 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				SaveIPAddress(IP_Address_Name, IPAddressString);
 				Net_JoinGame();
 
-				// The relay server's games as well, when the page is opened, and then every 5 s from its frame (OnlinePage_TimeToAskAgain),
-				// never on each answer. A joiner needs the relays too, to reach a game's region, and to time them for the ping column.
+				// Every line's games, when the page is opened, and then every 5 s from its frame (OnlinePage_TimeToAskAgain), never on each
+				// answer. Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): each line's relay comes from its own
+				// line (RelayList_RelayOf), so there are no relays to ask for first.
 				OnlinePage_Opened();
 				relayGamesKept = 0;
-				RelayList_FindRelays();
 				RelayList_FindGames();
 			}
 
@@ -2631,11 +2690,11 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Online access row is there when servers.cfg names a server
 			// (modified 2026-11-10 by Melanikus for the AvP port, beta.2: it was -dev only for beta.1). They're set before the page's rows
 			// are counted.
-			MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0);
-
-			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
-			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
-			RelayList_FindRelays();
+			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the Online page's row is there when servers.cfg has
+			// any line, and every line's state is asked for here (a visit to each line with a yes), so the host page's list has it
+			char **const hostOnChoices = HostOnChoices();
+			MenuData_SetMultiplayerRows(RelayList_LineCount() > 0, hostOnChoices, hostOnCount);
+			RelayList_FindGames();
 
 			//skirmishMode must be false
 			netGameData.skirmishMode = FALSE;
@@ -4269,9 +4328,11 @@ static void ActUponUsersInput(void)
 // Whether a game hosted now would be hosted online: when servers.cfg names a server, as every game is (networking.cpp, Net_HostGame).
 // Added 2026-11-10 by Melanikus for the AvP port, for the ways online (ServerYesPage_WayIn); modified the same day (the owner's ruling for beta.2: "Everything over nyc3"):
 // there's no Host row and no game at home, so with no server named nothing is hosted, and the host says why.
+// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): online on the line the player
+// chose on the host page, and with none chosen, nothing is hosted, and the host says to choose one.
 static bool HostsOnline(void)
 {
-	return Relay_ServerName()[0] != 0;
+	return RelayList_HostLine() >= 0;
 }
 
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
@@ -4315,6 +4376,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part, PO's rulings): a way online asks for the player's yes to
 				// the server in servers.cfg first, as its row is pressed (server_yes_page.h, ServerYesPage_WayIn). Every other row goes where it
 				// always went.
+				// Added 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): Start game and Co-op campaign
+				// host on the server the Host on row shows, and with none chosen they don't open, and say so
+				if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&
+					(elementPtr->MenuToGoTo == AVPMENU_MULTIPLAYER_CONFIG || elementPtr->MenuToGoTo == AVPMENU_COOP_HOST))
+				{
+					ShowTheHostLine(AVPMENU_MULTIPLAYER, GetTextString(TEXTSTRING_HOSTON_CHOOSE_FIRST));
+					break;
+				}
+
 				enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());
 
 				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)

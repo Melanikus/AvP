@@ -1565,6 +1565,16 @@ enum TEXTSTRING_ID
 	TEXTSTRING_SERVERS_NOT_PICKED,
 	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
 	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
+	TEXTSTRING_MULTIPLAYER_HOSTON,           // "Host on", the Multiplayer page's row for the server a game is hosted on (2026-11-11)
+	TEXTSTRING_MULTIPLAYER_HOSTON_HELP,
+	TEXTSTRING_HOSTON_CHOOSE,                // "choose a server": the row's first choice, and where it starts
+	TEXTSTRING_HOSTON_NONE,                  // its first choice when no line has approved this PC
+	TEXTSTRING_HOSTON_CHOOSE_FIRST,          // Start game or Co-op campaign pressed with no server chosen
+	TEXTSTRING_FINDGAMES_LINE_NOYES,         // the games page's words for a line, after its name: no yes yet (2026-11-11)
+	TEXTSTRING_FINDGAMES_LINE_ASKING,        // being asked
+	TEXTSTRING_FINDGAMES_LINE_NOANSWER,      // no answer, before the list code's own why
+	TEXTSTRING_FINDGAMES_LINE_NOTASKED,      // past the first 8 lines
+	TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED,   // answered, but this PC isn't approved there yet
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

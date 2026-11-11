@@ -468,6 +468,11 @@ static AVPMENU_ELEMENT const JoinGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRIN
 static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_ROW},	{AVPMENU_ONLINE_ACCESS},	{0},	{0},	TEXTSTRING_ACCESS_ROW_HELP};
 static AVPMENU_ELEMENT const EndOfTheRows = {AVPMENU_ELEMENT_ENDOFMENU};
 
+// The server a game is hosted on (menu_data.h, MP_HostOnChoice; added 2026-11-11 by Melanikus for the AvP port). Its choices and their
+// count are written as the page opens, and each frame after (MenuData_SetHostOnChoices).
+int MP_HostOnChoice = 0;
+static AVPMENU_ELEMENT const HostOnRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,	{TEXTSTRING_MULTIPLAYER_HOSTON},	{0},	{&MP_HostOnChoice},	{0},	TEXTSTRING_MULTIPLAYER_HOSTON_HELP};
+
 static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 {
 	PlayerNameRow,
@@ -476,23 +481,29 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	JoinGameRow,
 	EndOfTheRows,
 
-	// Room for the Servers row and the Online access row
+	// Room for the Servers row, the Host on row and the Online access row
+	EndOfTheRows,
 	EndOfTheRows,
 	EndOfTheRows
 };
 
 static int const kMultiplayerRowRoom = sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]);
-static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 7,
-	"the page's four rows of 1999, the Servers row, the Online access row a named server brings, and its end");
+static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 8,
+	"the page's four rows of 1999, the Servers row, the Host on row and the Online access row a line brings, and its end");
 
-void MenuData_SetMultiplayerRows(bool aServerIsNamed)
+void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int hostOnCount)
 {
 	int row = 0;
 	AvPMenu_Multiplayer[row++] = PlayerNameRow;
 
-	// Every server servers.cfg names, and picking one for the next start (#175 2b). Always there, so that even with no servers.cfg at
-	// all its page can say why.
+	// Every server servers.cfg names (#175 2b). Always there, so that even with no servers.cfg at all its page can say why.
 	AvPMenu_Multiplayer[row++] = ServersRow;
+
+	// The server a game is hosted on, just above the rows that host (added 2026-11-11 by Melanikus for the AvP port)
+	if (aServerIsNamed)
+	{
+		AvPMenu_Multiplayer[row++] = HostOnRow;
+	}
 
 	AvPMenu_Multiplayer[row++] = StartGameRow;
 	AvPMenu_Multiplayer[row++] = CoopRow;
@@ -508,6 +519,28 @@ void MenuData_SetMultiplayerRows(bool aServerIsNamed)
 	while (row < kMultiplayerRowRoom)
 	{
 		AvPMenu_Multiplayer[row++] = EndOfTheRows;
+	}
+
+	MenuData_SetHostOnChoices(hostOnNames, hostOnCount);
+}
+
+void MenuData_SetHostOnChoices(char **hostOnNames, int hostOnCount)
+{
+	int const count = hostOnCount < 0 ? 0 : hostOnCount;
+
+	for (int row = 0; row < kMultiplayerRowRoom; row++)
+	{
+		if (AvPMenu_Multiplayer[row].ElementID == AVPMENU_ELEMENT_TEXTSLIDER_POINTER && AvPMenu_Multiplayer[row].SliderValuePtr == &MP_HostOnChoice)
+		{
+			AvPMenu_Multiplayer[row].TextSliderStringPointer = hostOnNames;
+			AvPMenu_Multiplayer[row].MaxSliderValue = count;
+		}
+	}
+
+	// A choice that isn't among them any more (a line no longer approved) goes back to none: it's never moved onto another line
+	if (MP_HostOnChoice < 0 || MP_HostOnChoice > count)
+	{
+		MP_HostOnChoice = 0;
 	}
 }
 

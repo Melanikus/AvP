@@ -163,11 +163,11 @@ static void Put(char *to, size_t size, const char *from)
 	to[size - 1] = '\0';
 }
 
-// Whether this game has a list of games to ask: until the relay server's name is built in, only a -dev tester's settings give one
-// (Relay_ServerName). Without one, the page is about this network alone, and says nothing of a list.
+// Whether this game has a list of games to ask: whenever servers.cfg has a line (modified 2026-11-11 by Melanikus for the AvP port, one
+// model for every line). Without one, the page says there's nothing to ask.
 static bool ThereIsAList(void)
 {
-	return Relay_ServerName()[0] != '\0';
+	return RelayList_LineCount() > 0;
 }
 
 // The small font's width for a letter, never more than its widest (menu_gfx.cpp's SmallLetterWidth, which is that file's own). Shared with
@@ -241,24 +241,11 @@ static void PlayersWords(const SESSION_DESC &session, const char *bracket, char 
 	words[size - 1] = '\0';
 }
 
-// The good line a game came from (SESSION_DESC's serverLine), or the one this run uses for -1. False when there's no such line.
-// Added 2026-11-11 by Melanikus for the AvP port.
-static bool LineOfTheGame(int line, RelayListLineShown *out)
+// The servers.cfg line a game came from (SESSION_DESC's serverLine), as it stands now. False when there's no such line. Added 2026-11-11
+// by Melanikus for the AvP port.
+static bool LineOfTheGame(int line, RelayListLineNow *out)
 {
-	if (line >= 0)
-	{
-		return RelayList_LineAt(line, out);
-	}
-
-	for (int place = 0; place < RelayList_LineCount(); place++)
-	{
-		if (RelayList_LineAt(place, out) && out->inUse)
-		{
-			return true;
-		}
-	}
-
-	return false;
+	return line >= 0 && RelayList_LineNow(line, out);
 }
 
 // "Games from New York", "Games from New York and Frankfurt", "Games from New York, Frankfurt and Sydney": every good line whose server
@@ -272,25 +259,19 @@ static bool ServersTheGamesComeFrom(char *out, size_t size)
 
 	for (int place = 0; place < RelayList_LineCount() && named < kRelayListMostVisits; place++)
 	{
-		RelayListLineShown shown;
-		const char *why = NULL;
+		RelayListLineNow now;
 
-		if (RelayList_LineGamesState(place, &why) == kRelayLineAnswered && RelayList_LineAt(place, &shown))
+		if (RelayList_LineNow(place, &now) && now.state == kRelayLineAnswered)
 		{
-			OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));
+			OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));
 			named++;
 		}
 	}
 
+	// None has answered yet: no heading, and each line's own row below says where it stands (modified 2026-11-11)
 	if (named == 0)
 	{
-		if (!Relay_ServerName()[0])
-		{
-			return false;
-		}
-
-		OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, names[0], sizeof(names[0]));
-		named = 1;
+		return false;
 	}
 
 	int used = snprintf(out, size, "%s %s", GetTextString(TEXTSTRING_FINDGAMES_FROM), names[0]);
@@ -302,6 +283,57 @@ static bool ServersTheGamesComeFrom(char *out, size_t size)
 		used = more < 0 ? -1 : used + more;
 	}
 
+	return true;
+}
+
+// The lowest a line of words under the list may start, above the menus' bottom edge (added 2026-11-11)
+static const int kLinesBottom = 460;
+
+// Where a line stands, in words, when its games aren't simply on the list: "<its name>: <why>", its name made safe and the words the
+// game's own (the why of a line that didn't answer is the list code's fixed words, made safe too, as anything drawn here is). False for a
+// line whose server answered and approved this PC, whose games are the list's rows. Added 2026-11-11 by Melanikus for the AvP port.
+static_assert(kRelayListMostVisits == 8, "the not-asked words say the first 8 servers");
+
+bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
+{
+	RelayListLineNow now;
+
+	if (!out || size == 0 || !RelayList_LineNow(place, &now))
+	{
+		return false;
+	}
+
+	char name[kServersCfgNameLetters + 1];
+	char why[96];
+	OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));
+	OnlineScreens_SafeName(now.why ? now.why : "", sizeof(why), why, sizeof(why));
+
+	int words = -1;
+
+	switch (now.state)
+	{
+		case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;
+		case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;
+		case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;
+		case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;
+		default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED; break;
+	}
+
+	if (words < 0)
+	{
+		return false;
+	}
+
+	if (now.state == kRelayLineNoAnswer && why[0])
+	{
+		_snprintf(out, size - 1, "%s: %s %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);
+	}
+	else
+	{
+		_snprintf(out, size - 1, "%s: %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)));
+	}
+
+	out[size - 1] = '\0';
 	return true;
 }
 
@@ -340,19 +372,20 @@ static int LiveRows(OnlineRow *rows, int most)
 		if (session.throughRelay)
 		{
 			OnlineScreens_SafeName(session.relayRegion, sizeof(session.relayRegion), row.region, sizeof(row.region));
-			// "..." while the page is still timing that relay (added 2026-11-10 by Melanikus for the AvP port)
-			int const joinerMs = Net_JoinerMsToRelay(row.region);
-			OnlineScreens_PingWords(true, joinerMs < 0 && Net_RelayBeingTimed(row.region) ? kOnlineJoinerMsMeasuring : joinerMs,
-				HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
+			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the joiner's round trip is the channel's, once a
+			// join has made one, or else the list's own last visit to the game's line (relay_list.h's pingMs)
+			RelayListLineNow gameLine;
+			bool const lineKnown = LineOfTheGame(session.serverLine, &gameLine);
+			int const channelMs = Net_JoinerMsToRelay(row.region);
+			int const joinerMs = channelMs >= 0 ? channelMs : lineKnown ? gameLine.pingMs : -1;
+			OnlineScreens_PingWords(true, joinerMs, HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
 
 			// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every server in servers.cfg goes through the same page): the
 			// column names the server whose line listed the game, by the line's own name in servers.cfg, made safe, never by anything a server
 			// sent. The region above only chose the relay to time.
-			RelayListLineShown shown;
-
-			if (LineOfTheGame(session.serverLine, &shown))
+			if (lineKnown)
 			{
-				OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, row.region, sizeof(row.region));
+				OnlineScreens_SafeName(gameLine.line.name, kServersCfgNameLetters, row.region, sizeof(row.region));
 			}
 		}
 		else
@@ -397,17 +430,41 @@ static void UpdateAndAdd(const OnlineRow *live, int liveCount)
 
 // ---- The games page
 
-// The server's name, as this game dialled it: the list's host name from the game's own settings (Relay_ServerName), or "this network"
-// when there's no list. Never a name a server sent (AVP Tao 3).
+// The servers being asked, for the page's "asking" words: the one line with a yes by its own name, made safe, or, with several, the
+// first such line's name and how many more. Never a name a server sent (AVP Tao 3). Modified 2026-11-11 by Melanikus for the AvP port
+// (one model for every line).
 static void ServerName(char *name, size_t size)
 {
-	if (ThereIsAList())
+	int asked = 0;
+	char first[kServersCfgNameLetters + 1] = "";
+
+	for (int place = 0; place < RelayList_LineCount(); place++)
 	{
-		OnlineScreens_SafeName(Relay_ServerName(), kRelayListHostLetters, name, size);
+		RelayListLineNow now;
+
+		if (RelayList_LineNow(place, &now) && now.state != kRelayLineNoYes)
+		{
+			if (asked == 0)
+			{
+				OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, first, sizeof(first));
+			}
+
+			asked++;
+		}
+	}
+
+	if (asked == 0)
+	{
+		Put(name, size, OnlineScreens_Words(kOnlineWordsThisNetwork));
+	}
+	else if (asked == 1)
+	{
+		Put(name, size, first);
 	}
 	else
 	{
-		Put(name, size, OnlineScreens_Words(kOnlineWordsThisNetwork));
+		_snprintf(name, size - 1, "%s +%d", first, asked - 1);
+		name[size - 1] = '\0';
 	}
 }
 
@@ -430,10 +487,6 @@ void OnlinePage_Opened(void)
 	searchBox[0] = '\0';
 	lastGameKept = false;
 	StartFetching();
-
-	// The server's relay is timed afresh each time the page opens, for the ping column (networking.h; added 2026-11-10 by Melanikus for the
-	// AvP port)
-	Net_StopTimingTheRelay();
 }
 
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why)
@@ -526,10 +579,6 @@ static int VisibleIndexOf(const OnlineGameKey &key)
 bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 {
 	(void)listChanged;   // the rows are read from the list every frame: there are at most ten, and that keeps them right whatever changed
-
-	// The page's own round trip to the server's relay, for the ping column. It starts by itself once the list names the relay, which is
-	// only after the player's yes to its line (networking.h; added 2026-11-10 by Melanikus for the AvP port).
-	Net_TimeTheRelayForThePage();
 
 	PageState const stateBefore = pageState;
 	OnlineRow before[kOnlineMostRows];
@@ -945,10 +994,25 @@ void OnlinePage_DrawTop(void)
 	}
 
 	// A failed join's line, under the rows, for a few seconds
+	int linesTop = kFirstRowTop + (visibleCount > 0 ? visibleCount : 1) * kRowStep + 14;
+
 	if (failedShown && !HasCome(Now(), failedAt + kFailedLineMs))
 	{
-		int const rows = visibleCount > 0 ? visibleCount : 1;
-		WrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);
+		WrappedWords(failedLine, linesTop, 2, ONE_FIXED);
+		linesTop += 2 * HUD_FONT_HEIGHT;
+	}
+
+	// Every line that has no games on the list says why, by its own name: no yes yet, being asked, no answer and why, not asked, or not
+	// approved yet (added 2026-11-11 by Melanikus for the AvP port: "Nobody blocked silently", and every server through the same page)
+	for (int place = 0; place < RelayList_LineCount() && linesTop + HUD_FONT_HEIGHT <= kLinesBottom; place++)
+	{
+		char lineWords[200];
+
+		if (OnlineScreens_LineStandsWords(place, lineWords, sizeof(lineWords)))
+		{
+			Words(lineWords, MENU_CENTREX, linesTop, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+			linesTop += HUD_FONT_HEIGHT;
+		}
 	}
 }
 
@@ -1406,11 +1470,12 @@ static void RelayLineInPlay(void)
 	// has one, otherwise by the relay's region, made safe either way, as anything drawn here is
 	char place[kRelayListShownNameLetters + 1];
 	char line[160];
-	const char *const shownName = Relay_ServerName();
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the line this game is played through, by its own name
+	RelayListLineNow playedOn;
 
-	if (shownName[0] != '\0')
+	if (state.line >= 0 && RelayList_LineNow(state.line, &playedOn))
 	{
-		OnlineScreens_SafeName(shownName, kRelayListShownNameLetters, place, sizeof(place));
+		OnlineScreens_SafeName(playedOn.line.name, kRelayListShownNameLetters, place, sizeof(place));
 	}
 	else
 	{

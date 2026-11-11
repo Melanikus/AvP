@@ -24,6 +24,9 @@ void OnlinePage_Opened(void);
 // answer, or the list code's own fixed words for one that failed (RelayList_FoundGames), which J1's failure shows, dim.
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why);
 
+// Where one servers.cfg line stands, in words, for the games page's lines under the list (added 2026-11-11 by Melanikus for the AvP port)
+bool OnlineScreens_LineStandsWords(int place, char *out, size_t size);
+
 // Each frame of the page, before OnlinePage_Frame: whether to fetch again, because Refresh was pressed or Enter on a failure. menus.cpp
 // does the asking, as it does when the page opens.
 bool OnlinePage_TimeToAskAgain(void);
