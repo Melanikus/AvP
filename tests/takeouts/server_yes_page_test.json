@@ -239,8 +239,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
-					"to": "\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n"
+					"from": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
+					"to": "\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n\n\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n"
 				}
 			]
 		},
