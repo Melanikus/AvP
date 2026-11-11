@@ -37,10 +37,20 @@ env:
   SNYK_CLI_VERSION: v1.1308.3
   SNYK_CLI_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
 
+# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
+# going, so runs can't pile up and hold every runner the account has (2026-11-11: runs for six heads at once took every slot, and new runs
+# couldn't start). A push to avpx_main and the nightly run are never stopped by another: each gets a group of its own. Added 2026-11-11 by Melanikus for the AvP port.
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   snyk-code:
     name: Snyk Code (SAST)
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    # About 1.3 minutes on 2026-11-11, but the free key takes 4 questions a minute, as in release.yml's scan. Without a limit a lost
+    # runner would hold its place for 6 hours. A scan that runs out of time fails, so nothing merges unscanned
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write   # upload SARIF to code scanning
@@ -112,6 +122,7 @@ jobs:
   snyk-open-source:
     name: Snyk Open Source (SCA)
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    timeout-minutes: 20   # under a minute on 2026-11-11; the same free key as above
     permissions:
       contents: read
       security-events: write   # upload SARIF to code scanning
@@ -205,6 +216,7 @@ jobs:
   vcpkg-sources:
     name: Build the vcpkg libraries
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    timeout-minutes: 45   # 6.4 minutes on 2026-11-11, building every library from source
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -323,6 +335,7 @@ jobs:
     # let the pull request through unscanned. always() makes it run anyway: with no sources to download, it fails.
     if: ${{ always() }}
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    timeout-minutes: 30   # 3.7 minutes on 2026-11-11; the same free key as above
     steps:
       - name: Check out the accepted-reports list
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -14,6 +14,14 @@ on:
 permissions:
   contents: read
 
+# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
+# going, so runs can't pile up and hold every runner the account has (2026-11-11: runs for six heads at once took every slot, and new runs
+# couldn't start). A push to avpx_main is never stopped by another: each merge keeps its own result, so it gets a group of its own.
+# Added 2026-11-11 by Melanikus for the AvP port.
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   unit-tests:
     name: Unit tests
@@ -191,8 +199,9 @@ jobs:
   # shorter and no test is ever left out.
   sanitizer:
     name: Tests under the address sanitizer, part ${{ matrix.part }} of ${{ strategy.job-total }}
-    # A test that hangs fails here, as above
-    timeout-minutes: 30
+    # A test that hangs fails here, as above. A part took 3.6 to 6.5 minutes on 2026-11-11, so 20 is about three times the slowest: a
+    # runner that's lost frees its place in minutes, not hours
+    timeout-minutes: 20
     runs-on: windows-2025-vs2026   # pinned: the same machine as the Unit tests job
     strategy:
       fail-fast: false   # one part failing doesn't stop the others, so a run shows every test that needs work
@@ -266,7 +275,7 @@ jobs:
   # with its reason, and show what each said.
   sanitizer-refusals:
     name: The sanitizer script's own refusals
-    timeout-minutes: 15
+    timeout-minutes: 10   # it took under a minute on 2026-11-11; 10 is the least any job here is given
     runs-on: windows-2025-vs2026   # pinned: the same machine as the jobs above
     steps:
       - name: Check out the repository

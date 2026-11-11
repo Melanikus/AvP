@@ -1788,6 +1788,20 @@ Check ($ubuntuJob -match '(?m)^          fetch-depth: 0\b') 'with the history, s
 Check ($ubuntuJob.Contains('persist-credentials: false')) 'leaving no token behind'
 Check ($ubuntuName.Length -gt 0 -and $listInCheck.Contains("'$ubuntuName'")) 'and a release asks for that check like the others'
 
+# --- Every job of every workflow has its own time limit, so a runner that's lost frees its place in minutes or an hour, never after
+# GitHub's own 6 hours. On 2026-11-11 lost jobs of the Take-outs check held every runner the account has, and no new run could start.
+# A job is a line of two spaces, its name and a colon, under "jobs:". Added 2026-11-11 by Melanikus for the AvP port.
+$workflowFiles = @(Get-ChildItem -LiteralPath (Join-Path $repository '.github/workflows') -Filter '*.yml' -File | Sort-Object Name)
+Check ($workflowFiles.Count -gt 0) 'the workflows are there to be read'
+foreach ($workflowFile in $workflowFiles)
+{
+    $workflowText = (Get-Content -Raw -LiteralPath $workflowFile.FullName) -replace "`r", ''
+    $jobsPart = [regex]::Match($workflowText, '(?ms)^jobs:\n(.*)\z').Groups[1].Value
+    $jobBlocks = @([regex]::Split($jobsPart, '(?m)^(?=  [A-Za-z0-9_-]+:[ \t]*(?:#[^\n]*)?$)') | Where-Object { $_ -match '\A  [A-Za-z0-9_-]+:' })
+    $withoutLimit = @($jobBlocks | Where-Object { $_ -notmatch '(?m)^    timeout-minutes: ' } | ForEach-Object { [regex]::Match($_, '\A  ([A-Za-z0-9_-]+):').Groups[1].Value })
+    Check ($jobBlocks.Count -gt 0 -and $withoutLimit.Count -eq 0) "every job in $($workflowFile.Name) has its own time limit (none: $($withoutLimit -join ', '))"
+}
+
 Clear-Work
 Remove-Item -Recurse -Force -LiteralPath $work
 

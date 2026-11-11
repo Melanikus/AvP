@@ -18,12 +18,21 @@ on:
 permissions:
   contents: read
 
+# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
+# going, so runs can't pile up and hold every runner the account has (2026-11-11: runs for six heads at once took every slot, and new runs
+# couldn't start). A push to avpx_main is never stopped by another: each merge keeps its own result, so it gets a group of its own. Added 2026-11-11 by Melanikus for the AvP port.
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build-the-game:
     name: Build the game
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
-    # The libraries are built from source, so this takes a while, but it shouldn't sit forever if something hangs
-    timeout-minutes: 120
+    # The libraries are built from source, so this takes a while, but it shouldn't sit forever if something hangs. It took 9 to 12
+    # minutes on 2026-11-11, so 45 is about three times the slowest: a lost runner frees its place in under an hour, not two
+    # (modified 2026-11-11 by Melanikus for the AvP port; it was 120)
+    timeout-minutes: 45
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

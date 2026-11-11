@@ -23,6 +23,9 @@ jobs:
   build:
     name: Make a test build
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    # The same script as the Game build check, which took 9 to 12 minutes on 2026-11-11. Without a limit a lost runner would hold its
+    # place for 6 hours (added 2026-11-11 by Melanikus for the AvP port)
+    timeout-minutes: 45
     # No right to record provenance here: this job runs vcpkg, which runs each library's own build scripts, and anything a step can reach
     # they could ask for. The package's and the libraries' provenance is recorded by the next job, which builds nothing.
     steps:

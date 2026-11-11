@@ -5,7 +5,8 @@
 # or one that can't be run any more because the code has moved on, fails this check. tests/takeouts/README.md says more.
 #
 # On a pull request this runs the lists the pull request can affect: those whose list, test, settings or stand-ins it changes, or which
-# break a file it changes. A pull request that changes this file, the runner, or tests/every_test/ runs every list. By hand (Actions, Take-outs, Run workflow)
+# break a file it changes. A pull request that changes this file, the runner, tests/every_test/, or any header (a .h or .hpp file) runs
+# every list. By hand (Actions, Take-outs, Run workflow)
 # it runs the lists named, or all of them. Each list runs on its own machine, at the same time as the others, because a list can take an hour.
 #
 # The job that decides whether this passes is the last one, "Take-outs": it fails if choosing the lists failed, or any list did.
@@ -25,10 +26,18 @@ on:
 permissions:
   contents: read
 
+# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
+# going. On 2026-11-11 this check was started on six heads at once, its jobs took every runner the account has, and new runs couldn't
+# start at all. Added 2026-11-11 by Melanikus for the AvP port.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   choose:
     name: Choose the lists
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    timeout-minutes: 10   # it only reads the code; 10 is the least any job here is given
     outputs:
       lists: ${{ steps.choose.outputs.lists }}
       count: ${{ steps.choose.outputs.count }}
@@ -75,7 +84,15 @@ jobs:
             # list, so none of them is ever changed untested. (The rule for tests/every_test/ is from the unmerged branch stl-harden, 28767cc3.)
             $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' -or $_.StartsWith('tests/every_test/') }).Count -gt 0
 
-            $chosen = if ($checkerChanged) { $all } else { @(foreach ($name in $all) {
+            # A header can change what any test compiles, or the code a test checks, and the lists below are chosen by the files they
+            # name, which never follow an #include. On avpx_main a2b5a253, 93 of the 129 lists would have been left out by a pull
+            # request changing only one header their test's own files include, tests/source_slice.h among them (#226). So a header
+            # change is tried on every list, until each list is chosen by everything its test compiles. Added 2026-11-11 by Melanikus
+            # for the AvP port.
+            $headers = @($changed | Where-Object { $_ -match '\.(h|hpp)$' })
+            if ($headers.Count -gt 0) { "Every list runs, because this pull request changes a header: $($headers -join ', ')" }
+
+            $chosen = if ($checkerChanged -or $headers.Count -gt 0) { $all } else { @(foreach ($name in $all) {
               # The list, the test and its settings, its stand-ins, every source file its settings name, and every file its rows break
               $files = @("tests/takeouts/$name.json", "tests/$name.cpp", "tests/$name.args")
               if (Test-Path "tests/$name.args") {
@@ -100,7 +117,11 @@ jobs:
     needs: choose
     if: needs.choose.outputs.count != '0'
     runs-on: windows-2025-vs2026
-    timeout-minutes: 300
+    # About three times each list's slowest known time, so a runner that's lost frees its place sooner, not after 5 hours. On
+    # 2026-11-11 (run 43079767129) hudson_plan_test took 85 minutes, net_v2b_test 37, and no other list over 27; 116 of the 148 took
+    # under 2. A list that outgrows its limit fails, and says so, and its limit is raised here. Modified 2026-11-11 by Melanikus for the
+    # AvP port (it was 300 for every list).
+    timeout-minutes: ${{ matrix.list == 'hudson_plan_test' && 255 || matrix.list == 'net_v2b_test' && 120 || 90 }}
     strategy:
       fail-fast: false   # one list failing doesn't stop the others, so a run shows every list that needs work
       # GitHub Pro runs up to 40 jobs at once for this account. 30 leaves room for the other checks of the same pull request
@@ -154,6 +175,7 @@ jobs:
     needs: [choose, run]
     if: always()
     runs-on: ubuntu-24.04
+    timeout-minutes: 10   # it only reads the other jobs' results
     steps:
       - name: Say how it went
         env:
