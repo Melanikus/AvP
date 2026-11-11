@@ -8528,62 +8528,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a net= run joins a game on another machine",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a net= run uses a relay elsewhere",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
 					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))",
 					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a net= run opens the socket for finding games",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL",
-					"to": "if (ENET_SOCKET_NULL"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a net= run's search listens on every address",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a net= run's search asks the whole network",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))",
-					"to": "if (!AskAboutGames(ENET_HOST_BROADCAST))"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a net= run's search asks a typed address on another machine",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "(!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && ",
-					"to": ""
 				}
 			]
 		},
@@ -10528,16 +10478,6 @@
 			]
 		},
 		{
-			"name": "hostrow=athome reads as online",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "plan->hostRow = kHudsonHostRowAtHome;",
-					"to": "plan->hostRow = kHudsonHostRowOnline;"
-				}
-			]
-		},
-		{
 			"name": "hostrow= without net=host is let through",
 			"changes": [
 				{
@@ -10618,16 +10558,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the Host row isn't moved for athome",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "if (atHome && MP_HostWhere != kHostWhereAtHome)\n\t{\n\t\tInteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);",
-					"to": "if (atHome && MP_HostWhere != kHostWhereAtHome)\n\t{\n\t\t;"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the species page is skipped",
 			"changes": [
 				{
@@ -10664,26 +10594,6 @@
 					"file": "tools/hudson/run-hudson.ps1",
 					"from": "if ($HostRow) { $arguments += \" hostrow=$HostRow\" }",
 					"to": "if ($false) { }"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a typed joiner gets -relayjoin",
-			"changes": [
-				{
-					"file": "tools/hudson/run-hudson.ps1",
-					"from": "elseif ($Typed) { '' } else { ' -relayjoin' }",
-					"to": "else { ' -relayjoin' }"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a pair at home may join by Find games' broadcast",
-			"changes": [
-				{
-					"file": "tools/hudson/run-net-pair.ps1",
-					"from": "if ($HostRow -ceq 'athome' -and (-not $Typed -or $JoinFindGames)) { Stop-Here",
-					"to": "if ($false) { Stop-Here"
 				}
 			]
 		}

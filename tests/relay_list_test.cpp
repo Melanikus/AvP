@@ -1056,8 +1056,8 @@ static void TestTheMenus()
 	Check(Has(joinPage, "{TEXTSTRING_MULTIPLAYER_FINDGAMES},") && Has(joinPage, "TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP}") && !Has(joinPage, "FINDLOCAL"),
 		"the Join page's first row is Find Games, with its own help, and nothing of the old local-servers words");
 	std::string const words = ReadSource("3dc/avp/language.cpp");
-	Check(Has(words, "\t\"Find Games\",\n\t\"Press ENTER to look for games on this network.\",\n") && !Has(words, "online list of games\""),
-		"and its help says only this network: nothing a player's game can't reach");
+	Check(Has(words, "\t\"Find Games\",\n\t\"Press ENTER to see the games on the server's online list.\",\n") && !Has(words, "games on this network"),
+		"and its help says the server's online list, the only place games are found (modified 2026-11-10: there's no search of this network any more)");
 
 	// -dev -findgames: only with -dev, and then the player's own way to the page of games found, one page after another
 	std::string const startUp = ReadSource("3dc/avp/win95/winmain.cpp");

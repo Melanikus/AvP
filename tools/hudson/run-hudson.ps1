@@ -208,7 +208,6 @@ param(
     [switch]$CoopWalk,
     [switch]$Hostile,
     [string]$HostileKind = '',
-    [switch]$Typed,
     [int]$CoopEnd = 0,
     [switch]$Relay,             # server #14: host or join through the relay server -ServersLine names (-relayhost or -relayjoin, by -Net)
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
@@ -230,7 +229,7 @@ param(
     # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens (hudson_plan.h's yespage= and
     # hostrow=)
     [string]$YesPage = '',        # yes or no: with -Access request or check, the run sees the yes page the Online access row opens, as a player's first time does, and presses that row. The yes holds for the run alone
-    [string]$HostRow = ''         # online or athome: with -Net host, the host hosts as a player does, through the Multiplayer page's Host row, Start game and Start, with the server's wait if it hasn't answered
+    [string]$HostRow = ''         # online: with -Net host, the host hosts as a player does, through the Multiplayer page's Start game and Start, with the server's wait if it hasn't answered
 )
 $ErrorActionPreference = 'Stop'
 
@@ -295,9 +294,11 @@ if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-P
 # (hudson_plan.cpp), and the Host row is on the page only when servers.cfg names a server
 if ($YesPage -and $YesPage -cnotmatch '\A(yes|no)\z') { Stop-Here "-YesPage is yes or no" }
 if ($YesPage -and $Access -cne 'request' -and $Access -cne 'check') { Stop-Here "-YesPage is the yes page the Online access row opens, so it needs -Access request or -Access check" }
-if ($HostRow -and $HostRow -cnotmatch '\A(online|athome)\z') { Stop-Here "-HostRow is online or athome" }
-if ($HostRow -and $Net -ne 'host') { Stop-Here "-HostRow is a host's way in, through the Multiplayer page's Host row, so it needs -Net host" }
-if ($HostRow -and -not $Relay) { Stop-Here "-HostRow presses the Host row, which is on the page only when servers.cfg names a server, so it needs -Relay and -ServersLine" }
+# Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): online only, as the Host row
+# and the game at home are gone
+if ($HostRow -and $HostRow -cnotmatch '\A(online)\z') { Stop-Here "-HostRow is online: beta.2 hosts online only, through a server's relay" }
+if ($HostRow -and $Net -ne 'host') { Stop-Here "-HostRow is a host's way in, through the Multiplayer page's Start game, so it needs -Net host" }
+if ($HostRow -and -not $Relay) { Stop-Here "-HostRow hosts through the server servers.cfg names, so it needs -Relay and -ServersLine" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -381,10 +382,9 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 # A host with -Answer gets -askjoiners, which hosts as -relayhost does but asks about each joiner (relay_auto.h). -relayhost lets every
 # joiner in without asking (relay_auto.cpp), and the game would never show the page -Answer presses, nor its check code: the nyc3 pair of
 # 2026-11-10 had answer=letin and no host-asked.png for that reason (modified 2026-11-10 by Melanikus (Third) for the AvP port)
-# A host with -HostRow gets neither, as it hosts through the page's rows, not by itself as the menus start; and a joiner with -Typed joins a
-# game at home by its typed address on this machine, so it gets no -relayjoin either, though servers.cfg names a server (added 2026-11-10
-# by Melanikus (Third) for the AvP port)
-$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $HostRow) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } elseif ($Typed) { '' } else { ' -relayjoin' }
+# A host with -HostRow gets neither, as it hosts through the page's rows, not by itself as the menus start (added 2026-11-10 by Melanikus
+# (Third) for the AvP port). A joiner always joins through the relay: the typed address at home went with the game at home (2026-11-10)
+$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $HostRow) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
 # -secondcopy is the game's own switch too, so it goes before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
@@ -477,7 +477,6 @@ if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }
 if ($HostileKind) { $arguments += " hostile=$HostileKind" }
-if ($Typed) { $arguments += " typed=yes" }
 if ($CoopEnd -gt 0) { $arguments += " coopend=$CoopEnd" }
 if ($GunMarine) { $arguments += " gunmarine=yes" }
 if ($Strategies) { $arguments += " strategies=$Strategies" }

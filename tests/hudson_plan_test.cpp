@@ -374,8 +374,6 @@ static void TestBadPlans()
 			"and without it a run's line needs no yes, as before");
 		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online", &plan) == 0 && plan.hostRow == kHudsonHostRowOnline,
 			"hostrow=online: the host hosts online through the Host row");
-		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=athome answer=letin", &plan) == 0 &&
-			plan.hostRow == kHudsonHostRowAtHome, "hostrow=athome: or at home, and it may answer the joiner as a player's host does");
 		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host", &plan) == 0 && plan.hostRow == kHudsonHostRowNone,
 			"and without it the host hosts from the code, as before");
 	}
@@ -385,11 +383,13 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 access=newid yespage=yes", kHudsonRefusedYesPageWithoutAccess);
 	Refused("-hudson level=invasion frames=5 machine=shared net=join yespage=yes", kHudsonRefusedYesPageWithoutAccess);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=away", kHudsonRefusedHostRowWord);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hostrow=athome", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=athome", kHudsonRefusedHostRowWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hostrow=online", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join typed=yes", kHudsonRefusedUnknownName);
 	Refused("-hudson level=invasion frames=5 machine=shared net=join hostrow=online", kHudsonRefusedHostRowWithoutHost);
-	Refused("-hudson level=invasion frames=5 hostrow=athome", kHudsonRefusedHostRowWithoutHost);
+	Refused("-hudson level=invasion frames=5 hostrow=online", kHudsonRefusedHostRowWithoutHost);
 	Refused("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
-	Refused("-dev -askjoiners -hudson level=invasion frames=5 machine=shared net=host hostrow=athome", kHudsonRefusedHostRowWithRelayAuto);
+	Refused("-dev -askjoiners -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes hostrow=online", kHudsonRefusedHostRowWithCoop);
 
 	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): its address, once, with net=. Modified 2026-11-10 by
@@ -2124,21 +2124,18 @@ static void TestTourAndSharedMachine()
 			"a run's host lets every joiner in without asking, as nobody is there to answer, unless the run answers as a player does (answer=)");
 		Check(Has(hudsonFile, "if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))") && Has(hudsonFile, "fprintf(file, \"remote_relay_address=%u.%u.%u.%u\\n\""),
 			"remoterelay= goes to the networking code, and the result says which one address it let through");
-		Check(Has(networking, "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))\n\t{\n\t\tCon_PrintError(\"Net_ConnectToSession - a Hudson run with net= joins only a game on this machine\");\n\t\treturn NET_FAIL;"),
-			"and it joins no game but one on this machine");
+		Check(Has(networking, "if (!SessionData[sessionNumber].throughRelay)\n\t{\n\t\tjoinRefusedWhy = kNotThroughTheList;") && !Has(networking, "Net_ConnectToThisMachine("),
+			"and it joins no game but one through the relay, as a player does: there's no plain join, to this machine or anywhere");
 		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
 			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by its address, checked before anything is sent to one");
-		Check(Has(networking, "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL != broadcastSocket)"), "and there's no socket for finding games");
-		Check(Has(networking, "\tif (NetLoopbackOnly)\n\t{\n\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n\n\t\tif (enet_socket_bind(broadcastSocket, &thisHost) == 0)"),
-			"unless it's trying the search, and then that socket is on this machine's own address too");
-		Check(Has(networking, "if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))") && Has(networking, "(!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host)"),
-			"and a search asks neither the whole network nor a typed address that isn't this machine's");
+		Check(!Has(networking, "broadcastSocket") && !Has(networking, "AskAboutGames(") && !Has(networking, "NetLoopbackSearch"),
+			"and there's no socket for finding games at all, for a run or a player: nothing on this network is asked or answered");
 		Check(Has(networking, "\treturn (address & 0xFF) == 127;"), "this machine's own addresses are the 127 ones");
 		Check(Has(networking, "LogString(\"net: \" + sstream.str());") && Has(networking, "arrived << \"net: message \" << messagesArrived << \" arrived, \" << dataSize << \" bytes\";") && Has(networking, "LogString(\"net: the other player has left\");"),
 			"a run's log says who joins, by connection number and never an address, what arrives, and who leaves");
 		Check(Has(networking, "bool NetLoopbackOnly = false;"), "and an ordinary game doesn't get any of that");
 		Check(hudsonFile.find("NetLoopbackOnly = true;") == hudsonFile.rfind("NetLoopbackOnly = true;") && !Has(networking, "NetLoopbackOnly = true;") && !Has(menusFile, "NetLoopbackOnly ="), "and only a run with net= can change that");
-		Check(Has(hudsonFile, "if (plan.netMode != kHudsonNetNone)\n\t{\n\t\tNetLoopbackOnly = true;\n\t\tNetLoopbackSearch = plan.typed;\n\n\t\tif (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)"), "and a level that isn't on the multiplayer list is refused");
+		Check(Has(hudsonFile, "if (plan.netMode != kHudsonNetNone)\n\t{\n\t\tNetLoopbackOnly = true;\n\n\t\tif (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)"), "and a level that isn't on the multiplayer list is refused");
 		Check(Has(hudsonFile, "\"net=%s net_stage=%s\\n\""), "the result says how far it got");
 		Check(Has(menusFile, "if (Hudson_NetIsOn())\n\t{\n\t\tStartNetworkGameForHudsonRun();"), "the menus' part goes this way");
 		Check(Has(menusFile, "Hudson_NetStopBecause(\"the client connected, and the host never told it who it is\");"), "a join that stops says where");
@@ -2284,11 +2281,11 @@ static void TestTourAndSharedMachine()
 			&& ComesBefore(access, "kServerYesRowNo,", "if (asAsked && press == kHudsonAccessNewId)"),
 			"SOURCE: the yes page the Online access row opened is pictured and its row pressed, before the access page's own rows");
 		std::string const rows = Between(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "extern void AvP_UpdateMenus(void)");
-		Check(Has(rows, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);") && ComesBefore(rows, "MenuFrameForARun(\"multiplayer.png\");", "\"Start game\")")
+		Check(!Has(rows, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);") && ComesBefore(rows, "MenuFrameForARun(\"multiplayer.png\");", "\"Start game\")")
 			&& ComesBefore(rows, "\"Start game\")", "\"Start, to the species page\")") && ComesBefore(rows, "\"Start, to the species page\")", "PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, \"Start\")"),
-			"SOURCE: hostrow=: the Host row moved and pictured, then Start game, the species page and its Start row, pressed as a player does");
+			"SOURCE: hostrow=: the Multiplayer page pictured (there's no Host row to move), then Start game, the species page and its Start row, pressed as a player does");
 		Check(Has(rows, "MenuFrameForARun(picture, false);") && Has(rows, "picture = \"host-asking.png\";") && Has(rows, "noAnswer ? \"host-gaveup.png\" : \"host-failed.png\"")
-			&& !Has(rows, "PressTheStartRowAgain") && !Has(rows, "Net_HostGame") && !Has(rows, "Net_HostAtHome"),
+			&& !Has(rows, "PressTheStartRowAgain") && !Has(rows, "Net_HostGame"),
 			"SOURCE: and the server's wait is the page's own, pictured asking and giving up, with nothing pressed and nothing hosted but by the page");
 		Check(Has(menus, "if (Hudson_NetIsHost() && Hudson_HostRow() != kHudsonHostRowNone)\n\t{")
 			&& ComesBefore(menus, "if (!HostThroughTheRowsForARun(level))", "else if (Hudson_NetIsHost())\n\t{\n\t\t// -dev -relayhost"),
@@ -2296,11 +2293,11 @@ static void TestTourAndSharedMachine()
 		std::string const runScript = ReadSourceFile("tools/hudson/run-hudson.ps1");
 		std::string const pairRun = ReadSourceFile("tools/hudson/run-net-pair.ps1");
 		Check(Has(runScript, "if ($YesPage) { $arguments += \" yespage=$YesPage\" }") && Has(runScript, "if ($HostRow) { $arguments += \" hostrow=$HostRow\" }")
-			&& Has(runScript, "elseif ($Net -eq 'host' -and $HostRow) { '' }") && Has(runScript, "elseif ($Typed) { '' } else { ' -relayjoin' }"),
-			"SOURCE: run-hudson.ps1 asks for both, gives a host through the rows no host switch, and a typed joiner no -relayjoin");
+			&& Has(runScript, "elseif ($Net -eq 'host' -and $HostRow) { '' }") && Has(runScript, "elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }") && !Has(runScript, "$Typed"),
+			"SOURCE: run-hudson.ps1 asks for both, gives a host through the rows no host switch, and every joiner -relayjoin");
 		Check(Has(pairRun, "if ($word -eq 'host' -and $HostRow) { $words += @('-HostRow', $HostRow) }")
-			&& Has(pairRun, "if ($HostRow -ceq 'athome' -and (-not $Typed -or $JoinFindGames)) { Stop-Here"),
-			"SOURCE: run-net-pair.ps1 passes it to the host, with a joiner at home only by its typed address, never Find games' broadcast");
+			&& Has(pairRun, "if ($HostRow -and $HostRow -cnotmatch '\\A(online)\\z') { Stop-Here") && !Has(pairRun, "$Typed") && !Has(pairRun, "athome"),
+			"SOURCE: run-net-pair.ps1 passes it to the host, online only, with no joiner by a typed address");
 	}
 	// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): which hudson-stop files end a run
 	Check(HudsonPlan_StopFileCounts(true, false, false, 100, 100), "#198: a plain hudson-stop written as the run started ends it");

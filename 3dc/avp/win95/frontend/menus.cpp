@@ -1718,7 +1718,7 @@ static void PressTheStartRowAgain(void)
 }
 
 // A host pressed while the server hasn't answered yet waits for it, on the page it was pressed on. False, with nothing changed, when
-// there's nothing to wait for: a game hosted at home, or a server that has answered.
+// there's nothing to wait for: no server named, or a server that has answered.
 static bool AHostWaits(HostWaitFor what)
 {
 	const char *why = NULL;
@@ -1813,10 +1813,10 @@ static void DrawTheHostLine(void)
 // hostrow=online (hudson_plan.h; athome went with the Host row, 2026-11-10): a Hudson host hosts the way a player does, for the owner's rehearsal of beta.2's
 // screens (PO, 2026-11-10). Added 2026-11-10 by Melanikus (Third) for the AvP port. Each press is a row selected and Enter, as a player
 // does, and one fixed line in the log (PressTheRowForARun):
-// 1. the Multiplayer page, its Host row moved to the run's choice (it starts on Online at every start), and pictured (multiplayer.png);
+// 1. the Multiplayer page, pictured (multiplayer.png);
 // 2. Start game, which opens the game's page (through the yes page's way in, as every way online does), with the run's game on it,
 //    pictured (host-config.png), and its Start row, which opens the species page (host-species.png);
-// 3. that page's Start row. At home, or online with a server that has answered, that hosts at once. Online with a server that hasn't
+// 3. that page's Start row. With a server that has answered, that hosts at once. With a server that hasn't
 //    answered yet, the page waits for it as a player's does (AHostWaits, HostWaitFrame): "Asking the server..." is pictured
 //    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
 //    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.

@@ -486,11 +486,13 @@ static void TestTheGameUsesIt()
 
 	Check(Has(forget, "Net_CoopLobbyState() == kCoopLobbyOpen ? kMostMillisecondsSilentInTheLobby : kMostMillisecondsSilent"), "the host lets go of a silent joiner sooner in the lobby");
 
-	std::string const addSession = Between(networking, "static void Net_AddSession(SessionDescription &session)\n{", "\n}\n");
+	// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): a game is found only on a
+	// server's online list, so its lobby state is checked where a listed game is kept (AddRelaySession); the search's Net_AddSession is gone
+	std::string const addSession = Between(networking, "static bool AddRelaySession(", "\n}\n");
 
-	Check(Has(addSession, "if (!CoopLobby_StateIsReal(session.coopLobby))"), "a game's lobby state from a search is checked");
-	Check(addSession.find("CoopLobby_StateIsReal") < addSession.find("SessionData[NumberOfSessionsFound].host"), "before anything of it is kept");
-	Check(Has(addSession, "if (local_index < 0 && session.coopLobby == kCoopLobbyNone)"), "a lobby game stays on the list even if this machine lacks the map");
+	Check(Has(addSession, "!CoopLobby_StateIsReal(coopLobby))") && !Has(networking, "static void Net_AddSession("), "a listed game's lobby state is checked");
+	Check(addSession.find("CoopLobby_StateIsReal") < addSession.find("SESSION_DESC &entry = SessionData[NumberOfSessionsFound];"), "before anything of it is kept");
+	Check(Has(addSession, "if (localIndex < 0 && coopLobby == kCoopLobbyNone)"), "a lobby game stays on the list even if this machine lacks the map");
 	Check(Has(networking, "Net_CoopLobbyJoined(SessionData[sessionNumber].coopLobby);"), "a joiner is in the lobby from the moment it's connected");
 
 	std::string const choice = Between(pldnet, "static void ProcessNetMsg_CoopCampaignChoice(NETMESSAGE_COOPCAMPAIGNCHOICE *messagePtr)\n{", "\n}\n");

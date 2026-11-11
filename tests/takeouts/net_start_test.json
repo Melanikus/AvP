@@ -136,46 +136,6 @@
 			]
 		},
 		{
-			"name": "one address can fill the list of games",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (gamesFromThisAddress >= kMostGamesFromOneAddress)",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "an answer from some other program is believed",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "an answer not marked as the game's is believed",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (header.marker == kMarker && header.messageType == NETSYS_SESSION_INFO)",
-					"to": "if (header.messageType == NETSYS_SESSION_INFO)"
-				}
-			]
-		},
-		{
-			"name": "an answer says where it's from, and is believed",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "newSession.host = address.host;\n",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a machine sends every frame",
 			"changes": [
 				{
@@ -316,16 +276,6 @@
 			]
 		},
 		{
-			"name": "a search's question keeps what was on the stack",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "memset(&newHeader, 0, sizeof(newHeader));\n",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "a message with nobody to send it to is not stopped",
 			"changes": [
 				{
@@ -356,166 +306,6 @@
 			]
 		},
 		{
-			"name": "an open socket is opened again",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (ENET_SOCKET_NULL != broadcastSocket)\n\t{\n\t\treturn true;",
-					"to": "if (false)\n\t{\n\t\treturn true;"
-				}
-			]
-		},
-		{
-			"name": "a socket that cannot be made says nothing",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "Con_PrintError(\"OpenDiscoverySocket - Couldn't create broadcast socket\");",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "it listens on the wrong port",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "thisHost.port = broadcastPort;",
-					"to": "thisHost.port = 1;"
-				}
-			]
-		},
-		{
-			"name": "a socket that cannot listen says nothing",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "Con_PrintError(\"OpenDiscoverySocket - Couldn't bind broadcast socket\");",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "a socket that cannot listen stays open",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t\treturn false;",
-					"to": "broadcastSocket = ENET_SOCKET_NULL;\n\t\treturn false;"
-				}
-			]
-		},
-		{
-			"name": "closing forgets to say it is closed",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t}\n}",
-					"to": "enet_socket_destroy(broadcastSocket);\n\t}\n}"
-				}
-			]
-		},
-		{
-			"name": "closing never closes",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t}\n}",
-					"to": "broadcastSocket = ENET_SOCKET_NULL;\n\t}\n}"
-				}
-			]
-		},
-		{
-			"name": "a search stopped still looks as if it is going on",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "void Net_StopSearchingForSessions()\n{\n\tsessionCheckTimer = 0;\n",
-					"to": "void Net_StopSearchingForSessions()\n{\n"
-				}
-			]
-		},
-		{
-			"name": "a search stopping closes a host out of being found",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (AvP.Network != I_Host)\n\t{\n\t\tCloseDiscoverySocket();",
-					"to": "if (true)\n\t{\n\t\tCloseDiscoverySocket();"
-				}
-			]
-		},
-		{
-			"name": "a search stopping leaves the socket open",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (AvP.Network != I_Host)\n\t{\n\t\tCloseDiscoverySocket();",
-					"to": "if (false)\n\t{\n\t\tCloseDiscoverySocket();"
-				}
-			]
-		},
-		{
-			"name": "a search with its time up leaves the socket open",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "Net_StopSearchingForSessions();\n\t\treturn false;",
-					"to": "sessionCheckTimer = 0;\n\t\treturn false;"
-				}
-			]
-		},
-		{
-			"name": "a search lasts longer than it should",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "timeGetTime() - sessionCheckTimer >= sessionCheckTimeout",
-					"to": "timeGetTime() - sessionCheckTimer > sessionCheckTimeout"
-				}
-			]
-		},
-		{
-			"name": "no search looks like a search just after the machine starts",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (sessionCheckTimer == 0 || timeGetTime()",
-					"to": "if (timeGetTime()"
-				}
-			]
-		},
-		{
-			"name": "a search goes on without a socket",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\t// A new search starts",
-					"to": "OpenDiscoverySocket();\n\n\t// A new search starts"
-				}
-			]
-		},
-		{
-			"name": "a search that cannot ask stays open",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!AskEveryoneAboutGames())\n\t{\n\t\tNet_StopSearchingForSessions();\n\t\treturn;\n\t}",
-					"to": "AskEveryoneAboutGames();"
-				}
-			]
-		},
-		{
-			"name": "a host with no socket looks at it anyway",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (ENET_SOCKET_NULL == broadcastSocket)\n\t{\n\t\treturn;\n\t}\n\n\t// Every minute, how many questions came",
-					"to": "// Every minute, how many questions came"
-				}
-			]
-		},
-		{
 			"name": "hosting loses the last ENet host",
 			"changes": [
 				{
@@ -532,46 +322,6 @@
 					"file": "3dc/networking.cpp",
 					"from": "// A host has no server to send to. Whatever was here belonged to the last game.\n\tServerPeer = NULL;",
 					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a host cannot be found",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\t\telse if (OpenDiscoverySocket())\n",
-					"to": "\t\t\telse if (false)\n"
-				}
-			]
-		},
-		{
-			"name": "leaving does not forget the server",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "// The ENet host owned this, and has just freed it\n\tServerPeer = NULL;\n\n\tsessionCheckTimer = 0;",
-					"to": "sessionCheckTimer = 0;"
-				}
-			]
-		},
-		{
-			"name": "leaving leaves a search going on",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tsessionCheckTimer = 0;\n\n\t// A host's search counts for the whole game",
-					"to": "\t// A host's search counts for the whole game"
-				}
-			]
-		},
-		{
-			"name": "leaving leaves the socket open",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t}\n\n\tCloseDiscoverySocket();\n\n\t// The game has closed",
-					"to": "\t}\n\n\t// The game has closed"
 				}
 			]
 		},
@@ -722,16 +472,6 @@
 					"file": "3dc/networking.cpp",
 					"from": "memcpy(&player, details, sizeof(PlayerDetails));\n\n\t// Nothing says this name ends\n\tplayer.name[kPlayerNameSize - 1] = '\\0';",
 					"to": "memcpy(&player, details, sizeof(PlayerDetails));"
-				}
-			]
-		},
-		{
-			"name": "a game's name with no end stays that way",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "session.sessionName[kSessionNameSize - 1] = '\\0';\n",
-					"to": ""
 				}
 			]
 		},
@@ -2091,36 +1831,6 @@
 			]
 		},
 		{
-			"name": "a search asks with a header alone again",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tbuf.dataLength = sizeof(question);\n",
-					"to": "\tbuf.dataLength = sizeof(MessageHeader);\n"
-				}
-			]
-		},
-		{
-			"name": "a host answers a question smaller than the answer",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (len == (int)kSearchQuestionBytes)",
-					"to": "if (len >= (int)sizeof(MessageHeader))"
-				}
-			]
-		},
-		{
-			"name": "a search's question is the size it used to be",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader) + sizeof(SessionDescription);",
-					"to": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader);"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the NPCs' messages are left out of a full frame without a word",
 			"changes": [
 				{
@@ -2157,26 +1867,6 @@
 					"file": "3dc/avp/win95/pldnet.cpp",
 					"from": "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();\n",
 					"to": "\tnetGameData.myGameState = NGS_Joining;\n"
-				}
-			]
-		},
-		{
-			"name": "a port of 0 is used",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "port >= 1 && port <= 65535 && port != (int)broadcastPort",
-					"to": "port <= 65535 && port != (int)broadcastPort"
-				}
-			]
-		},
-		{
-			"name": "the search's port is used for the game as well",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "port <= 65535 && port != (int)broadcastPort",
-					"to": "port <= 65535"
 				}
 			]
 		},
@@ -2267,16 +1957,6 @@
 					"file": "3dc/networking.cpp",
 					"from": "sstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \")\";",
 					"to": "sstream << \"A player is joining\";"
-				}
-			]
-		},
-		{
-			"name": "a LAN game's players aren't kept for the games page",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tSessionData[NumberOfSessionsFound].players = session.nPlayers;\n",
-					"to": ""
 				}
 			]
 		},
@@ -3206,16 +2886,6 @@
 			]
 		},
 		{
-			"name": "an online host the relay can't take is hosted anyway (#188)",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (online && !RelayHostStart(&notOnline))",
-					"to": "if (false && !RelayHostStart(&notOnline))"
-				}
-			]
-		},
-		{
 			"name": "the server isn't asked when an online host needs it",
 			"changes": [
 				{
@@ -3232,46 +2902,6 @@
 					"file": "3dc/networking.cpp",
 					"from": ": kServerNotYet;",
 					"to": ": kRelayCantBeUsed;"
-				}
-			]
-		},
-		{
-			"name": "a home game's host hears the internet",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\t\telse if (!online)\n\t\t\t{\n\t\t\t\thost->intercept = HomeIntercept;\n\t\t\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a home game drops nothing from outside",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tif (!NetAddress_IsThisNetwork(on->receivedAddress.host))\n\t{\n\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a home game drops what comes from home too",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n\n\treturn 0;\n}",
-					"to": "\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n\n\treturn 1;\n}"
-				}
-			]
-		},
-		{
-			"name": "a home game's drops aren't counted for the log",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\thomeStrangersDropped++;\n\t\treturn 1;",
-					"to": "\t\treturn 1;"
 				}
 			]
 		},
@@ -3302,56 +2932,6 @@
 					"file": "3dc/networking.cpp",
 					"from": "\t(void)on;\n\t(void)event;\n\treturn 1;\n}",
 					"to": "\t(void)on;\n\t(void)event;\n\treturn 0;\n}"
-				}
-			]
-		},
-		{
-			"name": "a joiner joins a plain game out on the internet",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))",
-					"to": "if (false)"
-				}
-			]
-		},
-		{
-			"name": "a joiner of a home game hears the internet",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\telse if (!SessionData[sessionNumber].throughRelay)\n\t{\n\t\thost->intercept = HomeIntercept;\n\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a search takes an answer from the internet",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (!NetAddress_IsThisNetwork(address.host))\n\t\t\t\t\t{\n\t\t\t\t\t\tsearchAnswersFromOutside++;",
-					"to": "if (false)\n\t\t\t\t\t{\n\t\t\t\t\t\tsearchAnswersFromOutside++;"
-				}
-			]
-		},
-		{
-			"name": "a search's ignored answers aren't counted for the log",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\t\t\t\t\t\tsearchAnswersFromOutside++;\n\t\t\t\t\t\tcontinue;",
-					"to": "\t\t\t\t\t\tcontinue;"
-				}
-			]
-		},
-		{
-			"name": "a typed address out on the internet is asked",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))",
-					"to": "enet_address_set_host_ip(&typed, IPAddressString) == 0 && false)"
 				}
 			]
 		},
@@ -3512,26 +3092,6 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "\t\t// port; networking.h)\n\t\tNet_StopTimingTheRelay();\n",
 					"to": "\t\t// port; networking.h)\n"
-				}
-			]
-		},
-		{
-			"name": "a home game chosen with a server in the file goes online after all",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\treturn HostGame(playerName, sessionName, species, gameStyle, level, true);",
-					"to": "\treturn HostGame(playerName, sessionName, species, gameStyle, level, false);"
-				}
-			]
-		},
-		{
-			"name": "a home game is online whenever servers.cfg names a server",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "bool const online = !atHome && Relay_ServerName()[0] != 0;",
-					"to": "bool const online = Relay_ServerName()[0] != 0;"
 				}
 			]
 		}

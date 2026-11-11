@@ -29,6 +29,8 @@
 //   does: it looks on this network. Only with -dev does it ask the online list of games too, and a release game reaches no server, so the
 //   help never promises the list to a player (the owner's ruling)
 //   the page of games found's Search box and Refresh row, and their help
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"):
+//   the Host row's words went with the game at home, and neither Find games' help nor a host's no-answer line offers this network any more
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -217,7 +219,7 @@ static char OurTextStrings[][200] =
 	"Asking the server...",
 	"Couldn't host online:",
 	"This game couldn't be hosted.",
-	"The server didn't answer in 30 seconds, so nothing was hosted. Try again, or host at home.",
+	"The server didn't answer in 30 seconds, so nothing was hosted. Try again.",
 	"Servers",
 	"Every server in servers.cfg: which one the game uses, and picking another for the next start.",
 	"Servers",
@@ -234,7 +236,7 @@ static char OurTextStrings[][200] =
 	"The pick couldn't be kept. The log says why.",
 	"Games from",
 	"Find Games",
-	"Press ENTER to look for games on this network.",
+	"Press ENTER to see the games on the server's online list.",
 	"Search",
 	"Type part of a game's name to show only the games with it. What you type stays on this PC.",
 	"Refresh",

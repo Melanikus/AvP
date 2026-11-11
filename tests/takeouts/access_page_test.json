@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());",
-					"to": "MenuData_SetMultiplayerRows(true, HostWhereNames());"
+					"from": "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0);",
+					"to": "MenuData_SetMultiplayerRows(true);"
 				}
 			]
 		},

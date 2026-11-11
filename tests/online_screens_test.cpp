@@ -998,13 +998,13 @@ static void TestTheJoinsFrames()
 	Check(Has(render, "bool ThisFramesRenderingIsOpen()\n{\n\treturn frameIsOpen;\n}"), "whether a frame is open is the renderer's own word on it");
 }
 
-// The home network's two refusals (#188, PO's ruling Q4): a join refused because the game's host isn't on the home network, and a typed
-// address the search left unasked for that reason, are said on the games page, in the networking code's own fixed words. Both are longer
-// than a line, so the page's failure line takes two. Read in the code, as the page needs the whole game. Added 2026-11-10 by Melanikus for
-// the AvP port.
+// A join refused before anything is opened (#188, PO's ruling Q4; modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling
+// for beta.2: "Everything over nyc3"): a game that isn't through a server's relay is plain, and refused, and the games page says why, in
+// the networking code's own fixed words. They're longer than a line, so the page's failure line takes two. A typed address's refusal went
+// with the typed address. Read in the code, as the page needs the whole game.
 static void TestTheHomeRefusals()
 {
-	puts("the home network's refusals, said on the games page (by reading the source)");
+	puts("a join refused for not going through the relay, said on the games page (by reading the source)");
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
 	Check(menus.size() > 1000 && page.size() > 1000, "the menus' and the page's sources were found and read");
@@ -1012,12 +1012,10 @@ static void TestTheHomeRefusals()
 	std::string const joining = SourceSlice(menus, "NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);", "\n\t\t\tbreak;\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const refused = joining.find("else if (Net_JoinRefusedWhy()) {");
 	Check(refused != std::string::npos && refused > joining.find("else if (SessionData[s].throughRelay) {") &&
-		Has(joining, "OnlinePage_JoinFailed(Net_JoinRefusedWhy());"), "a join the home network's rule refused says why on the page");
+		Has(joining, "OnlinePage_JoinFailed(Net_JoinRefusedWhy());"), "a join the networking code refused says why on the page");
 
 	std::string const top = SourceSlice(page, "void OnlinePage_DrawTop(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const typed = top.find("if (visibleCount == 0 && shownCount == 0 && typedRefused)\n\t{\n\t\tWrappedWords(typedRefused, kFirstRowTop, 2, ONE_FIXED / 2);");
-	Check(Has(top, "const char *const typedRefused = Net_TypedAddressRefusedWhy();") && typed != std::string::npos &&
-		typed < top.find("else if (visibleCount == 0)"), "a typed address the search left unasked says so, in place of no games");
+	Check(!Has(page, "Net_TypedAddressRefusedWhy") && !Has(page, "typedRefused"), "and there's no typed address's refusal to show any more");
 
 	Check(Has(page, "static char failedLine[200];") && Has(page, "void OnlinePage_JoinFailed(const char *why)\n{\n\tchar safe[160];") &&
 		Has(top, "WrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);"),

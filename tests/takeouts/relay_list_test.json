@@ -559,8 +559,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())",
-					"to": "if (Net_UpdateSessionList(selection))"
+					"from": "if (TheRelayGamesHaveCome())",
+					"to": "if (false && TheRelayGamesHaveCome())"
 				}
 			]
 		},
@@ -595,12 +595,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: Find Games' help promises a player the online list, which a release game can't reach",
+			"name": "SOURCE: Find Games' help sends a player to this network's games, which there aren't any more",
 			"changes": [
 				{
 					"file": "3dc/avp/language.cpp",
-					"from": "\"Press ENTER to look for games on this network.\",",
-					"to": "\"Press ENTER to look for games on this network and on the online list of games.\","
+					"from": "\"Press ENTER to see the games on the server's online list.\",",
+					"to": "\"Press ENTER to look for games on this network.\","
 				}
 			]
 		},

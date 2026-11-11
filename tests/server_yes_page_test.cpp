@@ -165,10 +165,8 @@ static void TestTheWaysOnline()
 	Check(ServerYes_WayAsks(kServerYesWayFindGames, false) && ServerYes_WayAsks(kServerYesWayFindGames, true),
 		"Find games always asks: it would read the server's list");
 	Check(ServerYes_WayAsks(kServerYesWayHost, true) && !ServerYes_WayAsks(kServerYesWayHost, false),
-		"a host asks only when it hosts online: a game at home uses no server");
+		"a host asks only when it hosts online, which is whenever servers.cfg names a server: with none, nothing is hosted");
 	Check(!ServerYes_WayAsks(kServerYesNotAWay, true) && !ServerYes_WayAsks(kServerYesNotAWay, false), "any other row never asks");
-	Check(ServerYes_NoGoesOn(kServerYesWayFindGames) && !ServerYes_NoGoesOn(kServerYesWayAccess) && !ServerYes_NoGoesOn(kServerYesWayHost) &&
-		!ServerYes_NoGoesOn(kServerYesNotAWay), "after a No only Find games goes on to its page; the others go back");
 
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	std::string const page = ReadSource("3dc/avp/win95/frontend/server_yes_page.cpp");
@@ -183,7 +181,7 @@ static void TestTheWaysOnline()
 	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST))\n\t{\n\t\treturn kServerYesWayHost;"),
 		"so are its two host rows, Start game and Co-op campaign");
 	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)\n\t{\n\t\treturn kServerYesWayFindGames;"),
-		"and the Join game page's Find games, never the typed address's row, which uses no server");
+		"and the Join game page's Find games");
 	Check(Has(data, "static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_ACCESS_ROW},\t{AVPMENU_ONLINE_ACCESS},") &&
 		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_MULTIPLAYER_STARTGAME},\t{AVPMENU_MULTIPLAYER_CONFIG},") &&
 		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},") &&
@@ -193,8 +191,8 @@ static void TestTheWaysOnline()
 	std::string const wayIn = SourceSlice(page, "enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline)", "\n}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(wayIn, "if (!ServerYes_WayAsks(way, hostsOnline))\n\t{\n\t\treturn goTo;") &&
-		Has(wayIn, "return ServerYesPage_Needed(goTo, ServerYes_NoGoesOn(way) ? goTo : AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;"),
-		"a way that asks opens the yes page in its page's place, while the line needs it; after a No, on or back by the rule");
+		Has(wayIn, "return ServerYesPage_Needed(goTo, AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;") && !Has(page, "NoGoesOn"),
+		"a way that asks opens the yes page in its page's place, while the line needs it; after a No, every way goes back to the Multiplayer page");
 
 	// The menus: every row that goes to a page goes through it, as it's pressed, with whether a host would host online
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
@@ -203,8 +201,8 @@ static void TestTheWaysOnline()
 	Check(pressedWayIn != std::string::npos && pressedWayIn < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1,
 		"a pressed row goes to its page only through the yes, and no other way");
 	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(online, "return Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;"),
-		"a host hosts online when servers.cfg names a server and the Host row says Online");
+	Check(Has(online, "return Relay_ServerName()[0] != 0;"),
+		"a host hosts online whenever servers.cfg names a server: there's nowhere else to host");
 	Check(CountOf(menus, "ServerYesPage_WayIn(") == 1 && CountOf(menus, "ServerYesPage_Needed(") == 0,
 		"the menus ask in that one place, never as a page opens");
 
@@ -218,53 +216,41 @@ static void TestTheWaysOnline()
 		"after a No the list's thread isn't started: it's made in Start alone, after the yes, so nothing goes to the server");
 }
 
-// WHERE A HOST'S GAME IS HOSTED (PO's ruling Q1, 2026-11-10): the Multiplayer page's Host row, Online (the server's name) or At home. It's
-// there only when servers.cfg names a server, starts on Online at every start of the game, and is never saved. Start game and Co-op
-// campaign host by it. Read in the code, as it needs the whole game; net_start_test tries Net_HostAtHome itself. Added 2026-11-10 by
-// Melanikus for the AvP port.
-static void TestWhereAHostHosts()
+// NO HOST ROW: EVERY GAME IS HOSTED ONLINE (the owner's ruling for beta.2, 2026-11-10: "Remove At home from beta.2", "Everything over
+// nyc3"). PO's ruling Q1's Host row, Online or At home, went with the game at home: Start game and Co-op campaign host only through the
+// server servers.cfg names, by Net_HostGame, which hosts nothing with no server named (net_start_test tries that). Read in the code, as it
+// needs the whole game. Added 2026-11-10 by Melanikus for the AvP port, in the Host row's section's place.
+static void TestEveryHostIsOnline()
 {
-	printf("5. the Host row: where a host's game is hosted\n");
+	printf("5. no Host row: every game is hosted online, through the server\n");
 	std::string const data = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
 	std::string const header = ReadSource("3dc/avp/win95/frontend/menu_data.h");
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	std::string const coop = ReadSource("3dc/avp/win95/frontend/coop_menu.cpp");
 	std::string const words = ReadSource("3dc/avp/language.cpp");
-	std::string const setups = ReadSource("3dc/avp/win95/frontend/mp_config.cpp");
-	std::string const profiles = ReadSource("3dc/avp/win95/frontend/user_profile.cpp");
-	std::string const settings = ReadSource("3dc/ConfigFile.cpp");
-	Check(data.size() > 1000 && header.size() > 100 && menus.size() > 1000 && coop.size() > 1000 && words.size() > 1000 && setups.size() > 1000 &&
-		profiles.size() > 1000 && settings.size() > 1000, "the rows', the menus', the co-op page's, the words' and the three saving files' sources were found and read");
+	std::string const names = ReadSource("3dc/avp/langenum.h");
+	Check(data.size() > 1000 && header.size() > 100 && menus.size() > 1000 && coop.size() > 1000 && words.size() > 1000 && names.size() > 1000,
+		"the rows', the menus', the co-op page's and the words' sources were found and read");
 
-	Check(Has(header, "enum { kHostWhereOnline = 0, kHostWhereAtHome = 1 };\nextern int MP_HostWhere;") && Has(data, "int MP_HostWhere = kHostWhereOnline;"),
-		"it starts on Online at every start of the game");
-	Check(!Has(setups, "MP_HostWhere") && !Has(profiles, "MP_HostWhere") && !Has(settings, "MP_HostWhere"),
-		"and it's never saved: not with a multiplayer setup, not in a profile, not in the settings file");
-	Check(Has(data, "static AVPMENU_ELEMENT const HostWhereRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_HOSTWHERE},\t{kHostWhereAtHome},\t{&MP_HostWhere},\t{0},\tTEXTSTRING_MULTIPLAYER_HOSTWHERE_HELP};"),
-		"the row chooses between its two places, with its help line");
+	Check(!Has(header, "MP_HostWhere") && !Has(data, "MP_HostWhere") && !Has(menus, "MP_HostWhere") && !Has(coop, "MP_HostWhere") &&
+		!Has(data, "HostWhereRow") && !Has(menus, "HostWhereNames") && !Has(names, "HOSTWHERE") && !Has(menus, "Net_HostAtHome") && !Has(coop, "Net_HostAtHome"),
+		"the Host row is gone, with its choice, its words and the game at home");
 
-	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostWhereNames)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const hostRow = setter.find("\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}");
-	Check(hostRow != std::string::npos && setter.find("= PlayerNameRow;") < hostRow && hostRow < setter.find("= StartGameRow;") && CountOf(data, "= HostWhereRow;") == 1,
-		"it's on the page only when servers.cfg names a server, just above the rows that host");
+	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const nameRow = setter.find("= PlayerNameRow;");
+	size_t const serversRow = setter.find("= ServersRow;");
+	Check(nameRow != std::string::npos && serversRow != std::string::npos && nameRow < serversRow && serversRow < setter.find("= StartGameRow;"),
+		"the Multiplayer page goes from the player's name and the Servers row straight to the rows that host");
 
-	std::string const names = SourceSlice(menus, "static char **HostWhereNames(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const safe = names.find("OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));");
-	Check(safe != std::string::npos &&
-		safe < names.find("snprintf(online, sizeof(online), \"%s (%.20s)\", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE), server);") &&
-		Has(names, "snprintf(atHome, sizeof(atHome), \"%s\", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME));"),
-		"its first choice names the server, made safe and cut to 20 letters, only ever as an argument; the second is At home");
-
-	// The two rows that host, by it
 	std::string const starting = SourceSlice(menus, "case AVPMENU_ELEMENT_STARTMPGAME:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)", "\n\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(starting, "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ?\n\t\t\t\t\tNet_HostAtHome(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) :\n\t\t\t\t\tNet_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);") &&
-		Has(starting, "if (hosted != NET_FAIL)") && CountOf(starting, "Net_HostGame(") == 1 && CountOf(starting, "Net_HostAtHome(") == 1, "Start game hosts at home when the row says so, online otherwise");
-	Check(Has(coop, "NetResult const hosted = MP_HostWhere == kHostWhereAtHome ? Net_HostAtHome(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel) :\n\t\tNet_HostGame(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel);") &&
-		CountOf(coop, "Net_HostGame(") == 1 && CountOf(coop, "Net_HostAtHome(") == 1, "and so does the co-op page, which hosts nowhere else");
+	Check(Has(starting, "NetResult const hosted = Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);") &&
+		Has(starting, "if (hosted != NET_FAIL)") && CountOf(starting, "Net_HostGame(") == 1, "Start game hosts online, by Net_HostGame alone");
+	Check(Has(coop, "NetResult const hosted = Net_HostGame(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel);") && CountOf(coop, "Net_HostGame(") == 1,
+		"and so does the co-op page, which hosts nowhere else");
 
-	Check(Has(words, "\t\"Host\",\n\t\"Online\",\n\t\"At home\",\n\t\"Online: players anywhere can find your game through this server. At home: only players on this home network can join.\",\n"),
-		"the row's words, and its help line says plainly who can join at home");
+	Check(!Has(words, "At home") && !Has(words, "host at home") && !Has(words, "home network can join") && !Has(words, "games on this network"),
+		"and none of the game's words offers a game at home, or this network's games");
 }
 
 // A HOST'S WAIT, AND A FAILED HOST'S LINE (PO's rulings Q3 and Q4, 2026-11-10; host_wait_rules.h says why). The rules are tried here,
@@ -303,7 +289,8 @@ static void TestTheHostsWait()
 
 	std::string const begins = SourceSlice(menus, "static bool AHostWaits(HostWaitFor what)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const onlyOnline = begins.find("if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)\n\t{\n\t\treturn false;\n\t}");
-	Check(onlyOnline != std::string::npos && onlyOnline < begins.find("hostWaiting = what;") && Has(begins, "hostWaitSince = GetTickCount();") &&
+	Check(onlyOnline != std::string::npos && onlyOnline < begins.find("hostWaiting = what;") &&
+		Has(begins, "hostWaitSince = hostWaitRetrySince != 0 ? hostWaitRetrySince : GetTickCount();") &&
 		Has(begins, "ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_ASKING));"),
 		"a host waits only online, only while the server hasn't answered, and says Asking the server...");
 
@@ -315,6 +302,12 @@ static void TestTheHostsWait()
 	std::string const cantUse = SourceSlice(frame, "case kHostWaitCantUse:", "case kHostWaitGiveUp:", kSliceEndAfterTheStart, FailedSlice);
 	std::string const givingUp = frame.substr(frame.find("case kHostWaitGiveUp:") == std::string::npos ? frame.size() : frame.find("case kHostWaitGiveUp:"));
 	Check(Has(hostNow, "PressTheStartRowAgain();") && Has(hostNow, "SetupNewMenu(AVPMENU_COOP_HOST);"), "a server that's ready: the host goes on as it was pressed");
+	// Third's finding on rc1 (2026-11-10): a host the server's asking again refuses waits on, counted from its first press, never a new 30 s
+	size_t const keptAt = hostNow.find("hostWaitRetrySince = hostWaitSince;");
+	size_t const forgotAt = hostNow.find("hostWaitRetrySince = 0;");
+	Check(keptAt != std::string::npos && forgotAt != std::string::npos && keptAt < hostNow.find("PressTheStartRowAgain();") &&
+		keptAt < hostNow.find("SetupNewMenu(AVPMENU_COOP_HOST);") && forgotAt > hostNow.find("SetupNewMenu(AVPMENU_COOP_HOST);"),
+		"and it's tried with the wait's start kept, so a wait that follows counts on from the first press, and the start is forgotten after");
 	Check(Has(cantUse, "ShowWhyTheHostFailed(hostWaitPage, why);") && !Has(cantUse, "PressTheStartRowAgain") && !Has(cantUse, "SetupNewMenu"),
 		"one that can't be used: why, and nothing hosted");
 	Check(Has(givingUp, "ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));") && !Has(givingUp, "PressTheStartRowAgain") && !Has(givingUp, "SetupNewMenu"),
@@ -337,6 +330,9 @@ static void TestTheHostsWait()
 	size_t const hostedOrNot = startRow.find("if (hosted != NET_FAIL)");
 	Check(hostedOrNot != std::string::npos && hostedOrNot < startRow.find("ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());"),
 		"and a Start that fails says why on its page");
+	Check(Has(startRow, "else if (!AHostWaits(kHostWaitingToStart))\n\t\t\t\t{") &&
+		startRow.find("else if (!AHostWaits(kHostWaitingToStart))") < startRow.find("ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());"),
+		"unless it was refused for the server being asked again: then it waits, as before a first answer (Third's finding on rc1)");
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const coopWaits = pressing.find("if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))\n\t\t\t\t{\n\t\t\t\t\tbreak;\n\t\t\t\t}");
@@ -353,7 +349,7 @@ static void TestTheHostsWait()
 	Check(CountOf(menus, "HostFailedForARun(\"") == 4 && Has(menus, "return why ? std::string(what) + \", because \" + why : std::string(what);"),
 		"the four hosts only a run makes say why in their log lines");
 
-	Check(Has(words, "\t\"Asking the server...\",\n\t\"Couldn't host online:\",\n\t\"This game couldn't be hosted.\",\n\t\"The server didn't answer in 30 seconds, so nothing was hosted. Try again, or host at home.\",\n"),
+	Check(Has(words, "\t\"Asking the server...\",\n\t\"Couldn't host online:\",\n\t\"This game couldn't be hosted.\",\n\t\"The server didn't answer in 30 seconds, so nothing was hosted. Try again.\",\n"),
 		"the wait's and the failed host's words, in langenum.h's order");
 }
 
@@ -363,7 +359,7 @@ int main()
 	TestTheLines();
 	TestTheWiring();
 	TestTheWaysOnline();
-	TestWhereAHostHosts();
+	TestEveryHostIsOnline();
 	TestTheHostsWait();
 
 	if (checksFailed)

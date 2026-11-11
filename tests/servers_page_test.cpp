@@ -236,12 +236,13 @@ static void TestTheWiring()
 		Has(menus, "else if (serversPage)\n\t\t{\n\t\t\tServersPage_DrawRow(elementPtr, e, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement);"),
 		"and it draws its own rows, a screenful at a time, and its words around them");
 
-	// The Multiplayer page's Servers row: always there, under the Host row; it goes to a page that contacts nothing, so it asks no yes
-	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostWhereNames)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const hostRow = setter.find("AvPMenu_Multiplayer[row] = HostWhereRow;");
+	// The Multiplayer page's Servers row: always there, under the player's name (the Host row that was between them went with the game at
+	// home, 2026-11-10); it goes to a page that contacts nothing, so it asks no yes
+	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const nameRow = setter.find("AvPMenu_Multiplayer[row++] = PlayerNameRow;");
 	size_t const serversRow = setter.find("\tAvPMenu_Multiplayer[row++] = ServersRow;\n");
-	Check(serversRow != std::string::npos && hostRow < serversRow && serversRow < setter.find("= StartGameRow;") &&
-		setter.rfind("if (aServerIsNamed)", serversRow) < hostRow, "the Servers row is on the Multiplayer page always, just under the Host row");
+	Check(serversRow != std::string::npos && nameRow != std::string::npos && nameRow < serversRow && serversRow < setter.find("= StartGameRow;") &&
+		setter.rfind("if (aServerIsNamed)", serversRow) == std::string::npos, "the Servers row is on the Multiplayer page always, just under the player's name");
 	Check(Has(data, "static AVPMENU_ELEMENT const ServersRow = {AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_SERVERS_ROW},\t{AVPMENU_SERVERS},") &&
 		Has(data, "static AVPMENU_ELEMENT AvPMenu_Servers[kServersPageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };") &&
 		Has(data, "== AVPMENU_SERVERS + 1,"), "it goes to the Servers page, whose table has room for every row, and has its entry");

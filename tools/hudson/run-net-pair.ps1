@@ -63,7 +63,6 @@ param(
     [switch]$Hostile,
     [switch]$Drain,
     [string]$ThirdFolder = '',
-    [switch]$Typed,
     [switch]$Relay,              # server #14: the host hosts through the relay server -ServersLine names, and the joiner joins through it
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line (relay-words.ps1)
     [string]$ServersLine = '',   # that line, for both games: "<address>[:<list port>:<relay port>] <fingerprint> <name>"
@@ -96,7 +95,7 @@ param(
     # clip for each page they picture (run-hudson.ps1's -FilmMenus and -PageHold, Hudson's film=menus and pagehold=)
     [switch]$FilmMenus,
     [int]$PageHold = 0,           # with -FilmMenus: seconds each pictured page is held first, 1 to 10
-    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host hosts through the Multiplayer page's Host row, online or athome
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host hosts through the Multiplayer page's rows, online
     # (run-hudson.ps1's -HostRow, Hudson's hostrow=)
     [string]$HostRow = ''
 )
@@ -396,12 +395,10 @@ if ($HostAnswerAfter -ne 0 -and ($HostAnswerAfter -lt 1 -or $HostAnswerAfter -gt
 if ($FilmMenus -and $NoFilm) { Stop-Here "-FilmMenus asks for films, and -NoFilm says there are none" }
 if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
 if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
-# The host through the Host row (added 2026-11-10 by Melanikus (Third)). At home, the joiner comes by its typed address on this machine:
-# Find games' home search would ask the whole network, by broadcast, and a pair here keeps to this machine
-if ($HostRow -and $HostRow -cnotmatch '\A(online|athome)\z') { Stop-Here "-HostRow is online or athome" }
-if ($HostRow -and -not $Relay) { Stop-Here "-HostRow presses the Host row, which is on the page only when servers.cfg names a server, so it needs -Relay and -ServersLine" }
-if ($HostRow -ceq 'athome' -and (-not $Typed -or $JoinFindGames)) { Stop-Here "-HostRow athome is a game at home, which the joiner reaches by its typed address on this machine, so it needs -Typed and no -JoinFindGames: Find games' home search would broadcast to the whole network" }
-if ($HostRow -ceq 'online' -and $Typed) { Stop-Here "-HostRow online is a game through the server, which a typed address on this machine doesn't reach, so it can't have -Typed" }
+# The host through the Multiplayer page's rows (added 2026-11-10 by Melanikus (Third)). Modified 2026-11-10 by Melanikus for the AvP port
+# (the owner's ruling for beta.2: "Everything over nyc3"): online only, as the game at home and its joiner by a typed address are gone
+if ($HostRow -and $HostRow -cnotmatch '\A(online)\z') { Stop-Here "-HostRow is online: beta.2 hosts online only, through a server's relay" }
+if ($HostRow -and -not $Relay) { Stop-Here "-HostRow hosts through the server servers.cfg names, so it needs -Relay and -ServersLine" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -494,7 +491,6 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($Hostile) { $words += '-Hostile' }
     if ($kind) { $words += @('-HostileKind', $kind) }
     if ($kind -eq 'flood') { $words += @('-NetSecondPartner', "`"$joinFull`"") }
-    if ($Typed) { $words += '-Typed' }
     if ($Relay) { $words += '-Relay' }
     if ($RemoteRelay) { $words += @('-RemoteRelay', $RemoteRelay) }
     # The line holds spaces, and Start-Process joins its words with nothing but spaces, so it goes in quotes (its rule has no quote in it)

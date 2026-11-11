@@ -1115,16 +1115,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: a typed address left unasked shows as no games",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "const char *const typedRefused = Net_TypedAddressRefusedWhy();",
-					"to": "const char *const typedRefused = NULL;"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the page's failure line is one line again",
 			"changes": [
 				{

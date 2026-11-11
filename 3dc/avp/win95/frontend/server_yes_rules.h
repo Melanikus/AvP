@@ -38,8 +38,9 @@ inline ServerYesChoice ServerYes_Choice(int row)
 // THE WAYS ONLINE, and where a No takes each (PO's rulings, 2026-11-10). Added 2026-11-10 by Melanikus for the AvP port. The page is
 // asked for as a way's row is pressed, never as a page opens, so a page can still open after a No without asking again:
 // - the Online access page: it would send the player's request to the server, so it always asks; after a No, back to the Multiplayer page;
-// - a host (Start game, Co-op campaign): it asks only when it hosts online. A game hosted at home uses no server, so it never asks.
-//   After a No, back to the Multiplayer page, where the player can choose to host at home;
+// - a host (Start game, Co-op campaign): it asks only when it hosts online, which is whenever servers.cfg names a server (with none,
+//   nothing is hosted, so there's nothing to ask; modified 2026-11-10, the owner's ruling for beta.2). After a No, back to the
+//   Multiplayer page;
 // - Find games: it would read the server's list, so it always asks. After a No, back to the Multiplayer page too (modified 2026-11-10,
 //   the owner's ruling for beta.2: "Everything over nyc3": there are no games on this network to show without it).
 enum ServerYesWay
