@@ -15,3 +15,6 @@
 /tests/takeouts/share.ps1   @Melanikus
 /tests/takeouts/run-batch.ps1 @Melanikus
 /tests/takeouts/sanitize.ps1 @Melanikus
+# The empty test whose imports are the floor of the import allow-list (tests/reuse/imports-allowed.txt): the gate's own data
+/tests/reuse_empty_probe_test.cpp  @Melanikus
+/tests/reuse_empty_probe_test.args @Melanikus
