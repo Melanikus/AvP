@@ -655,7 +655,9 @@ static void TheClock()
 
 	for (int ms = 0; ms < 1600; ms += 100)
 	{
-		AlienWaysXYZ const at = { 1000 - kAlienWaysHeadway * (ms / 400), 0, 500 };
+		// Beside the wall the way takes (kWallX is 0 or 2000, as the corridor's way goes), nearer by kAlienWaysHeadway each 400 ms (modified
+		// 2026-11-11 by Melanikus (Third): a plain x walked away from the wall at 2000, and run 43120129973 rightly found it stuck)
+		AlienWaysXYZ const at = Beside(1000 - kAlienWaysHeadway * (ms / 400), 0, 500);
 		slow.Steer(&map, Ask(Alien(1), at, kGoal, 13), &towards);
 		Frame(slow, map, 100);
 		const AlienWaysReport *reports = nullptr;
@@ -1215,27 +1217,33 @@ static void HeldForTheSlide()
 	GuidedAlien(guide, Alien(1));
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 
-	// Held 900 mm from the wall's foot. From 300 ms its goal has moved 3.5 m, so it asks for a new way, and with 1 polygon a frame that
-	// search takes several frames. Its slide starts in the meantime, at about 500 ms, so the search ends while it slides.
+	// Held 900 mm from the wall's foot. From 400 ms its goal has moved 3.5 m, so it asks for a new way, and with 1 polygon a frame that
+	// search takes at least two frames. Its slide starts at 500 ms, the next frame, so the search ends while it slides. (Modified 2026-11-11 by
+	// Melanikus (Third): asked at 300 ms, run 43120129973's search ended before the slide began.)
 	AlienWaysXYZ const near = Beside(900, 0, 500), movedGoal = { kGoal.x, kGoal.y, kGoal.z - 3500 };
 	bool slid = false, held = false, taken = false;
+	int slidAt = -1, foundAt = -1, foundFrames = -1;
 
 	for (int ms = 0; ms <= 1400 && !held; ms += 100)
 	{
-		guide.Steer(&map, Ask(Alien(1), near, ms >= 300 ? movedGoal : kGoal, 13), &towards);
-		Frame(guide, map, 100, nullptr, ms >= 300 ? 1 : kAlienWaysLooksPerFrame);
+		guide.Steer(&map, Ask(Alien(1), near, ms >= 400 ? movedGoal : kGoal, 13), &towards);
+		Frame(guide, map, 100, nullptr, ms >= 400 ? 1 : kAlienWaysLooksPerFrame);
 		const AlienWaysReport *reports = nullptr;
 		size_t const count = ReportsOf(guide, &reports);
 
 		for (size_t r = 0; r < count; r++)
 		{
+			slidAt = slidAt < 0 && reports[r].outcome == kAlienWaysOutcomeSlide ? ms : slidAt;
+			foundAt = foundAt < 0 && ms >= 400 && reports[r].outcome == kAlienWaysOutcomeFound ? ms : foundAt;
+			foundFrames = foundAt == ms && reports[r].outcome == kAlienWaysOutcomeFound ? reports[r].frames : foundFrames;
 			slid = slid || reports[r].outcome == kAlienWaysOutcomeSlide;
 			held = held || (reports[r].outcome == kAlienWaysOutcomeFound && reports[r].heldForSlide);
 			taken = taken || (slid && reports[r].outcome == kAlienWaysOutcomeFound && !reports[r].heldForSlide);
 		}
 	}
 
-	Check(slid && held && !taken, "a way that comes while it slides isn't taken, and its line says so");
+	Check(slid && held && !taken, "a way that comes while it slides isn't taken, and its line says so (slid at " + std::to_string(slidAt) + " ms, the new way at " +
+		std::to_string(foundAt) + " ms, in " + std::to_string(foundFrames) + " frames)");
 	Check(guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall) && Same(next, kUpTheWall),
 		"its slide goes on, to the same point, with the same point after it");
 
