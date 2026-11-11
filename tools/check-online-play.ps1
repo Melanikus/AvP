@@ -1197,11 +1197,14 @@ foreach ($adding in (Get-Calls 'ServersTrust_Add'))
     }
 }
 
-$listState = Get-OneDefinition 'RelayList_ServerState' 'Y' $listFile 'where the server stands'
+# Each line's own state, which every page reads (the Online page, the host page, Find games): a line without the player's yes says so
+# first, before anything a find said of it (modified 2026-11-11 by Melanikus for the AvP port: it was the one server's state,
+# RelayList_ServerState, which went with the one server, rule J)
+$lineState = Get-OneDefinition 'RelayList_LineNow' 'Y' $listFile 'where each line stands'
 
-if (-not (Test-Before $listState.Flat 'if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }' 'if (!shared)'))
+if (-not (Test-Before $lineState.Flat 'if (!TheLineIsAgreed(line)) { out->state = kRelayLineNoYes; return true; }' 'if (shared)'))
 {
-    Stop-Check "Y: RelayList_ServerState ($listFile line $($listState.Line)) must say a line without the player's yes needs it, before anything else: if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }"
+    Stop-Check "Y: RelayList_LineNow ($listFile line $($lineState.Line)) must say a line without the player's yes needs it, before anything a find said: if (!TheLineIsAgreed(line)) { out->state = kRelayLineNoYes; return true; } before if (shared)"
 }
 
 # (Moved from Y to H by Primary, 2026-11-11, agreed with Fourth: "an online host isn't hosted before the player's yes". Net_HostGame no

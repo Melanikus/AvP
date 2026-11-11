@@ -10736,6 +10736,26 @@
 					"to": "if (length > (size_t)kHudsonLongestServerName"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: access=newid presses the new identity while lines are still being asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\twhile (bRunning && ALineIsStillAskingForARun() && (DWORD)(GetTickCount() - waitStarted) < 30000u)\n",
+					"to": "\t\twhile (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: access=newid passes without a new identity made",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (asAsked && !OnlineLines_SaysTheNewIdentityWasMade())\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
 		}
 	]
 }

@@ -1043,11 +1043,34 @@ static void RunTheAccessPagesForHudson(void)
 
 	if (asAsked && press == kHudsonAccessNewId)
 	{
-		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_NEW_IDENTITY, "Make a new identity");
+		// The Multiplayer page asked every line with its yes as it opened, and a new identity waits until every answer has come
+		// (RelayList_ForgetAccess), so the run waits for them first, at most 30 s, as a player would see them come. Then the page must say
+		// the new identity was made: a run that kept its old identity proves nothing about a fresh one. Added 2026-11-11 by Melanikus for the
+		// AvP port (PO, after the owner's picture run).
+		DWORD const waitStarted = GetTickCount();
+
+		while (bRunning && ALineIsStillAskingForARun() && (DWORD)(GetTickCount() - waitStarted) < 30000u)
+		{
+			MenuFrameForARun(NULL);
+		}
+
+		if (ALineIsStillAskingForARun())
+		{
+			LogErrorString("hudson: a line's access request was still on its way after 30 s, so no new identity was made");
+			asAsked = false;
+		}
+
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_NEW_IDENTITY, "Make a new identity");
 		MenuSecondsForARun(2);
 		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlineNewIdentityYes, "Yes, make a new identity");
 		MenuSecondsForARun(2);
 		MenuFrameForARun("access-newid.png");
+
+		if (asAsked && !OnlineLines_SaysTheNewIdentityWasMade())
+		{
+			LogErrorString("hudson: Make a new identity was pressed, and the Online page doesn't say a new identity was made");
+			asAsked = false;
+		}
 	}
 	else if (asAsked)
 	{
