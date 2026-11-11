@@ -43,6 +43,11 @@ extern bool HudsonMarineHoldsFire;
 // Something has hit a marine, in a run with a fight. He's kept alive, so his health can't show whether anything reached him, and this says so in the log. kind is what hit him: the game's number for it, from AMMO_ID in equipment.h.
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind);
 
+// An alien's claw is about to land (alien, just before its CauseDamageToObject in bh_near.cpp), or has (NULL, just after), so a blow can be
+// put down to the alien that struck it, by its own name, and never to whichever alien a run happens to be watching. Nothing outside a run.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: a run's watch had counted a level alien's claw as its own alien's first blow.
+void Hudson_AlienStrikes(const STRATEGYBLOCK *alien);
+
 // A marine has come down after falling, at this speed, and wouldKillHim is what the game's own rule says about that speed. Nothing's hurt in a run, so this is how a walk finds out.
 void Hudson_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim);
 

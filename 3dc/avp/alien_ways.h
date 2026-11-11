@@ -110,6 +110,11 @@ bool AlienWays_Following(struct strategyblock *alien);
 // in a frame nothing asked. Hunt and Wander (bh_near.cpp) use it to hold back the game's own avoidance only while a way really steers them.
 bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
 
+// The guide's place for this alien: the N of the log's "alien N" lines, so another line can name the same alien. -1 when it has none, and
+// with the switch off. A place is given again once its alien is let go, so it names an alien only together with when. Added 2026-11-11 by
+// Melanikus (Third) for the AvP port, for Hudson's per-alien lines (#109).
+int AlienWays_PlaceOf(const struct strategyblock *alien);
+
 // On a frame its way steers an alien, the game's own tests that would send it off to avoid something are kept from acting, because running
 // into a wall is how it climbs (AlienNearState_Approach, _Hunt and _Wander, bh_near.cpp). When one of them would have acted, this says so in
 // the log: which one,

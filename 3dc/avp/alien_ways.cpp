@@ -947,6 +947,11 @@ bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
 	return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));
 }
 
+int AlienWays_PlaceOf(const STRATEGYBLOCK *alien)
+{
+	return alien && AlienWays_On() && ReadyMap() ? theGuide.PlaceOf(WhoIs(alien)) : -1;
+}
+
 // Modified 2026-11-08 by Melanikus for the AvP port: keeps an alien going on a frame its state didn't ask, and the watch on one alien (#109)
 bool AlienWays_KeepDriving(STRATEGYBLOCK *alien, VECTORCH *direction)
 {

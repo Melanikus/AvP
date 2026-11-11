@@ -2698,11 +2698,38 @@ static void TestTheGridInTheGame()
 	Check(gridLevel.find("(module->m_flags & MODULEFLAG_AIRDUCT) != 0") != std::string::npos, "and a room marked as an air duct is where he crawls");
 }
 
+// Each alien's own blows (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): a blow on him is put down to the alien whose claw it
+// is, by its name, and never to whichever alien a run watches; and in play=yes every alien that comes for him has lines of its own. Only the
+// game can show it works; these read the source for the lines it depends on.
+static void TestEachAliensOwnBlows()
+{
+	std::string const nearCode = ReadSourceFile("3dc/avp/bh_near.cpp");
+	std::string const hudson = ReadSourceFile("3dc/avp/hudson.cpp");
+	std::string const strikes = Between(hudson, "void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)\n{", "\n}\n");
+	std::string const noted = Between(hudson, "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{", "\n}\n");
+	std::string const played = Between(hudson, "void Hudson_PlayInput(void *playerStatus)\n{", "static bool started = false;");
+
+	Check(Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);\n\n\t\t\t\t\tif (alienStatusPointer->Target->SBdptr->HModelControlBlock) {")
+		&& Has(nearCode, "\t\t\t\t\t}\n\n\t\t\t\t\tHudson_AlienStrikes(NULL);\n")
+		&& Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);   // Hudson's runs only, as above (added 2026-11-11 by Melanikus (Third))\n\t\t\t\t\tCauseDamageToObject(alienStatusPointer->Target,"),
+		"both of an alien's claws say which alien it is, just before the damage, and clear it just after");
+	Check(Has(strikes, "\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;\n\t}\n\n\tstrikingAlien = alien;"),
+		"which alien a claw is is kept only in a run, and nothing else is done with it there");
+	Check(Has(hudson, "bool const theWatchedAliensOwn = strikingAlien && watchAlienNamed && NAME_ISEQUAL(strikingAlien->SBname, watchAlienName);")
+		&& Has(hudson, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"),
+		"a watch's first blow is only its own alien's, by its name, never any blow after it was made");
+	Check(Has(noted, "if (plan.play && strikingAlien && target && Player && target == Player->ObStrategyBlock)\n\t{\n\t\tAlienComingStruck(strikingAlien);"),
+		"in play=yes, a claw on him is that alien's first blow, if it's its first");
+	Check(Has(played, "TrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);"),
+		"and every alien that comes for him is followed, once a frame of play=yes");
+}
+
 int main()
 {
 	CheckBotFight();
 	CheckFriendlyFire();
 	TestTheGridInTheGame();
+	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");
 
 	TestWhoAsked();

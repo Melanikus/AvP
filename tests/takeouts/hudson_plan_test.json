@@ -10696,6 +10696,56 @@
 					"to": "if (said || plan.netMode != kHudsonNetHost)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a claw doesn't say which alien it is before its damage",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\t\t\t\tHudson_AlienStrikes(sbPtr);\n\n\t\t\t\t\tif (alienStatusPointer->Target->SBdptr->HModelControlBlock) {",
+					"to": "\n\n\t\t\t\t\tif (alienStatusPointer->Target->SBdptr->HModelControlBlock) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: which alien a claw is is kept outside a run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)\n{\n\tif (!HudsonRunIsOn)",
+					"to": "void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)\n{\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a watch's first blow is any blow after its alien was made",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "marineStage == kMarineFighting && theWatchedAliensOwn)",
+					"to": "marineStage == kMarineFighting)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a claw on him in play=yes counts for no alien",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tAlienComingStruck(strikingAlien);",
+					"to": "\t\t(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the aliens coming for him aren't followed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tTrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);",
+					"to": "\t(void)0;"
+				}
+			]
 		}
 	]
 }

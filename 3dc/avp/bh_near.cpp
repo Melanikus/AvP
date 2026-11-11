@@ -43,6 +43,7 @@
 #include "particle.h"
 #include "scream.h"
 #include "alien_ways.h"
+#include "hudson.h"   // Hudson_AlienStrikes: which alien a claw is, in Hudson's runs only (added 2026-11-11 by Melanikus (Third))
 
 extern int ShowHiveState;
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
@@ -779,12 +780,18 @@ static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)
 
 					GetDirectionOfAttack(alienStatusPointer->Target,&rel_pos,&attack_dir);
 
+					// Hudson's runs only: which alien this claw is, so his log puts the blow down to it (hudson.h; nothing outside a run).
+					// Added 2026-11-11 by Melanikus (Third) for the AvP port
+					Hudson_AlienStrikes(sbPtr);
+
 					if (alienStatusPointer->Target->SBdptr->HModelControlBlock) {
 						HtoHDamageToHModel(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED, sbPtr, &attack_dir);
 					} else {
 
 						CauseDamageToObject(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED,&attack_dir);
 					}
+
+					Hudson_AlienStrikes(NULL);
 				} else {
 					VECTORCH rel_pos,attack_dir;
 
@@ -794,7 +801,9 @@ static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)
 
 					GetDirectionOfAttack(alienStatusPointer->Target,&rel_pos,&attack_dir);
 
+					Hudson_AlienStrikes(sbPtr);   // Hudson's runs only, as above (added 2026-11-11 by Melanikus (Third))
 					CauseDamageToObject(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED,&attack_dir);
+					Hudson_AlienStrikes(NULL);
 				}
 			}
 		}
