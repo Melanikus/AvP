@@ -202,6 +202,24 @@ static void TestTheOneWayIn()
 	Check(noLine != std::string::npos && thread != std::string::npos && noLine < thread && CountOf(list, "CreateThread(") == 1 &&
 		Has(list, "if (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}"),
 		"after a No the list's own state has no server, from before its thread starts, and every call refuses it, so nothing goes to the server");
+
+	// The Multiplayer page asks each line WITH its yes where this PC stands, as nothing of it is kept between runs (PO's ruling,
+	// 2026-11-11), by the row's own request and rule, and never a line without its yes. Added 2026-11-11 by Melanikus for the AvP port.
+	std::string const askAll = SourceSlice(online, "void OnlineLines_AskTheAgreedLines(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(CountOf(menus, "OnlineLines_AskTheAgreedLines();") == 1 &&
+		Has(menus, "\t\t\tRelayList_FindGames();\n\n\t\t\t// And where this PC stands on each line with the player's yes, asked again") &&
+		Has(askAll, "if (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(says, askedThisRun[place], now, lastAskedAt[place]) == kOnlinePageAsk)\n\t\t{\n\t\t\tAsk(place);") &&
+		CountOf(online, "RelayList_AskForAccessOn(") == 1,
+		"the Multiplayer page opening asks each line with its yes, at most once a minute, by the row's own request, and never a line without its yes");
+
+	// A game on a line that hasn't approved this PC is on the list, greyed, never joined (PO's ruling, 2026-11-11)
+	std::string const putting = SourceSlice(menus, "static void PutTheRelayGamesOnThePage(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(putting, "bool const approved = RelayList_LineNow(found.line, &now) && now.access == kRelayAccessIsApproved;") &&
+		Has(putting, "if (!approved && session >= 0)\n\t\t{\n\t\t\tSessionData[session].AllowedToJoin = false;"),
+		"a game on a line that hasn't approved this PC is shown, greyed, and can't be joined");
+	Check(Has(menus, "uint64_t const approvedNow = TheApprovedLines();\n\n\t\tif (approvedNow != approvedWhenPut)\n\t\t{\n\t\t\tNet_FindAvPSessions();\n\t\t\tlistChanged = true;\n\t\t}") &&
+		Has(menus, "\t\t\tPutTheRelayGamesOnThePage();\n\t\t\tapprovedWhenPut = approvedNow;\n"),
+		"and the moment a line's approval comes or goes, the list is put on the page again, so each game is greyed or joinable as its line stands now");
 }
 
 // NO HOST ROW: EVERY GAME IS HOSTED ONLINE (the owner's ruling for beta.2, 2026-11-10: "Remove At home from beta.2", "Everything over
@@ -226,6 +244,16 @@ static void TestEveryHostIsOnline()
 
 	// The Multiplayer page's rows and the server a game is hosted on: tests/host_page_test.cpp (moved there 2026-11-11 by Melanikus for the AvP
 	// port, hash 2: the Host on row is gone, and Start game and Co-op campaign open the host page)
+
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port: a Hudson joiner comes to Find Games as a player does, through the Multiplayer
+	// page, whose opening asks every line with the yes where this PC stands, and its list is pictured once every answer has come
+	std::string const runJoin = SourceSlice(menus, "static bool JoinThroughFindGamesForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const joinFromMultiplayer = runJoin.find("SetupNewMenu(AVPMENU_MULTIPLAYER);");
+	size_t const joinRow = runJoin.find("AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")");
+	size_t const findRow = runJoin.find("AVPMENU_MULTIPLAYERSELECTSESSION, \"Find Games\")");
+	Check(joinFromMultiplayer != std::string::npos && joinRow != std::string::npos && findRow != std::string::npos && joinFromMultiplayer < joinRow &&
+		joinRow < findRow && !Has(runJoin, "SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);") && Has(runJoin, "&& !ALineIsStillAskingForARun())"),
+		"a Hudson joiner goes Multiplayer, Join Game, Find Games, as a player does, so the lines are asked where it stands, and waits for every answer");
 
 	std::string const starting = SourceSlice(menus, "case AVPMENU_ELEMENT_STARTMPGAME:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)", "\n\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);

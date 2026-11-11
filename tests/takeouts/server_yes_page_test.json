@@ -423,6 +423,66 @@
 					"to": "\t\t\t\tif (false)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page doesn't ask the agreed lines",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tOnlineLines_AskTheAgreedLines();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page asks a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(",
+					"to": "\t\tif (OnlineLines_Pressed("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game on a line not approved can be joined",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (!approved && session >= 0)\n",
+					"to": "\t\tif (false && session >= 0)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game stays greyed after its line approves this PC",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (approvedNow != approvedWhenPut)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson joiner goes straight to Join Game, so no line is asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\tMenuSecondsForARun(1);\n\tbool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")",
+					"to": "\tSetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);\n\tMenuSecondsForARun(1);\n\tbool joined = true || PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson joiner's list is pictured before every line has answered",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (row >= 0 && linesWithAGame >= approved && !ALineIsStillAskingForARun())",
+					"to": "if (row >= 0 && linesWithAGame >= approved)"
+				}
+			]
 		}
 	]
 }

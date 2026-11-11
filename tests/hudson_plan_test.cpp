@@ -2187,8 +2187,8 @@ static void TestTourAndSharedMachine()
 		Check(Has(pairScript, "@('udp', '', $exampleRoute, '', '', $false)") && Has(pairScript, "@('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true)")
 			&& Has(pairScript, "@('tcp', 'Established', $exampleRoute, '203.0.113.51', '443', $true)") && Has(pairScript, "@('tcp', 'Listen', $exampleRoute, '0.0.0.0', '0', $true)"),
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
-		Check(Has(oneRun, "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine\nif ($serversRefusal) { Stop-Here $serversRefusal }")
-			&& ComesBefore(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine", "$process = Start-Process -FilePath $exePath"),
+		Check(Has(oneRun, "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }\nif ($serversRefusal) { Stop-Here $serversRefusal }")
+			&& ComesBefore(oneRun, "$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }", "$process = Start-Process -FilePath $exePath"),
 			"and each game is told the relay's address (remoterelay=, which Hudson takes only with net=, so an -Access run has the list alone), and has the server's one line in its servers.cfg before it starts");
 		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair through the relay. The joiner is the second copy (before -hudson, as
 		// the game's own switches go), so the two have their own identity each. Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a):
@@ -2200,7 +2200,7 @@ static void TestTourAndSharedMachine()
 		Check(!Has(oneRun, "RelayKey = ") && !Has(oneRun, "RelayServer = ") && !Has(oneRun, "RelayListPin = ") && !Has(oneRun, "[Network]")
 			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
 			"SOURCE: no relay setting goes in the run's settings, and the second copy's files are read from its own folder");
-		Check(Has(oneRun, "if ($Relay -and -not $ServersLine) { Stop-Here") && Has(pairScript, "if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }")
+		Check(Has(oneRun, "if ($Relay -and -not $ServersLine -and -not $ShippedServers) { Stop-Here") && Has(pairScript, "if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }")
 			&& Has(pairScript, "$said = Get-HudsonServersLineRefusal $case[0] $case[1]") && Has(pairScript, "$said = Get-HudsonRemoteRelayRefusal $case[0]"),
 			"SOURCE: -Relay needs the server's line, the pair's joiner is always the second copy, and -CheckTheWatch tries every refusal of -RemoteRelay and -ServersLine");
 		// Added 2026-11-10 by Melanikus for the AvP port (#175): a run writes servers.cfg only into a copy made for Hudson's runs (PO's
@@ -2294,7 +2294,7 @@ static void TestTourAndSharedMachine()
 		std::string const list = ReadSourceFile("3dc/relay_list.cpp");
 		std::string const agreed = Between(list, "bool TheLineIsAgreed(const ServersCfgServer &line)", "bool Start(void)");
 		// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: the run's Yes is each line's own, by its hash)
-		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "bool RelayList_LineToAgree(RelayListLineToAgree *out)");
+		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "int RelayList_LineCount(void)");
 		Check(Has(agreed, "if (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];\n\t\t\treturn !hudsonRunShowsTheYesPage || "
 			"(LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));\n\t\t}"),
 			"SOURCE: yespage=: a Hudson run's line is agreed at once, unless it asked for the yes page, and then only after its own Yes to that line");

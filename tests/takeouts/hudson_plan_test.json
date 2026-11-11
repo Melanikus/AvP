@@ -8892,7 +8892,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "$serversRefusal = Set-HudsonServersFile $folder $ServersLine\nif ($serversRefusal) { Stop-Here $serversRefusal }",
+					"from": "$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }\nif ($serversRefusal) { Stop-Here $serversRefusal }",
 					"to": "$serversRefusal = ''\nif ($serversRefusal) { Stop-Here $serversRefusal }"
 				}
 			]
@@ -9672,8 +9672,8 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "if ($Relay -and -not $ServersLine) { Stop-Here \"-Relay needs -ServersLine: the game finds",
-					"to": "if ($false) { Stop-Here \"-Relay needs -ServersLine: the game finds"
+					"from": "if ($Relay -and -not $ServersLine -and -not $ShippedServers) { Stop-Here \"-Relay needs -ServersLine or -ShippedServers: the game finds",
+					"to": "if ($false) { Stop-Here \"-Relay needs -ServersLine or -ShippedServers: the game finds"
 				}
 			]
 		},
