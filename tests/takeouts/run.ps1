@@ -43,13 +43,14 @@ $list = [System.IO.File]::ReadAllText($rowsFile, [System.Text.Encoding]::UTF8) |
 # the top of the repository, such as servers.cfg (the servers the game ships with, which relay_list_test holds to its own list of them). Such a
 # file is copied as it is, and only by its plain name, so nothing from outside the repository, or deeper in it, comes in that way.
 foreach ($folder in $list.copy) {
-    $from = Join-Path $repository $folder
-    if (Test-Path -LiteralPath $from -PathType Leaf) {
+    # (Not $from: PowerShell reads $from and the -From parameter above as the same name, and an [int] can't hold a path)
+    $copyFrom = Join-Path $repository $folder
+    if (Test-Path -LiteralPath $copyFrom -PathType Leaf) {
         if ("$folder" -cnotmatch '\A[A-Za-z0-9_][A-Za-z0-9_.-]*\z') { throw "A list copies a file only from the top of the repository, by its plain name: $folder" }
-        Copy-Item -LiteralPath $from -Destination (Join-Path $tree $folder)
+        Copy-Item -LiteralPath $copyFrom -Destination (Join-Path $tree $folder)
         continue
     }
-    & robocopy $from (Join-Path $tree $folder) /E /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
+    & robocopy $copyFrom (Join-Path $tree $folder) /E /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $folder" }
 }
 $global:LASTEXITCODE = 0
