@@ -464,7 +464,7 @@ private:
 
 // ----- Picking the nearest relay, in version 2 (CRYPTO.md section 5.1 point 11)
 //
-// Version 1 times each relay with ECHO (net_relay.h, NetRelayPicker). A version 2 relay answers no ECHO, plain or sealed: its timing echo
+// Version 1 timed each relay with ECHO (its picker went with version 1). A version 2 relay answers no ECHO, plain or sealed: its timing echo
 // is the cookie round, A0 and A0', which asks 1,200 bytes and answers 64 and keeps nothing. So this sends kNetRelayEchoes COOKIE_ASKs to
 // every relay, kNetRelayEchoEveryMs apart, each with an id of its own (8 fresh random bytes, handed in, as the version 1 picker's are). An
 // A0' counts only from that relay's control port, for an id this sent to that relay and not answered yet, within

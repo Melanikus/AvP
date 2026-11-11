@@ -185,6 +185,11 @@ static void TestKeepAndRead()
 	Check(NetIdentityStore_LoadFrom(kKept, &read, &why) == kNetIdentityStoreLoaded && why == NULL, "it's read back");
 	Check(read.made && memcmp(read.statics, made.statics, kNetIdentityStaticBytes) == 0 &&
 		memcmp(read.fingerprint, made.fingerprint, kNetIdentityFingerprintBytes) == 0, "with the same public halves and fingerprint");
+	// Added 2026-11-10 by Melanikus for the AvP port (SERVER-BLOCKERS item 6): and the same whole id, which a new identity is made with and a
+	// kept one has worked out again as it's read, the one its public halves make
+	uint8_t idOfMade[kNetIdentityIdBytes];
+	Check(NetIdentity_Id(NetIdentity_P384Public(&made), NetIdentity_KemPublic(&made), idOfMade) && memcmp(made.id, idOfMade, sizeof(idOfMade)) == 0 &&
+		memcmp(read.id, made.id, kNetIdentityIdBytes) == 0, "and the same whole id, the one its public halves make");
 	Check(SameKeys(&made, &read), "and private halves that agree the same secrets as the ones made");
 
 	NetIdentity_Free(&read);

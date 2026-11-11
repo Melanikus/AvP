@@ -238,96 +238,9 @@ static void TheMessages()
 		"REFUSED's reasons 1 to 4 are kept, and any other is \"a reason this version doesn't know\"");
 }
 
-// 16 bytes for each echo to each relay, all different
-static void EchoBytes(uint8_t *out, size_t relays)
-{
-	for (size_t i = 0; i < relays * kNetRelayEchoes * kNetRelaySecretBytes; i++)
-	{
-		out[i] = static_cast<uint8_t>(i * 7 + 3);
-	}
-}
+// (Removed 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: the version 1 picker's test, as the picker went with version 1. A version 2
+// relay answers no echo; the version 2 game times its relay with handshake A's cookie round, NetRelayV2Picker, tested in net_v2a_test.)
 
-static const uint8_t *EchoOf(const uint8_t *random, size_t relay, size_t echo)
-{
-	return random + (relay * kNetRelayEchoes + echo) * kNetRelaySecretBytes;
-}
-
-static void PickingARelay()
-{
-	printf("Picking a relay\n");
-	uint16_t const ports[3] = { 27500, 27500, 27600 };
-	uint8_t random[3 * kNetRelayEchoes * kNetRelaySecretBytes];
-	EchoBytes(random, 3);
-
-	NetRelayPicker picker;
-	Check(!picker.Start(0, ports, random, 0) && SendCount(picker) == 0, "no relays to time: nothing starts, and nothing is sent");
-	Check(!picker.Start(kNetRelayMostRelays + 1, ports, random, 0), "nor more than 16");
-
-	Check(picker.Start(3, ports, random, 1000), "three relays to time");
-	NetRelaySend sends[kNetRelayMostSends];
-	size_t const first = picker.TakeSends(sends, kNetRelayMostSends);
-	NetRelayMessage m;
-	Check(first == 3 && sends[0].relay == 0 && sends[1].relay == 1 && sends[2].relay == 2 && sends[2].port == 27600
-		&& NetRelay_Read(sends[0].bytes, 64, &m) == kNetRelayIsAMessage && m.type == kNetRelayEcho && m.number == 1 && memcmp(m.secret, EchoOf(random, 0, 0), 16) == 0,
-		"the first echo goes to each at once, to its control port, with its own 16 bytes and the count 1");
-
-	picker.Tick(1000 + kNetRelayEchoEveryMs - 1);
-	Check(SendCount(picker) == 0, "nothing more within 100 ms");
-	picker.Tick(1000 + kNetRelayEchoEveryMs);
-	Check(SendCount(picker) == 3, "then the second echo to each");
-	picker.Tick(1000 + 2 * kNetRelayEchoEveryMs);
-	Check(SendCount(picker) == 3, "then the third");
-	picker.Tick(1000 + 5 * kNetRelayEchoEveryMs);
-	Check(SendCount(picker) == 0, "and no more");
-
-	// Relay 0 answers its first echo after 80 ms and its second after 30; relay 2 its first after 40; relay 1 never
-	Bytes const back00 = Make(kNetRelayEchoBack, EchoOf(random, 0, 0), NULL, 0, 1);
-	Bytes const back01 = Make(kNetRelayEchoBack, EchoOf(random, 0, 1), NULL, 0, 2);
-	Bytes const back20 = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 1);
-	Check(picker.Hear(0, 27500, back00.b, 64, 1080), "relay 0's answer to its first echo");
-	Check(picker.Hear(0, 27500, back01.b, 64, 1130), "and to its second");
-	Check(picker.Hear(2, 27600, back20.b, 64, 1040), "relay 2's answer to its first");
-	Check(picker.Best() == 0 && picker.BestMs() == 30, "the lowest round trip counts: relay 0's 30 ms, its second echo's");
-
-	Check(picker.Hear(2, 27600, back00.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 1, "an answer with another relay's bytes doesn't count");
-	Bytes const wrongCount = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 2);
-	Check(picker.Hear(2, 27600, wrongCount.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 2, "nor one with its bytes and another echo's count");
-	Bytes const countPastSent = Make(kNetRelayEchoBack, EchoOf(random, 2, 0), NULL, 0, 4);
-	Check(picker.Hear(2, 27600, countPastSent.b, 64, 1050) && picker.UnusedMessages(kNetRelayWrongSecret) == 3, "nor a count past the third");
-	Check(picker.Hear(2, 27600, back20.b, 64, 1041) && picker.UnusedMessages(kNetRelayWrongSecret) == 4 && picker.BestMs() == 30,
-		"an answer sent again doesn't count again: relay 2 doesn't get 1 ms for it");
-	Check(!picker.Hear(2, 27500, back20.b, 64, 1041), "from another port of that relay, it isn't the relay's at all");
-	Check(!picker.Hear(5, 27500, back00.b, 64, 1041), "nor from a relay that isn't one of the three");
-	Bytes const echoNotBack = Make(kNetRelayEcho, EchoOf(random, 1, 0), NULL, 0, 1);
-	Check(picker.Hear(1, 27500, echoNotBack.b, 64, 1050) && picker.UnusedMessages(kNetRelayNotForNow) == 1, "an ECHO, not an ECHO_BACK, is taken and not used");
-	uint8_t junk[64];
-	memset(junk, 'A', sizeof(junk));
-	Check(picker.Hear(1, 27500, junk, 64, 1050) && picker.NotMessages(kNetRelayNotMagic) == 1, "64 bytes that aren't a message are counted by why");
-
-	Check(!picker.Done(1000 + 2 * kNetRelayEchoEveryMs + kNetRelayEchoAnswerWithinMs - 1), "it isn't done until a second after the last echo");
-	Check(picker.Done(1000 + 2 * kNetRelayEchoEveryMs + kNetRelayEchoAnswerWithinMs), "and then it is");
-
-	NetRelayPicker late;
-	late.Start(1, ports, random, 0);
-	SendCount(late);
-	Check(late.Hear(0, 27500, back00.b, 64, kNetRelayEchoAnswerWithinMs + 1) && late.Best() == -1 && late.BestMs() == 0,
-		"an answer later than a second doesn't count, and with none, there's no relay to use");
-
-	NetRelayPicker many;
-	uint16_t manyPorts[kNetRelayMostRelays];
-	uint8_t manyRandom[kNetRelayMostRelays * kNetRelayEchoes * kNetRelaySecretBytes];
-
-	for (size_t i = 0; i < kNetRelayMostRelays; i++)
-	{
-		manyPorts[i] = 27500;
-	}
-
-	EchoBytes(manyRandom, kNetRelayMostRelays);
-	Check(many.Start(kNetRelayMostRelays, manyPorts, manyRandom, 0) && SendCount(many) == kNetRelayMostRelays && many.SendsDropped() == 0,
-		"16 relays: one echo each, every one sent");
-}
-
-// A host whose room is open, at time 0
 static NetRelayHost &OpenHost(NetRelayHost &host)
 {
 	host.Start(kControl, 0);
@@ -854,7 +767,6 @@ int main()
 {
 	TheMessages();
 	TheSharedVectors();
-	PickingARelay();
 	TheHost();
 	TheJoiner();
 	TheTimeWrapping();
