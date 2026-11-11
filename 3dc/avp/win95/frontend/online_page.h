@@ -76,6 +76,9 @@ int OnlineLines_DrawQuestion(int menuHeight);
 int OnlineLines_LineCount(void);
 bool OnlineLines_AskingOn(int place);
 
+// Whether the page's last answer is that a new identity was made (for a Hudson run's access=newid, which must end with a fresh one)
+bool OnlineLines_SaysTheNewIdentityWasMade(void);
+
 // Whether a line still needs the player's yes (for a Hudson run's yespage=)
 bool OnlineLines_NeedsTheYes(int place);
 
