@@ -251,6 +251,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_build.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_guide.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_level.cpp" />
     <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp" />
     <ClCompile Include="..\..\3dc\avp\npc_grid.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_agun.cpp" />
@@ -567,6 +571,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_build.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_level.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_lookahead.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_stuck.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_map.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_claims.h" />
     <ClInclude Include="..\..\3dc\avp\npc_grid.h" />

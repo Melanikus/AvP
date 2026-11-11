@@ -1,0 +1,338 @@
+// The guide: which aliens are following a way across the alien ways map (alien_ways_map.h), what each one's way is, and the one search that's
+// running for them. Written 2026-11-08 by Melanikus for the AvP port ("For Aliens, Floor is lava", #109 and #118).
+//
+// It knows nothing of the game, so a test can drive it with made-up aliens. alien_ways.cpp is the game's side: it tells the guide where each
+// alien is and where it's going, and does what the guide says.
+//
+// ONE FRAME:
+//
+//      AlienWays_Frame, before any alien moves
+//        Frame: every alien nothing has asked about for kAlienWaysForgetAfter is let go, and named, so the game gives it its usual gravity
+//        |      back. One that missed only a frame or a few is kept, way and all, and named apart (MissedLastFrame), so the game can let go
+//        |      at once of one that's in a state that never asks. Then the searches get up to kAlienWaysLooksPerFrame polygons between them,
+//        |      first asked, first served.
+//      each alien that's coming for its target (bh_near.cpp)
+//        Steer: says where to head for now, or that it has no way yet, and then the game's own code steers it as it always has.
+//               It asks for a search when there's no way, or the way's 2 s old, or the goal has moved 3 m, or the alien is 3 m off the way.
+//
+// AN ALIEN STOPS BEING GUIDED (and gets its usual gravity back) when:
+// - Steer says no. It's still coming for its target, so the game's own code sets its gravity that same frame, as it always has.
+// - Nothing asks Steer for it for kAlienWaysForgetAfter, half a second: it's gone far, or gone, or it stays in a state that doesn't ask.
+//   A frame or a few with no asking don't let it go. A hunting alien skips asking now and then, and when each skip dropped its way, the way
+//   was searched for again nearly every frame and never followed (Sixth's 5-alien film, 2026-11-08). Through those frames it's still on its
+//   way for Guided, so the game keeps it crawling, and its gravity off.
+// - The game lets it go (Forget), at the first frame it's in a state that never asks, such as attacking or dying: the game gives it its
+//   usual gravity back then, so a dying alien doesn't hang on a ceiling. Most of those states set their own gravity as they start anyway;
+//   the ones that don't, avoiding something and taunting, are the ones this is for.
+// - The level ends: Clear, and the map and every alien go with it.
+//
+// A WAY THAT'S BEING FOLLOWED IS NEVER DROPPED BY A SEARCH THAT FAILS: only a new way replaces it. So an alien on a ceiling doesn't let go
+// because its way's renewal found nothing.
+//
+// ALL ON THE GAME'S THREAD. Nothing here asks for memory after it's made: every way is kept in room set aside for it.
+#ifndef ALIEN_WAYS_GUIDE_H
+#define ALIEN_WAYS_GUIDE_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "alien_ways_map.h"
+#include "alien_ways_lookahead.h"
+
+#include <vector>
+
+class NpcGrid;
+
+// Who an alien is, in two numbers the game picks. The game uses where the alien is kept and its name, so a new alien kept where a dead one was
+// is never taken for it.
+struct AlienWaysWho
+{
+	uint64_t place;
+	uint64_t name;
+};
+
+// Some of the polygons handed to the map's Build, from first up to end: one module's, say. See AlienWaysMap::NearestPolygon.
+struct AlienWaysRange
+{
+	size_t first, end;
+};
+
+// The rules. Each is a first guess, to be tuned from the log's lines and from film.
+int const kAlienWaysFloorPrice = 10;              // the floor costs 10 times as much as a wall or a ceiling. Step 2c's knee.
+size_t const kAlienWaysMostFollowers = 64;        // aliens with a way at once. One more is steered by the game's own code.
+int const kAlienWaysLooksPerFrame = 500;          // polygons all the searches may look at in one frame, between them
+
+// Modified 2026-11-08 by Melanikus for the AvP port: the same for the grid (npc_grid.h, -alienwaysgrid; #145, for #109).
+// Cells all the searches may look at in one frame, between them, and the most one search may look at in all before it gives up. A cell is
+// a lot smaller than a polygon, so there are many more of them. Primary's first guesses, for the first film to measure (each search's line
+// in the log says how many cells it looked at, in how many frames and how many ms):
+// - a look is about 1 microsecond in C++, so 5,000 a frame is about 5 ms;
+// - a search holds about 60 bytes for each cell it sees, a few for each one it looks at, so 200,000 looks can hold about 35 MB while it runs,
+//   on top of the grid. A search that would look at more stops there, and that alien's next search goes to the polygon map.
+int const kAlienWaysGridLooksPerFrame = 5000;
+int const kAlienWaysGridMostLooks = 200000;
+int const kAlienWaysNearEnough = 2000;            // mm: how far an alien, or its goal, can be from a polygon and still start on it. An alien
+                                                  // starts on the nearest polygon of the kind it's standing on, by its down, if there's one that near.
+int const kAlienWaysReached = 600;                // mm across the surface the alien is on: a point that near has been reached...
+int const kAlienWaysBodyHeight = 1500;            // ...as long as it's no more than this far above or below the alien's own middle
+int const kAlienWaysOffTheWay = 3000;             // mm: an alien this far from its way has lost it, and asks again
+int const kAlienWaysAskAgainAfter = 2000;         // ms: a way this old is searched for again, and followed till the new one comes
+int const kAlienWaysGoalMoved = 3000;             // mm: a goal that's moved this far since the search is searched for again
+int const kAlienWaysHeadway = 100;                // mm: getting this much nearer to the next point counts as headway...
+int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this many ms, the alien is stuck: its way is dropped...
+int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
+int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
+
+// An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
+// Checked here, where both are known, so the game's own build stops if one of them is changed alone.
+static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
+
+// FLANKERS (the user's rule, 2026-11-08: "1 in 3, up to 2.5x", "the 4th and 5th are long route sneaking bastards"). The first aliens on one
+// target go the direct way, with the other aliens' claims at their usual weight and a polygon at most 1.5 times its price. Every alien after
+// them is a flanker: the others' claims weigh three times as much for it, and a polygon can cost it up to 2.5 times, so it comes round by
+// another way where the level has one. An alien's place in that order is its place among the aliens with the same target when its first
+// search for it started, and it keeps it while that's its target.
+int const kAlienWaysDirectAliens = 3;
+double const kAlienWaysFlankerClaimStep = 3.0 * kAlienWaysClaimPriceStep;
+double const kAlienWaysFlankerMostPriceFactor = 2.5;
+
+// The kinds of door the game has (ModuleIsADoor, in pfarlocs.cpp), and whether one lets an alien through now. It's the rule the game's own
+// routes for aliens follow (AIModuleAdmitsPheromones, in pheromone.cpp), which is why a hunting alien never plans through a locked door:
+// - a proximity door opens by itself for an alien that comes near it, so it lets one through unless it's locked, open yet or not;
+// - a lift's door, and a door worked by a switch, only while they're open: an alien can't open either. open is as the game says it
+//   (GetState, in bh_types.cpp): for a lift's door, anything but shut; for a switch's door, only all the way open.
+// A search keeps off a door that doesn't (DOORS, in alien_ways_map.h).
+enum AlienWaysDoorKind
+{
+	kAlienWaysProximityDoor,
+	kAlienWaysLiftDoor,
+	kAlienWaysSwitchDoor
+};
+
+bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open);
+
+// Whether an alien whose down is down has made the step from the stretch that starts at point from onto the one that starts at point onto.
+// Where both facings are known (AlienWaysPoint::facing), it goes by the planes:
+// - two polygons facing within kAlienWaysSamePlaneDegrees of each other are one surface, and there's no step to make (AlienWays_SameSurface,
+//   in alien_ways_map.h, which the aim asks too);
+// - otherwise the step is made once the alien is clinging to the new polygon, closely enough: its down within kAlienWaysOnThePlaneDegrees
+//   of that polygon's facing turned round. So a step off a bevel, the strip between a wall and the floor that faces half up and the map
+//   counts as floor, onto the wall beside it, about 45 degrees, is made straight away; by kind alone it waited for the alien to turn onto
+//   the wall, and the alien, pushed by 1999's gravity, never did (Third's read: 12 of 23 stucks at Third's 5-alien spot, 2026-11-08).
+// Where either facing isn't known it goes by kind, as before: made if the two are the same kind, or the alien is on the new kind by its down.
+int const kAlienWaysOnThePlaneDegrees = 55;
+bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, AlienWaysXYZ down);
+
+// What an alien tells Steer, every frame it's coming for its target
+struct AlienWaysAsk
+{
+	AlienWaysWho who;
+	AlienWaysXYZ at;                // where it is
+	AlienWaysXYZ down;              // which way is down for it, as the game keeps it: a length of 65536 (its OrientMat's second row)
+	AlienWaysRange atPolygons;      // where to look for the polygon it's on: the module it's in
+	AlienWaysXYZ goal;              // where it's going
+	AlienWaysRange goalPolygons[2]; // where to look for the polygon the goal's on: the alien's module and the target's. The nearer wins.
+	bool goalIsTheTarget;           // the goal is the target itself, not a point on the way to it: only so the log can say which
+	bool hasTarget;                 // it's coming for a target, whether or not the goal is the target itself...
+	AlienWaysWho target;            // ...and which: the aliens coming for one target are counted, for the flankers (kAlienWaysDirectAliens)
+};
+
+// How one search went, for the log
+enum AlienWaysOutcome
+{
+	kAlienWaysOutcomeFound,
+	kAlienWaysOutcomeNoWay,
+	kAlienWaysOutcomeAllFloor,      // a way, but all of it on the floor: the game's own code does that as well, and climbs when it can
+	kAlienWaysOutcomeNoPolygon,     // the alien, or its goal, wasn't near enough to any polygon to start on
+	kAlienWaysOutcomeRefused,       // the map wouldn't start the search: why says why
+	kAlienWaysOutcomeStuck          // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
+};
+
+struct AlienWaysReport
+{
+	AlienWaysOutcome outcome;
+	const char *why;                // for kAlienWaysOutcomeRefused
+	size_t follower;                // which of the guide's places the alien has, so lines about one alien can be told apart
+	AlienWaysWho who;               // the alien itself, so the game can say more about it
+	AlienWaysXYZ from, to;
+	int frames;                     // how many frames the search was worked on
+	long long waitedMs;             // from the ask to the answer, in the game's time
+	long long microseconds;         // the computer's time the search itself took, in all
+	int looks;                      // polygons looked at
+	int points;
+	bool cutShort;                  // the way was longer than the map gives, and stops short of the goal
+	bool toTheTarget;               // the goal was the target itself (AlienWaysAsk::goalIsTheTarget)
+	int fromKind;                   // the kind of polygon the search started on (an AlienWaysKind), or -1 if none was near
+	int toKind;                     // the kind of polygon the goal is on, or -1 if none was near: so a refused line can say which end it was
+	double floorMm, wallMm, ceilingMm;
+	int polygons[kAlienWaysMostWayPoints];   // the map polygons the way is on, in order, each once in a row, for measuring how ways stack
+	int polygonCount;
+	bool flanker;                   // the search was a flanker's (kAlienWaysDirectAliens)
+	double cost;                    // what the way found cost, by the search's own prices, or -1
+	int arrivalDegrees;             // for a way found: the way it comes into its goal from, seen from above, in degrees (0 is from +x, 90 from
+	                                // +z), so a film can tell whether a flanker came from another side; -1 if it can't be told
+	bool onGrid;                    // the search was the grid's (UseGrid): looks are cells, cost is -1, and polygons holds the cell of each
+	                                // point of the way instead
+	bool tooFar;                    // on the grid: it looked at kAlienWaysGridMostLooks cells without reaching the goal (outcome NoWay)
+};
+
+class AlienWaysGuide
+{
+public:
+	AlienWaysGuide();
+
+	// Forgets every alien, every way and the search. At a level's start and end. The grid too: UseGrid hands it again.
+	void Clear();
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: searching the grid (#145, for #109).
+	// Which grid to search (npc_grid.h), or nothing for the polygon map. Asked once a frame, before Frame. While there's a grid, every search
+	// goes to it, finding the cells under the alien and its goal itself, inside kAlienWaysGridLooksPerFrame cells a frame; the map is still
+	// needed, ready, for its doors and its joins, which the claims use. A search running when the grid changes is dropped, and its alien asks
+	// again.
+	void UseGrid(NpcGrid *grid);
+
+	// Once a frame, before any alien moves, with how long the last frame took. Every alien that was guided last frame and wasn't steered since
+	// is let go and written into lapsed, up to mostLapsed of them, so the game can give each its usual gravity back. It gives back how many.
+	// Then the searches carry on, looking at no more than looksAllowed polygons. With no map ready, there are no searches.
+	size_t Frame(AlienWaysMap *map, int stepMs, int looksAllowed, AlienWaysWho *lapsed, size_t mostLapsed);
+
+	// An alien asks how to go. It gives back true, and the point to head for in towards, when the alien has a way to follow now. False means
+	// the game's own code steers it this frame; it may have asked for a search, which takes a frame or a few.
+	bool Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards);
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: keeps an alien going along its way on a frame its state didn't ask (#109).
+	// An alien's state can skip asking for a frame: a hunting alien that finds no next module by the marine scent goes to Wander for a frame
+	// and back, every other frame. Steer isn't asked then, the game stands it still and lets go of its grip, and a step from one surface
+	// onto another, which needs it to cling for a few frames running, never gets made. So on such a frame the game asks Drive instead, and
+	// gets the point to head for along the way it already has, worked out as Steer works it out.
+	// It gives back false, and the game does as it always did, unless Steer wasn't asked for it this frame and it has a way it has taken up
+	// (one resting after being stuck has none). It never counts as asking, so Frame still lets it go at the half second since it was last
+	// asked, just as without Drive. A way it has used up or left is for the next Steer to drop: Drive only says false.
+	bool Drive(const AlienWaysMap *map, const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ down, AlienWaysXYZ *towards);
+
+	// The guide's place for an alien, from 0 to kAlienWaysMostFollowers - 1, or -1 if it has none. For the log's watch on one alien.
+	int PlaceOf(const AlienWaysWho &who) const { return Find(who); }
+
+	// Reports from Steer, of aliens found stuck since the last Frame, come out with the next Frame's reports.
+
+	// Whether the last Steer for this alien gave back true
+	bool Guided(const AlienWaysWho &who) const;
+
+	// Whether Steer was asked for this alien since the last Frame, and gave back true: its way steers it in this frame. Unlike Guided, it's
+	// false in a frame nothing asked Steer for it, even before the next Frame lets it go.
+	bool GuidedThisFrame(const AlienWaysWho &who) const;
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: for the mover (alien_ways.cpp, #149).
+	// Whether this alien was found stuck lately and is still in the kAlienWaysRestAfterStuck that follows, when the game's own code has it.
+	// The mover leaves it to that code then, rather than heading it straight for its goal again, which is how it got stuck.
+	bool RestingAfterStuck(const AlienWaysWho &who) const;
+
+	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
+	// has: up to most of them, for the log's once-a-second line (lanes, #138)
+	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
+
+	// What every guided alien's way is now, for the developer view: up to most of them. The points are good until the next Frame or Clear.
+	size_t Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const;
+
+	// How the searches that ended in the last Frame went
+	size_t Reports(const AlienWaysReport **reports) const { *reports = report; return reportCount; }
+
+	// How many times an alien was turned away because all kAlienWaysMostFollowers places were taken, since the last Clear
+	size_t TurnedAway() const { return turnedAway; }
+
+	// The aliens the last Frame kept though nothing had asked Steer about them since the Frame before: kept, way and all, until
+	// kAlienWaysForgetAfter. Good until the next Frame or Clear. The game counts them by state for the log, and lets go at once of one in
+	// a state that never asks (Forget).
+	size_t MissedLastFrame(const AlienWaysWho **who) const { *who = missed; return missedCount; }
+
+	// Lets an alien go now, as if nothing had asked about it for kAlienWaysForgetAfter. Gives back whether it was guided, so the game can
+	// give it its usual gravity back. An alien the guide doesn't have gives back false.
+	bool Forget(const AlienWaysWho &who);
+
+	// How far along its way Steer aims an alien, in mm (alien_ways_lookahead.h): from its nearest place on the way, a little further on, so it
+	// curves round bends instead of running corner to corner. 0, as a guide starts, aims at the way's next point itself, as before. Whether a
+	// point is reached, and whether the alien is stuck, still go by the next point. Kept through Clear: it's a setting, not part of a level.
+	void SetAimAhead(int mm) { aimAheadMm = mm; }
+
+private:
+	struct Follower
+	{
+		bool used;
+		AlienWaysWho who;
+		bool steered;                       // Steer was asked for it since the last Frame
+		long long steeredAt;                // when Steer was last asked for it
+		bool guided;                        // the last Steer gave back true
+		bool queued;                        // it wants a search
+		long long askedAt;                  // when it last asked for one
+		long long restUntil;                // no way, and no asking, till then
+		long long stuckUntil;               // found stuck: the game's own code has it till then (RestingAfterStuck)
+		AlienWaysAsk last;                  // what it last told Steer: a search starts from this
+
+		int count, heading;                 // the way: count points, heading for point heading
+		bool fresh;                         // the way has just come, and the alien hasn't taken it up yet
+		long long wayAt;                    // when the way came
+		AlienWaysXYZ wayGoal;               // the goal it was searched for
+		double nearest;                     // the nearest the alien has been to the point it's heading for
+		long long headwayAt;                // when it last got kAlienWaysHeadway nearer
+		AlienWaysPoint points[kAlienWaysMostWayPoints];
+
+		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
+		AlienWaysWho target;
+		bool flanker;                       // ...and it's past the first kAlienWaysDirectAliens of them
+
+		bool mapNext;                       // its last search on the grid was refused, found no way or looked at too many cells, so its
+		                                    // next goes to the map
+	};
+
+	int Find(const AlienWaysWho &who) const;
+	int Take(const AlienWaysWho &who);
+	void LetGo(int f);
+	void DropTheWay(Follower *follower);
+	void StartNext(AlienWaysMap *map);
+	void Finish(AlienWaysMap *map, AlienWaysSearch result);
+	AlienWaysSearch WorkOnGrid(int looksAllowed);
+	const std::vector<uint8_t> *ShutForTheGrid(const AlienWaysMap &map);
+	void NoNewWay(Follower *follower, AlienWaysXYZ goal);
+	void AddReport(const AlienWaysReport &line);
+
+	long long now;
+	Follower followers[kAlienWaysMostFollowers];
+	size_t turnedAway;
+
+	// The one search that's running, and for which alien, or -1
+	int searching;
+	AlienWaysXYZ searchFrom, searchGoal;
+	bool searchToTheTarget;
+	int searchFromKind;
+	long long searchAskedAt, searchMicroseconds;
+	int searchFrames;
+	bool searchFlanker;                 // the search running is a flanker's
+
+	// The grid (UseGrid), whether the search running is on it, whether it gave up for looking at too many cells, the doors shut when it
+	// started, a byte for each map polygon (ShutForTheGrid: it has to stay as it is until the search ends), and a found way's map polygons,
+	// each once in a row, for its claims
+	NpcGrid *grid;
+	bool searchOnGrid;
+	bool searchTooFar;
+	std::vector<uint8_t> gridShut;
+	std::vector<int> gridWayPolygons;
+
+	AlienWaysReport report[kAlienWaysMostFollowers];
+	size_t reportCount;
+	bool reportsRead;                   // the reports have been read by a Frame, so the next report starts a new list
+
+	// The aliens the last Frame kept though nothing had asked about them (MissedLastFrame)
+	AlienWaysWho missed[kAlienWaysMostFollowers];
+	size_t missedCount;
+
+	// What each alien's way claims of the map, so the others' searches pay more there and take other ways where they can (lanes, #138;
+	// alien_ways_claims.h). Made once a level, the first Frame there's a map: claimsTried says it was tried, claimsOn that it worked. Without
+	// them the searches go as they did before. An alien's place here is its place in followers.
+	AlienWaysClaims claims;
+	bool claimsTried, claimsOn;
+
+	int aimAheadMm;                     // SetAimAhead
+	static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims have room for every alien the guide has");
+};
+
+#endif
