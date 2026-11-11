@@ -1,7 +1,10 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"win32",
+		"tools",
+		".github"
 	],
 	"rows": [
 		{
@@ -111,6 +114,26 @@
 					"file": "3dc/avp/save_test_rules.h",
 					"from": "case kSaveTestBoth: return \"save test: -savetest or -savetest-make, not both\";",
 					"to": "case kSaveTestBoth: return \"save test: not in a network game\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pool is off in every build",
+			"changes": [
+				{
+					"file": "3dc/avp/mempool.h",
+					"from": "#ifndef USE_LEVEL_MEMORY_POOL\n#define USE_LEVEL_MEMORY_POOL 1\n#endif\n",
+					"to": "#define USE_LEVEL_MEMORY_POOL 0\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the project builds the game with the pool off",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "<PreprocessorDefinitions>USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;",
+					"to": "<PreprocessorDefinitions>USE_LEVEL_MEMORY_POOL=0;USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;"
 				}
 			]
 		}

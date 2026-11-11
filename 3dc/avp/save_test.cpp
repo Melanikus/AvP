@@ -24,6 +24,7 @@
 #include "bh_types.h"
 #include "savegame.h"
 #include "env_info.h"
+#include "mempool.h"       // whether this build has the level memory pool (SAVE-HOSTILE-1's sanitizer build has it off)
 
 extern bool bRunning;
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -175,6 +176,17 @@ bool SaveTest_Start(bool dev, bool networkGame)
 	}
 
 	running = true;
+
+	// What this build is, in each run's own log, so a run proves what it ran on: the sanitizer and the pool are a build's, never a setting.
+	// Added 2026-11-10 by Melanikus for the AvP port (SAVE-HOSTILE-1): the hostile runs need the sanitizer in, and the pool off, so that
+	// each level object is an allocation the sanitizer watches (mempool.h).
+#if defined(__SANITIZE_ADDRESS__)
+	bool const sanitizer = true;
+#else
+	bool const sanitizer = false;
+#endif
+	LogString(std::string("save test: this build has ") + (sanitizer ? "the address sanitizer" : "no address sanitizer") + ", and the level memory pool " +
+		(USE_LEVEL_MEMORY_POOL ? "on" : "off"));
 	LogString(answer == kSaveTestLoad ? std::string("save test: loading ") + savePath
 		: "save test: making a save of species " + std::to_string(species) + ", episode " + std::to_string(episode));
 	return true;

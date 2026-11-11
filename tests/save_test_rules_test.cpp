@@ -149,11 +149,59 @@ static void Reasons()
 	Check(SaveTest_Why(kSaveTestLoad) == nullptr && SaveTest_Why(kSaveTestMake) == nullptr, "and the two that run have none");
 }
 
+// The level memory pool, on in every build a player gets (SAVE-HOSTILE-1, added 2026-11-10 by Melanikus for the AvP port). A sanitizer
+// build turns it off to see each level object as an allocation of its own, by building with USE_LEVEL_MEMORY_POOL set to 0. Nothing a
+// player's game is built from may set it: the project, the packaging script and the workflows are read here.
+static std::string ReadText(const char *name)
+{
+	FILE *file = fopen(name, "rb");
+	std::string text;
+
+	if (!file)
+	{
+		return text;
+	}
+
+	char block[4096];
+	size_t got = 0;
+
+	while ((got = fread(block, 1, sizeof(block), file)) > 0)
+	{
+		for (size_t i = 0; i < got; i++)
+		{
+			if (block[i] != '\r')
+			{
+				text += block[i];
+			}
+		}
+	}
+
+	fclose(file);
+	return text;
+}
+
+static void ThePool()
+{
+	std::string const pool = ReadText("3dc/avp/mempool.h");
+	std::string const project = ReadText("win32/VS2026/AvP.vcxproj");
+	std::string const packaging = ReadText("tools/build-and-package.ps1");
+	std::string const builds = ReadText(".github/workflows/build.yml") + ReadText(".github/workflows/game-build.yml") + ReadText(".github/workflows/release.yml");
+	Check(pool.size() > 100 && project.size() > 1000 && packaging.size() > 1000 && builds.size() > 1000, "mempool.h, the project, the packaging script and the build workflows were found and read");
+
+	Check(pool.find("#ifndef USE_LEVEL_MEMORY_POOL\n#define USE_LEVEL_MEMORY_POOL 1\n#endif\n") != std::string::npos,
+		"the pool is on unless a build asks for it off");
+	Check(project.find("USE_LEVEL_MEMORY_POOL") == std::string::npos && packaging.find("USE_LEVEL_MEMORY_POOL") == std::string::npos &&
+		builds.find("USE_LEVEL_MEMORY_POOL") == std::string::npos, "and nothing a player's game is built from asks for it off");
+	Check(project.find("EnableASAN") == std::string::npos && packaging.find("fsanitize") == std::string::npos && builds.find("fsanitize") == std::string::npos &&
+		builds.find("EnableASAN") == std::string::npos, "nor for the sanitizer: that's a local build of its own, never a player's");
+}
+
 int main()
 {
 	Loading();
 	Making();
 	Reasons();
+	ThePool();
 
 	if (checksFailed)
 	{
