@@ -827,7 +827,9 @@ static void NotShared()
 	Check(second, "another alien's way goes by that wall: it isn't shut for it");
 }
 
-// An alien let go takes nothing shut with it, so nothing piles up across a level as aliens die or go (PO, 2026-11-11)
+// An alien let go leaves nothing shut for the alien given its place next, so nothing piles up across a level as aliens die or go (PO,
+// 2026-11-11). But the same alien back, from a moment in a state that never asks, has what it had (THE WATCHDOG'S MEMORY; modified
+// 2026-11-11 by Melanikus (Third) for the AvP port, #109).
 static void LetGoForgetsIt()
 {
 	printf("The watchdog: an alien let go, dead or gone, leaves nothing shut\n");
@@ -835,25 +837,42 @@ static void LetGoForgetsIt()
 	AlienWaysXYZ towards;
 	const AlienWaysReport *reports = nullptr;
 
-	// Dead: the game lets it go at once (Forget). Asking again, it's an alien the guide has never seen: the wall isn't shut for it.
+	// Dead: the game lets it go at once (Forget). A new alien given its place has nothing shut: its way goes by that wall.
 	const std::unique_ptr<AlienWaysGuide> deadRoom(new AlienWaysGuide);
 	AlienWaysGuide &dead = *deadRoom;
 	Held const killed = HeldTillStuck(dead, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
 	Check(killed.stuck && killed.line.shutPolygon == TheWall(), "stuck at the start, the wall is shut for it");
 	dead.Forget(Alien(1));
-	dead.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	dead.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
 	Frame(dead, map, 100);
-	Check(ReportsOf(dead, &reports) == 1 && ByTheWall(reports[0], TheWall()), "let go at once and asking again, its way goes by that wall: nothing is shut for it");
+	Check(ReportsOf(dead, &reports) == 1 && reports[0].follower == killed.line.follower && ByTheWall(reports[0], TheWall()),
+		"let go at once, its place given to a new alien: that one's way goes by the wall, as nothing is shut for it");
 
-	// Gone: nothing asks about it for half a second, so the guide lets it go
+	// Back: the same alien, let go a moment (in a state that never asks) and asking again, still has the wall shut for it
+	const std::unique_ptr<AlienWaysGuide> backRoom(new AlienWaysGuide);
+	AlienWaysGuide &back = *backRoom;
+	Held const avoided = HeldTillStuck(back, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	back.Forget(Alien(1));
+	back.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	Frame(back, map, 100);
+	Check(avoided.stuck && ReportsOf(back, &reports) == 1 && ByTheWall(reports[0], OtherWall()),
+		"the same alien let go a moment and asking again still has the wall shut for it: its way goes by the other");
+
+	// Gone: nothing asks about it for half a second, so the guide lets it go. Back after its shut has run out, it has nothing shut.
 	const std::unique_ptr<AlienWaysGuide> goneRoom(new AlienWaysGuide);
 	AlienWaysGuide &gone = *goneRoom;
 	Held const away = HeldTillStuck(gone, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
 	Check(away.stuck && away.line.shutPolygon == TheWall(), "another stuck at the start, the wall shut for it");
 	Frame(gone, map, kAlienWaysForgetAfter);
+
+	for (int ms = 0; ms < kAlienWaysShutFor; ms += 400)
+	{
+		Frame(gone, map, 400);
+	}
+
 	gone.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(gone, map, 100);
-	Check(ReportsOf(gone, &reports) == 1 && ByTheWall(reports[0], TheWall()), "nothing asked about it for half a second, then asking again: nothing is shut for it");
+	Check(ReportsOf(gone, &reports) == 1 && ByTheWall(reports[0], TheWall()), "gone, and back once its shut has run out: nothing is shut for it, and its memory is over");
 }
 
 // THE HAND-OVER (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner: "I would expect this place

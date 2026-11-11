@@ -103,8 +103,13 @@ int const kAlienWaysMovedOn = 1000;               // mm
 //   rest got it out every time. Its next search keeps off the polygon it was heading for.
 // - THE CAP: at most kAlienWaysMostReplans re-plans in any kAlienWaysReplansWithin. Stuck again past that, it rests, as before. So an
 //   alien can never spin from one re-plan to the next.
-// Each alien's shut polygons and re-plans are its own, and they are forgotten when it's let go (dead, or gone). Nothing is shared
-// between aliens. The 1999 attack and pounce aren't touched: the guide is only asked while an alien is coming for its target.
+// Each alien's shut polygons and re-plans are its own. Nothing is shared between aliens.
+// THE WATCHDOG'S MEMORY (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109): an alien let go keeps them, by who it is, for as
+// long as any of them would have lasted (a minute at most), and has them back if it comes back. The game lets an alien go the moment it's
+// in a state that never asks for a way, and 1999's code puts one there for a second or two (Avoidance, a jump), so without this an alien
+// back from one had nothing shut and a fresh cap (Primary's count of the owner's watchdog play: the same lip searched again, and "re-plan
+// 1 of 3" twice in 15 s). A dead alien never comes back, so its memory just runs out; at most kAlienWaysMostFollowers memories are kept,
+// the one ending first giving way, so nothing piles up across a level (PO's ruling). The 1999 attack and pounce aren't touched: the guide is only asked while an alien is coming for its target.
 int const kAlienWaysShutFor = 20000;              // ms
 size_t const kAlienWaysMostShut = 4;
 int const kAlienWaysMostReplans = 3;
@@ -449,6 +454,8 @@ private:
 
 	// THE WATCHDOG (above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 	void ForgetTheWatchdog(Follower *follower);
+	void Remember(const Follower &follower);
+	void Recall(Follower *follower);
 	void ShutForIt(Follower *follower, int polygon);
 	int TakeAReplan(Follower *follower);
 	void AddReport(const AlienWaysReport &line);
@@ -488,6 +495,19 @@ private:
 	// them the searches go as they did before. An alien's place here is its place in followers.
 	AlienWaysClaims claims;
 	bool claimsTried, claimsOn;
+
+	// THE WATCHDOG'S MEMORY (above): what aliens let go had shut for them and their re-plans, each until its last one ends. One whose time
+	// has come is free.
+	struct Remembered
+	{
+		AlienWaysWho who;
+		long long until;
+		int shutPolygon[kAlienWaysMostShut];
+		long long shutUntil[kAlienWaysMostShut];
+		long long replanCountsUntil[kAlienWaysMostReplans];
+	};
+
+	Remembered remembered[kAlienWaysMostFollowers];
 
 	int aimAheadMm;                     // SetAimAhead
 	bool slidesOn;                      // SetSlides (added 2026-11-11 by Melanikus (Third), #109)

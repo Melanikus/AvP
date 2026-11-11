@@ -1480,8 +1480,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "starts with nothing shut\n\tForgetTheWatchdog(&follower);\n",
-					"to": "starts with nothing shut\n"
+					"from": "for if it comes back (THE WATCHDOG'S MEMORY)\n\tRemember(follower);\n\tForgetTheWatchdog(&follower);\n",
+					"to": "for if it comes back (THE WATCHDOG'S MEMORY)\n\tRemember(follower);\n"
 				}
 			]
 		},
@@ -1972,6 +1972,36 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "\t*who = followers[slot].who;\n\treturn true;",
 					"to": "\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "an alien let go a moment and back has nothing shut for it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tRemember(follower);\n\tForgetTheWatchdog(&follower);\n",
+					"to": "\tForgetTheWatchdog(&follower);\n"
+				}
+			]
+		},
+		{
+			"name": "an alien back isn't given what it had",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tRecall(&follower);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new alien is given what a let-go alien had",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "if (now < memory.until && SameWho(memory.who, follower->who))",
+					"to": "if (now < memory.until)"
 				}
 			]
 		}

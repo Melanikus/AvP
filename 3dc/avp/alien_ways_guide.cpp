@@ -199,6 +199,12 @@ void AlienWaysGuide::Clear()
 	claims.Clear();
 	claimsTried = claimsOn = false;
 
+	// No alien of the last level is remembered (THE WATCHDOG'S MEMORY; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	for (size_t m = 0; m < kAlienWaysMostFollowers; m++)
+	{
+		remembered[m].until = 0;
+	}
+
 	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
 	{
 		followers[f].used = false;
@@ -275,6 +281,94 @@ void AlienWaysGuide::ShutForIt(Follower *follower, int polygon)
 	follower->shutUntil[place] = now + kAlienWaysShutFor;
 }
 
+// THE WATCHDOG'S MEMORY (alien_ways_guide.h): an alien let go, with anything still shut for it or a re-plan still counting, is remembered by
+// who it is, until the last of them ends. A memory of the same alien is written over; otherwise a free one is taken, or, with none free,
+// the one ending first. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+void AlienWaysGuide::Remember(const Follower &follower)
+{
+	long long until = 0;
+
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		until = std::max(until, follower.shutUntil[s]);
+	}
+
+	for (int r = 0; r < kAlienWaysMostReplans; r++)
+	{
+		until = std::max(until, follower.replanCountsUntil[r]);
+	}
+
+	if (until <= now)
+	{
+		return;
+	}
+
+	size_t place = kAlienWaysMostFollowers;
+
+	for (size_t m = 0; m < kAlienWaysMostFollowers && place == kAlienWaysMostFollowers; m++)
+	{
+		if (now < remembered[m].until && SameWho(remembered[m].who, follower.who))
+		{
+			place = m;
+		}
+	}
+
+	if (place == kAlienWaysMostFollowers)
+	{
+		place = 0;
+
+		for (size_t m = 1; m < kAlienWaysMostFollowers; m++)
+		{
+			if (remembered[m].until < remembered[place].until)
+			{
+				place = m;
+			}
+		}
+	}
+
+	Remembered &memory = remembered[place];
+	memory.who = follower.who;
+	memory.until = until;
+
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		memory.shutPolygon[s] = follower.shutPolygon[s];
+		memory.shutUntil[s] = follower.shutUntil[s];
+	}
+
+	for (int r = 0; r < kAlienWaysMostReplans; r++)
+	{
+		memory.replanCountsUntil[r] = follower.replanCountsUntil[r];
+	}
+}
+
+// An alien taking a place gets back what it had when it was let go, if it's remembered still, and the memory is free again. Added
+// 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+void AlienWaysGuide::Recall(Follower *follower)
+{
+	for (size_t m = 0; m < kAlienWaysMostFollowers; m++)
+	{
+		Remembered &memory = remembered[m];
+
+		if (now < memory.until && SameWho(memory.who, follower->who))
+		{
+			for (size_t s = 0; s < kAlienWaysMostShut; s++)
+			{
+				follower->shutPolygon[s] = memory.shutPolygon[s];
+				follower->shutUntil[s] = memory.shutUntil[s];
+			}
+
+			for (int r = 0; r < kAlienWaysMostReplans; r++)
+			{
+				follower->replanCountsUntil[r] = memory.replanCountsUntil[r];
+			}
+
+			memory.until = 0;
+			return;
+		}
+	}
+}
+
 // THE CAP: whether this alien may re-plan now. It may if fewer than kAlienWaysMostReplans of its re-plans were in the last
 // kAlienWaysReplansWithin. If so, this one is counted, and the answer is which one it is, from 1, for the log. 0 means its re-plans are used up.
 int AlienWaysGuide::TakeAReplan(Follower *follower)
@@ -343,6 +437,10 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.ranked = false;
 			follower.flanker = false;
 			follower.mapNext = false;
+
+			// One let go lately and back has what was shut for it and its re-plans again (THE WATCHDOG'S MEMORY; added 2026-11-11 by
+			// Melanikus (Third) for the AvP port, #109)
+			Recall(&follower);
 			return static_cast<int>(f);
 		}
 	}
@@ -379,8 +477,9 @@ void AlienWaysGuide::LetGo(int f)
 	follower.keptCount = 0;
 	DropTheWay(&follower);
 
-	// What the watchdog kept for it goes too (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109), so nothing piles up across
-	// a level as aliens die or go, and an alien later given this place starts with nothing shut
+	// What the watchdog kept for it goes from its place too (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109), so an alien
+	// later given this place starts with nothing shut; but it's remembered by who it is, for if it comes back (THE WATCHDOG'S MEMORY)
+	Remember(follower);
 	ForgetTheWatchdog(&follower);
 }
 
