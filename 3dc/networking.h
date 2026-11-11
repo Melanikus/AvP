@@ -88,6 +88,39 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_ConnectToThisMachine(int level, char *playerName);   // a Hudson run with net= only
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 
+// SEALED OR NOTHING (#188). Added 2026-11-10 by Melanikus for the AvP port, for the owner's boundary (2026-11-09 night): beyond the home
+// network a game is sealed, through the relay, or it doesn't happen; a plain game, as LAN always was, is only ever between addresses on the
+// home network (net_checks.h's NetAddress_IsThisNetwork: 10/8, 172.16/12, 192.168/16, 127/8 and 169.254/16). For now only with the v2
+// draft (Net_V2DraftOn, below): without it, every one of these is as it was. #175's last part turns it on for every player.
+//   - Net_HostGame, with a server in servers.cfg (Relay_ServerName, relay_list.h), hosts online: through that server's relay, sealed, or
+//     not at all. It never opens on this network instead, and never opens the search port. With no server, it's a home game, as below.
+//   - Net_HostAtHome hosts a home game, whatever servers.cfg says: plain, found by a search on this network, and deaf to every address
+//     that isn't on the home network, so a forwarded router port can't bring in a joiner from the internet. Without the draft it's
+//     Net_HostGame.
+//   - Net_HostFailedWhy: why the last of the two gave NET_FAIL for one of online play's reasons, in the game's own fixed words. NULL if it
+//     didn't fail, or failed for one of the game's older reasons (networking not started, the session or player not made), which the
+//     screen says in its own words. When it's only that the server hasn't answered yet, Net_ServerState says kNetServerAsking: the screen
+//     waits for it, then hosts again.
+NetResult Net_HostAtHome(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
+const char *Net_HostFailedWhy(void);
+
+// Where the online server stands, for a host's screen before it hosts, and while it waits. It only reads, so a screen can ask every
+// frame. Net_HostGame asks the server when it hasn't been asked; so does the games page (RelayList_FindRelays).
+int const kNetServerNone = 0;      // no server in servers.cfg, or the draft is off: a host's game is a home game
+int const kNetServerAsking = 1;    // the server is being asked, or hasn't been yet, and hasn't answered: wait, then host
+int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
+int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
+                                   // match its line), in the game's own fixed words
+int Net_ServerState(const char **why);
+
+// Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game on this network whose host isn't on the home network
+// (from a typed address, or a search's answer), with the draft. The game's own fixed words, or NULL if it wasn't refused that way.
+const char *Net_JoinRefusedWhy(void);
+
+// Whether the last search left the typed address unasked, as it isn't on the home network (with the draft): the words for the games
+// page, or NULL if it was asked or there was none
+const char *Net_TypedAddressRefusedWhy(void);
+
 // What a search for games is told about this one, for a game from the co-op campaign page, whose level changes as the host changes its rows.
 void Net_SayWhatTheGameIs(uint16_t level, const char *levelName, const char *sessionName, uint8_t coopLobby);
 
@@ -320,13 +353,16 @@ int const kNetRelayHostFinding = 1;    // timing the relays the list named, to o
 int const kNetRelayHostListed = 2;     // the room is open, and the game is going on the list: region and ms say through which relay, and how far
 int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be used: the game is open on this network only
 int const kNetRelayHostRoomGone = 4;   // the room on the relay has gone (why says why), so the game is open on this network instead
+// Added 2026-11-10 by Melanikus for the AvP port (#188): with the v2 draft, an online game that loses its relay can't go on sealed, so it
+// has ended (why says why). Nothing reaches the host any more, and nothing on this network can find or join it: the screen ends the game.
+int const kNetRelayHostEnded = 5;
 struct NetRelayHostState
 {
 	unsigned int changes;                     // goes up by one each time what changes, so the screen shows each change once
 	int what;                                 // one of kNetRelayHost...
 	char region[kNetRelayRegionLetters + 1];  // for Listed: the relay's region; "" otherwise
 	int ms;                                   // for Listed: the host's round trip to that relay, from its echoes; 0 otherwise
-	const char *why;                          // for RoomGone: why, in the game's own fixed words (NetRelay_WhyText); NULL otherwise
+	const char *why;                          // for RoomGone and Ended: why, in the game's own fixed words (NetRelay_WhyText); NULL otherwise
 };
 void Net_RelayHostStateNow(NetRelayHostState *state);
 

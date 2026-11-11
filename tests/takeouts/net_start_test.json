@@ -430,8 +430,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "sessionCheckTimer = 0;\n\n\tif (AvP.Network != I_Host)",
-					"to": "if (AvP.Network != I_Host)"
+					"from": "void Net_StopSearchingForSessions()\n{\n\tsessionCheckTimer = 0;\n",
+					"to": "void Net_StopSearchingForSessions()\n{\n"
 				}
 			]
 		},
@@ -550,8 +550,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tCon_PrintError(why);\n\tOpenTheSearchPortForAHost();\n",
-					"to": "\tCon_PrintError(why);\n"
+					"from": "\tCon_PrintError(lineWithoutTheDraft);\n\tOpenTheSearchPortForAHost();\n",
+					"to": "\tCon_PrintError(lineWithoutTheDraft);\n"
 				}
 			]
 		},
@@ -2495,8 +2495,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n\t\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n",
-					"to": "\t\t\tRelayHostGiveUp(\"net: no relay answered, so this game is open on this network only\");\n"
+					"from": "\t\t\tif (!Net_V2DraftOn())\n\t\t\t{\n\t\t\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n\t\t\t}\n",
+					"to": ""
 				}
 			]
 		},
@@ -2505,8 +2505,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "so this game is open on this network only\");\n\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n\t\treturn false;",
-					"to": "so this game is open on this network only\");\n\t\treturn false;"
+					"from": "so this game is open on this network only\");\n\t\t\tRelayHostNews(kNetRelayHostNoRelay, NULL);\n",
+					"to": "so this game is open on this network only\");\n"
 				}
 			]
 		},
@@ -3050,8 +3050,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;",
-					"to": "host->intercept = NULL;"
+					"from": "host->intercept = draft ? NothingIntercept : (OnTheRemoteRoute(host->address) ? RelayIntercept : NULL);",
+					"to": "host->intercept = draft ? NothingIntercept : NULL;"
 				}
 			]
 		},
@@ -3150,8 +3150,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\t\tif (step == kRelayV2None)\n\t\t{\n\t\t\tbool const wasOpen = !relayPicking;",
-					"to": "\t\tif (false)\n\t\t{\n\t\t\tbool const wasOpen = !relayPicking;"
+					"from": "\t\tif (step == kRelayV2None)\n\t\t{\n\t\t\tif (relayRoomListed)",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tif (relayRoomListed)"
 				}
 			]
 		},
@@ -3502,6 +3502,176 @@
 					"file": "3dc/networking.cpp",
 					"from": "if (asENetKeepsIt == ENET_HOST_ANY || asENetKeepsIt == ENET_HOST_BROADCAST)",
 					"to": "if (asENetKeepsIt == ENET_HOST_BROADCAST)"
+				}
+			]
+		},
+		{
+			"name": "an online host the relay can't take is hosted anyway (#188)",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (online && !RelayHostStart(&notOnline))",
+					"to": "if (false && !RelayHostStart(&notOnline))"
+				}
+			]
+		},
+		{
+			"name": "the server isn't asked when an online host needs it",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (online)\n\t{\n\t\tRelayList_FindRelays();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a server that hasn't answered yet is taken for one that can't be used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": ": kServerNotYet;",
+					"to": ": kRelayCantBeUsed;"
+				}
+			]
+		},
+		{
+			"name": "a home game's host hears the internet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\telse if (draft && !online)\n\t\t\t{\n\t\t\t\thost->intercept = HomeIntercept;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a home game drops nothing from outside",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!NetAddress_IsThisNetwork(on->receivedAddress.host))\n\t{\n\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a home game drops what comes from home too",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n\n\treturn 0;\n}",
+					"to": "\t\thomeStrangersDropped++;\n\t\treturn 1;\n\t}\n\n\treturn 1;\n}"
+				}
+			]
+		},
+		{
+			"name": "a home game's drops aren't counted for the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\thomeStrangersDropped++;\n\t\treturn 1;",
+					"to": "\t\treturn 1;"
+				}
+			]
+		},
+		{
+			"name": "a lost relay leaves the online host hearing the relay",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host->intercept = draft ? NothingIntercept :",
+					"to": "host->intercept = false ? NothingIntercept :"
+				}
+			]
+		},
+		{
+			"name": "a lost relay opens the online game on this network",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (draft)\n\t{\n\t\tCon_PrintError(std::string(\"net: \") + reason",
+					"to": "\tif (false)\n\t{\n\t\tCon_PrintError(std::string(\"net: \") + reason"
+				}
+			]
+		},
+		{
+			"name": "an ended online game still lets things through",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t(void)on;\n\t(void)event;\n\treturn 1;\n}",
+					"to": "\t(void)on;\n\t(void)event;\n\treturn 0;\n}"
+				}
+			]
+		},
+		{
+			"name": "a joiner joins a plain game out on the internet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_V2DraftOn() && !SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a joiner of a home game hears the internet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\telse if (Net_V2DraftOn() && !SessionData[sessionNumber].throughRelay)\n\t{\n\t\thost->intercept = HomeIntercept;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a search takes an answer from the internet",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_V2DraftOn() && !NetAddress_IsThisNetwork(address.host))\n\t\t\t\t\t{\n\t\t\t\t\t\tsearchAnswersFromOutside++;",
+					"to": "if (false)\n\t\t\t\t\t{\n\t\t\t\t\t\tsearchAnswersFromOutside++;"
+				}
+			]
+		},
+		{
+			"name": "a search's ignored answers aren't counted for the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\t\tsearchAnswersFromOutside++;\n\t\t\t\t\t\tcontinue;",
+					"to": "\t\t\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "a typed address out on the internet is asked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_address_set_host_ip(&typed, IPAddressString) == 0 && Net_V2DraftOn() && !NetAddress_IsThisNetwork(typed.host))",
+					"to": "enet_address_set_host_ip(&typed, IPAddressString) == 0 && false)"
+				}
+			]
+		},
+		{
+			"name": "the server's state is always \"asking\"",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return state == kRelayServerGood ? kNetServerReady : state == kRelayServerCantUse ? kNetServerCantUse : kNetServerAsking;",
+					"to": "return kNetServerAsking;"
+				}
+			]
+		},
+		{
+			"name": "no server in the file isn't told apart",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_V2DraftOn() || !Relay_ServerName()[0])\n\t{\n\t\treturn kNetServerNone;",
+					"to": "if (false)\n\t{\n\t\treturn kNetServerNone;"
 				}
 			]
 		}
