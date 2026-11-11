@@ -52,7 +52,8 @@ static void TheRowsFit(int count, const char *what)
 			lastBottom = top + kOnlinePageRowHeight;
 		}
 
-		if (chosen >= 0 && chosen < count)
+		// (A line past servers.cfg's 64 is never read, so there's no row for it to show: modified 2026-11-11 by Melanikus for the AvP port)
+		if (chosen >= 0 && chosen < count && chosen < kOnlinePageMostLines)
 		{
 			chosenShown = chosenShown && OnlineLines_RowTop(chosen, view) >= 0;
 		}

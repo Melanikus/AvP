@@ -1235,12 +1235,6 @@ namespace
 	}
 }
 
-const char *Relay_ServerName(void)
-{
-	const ServersCfgServer *const line = Server();
-	return line ? line->name : "";
-}
-
 namespace
 {
 	bool TheLineIsAgreed(const ServersCfgServer &line)
@@ -1286,11 +1280,6 @@ namespace
 		if (shared)
 		{
 			return true;
-		}
-
-		if (!Relay_ServerName()[0])
-		{
-			return false;
 		}
 
 		const ServersCfgServer *const line = Server();
@@ -1528,13 +1517,6 @@ void RelayList_HostRoomEnded(void)
 {
 	hostRoomLine = -1;
 }
-
-bool RelayList_Relays(RelayListRelay *relays, int *count)
-{
-	snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);
-	relays[0].address = shared->relayAddress;
-	return true;
-}
 '@ + "`n"); '3dc/relay_list_text.cpp' = (@'
 int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states)
 {
@@ -1612,12 +1594,12 @@ bool Auto()
 	return DevMode != 0;
 }
 '@ + "`n") }; Reason = 'D: 3dc/relay_auto.cpp line 3 names DevMode' },
-    @{ What = 'D: and on the online pages (the access page, the yes page, the online screens)'; None = $false; Files = @{ '3dc/avp/win95/frontend/access_page.cpp' = (@'
-bool AccessPage_QuestionOpened(void)
+    @{ What = 'D: and on the online pages (the Online page, the yes page, the online screens)'; None = $false; Files = @{ '3dc/avp/win95/frontend/online_page.cpp' = (@'
+bool OnlineLines_QuestionOpened(void)
 {
 	return DevMode != 0;
 }
-'@ + "`n") }; Reason = 'D: 3dc/avp/win95/frontend/access_page.cpp line 3 names DevMode' },
+'@ + "`n") }; Reason = 'D: 3dc/avp/win95/frontend/online_page.cpp line 3 names DevMode' },
     @{ What = 'D: DevMode in a comment, or outside the network''s files, is let through'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 // Nothing here asks DevMode
 '@ + "`n") }; '3dc/menus.cpp' = (@'
@@ -1731,14 +1713,15 @@ made->relayAddress = htonl(line.address);
 made->relayAddress = htonl(otherAddress);
 '@) } }; Reason = 'R: 3dc/relay_list.cpp must write the relay''s address in one place only' },
     @{ What = 'R: the list starting without a line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
-		if (!Relay_ServerName()[0])
+		const ServersCfgServer *const line = Server();
+
+		if (!line)
 		{
 			return false;
 		}
-
 '@ + "`n"); To = (@'
-
-'@) } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 440) must make nothing when there''s no line' },
+		const ServersCfgServer *const line = Server();
+'@ + "`n") } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 440) must make nothing when there''s no line' },
     @{ What = 'K: a request sent outside CallChecked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		KeyCheck &check = s->laterCheck;
 '@ + "`n"); To = (@'
@@ -2404,13 +2387,20 @@ void TheOldWay()
 	RelayList_Relays(relays, &named);
 }
 '@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 names RelayList_Relays, a call for the one server' },
-    @{ What = 'J: the network''s file reading servers.cfg itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+    @{ What = 'J: the network''s file calling servers.cfg''s code itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ReadIt()
+{
+	ServersCfg_GameFolderOf(path, folder, sizeof(folder));
+}
+'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 calls the servers.cfg reader itself' },
+    @{ What = 'R: the network''s file reading servers.cfg itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void ReadIt()
 {
 	ServersCfg_ReadTheGames(&file);
 }
-'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 calls the servers.cfg reader itself' },
+'@ + "`n") } }; Reason = 'R: 3dc/networking.cpp reads servers.cfg: only 3dc/relay_list.cpp may' },
     @{ What = 'H: a host whose missing choice is refused only later is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (line < 0)
 	{

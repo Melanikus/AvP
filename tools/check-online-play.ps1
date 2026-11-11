@@ -78,8 +78,9 @@ $netFile = '3dc/networking.cpp'
 
 # The network's own files, where -dev may decide nothing (rule D). Modified 2026-11-10 by Melanikus for the AvP port (beta.2): and the
 # online pages, the access page, the yes page, the online screens and the Servers page (#175 2b), now that they're there for every player whose servers.cfg names a
+# server (modified 2026-11-11 by Melanikus for the AvP port: the Online page, online_page.*, in place of the access page and the Servers page),
 # server, so no word typed on the command line can open or close one
-$onlineFile = '^3dc/(networking\.(cpp|h)|relay_[\w]+\.(cpp|h)|net_[\w]+\.(cpp|h)|servers_cfg[\w]*\.(cpp|h)|avp/win95/frontend/(access_page|server_yes|online_screens|servers_page)[\w]*\.(cpp|h))$'
+$onlineFile = '^3dc/(networking\.(cpp|h)|relay_[\w]+\.(cpp|h)|net_[\w]+\.(cpp|h)|servers_cfg[\w]*\.(cpp|h)|avp/win95/frontend/(online_page|server_yes|online_screens)[\w]*\.(cpp|h))$'
 
 # ---- Reading the code
 
@@ -655,16 +656,16 @@ if ($relayWrites.Count -ne 1 -or $relayWrites[0].Value -cne '->relayAddress = ht
     Stop-Check "R: $listFile must write the relay's address in one place only, NewServer, from the line's address: made->relayAddress = htonl(line.address);"
 }
 
-# The list starts only for a line: with none, it makes nothing
+# The list starts only for a line: with none, it makes nothing (modified 2026-11-11 by Melanikus for the AvP port: the line itself is
+# asked for, as the one-server name that was asked before is gone, rule J)
 $start = $startDef.Words
 $startLine = $startDef.Line
-$refuseAt = $start.IndexOf('if (!Relay_ServerName()[0]) { return false; }', [System.StringComparison]::Ordinal)
-$lineAt = $start.IndexOf('const ServersCfgServer *const line = Server();', [System.StringComparison]::Ordinal)
+$lineAt = $start.IndexOf('const ServersCfgServer *const line = Server(); if (!line) { return false; }', [System.StringComparison]::Ordinal)
 $makeAt = $start.IndexOf('Shared *made = NewServer(*line);', [System.StringComparison]::Ordinal)
 
-if ($refuseAt -lt 0 -or $lineAt -lt $refuseAt -or $makeAt -lt $lineAt)
+if ($lineAt -lt 0 -or $makeAt -lt $lineAt)
 {
-    Stop-Check "R: the list's start ($listFile line $startLine) must make nothing when there's no line: if (!Relay_ServerName()[0]) { return false; }, then const ServersCfgServer *const line = Server();, before Shared *made = NewServer(*line);"
+    Stop-Check "R: the list's start ($listFile line $startLine) must make nothing when there's no line: const ServersCfgServer *const line = Server(); if (!line) { return false; }, before Shared *made = NewServer(*line);"
 }
 
 # Each visit is made from a line the find chose (rule Y), by the same NewServer, and only those lines are visited
