@@ -689,6 +689,18 @@ bool Net_UpdateSessionList(int &SelectedItem)
 static NetResult HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level, bool atHome)
 {
 	bool const online = !atHome && Relay_ServerName()[0] != 0;
+	const char *notAgreedWhy = NULL;
+
+	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
+	{
+		return NET_FAIL;
+	}
+
+	if (online)
+	{
+		RelayList_FindRelays();
+	}
+
 	host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
 
 	if (OnTheRemoteRoute(ServerAddress))
@@ -905,6 +917,17 @@ const char *Relay_ServerName(void)
 
 namespace
 {
+	bool TheLineIsAgreed(const ServersCfgServer &line)
+	{
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+
+		uint8_t hash[kServersTrustHashBytes];
+		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
+	}
+
 	bool Start(void)
 	{
 		if (!Relay_ServerName()[0])
@@ -913,6 +936,12 @@ namespace
 		}
 
 		const ServersCfgServer *const line = Server();
+
+		if (!line || !TheLineIsAgreed(*line))
+		{
+			return false;
+		}
+
 		Shared *made = new Shared;
 		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu,
 			(line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);
@@ -920,6 +949,29 @@ namespace
 		made->keyState = kKeyNotChecked;
 		return true;
 	}
+}
+
+int RelayList_ServerState(const char **why)
+{
+	const ServersCfgServer *const line = Server();
+
+	if (line && !TheLineIsAgreed(*line))
+	{
+		return kRelayServerNeedsYes;
+	}
+
+	if (!shared)
+	{
+		return kRelayServerAsking;
+	}
+
+	return kRelayServerGood;
+}
+
+bool RelayList_AgreeToTheLine(void)
+{
+	ServersTrust_Add(&yeses, theHash);
+	return true;
 }
 
 bool RelayList_Relays(RelayListRelay *relays, int *count)
@@ -949,7 +1001,7 @@ void Weaker()
 		LetEveryoneIn();
 	}
 }
-'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 189 names DevMode' },
+'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 201 names DevMode' },
     @{ What = 'D: and in any relay_ file'; None = $false; Files = @{ '3dc/relay_auto.cpp' = (@'
 bool Auto()
 {
@@ -1001,7 +1053,7 @@ void ReadThePin(void)
 {
 	std::string const setting = Config_GetString("[Network]", "Anything", "");
 }
-'@ + "`n") } }; Reason = 'C: 3dc/relay_list.cpp line 138 reads Anything from [Network]' },
+'@ + "`n") } }; Reason = 'C: 3dc/relay_list.cpp line 178 reads Anything from [Network]' },
     @{ What = 'C: and a setting about a server in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 void ReadTheKeys(void)
 {
@@ -1076,7 +1128,7 @@ made->relayAddress = htonl(otherAddress);
 
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 113) must make nothing when there''s no line' },
+'@) } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 124) must make nothing when there''s no line' },
     @{ What = 'K: a request sent outside CallChecked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 		static KeyCheck check;
 '@ + "`n"); To = (@'
@@ -1150,6 +1202,56 @@ void Sneak(void)
 '@ + "`n"); To = (@'
 		made->keyState = kKeyGood;
 '@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp must write the key that matched in CheckTheServer alone' },
+    @{ What = 'Y: the list started before the player''s yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (!line || !TheLineIsAgreed(*line))
+'@); To = (@'
+		if (!line)
+'@) } }; Reason = 'Y: the list''s start (3dc/relay_list.cpp line 124) must refuse a line the player hasn''t said yes to' },
+    @{ What = 'Y: a yes taken for any line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
+'@); To = (@'
+		return LineHash(line, hash);
+'@) } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 113) must let a Hudson run past alone' },
+    @{ What = 'Y: another way past the yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+'@ + "`n"); To = (@'
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+
+		if (TesterSaysSo)
+		{
+			return true;
+		}
+'@ + "`n") } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 113) must let a Hudson run past alone' },
+    @{ What = 'Y: Hudson''s flag set in the list''s file is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Cheat(void)
+{
+	HudsonRunIsOn = true;
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 178 changes HudsonRunIsOn' },
+    @{ What = 'Y: a yes added anywhere but the player''s own is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Sneak(void)
+{
+	ServersTrust_Add(&yeses, anyHash);
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 178 adds a yes: only the player''s own' },
+    @{ What = 'Y: a line without the yes waited for as if it had one is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	if (line && !TheLineIsAgreed(*line))
+'@); To = (@'
+	if (false)
+'@) } }; Reason = 'Y: RelayList_ServerState (3dc/relay_list.cpp line 147) must say a line without the player''s yes needs it' },
+    @{ What = 'Y: an online host before the yes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
+'@); To = (@'
+	if (false)
+'@) } }; Reason = 'Y: HostGame (3dc/networking.cpp line 80) must host nothing online before the player''s yes' },
     @{ What = 'V: a v2 draft switch named anywhere is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 bool Which()
 {
@@ -1229,7 +1331,7 @@ static bool RelayHostStart
 	if (!online)
 	{
 		Con_PrintMessage
-'@) } }; Reason = 'S: 3dc/networking.cpp line 107 opens the search port' },
+'@) } }; Reason = 'S: 3dc/networking.cpp line 119 opens the search port' },
     @{ What = 'S: a joiner that connects when handshake B fails is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (relayEndToEndJoinFailed)
 		{
@@ -1238,7 +1340,7 @@ static bool RelayHostStart
 		}
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 115) must make handshake B (RelayEndToEndJoin) before it connects' },
+'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 127) must make handshake B (RelayEndToEndJoin) before it connects' },
     @{ What = 'L: a home game that hears the internet is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		homeStrangersDropped++;
 		return 1;
@@ -1262,25 +1364,25 @@ static bool RelayHostStart
 
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'L: Net_ConnectToSession (3dc/networking.cpp line 115) must join a plain game on this network only' },
+'@) } }; Reason = 'L: Net_ConnectToSession (3dc/networking.cpp line 127) must join a plain game on this network only' },
     @{ What = 'L: a host''s intercept cleared is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Forget()
 {
 	host->intercept = NULL;
 }
-'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 189 clears a host''s intercept' },
+'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 201 clears a host''s intercept' },
     @{ What = 'L: a typed address asked without the home check is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))
 '@); To = (@'
 	if (enet_address_set_host_ip(&typed, IPAddressString) != 0)
-'@) } }; Reason = 'L: 3dc/networking.cpp line 171 asks a typed address about its games outside the else of' },
+'@) } }; Reason = 'L: 3dc/networking.cpp line 183 asks a typed address about its games outside the else of' },
     @{ What = 'L: another address asked is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	ENetAddress typed;
 '@ + "`n"); To = (@'
 	AskAboutGames(otherHost);
 	ENetAddress typed;
-'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 165 asks otherHost about its games' },
+'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 177 asks otherHost about its games' },
     @{ What = 'L: a search''s answer from outside this network kept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (!NetAddress_IsThisNetwork(address.host))
 		{

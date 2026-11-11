@@ -847,6 +847,26 @@ static void TestTheCalls()
 		Has(starting, "made->port = static_cast<INTERNET_PORT>(line->listPort);") && Has(starting, "made->relayPort = line->relayPort;"),
 		"and the list is started only for it, at its address, written as four numbers, and its ports");
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): THE PLAYER'S YES. The list needs the whole game (WinHTTP, the store,
+	// the main thread), so its side of the gate is read in the code; servers_trust_test tries the yes's hash and its file, and net_start_test
+	// what networking.cpp does before it.
+	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
+	Check(gate != std::string::npos && gate < starting.find("new (std::nothrow) Shared") && gate < starting.find("swprintf(made->server"),
+		"the list starts only for a line the player has said yes to: before it makes anything, or writes the server it would call");
+	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}");
+	Check(hudsonFirst != std::string::npos && hudsonFirst < agreed.find("if (!yesesRead)") && Has(agreed, "return LineHash(line, hash) && ServersTrust_Has(yeses, hash);") &&
+		Has(source, "extern bool HudsonRunIsOn;") && !Has(source, "HudsonRunIsOn =") && !Has(source, "HudsonRunIsOn=") ,
+		"the one way past it is a Hudson run, which this file only reads; anyone else's line needs its own hash among the kept yeses");
+	std::string const hashing = SourceSlice(source, "bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(hashing, "ServersTrust_HashInput(line.address, line.listPort, line.relayPort, line.fingerprint, input) && NetCrypto_Sha256(&piece, 1, hash);"),
+		"a yes is the SHA-256 of the line's address, ports and fingerprint (servers_trust.h)");
+	std::string const yesState = SourceSlice(source, "int RelayList_ServerState(const char **why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const needsYes = yesState.find("if (line && !TheLineIsAgreed(*line))\n\t{\n\t\treturn kRelayServerNeedsYes;\n\t}");
+	Check(needsYes != std::string::npos && needsYes < yesState.find("if (!shared)"), "a line without the yes is said to need it, before anything else");
+	Check(CountOf(source, "ServersTrust_Add(") == 1 && Has(SourceSlice(source, "bool RelayList_AgreeToTheLine(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice),
+		"ServersTrust_Add(&yeses, hash);"), "and only the player's yes adds one");
+
 	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks.
 	// Modified 2026-11-09 by Melanikus for the AvP port: its one call of the list's is RelayList_BeforeQuitting, after the menus have ended
 	// and before the game shuts down, and that never starts the list (below).
@@ -1093,6 +1113,37 @@ static void TestAddresses()
 	{
 		Check(RelayList_AddressRefusal(cases[i].address) == cases[i].kind, cases[i].what);
 	}
+
+	// A line's address as the yes page shows it (added 2026-11-10 by Melanikus for the AvP port, #175's last part): whole or not at all. The
+	// page's first address was 24 bytes, so "255.255.255.255:65535:65535" (27 letters) would have been shown cut short, on the very page that
+	// shows the player where a server is before they say yes to it.
+	char shown[kRelayListShownAddressBytes];
+	Check(RelayList_ShownAddress(Address(104, 131, 35, 41), 443, 27500, shown, sizeof(shown)) && strcmp(shown, "104.131.35.41") == 0,
+		"an address with the usual ports is shown alone");
+	Check(RelayList_ShownAddress(Address(203, 0, 113, 7), 8443, 27500, shown, sizeof(shown)) && strcmp(shown, "203.0.113.7:8443:27500") == 0,
+		"with another list port, both ports are shown");
+	Check(RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27501, shown, sizeof(shown)) && strcmp(shown, "203.0.113.7:443:27501") == 0,
+		"and with another relay port too");
+	Check(RelayList_ShownAddress(Address(255, 255, 255, 255), 65535, 65535, shown, sizeof(shown)) &&
+		strcmp(shown, "255.255.255.255:65535:65535") == 0, "the longest there can be is shown whole, in the room the page has for it");
+
+	char tooSmall[27];
+	memset(tooSmall, 'x', sizeof(tooSmall));
+	Check(!RelayList_ShownAddress(Address(255, 255, 255, 255), 65535, 65535, tooSmall, sizeof(tooSmall)) && tooSmall[0] == '\0',
+		"in a byte less room, nothing is shown: never a part of an address");
+	memset(shown, 'x', sizeof(shown));
+	Check(!RelayList_ShownAddress(Address(203, 0, 113, 7), 0, 27500, shown, sizeof(shown)) && shown[0] == '\0' &&
+		!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 65536, shown, sizeof(shown)) && shown[0] == '\0',
+		"nor for a port that isn't 1 to 65535");
+	Check(!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27500, NULL, 10) &&
+		!RelayList_ShownAddress(Address(203, 0, 113, 7), 443, 27500, shown, 0), "and nothing at all with nowhere to write it");
+
+	// The yes page's address is this one, in a room of this size (relay_list.h's RelayListLineToAgree), and nothing else writes it
+	std::string const header = ReadSource("3dc/relay_list.h");
+	std::string const lines = ReadSource("3dc/relay_list.cpp");
+	Check(Has(header, "\tchar address[kRelayListShownAddressBytes];") &&
+		Has(lines, "if (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))\n\t{\n\t\treturn false;\n\t}") &&
+		!Has(lines, "%u.%u.%u.%u:%d:%d"), "the yes page's address is written by it alone, into room for the longest");
 
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): no name is looked up at all, now the server is a servers.cfg line with its
 	// address written plainly, and its relay is at that same address

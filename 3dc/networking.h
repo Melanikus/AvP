@@ -109,6 +109,8 @@ int const kNetServerAsking = 1;    // the server is being asked, or hasn't been 
 int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
                                    // match its line), in the game's own fixed words
+int const kNetServerNeedsYes = 4;  // the player hasn't said yes to the server in servers.cfg yet (#175's last part, added 2026-11-10): it's
+                                   // never asked, so show the line (RelayList_LineToAgree) and host after the yes (RelayList_AgreeToTheLine)
 int Net_ServerState(const char **why);
 
 // Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game on this network whose host isn't on the home network
@@ -278,8 +280,17 @@ int Net_RelayJoinStep();
 
 // The joiner's round trip to its relay, for the ping column and the line in play: in ms, from the channel's own timing once a join has made
 // it, for that relay's region; -1 before, or for any other region (modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: version
-// 1's timing of every relay with plain echoes, before a join, went with version 1). Only reads.
+// 1's timing of every relay with plain echoes, before a join, went with version 1). Only reads. Modified again the same day (PO's ruling):
+// before a join, the games page's own timing of the relay (below).
 int Net_JoinerMsToRelay(const char *region);
+
+// The games page's own round trip to the server's relay, before any join (added 2026-11-10 by Melanikus for the AvP port; networking.cpp
+// says how). The page calls the first each frame while it's open, and the timing starts by itself once the list names the relay, which is
+// only after the player's yes to the line. The second ends it whatever it's doing (the page has closed, or opens again). The third says
+// whether a region's relay is being timed, so the page shows "..." for it in the meantime.
+void Net_TimeTheRelayForThePage(void);
+void Net_StopTimingTheRelay(void);
+bool Net_RelayBeingTimed(const char *region);
 
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):

@@ -479,6 +479,11 @@ static void TestPingAndWaits()
 
 	OnlineScreens_PingWords(true, -1, 30, words, sizeof(words));
 	Check(strcmp(words, "?") == 0, "until the joiner has timed the relay, the ping is a question mark");
+	// Added 2026-11-10 by Melanikus for the AvP port (PO's ruling): while the games page is timing the relay, three dots
+	OnlineScreens_PingWords(true, kOnlineJoinerMsMeasuring, 30, words, sizeof(words));
+	Check(strcmp(words, "...") == 0, "while the games page is timing the relay, the ping is three dots");
+	OnlineScreens_PingWords(true, -3, 30, words, sizeof(words));
+	Check(strcmp(words, "?") == 0, "and any other time below 0 is still a question mark");
 
 	OnlineScreens_PingWords(true, 40, 30, words, sizeof(words));
 	Check(strcmp(words, "about 70 ms") == 0, "a relay game's ping is the joiner's time to the relay and the host's, added");

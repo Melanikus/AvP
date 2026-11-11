@@ -291,4 +291,13 @@ bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder);   // RelayList_I
 // The most letters of a server's name the online screens make room for: a servers.cfg line's name is at most 31 (servers_cfg.h)
 int const kRelayListShownNameLetters = 32;
 
+// ---- A servers.cfg line's address, as a person reads it on the yes page and the server lists. Added 2026-11-10 by Melanikus for the AvP
+// port (#175's last part). "104.131.35.41", or with both ports when either isn't the usual one (servers_cfg.h's kServersCfgListPort and
+// kServersCfgRelayPort): "203.0.113.7:8443:27500". The longest, "255.255.255.255:65535:65535", is 27 letters, so kRelayListShownAddressBytes
+// holds any address with its 0. address has its first number in the highest byte, as servers_cfg.h keeps it.
+// It's written whole or not at all: false, with out empty, if room is too small or a port isn't 1 to 65535, so a screen never shows an
+// address cut short. (The yes page's first address was 24 bytes, and an address with both ports written out could be cut.)
+size_t const kRelayListShownAddressBytes = 28;
+bool RelayList_ShownAddress(uint32_t address, int listPort, int relayPort, char *out, size_t room);
+
 #endif

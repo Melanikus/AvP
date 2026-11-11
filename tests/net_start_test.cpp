@@ -1795,6 +1795,94 @@ static void TestTheJoinersRoundTrip()
 		"SOURCE: and nothing times a relay with plain echoes any more");
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (PO's ruling): the games page's own round trip to the server's relay, before any join, for
+// its ping column (networking.h). The cookie round is the stand-in channel's picker (net_start_test_stubs/net_relay_v2.h): with pickerSilent
+// it answers only a cookie ('c') from the relay's control port, and its time is netRelayV2StandIn.pickerMs.
+static void TestTheGamesPageTimesTheRelay()
+{
+	printf("The games page's own round trip to the relay\n");
+	ResetTheStandInChannel();
+	datagramsWaiting.clear();
+	relayNamed = false;
+	Net_StopTimingTheRelay();
+	int const openBefore = socketsOpen;
+	int const asksBefore = channelSends;
+	Net_TimeTheRelayForThePage();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && !Net_RelayBeingTimed("virginia") && socketsOpen == openBefore && channelSends == asksBefore,
+		"while the list names no relay (before the player's yes, or before the server's check), nothing is timed, opened or sent");
+
+	relayNamed = true;
+	netRelayV2StandIn.pickerSilent = true;
+	netRelayV2StandIn.pickerMs = 37;
+	int const startsBefore = netRelayV2StandIn.pickerStarts;
+	Net_TimeTheRelayForThePage();
+	Check(netRelayV2StandIn.pickerStarts == startsBefore + 1 && netRelayV2StandIn.pickerPort == kNetRelayDefaultControlPort && channelSends == asksBefore + 1
+		&& socketsOpen == openBefore + 1, "once the list names the relay: a cookie ask goes to its control port, from a socket of the page's own");
+	Check(Net_RelayBeingTimed("virginia") && !Net_RelayBeingTimed("paris") && !Net_RelayBeingTimed(NULL) && Net_JoinerMsToRelay("virginia") == -1,
+		"until it's done, the page is told that relay is being timed (it shows \"...\"), with no time yet");
+
+	// A stranger answers first, with a cookie, from the relay's port; then the relay does
+	WaitingDatagram answer;
+	answer.bytes.assign(64, 0);
+	memcpy(answer.bytes.data(), "AVPRc", 5);
+	answer.from.host = 0x0E0E0E0E;
+	answer.from.port = kNetRelayDefaultControlPort;
+	datagramsWaiting.push_back(answer);
+	enetClock += 10;
+	Net_TimeTheRelayForThePage();
+	Check(Net_RelayBeingTimed("virginia") && !netRelayV2StandIn.pickerAnswered && datagramsWaiting.empty(), "an answer from anywhere but the relay's address is dropped unheard");
+	answer.from.host = kRelayHost;
+	datagramsWaiting.push_back(answer);
+	enetClock += 27;
+	Net_TimeTheRelayForThePage();
+	Check(Net_JoinerMsToRelay("virginia") == 37 && !Net_RelayBeingTimed("virginia") && socketsOpen == openBefore,
+		"the relay's answer gives the page its time, and the socket is closed once it's done");
+	Check(Net_JoinerMsToRelay("paris") == -1 && Net_JoinerMsToRelay(NULL) == -1, "for another region, or none, there's no time");
+	int const asksAfter = channelSends;
+	Net_TimeTheRelayForThePage();
+	Check(channelSends == asksAfter && Net_JoinerMsToRelay("virginia") == 37 && socketsOpen == openBefore, "after that, each frame's call sends and opens nothing");
+
+	// The page closes, or opens again: forgotten. This time the relay never answers.
+	Net_StopTimingTheRelay();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && !Net_RelayBeingTimed("virginia"), "it's forgotten when the page closes or opens again");
+	Net_TimeTheRelayForThePage();
+	enetClock += 3500;
+	Net_TimeTheRelayForThePage();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && !Net_RelayBeingTimed("virginia") && socketsOpen == openBefore,
+		"a relay that never answers has no time (\"?\"), and the socket is closed");
+
+	// A time too long to be one is no time
+	Net_StopTimingTheRelay();
+	netRelayV2StandIn.pickerSilent = false;
+	netRelayV2StandIn.pickerMs = kRelayListMostHostMs + 1;
+	Net_TimeTheRelayForThePage();
+	Check(Net_JoinerMsToRelay("virginia") == -1 && socketsOpen == openBefore, "a time too long to be one isn't given");
+
+	// A page closed while it's timing: the socket goes with it
+	Net_StopTimingTheRelay();
+	netRelayV2StandIn.pickerSilent = true;
+	Net_TimeTheRelayForThePage();
+	Check(socketsOpen == openBefore + 1 && Net_RelayBeingTimed("virginia"), "(timing again)");
+	Net_StopTimingTheRelay();
+	Check(socketsOpen == openBefore && !Net_RelayBeingTimed("virginia"), "and a page closed while it's timing closes its socket");
+
+	// What only the menus can show, read in the code: the page's frame times it, its opening and leaving it start it afresh
+	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
+	std::string const page = ReadSourceFile("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const leaving = Between(menus, "if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)", "\n\t}\n");
+	std::string const opening = Between(page, "void OnlinePage_Opened(void)", "\n}\n");
+	std::string const frame = Between(page, "bool OnlinePage_Frame(bool listChanged, int *selectedElement)", "PageState const stateBefore = pageState;");
+	Check(Has(leaving, "Net_StopTimingTheRelay();") && Has(opening, "Net_StopTimingTheRelay();") && Has(frame, "Net_TimeTheRelayForThePage();"),
+		"SOURCE: the page's frame times the relay, and opening or leaving the page ends any timing that's going");
+	Check(Has(page, "OnlineScreens_PingWords(true, joinerMs < 0 && Net_RelayBeingTimed(row.region) ? kOnlineJoinerMsMeasuring : joinerMs,"),
+		"SOURCE: and while it's timing a game's relay, that game's ping says \"...\"");
+
+	netRelayV2StandIn.pickerSilent = false;
+	relayNamed = false;
+	datagramsWaiting.clear();
+	ResetTheStandInChannel();
+}
+
 static void TestStartingTheGame()
 {
 	Check(Net_GetNextPlayerID() != 0, "the first player ID there is isn't 0, which means nobody");
@@ -4369,6 +4457,19 @@ static void TestSealedOrNothing()
 	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the relay server couldn't be reached") == 0
 		&& Net_ServerState(&why) == kNetServerCantUse && why != NULL && strcmp(why, "the relay server couldn't be reached") == 0 && socketsOpen == socketsBefore,
 		"and one whose server can't be reached isn't hosted either, saying the server's words, with nothing opened on this network instead");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): one whose line the player hasn't said yes to. Nothing is made, the
+	// server isn't even asked, and the screen is told to show the line and ask (relay_list.h, RelayList_LineToAgree)
+	serverStateGiven = kRelayServerNeedsYes;
+	serverStateWhy = NULL;
+	int const askedBeforeTheYes = serverAsked;
+	size_t const boundBeforeTheYes = hostsBoundTo.size();
+	size_t const sentBeforeTheYes = datagramsSentTo.size();
+	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "you haven't said yes to the server in servers.cfg yet") == 0,
+		"an online host whose server the player hasn't said yes to isn't hosted, and says so");
+	Check(Net_ServerState(&why) == kNetServerNeedsYes && serverAsked == askedBeforeTheYes && hostsBoundTo.size() == boundBeforeTheYes
+		&& datagramsSentTo.size() == sentBeforeTheYes && socketsOpen == socketsBefore,
+		"before the yes the server isn't asked, no host is made, nothing is sent anywhere, and nothing opens on this network instead");
 	serverStateGiven = -1;
 	serverStateWhy = NULL;
 	EndTheGame();
@@ -4518,6 +4619,7 @@ int main()
 	TestTheRelayOnTheScreen();
 	TestARunsOneRelayBeyondThisMachine();
 	TestTheJoinersRoundTrip();
+	TestTheGamesPageTimesTheRelay();
 	TestTheStartLimitIsAsked();
 	TestTheRequestToJoin();
 	TestHostingWhenASocketCantBeHad();

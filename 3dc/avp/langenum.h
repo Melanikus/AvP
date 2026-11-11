@@ -1549,6 +1549,19 @@ enum TEXTSTRING_ID
 	TEXTSTRING_MULTIPLAYER_SEARCH_HELP,
 	TEXTSTRING_MULTIPLAYER_REFRESH,
 	TEXTSTRING_MULTIPLAYER_REFRESH_HELP,
+
+	// The player's yes to the server in servers.cfg, before anything goes to it (#175's last part, server_yes_page.cpp). Added 2026-11-10
+	// by Melanikus for the AvP port, in PO's words; the owner may reword them once he's seen the page in a Hudson picture. (Before the HUD
+	// size line's, which hud_scale_test keeps last.)
+	TEXTSTRING_SERVERYES_TITLE,          // the page's title and its question
+	TEXTSTRING_SERVERYES_ON_INTERNET,    // after the address: where the server is
+	TEXTSTRING_SERVERYES_ON_THIS_PC,
+	TEXTSTRING_SERVERYES_ON_OWN_NETWORK,
+	TEXTSTRING_SERVERYES_KEY,            // before the fingerprint's two ends
+	TEXTSTRING_SERVERYES_OWNER,          // what the server's owner does and sees
+	TEXTSTRING_SERVERYES_YES,
+	TEXTSTRING_SERVERYES_NO,
+
 	TEXTSTRING_RENDERING_HUDSIZE,
 	TEXTSTRING_RENDERING_HUDSIZE_HELP,
 	MAX_NO_OF_TEXTSTRINGS

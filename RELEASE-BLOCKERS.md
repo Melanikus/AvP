@@ -14,6 +14,6 @@ RELEASING.md says how a release is made.
 
 ## What's in the way
 
-- #175 part 3: the game uses the first server in servers.cfg without asking. A release must show the player the server and use it only
-  after the player says yes.
+- #175 part 3: the game now uses a server in servers.cfg only after the player says yes, but the menus don't reach that question yet
+  (Find games, Host online, Online access), so a player can't play online at all.
 - **The save loader's proof (SAVE-HOSTILE-1).** Its checks are in, but the test runs that prove them on broken saves haven't been done yet, and a new save doesn't yet say which level it belongs to.

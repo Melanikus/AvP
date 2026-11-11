@@ -43,6 +43,7 @@
 #include "MusicPlayer.h"
 #include "online_screens_page.h"
 #include "access_page.h"
+#include "server_yes_rules.h"
 
 #define MPLAYER_SUPPORT 0
 
@@ -493,6 +494,15 @@ static AVPMENU_ELEMENT AvPMenu_OnlineAccessNew[]=
 {
 	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_NO},	{kAccessRowNewNo},	{0},	{0},	TEXTSTRING_BLANK},
 	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_YES},	{kAccessRowNewYes},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// The player's yes to the server in servers.cfg (server_yes_page.h; added 2026-11-10 by Melanikus for the AvP port, #175's last part): No
+// comes first, so an Enter pressed by chance sends nothing to the server
+static AVPMENU_ELEMENT AvPMenu_ServerYes[]=
+{
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_SERVERYES_NO},	{kServerYesRowNo},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_SERVERYES_YES},	{kServerYesRowYes},	{0},	{0},	TEXTSTRING_BLANK},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -1186,10 +1196,13 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_ONLINE_ACCESS_NEW
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_NEWID,			AvPMenu_OnlineAccessNew,					AVPMENU_ONLINE_ACCESS, 0},
+
+	// AVPMENU_SERVER_YES: Esc goes back to the Multiplayer page, as a no does
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_SERVERYES_TITLE,			AvPMenu_ServerYes,					AVPMENU_MULTIPLAYER, 0},
 };
 
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
-static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_ONLINE_ACCESS_NEW + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_SERVER_YES + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
 // The page of games found (online_screens_page.h). On the list: the Search box (the menus' own text field, typing into the page's own
 // buffer of 20 letters), the Refresh row, and a row for each game the search lets through, even none. While the open sessions are fetched

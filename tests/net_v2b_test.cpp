@@ -220,13 +220,13 @@ static void TestIdentities()
 		BCheck(Equal(BHex(name, "fingerprint"), id->fingerprint, kNetIdentityFingerprintBytes),
 			std::string("its fingerprint (SHA-384 of \"AVPX-ID-2\" and both public keys, the first 16 bytes) is the file's"));
 
-		char hex[kNetIdentityFingerprintHexBytes];
-		NetIdentity_FingerprintHex(id->fingerprint, hex);
+		// Modified 2026-11-10 by Melanikus for the AvP port: the game no longer writes a fingerprint as hex (a listing names its host by the
+		// whole id, SERVER-BLOCKERS item 6), so its writer went, and the file's text is read the one way the game reads one. That reader
+		// takes exactly 32 small hex digits and nothing else, so this also proves the file writes them the way the list does.
 		const JsonValue *const written = TextMember(*b->Member(name), "fingerprint");
-		BCheck(written && written->text == hex, std::string("and as 32 small hex digits it's written exactly as the file writes it: ") + hex);
-
 		uint8_t back[kNetIdentityFingerprintBytes];
-		BCheck(NetIdentity_FingerprintFromHex(hex, back) && memcmp(back, id->fingerprint, sizeof(back)) == 0, "and reads back to the same 16 bytes");
+		BCheck(written && NetIdentity_FingerprintFromHex(written->text.c_str(), back) && memcmp(back, id->fingerprint, sizeof(back)) == 0,
+			std::string("and the file's 32 small hex digits for it, read the game's one way, are the same 16 bytes"));
 
 		// Added 2026-11-10 by Melanikus for the AvP port (SERVER-BLOCKERS item 6): the whole id, which the listing carries and B's prologue
 		// mixes, is the file's, and the fingerprint is its first 16 bytes

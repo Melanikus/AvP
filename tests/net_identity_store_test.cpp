@@ -61,12 +61,18 @@ bool SaveFolder_IsTheSecondCopy()
 	return false;
 }
 
+// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part): a Hudson run's stand-in a test can turn on, to see the kept
+// yeses' own two functions read and write nothing then. Off, they'd use the game's own file, which this test never does.
+static bool hudsonRunStandIn = false;
+
 bool SaveFolder_IsAHudsonRun()
 {
-	return false;
+	return hudsonRunStandIn;
 }
 
 static const wchar_t *const kKept = L"net_identity_store_test.bin";
+static const wchar_t *const kTrustKept = L"net_identity_store_test_trusted.cfg";
+static const wchar_t *const kTrustLink = L"net_identity_store_test_trusted_link.cfg";
 static const wchar_t *const kMissing = L"net_identity_store_test_missing.bin";
 static const wchar_t *const kFolder = L"net_identity_store_test_folder";
 static const wchar_t *const kLink = L"net_identity_store_test_link.bin";
@@ -501,18 +507,33 @@ static void TestTheSource()
 
 	// Primary's read, finding 1: a power cut can't be tested, so the source is read for it. The new file's data is flushed to the disk
 	// itself, in the writer the keeping calls, before the keeping puts it in place.
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part): the putting in place is KeepWholeFile's, which the identity and
+	// the kept yeses both keep through
 	std::string const writer = SourceSlice(store, "bool WriteWholeFile(const wchar_t *path, const uint8_t *bytes, size_t size)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	std::string const keeping = SourceSlice(store, "bool NetIdentityStore_KeepTo(const wchar_t *path, const NetIdentity *id)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const written = keeping.find("WriteWholeFile(fresh.c_str(), file, size) &&");
+	std::string const keeping = SourceSlice(store, "bool KeepWholeFile(const wchar_t *path, const uint8_t *bytes, size_t size)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const written = keeping.find("WriteWholeFile(fresh.c_str(), bytes, size) &&");
 	Check(writer.find("ok = ok && FlushFileBuffers(file) != FALSE;") != std::string::npos && writer.find("FlushFileBuffers") < writer.find("CloseHandle(file)") &&
 		written != std::string::npos && written < keeping.find("MoveFileExW("),
 		"the new file is made sure of on the disk itself, not only in Windows' cache, before it's put in place");
+	Check(store.find("\treturn KeepWholeFile(path, file, size);") != std::string::npos &&
+		store.find("\treturn KeepWholeFile(path, reinterpret_cast<const uint8_t *>(text), size);") != std::string::npos,
+		"and the identity and the kept yeses are both kept that one way");
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): a Hudson run reads and keeps no yes, before any file is even looked
+	// for. TestTheKeptYeses tries it, but with no file of the player's on the machine a read that went ahead would say the same, so it's
+	// read in the code as well.
+	Check(store.find("NetTrustStoreResult NetIdentityStore_LoadTrust(ServersTrustYeses *out, const char **why)\n{\n\tif (SaveFolder_IsAHudsonRun())") != std::string::npos &&
+		store.find("\treturn !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepTrustTo(") != std::string::npos,
+		"SOURCE: a Hudson run reads no yes and keeps none, before any file is looked for");
 
 	// Finding 2: never in Documents, which can roam to the player's other PCs, where a DPAPI seal won't open
 	Check(store.find("SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &local)") != std::string::npos &&
 		store.find("GetSaveFolderPath") == std::string::npos,
 		"the file is kept in this PC's own LocalAppData, never the save folder");
-	Check(store.find("return folder + L\"\\\\\" + NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy());") != std::string::npos,
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part): the folder is found in one place, for the identity and the kept
+	// yeses alike, and the identity's name is the one that says which run it is
+	Check(store.find("return KeptPath(NetIdentityStore_FileName(SaveFolder_IsAHudsonRun(), SaveFolder_IsTheSecondCopy()), makeFolder);") != std::string::npos &&
+		store.find("return folder + L\"\\\\\" + name;") != std::string::npos,
 		"and its name says whether this is a Hudson run, and whether it's the second copy (TestTheFileNames)");
 
 	// Finding 3: the owner is checked through the same handle the file is read through
@@ -670,6 +691,69 @@ static void TestTheFileNames()
 		"and whether this is a Hudson run");
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): the player's yeses to servers.cfg lines, kept beside the identity
+// with the same reading and writing (net_identity_store.h). What's in the file, and each way its text is refused, is servers_trust_test's;
+// this tries the file itself: kept and read back, none, a text the game didn't write, a link, the names, and a Hudson run, which keeps none.
+static void TestTheKeptYeses()
+{
+	puts("The player's yeses to servers.cfg lines, kept beside the identity (#175)");
+	DeleteFileW(kTrustKept);
+	DeleteFileW(kTrustLink);
+
+	ServersTrustYeses yeses;
+	yeses.count = 0;
+	uint8_t hash[kServersTrustHashBytes];
+	memset(hash, 0x5e, sizeof(hash));
+	ServersTrust_Add(&yeses, hash);
+	memset(hash, 0x17, sizeof(hash));
+	ServersTrust_Add(&yeses, hash);
+
+	ServersTrustYeses read;
+	read.count = 99;
+	const char *why = "not asked";
+	Check(NetIdentityStore_LoadTrustFrom(kTrustKept, &read, &why) == kNetTrustStoreNoFile && read.count == 0, "with none kept yet, there's no file and no yes");
+	Check(NetIdentityStore_KeepTrustTo(kTrustKept, yeses), "two yeses are kept");
+	Check(NetIdentityStore_LoadTrustFrom(kTrustKept, &read, &why) == kNetTrustStoreRead && read.count == 2 &&
+		memcmp(read.hashes, yeses.hashes, 2 * kServersTrustHashBytes) == 0, "and they read back, the same and in the same order");
+	Check(GetFileAttributesW((std::wstring(kTrustKept) + L".new").c_str()) == INVALID_FILE_ATTRIBUTES, "and nothing is left under the new file's name");
+
+	memset(hash, 0x99, sizeof(hash));
+	ServersTrust_Add(&yeses, hash);
+	Check(NetIdentityStore_KeepTrustTo(kTrustKept, yeses) && NetIdentityStore_LoadTrustFrom(kTrustKept, &read, NULL) == kNetTrustStoreRead &&
+		read.count == 3, "a third is kept by writing the file whole again, in place of the old one");
+
+	std::string const notTheGames = "yes 5e5e\nadd 203.0.113.7\n";
+	WriteAll(kTrustKept, std::vector<uint8_t>(notTheGames.begin(), notTheGames.end()));
+	read.count = 99;
+	why = NULL;
+	Check(NetIdentityStore_LoadTrustFrom(kTrustKept, &read, &why) == kNetTrustStoreRefused && read.count == 0 && why &&
+		strcmp(why, ServersTrust_Words(kServersTrustBadLine)) == 0, "a text the game didn't write is refused whole, with no yes taken from it, saying why");
+
+	// A link at the file's place, pointing at a good file of this user's: refused as a link, never followed. GitHub's runner can make one.
+	NetIdentityStore_KeepTrustTo(kTrustKept, yeses);
+	bool const linked = CreateSymbolicLinkW(kTrustLink, kTrustKept, kLinkUnprivileged) != FALSE;
+	Check(linked, "the test could make a link to the kept yeses (GitHub's runner is an administrator, so it can)");
+	read.count = 99;
+	why = NULL;
+	Check(linked && NetIdentityStore_LoadTrustFrom(kTrustLink, &read, &why) == kNetTrustStoreRefused && read.count == 0 && why &&
+		strstr(why, "servers-trusted.cfg is a link") != NULL, "a link at the file's place is refused as a link, in the yeses' own words");
+	DeleteFileW(kTrustLink);
+
+	Check(wcscmp(NetIdentityStore_TrustFileName(false), L"servers-trusted.cfg") == 0 &&
+		wcscmp(NetIdentityStore_TrustFileName(true), L"servers-trusted-second-copy.cfg") == 0, "the player's own file, and the second copy's");
+	Check(_wcsicmp(NetIdentityStore_TrustFileName(false), NetIdentityStore_FileName(false, false)) != 0 &&
+		_wcsicmp(NetIdentityStore_TrustFileName(true), NetIdentityStore_FileName(false, true)) != 0, "neither is the identity's");
+
+	// A Hudson run keeps none and reads none: the two answer before any file is looked for, so this never reaches the game's own
+	hudsonRunStandIn = true;
+	read.count = 99;
+	Check(NetIdentityStore_LoadTrust(&read, NULL) == kNetTrustStoreNoFile && read.count == 0, "a Hudson run reads no yes");
+	Check(!NetIdentityStore_KeepTrust(yeses), "and keeps none");
+	hudsonRunStandIn = false;
+
+	DeleteFileW(kTrustKept);
+}
+
 int main()
 {
 	TestKeepAndRead();
@@ -680,7 +764,10 @@ int main()
 	TestWhoseFile();
 	TestTheSource();
 	TestTheFileNames();
+	TestTheKeptYeses();
 
+	DeleteFileW(kTrustKept);
+	DeleteFileW(kTrustLink);
 	DeleteFileW(kKept);
 	DeleteFileW(kMissing);
 	DeleteFileW((std::wstring(kFolder) + L".new").c_str());

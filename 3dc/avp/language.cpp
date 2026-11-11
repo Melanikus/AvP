@@ -218,6 +218,15 @@ static char OurTextStrings[][200] =
 	"Type part of a game's name to show only the games with it. What you type stays on this PC.",
 	"Refresh",
 	"Press ENTER to fetch the open sessions again.",
+	// The player's yes to the server in servers.cfg (#175's last part, server_yes_page.cpp; added 2026-11-10 by Melanikus for the AvP port)
+	"Play online through this server?",
+	"on the internet",
+	"on this PC",
+	"on your own network",
+	"key",
+	"Its owner approves their own players, and sees your name, your key and your address while you play.",
+	"Yes, use this server",
+	"No, not now",
 	"HUD size",
 	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };

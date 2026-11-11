@@ -42,6 +42,8 @@ A port can't be forwarded on any of those. Those players can still join: someone
 
 **Your access is approved first.** The server plays only with players its owner has approved. Your game asks for access on the **Online access** page, with your name and your PC's public key, and the owner says yes or no. (That page is still for testers only.)
 
+**And you say yes to the server.** The first time the game would use a server's line (Find games, Host online, or the Online access page), it shows you the server first: its name, its address and where that is (on the internet, on this PC, or on your own network), and the two ends of its key. Nothing at all goes to it until you say yes. Your yes is kept on this PC, as a hash and never as an address, in `%LOCALAPPDATA%\AVPx\servers-trusted.cfg`. A line with another address, port or key is another server, and you're asked again. To take back every yes, delete that file. (The menus' way to the question is still to come.)
+
 **What you'll see:**
 - **While the page of games found looks,** an alien's tail turns in the middle, and one line says what it's doing: looking on your own network, then asking the list. It asks again every 5 seconds. If it finds nothing in a minute, it stops and says so, and **Enter looks again**. Esc goes back.
 - **The games** are a table: **Game | Level | Players | Region | Ping**. The list's games come after the ones found on your own network.
@@ -70,7 +72,7 @@ servers.cfg has one line per server: its address, written plainly, its fingerpri
 - **The address** is four numbers with dots, never a name. The server's list of games answers HTTPS on port 443 there, and its relay on port 27500, unless the line gives both ports, as `address:listport:relayport`.
 - **The fingerprint** proves the server. Before the game sends the server anything that matters, it checks the server's keys against the fingerprint, and a server whose keys don't match is sent nothing more. Take a server's line only from whoever runs that server.
 - **The name** is what the game shows, up to 31 letters.
-- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped. For now the game uses the first good line without asking: a release will show you the server and ask you first.
+- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped. For now the game uses the first good line, once you've said yes to it.
 
 Two copies of the game on one PC: start the second with `-dev -secondcopy`, so it keeps its own settings, log and saves in `Documents\My Games\Aliens versus Predator (second copy)`.
 
@@ -97,6 +99,7 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | `net: this game's sealed channel to the relay is open, N ms away` | the channel to the relay is open, and its round trip | nothing |
 | `net: the relay has opened this game's room, and it's going on the list` | the room is open, and the list is told | nothing |
 | `net: this game can't be hosted online: …, so it isn't hosted at all (sealed or nothing)` | the game couldn't go through the relay, for the reason given. It's never hosted online unsealed instead | try again later. If it says so, ask for access on the Online access page. Send us the log for any other reason |
+| `net: this game can't be hosted online: you haven't said yes to the server in servers.cfg yet` | nothing was sent: the game asks you first (above) | say yes to the server, then host |
 | `net: this game won't answer searches on this network while it goes through a relay` | hosting through the relay, a search on your own network won't find the game | nothing. Friends there join from the list, like everyone else |
 | `net: this game's room on the relay is gone, so nobody more can join through it: …` | the room couldn't be kept. The reason follows, one of: "the relay didn't answer" (no room within 10 s), "the relay is too busy just now", "the relay has too many games from this address", "the relay said no, for a reason this version doesn't know", "the relay stopped answering, so the room has gone" (no answer to the room's keeps for 45 s). The online game then ends (the next line) | host again |
 | `net: …, so this online game has ended: it can't go on sealed, and it never opens on this network instead` | the relay was lost, so the game ended rather than go on unsealed | host again |
@@ -113,6 +116,8 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | `Relay list: servers.cfg line N isn't used: …` | that line was skipped. The reason says what's wrong with it, such as "its fingerprint isn't 64 small hex digits", "its address can't be a server's", or "another line has the same name, so neither is used". The line itself is never written in the log | fix that line, or get it again from whoever runs the server |
 | `Relay list: servers.cfg isn't used: …`, or `Relay list: there's no servers.cfg in the game's folder, …` (and the other lines about finding the file) | the whole file was skipped, such as one over 16 KB or of more than 64 lines, or the game couldn't find or read it | put a good servers.cfg beside the game's `bin` folder |
 | `Relay list: the relay server's keys match its line in servers.cfg` | the server proved it's the one the line names | nothing |
+| `Relay list: the player said yes to the server in servers.cfg, and it's kept for the next time` (or `…, but it couldn't be kept, so it holds for this run only`) | you said yes to the server, and from then on the game may use it | nothing. If it couldn't be kept, you'll be asked again next time |
+| `Relay list: servers-trusted.cfg isn't used, so every server is asked about again: …` | the file of your yeses isn't one the game wrote (a line it never writes, a link, or not your Windows user's), so none is taken from it | nothing: say yes again, and the file is written whole again |
 | `Relay list: the relay server's keys don't match its line in servers.cfg, so nothing more is sent to it` | the server at that address isn't the one the line names: the line is wrong or old, or something else answered at that address. Nothing more goes to it until the game restarts | get the line again from whoever runs the server. If it's right, tell them |
 | `Relay list: the relay server showed another key than the one that matched its line, so nothing was sent to it` | after it matched, the server showed another key on a later call, so that call was dropped before anything went | tell whoever runs the server, and send us the log |
 | `Relay list: couldn't start, …` | the game couldn't start its list calls | send us the log |

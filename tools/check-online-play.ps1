@@ -34,6 +34,10 @@ K. The key: the server is trusted by its line's fingerprint alone. Every web cal
    server whose keys didn't match and nothing but the first call before they're checked; the list's key is read and compared just
    before the first byte goes, every byte of it, and a call whose key doesn't match is closed unsent; a body goes only after that; and
    the key that matched is kept only when the list's key and the relay's keys make the line's fingerprint.
+Y. The player's yes (#175's last part, added 2026-11-10): the list starts only for a line the player has said yes to, before it makes
+   anything; the one way past that is a Hudson run, which this file only reads (tools/check-hudson-asleep.ps1 proves a player's game
+   never sets it); a yes is the line's own hash among the kept ones, and only the player's yes adds one; the list says a line without
+   it needs it; and an online host isn't hosted before it.
 V. Version 2 only: every switch the v2 draft had is gone, and beta.1's version 1 relay path with it (the plain relay messages, the echo
    picker, the commit word), so nothing can choose version 1 or a plain game after a relay. The network version is 116 or later, and the
    relay's messages are read only once the channel has opened them.
@@ -623,6 +627,56 @@ if ((Get-Count $listCode 'memcpy(shared->goodKey,') -ne 1 -or (Get-Count $listCo
     Stop-Check "K: $listFile must write the key that matched in CheckTheServer alone, and the server's state only there or as not checked yet"
 }
 
+# ---- Y: the player's yes (#175's last part). Added 2026-11-10 by Melanikus for the AvP port.
+
+$theGate = 'const ServersCfgServer *const line = Server(); if (!line || !TheLineIsAgreed(*line)) { return false; }'
+$gateAt = $start.IndexOf($theGate, [System.StringComparison]::Ordinal)
+
+if ($gateAt -lt 0 -or $gateAt -gt $start.IndexOf($serverWrite, [System.StringComparison]::Ordinal) -or $gateAt -gt $start.IndexOf('Shared *made', [System.StringComparison]::Ordinal))
+{
+    Stop-Check "Y: the list's start ($listFile line $($starts[0].Line)) must refuse a line the player hasn't said yes to, before it makes anything or writes its server: $theGate"
+}
+
+$agreed = Get-OneDefinition 'TheLineIsAgreed' 'Y' $listFile 'whether the player has said yes to a line'
+
+if (-not $agreed.Flat.StartsWith('if (HudsonRunIsOn) { return true; }', [System.StringComparison]::Ordinal) -or (Get-Count $agreed.Flat 'return true;') -ne 1 -or
+    -not $agreed.Flat.EndsWith('return LineHash(line, hash) && ServersTrust_Has(yeses, hash);', [System.StringComparison]::Ordinal))
+{
+    Stop-Check "Y: TheLineIsAgreed ($listFile line $($agreed.Line)) must let a Hudson run past alone, and anyone else only with the line's own hash among the kept yeses: if (HudsonRunIsOn) { return true; } first, and return LineHash(line, hash) && ServersTrust_Has(yeses, hash); last"
+}
+
+$hudsonWrite = [regex]::Match($code[$listFile], '\bHudsonRunIsOn\s*(=(?!=)|\+\+|--)|&\s*HudsonRunIsOn\b')
+
+if ($hudsonWrite.Success)
+{
+    Stop-Check "Y: $listFile line $(Get-LineNumber $code[$listFile] $hudsonWrite.Index) changes HudsonRunIsOn: this file only reads it, so only a real Hudson run gets past the yes"
+}
+
+$agreeing = Get-OneDefinition 'RelayList_AgreeToTheLine' 'Y' $listFile 'the player''s yes'
+
+foreach ($adding in (Get-Calls 'ServersTrust_Add'))
+{
+    if (-not (Test-Inside $adding $agreeing))
+    {
+        Stop-Check "Y: $($adding.File) line $($adding.Line) adds a yes: only the player's own (RelayList_AgreeToTheLine) may"
+    }
+}
+
+$listState = Get-OneDefinition 'RelayList_ServerState' 'Y' $listFile 'where the server stands'
+
+if (-not (Test-Before $listState.Flat 'if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }' 'if (!shared)'))
+{
+    Stop-Check "Y: RelayList_ServerState ($listFile line $($listState.Line)) must say a line without the player's yes needs it, before anything else: if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }"
+}
+
+$hostBeforeTheYes = Get-OneDefinition 'HostGame' 'Y' $netFile 'every host'
+
+if (-not (Test-FormBlock $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' @('return NET_FAIL;')) -or
+    -not (Test-Before $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' 'RelayList_FindRelays();'))
+{
+    Stop-Check "Y: HostGame ($netFile line $($hostBeforeTheYes.Line)) must host nothing online before the player's yes, before it asks the server: if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) { ... return NET_FAIL; }"
+}
+
 # ---- V: version 2 only
 
 # With no choice left between versions, every switch that made one is gone, and so is version 1's relay path
@@ -811,7 +865,7 @@ foreach ($adding in (Get-Calls 'Net_AddSession'))
     }
 }
 
-Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and a plain game is for this network only ($($local.File) line $($local.Line))."
+Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and a plain game is for this network only ($($local.File) line $($local.Line))."
 Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
 
 foreach ($server in $expected)

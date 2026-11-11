@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "Yes comes first, so an Enter pressed by chance says yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_NO},\t{kServerYesRowNo},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_YES},\t{kServerYesRowYes},\t{0},\t{0},\tTEXTSTRING_BLANK},\n",
+					"to": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_YES},\t{kServerYesRowYes},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_NO},\t{kServerYesRowNo},\t{0},\t{0},\tTEXTSTRING_BLANK},\n"
+				}
+			]
+		},
+		{
+			"name": "any row but No says yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "\tif (row == kServerYesRowYes)",
+					"to": "\tif (row != kServerYesRowNo)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes goes on without being kept",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\t\tif (!RelayList_AgreeToTheLine())",
+					"to": "\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a no goes on as a yes does",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\tcase kServerYesGoBack:\n\t\t\t*page = backToAfterNo;",
+					"to": "\t\tcase kServerYesGoBack:\n\t\t\t*page = goToAfterYes;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the server's name is drawn as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\tOnlineScreens_SafeName(shown.name, sizeof(shown.name), name, sizeof(name));",
+					"to": "\tstrncpy(name, shown.name, sizeof(name) - 1);\n\tname[sizeof(name) - 1] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page's rows are pressed as the access page's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's\n\t\t\tif (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page opens with no line waiting for a yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tif (!ServerYesPage_Opened())",
+					"to": "\t\t\tif (!ServerYesPage_Opened() && false)"
+				}
+			]
+		}
+	]
+}

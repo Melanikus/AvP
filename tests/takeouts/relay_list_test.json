@@ -1723,6 +1723,96 @@
 					"to": "\tkRelayListMostGamesBytes = 49152,"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the list starts before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
+					"to": "\t\tif (!line)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes is taken for any line",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\treturn LineHash(line, hash) && ServersTrust_Has(yeses, hash);",
+					"to": "\t\treturn LineHash(line, hash);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line without the yes is waited for as if it had one",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (line && !TheLineIsAgreed(*line))",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run is asked for a yes nobody can give",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn true;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "a shown address that doesn't fit its room is cut, and shown",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)\n\t{\n\t\treturn false;\n\t}",
+					"to": "if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)\n\t{\n\t\tsnprintf(out, room, \"%s\", text);\n\t\treturn true;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a shown address always has its two ports",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (listPort == kServersCfgListPort && relayPort == kServersCfgRelayPort)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a shown address has a port that isn't 1 to 65535",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (listPort < 1 || listPort > 65535 || relayPort < 1 || relayPort > 65535)\n\t{\n\t\treturn false;\n\t}\n\n\t// Written here first",
+					"to": "if (false)\n\t{\n\t\treturn false;\n\t}\n\n\t// Written here first"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page's address has its old 24 bytes again",
+			"changes": [
+				{
+					"file": "3dc/relay_list.h",
+					"from": "\tchar address[kRelayListShownAddressBytes];",
+					"to": "\tchar address[24];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page writes its address itself again, cut to its room",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tunsigned int const a = line->address;\n\tsnprintf(out->address, sizeof(out->address), \"%u.%u.%u.%u:%d:%d\", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,\n\t\tline->listPort, line->relayPort);"
+				}
+			]
 		}
 	]
 }
