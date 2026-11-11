@@ -274,17 +274,41 @@ int main()
 	Check(chooseCase != std::string::npos && hostOn != std::string::npos && chooseCase < hostOn && Count(pressed, "RelayList_HostOn(") == 1 &&
 		pressed.find("switch (HostPage_Pressed(false, says))") < chooseCase, "a line is chosen only in Enter's kHostPageChooseIt, decided by the rules from what relay_list says of it");
 	Check(Count(page, "RelayList_HostOn(") == 2, "and the page names RelayList_HostOn only there and to clear the choice");
+	std::string const askAgain = Slice(pressed, "case kHostPageAskAgain:", "return false;");
+	Check(Count(page, "RelayList_FindGames();") == 2 && Has(opened, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();"),
+		"the page asks the lines only as it opens and when the player presses Enter on a line that didn't answer: never on a timer, never on each answer");
 
 	// The menus: Start game and Co-op campaign open the page, every time, and only a choice there goes on
 	std::string const press = Slice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{", "\n\t\t}\n");
 	Check(Has(press, "hostPageGoesTo = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);") && Has(press, "SetupNewMenu(AVPMENU_HOST_ON);") &&
 		Has(press, "elementPtr->MenuToGoTo == AVPMENU_MULTIPLAYER_CONFIG || elementPtr->MenuToGoTo == AVPMENU_COOP_HOST"),
 		"Start game and Co-op campaign open the host page, every time");
-	std::string const lineRow = Slice(menus, "case AVPMENU_ELEMENT_HOSTLINE:\n\t\t{", "\n\t\t}\n");
-	Check(Has(lineRow, "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && HostPage_PressedRow(elementPtr->MaxValue))"),
-		"and the menus go on from it only when HostPage_PressedRow chose a line");
-	Check(!Has(menus, "MP_HostOnChoice") && !Has(menus, "HostOnChoices") && !Has(menus, "HostOnFollowsTheRow"),
+	std::string const lineRow = Slice(menus, "case AVPMENU_ELEMENT_HOSTLINE:\n\t\t{\n\t\t\tif (interactionID", "\n\t\t}\n");
+	Check(Has(lineRow, "== AVPMENU_ELEMENT_INTERACTION_SELECT && HostPage_PressedRow(elementPtr->MaxValue))") && Has(lineRow, "SetupNewMenu(hostPageGoesTo);"),
+		"and the menus go on from it, to where the host was going, only when HostPage_PressedRow chose a line");
+	Check(!Has(menus, "MP_HostOnChoice") && !Has(menus, "HostOnChoices") && !Has(menus, "HostOnFollowsTheRow") && !Has(menus, "HostOnChoiceForARun"),
 		"the Host on row is gone, so nothing on the Multiplayer page chooses a line");
+
+	// A Hudson run (hostrow=online with hoston=, Third's): it presses the row of the line it names, as a player does, and never one by default
+	std::string const run = Slice(menus, "static bool ChooseOnTheHostPageForARun(void)\n{", "\n}\n");
+	Check(Has(run, "const char *const name = Hudson_HostOnName();") && Has(run, "!HostPage_RowCanBeChosen(row = HostPage_RowNamed(name))") &&
+		Has(run, "PressTheRowForARun(AVPMENU_ELEMENT_HOSTLINE, row, ") && !Has(run, "RelayList_HostOn("),
+		"a Hudson run presses the row of the line hoston= names, waited for, as a player does; it never chooses a line itself, nor the first by default");
+	Check(Count(menus, "ChooseOnTheHostPageForARun()") == 1 && Has(Slice(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "\n}\n"),
+		"if (!ChooseOnTheHostPageForARun() || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG)"), "and a run that chose nothing hosts nothing");
+
+	// The Multiplayer page's rows: the player's name, the Online row, then the rows that host, and no Host on row (moved here from
+	// server_yes_page_test, 2026-11-11)
+	std::string const data = FileText("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const setter = Slice(data, "void MenuData_SetMultiplayerRows(void)\n{", "\n}\n");
+	size_t const nameRow = setter.find("= PlayerNameRow;");
+	size_t const onlineRow = setter.find("= OnlineRow;");
+	size_t const startRow = setter.find("= StartGameRow;");
+	Check(nameRow != std::string::npos && onlineRow != std::string::npos && startRow != std::string::npos && nameRow < onlineRow && onlineRow < startRow &&
+		!Has(data, "HostOnRow") && !Has(data, "MP_HostOnChoice"), "the Multiplayer page goes from the player's name and the Online row to Start game, with no Host on row");
+	Check(Has(data, "static AVPMENU_ELEMENT AvPMenu_HostOn[kHostPageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };") &&
+		Has(data, "{AVPMENU_FONT_SMALL,\tTEXTSTRING_HOSTPAGE_TITLE,\t\t\tAvPMenu_HostOn,\t\t\t\t\tAVPMENU_MULTIPLAYER, 0},"),
+		"the host page has room for every line's row, and Esc on it goes back to the Multiplayer page");
 
 	printf(checksFailed ? "Host page: %d FAILED\n" : "Host page: all passed\n", checksFailed);
 	return checksFailed ? 1 : 0;

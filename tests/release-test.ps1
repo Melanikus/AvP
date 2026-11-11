@@ -2422,7 +2422,82 @@ void ElsewhereHosted()
 {
 	RelayHostStart(&why);
 }
-'@ + "`n") } }; Reason = 'H: 3dc/networking.cpp line 227 starts a host through a relay: only Net_HostGame may' }
+'@ + "`n") } }; Reason = 'H: 3dc/networking.cpp line 227 starts a host through a relay: only Net_HostGame may' },
+    # THE PLAYER'S CHOICE (added 2026-11-11 by Melanikus for the AvP port, hash 2, the owner's "No auto choice, they choose"): a line is
+    # chosen only by the host page's Enter on that line's row, in its kHostPageChooseIt case; clearing the choice is let through anywhere
+    @{ What = 'H: a line chosen to host on anywhere but the host page is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void PickTheFirst()
+{
+	RelayList_HostOn(0);
+}
+'@ + "`n") }; Reason = 'H: 3dc/menus.cpp line 3 chooses the line to host on: only the host page''s Enter on a line''s row may' },
+    @{ What = 'H: the choice cleared anywhere is let through'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void ForgetTheChoice()
+{
+	RelayList_HostOn(-1);
+}
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'H: the host page choosing a line in its kHostPageChooseIt case is let through'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+
+		default:
+			return false;
+	}
+}
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'H: the host page choosing a line outside its kHostPageChooseIt case is refused'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			return false;
+
+		default:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+	}
+}
+'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' },
+    @{ What = 'H: and a host page that chooses twice is refused'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+	(void)RelayList_HostOn(place);
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+
+		default:
+			return false;
+	}
+}
+'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' }
 )
 
 foreach ($case in $onlineCases)

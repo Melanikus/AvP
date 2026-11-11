@@ -1008,7 +1008,8 @@ static void TestTheHomeRefusals()
 	puts("a join refused for not going through the relay, said on the games page (by reading the source)");
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
-	Check(menus.size() > 1000 && page.size() > 1000, "the menus' and the page's sources were found and read");
+	std::string const names = ReadSource("3dc/avp/language.cpp");   // the game's own words (added 2026-11-11)
+	Check(menus.size() > 1000 && page.size() > 1000 && names.size() > 1000, "the menus', the page's and the words' sources were found and read");
 
 	std::string const joining = SourceSlice(menus, "NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);", "\n\t\t\tbreak;\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const refused = joining.find("else if (Net_JoinRefusedWhy()) {");
@@ -1027,8 +1028,13 @@ static void TestTheHomeRefusals()
 	std::string const stands = SourceSlice(page, "bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(stands, "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;") && Has(stands, "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;") &&
 		Has(stands, "case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;") && Has(stands, "case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;") &&
-		Has(stands, "default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED; break;"),
+		Has(stands, "default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_NOTAPPROVED_BEFORE; break;"),
 		"NOBODY BLOCKED SILENTLY: a line with no yes, being asked, with no answer, not asked, or not approved each has its words");
+	// Modified 2026-11-11 by Melanikus for the AvP port (hash 2): a line not approved yet is said in PO's ruling's words (R-SRV-P3), "Not
+	// approved on <name> yet: ask on the Online page", the name between the two parts and never inside a printf form
+	Check(Has(stands, "_snprintf(out, size - 1, \"%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER));") &&
+		Has(names, "\"Not approved on \",\n\t\" yet: ask on the Online page\","),
+		"a line not approved yet: \"Not approved on <name> yet: ask on the Online page\", in PO's words (R-SRV-P3)");
 	Check(Has(stands, "OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));") &&
 		Has(stands, "OnlineScreens_SafeName(now.why ? now.why : \"\", sizeof(why), why, sizeof(why));") &&
 		Has(stands, "_snprintf(out, size - 1, \"%s: %s %s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);"),

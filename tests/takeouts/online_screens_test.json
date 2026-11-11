@@ -1163,6 +1163,16 @@
 					"to": "\tPut(name, sizeof(name), now.line.name);\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a line not approved yet isn't said in R-SRV-P3's words",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\t_snprintf(out, size - 1, \"%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER));\n",
+					"to": "\t\t_snprintf(out, size - 1, \"%s: %s\", name, GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE));\n"
+				}
+			]
 		}
 	]
 }
