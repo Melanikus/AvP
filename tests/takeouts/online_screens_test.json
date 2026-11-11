@@ -933,6 +933,86 @@
 					"to": "\"?\""
 				}
 			]
+		},
+		{
+			"name": "a campaign game shows the name its host sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (campaignName)",
+					"to": "if (campaignName && !hostsName)"
+				}
+			]
+		},
+		{
+			"name": "a campaign level's name isn't made safe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "OnlineScreens_SafeName(campaignName, strlen(campaignName), words, size);",
+					"to": "Put(words, size, campaignName);"
+				}
+			]
+		},
+		{
+			"name": "a host's level name is read to its 0, past the bytes it was given",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "hostsName ? hostsNameBytes : 0",
+					"to": "hostsName ? strlen(hostsName) : 0"
+				}
+			]
+		},
+		{
+			"name": "only a campaign place with no name shows \"-\"",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (words[0] == '\\0')\n\t{\n\t\tPut(words, size, \"-\");\n\t}\n}\n\n// ---- The ping column",
+					"to": "if (words[0] == '\\0' && campaignName)\n\t{\n\t\tPut(words, size, \"-\");\n\t}\n}\n\n// ---- The ping column"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page never gives the campaign's name, so a campaign game shows the host's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL,",
+					"to": "OnlineScreens_LevelWords(NULL,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the place is looked for on the multiplayer list, where the co-op numbers mean other levels",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_COOPERATIVE_EPISODES,",
+					"to": "LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_MULTIPLAYER_EPISODES,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game that is not co-op is named as a campaign level too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "bool const onACampaign = session.gameStyle == NGT_Coop &&",
+					"to": "bool const onACampaign ="
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's level name is written into the column the old way first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName,",
+					"to": "OnlineScreens_SafeName(session.levelName, sizeof(session.levelName), row.level, sizeof(row.level));\n\t\tOnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName,"
+				}
+			]
 		}
 	]
 }
