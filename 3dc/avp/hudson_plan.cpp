@@ -98,6 +98,12 @@ const char *const kHudsonRefusedHostRowWord = "hostrow= can only be online: beta
 const char *const kHudsonRefusedHostRowWithoutHost = "hostrow= is a host's way in, through the Multiplayer page's Host row, so it needs net=host";
 const char *const kHudsonRefusedHostRowWithRelayAuto = "hostrow= hosts through the Multiplayer page's rows, and -relayhost or -askjoiners host by themselves as the menus start, so the rows would never be pressed";
 const char *const kHudsonRefusedHostRowWithCoop = "hostrow= presses Start game, a deathmatch's way in, so it can't be a coop=yes run";
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: hoston= and joinon= (hudson_plan.h)
+const char *const kHudsonRefusedHostRowWithoutHostOn = "hostrow=online needs hoston=, the server to choose on the Host on row: nothing is chosen for a player, so a run names its own";
+const char *const kHudsonRefusedHostOnName = "hoston= is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with a single _ for each space between them";
+const char *const kHudsonRefusedHostOnWithoutHostRow = "hoston= chooses on the Multiplayer page's Host on row, which only hostrow=online goes through, so it needs hostrow=online";
+const char *const kHudsonRefusedJoinOnName = "joinon= is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with a single _ for each space between them";
+const char *const kHudsonRefusedJoinOnWithoutFindGames = "joinon= chooses among Find games' games, so it needs findgames=yes";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
 const char *const kHudsonRefusedKillWords = "killkind= (marine, predator, xenoborg or queen), killat=x,y,z and killer= (host or join) go together, on a net= run with coop=yes";
 const char *const kHudsonRefusedFramesPerSecond = "fps= is a number from 10 to 1000, or uncapped";
@@ -337,6 +343,37 @@ static bool ReadNumber(const char *text, size_t length, int *number)
 	return true;
 }
 
+// hoston= and joinon= (hudson_plan.h): a servers.cfg line's name as a plan writes it, with _ for each space, into name, which has room for
+// kHudsonLongestServerName letters and its ending 0. Only letters, digits, - and . are taken, with one _ between two of them, never at
+// either end or two together: then each _ is one space, as servers.cfg keeps a name (one space for each run of them), and nothing else
+// from the command line reaches the name. False, with name empty, for anything else. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static bool ReadServerName(const char *text, size_t length, char *name)
+{
+	name[0] = 0;
+
+	if (length == 0 || length > (size_t)kHudsonLongestServerName || text[0] == '_' || text[length - 1] == '_')
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < length; i++)
+	{
+		char const c = text[i];
+		bool const letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.';
+
+		if (!letter && !(c == '_' && text[i - 1] != '_'))
+		{
+			name[0] = 0;
+			return false;
+		}
+
+		name[i] = c == '_' ? ' ' : c;
+	}
+
+	name[length] = 0;
+	return true;
+}
+
 // Where -hudson is, as a word on its own. It's the same test as CommandLineHasWord, but this needs the place.
 static const char *FindHudsonWord(const char *commandLine)
 {
@@ -432,6 +469,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
 	bool seenMenus = false;
 	bool seenYesPage = false, seenHostRow = false;   // added 2026-11-10 by Melanikus (Third) for the AvP port
+	bool seenHostOn = false, seenJoinOn = false;     // added 2026-11-11 by Melanikus (Third) for the AvP port
 	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
@@ -1531,6 +1569,36 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			else
 			{
 				return kHudsonRefusedHostRowWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "hoston"))
+		{
+			// Added 2026-11-11 by Melanikus (Third) for the AvP port: see hoston= in hudson_plan.h
+			if (seenHostOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenHostOn = true;
+
+			if (!ReadServerName(value, valueLength, plan->hostOn))
+			{
+				return kHudsonRefusedHostOnName;
+			}
+		}
+		else if (WordIs(place, nameLength, "joinon"))
+		{
+			// Added 2026-11-11 by Melanikus (Third) for the AvP port: see joinon= in hudson_plan.h
+			if (seenJoinOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenJoinOn = true;
+
+			if (!ReadServerName(value, valueLength, plan->joinOn))
+			{
+				return kHudsonRefusedJoinOnName;
 			}
 		}
 		else if (WordIs(place, nameLength, "answerafter"))
@@ -2988,6 +3056,23 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenHostRow && plan->coop)
 	{
 		return kHudsonRefusedHostRowWithCoop;
+	}
+
+	// hoston= and joinon= (added 2026-11-11 by Melanikus (Third) for the AvP port): a host through the rows names its server, as nothing is
+	// chosen for a player ("No auto choice, they choose"), and each name is for the one way in that chooses one
+	if (seenHostRow && !seenHostOn)
+	{
+		return kHudsonRefusedHostRowWithoutHostOn;
+	}
+
+	if (seenHostOn && !seenHostRow)
+	{
+		return kHudsonRefusedHostOnWithoutHostRow;
+	}
+
+	if (seenJoinOn && !plan->findGames)
+	{
+		return kHudsonRefusedJoinOnWithoutFindGames;
 	}
 
 	if (seenSiegeFrom && !seenSiege)

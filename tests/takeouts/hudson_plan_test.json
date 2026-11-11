@@ -10606,6 +10606,136 @@
 					"to": "if (said || plan.netMode != kHudsonNetHost)"
 				}
 			]
+		},
+		{
+			"name": "hoston= isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(place, nameLength, \"hoston\"))",
+					"to": "else if (WordIs(place, nameLength, \"hostonx\"))"
+				}
+			]
+		},
+		{
+			"name": "joinon= isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(place, nameLength, \"joinon\"))",
+					"to": "else if (WordIs(place, nameLength, \"joinonx\"))"
+				}
+			]
+		},
+		{
+			"name": "hoston= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostOn)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "joinon= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenJoinOn)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "hostrow= without hoston= is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostRow && !seenHostOn)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "hoston= without hostrow= is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostOn && !seenHostRow)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "joinon= without findgames=yes is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenJoinOn && !plan->findGames)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name's _ isn't turned into a space",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "name[i] = c == '_' ? ' ' : c;",
+					"to": "name[i] = c;"
+				}
+			]
+		},
+		{
+			"name": "two _ together are let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!letter && !(c == '_' && text[i - 1] != '_'))",
+					"to": "if (!letter && c != '_')"
+				}
+			]
+		},
+		{
+			"name": "a name may start or end with _",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || text[0] == '_' || text[length - 1] == '_')",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a name may be longer than servers.cfg's longest",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "length > (size_t)kHudsonLongestServerName ||",
+					"to": "length > (size_t)kHudsonLongestServerName + 1 ||"
+				}
+			]
+		},
+		{
+			"name": "a name may hold a /",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "|| c == '-' || c == '.';",
+					"to": "|| c == '-' || c == '.' || c == '/';"
+				}
+			]
+		},
+		{
+			"name": "an empty hoston= is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (length == 0 || length > (size_t)kHudsonLongestServerName",
+					"to": "if (length > (size_t)kHudsonLongestServerName"
+				}
+			]
 		}
 	]
 }
