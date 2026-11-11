@@ -239,8 +239,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
-					"to": "\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n\n\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n"
+					"from": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n\n\t// Every server servers.cfg names, and picking one for the next start (#175 2b). Always there, so that even with no servers.cfg at\n\t// all its page can say why.\n\tAvPMenu_Multiplayer[row++] = ServersRow;\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
+					"to": "\t// Every server servers.cfg names, and picking one for the next start (#175 2b). Always there, so that even with no servers.cfg at\n\t// all its page can say why.\n\tAvPMenu_Multiplayer[row++] = ServersRow;\n\n\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\tAvPMenu_Multiplayer[row++] = CoopRow;\n\n\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row] = HostWhereRow;\n\t\tAvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;\n\t\trow++;\n\t}\n"
 				}
 			]
 		},
@@ -441,6 +441,16 @@
 					"file": "3dc/avp/language.cpp",
 					"from": "\"The server didn't answer in 30 seconds, so nothing was hosted.",
 					"to": "\"The server didn't answer in a minute, so nothing was hosted."
+				}
+			]
+		},
+		{
+			"name": "the clock going round past 0 makes the wait end at once, or never",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "return static_cast<uint32_t>(now - startedAt) >= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;",
+					"to": "return static_cast<int64_t>(now) - static_cast<int64_t>(startedAt) >= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;"
 				}
 			]
 		}

@@ -1553,6 +1553,21 @@ enum TEXTSTRING_ID
 	TEXTSTRING_HOST_FAILED,                  // a failed online host's line, before the game's own words for why (Q4)
 	TEXTSTRING_HOST_FAILED_PLAIN,            // a failed host's line when there's no why to give
 	TEXTSTRING_HOST_NO_ANSWER,               // the wait gave up: the server didn't answer in kHostWaitMostMs
+	TEXTSTRING_SERVERS_ROW,                  // the Multiplayer page's Servers row, and its help (#175 2b, 2026-11-10)
+	TEXTSTRING_SERVERS_ROW_HELP,
+	TEXTSTRING_SERVERS_TITLE,                // the Servers page (servers_page.h)
+	TEXTSTRING_SERVERS_PICK_HELP,            // a server row's help
+	TEXTSTRING_SERVERS_BACK,
+	TEXTSTRING_SERVERS_IN_USE,               // what's true of a server, after its name
+	TEXTSTRING_SERVERS_NEXT_START,
+	TEXTSTRING_SERVERS_YES_GIVEN,
+	TEXTSTRING_SERVERS_LINE,                 // "servers.cfg line", before a refused line's number
+	TEXTSTRING_SERVERS_MORE_NOT_USED,        // before how many more refused lines there are
+	TEXTSTRING_SERVERS_NONE,
+	TEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)
+	TEXTSTRING_SERVERS_PICKED,               // the pick's two answers
+	TEXTSTRING_SERVERS_NOT_PICKED,
+	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,
