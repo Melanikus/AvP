@@ -36,10 +36,15 @@ static ServersTrustRefusal ReadText(const std::string &text, ServersTrustYeses *
 	return ServersTrust_Read(exact.empty() ? NULL : exact.data(), exact.size(), out, badLine);
 }
 
-// A hash of the test's own: every byte the same number
+// A hash of the test's own: every byte the same number. Modified 2026-11-10 by Melanikus for the AvP port: written a byte at a time, not
+// with memset (Snyk's "an optimizing compiler may remove memset": it sees this function fill its caller's bytes and return, and can't
+// tell the caller reads them). A loop says the same and can't be taken out.
 static void MadeUpHash(uint8_t hash[kServersTrustHashBytes], uint8_t value)
 {
-	memset(hash, value, kServersTrustHashBytes);
+	for (size_t i = 0; i < kServersTrustHashBytes; i++)
+	{
+		hash[i] = value;
+	}
 }
 
 static std::string YesLine(uint8_t value)
