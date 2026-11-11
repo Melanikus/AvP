@@ -2660,7 +2660,8 @@ static void TestLettingPeopleIn()
 	Check(HostAGame() == NET_OK, "someone hosts");
 	Check(connectionsAllowed == 7, "with room for the other seven players, and no more");
 	Check(channelsAllowed == 1, "and one channel for each, the only one the game uses");
-	Check(theHost.duplicatePeers == kMostClients && theHost.maximumPacketSize == kMostMessageBytes && theHost.maximumWaitingData == 8 * 1024 * 1024, "with the game's limits on places from one address (through the relay, every joiner comes from its one address, so all the game's places), a message's size, and what can wait");
+	// 7 is networking.cpp's kMostClients, which this file can't see (it's static there): every place the game has
+	Check(theHost.duplicatePeers == 7 && theHost.maximumPacketSize == kMostMessageBytes && theHost.maximumWaitingData == 8 * 1024 * 1024, "with the game's limits on places from one address (through the relay, every joiner comes from its one address, so all the game's places), a message's size, and what can wait");
 	Check(theHost.checksum == enet_crc32, "and a checksum on every packet");
 	Check(netSession.nPlayers == 1, "and the game says it has one player");
 
