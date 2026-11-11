@@ -368,11 +368,14 @@ foreach ($relative in ($code.Keys | Sort-Object))
     }
 }
 
+# Every call goes to its own server, the one it was given: s, a server's state made from its servers.cfg line alone (NewServer, rule R),
+# whose key every call is held to (rule K). Modified 2026-11-11 by Melanikus for the AvP port (all servers' games, the owner's "same code,
+# for 2 or more servers"): every line takes this one way, the line in use and each one visited.
 foreach ($m in ([regex]'\bWinHttpConnect\s*\(\s*(\w+)\s*,\s*([^,]+?)\s*,').Matches($code[$listFile]))
 {
-    if ((Get-Flat $m.Groups[2].Value) -cne 'shared->server')
+    if ((Get-Flat $m.Groups[2].Value) -cne 's->server')
     {
-        Stop-Check "N: $listFile line $(Get-LineNumber $code[$listFile] $m.Index) calls WinHttpConnect to $(Get-Flat $m.Groups[2].Value): the list's calls may only go to shared->server, the line's address"
+        Stop-Check "N: $listFile line $(Get-LineNumber $code[$listFile] $m.Index) calls WinHttpConnect to $(Get-Flat $m.Groups[2].Value): the list's calls may only go to s->server, the call's own server, made from its line"
     }
 }
 
@@ -499,14 +502,141 @@ foreach ($relative in ($code.Keys | Sort-Object))
 
 $listFlat = Get-Flat $withWords[$listFile]
 
-# The server is written in one place only, from the line's four numbers, so it's an address and never a name; and it's used in no other
-# way than these: called (rule N), written there, and handed to networking.cpp as the relay's address in words
-$serverWrite = 'swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu, (line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);'
-$serverUses = @('WinHttpConnect(session, shared->server,', $serverWrite, 'snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);')
+# EVERY SERVER THE SAME WAY (modified 2026-11-11 by Melanikus for the AvP port: all servers' games, the owner's "same code, for 2 or
+# more servers"). A server's state is made in one place only, NewServer, from its servers.cfg line alone: for the line in use (Start) and
+# for each line a find visits (VisitEveryLine). Nothing else makes one. So whatever holds for one line holds for every line.
+$newServer = Get-OneDefinition 'NewServer' 'R' $listFile 'a server''s state, made from its line alone'
+$madeHere = 'Shared *made = new (std::nothrow) Shared;'
 
-if ((Get-Count $listFlat $serverWrite) -ne 1)
+if ((Get-Count $listFlat 'new (std::nothrow) Shared') -ne 1 -or -not $newServer.Words.StartsWith($madeHere, [System.StringComparison]::Ordinal) -or
+    -not $newServer.Words.EndsWith('return made;', [System.StringComparison]::Ordinal))
 {
-    Stop-Check "R: $listFile must write the list's server in one place only, from the line's four numbers: $serverWrite"
+    Stop-Check "R: a server's state must be made in one place only, NewServer ($listFile line $($newServer.Line)), from its line: $madeHere, ... return made;"
+}
+
+# NOTHING ELSE MAKES OR COPIES ONE (added 2026-11-11 by Melanikus for the AvP port, all servers' games). Rule K holds each server's trust
+# in its state: the key that matched, and its line's fingerprint. So a state that came any other way than NewServer, or one copied whole
+# from another server's, could carry one server's trust over to another. There's one new of a state, whatever its form, and no state kept
+# as a plain variable, which could be copied by assignment. No state is copied whole: not by assignment through a pointer, not by the
+# size of a whole state (only made and visit are sized, to be cleared), and no copy call is handed a whole state. (This reads names, not
+# types: a state is reached by the names the file gives it, listed in $stateNames.)
+$listCode = Get-Flat $code[$listFile]
+$stateNames = 'shared|visit|made|s|server|owner|hostServer'
+$byValue = [regex]::Match($listCode, '\bShared\b(\s+const)?\s+\w+\s*[;=\[({,)]')
+$wholeSizes = @([regex]::Matches($listCode, '[^;{}]*\bsizeof\s*\(\s*(\*\s*\w+|Shared)\s*\)[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() } |
+    Where-Object { $_ -cmatch "sizeof\s*\(\s*(\*\s*($stateNames)|Shared)\s*\)" })
+$knownSizes = @('memset(made, 0, sizeof(*made));', 'SecureZeroMemory(visit, sizeof(*visit));')
+$copies = @([regex]::Matches($listCode, '\b(memcpy|memmove|memcpy_s|memmove_s|CopyMemory|MoveMemory|RtlCopyMemory|RtlMoveMemory|copy)\s*\(([^;]*);') |
+    Where-Object { $_.Groups[2].Value -cmatch "(?<![\w.>])\b($stateNames)\b(?!\s*(->|\.))" } | ForEach-Object { $_.Value })
+
+if (([regex]::Matches($listCode, '\bnew\b[^;]*\bShared\b')).Count -ne 1 -or $byValue.Success -or
+    @($wholeSizes | Where-Object { $knownSizes -cnotcontains $_ }).Count -ne 0 -or $copies.Count -ne 0 -or
+    $listCode -cmatch "=\s*\*\s*\(?\s*($stateNames)\b\s*\)?\s*;" -or $listCode -cmatch "(^|[;{}(]\s*)\*\s*($stateNames)\b\s*=(?!=)")
+{
+    Stop-Check "R: $listFile must make a server's state only by NewServer's one new, keep none as a plain variable, and copy none whole (by assignment, by its whole size, or by a copy call handed one)$(if ($byValue.Success) { ': ' + $byValue.Value })$(if ($copies.Count) { ': ' + ($copies -join ' / ') })"
+}
+
+# The two states that last (modified 2026-11-11 by Melanikus for the AvP port, one model for every line): the list's own (shared), set
+# in one place, Start, to the one it made or back to nothing; and the host's line's (hostServer), set only by UseTheHostLine, to one made
+# from the line the room is on, and back to nothing by ForgetTheHostLine. Each starts as nothing, and nothing else is ever called by its
+# name (a variable or a parameter of that name would hide it).
+$lasting = @(
+    @{ Name = 'shared'; Sets = @{ 'made' = 'Start'; 'NULL' = 'Start' } },
+    @{ Name = 'hostServer'; Sets = @{ 'NewServer(line)' = 'UseTheHostLine'; 'NULL' = 'ForgetTheHostLine' } }
+)
+
+foreach ($state in $lasting)
+{
+    $name = $state.Name
+    $named = [regex]('\b(?!(return|delete|else|case|sizeof|throw|new|goto)\b)[A-Za-z_][\w:<>]*\s*(\*\s*|&\s*|\s)(const\s*)?(\*\s*)?' + $name + '\s*[;=,)\[]')
+
+    if ((Get-Count $listCode "Shared *$name = NULL;") -ne 1 -or $named.Matches($listCode).Count -ne 1)
+    {
+        Stop-Check "R: $listFile must start $name as nothing, once, and call nothing else ${name}: Shared *$name = NULL;"
+    }
+
+    foreach ($m in [regex]::Matches($code[$listFile], '\b' + $name + '\s*=(?!=)\s*([^;]*);'))
+    {
+        if ($code[$listFile].Substring(0, $m.Index) -cmatch 'Shared\s*\*\s*$') { continue }
+        $setAt = [pscustomobject]@{ File = $listFile; At = $m.Index; Line = (Get-LineNumber $code[$listFile] $m.Index) }
+        $to = Get-Flat $m.Groups[1].Value
+        $where = @(if ($state.Sets.ContainsKey($to)) { Get-Definitions $state.Sets[$to] | Where-Object { $_.File -eq $listFile } })
+
+        if ($where.Count -ne 1 -or -not (Test-Inside $setAt $where[0]))
+        {
+            Stop-Check "R: $listFile line $($setAt.Line) sets $name to $($to): only $(($state.Sets.Keys | Sort-Object | ForEach-Object { "$($state.Sets[$_]) may set it to $_" }) -join ', and ')"
+        }
+    }
+}
+
+# The list's own Start, in its file (another file may have a Start of its own)
+$startDefs = @(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile })
+
+if ($startDefs.Count -ne 1)
+{
+    Stop-Check "R: $listFile must start the list in one function, Start; it has $($startDefs.Count)"
+}
+
+$startDef = $startDefs[0]
+$visits = Get-OneDefinition 'VisitEveryLine' 'R' $listFile 'every line a find visits'
+
+# THE MAKERS (modified 2026-11-11 by Melanikus for the AvP port, one model for every line). A server's state is made in five places,
+# each once, in its own one form, each from a line whose yes rule Y proves: the list's own (Start, the line in use), a find's visits
+# (VisitEveryLine), a relay's keys and an access request (each a visit of its own, to the line it's for), and the host's line
+# (UseTheHostLine, kept for a room's life). The three that take a line are each called once, from the list's thread, with the line the
+# main thread copied after its yes (rule Y).
+$makers = [ordered]@{
+    'Start' = 'Shared *made = NewServer(*line);'
+    'VisitEveryLine' = 'Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;'
+    'ReadTheRelayKeysOn' = 'Shared *const visit = NewServer(line);'
+    'AskForAccessOn' = 'Shared *const visit = NewServer(line);'
+    'UseTheHostLine' = 'hostServer = NewServer(line);'
+}
+$makerParts = @{ 'Start' = $startDef; 'VisitEveryLine' = $visits }
+
+foreach ($maker in $makers.Keys)
+{
+    if (-not $makerParts.ContainsKey($maker)) { $makerParts[$maker] = Get-OneDefinition $maker 'R' $listFile 'a server''s state, made from one line' }
+
+    if ((Get-Count $makerParts[$maker].Flat $makers[$maker]) -ne 1 -or (Get-Count $makerParts[$maker].Flat 'NewServer(') -ne 1)
+    {
+        Stop-Check "R: $maker ($listFile line $($makerParts[$maker].Line)) must make its server's state once, in one form: $($makers[$maker])"
+    }
+}
+
+foreach ($making in (Get-Calls 'NewServer'))
+{
+    if (@($makers.Keys | Where-Object { Test-Inside $making $makerParts[$_] }).Count -ne 1)
+    {
+        Stop-Check "R: $($making.File) line $($making.Line) makes a server's state: only $($makers.Keys -join ', ') may"
+    }
+}
+
+$listThread = Get-OneDefinition 'ListThread' 'R' $listFile 'the list''s thread'
+$lineTakers = [ordered]@{
+    'ReadTheRelayKeysOn' = 'ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);'
+    'AskForAccessOn' = 'AskForAccessOn(place, accessLines[place], accessBody, accessFingerprint);'
+    'UseTheHostLine' = 'UseTheHostLine(hostPlace, hostLine);'
+}
+
+foreach ($taker in $lineTakers.Keys)
+{
+    $takes = @(Get-Calls $taker)
+
+    if ($takes.Count -ne 1 -or -not (Test-Inside $takes[0] $listThread) -or (Get-Count $listThread.Flat $lineTakers[$taker]) -ne 1)
+    {
+        Stop-Check "R: $taker must be called once, from ListThread ($listFile line $($listThread.Line)), with the line the main thread copied after its yes: $($lineTakers[$taker])"
+    }
+}
+
+# The server is written in one place only, there, from the line's four numbers, so it's an address and never a name; and it's used in no
+# other way than these: called (rule N), written there, and handed to networking.cpp as the relay's address in words
+$serverWrite = 'swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line.address >> 24) & 0xFFu, (line.address >> 16) & 0xFFu, (line.address >> 8) & 0xFFu, line.address & 0xFFu);'
+$serverUses = @('WinHttpConnect(session, s->server,', $serverWrite, 'snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);')
+
+if ((Get-Count $listFlat $serverWrite) -ne 1 -or -not $newServer.Words.Contains($serverWrite))
+{
+    Stop-Check "R: $listFile must write a server in one place only, NewServer, from the line's four numbers: $serverWrite"
 }
 
 $leftOver = $listFlat
@@ -517,38 +647,40 @@ if ($leftOver -match '(->|\.)server\b')
     Stop-Check "R: $listFile uses the list's server in a way this check doesn't know: only $($serverUses -join ' or ')"
 }
 
-# The relay is at the line's address too, written in one place
+# The relay is at the line's address too, written in one place, there
 $relayWrites = @([regex]::Matches($listFlat, '->relayAddress\s*=(?!=)[^;]*;'))
 
-if ($relayWrites.Count -ne 1 -or $relayWrites[0].Value -cne '->relayAddress = htonl(line->address);')
+if ($relayWrites.Count -ne 1 -or $relayWrites[0].Value -cne '->relayAddress = htonl(line.address);' -or -not $newServer.Words.Contains('made->relayAddress = htonl(line.address);'))
 {
-    Stop-Check "R: $listFile must write the relay's address in one place only, from the line's address: made->relayAddress = htonl(line->address);"
+    Stop-Check "R: $listFile must write the relay's address in one place only, NewServer, from the line's address: made->relayAddress = htonl(line.address);"
 }
 
 # The list starts only for a line: with none, it makes nothing
-$starts = @(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile -and $_.Words.Contains($serverWrite) })
-
-if ($starts.Count -ne 1)
-{
-    Stop-Check "R: $listFile must start the list in one function, the one that writes its server"
-}
-
-$start = $starts[0].Words
+$start = $startDef.Words
+$startLine = $startDef.Line
 $refuseAt = $start.IndexOf('if (!Relay_ServerName()[0]) { return false; }', [System.StringComparison]::Ordinal)
 $lineAt = $start.IndexOf('const ServersCfgServer *const line = Server();', [System.StringComparison]::Ordinal)
-$writeAt = $start.IndexOf($serverWrite, [System.StringComparison]::Ordinal)
-$relayAt = $start.IndexOf('made->relayAddress = htonl(line->address);', [System.StringComparison]::Ordinal)
+$makeAt = $start.IndexOf('Shared *made = NewServer(*line);', [System.StringComparison]::Ordinal)
 
-if ($refuseAt -lt 0 -or $lineAt -lt $refuseAt -or $writeAt -lt $lineAt -or $relayAt -lt $lineAt)
+if ($refuseAt -lt 0 -or $lineAt -lt $refuseAt -or $makeAt -lt $lineAt)
 {
-    Stop-Check "R: the list's start ($listFile line $($starts[0].Line)) must make nothing when there's no line: if (!Relay_ServerName()[0]) { return false; }, then const ServersCfgServer *const line = Server();, before it writes its server and its relay"
+    Stop-Check "R: the list's start ($listFile line $startLine) must make nothing when there's no line: if (!Relay_ServerName()[0]) { return false; }, then const ServersCfgServer *const line = Server();, before Shared *made = NewServer(*line);"
+}
+
+# Each visit is made from a line the find chose (rule Y), by the same NewServer, and only those lines are visited
+if (-not (Test-Before $visits.Flat 'memcpy(lines, shared->visitLines, sizeof(lines));' 'Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;'))
+{
+    Stop-Check "R: VisitEveryLine ($listFile line $($visits.Line)) must make each visit by NewServer from the lines the find chose: memcpy(lines, shared->visitLines, sizeof(lines)); before Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;"
 }
 
 # ---- K: the key. The server is trusted by its line's fingerprint alone.
 
+# Modified 2026-11-11 by Melanikus for the AvP port (all servers' games, the owner's "same code, for 2 or more servers"): each call is
+# held to its OWN server's key. A server's state (Shared, made by NewServer from its line, rule R) carries its own two key checks and its
+# own answers, so nothing of one server's check or answer can be read for another's, and nothing is kept between one line and the next.
 $callChecked = Get-OneDefinition 'CallChecked' 'K' $listFile 'every web call to the list'
 
-foreach ($name in @('WinHttpOpenRequest', 'WinHttpSendRequest', 'WinHttpWriteData', 'WinHttpReceiveResponse'))
+foreach ($name in @('WinHttpConnect', 'WinHttpOpenRequest', 'WinHttpSendRequest', 'WinHttpWriteData', 'WinHttpReceiveResponse'))
 {
     foreach ($call in (Get-Calls $name))
     {
@@ -561,10 +693,25 @@ foreach ($name in @('WinHttpOpenRequest', 'WinHttpSendRequest', 'WinHttpWriteDat
 
 $checked = $callChecked.Flat
 
-if (-not $checked.StartsWith('Answer a = { false, 0, kCantStart, 0 }; if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood)) {', [System.StringComparison]::Ordinal) -or
-    -not (Test-FormBlock $checked 'if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood)) {' @('return a;')))
+# Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): a server's key is read under its lock (KeyStateOf), as the
+# main thread can turn the list's own state from "no line yet" to "not checked" with the player's yes (rule Y). A state with no line
+# (kKeyNoLine) sends nothing at all, so the list's thread can run before the line in use has its yes.
+$keyNowFirst = [regex]'^Answer a = \{ false, [^;{}]*\}; check\.owner = s; int const keyNow = KeyStateOf\(s\); if \(keyNow == kKeyNoLine\) \{'
+$keyNowRefusal = 'if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood)) {'
+
+if ((Get-Count (Get-Flat $code[$listFile]) 'Answer CallChecked(Shared *s, ') -ne 1 -or -not $keyNowFirst.IsMatch($checked) -or
+    -not (Test-FormBlock $checked 'if (keyNow == kKeyNoLine) {' @('return a;')) -or -not (Test-FormBlock $checked $keyNowRefusal @('return a;')) -or
+    -not (Test-Before $checked 'if (keyNow == kKeyNoLine) {' $keyNowRefusal) -or -not (Test-Before $checked $keyNowRefusal 'WinHttpOpen(') -or
+    (Get-Count $checked 'KeyStateOf(') -ne 1 -or $checked -cmatch '\bkeyState\b')
 {
-    Stop-Check "K: CallChecked ($listFile line $($callChecked.Line)) must first send nothing to a server whose keys didn't match, and nothing but the first call before they're checked: if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood)) { ... return a; }"
+    Stop-Check "K: CallChecked ($listFile line $($callChecked.Line)) must hold its key check to its own server, then send nothing through a state with no line, nothing to a server whose keys didn't match, and nothing but the first call before they're checked: Answer CallChecked(Shared *s, ...), then check.owner = s; int const keyNow = KeyStateOf(s); if (keyNow == kKeyNoLine) { ... return a; } $keyNowRefusal ... return a; }"
+}
+
+$keyNowOf = Get-OneDefinition 'KeyStateOf' 'K' $listFile 'where a server''s key stands'
+
+if ($keyNowOf.Flat -cne 'EnterCriticalSection(&s->lock); int const state = s->keyState; LeaveCriticalSection(&s->lock); return state;')
+{
+    Stop-Check "K: KeyStateOf ($listFile line $($keyNowOf.Line)) must only read its own server's key state under its lock: EnterCriticalSection(&s->lock); int const state = s->keyState; LeaveCriticalSection(&s->lock); return state;"
 }
 
 # (The request is sent from one statement, with a body's headers or without, so WinHttpSendRequest is written twice: the check comes after
@@ -583,12 +730,13 @@ if (-not (Test-Before $checked 'WinHttpSetStatusCallback(request, CheckTheKey, W
 
 $keyCheck = Get-OneDefinition 'CheckTheKey' 'K' $listFile 'the list''s key, read and compared just before the first byte goes'
 
-foreach ($must in @('if (check->keepIt) { check->matched = read; }', 'differences |= static_cast<uint8_t>(check->shown[i] ^ shared->goodKey[i]);',
+foreach ($must in @('|| !check->owner) { return; }', 'Shared const *const server = check->owner;', 'if (check->keepIt) { check->matched = read; }',
+    'bool const sameSize = read && check->shownSize == server->goodKeySize;', 'differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);',
     'check->matched = sameSize && differences == 0;', 'if (!check->matched) { check->closed = true; WinHttpCloseHandle(request); }'))
 {
     if (-not $keyCheck.Flat.Contains($must))
     {
-        Stop-Check "K: CheckTheKey ($listFile line $($keyCheck.Line)) must compare every byte of the list's key with the one that matched, and close a call whose key doesn't match before anything of it goes: $must"
+        Stop-Check "K: CheckTheKey ($listFile line $($keyCheck.Line)) must compare every byte of the list's key with the one that matched for the call's own server (check->owner), and close a call whose key doesn't match before anything of it goes: $must"
     }
 }
 
@@ -603,40 +751,359 @@ foreach ($caller in (Get-Calls 'CallChecked'))
     }
 }
 
-if (-not (Test-Before $serverCheck.Flat 'first.keepIt = true;' 'CallChecked(') -or
-    -not $serverCheck.Flat.Contains('bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint);') -or
-    -not (Test-FormBlock $serverCheck.Flat 'if (good) {' @('memcpy(shared->goodKey, first.shown, first.shownSize);')) -or
-    -not $serverCheck.Flat.Contains('shared->keyState = good ? kKeyGood : kKeyRefused;'))
+if (-not (Test-Before $serverCheck.Flat 'KeyCheck &first = s->firstCheck; memset(&first, 0, sizeof(first)); first.keepIt = true;' 'CallChecked(s, ') -or
+    -not $serverCheck.Flat.Contains('bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);') -or
+    -not (Test-FormBlock $serverCheck.Flat 'if (good) {' @('memcpy(s->goodKey, first.shown, first.shownSize);')) -or
+    -not $serverCheck.Flat.Contains('s->keyState = good ? kKeyGood : kKeyRefused;'))
 {
-    Stop-Check "K: CheckTheServer ($listFile line $($serverCheck.Line)) must keep the list's key only when it and the relay's keys make the line's fingerprint: NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint), then if (good) { memcpy(shared->goodKey, ...) }"
+    Stop-Check "K: CheckTheServer ($listFile line $($serverCheck.Line)) must make its server's own first check, and keep the list's key only when it and the relay's keys make that server's line's fingerprint: KeyCheck &first = s->firstCheck; memset(&first, 0, sizeof(first)); first.keepIt = true;, NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint), then if (good) { memcpy(s->goodKey, ...) }"
 }
 
-if (-not (Test-Before $call.Flat 'const char *const unchecked = CheckTheServer();' 'check.keepIt = false;') -or
+if (-not (Test-Before $call.Flat 'const char *const unchecked = CheckTheServer(s);' 'KeyCheck &check = s->laterCheck; memset(&check, 0, sizeof(check)); check.keepIt = false;') -or
     -not (Test-FormBlock $call.Flat 'if (unchecked) {' @('return none;')) -or
-    -not (Test-Before $call.Flat 'check.keepIt = false;' 'return CallChecked('))
+    -not (Test-Before $call.Flat 'check.keepIt = false;' 'return CallChecked(s, '))
 {
-    Stop-Check "K: Call ($listFile line $($call.Line)) must hold the server to its line first, and send nothing if that fails, before a call that goes only to the key that matched: CheckTheServer(), then check.keepIt = false;"
+    Stop-Check "K: Call ($listFile line $($call.Line)) must hold its server to its line first, and send nothing if that fails, before a call of its own server's that goes only to the key that matched: CheckTheServer(s), then KeyCheck &check = s->laterCheck; memset(&check, 0, sizeof(check)); check.keepIt = false;"
 }
 
-# The key that matched is written there alone, and the server is called good there alone
-$listCode = Get-Flat $code[$listFile]
+# The key that matched is written there alone, and a server is called good there alone. Modified 2026-11-11 by Melanikus for the AvP port
+# (one model for every line): a server's key state is written in four statements, each once, each in its one place. Called good or refused
+# by its own check (CheckTheServer); not checked yet when it's made (NewServer); with no line when the list's own state is made before the
+# line in use has its yes (Start, inside if (!lineAgreed)); and from no line to not checked yet only by the player's yes to that line
+# (RelayList_AgreeToTheLineAt, inside if (shared->keyState == kKeyNoLine)).
+$stateWrites = @([regex]::Matches($listCode, '[^;{}]*\bkeyState\s*=(?!=)[^;]*;') | ForEach-Object { $_.Value.Trim() })
+$writePlaces = [ordered]@{
+    's->keyState = good ? kKeyGood : kKeyRefused;' = @('CheckTheServer', '')
+    'made->keyState = kKeyNotChecked;' = @('NewServer', '')
+    'made->keyState = kKeyNoLine;' = @('Start', 'if (!lineAgreed) {')
+    'shared->keyState = kKeyNotChecked;' = @('RelayList_AgreeToTheLineAt', 'if (shared->keyState == kKeyNoLine) {')
+}
 
-$stateWrites = @([regex]::Matches($listCode, '\bkeyState\s*=(?!=)\s*([^;]*);') | ForEach-Object { Get-Flat $_.Groups[1].Value })
-$otherStates = @($stateWrites | Where-Object { $_ -cne 'good ? kKeyGood : kKeyRefused' -and $_ -cne 'kKeyNotChecked' })
-
-if ((Get-Count $listCode 'memcpy(shared->goodKey,') -ne 1 -or (Get-Count $listCode 'shared->keyState = good ? kKeyGood : kKeyRefused;') -ne 1 -or $otherStates.Count -ne 0)
+if ((Get-Count $listCode 'goodKey,') -ne 1 -or (Get-Count $listCode 'memcpy(s->goodKey,') -ne 1 -or
+    @($stateWrites | Where-Object { -not $writePlaces.Contains($_) }).Count -ne 0 -or $stateWrites.Count -ne $writePlaces.Count)
 {
-    Stop-Check "K: $listFile must write the key that matched in CheckTheServer alone, and the server's state only there or as not checked yet"
+    Stop-Check "K: $listFile must write the key that matched in CheckTheServer alone, and a server's key state only in $($writePlaces.Keys -join ' / '), each once"
+}
+
+foreach ($write in $writePlaces.Keys)
+{
+    # (The list's own Start, rule R's: other files have a Start of their own)
+    $in = if ($writePlaces[$write][0] -eq 'Start') { $startDef } else { Get-OneDefinition $writePlaces[$write][0] 'K' $listFile 'where a server''s key state is written' }
+    $form = $writePlaces[$write][1]
+
+    if ((Get-Count $in.Flat $write) -ne 1 -or ($form -and -not (Test-FormBlock $in.Flat $form @($write))))
+    {
+        Stop-Check "K: $($writePlaces[$write][0]) ($listFile line $($in.Line)) must write $write$(if ($form) { " inside $form ... }" })"
+    }
+}
+
+# A server's trust lives in a few parts of its state: the key that matched and its size, its line's fingerprint, its relay's address and
+# its two key checks. Each is used only in the statements below (added 2026-11-11 by Melanikus for the AvP port, all servers' games), so
+# none can be written from anything but its own server's check or its own line, or read across from another server. A new use fails
+# this check until it's read and added here: a check that names what it allows can't be passed by a shape it didn't think of.
+$trustUses = [ordered]@{
+    'goodKey' = @('uint8_t goodKey[kNetServerFingerprintMostKeyBytes];', 'differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);',
+        'memcpy(s->goodKey, first.shown, first.shownSize);')
+    'goodKeySize' = @('size_t goodKeySize;', 'bool const sameSize = read && check->shownSize == server->goodKeySize;', 's->goodKeySize = first.shownSize;')
+    'lineFingerprint' = @('uint8_t lineFingerprint[kNetServerFingerprintBytes];',
+        'bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);',
+        'memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));')
+    'relayAddress' = @('uint32_t relayAddress;', 'made->relayAddress = htonl(line.address);', 'relays[0].address = shared->relayAddress;')
+    'firstCheck' = @('KeyCheck firstCheck;', 'KeyCheck &first = s->firstCheck;')
+    'laterCheck' = @('KeyCheck laterCheck;', 'KeyCheck &check = s->laterCheck;')
+    'keyState' = @('int keyState;', 'int const state = s->keyState;', 's->keyState = good ? kKeyGood : kKeyRefused;', 'made->keyState = kKeyNotChecked;',
+        'made->keyState = kKeyNoLine;', 'bool const known = shared->keyState == kKeyGood;', 'if (shared->keyState == kKeyGood) {',
+        'else if (shared->keyState == kKeyRefused) {', 'if (shared->keyState == kKeyNoLine) {', 'shared->keyState = kKeyNotChecked;')
+}
+
+foreach ($member in $trustUses.Keys)
+{
+    $uses = @([regex]::Matches($listCode, '[^;{}]*\b' + $member + '\b[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() })
+    $unknown = @($uses | Where-Object { $trustUses[$member] -cnotcontains $_ })
+
+    if ($unknown.Count -ne 0)
+    {
+        Stop-Check "K: $listFile uses a server's $member in a way this check doesn't know: only $($trustUses[$member] -join ' or ') ($($unknown -join ' / '))"
+    }
+}
+
+if (-not $newServer.Flat.Contains('memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));'))
+{
+    Stop-Check "K: NewServer ($listFile line $($newServer.Line)) must take its server's fingerprint from its own line: memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));"
+}
+
+# NOTHING CARRIED FROM ONE SERVER TO ANOTHER. No key check is kept by the file, and the functions a call goes through touch only the server
+# they were given: no static of their own, and never the line in use's state (shared) in place of the one they were given.
+if ($listCode -cmatch '\bstatic\s+KeyCheck\b')
+{
+    Stop-Check "K: $listFile keeps a KeyCheck for the whole file: each server's state holds its own (firstCheck and laterCheck), so no check is shared between servers"
+}
+
+$chain = @('Tell', 'CantUse', 'KeyStateOf', 'CallChecked', 'CheckTheKey', 'CheckTheServer', 'Call', 'VisitTheLine', 'NewServer', 'ForgetTheVisit')
+$chainParts = @{}
+
+foreach ($name in $chain)
+{
+    $part = Get-OneDefinition $name 'K' $listFile 'a call to one server, held to that server alone'
+    $chainParts[$name] = $part
+
+    if ($part.Flat -cmatch '\bstatic\s' -or $part.Flat -cmatch '\bshared\b')
+    {
+        Stop-Check "K: $name ($listFile line $($part.Line)) must keep nothing of its own between calls (no static) and touch only the server it was given, never shared"
+    }
+}
+
+# And each of them hands on the server it was given, never another: inside the chain a call's first word is s (VisitTheLine's, visit);
+# in a function that makes a visit it's visit, the line it's visiting; anywhere else it's shared, the list's own, or hostServer, the
+# host's line's (modified 2026-11-11 by Melanikus for the AvP port, one model for every line)
+$visitMakers = @('VisitEveryLine', 'ReadTheRelayKeysOn', 'AskForAccessOn')
+
+foreach ($name in @('Tell', 'CantUse', 'KeyStateOf', 'CallChecked', 'CheckTheServer', 'Call', 'VisitTheLine'))
+{
+    foreach ($use in (Get-Calls $name))
+    {
+        if ($use.File -ne $listFile)
+        {
+            Stop-Check "K: $($use.File) line $($use.Line) calls ${name}: only $listFile's own calls may"
+        }
+
+        $given = [regex]::Match($code[$listFile].Substring($use.At), '^\w+\s*\(\s*(\w+)\s*[,)]')
+        $inside = @($chain | Where-Object { Test-Inside $use $chainParts[$_] })
+        $inAVisit = @($visitMakers | Where-Object { Test-Inside $use $makerParts[$_] }).Count -gt 0
+        $wanted = if ($inside -contains 'VisitTheLine') { @('visit') } elseif ($inside.Count -gt 0) { @('s') } elseif ($inAVisit) { @('visit') } else { @('shared', 'hostServer') }
+
+        if (-not $given.Success -or $wanted -cnotcontains $given.Groups[1].Value)
+        {
+            Stop-Check "K: $listFile line $($use.Line) hands $name another server than its own: inside a call it must be $($wanted -join ' or ')"
+        }
+    }
+}
+
+# A visit is forgotten whole, wiped and given back, and nothing of it is kept: between its making and its end there's no way out, and
+# it isn't stored anywhere
+$forget = Get-OneDefinition 'ForgetTheVisit' 'K' $listFile 'a visit''s end'
+
+if ($forget.Flat -cne 'DeleteCriticalSection(&visit->lock); SecureZeroMemory(visit, sizeof(*visit)); delete visit;')
+{
+    Stop-Check "K: ForgetTheVisit ($listFile line $($forget.Line)) must wipe the whole visit and give it back, and do nothing else: DeleteCriticalSection(&visit->lock); SecureZeroMemory(visit, sizeof(*visit)); delete visit;"
+}
+
+# Only a visit is forgotten, where it was made, and the host's line's state where it's let go: forgetting the list's own state would
+# leave it pointing at freed memory
+$forgetters = @{ 'ForgetTheHostLine' = (Get-OneDefinition 'ForgetTheHostLine' 'K' $listFile 'the host''s line let go') }
+foreach ($maker in $visitMakers) { $forgetters[$maker] = $makerParts[$maker] }
+
+foreach ($forgetting in (Get-Calls 'ForgetTheVisit'))
+{
+    if (@($forgetters.Keys | Where-Object { Test-Inside $forgetting $forgetters[$_] }).Count -ne 1)
+    {
+        Stop-Check "K: $($forgetting.File) line $($forgetting.Line) calls ForgetTheVisit: only $($visitMakers -join ', ') may, for the visit each made, and ForgetTheHostLine, for the host's line's"
+    }
+}
+
+# The form of the innermost block round a place in flattened code, such as "if (visit) {". The code read has no comments and no string's
+# insides, so every brace is a real one.
+function Get-FormRound([string]$flat, [int]$at)
+{
+    $depth = 0
+
+    for ($i = $at - 1; $i -ge 0; $i--)
+    {
+        if ($flat[$i] -eq '}') { $depth++ }
+        elseif ($flat[$i] -eq '{')
+        {
+            if ($depth -eq 0) { return ([regex]::Match($flat.Substring(0, $i + 1), '[^;{}]*\{$')).Value.Trim() }
+            $depth--
+        }
+    }
+
+    return ''
+}
+
+# Each visit ends the one way: made once, then forgotten once, inside if (visit) { }, with no way out between, nothing of it kept, and
+# nothing of it touched after
+foreach ($maker in $visitMakers)
+{
+    $part = $makerParts[$maker]
+    $madeAt = $part.Flat.IndexOf($makers[$maker], [System.StringComparison]::Ordinal)
+    $endAt = $part.Flat.IndexOf('ForgetTheVisit(visit);', [System.StringComparison]::Ordinal)
+    $between = if ($madeAt -ge 0 -and $endAt -gt $madeAt) { $part.Flat.Substring($madeAt, $endAt - $madeAt) } else { '' }
+    $after = if ($endAt -ge 0) { $part.Flat.Substring($endAt + 'ForgetTheVisit(visit);'.Length) } else { '' }
+
+    if ($madeAt -lt 0 -or $endAt -lt $madeAt -or (Get-Count $part.Flat 'ForgetTheVisit(visit);') -ne 1 -or (Get-FormRound $part.Flat $endAt) -cne 'if (visit) {' -or
+        $between -cmatch '\b(return|break|continue|goto|throw)\b' -or $part.Flat -cmatch '=\s*visit\s*[;,)]' -or $after -cmatch '\bvisit\b')
+    {
+        Stop-Check "K: $maker ($listFile line $($part.Line)) must end every visit it makes with ForgetTheVisit(visit), with no way out before it, and keep nothing of it: $($makers[$maker]) then if (visit) { ... ForgetTheVisit(visit); }"
+    }
+}
+
+# The host's line's state: let go whole before another is made, and made only from the line the room is on
+$hostForms = [ordered]@{
+    'ForgetTheHostLine' = 'if (hostServer) { ForgetTheVisit(hostServer); } hostServer = NULL; hostServerPlace = -1;'
+    'UseTheHostLine' = 'if (hostServer && hostServerPlace == place) { return; } ForgetTheHostLine(); hostServer = NewServer(line); hostServerPlace = hostServer ? place : -1;'
+}
+
+foreach ($name in $hostForms.Keys)
+{
+    $part = if ($name -eq 'UseTheHostLine') { $makerParts[$name] } else { $forgetters[$name] }
+
+    if ($part.Flat -cne $hostForms[$name])
+    {
+        Stop-Check "K: $name ($listFile line $($part.Line)) must be exactly: $($hostForms[$name])"
+    }
 }
 
 # ---- Y: the player's yes (#175's last part). Added 2026-11-10 by Melanikus for the AvP port.
 
-$theGate = 'const ServersCfgServer *const line = Server(); if (!line || !TheLineIsAgreed(*line)) { return false; }'
+# Modified 2026-11-11 by Melanikus for the AvP port (all servers' games): every line has the same gate. The line in use is refused at
+# the list's start, before its server's state is made; and a find visits only the lines that passed the same question on the main thread,
+# where the yeses are, and nothing else puts a line in the list of lines to visit.
+#
+# Modified again 2026-11-11 by Melanikus for the AvP port (one model for every line): the list's thread runs for every line that's had its
+# yes, so Start no longer refuses the line in use without one. It asks the yes before it makes its state, and a state made without the yes
+# has no line (kKeyNoLine): rule K proves CallChecked sends nothing through it, and only the player's yes to that line turns it into one
+# not checked yet. Every other call to a line is a visit of its own, asked for on the main thread only after that line's yes (below).
+$theGate = 'const ServersCfgServer *const line = Server(); if (!line) { return false; } bool const lineAgreed = TheLineIsAgreed(*line); Shared *made = NewServer(*line); if (!made) { return false; } if (!lineAgreed) { made->keyState = kKeyNoLine; }'
 $gateAt = $start.IndexOf($theGate, [System.StringComparison]::Ordinal)
 
-if ($gateAt -lt 0 -or $gateAt -gt $start.IndexOf($serverWrite, [System.StringComparison]::Ordinal) -or $gateAt -gt $start.IndexOf('Shared *made', [System.StringComparison]::Ordinal))
+if ($gateAt -lt 0 -or (Get-Count $start $theGate) -ne 1 -or $gateAt -gt $start.IndexOf('shared = made;', [System.StringComparison]::Ordinal))
 {
-    Stop-Check "Y: the list's start ($listFile line $($starts[0].Line)) must refuse a line the player hasn't said yes to, before it makes anything or writes its server: $theGate"
+    Stop-Check "Y: the list's start ($listFile line $startLine) must give a line the player hasn't said yes to no server, before its state is shared: $theGate, before shared = made;"
+}
+
+# Each call to a line other than a find's is asked for on the main thread, where the yeses are, and only once that line has its yes:
+# the line is copied for the list's thread only after that refusal. The host's line is the one RelayList_HostLine gives, which is a line
+# with its yes and its approval (below), or none.
+$asks = [ordered]@{
+    'RelayList_AskForRelayKeysOn' = @('if (!TheLineIsAgreed(theFile.servers[place]) || !Start()) {', 'return false;', 'shared->keysLine = theFile.servers[place];')
+    'RelayList_AskForAccessOn' = @('if (!TheLineIsAgreed(theFile.servers[place])) {', 'return false;', 'shared->accessLines[place] = theFile.servers[place];')
+    'RelayList_HostRoomOpened' = @('int const place = RelayList_HostLine(); if (place < 0) {', 'return;', 'shared->hostLine = theFile.servers[place];')
+}
+
+foreach ($ask in $asks.Keys)
+{
+    $part = Get-OneDefinition $ask 'Y' $listFile 'a call to one line, asked for after its yes'
+    $refusal, $out, $copy = $asks[$ask]
+
+    if (-not (Test-FormBlock $part.Flat $refusal @($out)) -or -not (Test-Before $part.Flat $refusal $copy) -or (Get-Count $part.Flat $copy) -ne 1)
+    {
+        Stop-Check "Y: $ask ($listFile line $($part.Line)) must refuse a line the player hasn't said yes to before it hands it to the list's thread: $refusal ... $out } before $copy"
+    }
+}
+
+# The lines handed over are used only as they're copied there, taken by the list's thread, and given to the one call each is for (rule R)
+$handedLines = [ordered]@{
+    'keysLine' = @('ServersCfgServer keysLine;', 'ServersCfgServer const keysLine = shared->keysLine;', 'ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);',
+        'shared->keysLine = theFile.servers[place];')
+    'accessLines' = @('ServersCfgServer accessLines[kServersCfgMostLines];', 'ServersCfgServer accessLines[kServersCfgMostLines];',
+        'memcpy(accessLines, shared->accessLines, sizeof(accessLines));', 'AskForAccessOn(place, accessLines[place], accessBody, accessFingerprint);',
+        'shared->accessLines[place] = theFile.servers[place];')
+    'hostLine' = @('ServersCfgServer hostLine;', 'ServersCfgServer const hostLine = shared->hostLine;', 'UseTheHostLine(hostPlace, hostLine);',
+        'shared->hostLine = theFile.servers[place];')
+}
+
+foreach ($handed in $handedLines.Keys)
+{
+    $uses = @([regex]::Matches($listCode, '[^;{}]*\b' + $handed + '\b[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() })
+    $unknown = @($uses | Where-Object { $handedLines[$handed] -cnotcontains $_ })
+
+    if ($unknown.Count -ne 0 -or $uses.Count -ne $handedLines[$handed].Count)
+    {
+        Stop-Check "Y: $listFile uses $handed in a way this check doesn't know: only $($handedLines[$handed] -join ' / ')$(if ($unknown.Count) { ' (' + ($unknown -join ' / ') + ')' })"
+    }
+}
+
+# The host's line: chosen only once it has its yes (RelayList_HostOn), given only while it has its yes and its approval, or for the
+# room already open on it (RelayList_HostLine), and the room's line set only there
+$hostOn = Get-OneDefinition 'RelayList_HostOn' 'Y' $listFile 'the player''s choice of the line to host on'
+$hostOnRefusal = 'if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place])) {'
+
+if (-not (Test-FormBlock $hostOn.Flat $hostOnRefusal @('return false;')) -or -not (Test-Before $hostOn.Flat $hostOnRefusal 'hostChoice = place;'))
+{
+    Stop-Check "Y: RelayList_HostOn ($listFile line $($hostOn.Line)) must refuse a line the player hasn't said yes to before it's chosen: $hostOnRefusal ... return false; } before hostChoice = place;"
+}
+
+$hostLineNow = Get-OneDefinition 'RelayList_HostLine' 'Y' $listFile 'the line to host on'
+$hostLineForm = 'if (hostRoomLine >= 0) { return hostRoomLine; } const char *why = NULL; if (hostChoice >= 0 && (hostChoice >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[hostChoice]) || AccessOn(hostChoice, &why) != kRelayAccessIsApproved)) { hostChoice = -1; } return hostChoice;'
+
+if ($hostLineNow.Flat -cne $hostLineForm)
+{
+    Stop-Check "Y: RelayList_HostLine ($listFile line $($hostLineNow.Line)) must give the room's line, or a chosen line only while it has its yes and its approval: $hostLineForm"
+}
+
+$hostKnown = [ordered]@{
+    'hostChoice' = @('int hostChoice = -1;', 'hostChoice = -1;', 'hostChoice = place;', 'hostChoice = -1;', 'return hostChoice;',
+        'if (hostChoice >= 0 && (hostChoice >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[hostChoice]) || AccessOn(hostChoice, &why) != kRelayAccessIsApproved)) {')
+    'hostRoomLine' = @('int hostRoomLine = -1;', 'hostRoomLine = place;', 'hostRoomLine = -1;', 'if (hostRoomLine >= 0) {', 'return hostRoomLine;')
+}
+
+foreach ($member in $hostKnown.Keys)
+{
+    $uses = @([regex]::Matches($listCode, '[^;{}]*\b' + $member + '\b[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() })
+    $unknown = @($uses | Where-Object { $hostKnown[$member] -cnotcontains $_ })
+
+    if ($unknown.Count -ne 0 -or $uses.Count -ne $hostKnown[$member].Count)
+    {
+        Stop-Check "Y: $listFile uses $member in a way this check doesn't know: only $($hostKnown[$member] -join ' / ')$(if ($unknown.Count) { ' (' + ($unknown -join ' / ') + ')' })"
+    }
+}
+
+$roomOpened = Get-OneDefinition 'RelayList_HostRoomOpened' 'Y' $listFile 'a room put on its line''s list'
+
+if (-not (Test-Before $roomOpened.Flat 'int const place = RelayList_HostLine(); if (place < 0) {' 'hostRoomLine = place;'))
+{
+    Stop-Check "Y: RelayList_HostRoomOpened ($listFile line $($roomOpened.Line)) must set the room's line only from RelayList_HostLine, once it gave one: int const place = RelayList_HostLine(); if (place < 0) { ... } before hostRoomLine = place;"
+}
+
+# Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): a find asks each line's yes, in its place, and hands the
+# answers to RelayList_ChooseVisits (in the list's text file, a plain function, so its tests can run it with 1, 2 and 9 lines). Only the
+# places it chose become the lines to visit. It never chooses a line without its yes, and never more than kRelayListMostVisits.
+$finding = Get-OneDefinition 'RelayList_FindGames' 'Y' $listFile 'a find, and the lines it visits'
+$findSteps = @(
+    'int const count = theFile.serverCount < kServersCfgMostLines ? theFile.serverCount : kServersCfgMostLines; bool agreed[kServersCfgMostLines] = {}; for (int place = 0; place < count; place++) { agreed[place] = TheLineIsAgreed(theFile.servers[place]); }',
+    'int const visits = RelayList_ChooseVisits(agreed, count, theServer.inUse, places, states);',
+    'for (int v = 0; v < visits; v++) { lines[v] = theFile.servers[places[v]]; }',
+    'memcpy(shared->visitLines, lines, ')
+$stepAt = -1
+$inOrder = $true
+
+foreach ($step in $findSteps)
+{
+    $at = $finding.Flat.IndexOf($step, [System.StringComparison]::Ordinal)
+    if ($at -le $stepAt -or (Get-Count $finding.Flat $step) -ne 1) { $inOrder = $false }
+    $stepAt = $at
+}
+
+if (-not $inOrder -or ([regex]::Matches($finding.Flat, '\bagreed\b')).Count -ne 3 -or ([regex]::Matches($finding.Flat, '\b(lines|places)\s*\[[^\]]*\]\s*=(?!=)')).Count -ne 1)
+{
+    Stop-Check "Y: RelayList_FindGames ($listFile line $($finding.Line)) must ask each line's yes, let RelayList_ChooseVisits choose from those answers alone, and hand the list's thread only the lines it chose: $($findSteps -join ' ... ')"
+}
+
+$textFile = '3dc/relay_list_text.cpp'
+$choice = Get-OneDefinition 'RelayList_ChooseVisits' 'Y' $textFile 'which lines a find visits'
+$choiceForm = 'if (!agreed || !visits || !states || count < 0) { return 0; } int made = 0; bool inUseToCome = inUse >= 0 && inUse < count; for (int place = 0; place < count; place++) { if (place == inUse) { inUseToCome = false; } if (!agreed[place]) { states[place] = kRelayLineNoYes; } else if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0)) { states[place] = kRelayLineNotAsked; } else { visits[made++] = place; states[place] = kRelayLineAsking; } } return made;'
+
+if ($choice.Flat -cne $choiceForm)
+{
+    Stop-Check "Y: RelayList_ChooseVisits ($textFile line $($choice.Line)) must never choose a line without its yes, and never more than kRelayListMostVisits, keeping a place for the line in use: $choiceForm"
+}
+
+foreach ($choosing in (Get-Calls 'RelayList_ChooseVisits'))
+{
+    if ($choosing.File -ne $listFile -or -not (Test-Inside $choosing $finding))
+    {
+        Stop-Check "Y: $($choosing.File) line $($choosing.Line) chooses lines to visit: only RelayList_FindGames may, from each line's yes"
+    }
+}
+
+# Only that choice writes the lines to visit, and only VisitEveryLine reads them
+$visitLineUses = @([regex]::Matches($listCode, '[^;{}]*\bvisitLines\b[^;{}]*;') | ForEach-Object { $_.Value.Trim() })
+$knownUses = @('ServersCfgServer visitLines[kRelayListMostVisits];', 'memcpy(shared->visitLines, lines, sizeof(ServersCfgServer) * static_cast<size_t>(visits));', 'memcpy(lines, shared->visitLines, sizeof(lines));')
+$otherUses = @($visitLineUses | Where-Object { $knownUses -cnotcontains $_ })
+
+if ($otherUses.Count -ne 0 -or $visitLineUses.Count -ne 3)
+{
+    Stop-Check "Y: $listFile uses the lines to visit in a way this check doesn't know: only the find's choice writes them, and only VisitEveryLine reads them ($($otherUses -join ' / '))"
 }
 
 $agreed = Get-OneDefinition 'TheLineIsAgreed' 'Y' $listFile 'whether the player has said yes to a line'
@@ -644,7 +1111,7 @@ $agreed = Get-OneDefinition 'TheLineIsAgreed' 'Y' $listFile 'whether the player 
 # A Hudson run's first line is one of two: past at once, or (yespage=, added 2026-11-10 by Melanikus (Third) for the AvP port) past at
 # once unless the run asked to see the yes page, and then only after its own Yes, which is held for the run alone (below)
 $hudsonPast = 'if (HudsonRunIsOn) { return true; }'
-$hudsonPastAfterItsYes = 'if (HudsonRunIsOn) { return !hudsonRunShowsTheYesPage || hudsonRunSaidYes; }'
+$hudsonPastAfterItsYes = 'if (HudsonRunIsOn) { uint8_t runHash[kServersTrustHashBytes]; return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash)); }'
 $withTheYesPage = $agreed.Flat.StartsWith($hudsonPastAfterItsYes, [System.StringComparison]::Ordinal)
 $returnsTrue = if ($withTheYesPage) { 0 } else { 1 }
 
@@ -654,24 +1121,23 @@ if (-not ($agreed.Flat.StartsWith($hudsonPast, [System.StringComparison]::Ordina
     Stop-Check "Y: TheLineIsAgreed ($listFile line $($agreed.Line)) must let a Hudson run past alone, and anyone else only with the line's own hash among the kept yeses: $hudsonPast (or $hudsonPastAfterItsYes) first, and return LineHash(line, hash) && ServersTrust_Has(yeses, hash); last"
 }
 
-# yespage=: the two flags start false, and each is set in one place only. A Hudson run's Yes, in RelayList_AgreeToTheLine, returns before
-# anything is read, added to the kept yeses or written, so a test run can't leave a yes for this PC's player; the run's ask is set only by
-# the HudsonTest_ switch, which only Hudson's files call (tools/check-hudson-asleep.ps1, rule 5), in a run
+# yespage=: the run's ask starts false and is set in one place only, the HudsonTest_ switch, which only Hudson's files call
+# (tools/check-hudson-asleep.ps1, rule 5), in a run. The run's yeses (modified 2026-11-11 by Melanikus for the AvP port: one for each line)
+# start empty and are added to only by a Hudson run's Yes (below).
 if ($withTheYesPage)
 {
-    foreach ($flag in @('hudsonRunShowsTheYesPage', 'hudsonRunSaidYes'))
+    $flag = 'hudsonRunShowsTheYesPage'
+
+    if ((Get-Count $listCode "bool $flag = false;") -ne 1)
     {
-        if ((Get-Count $listCode "bool $flag = false;") -ne 1)
-        {
-            Stop-Check "Y: $listFile must start $flag false, once: bool $flag = false;"
-        }
+        Stop-Check "Y: $listFile must start $flag false, once: bool $flag = false;"
+    }
 
-        $flagWrites = @([regex]::Matches($code[$listFile], '\b' + $flag + '\s*(=(?!=)|\+\+|--)|&\s*' + $flag + '\b'))
+    $flagWrites = @([regex]::Matches($code[$listFile], '\b' + $flag + '\s*(=(?!=)|\+\+|--)|&\s*' + $flag + '\b'))
 
-        if ($flagWrites.Count -ne 2)
-        {
-            Stop-Check "Y: $listFile changes $flag in $($flagWrites.Count) places: only its start and its one place may"
-        }
+    if ($flagWrites.Count -ne 2)
+    {
+        Stop-Check "Y: $listFile changes $flag in $($flagWrites.Count) places: only its start and its one place may"
     }
 
     $yesPageSwitch = Get-OneDefinition 'HudsonTest_RelayListShowsTheYesPage' 'Y' $listFile 'a Hudson run asking for the yes page'
@@ -681,15 +1147,32 @@ if ($withTheYesPage)
         Stop-Check "Y: HudsonTest_RelayListShowsTheYesPage ($listFile line $($yesPageSwitch.Line)) must do nothing but hudsonRunShowsTheYesPage = true;"
     }
 
-    $hudsonsYesFlat = (Get-OneDefinition 'RelayList_AgreeToTheLine' 'Y' $listFile 'the player''s yes').Flat
-    $hudsonsYes = 'if (HudsonRunIsOn) {'
+    $runYesUses = @([regex]::Matches($listCode, '[^;{}]*\bhudsonRunYeses\b[^;{}]*[;{]') | ForEach-Object { $_.Value.Trim() })
+    # (A statement is read up to its ; or {, so the empty start reads as "= {"; that it's empty is checked whole, below)
+    $runYesKnown = @('ServersTrustYeses hudsonRunYeses = {', 'return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));',
+        'if (!ServersTrust_Has(hudsonRunYeses, hash) && hudsonRunYeses.count < kServersTrustMostYeses) {', 'ServersTrust_Add(&hudsonRunYeses, hash);')
 
-    if (-not (Test-FormBlock $hudsonsYesFlat $hudsonsYes @('hudsonRunSaidYes = true;', 'return true;')) -or
-        -not (Test-Before $hudsonsYesFlat $hudsonsYes 'ServersTrust_Add(&yeses, hash);') -or -not (Test-Before $hudsonsYesFlat $hudsonsYes 'NetIdentityStore_KeepTrust(') -or
-        -not (Test-Before $hudsonsYesFlat $hudsonsYes 'TheLineIsAgreed(*line);'))
+    if (@($runYesUses | Where-Object { $runYesKnown -cnotcontains $_ }).Count -ne 0 -or $runYesUses.Count -ne $runYesKnown.Count -or
+        (Get-Count $listCode 'ServersTrustYeses hudsonRunYeses = {};') -ne 1)
     {
-        Stop-Check "Y: RelayList_AgreeToTheLine ($listFile) must hold a Hudson run's Yes for the run alone, before it reads, adds or keeps any yes: if (HudsonRunIsOn) { hudsonRunSaidYes = true; ... return true; } first"
+        Stop-Check "Y: $listFile uses a Hudson run's yeses in a way this check doesn't know: only $($runYesKnown -join ' / ')"
     }
+}
+
+# A yes is added in one place only, the player's yes to a line (RelayList_AgreeToTheLineAt), in one of two ways: a Hudson run's Yes, held
+# for the run alone, which goes nowhere near the kept yeses or their file, so a test run can't leave a yes for this PC's player; or
+# anyone else's, read in first, added to the kept yeses and kept
+$agreeing = Get-OneDefinition 'RelayList_AgreeToTheLineAt' 'Y' $listFile 'the player''s yes to a line'
+$hudsonsYes = Get-FormBlock $agreeing.Flat 'if (HudsonRunIsOn) {'
+$playersYes = if ($null -ne $hudsonsYes) { Get-FormBlock $agreeing.Flat ('if (HudsonRunIsOn) {' + $hudsonsYes + '} else {') } else { $null }
+
+if ($null -eq $hudsonsYes -or $null -eq $playersYes -or -not $hudsonsYes.Contains('ServersTrust_Add(&hudsonRunYeses, hash);') -or
+    $hudsonsYes -cmatch '\byeses\b|NetIdentityStore_KeepTrust' -or (Get-Count $agreeing.Flat 'ServersTrust_Add(&yeses, hash);') -ne 1 -or
+    -not (Test-Before $playersYes 'TheLineIsAgreed(theFile.servers[place]);' 'ServersTrust_Add(&yeses, hash);') -or
+    -not (Test-Before $playersYes 'ServersTrust_Add(&yeses, hash);' 'NetIdentityStore_KeepTrust(yeses)') -or
+    (Get-Count $agreeing.Flat 'NetIdentityStore_KeepTrust(') -ne 1)
+{
+    Stop-Check "Y: RelayList_AgreeToTheLineAt ($listFile line $($agreeing.Line)) must hold a Hudson run's Yes for the run alone, and add anyone else's to the kept yeses only after reading them in: if (HudsonRunIsOn) { ... ServersTrust_Add(&hudsonRunYeses, hash); ... } else { TheLineIsAgreed(theFile.servers[place]); ... ServersTrust_Add(&yeses, hash); NetIdentityStore_KeepTrust(yeses) ... }"
 }
 
 $hudsonWrite = [regex]::Match($code[$listFile], '\bHudsonRunIsOn\s*(=(?!=)|\+\+|--)|&\s*HudsonRunIsOn\b')
@@ -699,13 +1182,11 @@ if ($hudsonWrite.Success)
     Stop-Check "Y: $listFile line $(Get-LineNumber $code[$listFile] $hudsonWrite.Index) changes HudsonRunIsOn: this file only reads it, so only a real Hudson run gets past the yes"
 }
 
-$agreeing = Get-OneDefinition 'RelayList_AgreeToTheLine' 'Y' $listFile 'the player''s yes'
-
 foreach ($adding in (Get-Calls 'ServersTrust_Add'))
 {
     if (-not (Test-Inside $adding $agreeing))
     {
-        Stop-Check "Y: $($adding.File) line $($adding.Line) adds a yes: only the player's own (RelayList_AgreeToTheLine) may"
+        Stop-Check "Y: $($adding.File) line $($adding.Line) adds a yes: only the player's own (RelayList_AgreeToTheLineAt) may"
     }
 }
 
