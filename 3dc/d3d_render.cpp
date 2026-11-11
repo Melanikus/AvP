@@ -7972,7 +7972,15 @@ static void DrawAlienWays()
 
 	for (size_t i = 0; i < count && i < kMostShown; i++)
 	{
-		AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);
+		// A kept way (its alien isn't following it now) is drawn dimmed (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+		if (shown[i].kept)
+		{
+			AlienWaysView_AddKeptWay(ViewMatrix, shown[i].points, shown[i].count, &ends);
+		}
+		else
+		{
+			AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);
+		}
 	}
 
 	if (ends.empty())

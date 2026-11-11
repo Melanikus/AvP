@@ -204,6 +204,36 @@
 					"to": "/* nothing in the log */"
 				}
 			]
+		},
+		{
+			"name": "a kept way isn't dimmed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\t\t(*ends)[e].colour = AlienWaysView_Dimmed((*ends)[e].colour);\n",
+					"to": "\t\t(void)e;\n"
+				}
+			]
+		},
+		{
+			"name": "dimmed takes red to a half, not two fifths",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\tuint32_t const red = ((colour >> 16) & 0xffu) * 2 / 5;\n",
+					"to": "\tuint32_t const red = ((colour >> 16) & 0xffu) / 2;\n"
+				}
+			]
+		},
+		{
+			"name": "a kept way marks the point it was heading for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\tsize_t const added = AlienWaysView_AddWay(matrix, points, count, -1, ends);\n",
+					"to": "\tsize_t const added = AlienWaysView_AddWay(matrix, points, count, 1, ends);\n"
+				}
+			]
 		}
 	]
 }

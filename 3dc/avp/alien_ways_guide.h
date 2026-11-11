@@ -234,6 +234,15 @@ public:
 	// What every guided alien's way is now, for the developer view: up to most of them. The points are good until the next Frame or Clear.
 	size_t Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const;
 
+	// The last way of every alien that isn't guided now (found stuck, resting, or between its searches), for the view to draw dimmed, so a
+	// line doesn't vanish the moment its alien stops following it (the owner, 2026-11-11). A way is kept until its alien has a new one or
+	// its place is let go. The points are good until the next Frame or Clear. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	size_t Kept(const AlienWaysPoint **points, int *counts, size_t most) const;
+
+	// The way the guide holds now for the alien at place (the N of the log's "alien N"), and how many points it has; 0 and nothing if none.
+	// For the log to say where a way goes, as places. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	int WayOf(size_t place, const AlienWaysPoint **points) const;
+
 	// How the searches that ended in the last Frame went
 	size_t Reports(const AlienWaysReport **reports) const { *reports = report; return reportCount; }
 
@@ -269,6 +278,7 @@ private:
 		AlienWaysAsk last;                  // what it last told Steer: a search starts from this
 
 		int count, heading;                 // the way: count points, heading for point heading
+		int keptCount;                      // the last way found's points, kept for the view after it's dropped (Kept); 0 for none
 		bool fresh;                         // the way has just come, and the alien hasn't taken it up yet
 		long long wayAt;                    // when the way came
 		AlienWaysXYZ wayGoal;               // the goal it was searched for

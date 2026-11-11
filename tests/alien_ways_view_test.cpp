@@ -145,6 +145,28 @@ static void TestTheLines()
 	// Every stretch's colour
 	Check(AlienWaysView_ColourOf(kAlienWaysFloor) == 0xffd9b44au && AlienWaysView_ColourOf(kAlienWaysWall) == 0xff78a2d0u && AlienWaysView_ColourOf(kAlienWaysCeiling) == 0xffb48ad0u, "floor gold, wall blue, ceiling purple: the offline page's colours");
 	Check(AlienWaysView_ColourOf(static_cast<AlienWaysKind>(7)) == kAlienWaysViewUnknown, "and grey for a kind that isn't one of the three");
+
+	// A kept way (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the last way of an alien that isn't following it now. The
+	// same lines as a way with no point it's heading for, each colour at two fifths, so it stays on screen but plainly isn't followed.
+	std::vector<AlienWaysViewEnd> plain;
+	AlienWaysView_AddWay(kSame, kWay, 3, -1, &plain);
+	ends.clear();
+	size_t const kept = AlienWaysView_AddKeptWay(kSame, kWay, 3, &ends);
+	bool sameLines = kept == plain.size() && ends.size() == plain.size();
+	bool allDimmed = sameLines;
+
+	for (size_t e = 0; sameLines && e < ends.size(); e++)
+	{
+		sameLines = ends[e].x == plain[e].x && ends[e].y == plain[e].y && ends[e].z == plain[e].z;
+		allDimmed = allDimmed && ends[e].colour == AlienWaysView_Dimmed(plain[e].colour);
+	}
+
+	Check(kept == 22 && sameLines, "a kept way is the same 22 line ends as the way, in the same places");
+	Check(allDimmed && CountColour(ends, kAlienWaysViewHere) == 0, "every one dimmed, and nothing white, as no point is being headed for");
+	Check(AlienWaysView_Dimmed(0xffd9b44au) == 0xff56481du && AlienWaysView_Dimmed(0x80ffffffu) == 0x80666666u,
+		"dimmed is red, green and blue at two fifths, the alpha kept");
+	Check(AlienWaysView_AddKeptWay(kSame, kWay, 0, &ends) == 0 && AlienWaysView_AddKeptWay(kSame, kWay, 3, 0) == 0,
+		"a kept way of no points, or with nowhere to put its lines, adds nothing");
 }
 
 static void TestTheView()

@@ -86,9 +86,10 @@ struct AlienWaysShown
 	const AlienWaysPoint *points;
 	int count;
 	int heading;
+	bool kept;   // the last way of an alien that isn't following it now, drawn dimmed (added 2026-11-11 by Melanikus (Third), #109)
 };
 
-// Fills out with up to most of the ways aliens are following now, and gives back how many. Only on the game's thread. The points are good until
+// Fills out with up to most of the ways aliens are following now, then the last ways of aliens that aren't (kept), and gives back how many. Only on the game's thread. The points are good until
 // the next AlienWays_Frame, so they're drawn in the same frame and never kept. Gives back 0 while there's no map.
 size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);
 

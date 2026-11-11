@@ -54,4 +54,12 @@ uint32_t AlienWaysView_ColourOf(AlienWaysKind kind);
 // kAlienWaysViewMostEnds.
 size_t AlienWaysView_AddWay(const float *matrix, const AlienWaysPoint *points, int count, int heading, std::vector<AlienWaysViewEnd> *ends);
 
+// A colour with its red, green and blue at two fifths, its alpha as it was: a kept way's
+uint32_t AlienWaysView_Dimmed(uint32_t colour);
+
+// Adds the last way of an alien that isn't following it now: the same lines and crosses as AlienWaysView_AddWay with no point it's heading
+// for, every colour dimmed (AlienWaysView_Dimmed), so the line stays on screen but plainly isn't being followed. Gives back how many ends
+// it added, as AlienWaysView_AddWay does. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; the owner's ask).
+size_t AlienWaysView_AddKeptWay(const float *matrix, const AlienWaysPoint *points, int count, std::vector<AlienWaysViewEnd> *ends);
+
 #endif

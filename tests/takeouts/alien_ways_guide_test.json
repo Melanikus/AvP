@@ -1324,6 +1324,66 @@
 					"to": "if (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)"
 				}
 			]
+		},
+		{
+			"name": "a found way isn't kept for the view",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tfollower.keptCount = follower.count;\n",
+					"to": "\tfollower.keptCount = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a way its alien is following is kept as well",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "!(follower.guided && follower.count > 0)",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "the log can't read a place's way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t*points = followers[place].points;\n\treturn followers[place].count;\n",
+					"to": "\t*points = followers[place].points;\n\treturn 0;\n"
+				}
+			]
+		},
+		{
+			"name": "kept ways go past the room given",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "for (size_t f = 0; f < kAlienWaysMostFollowers && kept < most; f++)",
+					"to": "for (size_t f = 0; f < kAlienWaysMostFollowers && kept < 4; f++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view isn't given the kept ways",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\treturn shown + kept;\n",
+					"to": "\treturn shown;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a found way's line in the log has no places",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\tdetails += \". Places (m):\";\n",
+					"to": "\t\t\tdetails += \".\";\n"
+				}
+			]
 		}
 	]
 }

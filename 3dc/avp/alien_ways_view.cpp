@@ -87,3 +87,29 @@ size_t AlienWaysView_AddWay(const float *matrix, const AlienWaysPoint *points, i
 
 	return ends->size() - before;
 }
+
+uint32_t AlienWaysView_Dimmed(uint32_t colour)
+{
+	uint32_t const red = ((colour >> 16) & 0xffu) * 2 / 5;
+	uint32_t const green = ((colour >> 8) & 0xffu) * 2 / 5;
+	uint32_t const blue = (colour & 0xffu) * 2 / 5;
+	return (colour & 0xff000000u) | (red << 16) | (green << 8) | blue;
+}
+
+size_t AlienWaysView_AddKeptWay(const float *matrix, const AlienWaysPoint *points, int count, std::vector<AlienWaysViewEnd> *ends)
+{
+	if (!ends)
+	{
+		return 0;
+	}
+
+	size_t const before = ends->size();
+	size_t const added = AlienWaysView_AddWay(matrix, points, count, -1, ends);
+
+	for (size_t e = before; e < before + added; e++)
+	{
+		(*ends)[e].colour = AlienWaysView_Dimmed((*ends)[e].colour);
+	}
+
+	return added;
+}

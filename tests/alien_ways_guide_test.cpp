@@ -239,6 +239,16 @@ static void FirstWay()
 	int counts[4], headings[4];
 	Check(guide.Shown(points, counts, headings, 4) == 1 && counts[0] == 6 && headings[0] == 1, "the view is shown its way: 6 points, heading for the second");
 	Check(guide.Shown(points, counts, headings, 0) == 0, "with no room, the view is shown nothing");
+
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): the log reads the same way by the alien's place, as places; and a way its
+	// alien is following isn't a kept one as well
+	const AlienWaysPoint *wayPoints = nullptr;
+	Check(guide.WayOf(0, &wayPoints) == 6 && wayPoints == points[0], "the log reads the same way by its place: 6 points");
+	Check(guide.WayOf(1, &wayPoints) == 0 && wayPoints == nullptr && guide.WayOf(kAlienWaysMostFollowers, &wayPoints) == 0,
+		"and nothing for a place with no alien, or past the last");
+	const AlienWaysPoint *keptPoints[4];
+	int keptCounts[4];
+	Check(guide.Kept(keptPoints, keptCounts, 4) == 0, "a way its alien is following isn't also a kept one");
 }
 
 static void Reaching()
@@ -423,6 +433,18 @@ static void Stuck()
 	}
 
 	Check(!asked && !guided, "for the next 3 s it's left to the game's own code, and asks for no way");
+
+	// Its way is kept for the view meanwhile, dimmed, so the line doesn't vanish when it's stuck (the owner, 2026-11-11; added the same day
+	// by Melanikus (Third) for the AvP port, #109)
+	{
+		const AlienWaysPoint *keptPoints[4];
+		int keptCounts[4];
+		const AlienWaysPoint *shownPoints[4];
+		int shownCounts[4], shownHeadings[4];
+		Check(guide.Kept(keptPoints, keptCounts, 4) == 1 && keptCounts[0] == 6 && guide.Shown(shownPoints, shownCounts, shownHeadings, 4) == 0,
+			"while it's stuck, its last way of 6 points is kept for the view, and none is shown as followed");
+		Check(guide.Kept(keptPoints, keptCounts, 0) == 0, "with no room, nothing is kept for the view");
+	}
 	Check(stuckReports == 1 && stuckSaysWhere, "being stuck is reported once, with who it is, where it was and where it was heading");
 	Frame(guide, map, 100);
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
@@ -1078,6 +1100,16 @@ static void SourceOfTheGame()
 	std::string const ways = ReadSourceFile("3dc/avp/alien_ways.cpp");
 	std::string const project = ReadSourceFile("win32/VS2026/AvP.vcxproj");
 	Check(!near.empty() && !ways.empty() && !project.empty(), "SOURCE: the game's files can be read");
+
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, the owner's asks): the view keeps each alien's last way, dimmed, and a
+	// found way's points go in the log as places
+	std::string const shownCode = Between(ways, "size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most)\n{", "\n}\n");
+	Check(Has(shownCode, "size_t const kept = theGuide.Kept(points, counts, room);") && Has(shownCode, "out[shown + i].kept = true;")
+		&& Has(shownCode, "out[i].kept = false;") && Has(shownCode, "return shown + kept;"),
+		"SOURCE: the view is given the followed ways, then each other alien's kept way, marked as kept");
+	Check(Has(ways, "int const count = theGuide.WayOf(line.follower, &points);") && Has(ways, "details += \". Places (m):\";")
+		&& Has(ways, "details += \" \" + Metres({ points[p].x, points[p].y, points[p].z });"),
+		"SOURCE: a found way's line in the log ends with its points, as places in metres");
 
 	// The hook, in AlienNearState_Approach
 	std::string const approach = Between(near, "static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)\n{", "/* state change and sequence change tests must go here");

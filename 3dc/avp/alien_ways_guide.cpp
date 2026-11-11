@@ -191,6 +191,7 @@ void AlienWaysGuide::Clear()
 		followers[f].guided = false;
 		followers[f].queued = false;
 		followers[f].count = 0;
+		followers[f].keptCount = 0;
 		followers[f].ranked = false;
 		followers[f].flanker = false;
 		followers[f].mapNext = false;
@@ -229,6 +230,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.restUntil = 0;
 			follower.stuckUntil = 0;
 			follower.count = 0;
+			follower.keptCount = 0;
 			follower.heading = 0;
 			follower.fresh = false;
 			follower.ranked = false;
@@ -264,6 +266,7 @@ void AlienWaysGuide::LetGo(int f)
 	follower.used = false;
 	follower.guided = false;
 	follower.queued = false;
+	follower.keptCount = 0;
 	DropTheWay(&follower);
 }
 
@@ -337,6 +340,39 @@ size_t AlienWaysGuide::Shown(const AlienWaysPoint **points, int *counts, int *he
 	}
 
 	return shown;
+}
+
+size_t AlienWaysGuide::Kept(const AlienWaysPoint **points, int *counts, size_t most) const
+{
+	size_t kept = 0;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers && kept < most; f++)
+	{
+		Follower const &follower = followers[f];
+
+		// One Shown gives isn't kept as well: only a way its alien isn't following now
+		if (follower.used && follower.keptCount > 0 && !(follower.guided && follower.count > 0))
+		{
+			points[kept] = follower.points;
+			counts[kept] = follower.keptCount;
+			kept++;
+		}
+	}
+
+	return kept;
+}
+
+int AlienWaysGuide::WayOf(size_t place, const AlienWaysPoint **points) const
+{
+	*points = nullptr;
+
+	if (place >= kAlienWaysMostFollowers || !followers[place].used || followers[place].count <= 0)
+	{
+		return 0;
+	}
+
+	*points = followers[place].points;
+	return followers[place].count;
 }
 
 void AlienWaysGuide::AddReport(const AlienWaysReport &line)
@@ -774,6 +810,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	}
 
 	follower.count = static_cast<int>(count);
+	follower.keptCount = follower.count;
 	follower.heading = 1;
 	follower.fresh = true;
 	follower.wayAt = now;

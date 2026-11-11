@@ -425,6 +425,25 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 	}
 
 	details += polygons;
+
+	// Where a found way goes, as places in metres, so a way can be read from the log without a film (an e must-close, 2026-11-11). The way is
+	// the one the guide holds for this alien now, which the search that ended this frame gave it. Added 2026-11-11 by Melanikus (Third) for
+	// the AvP port, #109.
+	if (line.outcome == kAlienWaysOutcomeFound || line.outcome == kAlienWaysOutcomeAllFloor)
+	{
+		const AlienWaysPoint *points = nullptr;
+		int const count = theGuide.WayOf(line.follower, &points);
+
+		if (count > 0 && points)
+		{
+			details += ". Places (m):";
+
+			for (int p = 0; p < count; p++)
+			{
+				details += " " + Metres({ points[p].x, points[p].y, points[p].z });
+			}
+		}
+	}
 	LogString(std::string(text) + details);
 }
 
@@ -1069,9 +1088,24 @@ size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most)
 		out[i].points = points[i];
 		out[i].count = counts[i];
 		out[i].heading = headings[i];
+		out[i].kept = false;
 	}
 
-	return shown;
+	// Then the last way of each alien that isn't following one now, so the view keeps its line, dimmed (the owner, 2026-11-11: "keeps the
+	// last way drawn (dimmed) while the alien isn't guided, so the line doesn't vanish when it gets stuck"). Added the same day by
+	// Melanikus (Third) for the AvP port, #109.
+	size_t const room = std::min(most, kAlienWaysMostFollowers) - shown;
+	size_t const kept = theGuide.Kept(points, counts, room);
+
+	for (size_t i = 0; i < kept; i++)
+	{
+		out[shown + i].points = points[i];
+		out[shown + i].count = counts[i];
+		out[shown + i].heading = -1;
+		out[shown + i].kept = true;
+	}
+
+	return shown + kept;
 }
 
 void AlienWays_LevelEnd()
