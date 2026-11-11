@@ -1465,12 +1465,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: there's a server without -dev",
+			"name": "SOURCE: a player's game has no server",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (!DevMode)\n\t{\n\t\treturn \"\";\n\t}\n\n\tconst ServersCfgServer *const line = Server();",
-					"to": "\tconst ServersCfgServer *const line = Server();"
+					"from": "\treturn line ? line->name : \"\";",
+					"to": "\treturn \"\";"
 				}
 			]
 		},

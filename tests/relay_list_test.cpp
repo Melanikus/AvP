@@ -833,13 +833,12 @@ static void TestTheCalls()
 		"each piece of news is kept as a copy of at most kMostNewsLetters letters, with its end");
 	Check(Has(news, "piece[kMostNewsLetters] = 0;"), "and it's ended again at the last place of its room before it's written");
 
-	// Until version 2 is on for players, there's a server only with -dev, so a player's game reaches none: without -dev, servers.cfg isn't
-	// even read. The server is the file's first good line, and its address is written out from its four numbers, never a name.
+	// The server is the file's first good line, for every game, and its address is written out from its four numbers, never a name.
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3b): -dev decides nothing online, so a player's game has the line as its
+	// server too, and this file doesn't name DevMode at all (tools/check-online-play.ps1's rule D says the same for a release).
 	std::string const serverName = SourceSlice(source, "const char *Relay_ServerName(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const devFirst = serverName.find("if (!DevMode)\n\t{\n\t\treturn \"\";\n\t}");
-	size_t const fileRead = serverName.find("Server()");
-	Check(devFirst != std::string::npos && fileRead != std::string::npos && devFirst < fileRead,
-		"without -dev, there's no server, and servers.cfg isn't read");
+	Check(Has(serverName, "const ServersCfgServer *const line = Server();\n\treturn line ? line->name : \"\";") && !Has(source, "DevMode"),
+		"every game's server is servers.cfg's first good line, with -dev or without, and relay_list.cpp never asks -dev");
 	std::string const theServer = SourceSlice(source, "const ServersCfgServer *Server(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(theServer, "ServersCfg_ReadTheGames(&file)") && Has(theServer, "theServer.line = file.servers[0];") && !Has(theServer, ".name"),
 		"the server is servers.cfg's first good line, read from the game's folder, and the log never says its name");
