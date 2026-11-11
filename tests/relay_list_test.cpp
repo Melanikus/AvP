@@ -731,7 +731,9 @@ static void TestTheCalls()
 		!Has(source, "PROTOCOL_SSL") && !Has(source, "PROTOCOL_ALL"), "with TLS 1.2 or newer, and nothing older named anywhere");
 
 	// Nothing goes to a server whose keys didn't match its line, and nothing but the first call goes before they're checked
-	size_t const refusedFirst = call.find("if (s->keyState == kKeyRefused || (!check.keepIt && s->keyState != kKeyGood))");
+	size_t const refusedFirst = call.find("if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood))");
+	// (Modified 2026-11-11 by Melanikus for the AvP port: where the key stands is read once, under the lock, as keyNow)
+	Check(Has(call, "int const keyNow = KeyStateOf(s);") && call.find("int const keyNow = KeyStateOf(s);") < refusedFirst, "where the server's key stands is read under its lock, before it decides anything");
 	size_t const sessionOpened = call.find("WinHttpOpen(");
 	Check(refusedFirst != std::string::npos && sessionOpened != std::string::npos && refusedFirst < sessionOpened,
 		"a call to a server whose keys didn't match, or any but the first before they're checked, ends before anything is opened");
