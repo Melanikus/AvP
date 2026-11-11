@@ -57,7 +57,8 @@ int main()
 	int filesLookedAt = 0;
 	std::string const relayList = ReadFile(Top() / "3dc" / "relay_list.cpp");
 
-	Check(relayList.find("Relay_ServerName") != std::string::npos, "this test is reading the file that finds the relay server");
+	// (Modified 2026-11-11 by Melanikus for the AvP port: every line's own state, as the one server's name went, rule J)
+	Check(relayList.find("bool RelayList_LineNow(int place, RelayListLineNow *out)") != std::string::npos, "this test is reading the file that finds the relay servers");
 	Check(relayList.find("Config_Get") == std::string::npos && relayList.find("ConfigFile.h") == std::string::npos,
 		"and the relay server doesn't come from the settings file in any way: no setting of any kind is read there");
 

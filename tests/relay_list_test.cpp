@@ -859,7 +859,7 @@ static void TestTheCalls()
 	// (Modified 2026-11-11 by Melanikus for the AvP port: a server's state is made in one place, NewServer, for the line in use and for each
 	// visit alike, from its line alone)
 	std::string const making = SourceSlice(source, "Shared *NewServer(const ServersCfgServer &line)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(starting, "if (!Relay_ServerName()[0])") && Has(starting, "Shared *made = NewServer(*line);") &&
+	Check(Has(starting, "const ServersCfgServer *const line = Server();\n\n\t\tif (!line)\n\t\t{\n\t\t\treturn false;\n\t\t}") && Has(starting, "Shared *made = NewServer(*line);") &&
 		Has(making, "L\"%u.%u.%u.%u\", (line.address >> 24) & 0xFFu,") && Has(making, "made->port = static_cast<INTERNET_PORT>(line.listPort);") &&
 		Has(making, "made->relayPort = line.relayPort;") && Has(making, "memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));") &&
 		Has(making, "made->keyState = kKeyNotChecked;") && CountOf(source, "new (std::nothrow) Shared") == 1,
