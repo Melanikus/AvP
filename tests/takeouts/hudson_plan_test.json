@@ -10552,8 +10552,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "MenuFrameForARun(asAsked ? \"server-yes.png\" : NULL);",
-					"to": "MenuFrameForARun(NULL);"
+					"from": "\t\t\t\tsnprintf(picture, sizeof(picture), \"server-yes-%d.png\", place + 1);\n\t\t\t\tMenuFrameForARun(picture);\n",
+					"to": ""
 				}
 			]
 		},

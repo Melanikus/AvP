@@ -1,0 +1,88 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the yes doesn't come first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (lineState == kRelayLineNoYes)\n\t{\n\t\treturn kOnlinePageSaysNoYes;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an access state the page doesn't know is called approved",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (access != kRelayAccessIsApproved)\n\t{\n\t\treturn kOnlinePageSaysNotAsked;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused line can be asked again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (says == kOnlinePageSaysAsking || says == kOnlinePageSaysRefused)\n",
+					"to": "\tif (says == kOnlinePageSaysAsking)\n"
+				}
+			]
+		},
+		{
+			"name": "a line is asked twice in a minute",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tif (askedThisRun && static_cast<uint32_t>(now - lastAskedAt) < kOnlinePageAskEveryMs)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the screenful doesn't follow the chosen line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tview.first = (place / kOnlinePageMostShown) * kOnlinePageMostShown;\n",
+					"to": "\tview.first = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a waiting line doesn't name the code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%s%s%s\", before, code ? code : \"\", after);\n",
+					"to": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n"
+				}
+			]
+		},
+		{
+			"name": "a line longer than its room isn't ended",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n\t}\n\n\tout[room - 1] = 0;\n",
+					"to": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n\t}\n\n"
+				}
+			]
+		},
+		{
+			"name": "a refused line shows no number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page_rules.h",
+					"from": "\tsnprintf(out, room, \"%s %d: %s\", lineWords ? lineWords : \"\", lineNumber, why ? why : \"\");\n",
+					"to": "\tsnprintf(out, room, \"%s: %s\", lineWords ? lineWords : \"\", why ? why : \"\");\n"
+				}
+			]
+		}
+	]
+}

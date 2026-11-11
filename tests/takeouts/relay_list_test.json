@@ -1466,22 +1466,22 @@
 			]
 		},
 		{
-			"name": "SOURCE: a player's game has no server",
+			"name": "SOURCE: the one server's name comes back",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\treturn line ? line->name : \"\";",
-					"to": "\treturn \"\";"
+					"from": "bool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{",
+					"to": "const char *Relay_ServerName(void)\n{\n\treturn \"\";\n}\n\nbool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: the relay is known before the server is checked",
+			"name": "SOURCE: the one server's relay comes back",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "bool const known = shared->keyState == kKeyGood;",
-					"to": "bool const known = true;"
+					"from": "bool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{",
+					"to": "bool RelayList_Relays(RelayListRelay *relays, int *count)\n{\n\treturn false;\n}\n\nbool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{"
 				}
 			]
 		},
@@ -1552,26 +1552,6 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\t\t\treturn CantUse(s, kSaidNo);",
 					"to": "\t\t\treturn kSaidNo;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a server whose keys didn't match can be used",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\tstate = kRelayServerCantUse;\n\t\t*why = kKeysDontMatch;",
-					"to": "\t\tstate = kRelayServerGood;\n\t\t*why = kKeysDontMatch;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a server whose check ended without an answer is still being asked",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\telse if (shared->serverWhy)\n\t{\n\t\tstate = kRelayServerCantUse;",
-					"to": "\telse if (false)\n\t{\n\t\tstate = kRelayServerCantUse;"
 				}
 			]
 		},
@@ -1750,8 +1730,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (line && !TheLineIsAgreed(*line))",
-					"to": "\tif (false)"
+					"from": "\tif (!TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;",
+					"to": "\tif (false)\n\t{\n\t\tout->state = kRelayLineNoYes;"
 				}
 			]
 		},
@@ -1840,8 +1820,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "if (line && !TheLineIsAgreed(*line))",
-					"to": "if (line && !theServer.pickNow.there && !TheLineIsAgreed(*line))"
+					"from": "\tif (!TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;",
+					"to": "\tif (!theServer.pickNow.there && !TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;"
 				}
 			]
 		},

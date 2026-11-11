@@ -2420,7 +2420,7 @@ bool RelayList_ForgetAccess(void)
 		return false;
 	}
 
-	hostChoice = -1;
+	RelayList_HostOn(-1);   // the one way the choice is cleared
 	return true;
 }
 

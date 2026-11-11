@@ -160,62 +160,42 @@ static void TestTheWiring()
 		"the words are PO's, in langenum.h's order");
 }
 
-// THE WAYS ONLINE (PO's rulings, 2026-11-10): the yes is asked as a way's row is pressed, never as a page opens; a host asks only when
-// it hosts online; after a No, Find games goes on to its page with this network's games only, the others back to the Multiplayer page,
-// and nothing goes to the server. The rules are tried here; how the menus use them is read in the code. Added 2026-11-10 by Melanikus for
-// the AvP port.
-static void TestTheWaysOnline()
+// THE ONE WAY IN (modified 2026-11-11 by Melanikus for the AvP port, one model for every line; the owner: "UNIFY THE UI"): the yes is
+// asked on a line's own row of the Online page, for that line, and nowhere else. No other row asks for "the" line's yes: Find games and
+// the host page show a line without its yes as just that, and send it nothing. It was "the ways online" (2026-11-10), the three rows that
+// asked for the one line's yes, which went with the line "in use" (REMOVED-CODE.md). Read in the code, as it needs the whole game.
+static void TestTheOneWayIn()
 {
-	printf("4. the ways online: which ask, and where a No goes\n");
-	Check(ServerYes_WayAsks(kServerYesWayAccess, false) && ServerYes_WayAsks(kServerYesWayAccess, true),
-		"the Online access page always asks: it would send the request to the server");
-	Check(ServerYes_WayAsks(kServerYesWayFindGames, false) && ServerYes_WayAsks(kServerYesWayFindGames, true),
-		"Find games always asks: it would read the server's list");
-	Check(ServerYes_WayAsks(kServerYesWayHost, true) && !ServerYes_WayAsks(kServerYesWayHost, false),
-		"a host asks only when it hosts online, which is whenever servers.cfg names a server: with none, nothing is hosted");
-	Check(!ServerYes_WayAsks(kServerYesNotAWay, true) && !ServerYes_WayAsks(kServerYesNotAWay, false), "any other row never asks");
-
+	printf("4. the one way in: a line's own row on the Online page\n");
 	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
 	std::string const page = ReadSource("3dc/avp/win95/frontend/server_yes_page.cpp");
-	std::string const data = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const online = ReadSource("3dc/avp/win95/frontend/online_page.cpp");
+	std::string const rules = ReadSource("3dc/avp/win95/frontend/server_yes_rules.h");
 	std::string const list = ReadSource("3dc/relay_list.cpp");
-	Check(menus.size() > 1000 && page.size() > 1000 && data.size() > 1000 && list.size() > 1000, "the menus', the page's, the rows' and the list's sources were found and read");
+	Check(menus.size() > 1000 && page.size() > 1000 && online.size() > 1000 && rules.size() > 100 && list.size() > 1000,
+		"the menus', the page's, the Online page's, the rules' and the list's sources were found and read");
 
-	// Which rows are the ways: by the page they're on and the page they go to
-	std::string const wayOf = SourceSlice(page, "static ServerYesWay WayOf(enum AVPMENU_ID from, enum AVPMENU_ID goTo)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)\n\t{\n\t\treturn kServerYesWayAccess;"),
-		"the Multiplayer page's row to Online access is a way online");
-	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST))\n\t{\n\t\treturn kServerYesWayHost;"),
-		"so are its two host rows, Start game and Co-op campaign");
-	Check(Has(wayOf, "if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)\n\t{\n\t\treturn kServerYesWayFindGames;"),
-		"and the Join game page's Find games");
-	Check(Has(data, "static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_ACCESS_ROW},\t{AVPMENU_ONLINE_ACCESS},") &&
-		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_MULTIPLAYER_STARTGAME},\t{AVPMENU_MULTIPLAYER_CONFIG},") &&
-		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},") &&
-		Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t\t{TEXTSTRING_MULTIPLAYER_FINDGAMES},\t{AVPMENU_MULTIPLAYERSELECTSESSION},"),
-		"each of those rows is a row that goes to its page, so its press goes through the yes");
+	// The Online page opens the yes page for the line pressed, when that line's row says it has no yes, and nothing else does
+	std::string const pressed = SourceSlice(online, "bool OnlineLines_Pressed(int row, enum AVPMENU_ID *page)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const openTheYes = SourceSlice(pressed, "case kOnlinePageOpenTheYes:", "case kOnlinePageAsk:", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(openTheYes, "if (ServerYesPage_OpenFor(place))\n\t\t\t\t{\n\t\t\t\t\t*page = AVPMENU_SERVER_YES;\n\t\t\t\t\treturn true;") &&
+		CountOf(online, "ServerYesPage_OpenFor(") == 1 && CountOf(menus, "ServerYesPage_OpenFor(") == 0,
+		"a line's row opens the yes page for that line, and that's the one place it's opened");
 
-	std::string const wayIn = SourceSlice(page, "enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline)", "\n}\n",
-		kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(wayIn, "if (!ServerYes_WayAsks(way, hostsOnline))\n\t{\n\t\treturn goTo;") &&
-		Has(wayIn, "return ServerYesPage_Needed(goTo, AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;") && !Has(page, "NoGoesOn"),
-		"a way that asks opens the yes page in its page's place, while the line needs it; after a No, every way goes back to the Multiplayer page");
-
-	// The menus: every row that goes to a page goes through it, as it's pressed, with whether a host would host online
+	// No row anywhere else asks: a row that goes to a page goes there
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const pressedWayIn = pressing.find("enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());");
-	Check(pressedWayIn != std::string::npos && pressedWayIn < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1,
-		"a pressed row goes to its page only through the yes, and no other way");
-	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(online, "return RelayList_HostLine() >= 0;"),
+	size_t const goes = pressing.find("enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);");
+	Check(goes != std::string::npos && goes < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1 &&
+		!Has(menus, "ServerYesPage_WayIn") && !Has(page, "ServerYesPage_WayIn") && !Has(page, "ServerYesPage_Needed") && !Has(rules, "ServerYes_WayAsks"),
+		"a pressed row goes to its page, and no row asks for a yes on the way: the ways online are gone");
+	std::string const hostsOnline = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(hostsOnline, "return RelayList_HostLine() >= 0;"),
 		"a host hosts online on the line the player chose on the Host on row, and with none chosen, nothing is hosted (modified 2026-11-11)");
-	Check(CountOf(menus, "ServerYesPage_WayIn(") == 1 && CountOf(menus, "ServerYesPage_Needed(") == 0,
-		"the menus ask in that one place, never as a page opens");
 
-	// After a No nothing goes to the server: the No tells the list nothing (section 3). Modified 2026-11-11 by Melanikus for the AvP port
-	// (one model for every line): the list's thread may run for other lines, but its own state has no server until the line in use has its
-	// yes, and every call refuses a state with none (relay_list_test reads each line's own gate).
+	// After a No nothing goes to that line's server: the No tells the list nothing (section 3), and every way of asking a line asks its yes
+	// first (relay_list_test reads each). The list's own state has no server until a line has its yes, and every call refuses a state with
+	// none.
 	std::string const starting = SourceSlice(list, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const noLine = starting.find("if (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}");
 	size_t const thread = starting.find("CreateThread(");
@@ -247,11 +227,11 @@ static void TestEveryHostIsOnline()
 	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int hostOnCount)", "\n}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	size_t const nameRow = setter.find("= PlayerNameRow;");
-	size_t const serversRow = setter.find("= ServersRow;");
+	size_t const serversRow = setter.find("= OnlineRow;");
 	size_t const hostOnRow = setter.find("\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row++] = HostOnRow;\n\t}");
 	Check(nameRow != std::string::npos && serversRow != std::string::npos && hostOnRow != std::string::npos && nameRow < serversRow &&
 		serversRow < hostOnRow && hostOnRow < setter.find("= StartGameRow;"),
-		"the Multiplayer page goes from the player's name and the Servers row to the Host on row, just above the rows that host (2026-11-11)");
+		"the Multiplayer page goes from the player's name and the Online row to the Host on row, just above the rows that host (2026-11-11)");
 
 	// THE HOST ON ROW (the owner's rulings, 2026-11-11: "they will choose their friends' server", "No auto choice, they choose")
 	Check(Has(data, "int MP_HostOnChoice = 0;") && Has(data, "static AVPMENU_ELEMENT const HostOnRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_HOSTON},\t{0},\t{&MP_HostOnChoice},\t{0},\tTEXTSTRING_MULTIPLAYER_HOSTON_HELP};") &&
@@ -278,7 +258,7 @@ static void TestEveryHostIsOnline()
 	std::string const press = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const refusedHere = press.find("if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&");
-	Check(refusedHere != std::string::npos && refusedHere < press.find("ServerYesPage_WayIn(") &&
+	Check(refusedHere != std::string::npos && refusedHere < press.find("SetupNewMenu(page);") &&
 		Has(press, "ShowTheHostLine(AVPMENU_MULTIPLAYER, GetTextString(TEXTSTRING_HOSTON_CHOOSE_FIRST));"),
 		"NOTHING HOSTS WITHOUT A CHOICE: Start game and Co-op campaign with the row on \"choose a server\" open nothing, and say so");
 
@@ -458,7 +438,7 @@ int main()
 	TestTheRows();
 	TestTheLines();
 	TestTheWiring();
-	TestTheWaysOnline();
+	TestTheOneWayIn();
 	TestEveryHostIsOnline();
 	TestTheHostsWait();
 	TestTheLayout();
