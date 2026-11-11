@@ -286,12 +286,6 @@ namespace
 	const char *const kTrustIsALink = "servers-trusted.cfg is a link, and the game only ever writes a plain file";
 	const char *const kTrustCantRead = "servers-trusted.cfg couldn't be read";
 
-	// And the pick's (#175 2b)
-	const wchar_t *const kPickFileName = L"servers-picked.cfg";
-	const wchar_t *const kPickSecondCopyFileName = L"servers-picked-second-copy.cfg";
-	const char *const kPickNotThisUsers = "servers-picked.cfg isn't owned by this Windows user, so it may not be theirs";
-	const char *const kPickIsALink = "servers-picked.cfg is a link, and the game only ever writes a plain file";
-	const char *const kPickCantRead = "servers-picked.cfg couldn't be read";
 }
 
 const wchar_t *NetIdentityStore_FileName(bool hudsonRun, bool secondCopy)
@@ -608,78 +602,4 @@ NetTrustStoreResult NetIdentityStore_LoadTrust(ServersTrustYeses *out, const cha
 bool NetIdentityStore_KeepTrust(const ServersTrustYeses &yeses)
 {
 	return !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepTrustTo(KeptPath(NetIdentityStore_TrustFileName(SaveFolder_IsTheSecondCopy()), true).c_str(), yeses);
-}
-
-// ---- The player's pick of a servers.cfg line (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see net_identity_store.h. The
-// same reading and writing as the yeses', with the pick's own rules (servers_trust.h) for what's inside.
-
-const wchar_t *NetIdentityStore_PickFileName(bool secondCopy)
-{
-	return secondCopy ? kPickSecondCopyFileName : kPickFileName;
-}
-
-NetTrustStoreResult NetIdentityStore_LoadPickFrom(const wchar_t *path, ServersTrustPick *out, const char **why)
-{
-	const char *unused = NULL;
-	const char **const said = why ? why : &unused;
-	*said = NULL;
-
-	if (!out)
-	{
-		return kNetTrustStoreCantRead;
-	}
-
-	out->there = false;
-	memset(out->hash, 0, sizeof(out->hash));
-	KeptHashesWords const words = { kPickNotThisUsers, kPickIsALink, kPickCantRead };
-	size_t size = 0;
-	NetTrustStoreResult const kept = ReadKeptHashes(path, words, &size, said);
-
-	if (kept != kNetTrustStoreRead)
-	{
-		return kept;
-	}
-
-	return TextRead(ServersTrust_ReadPick(reinterpret_cast<const char *>(keptText), size, out, NULL), said);
-}
-
-bool NetIdentityStore_KeepPickTo(const wchar_t *path, const uint8_t hash[kServersTrustHashBytes])
-{
-	if (!path || !path[0] || !hash)
-	{
-		return false;
-	}
-
-	char text[512];
-	size_t const size = ServersTrust_WritePick(hash, text, sizeof(text));
-
-	if (size == 0)
-	{
-		return false;
-	}
-
-	// Written whole under a name of its own, made sure of on the disk, then put in place of the old one in a single step
-	return KeepWholeFile(path, reinterpret_cast<const uint8_t *>(text), size);
-}
-
-NetTrustStoreResult NetIdentityStore_LoadPick(ServersTrustPick *out, const char **why)
-{
-	// A Hudson run reads no pick, as it reads no yes: its servers.cfg is its own copy's
-	if (SaveFolder_IsAHudsonRun())
-	{
-		if (out)
-		{
-			out->there = false;
-			memset(out->hash, 0, sizeof(out->hash));
-		}
-
-		return kNetTrustStoreNoFile;
-	}
-
-	return NetIdentityStore_LoadPickFrom(KeptPath(NetIdentityStore_PickFileName(SaveFolder_IsTheSecondCopy()), false).c_str(), out, why);
-}
-
-bool NetIdentityStore_KeepPick(const uint8_t hash[kServersTrustHashBytes])
-{
-	return !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepPickTo(KeptPath(NetIdentityStore_PickFileName(SaveFolder_IsTheSecondCopy()), true).c_str(), hash);
 }

@@ -1819,40 +1819,36 @@ static void TestTheShippedServers()
 // so it's read in the code.
 static void TestTheServerLists()
 {
-	puts("23. every servers.cfg line on the pages, and the player's pick (by reading the source)");
+	puts("23. every servers.cfg line on the pages, and no pick (by reading the source)");
 	std::string const source = ReadSource("3dc/relay_list.cpp");
 	Check(source.size() > 50000, "relay_list.cpp was found and read");
 
-	// The pick is read once a run, when servers.cfg is, and chooses among the good lines alone
+	// Modified 2026-11-11 by Melanikus for the AvP port (R-SRV-4: "every pick goes"): no pick is read, and the line the list's own state is
+	// made from is the first good line, chosen by nothing; nothing is ever sent through that state (every call is a line's own visit)
 	std::string const server = SourceSlice(source, "const ServersCfgServer *Server(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const once = server.find("if (!theServer.read)");
-	size_t const pickRead = server.find("NetTrustStoreResult const picked = NetIdentityStore_LoadPick(&theServer.pickNow, &why);");
-	size_t const chosen = server.find("theServer.inUse = ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);");
-	Check(once != std::string::npos && pickRead != std::string::npos && chosen != std::string::npos && once < pickRead && pickRead < chosen &&
-		CountOf(source, "NetIdentityStore_LoadPick(") == 1, "the pick is read once a run, as servers.cfg is, and the line is chosen from it among the good lines");
+	size_t const first = server.find("theServer.inUse = theFile.serverCount > 0 ? 0 : -1;");
+	Check(once != std::string::npos && first != std::string::npos && once < first && !Has(source, "Pick") && !Has(source, "pickNow"),
+		"no pick is read: the list's own state is made from the first good line, set once a run, as servers.cfg is read");
 	Check(Has(server, "theServer.hashed[i] = LineHash(theFile.servers[i], theServer.hashes[i]);"),
-		"each good line's hash is the one its yes is, so a pick names a line as exactly as a yes does");
+		"each good line's hash is the one its yes is");
 
+	// The line in use is set there alone, never anywhere else
 	// The line in use is set there alone, so a pick made while the game runs is for the next start: never this run's server
 	Check(CountOf(source, "theServer.line =") == 1 && CountOf(server, "theServer.line =") == 1 && CountOf(source, "theServer.inUse =") == 2 &&
 		CountOf(server, "theServer.inUse =") == 2 && CountOf(source, "theServer.there =") == 1 && CountOf(server, "theServer.there =") == 1,
 		"the line in use is set once, when servers.cfg is read, and never anywhere else");
-	std::string const picking = SourceSlice(source, "bool RelayList_PickLine(int place)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(picking, "if (!NetIdentityStore_KeepPick(theServer.hashes[place]))") && Has(picking, "theServer.pickNow.there = true;") &&
-		picking.find("NetIdentityStore_KeepPick(") < picking.find("theServer.pickNow.there = true;"),
-		"a pick is kept for the next start, and counts as the pick only once it's kept");
 
-	// A picked line still needs its yes (PO's ruling): the pick is never asked where the yes is
+	// Every line needs its own yes: the gate, the yes and the page that asks for it never look at anything else
 	std::string const starting = SourceSlice(source, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const toAgree = SourceSlice(source, "bool RelayList_LineToAgreeAt(int place, RelayListLineToAgree *out)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(starting, "bool const lineAgreed = TheLineIsAgreed(*line);") && !Has(starting, "pick") &&
-		!Has(agreed, "pick") && !Has(toAgree, "pick") && !Has(picking, "ServersTrust_Add") && !Has(picking, "KeepTrust"),
-		"a picked line needs its yes like any line: the gate, the yes and the page that asks for it never look at the pick, and a pick adds no yes");
+	Check(Has(starting, "bool const lineAgreed = TheLineIsAgreed(*line);") && !Has(starting, "pick") && !Has(agreed, "pick") && !Has(toAgree, "pick"),
+		"every line needs its own yes: the gate, the yes and the page that asks for it look at nothing but the line");
 
 	// The lists only read what servers.cfg said: nothing starts the list, wakes it, or calls anything
-	char const *const lists[] = { "int RelayList_LineCount(void)", "bool RelayList_LineAt(int place, RelayListLineShown *out)", "int RelayList_RefusedLineCount(void)",
-		"bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words)", "const char *RelayList_FileWords(void)", "bool RelayList_PickLine(int place)" };
+	char const *const lists[] = { "int RelayList_LineCount(void)", "int RelayList_RefusedLineCount(void)",
+		"bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words)", "const char *RelayList_FileWords(void)" };
 	bool noneContacts = true;
 
 	for (size_t i = 0; i < sizeof(lists) / sizeof(lists[0]); i++)
@@ -1861,14 +1857,8 @@ static void TestTheServerLists()
 		noneContacts = noneContacts && body.size() > 20 && !Has(body, "Start()") && !Has(body, "Wake()") && !Has(body, "Call(") && !Has(body, "shared");
 	}
 
-	Check(noneContacts, "the server lists and the pick contact nothing and start nothing");
+	Check(noneContacts, "the server lists contact nothing and start nothing");
 
-	std::string const shown = SourceSlice(source, "bool RelayList_LineAt(int place, RelayListLineShown *out)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(shown, "if (place < 0 || place >= theFile.serverCount)") && Has(shown, "if (!ShowTheLine(&line, &out->line))") &&
-		Has(shown, "out->inUse = place == theServer.inUse;") &&
-		Has(shown, "out->nextStart = place == ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);") &&
-		Has(shown, "out->agreed = TheLineIsAgreed(line);"),
-		"a line is shown only from the good lines, as the yes page shows one, with the line in use, the next start's, and its yes");
 	std::string const refused = SourceSlice(source, "bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words)", "\n}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(refused, "if (!lineNumber || !words || place < 0 || place >= theFile.refusedCount)") &&

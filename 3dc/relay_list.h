@@ -66,28 +66,15 @@ struct RelayListLineToAgree
 	char keyEnd[9];                           // person can hold against what the server's owner gave out
 };
 
-// ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port. For the Online page
-// and the Find games page: every good line, so the player sees the servers they have and picks one, and every refused line by its number,
+// ---- Every servers.cfg line (#175 2b). Added 2026-11-10 by Melanikus for the AvP port. For the Online page and the Find games page: how
+// many good lines there are (each one's own state is RelayList_LineNow, below), and every refused line by its number,
 // so someone following an instruction can see what to fix. Only the main thread calls these, and none of them contacts anything: they
 // read what servers.cfg said when it was read, once a run (relay_list.cpp, Server).
-// THE PICK is kept in servers-picked.cfg (net_identity_store.h) as the line's hash, the same 64 hex digits as its yes (servers_trust.h):
-// it can only choose among the lines servers.cfg has, it can't add a server, and it isn't an address. It's used from the next start of
-// the game, never halfway through a run: the line in use for this run stays in use until the game starts again. A picked line still
-// needs its yes before anything goes to it, as any line does. A Hudson run reads and keeps no pick.
+// (THE PICK, the player's choice of one line for the next start, went 2026-11-11: no line is "in use", every line is reached by its own
+// place, and the host chooses where to host on the host page. REMOVED-CODE.md has the row.)
 
-// One good line, as the pages show it
-struct RelayListLineShown
-{
-	RelayListLineToAgree line;   // its name, address, where it is and its key's two ends, as the yes page shows them
-	int lineNumber;              // its number in servers.cfg, counted from 1, as an editor shows it
-	bool inUse;                  // the line this run uses
-	bool nextStart;              // the line the next start will use: the player's pick, or the first good line when there's none
-	bool agreed;                 // the player has said yes to it (a Hudson run's always has)
-};
-
-// How many good lines there are (0 to 64), in the file's order, and one of them. False, with out wiped, for a place out of range.
+// How many good lines there are (0 to 64), in the file's order
 int RelayList_LineCount(void);
-bool RelayList_LineAt(int place, RelayListLineShown *out);
 
 // How many lines were refused, and one of them: its number in servers.cfg, and the game's own words for why (servers_cfg.h,
 // ServersCfg_LineWords), never anything from the line. False, with lineNumber 0 and words NULL, for a place out of range.
@@ -98,10 +85,6 @@ bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words);
 // refused whole (too big, too many lines). NULL when the file was read, whatever its lines said.
 const char *RelayList_FileWords(void);
 
-// The player picks a good line, for the next start. True when the pick is kept. False, with nothing changed, for a place out of range, in
-// a Hudson run, or when servers-picked.cfg couldn't be written (the log says which).
-bool RelayList_PickLine(int place);
-
 // Hudson's yespage= (hudson_plan.h), called only from Hudson's own files: from now on, this Hudson run's line needs its own Yes on the yes
 // page, as a player's does, before the list starts. That yes is held for the run alone (RelayList_AgreeToTheLineAt). Added 2026-11-10 by
 // Melanikus (Third) for the AvP port.
@@ -109,22 +92,17 @@ void HudsonTest_RelayListShowsTheYesPage(void);
 
 // ---- Finding games. The menus call these.
 
-// Asks the list for the games of this version of the game. The answer comes a moment later, through RelayList_FoundGames.
+// Asks the list for the games of this version of the game. The answers come a moment later.
 // Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: Find games lists every server servers.cfg names, "all servers go
 // through the same pipeline"): it asks every good line the player has said yes to, one after another, in the file's order, each a visit
 // of its own (relay_list.cpp, THE VISITS). A line without the yes isn't asked: nothing goes to its server. The answers come through
-// RelayList_FoundAllGames and RelayList_LineGamesState once every visit has ended, and the line in use's through RelayList_FoundGames too.
+// RelayList_FoundAllGames and RelayList_LineNow once every visit has ended.
 void RelayList_FindGames(void);
-
-// Once for each answer: true, with the games, newest first (games has room for kRelayListMostGames). An answer that failed is true with
-// no games, and why says why in words for the page, fixed words of the game's own, never the list's. False while there's no new answer.
-// These are the line in use's alone, the server a game is hosted on and joined through (relay_auto.cpp and the joins use these).
-bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 
 // ---- Every agreed line's games (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling). For the page of games found.
 
-// One game, and the good line it was listed on: its place among the good lines, as RelayList_LineAt numbers them. The page names the
-// server by that line (RelayList_LineAt's line.name, made safe), never by anything the server sent. A game is joined through its own line
+// One game, and the good line it was listed on: its place among the good lines, as RelayList_LineNow numbers them. The page names the
+// server by that line (RelayList_LineNow's line.name, made safe), never by anything the server sent. A game is joined through its own line
 // (RelayList_RelayOf and RelayList_AskForRelayKeysOn with that place; modified 2026-11-11, one model for every line), once the player's
 // access on that line is approved.
 struct RelayListServerGame
@@ -139,11 +117,6 @@ int const kRelayListMostAllGames = kRelayListMostVisits * kRelayListMostGames;  
 // Once for each find, after every visit has ended: true, with every agreed line's games, each tagged with its line, in the lines' order
 // and each line's newest first. games has room for kRelayListMostAllGames. False while there's no new answer.
 bool RelayList_FoundAllGames(RelayListServerGame *games, int *count);
-
-// How a good line stands after the last find (place: as RelayList_LineAt numbers them), and why, in the game's own fixed words, when
-// it's kRelayLineNoAnswer. Asking means no find has ended since it was asked, or none has been asked. (The states, kRelayLine..., are in
-// relay_list_text.h.)
-int RelayList_LineGamesState(int place, const char **why);
 
 // ---- ONE MODEL FOR EVERY LINE. Added 2026-11-11 by Melanikus for the AvP port (PO's design from the owner's rulings of that day: "They
 // don't PICK a server, all authorized ones show up", "UNIFY THE UI", "they will choose their friends' server, not least ping", "No auto

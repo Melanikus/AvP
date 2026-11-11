@@ -24,13 +24,7 @@
 //   - the lines are split at each newline and nowhere else. A carriage return just before a newline is taken, as Notepad writes one;
 //     anywhere else it's a bad line, and so is any byte that isn't a printable character;
 //   - the last line must end with its newline, as the game writes it, so a file cut short is never half read.
-//
-// THE PICK, servers-picked.cfg (#175 2b; added 2026-11-10 by Melanikus for the AvP port). Which servers.cfg line the player picked, for
-// the next start of the game: the same hash as that line's yes, kept in a file of its own, so a pick can never stand in for a yes, and a
-// pick file someone spoiled costs only the pick. Notes and at most one line "pick " and the hash, with the same rules as the yeses' file;
-// a second pick refuses the file. A file refused, or none, means no pick, and the game uses the first good line, as it did before there
-// was a pick. A pick no good line has now (the line was changed or taken out) is the same as none. It holds a hash only, so it can never
-// add a server, and it's never an address.
+
 
 #ifndef SERVERS_TRUST_H
 #define SERVERS_TRUST_H
@@ -61,8 +55,7 @@ enum ServersTrustRefusal
 	kServersTrustTooBig,        // over kServersTrustMostBytes
 	kServersTrustBadLine,       // a line that isn't a note or a yes in its shape, or a last line with no newline
 	kServersTrustTooMany,       // over kServersTrustMostYeses
-	kServersTrustTwice,         // the same yes twice, which the game never writes
-	kServersTrustTwoPicks       // servers-picked.cfg: more than one pick, which the game never writes (added 2026-11-10, #175 2b)
+	kServersTrustTwice          // the same yes twice, which the game never writes
 };
 
 // What a yes is the hash of, for one line: its address (its first number in the highest byte, as servers_cfg.h keeps it), its two ports
@@ -86,27 +79,5 @@ size_t ServersTrust_Write(const ServersTrustYeses &yeses, char *out, size_t room
 
 // The words for a refusal, for the log: the game's own, never anything from the file
 const char *ServersTrust_Words(ServersTrustRefusal why);
-
-// ---- The pick (#175 2b; THE PICK, above). Added 2026-11-10 by Melanikus for the AvP port.
-
-#define SERVERS_PICK_FILE_NAME "servers-picked.cfg"
-
-struct ServersTrustPick
-{
-	bool there;                              // false: no pick, so the first good line
-	uint8_t hash[kServersTrustHashBytes];   // the picked line's hash, when there is one
-};
-
-// Reads servers-picked.cfg's text, as ServersTrust_Read does the yeses'. out is a pick only for kServersTrustRead with a pick line in the
-// file; for every refusal it holds none. A second pick line is kServersTrustTwoPicks.
-ServersTrustRefusal ServersTrust_ReadPick(const char *text, size_t bytes, ServersTrustPick *out, int *badLine);
-
-// The pick file's whole text for this hash, as the game writes it, into out (room bytes, no 0 at the end). Its size, or 0 if room is too
-// small or there's no hash (then nothing should be written).
-size_t ServersTrust_WritePick(const uint8_t hash[kServersTrustHashBytes], char *out, size_t room);
-
-// Which good line a run uses, from 0: the one whose hash is the pick, or else the first. -1 when there are none. hashes holds each good
-// line's hash, in the file's order, and hashed says whether it could be worked out: a line whose hash couldn't be is never the pick's.
-int ServersTrust_LineToUse(const uint8_t (*hashes)[kServersTrustHashBytes], const bool *hashed, int count, const ServersTrustPick &pick);
 
 #endif

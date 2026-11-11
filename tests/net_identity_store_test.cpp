@@ -73,8 +73,6 @@ bool SaveFolder_IsAHudsonRun()
 static const wchar_t *const kKept = L"net_identity_store_test.bin";
 static const wchar_t *const kTrustKept = L"net_identity_store_test_trusted.cfg";
 static const wchar_t *const kTrustLink = L"net_identity_store_test_trusted_link.cfg";
-static const wchar_t *const kPickKept = L"net_identity_store_test_picked.cfg";        // the pick's (#175 2b, added 2026-11-10)
-static const wchar_t *const kPickLink = L"net_identity_store_test_picked_link.cfg";
 static const wchar_t *const kMissing = L"net_identity_store_test_missing.bin";
 static const wchar_t *const kFolder = L"net_identity_store_test_folder";
 static const wchar_t *const kLink = L"net_identity_store_test_link.bin";
@@ -756,72 +754,7 @@ static void TestTheKeptYeses()
 	DeleteFileW(kTrustKept);
 }
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175 2b): the player's pick of a servers.cfg line, kept beside the yeses in a file of
-// its own, with the same reading and writing. What's in the file is servers_trust_test's; this tries the file itself.
-static void TestTheKeptPick()
-{
-	puts("The player's pick of a servers.cfg line, kept beside the yeses (#175 2b)");
-	DeleteFileW(kPickKept);
-	DeleteFileW(kPickLink);
-
-	uint8_t hash[kServersTrustHashBytes];
-	memset(hash, 0x5e, sizeof(hash));
-	ServersTrustPick read;
-	read.there = true;
-	const char *why = "not asked";
-	Check(NetIdentityStore_LoadPickFrom(kPickKept, &read, &why) == kNetTrustStoreNoFile && !read.there, "with none kept yet, there's no file and no pick");
-	Check(NetIdentityStore_KeepPickTo(kPickKept, hash), "a pick is kept");
-	Check(NetIdentityStore_LoadPickFrom(kPickKept, &read, &why) == kNetTrustStoreRead && read.there && memcmp(read.hash, hash, sizeof(hash)) == 0,
-		"and it reads back, the same");
-	Check(GetFileAttributesW((std::wstring(kPickKept) + L".new").c_str()) == INVALID_FILE_ATTRIBUTES, "and nothing is left under the new file's name");
-
-	memset(hash, 0x17, sizeof(hash));
-	Check(NetIdentityStore_KeepPickTo(kPickKept, hash) && NetIdentityStore_LoadPickFrom(kPickKept, &read, NULL) == kNetTrustStoreRead &&
-		read.there && read.hash[0] == 0x17, "another pick is kept in place of the old one, never beside it");
-	Check(!NetIdentityStore_KeepPickTo(kPickKept, NULL) && !NetIdentityStore_KeepPickTo(NULL, hash), "with no pick or no place, nothing is kept");
-
-	// A yes isn't a pick: the yeses' file, read as the pick's, is refused
-	ServersTrustYeses yeses;
-	yeses.count = 0;
-	ServersTrust_Add(&yeses, hash);
-	NetIdentityStore_KeepTrustTo(kPickKept, yeses);
-	read.there = true;
-	why = NULL;
-	Check(NetIdentityStore_LoadPickFrom(kPickKept, &read, &why) == kNetTrustStoreRefused && !read.there && why &&
-		strcmp(why, ServersTrust_Words(kServersTrustBadLine)) == 0, "a yes in the pick's place is refused, with no pick taken from it, saying why");
-
-	// A link at the file's place: refused as a link, never followed, in the pick's own words
-	NetIdentityStore_KeepPickTo(kPickKept, hash);
-	bool const linked = CreateSymbolicLinkW(kPickLink, kPickKept, kLinkUnprivileged) != FALSE;
-	Check(linked, "the test could make a link to the kept pick (GitHub's runner is an administrator, so it can)");
-	read.there = true;
-	why = NULL;
-	Check(linked && NetIdentityStore_LoadPickFrom(kPickLink, &read, &why) == kNetTrustStoreRefused && !read.there && why &&
-		strstr(why, "servers-picked.cfg is a link") != NULL, "a link at the file's place is refused as a link, in the pick's own words");
-	DeleteFileW(kPickLink);
-
-	Check(wcscmp(NetIdentityStore_PickFileName(false), L"servers-picked.cfg") == 0 &&
-		wcscmp(NetIdentityStore_PickFileName(true), L"servers-picked-second-copy.cfg") == 0, "the player's own file, and the second copy's");
-	Check(_wcsicmp(NetIdentityStore_PickFileName(false), NetIdentityStore_TrustFileName(false)) != 0 &&
-		_wcsicmp(NetIdentityStore_PickFileName(true), NetIdentityStore_TrustFileName(true)) != 0 &&
-		_wcsicmp(NetIdentityStore_PickFileName(false), NetIdentityStore_FileName(false, false)) != 0,
-		"neither is the yeses' file, nor the identity's: a pick never stands in for a yes");
-
-	// A Hudson run reads none and keeps none, before any file is looked for
-	hudsonRunStandIn = true;
-	read.there = true;
-	Check(NetIdentityStore_LoadPick(&read, NULL) == kNetTrustStoreNoFile && !read.there, "a Hudson run reads no pick");
-	Check(!NetIdentityStore_KeepPick(hash), "and keeps none");
-	hudsonRunStandIn = false;
-
-	std::string const store = ReadSource("3dc/net_identity_store.cpp");
-	Check(store.find("NetTrustStoreResult NetIdentityStore_LoadPick(ServersTrustPick *out, const char **why)\n{\n\t// A Hudson run reads no pick, as it reads no yes: "
-		"its servers.cfg is its own copy's\n\tif (SaveFolder_IsAHudsonRun())") != std::string::npos &&
-		store.find("\treturn !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepPickTo(") != std::string::npos,
-		"SOURCE: a Hudson run reads no pick and keeps none, before any file is looked for");
-
-	DeleteFileW(kPickKept);
-}
+// (The kept pick, servers-picked.cfg, went 2026-11-11 with the player's choice of a line, R-SRV-4: REMOVED-CODE.md has the row.)
 
 int main()
 {
@@ -834,12 +767,9 @@ int main()
 	TestTheSource();
 	TestTheFileNames();
 	TestTheKeptYeses();
-	TestTheKeptPick();
 
 	DeleteFileW(kTrustKept);
 	DeleteFileW(kTrustLink);
-	DeleteFileW(kPickKept);
-	DeleteFileW(kPickLink);
 	DeleteFileW(kKept);
 	DeleteFileW(kMissing);
 	DeleteFileW((std::wstring(kFolder) + L".new").c_str());

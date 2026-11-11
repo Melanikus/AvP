@@ -1826,56 +1826,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: a pick is used at once, halfway through the run",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\tmemcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);",
-					"to": "\tmemcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);\n\ttheServer.line = theFile.servers[place];\n\ttheServer.inUse = place;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the pick is never read",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "NetTrustStoreResult const picked = NetIdentityStore_LoadPick(&theServer.pickNow, &why);",
-					"to": "NetTrustStoreResult const picked = kNetTrustStoreNoFile;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the first good line is always used, whatever the pick",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "theServer.inUse = ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);",
-					"to": "theServer.inUse = theFile.serverCount > 0 ? 0 : -1;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a pick that couldn't be kept still counts as the pick",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\tif (!NetIdentityStore_KeepPick(theServer.hashes[place]))",
-					"to": "\ttheServer.pickNow.there = true;\n\tif (!NetIdentityStore_KeepPick(theServer.hashes[place]))"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a pick adds a yes",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\ttheServer.pickNow.there = true;",
-					"to": "\tServersTrust_Add(&yeses, theServer.hashes[place]);\n\ttheServer.pickNow.there = true;"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the server list starts the list",
 			"changes": [
 				{
@@ -1886,42 +1836,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the next start's line is said to be this run's",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "out->nextStart = place == ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);",
-					"to": "out->nextStart = place == theServer.inUse;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: every line is shown as having its yes",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "out->agreed = TheLineIsAgreed(line);",
-					"to": "out->agreed = true;"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a refused line's words are another line's",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
 					"from": "*words = ServersCfg_LineWords(theFile.refused[place].why);",
 					"to": "*words = ServersCfg_LineWords(theFile.refused[0].why);"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a line past the good ones is shown",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\tif (place < 0 || place >= theFile.serverCount)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line = theFile.servers[place];\n\n\tif (!ShowTheLine(&line, &out->line))\n\t{\n\t\tmemset(out, 0, sizeof(*out));\n\t\treturn false;\n\t}\n\n\tout->lineNumber = line.lineNumber;\n\tout->inUse",
-					"to": "\tif (place < 0)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line = theFile.servers[place];\n\n\tif (!ShowTheLine(&line, &out->line))\n\t{\n\t\tmemset(out, 0, sizeof(*out));\n\t\treturn false;\n\t}\n\n\tout->lineNumber = line.lineNumber;\n\tout->inUse"
 				}
 			]
 		},
@@ -2132,6 +2052,16 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "\tRelayList_FindGames();\n\treturn true;\n}\n\n// ---- Every servers.cfg line",
 					"to": "\treturn true;\n}\n\n// ---- Every servers.cfg line"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's own state is made from a line other than the first",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\ttheServer.inUse = theFile.serverCount > 0 ? 0 : -1;\n",
+					"to": "\t\t\ttheServer.inUse = theFile.serverCount > 1 ? 1 : -1;\n"
 				}
 			]
 		}

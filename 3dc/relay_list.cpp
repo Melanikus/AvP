@@ -69,13 +69,12 @@ static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStand
 // A level's name on the list is at most what the game's own session holds
 static_assert(kRelayListLevelLetters == kLevelNameSize - 1, "the list's level names are the game's own, kLevelNameSize - 1 long");
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175): the game's one server, a good line of servers.cfg (servers_cfg_file.h). Modified
-// the same day (#175 2b): the player's pick of a line, if it's one of the good lines, or else the first good line, as before there was a
-// pick (servers_trust.h, THE PICK).
+// Added 2026-11-10 by Melanikus for the AvP port (#175): servers.cfg's good lines (servers_cfg_file.h). The list's own state is made from
+// the first of them (Start); nothing is ever sent through that state, as every call is a visit of a line's own (modified 2026-11-11: the
+// player's pick of a line went, R-SRV-4).
 namespace
 {
-	// What a yes to a line is, and a pick of it: SHA-256 over servers_trust.h's 68 bytes. False if it couldn't be worked out, which counts
-	// as no yes, and as never the pick's line.
+	// What a yes to a line is: SHA-256 over servers_trust.h's 68 bytes. False if it couldn't be worked out, which counts as no yes.
 	bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])
 	{
 		uint8_t input[kServersTrustInputBytes];
@@ -85,22 +84,20 @@ namespace
 
 	// servers.cfg, read the first time the server is asked about and kept for the run, so a line changed while the game runs can't change
 	// the server halfway through a game. Every refusal goes to the log, with the line's number and the reader's own words, never the
-	// line's text. The pick is read at the same moment, once a run, so a pick made while the game runs is for the next start, never this
-	// one (#175 2b). Only the main thread reads or changes these.
+	// line's text. Only the main thread reads or changes these.
 	struct TheServer
 	{
 		bool read;
 		bool there;
 		ServersCfgServer line;
 		ServersCfgOpening opening;                                     // whether servers.cfg could be read at all (#175 2b)
-		int inUse;                                                     // which good line is this run's, from 0, or -1 for none
+		int inUse;                                                     // the good line the list's own state is made from: the first, or -1
 		uint8_t hashes[kServersCfgMostLines][kServersTrustHashBytes];  // each good line's hash, in the file's order
 		bool hashed[kServersCfgMostLines];                             // and whether it could be worked out
-		ServersTrustPick pickNow;                                      // the pick as kept now: the one read, or one made since
 	};
 
 	TheServer theServer = {};
-	ServersCfgFileRead theFile;   // what servers.cfg said, for the server lists (RelayList_LineAt and the rest)
+	ServersCfgFileRead theFile;   // what servers.cfg said, for every line (RelayList_LineNow and the rest)
 
 	// The line the player chose for the next room (RelayList_HostOn), and the line the open room is on: -1 for none. The room keeps its
 	// line for its whole life; a choice made while it's open is for the next one. Main thread only. Added 2026-11-11 by Melanikus for the
@@ -136,27 +133,15 @@ namespace
 				theServer.hashed[i] = LineHash(theFile.servers[i], theServer.hashes[i]);
 			}
 
-			// The player's pick, read as hostile: a file that can't be used counts as none, and so the first good line is used
-			const char *why = NULL;
-			NetTrustStoreResult const picked = NetIdentityStore_LoadPick(&theServer.pickNow, &why);
-
-			if (picked != kNetTrustStoreRead && picked != kNetTrustStoreNoFile)
-			{
-				LogString(std::string("Relay list: " SERVERS_PICK_FILE_NAME " isn't used, so the first good line is: ") + (why ? why : "it couldn't be read"));
-			}
-
-			theServer.inUse = ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);
+			theServer.inUse = theFile.serverCount > 0 ? 0 : -1;
 
 			if (theServer.inUse >= 0)
 			{
 				theServer.line = theFile.servers[theServer.inUse];
 				theServer.there = true;
-				bool const isThePick = theServer.pickNow.there && theServer.hashed[theServer.inUse] &&
-					memcmp(theServer.hashes[theServer.inUse], theServer.pickNow.hash, kServersTrustHashBytes) == 0;
 				char const *const where = theServer.line.place == kServersCfgOnTheInternet ? "" :
 					theServer.line.place == kServersCfgOnThisPC ? ", on this PC" : ", on this network";
-				LogString("Relay list: the server is " SERVERS_CFG_FILE_NAME " line " + std::to_string(theServer.line.lineNumber) + where +
-					(isThePick ? ", the player's pick" : ""));
+				LogString("Relay list: the list's own state is made from " SERVERS_CFG_FILE_NAME " line " + std::to_string(theServer.line.lineNumber) + where);
 			}
 		}
 
@@ -337,10 +322,6 @@ namespace
 
 		// Finding games: a call wanted, and an answer waiting for the main thread
 		bool findWanted;
-		bool answerReady;
-		RelayListGame games[kRelayListMostGames];
-		int count;
-		const char *why;
 
 		// Asking for online access: the request's body and the fingerprint its answer must be about (added 2026-11-09, server #24). The
 		// same for every line, as there's one identity (PO, 2026-11-11); which lines to ask, and their answers, are below, by line.
@@ -369,7 +350,6 @@ namespace
 		int visitCount;
 		ServersCfgServer visitLines[kRelayListMostVisits];
 		int visitPlaces[kRelayListMostVisits];
-		int visitInUse;
 		bool allReady;
 		RelayListServerGame allGames[kRelayListMostAllGames];
 		int allCount;
@@ -1095,7 +1075,6 @@ namespace
 		int places[kRelayListMostVisits];
 		EnterCriticalSection(&shared->lock);
 		int const count = shared->visitCount < 0 ? 0 : (shared->visitCount > kRelayListMostVisits ? kRelayListMostVisits : shared->visitCount);
-		int const inUse = shared->visitInUse;
 		memcpy(lines, shared->visitLines, sizeof(lines));
 		memcpy(places, shared->visitPlaces, sizeof(places));
 		LeaveCriticalSection(&shared->lock);
@@ -1143,15 +1122,6 @@ namespace
 				memcpy(shared->lineRegions[place], region, sizeof(region));
 			}
 
-			// The line in use's games are also its own answer, for joining (RelayList_FoundGames)
-			if (place >= 0 && place == inUse)
-			{
-				shared->count = why ? 0 : got;
-				memcpy(shared->games, visit->gamesRead, sizeof(RelayListGame) * static_cast<size_t>(shared->count));
-				shared->why = why;
-				shared->answerReady = true;
-			}
-
 			LeaveCriticalSection(&shared->lock);
 
 			if (visit)
@@ -1161,24 +1131,7 @@ namespace
 			}
 		}
 
-		// The line in use wasn't among them when it hasn't had its yes: its own answer still comes, with no games and why, so nothing that
-		// waits for it (RelayList_FoundGames) waits forever (added 2026-11-11)
-		bool inUseVisited = false;
-
-		for (int v = 0; v < count; v++)
-		{
-			inUseVisited = inUseVisited || places[v] == inUse;
-		}
-
 		EnterCriticalSection(&shared->lock);
-
-		if (!inUseVisited)
-		{
-			shared->count = 0;
-			shared->why = kLineNotAgreed;
-			shared->answerReady = true;
-		}
-
 		shared->allReady = true;
 		LeaveCriticalSection(&shared->lock);
 	}
@@ -1416,7 +1369,7 @@ namespace
 	ServersTrustYeses yeses;
 	bool yesesRead = false;
 
-	// (What a yes to a line is, LineHash, is with the server's own code at the top of this file, as the pick is worked out from it too.)
+	// (What a yes to a line is, LineHash, is with the server's own code at the top of this file.)
 
 	// A Hudson run's yes page (yespage=, hudson_plan.h; added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of
 	// beta.2's screens). A Hudson run's line is agreed without a yes, as nobody is there to answer, unless the run asks to see the yes page
@@ -1602,9 +1555,6 @@ namespace
 		SetEvent(shared->wake);
 		WriteTheNews();
 	}
-
-	// The page asked with no list to ask: its answer, which needs no thread
-	bool noListAnswerWaiting = false;
 
 	// This run's identity's whole id, from RelayList_HostIdentity, and whether one has been given. Only the main thread uses these.
 	uint8_t hostIdentity[kNetIdentityIdBytes];
@@ -1940,44 +1890,13 @@ bool RelayList_AgreeToTheLineAt(int place)
 	return true;
 }
 
-// ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see relay_list.h.
-// These only read what servers.cfg said when it was read (Server, at the top of this file), and the pick; nothing here contacts anything,
-// and nothing here changes the line this run uses.
+// ---- Every servers.cfg line (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see relay_list.h. These only read what
+// servers.cfg said when it was read (Server, at the top of this file); nothing here contacts anything.
 
 int RelayList_LineCount(void)
 {
 	Server();
 	return theFile.serverCount;
-}
-
-bool RelayList_LineAt(int place, RelayListLineShown *out)
-{
-	if (!out)
-	{
-		return false;
-	}
-
-	memset(out, 0, sizeof(*out));
-	Server();
-
-	if (place < 0 || place >= theFile.serverCount)
-	{
-		return false;
-	}
-
-	ServersCfgServer const &line = theFile.servers[place];
-
-	if (!ShowTheLine(&line, &out->line))
-	{
-		memset(out, 0, sizeof(*out));
-		return false;
-	}
-
-	out->lineNumber = line.lineNumber;
-	out->inUse = place == theServer.inUse;
-	out->nextStart = place == ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);
-	out->agreed = TheLineIsAgreed(line);
-	return true;
 }
 
 int RelayList_RefusedLineCount(void)
@@ -2023,34 +1942,6 @@ const char *RelayList_FileWords(void)
 	return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);
 }
 
-// The pick is kept for the next start. The line in use, theServer.line, is never changed here: it was set once, when servers.cfg was read,
-// and what the list's thread holds of it (its checked key, the relay's region and keys) stays with it until the game starts again.
-bool RelayList_PickLine(int place)
-{
-	Server();
-
-	if (place < 0 || place >= theFile.serverCount || !theServer.hashed[place])
-	{
-		return false;
-	}
-
-	std::string const which = SERVERS_CFG_FILE_NAME " line " + std::to_string(theFile.servers[place].lineNumber);
-
-	if (!NetIdentityStore_KeepPick(theServer.hashes[place]))
-	{
-		LogString("Relay list: the player picked " + which + ", but the pick couldn't be kept, so the next start uses the line it would have");
-		return false;
-	}
-
-	theServer.pickNow.there = true;
-	memcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);
-	LogString("Relay list: the player picked " + which + ", for the next start");
-	return true;
-}
-
-// yespage= (relay_list.h): Hudson's own switch, which only Hudson's files call (tools/check-hudson-asleep.ps1, rule 5), and only in a
-// run. Outside one it changes nothing, as TheLineIsAgreed reads it only for a Hudson run. Added 2026-11-10 by Melanikus (Third) for the
-// AvP port.
 void HudsonTest_RelayListShowsTheYesPage(void)
 {
 	hudsonRunShowsTheYesPage = true;
@@ -2060,7 +1951,6 @@ void RelayList_FindGames(void)
 {
 	if (!Start())
 	{
-		noListAnswerWaiting = true;
 		return;
 	}
 
@@ -2091,7 +1981,6 @@ void RelayList_FindGames(void)
 	shared->visitCount = visits;
 	memcpy(shared->visitLines, lines, sizeof(ServersCfgServer) * static_cast<size_t>(visits));
 	memcpy(shared->visitPlaces, places, sizeof(int) * static_cast<size_t>(visits));
-	shared->visitInUse = theServer.inUse;
 
 	for (int place = 0; place < count; place++)
 	{
@@ -2107,41 +1996,6 @@ void RelayList_FindGames(void)
 	Wake();
 }
 
-bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why)
-{
-	*count = 0;
-	*why = NULL;
-
-	if (noListAnswerWaiting)
-	{
-		noListAnswerWaiting = false;
-		*why = Server() ? kCantStart : kNoServer;
-		return true;
-	}
-
-	if (!shared)
-	{
-		return false;
-	}
-
-	WriteTheNews();
-
-	EnterCriticalSection(&shared->lock);
-	bool const ready = shared->answerReady;
-
-	if (ready)
-	{
-		shared->answerReady = false;
-		*count = shared->count;
-		*why = shared->why;
-		memcpy(games, shared->games, sizeof(RelayListGame) * static_cast<size_t>(shared->count));
-	}
-
-	LeaveCriticalSection(&shared->lock);
-	return ready;
-}
-
-// Added 2026-11-11 by Melanikus for the AvP port (THE VISITS): see relay_list.h
 bool RelayList_FoundAllGames(RelayListServerGame *games, int *count)
 {
 	*count = 0;
@@ -2165,38 +2019,6 @@ bool RelayList_FoundAllGames(RelayListServerGame *games, int *count)
 
 	LeaveCriticalSection(&shared->lock);
 	return ready;
-}
-
-int RelayList_LineGamesState(int place, const char **why)
-{
-	if (why)
-	{
-		*why = NULL;
-	}
-
-	Server();
-
-	if (place < 0 || place >= theFile.serverCount || place >= kServersCfgMostLines)
-	{
-		return kRelayLineNotAsked;
-	}
-
-	// Before any find, a line stands as it would be asked: by its yes
-	if (!shared)
-	{
-		return TheLineIsAgreed(theFile.servers[place]) ? kRelayLineAsking : kRelayLineNoYes;
-	}
-
-	EnterCriticalSection(&shared->lock);
-	int const state = shared->lineStates[place];
-
-	if (why)
-	{
-		*why = shared->lineWhys[place];
-	}
-
-	LeaveCriticalSection(&shared->lock);
-	return state;
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): see relay_list.h. Modified 2026-11-11 (one model for

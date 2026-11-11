@@ -108,22 +108,4 @@ bool NetIdentityStore_KeepTrustTo(const wchar_t *path, const ServersTrustYeses &
 NetTrustStoreResult NetIdentityStore_LoadTrust(ServersTrustYeses *out, const char **why);
 bool NetIdentityStore_KeepTrust(const ServersTrustYeses &yeses);
 
-// ---- THE PLAYER'S PICK of a servers.cfg line, for the next start (servers_trust.h, THE PICK). Added 2026-11-10 by Melanikus for the AvP
-// port (#175 2b). Kept exactly as the yeses are, beside them: %LOCALAPPDATA%\AVPx\servers-picked.cfg, or servers-picked-second-copy.cfg
-// for the second copy, read through one handle as hostile input and written whole. A file of its own, so a pick can never stand in for a
-// yes. A Hudson run reads none and keeps none. The answers are the yeses' (NetTrustStoreResult), meaning the same for the pick.
-
-const wchar_t *NetIdentityStore_PickFileName(bool secondCopy);
-
-// Reads the pick kept at path into out. out is a pick only for Read with a pick in the file; for every other answer it holds none. why is
-// as for the yeses.
-NetTrustStoreResult NetIdentityStore_LoadPickFrom(const wchar_t *path, ServersTrustPick *out, const char **why);
-
-// Keeps the pick (a line's hash) at path, whole, as KeepTrustTo keeps the yeses. False, with path as it was, if any of that was refused.
-bool NetIdentityStore_KeepPickTo(const wchar_t *path, const uint8_t hash[kServersTrustHashBytes]);
-
-// The same, at this PC's own file, which is what the game uses (relay_list.cpp). In a Hudson run, NoFile and false.
-NetTrustStoreResult NetIdentityStore_LoadPick(ServersTrustPick *out, const char **why);
-bool NetIdentityStore_KeepPick(const uint8_t hash[kServersTrustHashBytes]);
-
 #endif
