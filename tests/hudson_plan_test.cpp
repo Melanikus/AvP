@@ -1533,7 +1533,7 @@ static void TestTheRealGame()
 		Check(Has(runPair, "if ($FilmMenus) { $words += '-FilmMenus' }") && Has(runPair, "if ($PageHold -ne 0) { $words += @('-PageHold', \"$PageHold\") }"),
 			"SOURCE: and the pair gives both games the same");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
-		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
+		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"), "SOURCE: its first blow on him is noted, its own alien's");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
 	}
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (aliensMade < plan.combatAliens)"), "the next alien comes until there have been as many as were asked for");
@@ -2057,7 +2057,8 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($SiegeFar) { $words += @('-SiegeFar', $SiegeFar) }"), "and the pair passes it on");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "GLOBALASSERT(damage);\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "a blow on a whole thing is noted");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "frag=NULL;\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "and so is a blow on a part of one");
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a siege");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;")
+		&& Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (!plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a run, and its siege part nothing outside a siege");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_Hugger = TRUE;"), "a siege loads the facehugger's model");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_SentryGun = TRUE;"), "and the sentry gun's");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "CreateSentrygun(&place, 0);"), "and the host makes the guns");

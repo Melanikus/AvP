@@ -6732,8 +6732,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target ||",
-					"to": "if (!target ||"
+					"from": "\tif (!plan.siegeRoom[0] || !target ||",
+					"to": "\tif (!target ||"
 				}
 			]
 		},
@@ -7482,7 +7482,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)",
+					"from": "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)",
 					"to": "if (false)"
 				}
 			]
