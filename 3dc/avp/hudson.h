@@ -147,8 +147,10 @@ bool Hudson_JoinsThroughFindGames();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);
-// An access run is over: what happened, in fixed words, and whether it went as asked
+// An access run is over: what happened, in fixed words, and whether it went as asked. A menus=pictures run ends the same way.
 void Hudson_AccessRunEnds(const char *howItEnded, bool asAsked);
+// menus=pictures: the run pictures four of the menus' pages and ends (hudson_plan.h). Added 2026-11-10 by Melanikus for the AvP port.
+bool Hudson_MenuPictures();
 
 // Whether the run plays as a Predator: species=predator on a gun= run. A marine otherwise.
 bool Hudson_PlayAsPredator();

@@ -208,7 +208,9 @@ param(
     [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
     [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
     # (The v2 draft's switch went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
-    [switch]$SecondCopy           # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
+    # Added 2026-11-10 by Melanikus for the AvP port, to see how the menus are drawn at a screen size (menu_shape.h):
+    [switch]$MenuPictures         # menus=pictures: a run with no -Net that stays at the menus, pictures main, Multiplayer, Online access and Options, and the intro's copyright screen and logo, and ends
 )
 $ErrorActionPreference = 'Stop'
 
@@ -250,6 +252,7 @@ if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something wi
 # Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port; its key line went with #175, as the
 # servers.cfg line proves the relay's keys, and every relay run is version 2 since #175 PR 3a)
 if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
+if ($MenuPictures -and $Net) { Stop-Here "-MenuPictures stays at the menus and pictures them, so it's a run with no -Net" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -333,6 +336,7 @@ $relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' 
 # -secondcopy is the game's own switch too, so it goes before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
+if ($MenuPictures) { $arguments += ' menus=pictures' }
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }
 if ($Views -gt 0) { $arguments += " views=$Views" }
 if ($Hold -gt 0) { $arguments += " hold=$Hold" }
