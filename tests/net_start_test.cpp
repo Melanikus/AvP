@@ -224,6 +224,7 @@ static int hostLineGiven = -2;       // -2: the first line while relayNamed says
 static int linesInTheFile = 1;       // how many good lines there are when servers.cfg names a server; a second line's relay is elsewhere
 static enet_uint32 const kSecondRelayHost = 0x0D0C0B0B;
 static int relayOfAsked = -1;        // the line whose relay was read last
+static int keysComeForLine = -1;     // -1: a relay's keys come for the line asked; otherwise the line they come saying they're for
 static int keysAskedOnLine = -1;     // the line the newest asking for a relay's keys was for
 static std::string keysAskedRegion;  // and the region it named ("" for a host's, which gets its relay's own region back)
 
@@ -257,7 +258,7 @@ bool RelayList_AskForRelayKeysOn(int place, const char *region)
 int RelayList_RelayKeysCameOn(int *place, char region[kRelayListRegionLetters + 1], uint8_t p384[kNetCryptoP384PublicBytes],
 	uint8_t kem[kNetPqKemPublicBytes], const char **why)
 {
-	*place = keysAskedOnLine;
+	*place = keysComeForLine >= 0 ? keysComeForLine : keysAskedOnLine;
 	strcpy(region, "virginia");
 	return RelayList_RelayKeysCame(p384, kem, why);
 }
@@ -1576,6 +1577,8 @@ static void TestJoiningThroughTheRelay()
 // EACH GAME THROUGH ITS OWN LINE (Fifth's condition, 2026-11-11; check-online-play's rule J): a game's relay and its keys come from the
 // servers.cfg line whose server listed it, keyed by that line, never by its region, which is only a word a server sends. Here two lines
 // both list a game with the same code in the same region. Added 2026-11-11 by Melanikus for the AvP port.
+static void ResetTheStandInChannel();   // further down, with the channel's own tests
+
 static void TestEachGameThroughItsOwnLine()
 {
 	printf("Each game through its own line\n");
@@ -1600,6 +1603,21 @@ static void TestEachGameThroughItsOwnLine()
 	Net_SetRelayJoinWaitHook(NULL);
 	Check(relayOfAsked == 1 && relayKeysAsked == keysBefore + 1 && keysAskedOnLine == 1,
 		"THROUGH ITS OWN LINE: the second game's join reads the second line's relay and asks the second line for its keys, never the first's, though both say the same region");
+	EndTheGame();
+
+	// Keys that come saying they're for another line than the one asked are never taken: the channel ends, and nothing is sent
+	ResetTheStandInChannel();
+	keysComeForLine = 1;
+	hostLineGiven = 0;
+	AvP.Network = I_No_Network;
+	Check(HostAGame() == NET_OK, "(a host on the first line, whose relay's keys will come saying they're the second line's)");
+	Net_ServiceNetwork();
+	NetRelayHostState news;
+	Net_RelayHostStateNow(&news);
+	Check(news.what == kNetRelayHostEnded && news.why != NULL && netRelayV2StandIn.starts == 0,
+		"keys that come for another line than the one asked are never taken: no handshake starts with them, and the online game ends, saying why");
+	keysComeForLine = -1;
+	hostLineGiven = -2;
 	EndTheGame();
 
 	linesInTheFile = 1;

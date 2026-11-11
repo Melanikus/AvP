@@ -170,8 +170,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tOnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));\n\t\tchar from[96];",
-					"to": "\t\tsnprintf(server, sizeof(server), \"%s\", Relay_ServerName());\n\t\tchar from[96];"
+					"from": "OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));",
+					"to": "Put(names[named], sizeof(names[named]), now.line.name);"
 				}
 			]
 		},

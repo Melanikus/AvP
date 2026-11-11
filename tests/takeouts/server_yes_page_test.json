@@ -159,8 +159,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "static bool HostsOnline(void)\n{\n\treturn Relay_ServerName()[0] != 0;\n}",
-					"to": "static bool HostsOnline(void)\n{\n\treturn true;\n}"
+					"from": "\treturn RelayList_HostLine() >= 0;\n}",
+					"to": "\treturn true;\n}"
 				}
 			]
 		},
@@ -471,6 +471,36 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "ServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);",
 					"to": "ServerYesPage_Draw(480);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host on row starts on a server, chosen for the player",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "int MP_HostOnChoice = 0;",
+					"to": "int MP_HostOnChoice = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start game opens with no server chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&",
+					"to": "if (false && !HostsOnline() &&"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line hosted on isn't the one the row shows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "(void)RelayList_HostOn(want);",
+					"to": "(void)RelayList_HostOn(hostOnCount > 0 ? hostOnPlaces[0] : -1);"
 				}
 			]
 		}

@@ -8532,7 +8532,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))",
+					"from": "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(address) && !TheRemoteRelay(address))",
 					"to": "if (false)"
 				}
 			]

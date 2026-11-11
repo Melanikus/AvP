@@ -1119,8 +1119,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tWrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);\n",
-					"to": "\t\tWords(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);\n"
+					"from": "WrappedWords(failedLine, linesTop, 2, ONE_FIXED);",
+					"to": "WrappedWords(failedLine, linesTop, 1, ONE_FIXED);"
 				}
 			]
 		},
@@ -1131,6 +1131,36 @@
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
 					"from": "static char failedLine[200];",
 					"to": "static char failedLine[96];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line with no yes says nothing on the games page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;",
+					"to": "case kRelayLineNoYes: break;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line that didn't answer says nothing on the games page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;",
+					"to": "case kRelayLineNoAnswer: break;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's name on the games page isn't made safe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tOnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));\n",
+					"to": "\tPut(name, sizeof(name), now.line.name);\n"
 				}
 			]
 		}
