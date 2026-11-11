@@ -81,6 +81,8 @@ const char *const kHudsonRefusedAccessWithNet = "access= stays at the menus to p
 const char *const kHudsonRefusedAccessWaitNotANumber = "accesswait= is a number of seconds";
 const char *const kHudsonRefusedAccessWaitOutOfRange = "accesswait= is from 61 seconds, past the list's minute between calls, to 3600";
 const char *const kHudsonRefusedAccessWaitWithoutCheck = "accesswait= says when Check again is pressed, so it needs access=check";
+const char *const kHudsonRefusedMenusWord = "menus= can only be pictures";
+const char *const kHudsonRefusedMenusWithOthers = "menus=pictures stays at the menus and pictures them, so it can't be a net= or an access= run";
 const char *const kHudsonRefusedAnswerWord = "answer= can only be letin or no";
 const char *const kHudsonRefusedAnswerWithoutHost = "answer= is the host's answer to a player asking to join, so it needs net=host";
 const char *const kHudsonRefusedAnswerAfterNotANumber = "answerafter= is a number of seconds";
@@ -410,6 +412,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	plan->answerAfterSeconds = kHudsonDefaultAnswerAfterSeconds;
 
 	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
+	bool seenMenus = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
@@ -1405,6 +1408,23 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			{
 				return kHudsonRefusedAccessWord;
 			}
+		}
+		else if (WordIs(place, nameLength, "menus"))
+		{
+			// Added 2026-11-10 by Melanikus for the AvP port: see menuPictures in hudson_plan.h
+			if (seenMenus)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenMenus = true;
+
+			if (!WordIs(value, valueLength, "pictures"))
+			{
+				return kHudsonRefusedMenusWord;
+			}
+
+			plan->menuPictures = true;
 		}
 		else if (WordIs(place, nameLength, "accesswait"))
 		{
@@ -2825,6 +2845,12 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenAccess && plan->netMode != kHudsonNetNone)
 	{
 		return kHudsonRefusedAccessWithNet;
+	}
+
+	// menus=pictures (added 2026-11-10): it stays at the menus and only pictures them, so it's neither a network run nor an access run
+	if (seenMenus && (plan->netMode != kHudsonNetNone || seenAccess))
+	{
+		return kHudsonRefusedMenusWithOthers;
 	}
 
 	if (seenAccessWait && plan->accessPress != kHudsonAccessCheck)

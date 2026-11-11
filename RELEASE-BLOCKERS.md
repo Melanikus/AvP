@@ -16,3 +16,4 @@ RELEASING.md says how a release is made.
 
 - #175 part 3: the game now uses a server in servers.cfg only after the player says yes, but the menus don't reach that question yet
   (Find games, Host online, Online access), so a player can't play online at all.
+- **The save loader's proof (SAVE-HOSTILE-1).** Its checks are in, but the test runs that prove them on broken saves haven't been done yet, and a new save doesn't yet say which level it belongs to.

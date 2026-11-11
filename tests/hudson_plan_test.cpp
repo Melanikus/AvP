@@ -295,6 +295,19 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 access=check accesswait=90 accesswait=90", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 access=request accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
 	Refused("-hudson level=invasion frames=5 accesswait=90", kHudsonRefusedAccessWaitWithoutCheck);
+
+	// menus=pictures (added 2026-11-10 by Melanikus for the AvP port): four of the menus' pages pictured, for comparing how they're drawn
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5", &plan) == 0 && !plan.menuPictures, "a run pictures the menus only when it asks");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 menus=pictures", &plan) == 0 && plan.menuPictures && plan.accessPress == kHudsonAccessNone &&
+			plan.netMode == kHudsonNetNone, "menus=pictures pictures the menus, and presses nothing on the access page");
+	}
+	Refused("-hudson level=invasion frames=5 menus=yes", kHudsonRefusedMenusWord);
+	Refused("-hudson level=invasion frames=5 menus=pictures menus=pictures", kHudsonRefusedAskedTwice);
+	// It stays at the menus and only pictures them: never a network run, nor an access run
+	Refused("-hudson level=invasion frames=5 machine=shared net=host menus=pictures", kHudsonRefusedMenusWithOthers);
+	Refused("-hudson level=invasion frames=5 menus=pictures access=request", kHudsonRefusedMenusWithOthers);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=maybe", kHudsonRefusedAnswerWord);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answer=no", kHudsonRefusedAskedTwice);
 	// The answer is a host's
