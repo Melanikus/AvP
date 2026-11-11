@@ -244,6 +244,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the grid's ready line doesn't count its outside edges",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "+ std::to_string(static_cast<long long>(grid->OutsideJoins())) + \" outside edges and \"",
+					"to": "+ \" some outside edges and \""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the grid's ready line doesn't count its joins onto hidden faces",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "+ std::to_string(static_cast<long long>(grid->ThroughJoins())) + \" joins onto hidden faces",
+					"to": "+ \"some joins onto hidden faces"
+				}
+			]
 		}
 	]
 }

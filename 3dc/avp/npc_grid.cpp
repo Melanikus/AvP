@@ -176,7 +176,8 @@ NpcGrid::NpcGrid()
 	: piecesSkipped(nullptr), searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0),
 	  searchMostLooks(0), searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
 	  searchClaimMost(kAlienWaysClaimMostPriceFactor), searchShut(nullptr), cutShort(false),
-	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
+	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), outsideJoins(0), throughJoins(0), bytesKept(0), bytesBuilding(0),
+	  bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
 	  ready(false), stopAsked(false), looksAtStop(0), stopAtLook(0)
 {
 	searchStart.x = searchStart.y = searchStart.z = 0;
@@ -215,6 +216,7 @@ void NpcGrid::LetGo()
 	GiveBack(&fallFrom);
 	GiveBack(&fallTo);
 	surfaceCells = steps = rayTests = squareTests = boxEntries = 0;
+	outsideJoins = throughJoins = 0;
 	bytesKept = bytesBuilding = bytesBuildingUsed = 0;
 	pieces.LetGo();
 	piecesSkipped = nullptr;
@@ -445,6 +447,50 @@ const uint32_t *NpcGrid::LinksOf(uint32_t cell, size_t *count) const
 const uint32_t *NpcGrid::FallsOf(uint32_t cell, size_t *count) const
 {
 	return RunOf(fallFrom, fallTo, cell, count);
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: THE KIND OF A JOIN (npc_grid.h; #109, corners repel)
+NpcGridJoin NpcGrid::JoinOf(uint32_t a, uint32_t b) const
+{
+	int const sa = SheetOf(a), sb = SheetOf(b);
+	double ma[3], mb[3];
+
+	if (sa < 0 || sb < 0 || sa == sb || !Middle(a, ma) || !Middle(b, mb))
+	{
+		return kNpcGridJoinPlain;
+	}
+
+	Sheet const &A = sheets[static_cast<size_t>(sa)], &B = sheets[static_cast<size_t>(sb)];
+
+	// Two sheets facing nearly the same way: a stair's treads, a seam between modules. There's no edge to go round.
+	if (!(Dot(A.n, B.n) < kNpcGridJoinSameWay))
+	{
+		return kNpcGridJoinPlain;
+	}
+
+	// How far each middle is in front of the other's face, less than 0 behind it, and which side that is: 0 within the slack, where it has
+	// no say
+	double const bOnA = Dot(A.n, mb) - A.d, aOnB = Dot(B.n, ma) - B.d;
+	double const slack = kNpcGridJoinSlack;
+	int const bSide = bOnA > slack ? 1 : (bOnA < -slack ? -1 : 0);
+	int const aSide = aOnB > slack ? 1 : (aOnB < -slack ? -1 : 0);
+
+	if (bSide == 0 && aSide == 0)
+	{
+		return kNpcGridJoinPlain;
+	}
+
+	if (bSide >= 0 && aSide >= 0)
+	{
+		return kNpcGridJoinInside;
+	}
+
+	if (bSide <= 0 && aSide <= 0)
+	{
+		return kNpcGridJoinOutside;
+	}
+
+	return kNpcGridJoinThrough;
 }
 
 const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const AlienWaysMap &map)
@@ -1524,6 +1570,23 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		linkTo[k] = links[k].to;
 	}
 
+	// How many joins are OUTSIDE, and how many THROUGH (THE KIND OF A JOIN, npc_grid.h), for the log. Each link is kept both ways, so each
+	// is counted once, from its lower cell. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel).
+	for (size_t k = 0; k < linkFrom.size(); k++)
+	{
+		if ((k & 0xFFFF) == 0 && StopNow())
+		{
+			return Fail("asked to stop");
+		}
+
+		if (linkFrom[k] < linkTo[k])
+		{
+			NpcGridJoin const join = JoinOf(linkFrom[k], linkTo[k]);
+			outsideJoins += join == kNpcGridJoinOutside ? 1 : 0;
+			throughJoins += join == kNpcGridJoinThrough ? 1 : 0;
+		}
+	}
+
 	fallFrom.resize(falls.size());
 	fallTo.resize(falls.size());
 
@@ -1819,8 +1882,19 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 				}
 			}
 
+			// An alien's way pays more to cross an OUTSIDE edge, or onto a face hidden behind another (THE KIND OF A JOIN, npc_grid.h). A
+			// price only, so every way there was is still there; and never a marine's. Modified 2026-11-11 by Melanikus (Third) for the AvP
+			// port (#109, corners repel).
+			double extra = 0.0;
+
+			if (searchBody == kNpcGridAlien)
+			{
+				NpcGridJoin const join = JoinOf(c, n);
+				extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice : (join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0);
+			}
+
 			double const far = sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
-			TryMove(goal, b, c, n, cost + far * PriceOf(n));
+			TryMove(goal, b, c, n, cost + far * PriceOf(n) + extra);
 		}
 
 		if (searchBody == kNpcGridMarine)

@@ -241,6 +241,20 @@ static size_t WayOnKind(NpcGrid const &grid, std::vector<uint32_t> const &way, A
 	return count;
 }
 
+// How many times a way crosses from one sheet to another by a join of this kind (THE KIND OF A JOIN, npc_grid.h). Added 2026-11-11 by
+// Melanikus (Third) for the AvP port (#109, corners repel).
+static size_t Crossings(NpcGrid const &grid, std::vector<uint32_t> const &way, NpcGridJoin kind)
+{
+	size_t count = 0;
+
+	for (size_t k = 1; k < way.size(); k++)
+	{
+		count += grid.SheetOf(way[k - 1]) != grid.SheetOf(way[k]) && grid.JoinOf(way[k - 1], way[k]) == kind ? 1 : 0;
+	}
+
+	return count;
+}
+
 static void Cells()
 {
 	printf("The cells of the room with the pillar\n");
@@ -408,8 +422,11 @@ static void Searches()
 	// A marine can't go there: the ceiling isn't his
 	Check(grid.Search(from, high, kNpcGridMarine, 1, 100000, &way, &looks) == kNpcGridNoWay && way.empty(), "a marine has no way to the ceiling");
 
-	// An alien round the pillar, from its face at x = 2700 to its face at x = 3300. The pillar runs from the floor to the ceiling, so the
-	// cheapest way is round its corners, along a face at z = 2700 or z = 3300, as at Ops01's outside corner.
+	// An alien round the pillar, from its face at x = 2700 to its face at x = 3300. The pillar runs from the floor to the ceiling. Round its
+	// corners, along a face at z = 2700 or z = 3300, is shortest, about 1 m, but each corner is an OUTSIDE edge, where the game's climbing
+	// can't turn an alien (Ops01's outside corner was one of the owner's stucks), and costs kNpcGridOutsidePrice more: about 7 m. So the way
+	// goes up the face, round the pillar on the ceiling and down the far face, about 4.6 m, by two inside corners. Modified 2026-11-11 by
+	// Melanikus (Third) for the AvP port (#109, corners repel; THE KIND OF A JOIN, npc_grid.h).
 	uint32_t const west = grid.NearestCell(2700, -1650, 2850, kNpcGridAlien, 10), east = grid.NearestCell(3300, -1650, 3150, kNpcGridAlien, 10);
 	Check(west != kNpcGridNoCell && east != kNpcGridNoCell, "an alien clings to the pillar's two faces");
 	Check(grid.Search(west, east, kNpcGridAlien, 10, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(grid, way), "and finds its way round the pillar");
@@ -422,7 +439,10 @@ static void Searches()
 		onSide += (grid.KindOf(way[k]) == kAlienWaysWall && (m[2] == 2700 || m[2] == 3300) && m[0] > 2700 && m[0] < 3300) ? 1 : 0;
 	}
 
-	Check(onSide > 0, "along one of the pillar's other faces (" + Number(onSide) + " cells of it)");
+	Check(onSide == 0 && WayOnKind(grid, way, kAlienWaysCeiling) > 0, "over the ceiling, not round the pillar's outside corners (" + Number(onSide) +
+		" cells on its other faces)");
+	Check(Crossings(grid, way, kNpcGridJoinInside) == 2 && Crossings(grid, way, kNpcGridJoinOutside) == 0,
+		"by two inside corners, onto the ceiling and off it, and no outside edge");
 	Check(WayOnKind(grid, way, kAlienWaysFloor) == 0, "and none of it on the floor");
 
 	// The same kind of search spread over frames, as the guide asks for one: from an alien's middle, 500 above the floor, to another,
@@ -1101,6 +1121,189 @@ static void Again()
 	Check(KeptNothing(grid) && grid.SurfaceCells() == 0, "Clear lets go of everything");
 }
 
+// THE KIND OF A JOIN (npc_grid.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel). Secondary's read of the
+// owner's play (AvP-docs\engine\rehearsal\2026-11-11-owner-play\START-STUCKS-secondary.md): 12 of 14 aliens stuck at their way's start
+// were heading across an OUTSIDE edge, and 2 onto a face hidden under another.
+
+// Three walls of a room and its floor, with no ceiling: the walls at x = 0 and x = 6000, facing in, and the one at z = 0 between them, 3 m
+// high. The room's two corners are inside corners.
+static std::vector<AlienWaysPolygon> ThreeWalls()
+{
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Floor(0, 6000, 0, 6000, 0));
+	world.push_back(WallAtX(0, 0, 6000, -3000, 0, 1));
+	world.push_back(WallAtZ(0, 0, 6000, -3000, 0, 1));
+	world.push_back(WallAtX(6000, 0, 6000, -3000, 0, -1));
+	return world;
+}
+
+// A wall 2 m high standing on a floor, facing +z, at z = 1450. Up to x = 3000 the floor carries on behind the wall, as a floor runs on
+// under a crate: two polygons, meeting at the wall's foot, so each is joined to the wall edge to edge. The joins along the foot pick the
+// floor's cell nearest each point on it: there, the one at z = 1350, 100 behind the wall's face, so the join is THROUGH. With insideToo,
+// the wall goes on to x = 6000 and so does the floor in front of it, but not behind: no cell there has its middle on a floor behind the
+// wall, so the nearest is the one at z = 1650, 200 in front of it, and those joins are INSIDE.
+static std::vector<AlienWaysPolygon> WallOnAFloor(bool insideToo)
+{
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Floor(0, 3000, 0, 1450, 0));
+	world.push_back(Floor(0, 3000, 1450, 3000, 0));
+
+	if (insideToo)
+	{
+		world.push_back(Floor(3000, 6000, 1450, 3000, 0));
+	}
+
+	world.push_back(WallAtZ(1450, 0, insideToo ? 6000 : 3000, -2000, 0, 1));
+	return world;
+}
+
+static void Joins()
+{
+	printf("The kinds of join an alien's way crosses\n");
+	AlienWaysMap map;
+	NpcGrid grid;
+	const char *why;
+
+	if (!Build(PillarRoom(), &map, &grid, &why))
+	{
+		Check(false, "the room with the pillar builds");
+		return;
+	}
+
+	// In the room with the pillar: the floor and a room wall, two room walls at a corner, the pillar and the ceiling are all INSIDE; two of
+	// the pillar's faces, round its corner, are OUTSIDE: each cell's middle is 150 behind the other's face
+	uint32_t const floorCell = grid.NearestCell(150, 0, 1650, kNpcGridAlien, 10), roomWall = grid.NearestCell(0, -150, 1650, kNpcGridAlien, 10);
+	uint32_t const wallX = grid.NearestCell(0, -1650, 150, kNpcGridAlien, 10), wallZ = grid.NearestCell(150, -1650, 0, kNpcGridAlien, 10);
+	uint32_t const west = grid.NearestCell(2700, -1650, 2850, kNpcGridAlien, 10), south = grid.NearestCell(2850, -1650, 2700, kNpcGridAlien, 10);
+	uint32_t const westTop = grid.NearestCell(2700, -2850, 2850, kNpcGridAlien, 10), ceiling = grid.NearestCell(2550, -3000, 2850, kNpcGridAlien, 10);
+	Check(floorCell != kNpcGridNoCell && roomWall != kNpcGridNoCell && wallX != kNpcGridNoCell && wallZ != kNpcGridNoCell && west != kNpcGridNoCell &&
+		south != kNpcGridNoCell && westTop != kNpcGridNoCell && ceiling != kNpcGridNoCell, "an alien clings to each cell tried");
+	Check(grid.JoinOf(floorCell, roomWall) == kNpcGridJoinInside && grid.JoinOf(roomWall, floorCell) == kNpcGridJoinInside,
+		"a floor and the wall standing on it are an INSIDE join, both ways round");
+	Check(grid.JoinOf(wallX, wallZ) == kNpcGridJoinInside, "so are two walls at the room's corner, so a way along a room's walls pays nothing more");
+	Check(grid.JoinOf(westTop, ceiling) == kNpcGridJoinInside, "and the pillar and the ceiling it holds up");
+	Check(grid.JoinOf(west, south) == kNpcGridJoinOutside && grid.JoinOf(south, west) == kNpcGridJoinOutside,
+		"two of the pillar's faces, round its corner, are an OUTSIDE join, both ways round");
+	Check(grid.JoinOf(floorCell, grid.NearestCell(450, 0, 1650, kNpcGridAlien, 10)) == kNpcGridJoinPlain &&
+		grid.JoinOf(floorCell, kNpcGridNoCell) == kNpcGridJoinPlain && grid.JoinOf(static_cast<uint32_t>(grid.Cells()), floorCell) == kNpcGridJoinPlain,
+		"two cells of one sheet, or a number that isn't a cell, are PLAIN");
+
+	// The count for the log: every link counted once, as the grid counts it itself
+	size_t outside = 0, through = 0;
+
+	for (uint32_t c = 0; c < grid.Cells(); c++)
+	{
+		size_t count = 0;
+		const uint32_t *list = grid.LinksOf(c, &count);
+
+		for (size_t k = 0; k < count; k++)
+		{
+			outside += c < list[k] && grid.JoinOf(c, list[k]) == kNpcGridJoinOutside ? 1 : 0;
+			through += c < list[k] && grid.JoinOf(c, list[k]) == kNpcGridJoinThrough ? 1 : 0;
+		}
+	}
+
+	Check(outside > 0 && grid.OutsideJoins() == outside, "the grid counts its OUTSIDE joins, each link once: the pillar's four corners (" +
+		Number(grid.OutsideJoins()) + ")");
+	Check(through == 0 && grid.ThroughJoins() == 0, "and no THROUGH join: no face here is hidden behind another");
+
+	// The ledge: an alien going up it crosses its foot, an INSIDE join, then its lip, an OUTSIDE one. It has no other way, so it's still
+	// found: the lip is a price, not a wall.
+	{
+		AlienWaysMap ledgeMap;
+		NpcGrid ledge;
+		std::vector<uint32_t> way;
+		size_t looks = 0;
+		bool const built = Build(Ledge(), &ledgeMap, &ledge, &why);
+		uint32_t const below = built ? ledge.NearestCell(1650, 0, 1650, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const above = built ? ledge.NearestCell(1650, -500, 4650, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(built && ledge.Search(below, above, kNpcGridAlien, 10, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(ledge, way),
+			"an alien still climbs the ledge, with no other way up");
+		Check(Crossings(ledge, way, kNpcGridJoinInside) == 1 && Crossings(ledge, way, kNpcGridJoinOutside) == 1,
+			"by its foot, an INSIDE join, and its lip, an OUTSIDE one");
+	}
+
+	// The owner's loop ("alien took diagonal paths across 3 walls to reach me, was INCREDIBLE"): from the wall at x = 0 to the one at x =
+	// 6000, with the floor dear, the way runs across all three walls by the room's two inside corners, as it always did
+	{
+		AlienWaysMap roomMap;
+		NpcGrid room;
+		std::vector<uint32_t> way;
+		size_t looks = 0;
+		bool const built = Build(ThreeWalls(), &roomMap, &room, &why);
+		uint32_t const from = built ? room.NearestCell(0, -1650, 4350, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const to = built ? room.NearestCell(6000, -1650, 4350, kNpcGridAlien, 10) : kNpcGridNoCell;
+		bool const found = built && room.Search(from, to, kNpcGridAlien, 10, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(room, way);
+		bool onTheBack = false;
+
+		for (size_t k = 0; k < way.size(); k++)
+		{
+			double m[3];
+			room.Middle(way[k], m);
+			onTheBack = onTheBack || (room.KindOf(way[k]) == kAlienWaysWall && m[2] == 0);
+		}
+
+		Check(found && onTheBack && WayOnKind(room, way, kAlienWaysFloor) == 0, "an alien goes wall to wall to wall round the room, none of it on the floor");
+		Check(Crossings(room, way, kNpcGridJoinInside) == 2 && Crossings(room, way, kNpcGridJoinOutside) == 0 && Crossings(room, way, kNpcGridJoinThrough) == 0,
+			"by the room's two inside corners, which cost nothing more");
+	}
+
+	// A face hidden behind another. Up to x = 3000 the wall's foot is joined only to floor cells behind it (WallOnAFloor, above): THROUGH.
+	// With nothing else, an alien still goes up the wall that way: a price, never a refusal, as a crate on a floor that runs under it is
+	// climbed so today (PO, 2026-11-11: never cut a way that works).
+	{
+		AlienWaysMap onlyMap;
+		NpcGrid only;
+		std::vector<uint32_t> way;
+		size_t looks = 0;
+		bool const built = Build(WallOnAFloor(false), &onlyMap, &only, &why);
+		uint32_t const behind = built ? only.NearestCell(1650, 0, 1350, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const face = built ? only.NearestCell(1650, -150, 1450, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const inFront = built ? only.NearestCell(1650, 0, 1650, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(built && behind != kNpcGridNoCell && face != kNpcGridNoCell && inFront != kNpcGridNoCell, "a floor running on under a wall builds");
+		Check(only.JoinOf(behind, face) == kNpcGridJoinThrough && only.JoinOf(face, behind) == kNpcGridJoinThrough,
+			"the floor 100 behind the wall's face, with the wall in front of the floor: THROUGH, both ways round");
+		Check(only.JoinOf(inFront, face) == kNpcGridJoinInside, "the floor 200 in front of it: INSIDE");
+		Check(only.ThroughJoins() > 0, "the grid counts its THROUGH joins (" + Number(only.ThroughJoins()) + ")");
+		uint32_t const up = built ? only.NearestCell(1650, -1650, 1450, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(built && only.Search(inFront, up, kNpcGridAlien, 1, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(only, way) &&
+			Crossings(only, way, kNpcGridJoinThrough) == 1, "with no other way onto the wall, an alien still goes up it by the THROUGH join");
+
+		// With an INSIDE way onto the same wall beyond x = 3000, within kNpcGridThroughPrice, it goes round by that
+		AlienWaysMap bothMap;
+		NpcGrid both;
+		bool const builtBoth = Build(WallOnAFloor(true), &bothMap, &both, &why);
+		uint32_t const start = builtBoth ? both.NearestCell(1650, 0, 1650, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const goal = builtBoth ? both.NearestCell(1650, -1650, 1450, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(builtBoth && both.Search(start, goal, kNpcGridAlien, 1, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(both, way) &&
+			Crossings(both, way, kNpcGridJoinThrough) == 0 && Crossings(both, way, kNpcGridJoinInside) == 1,
+			"with an INSIDE way onto the wall 1.5 m along, an alien takes that, not the THROUGH join in front of it");
+	}
+
+	// A stair's treads face the same way, so the step links between them aren't sorted: an alien on the stairs goes by them as before
+	{
+		AlienWaysMap stairsMap;
+		NpcGrid stairs;
+		bool const built = Build(Stairs(), &stairsMap, &stairs, &why);
+		size_t stepLinks = 0, sorted = 0;
+
+		for (uint32_t c = 0; built && c < stairs.Cells(); c++)
+		{
+			size_t count = 0;
+			const uint32_t *list = stairs.LinksOf(c, &count);
+
+			for (size_t k = 0; k < count; k++)
+			{
+				bool const step = stairs.KindOf(c) == kAlienWaysFloor && stairs.KindOf(list[k]) == kAlienWaysFloor;
+				stepLinks += step ? 1 : 0;
+				sorted += step && stairs.JoinOf(c, list[k]) != kNpcGridJoinPlain ? 1 : 0;
+			}
+		}
+
+		Check(built && stepLinks > 0 && sorted == 0, "every step link between two treads is PLAIN (" + Number(stepLinks) + " of them)");
+	}
+}
+
 int main()
 {
 	Cells();
@@ -1110,6 +1313,7 @@ int main()
 	Pieces();
 	Steps();
 	Falls();
+	Joins();
 	Slopes();
 	Doors();
 	Room();

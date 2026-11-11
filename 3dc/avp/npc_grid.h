@@ -94,6 +94,42 @@ int const kNpcGridSideSlack = 300;           // how far behind a sheet's plane a
                                              // stands right on its floor, and a sheet's plane is an average of polygons up to kNpcGridSamePlane
                                              // apart, so a body on the floor can be a little behind it. A body under a floor is metres behind.
 
+// THE KIND OF A JOIN, for an alien's search. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, "corners repel").
+// The owner: "Can vertices/corners be repellers so it chooses a better path?" Secondary's read of the owner's own play
+// (AvP-docs\engine\rehearsal\2026-11-11-owner-play\START-STUCKS-secondary.md) found this. 14 aliens were stuck where their way started:
+// - 12 of them heading across an OUTSIDE edge: a lip, a wall's top, an outside corner;
+// - 2 heading onto a face hidden under another;
+// - none at an inside corner.
+// Why: the game's own climbing turns an alien onto a face it runs into, and that only happens at an inside corner. Round an outside edge
+// it never runs into the next face, so it waits at the edge.
+//
+// So each link between two sheets is sorted by where each cell's middle lies against the other cell's sheet (alien-stuck.js's test):
+//   INSIDE    each middle in front of the other's face: a floor and the wall standing on it, two walls at a room's corner. Priced as
+//             before, so a way that loops across a room's walls, wall to wall to wall, costs what it always did.
+//   OUTSIDE   each behind the other's face: a lip, a wall's top, the corner of a pillar or a block. An alien's way pays kNpcGridOutsidePrice
+//             more to cross it, so it takes a way by inside corners when there's one no dearer than that, and crosses here only when not.
+//   THROUGH   one in front and one behind: one face carries on behind the other, so the far cell is on a face no alien there can reach.
+//             An alien's way pays kNpcGridThroughPrice more. It's a price and not a refusal, as a refusal can cut a way that works today:
+//             at a crate standing on a floor that runs on under it, a link can land on the floor just behind the crate's face, and the
+//             alien still climbs the crate from there (PO, 2026-11-11: never cut a way that works).
+//   PLAIN     not sorted, and priced as before. Either the two sheets face within kNpcGridJoinSameWay of each other (a stair's treads, a
+//             seam between two modules), or neither middle is clear of the other's face by kNpcGridJoinSlack.
+// A middle within the slack has no say. A cell's middle can be anywhere from 0 to 300 mm from the join, so the one nearest it can't
+// tell front from behind (Secondary's catch). The other middle then decides INSIDE or OUTSIDE alone, and THROUGH needs both to be clear.
+// The two prices are starting values, for Primary's films to tune. A marine's search is never priced so: Hudson's ways are as they were.
+enum NpcGridJoin
+{
+	kNpcGridJoinPlain,
+	kNpcGridJoinInside,
+	kNpcGridJoinOutside,
+	kNpcGridJoinThrough
+};
+
+float const kNpcGridJoinSameWay = 0.8660254f;  // cos(30 degrees)
+int const kNpcGridJoinSlack = 50;              // mm
+int const kNpcGridOutsidePrice = 3000;         // a crossing costs this many mm of wall more
+int const kNpcGridThroughPrice = 10000;        // the same, onto a hidden face
+
 // THE LIMITS. What the stock levels need is in brackets: the most on any of the 63, measured by the node copy (npc-grid.js), whose steps are
 // this code's. A level made to take more is refused, and the game moves its NPCs as before.
 struct NpcGridLimits
@@ -168,6 +204,13 @@ public:
 	size_t Pieces() const { return pieces.Pieces(); }
 	const char *PiecesGaveUp() const { return piecesSkipped; }
 	size_t PieceBytes() const { return pieces.BytesKept(); }      // part of BytesKept()
+
+	// THE KIND OF A JOIN (above), between two cells of different sheets: PLAIN for two cells of one sheet, or a number that isn't a cell.
+	// The same both ways round. And how many of the grid's links are OUTSIDE and THROUGH, each link counted once, though it's kept both
+	// ways: for the log's line when the grid is ready. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel).
+	NpcGridJoin JoinOf(uint32_t a, uint32_t b) const;
+	size_t OutsideJoins() const { return outsideJoins; }
+	size_t ThroughJoins() const { return throughJoins; }
 
 	// One cell's sheet, which kind of surface it's on, its middle in the game's numbers, its flags and its room. A number that isn't a
 	// cell gives -1, a wall, false (with out untouched), 0 and 0.
@@ -301,6 +344,7 @@ private:
 	bool cutShort;
 
 	size_t surfaceCells, steps, rayTests, squareTests, boxEntries;
+	size_t outsideJoins, throughJoins;   // OutsideJoins and ThroughJoins (added 2026-11-11 by Melanikus (Third), #109)
 	size_t bytesKept, bytesBuilding, bytesBuildingUsed;
 	NpcGridLimits limits;
 	bool ready;

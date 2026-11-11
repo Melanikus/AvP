@@ -247,6 +247,12 @@ static void SourceOfTheGame()
 	std::string const ways = ReadSourceFile("3dc/avp/alien_ways.cpp");
 	std::string const project = ReadSourceFile("win32/VS2026/AvP.vcxproj");
 
+	// The grid's ready line says how many joins an alien's way pays more to cross (added 2026-11-11 by Melanikus (Third) for the AvP port,
+	// #109, corners repel; THE KIND OF A JOIN, npc_grid.h), so a level where the sort looks wrong shows in the log at once
+	Check(Has(ways, "+ std::to_string(static_cast<long long>(grid->OutsideJoins())) + \" outside edges and \"")
+		&& Has(ways, "+ std::to_string(static_cast<long long>(grid->ThroughJoins())) + \" joins onto hidden faces, dearer for an alien's way\");"),
+		"SOURCE: the grid's ready line counts its outside edges and its joins onto hidden faces");
+
 	Check(!game.empty() && !system.empty() && !winmain.empty() && !ways.empty() && !project.empty(), "SOURCE: the game's files can be read");
 
 	std::string const startGame = Between(game, "void StartGame(void)", "InitHive();");

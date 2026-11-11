@@ -523,6 +523,126 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "an alien's way pays nothing more to cross an outside edge",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice :",
+					"to": "extra = join == kNpcGridJoinOutside ? 0.0 :"
+				}
+			]
+		},
+		{
+			"name": "an alien's way pays nothing more onto a hidden face",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "(join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0)",
+					"to": "(join == kNpcGridJoinThrough ? 0.0 : 0.0)"
+				}
+			]
+		},
+		{
+			"name": "an alien's search never looks at the kind of a join",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tif (searchBody == kNpcGridAlien)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = JoinOf(c, n);",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = JoinOf(c, n);"
+				}
+			]
+		},
+		{
+			"name": "a hidden face is refused, not priced",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\t\tNpcGridJoin const join = JoinOf(c, n);\n",
+					"to": "\t\t\t\tNpcGridJoin const join = JoinOf(c, n);\n\n\t\t\t\tif (join == kNpcGridJoinThrough)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "sheets facing the same way are sorted too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (!(Dot(A.n, B.n) < kNpcGridJoinSameWay))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the slack is so wide that no join is sorted",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double const slack = kNpcGridJoinSlack;",
+					"to": "double const slack = 100000.0;"
+				}
+			]
+		},
+		{
+			"name": "a join with a middle in front is taken as outside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tif (bSide >= 0 && aSide >= 0)\n\t{\n\t\treturn kNpcGridJoinInside;",
+					"to": "\tif (bSide >= 0 && aSide >= 0)\n\t{\n\t\treturn kNpcGridJoinOutside;"
+				}
+			]
+		},
+		{
+			"name": "a join with both middles behind is taken as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tif (bSide <= 0 && aSide <= 0)\n\t{\n\t\treturn kNpcGridJoinOutside;",
+					"to": "\tif (bSide <= 0 && aSide <= 0)\n\t{\n\t\treturn kNpcGridJoinInside;"
+				}
+			]
+		},
+		{
+			"name": "a join onto a hidden face is taken as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\treturn kNpcGridJoinOutside;\n\t}\n\n\treturn kNpcGridJoinThrough;\n}",
+					"to": "\t\treturn kNpcGridJoinOutside;\n\t}\n\n\treturn kNpcGridJoinInside;\n}"
+				}
+			]
+		},
+		{
+			"name": "the grid counts no outside joins",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "outsideJoins += join == kNpcGridJoinOutside ? 1 : 0;",
+					"to": "outsideJoins += 0;"
+				}
+			]
+		},
+		{
+			"name": "the grid counts no joins onto hidden faces",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "throughJoins += join == kNpcGridJoinThrough ? 1 : 0;",
+					"to": "throughJoins += 0;"
+				}
+			]
+		},
+		{
+			"name": "the grid counts each join twice, once each way",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\tif (linkFrom[k] < linkTo[k])\n",
+					"to": "\t\tif (linkFrom[k] != linkTo[k])\n"
+				}
+			]
 		}
 	]
 }

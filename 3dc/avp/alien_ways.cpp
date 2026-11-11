@@ -577,7 +577,11 @@ static void TellHowTheBuildWent()
 			snprintf(size, sizeof(size), "%.1f MB kept", static_cast<double>(grid->BytesKept()) / (1024.0 * 1024.0));
 			LogString("alien ways: the grid is ready after " + std::to_string(theBuild.GridMilliseconds()) + " ms, after the map: "
 				+ std::to_string(static_cast<long long>(grid->Sheets())) + " sheets, " + std::to_string(static_cast<long long>(grid->SurfaceCells())) + " cells on the surface, "
-				+ std::to_string(static_cast<long long>(grid->Links())) + " links, " + size);
+				+ std::to_string(static_cast<long long>(grid->Links())) + " links, " + size
+				// Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel; THE KIND OF A JOIN, npc_grid.h): how many
+				// joins an alien's way pays more to cross, so a level where the sort looks wrong shows at once
+				+ ", " + std::to_string(static_cast<long long>(grid->OutsideJoins())) + " outside edges and "
+				+ std::to_string(static_cast<long long>(grid->ThroughJoins())) + " joins onto hidden faces, dearer for an alien's way");
 		}
 		else
 		{
