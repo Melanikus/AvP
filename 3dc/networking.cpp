@@ -2191,7 +2191,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	}
 
 	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): an online game only once the player has said yes to the server,
-	// before anything is made. Its screen shows the line and asks (RelayList_LineToAgree), then hosts again.
+	// before anything is made. The line's yes is said on its own row of the Online page (online_page.h), then the host hosts again.
 	const char *notAgreedWhy = NULL;
 
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)

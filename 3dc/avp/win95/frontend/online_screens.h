@@ -124,7 +124,7 @@ bool OnlineScreens_NameMatches(const char *safeName, const char *safeSearch);
 // ---- The fetching screen (J1): the tail, while the games are fetched from the server the game dialled
 
 // "Fetching localhost's open sessions"; "Connected: 3 sessions open" (and "1 session", and "no sessions"); "Couldn't connect to localhost";
-// "Connected to localhost, but couldn't fetch its open sessions". The server's name is the one this game dialled (Relay_ServerName, or
+// "Connected to localhost, but couldn't fetch its open sessions". The server's name is the one this game dialled (its servers.cfg line's name, or
 // "this network"), never one a server sent, and comes made safe already; it's cut to a host name's 63 letters. words always ends with a 0.
 void OnlineScreens_FetchingWords(const char *safeServer, char *words, size_t size);
 void OnlineScreens_ConnectedWords(int sessions, char *words, size_t size);
@@ -223,7 +223,7 @@ void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 //   a joiner:   "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)", ms being ENet's time to the host and back,
 //               through the server, then ", 146 ms round trip to server" when serverMs isn't below 0: its own time to the server and
 //               back, as the games page measured it before the join.
-// safeRegion is the name people see for the server (its servers.cfg line's name, Relay_ServerName) when it has one, otherwise the relay's
+// safeRegion is the name people see for the server (its servers.cfg line's name, RelayList_LineNow's line.name) when it has one, otherwise the relay's
 // region. It comes made safe already, and is cut to a shown name's 32 letters; with none it says "a relay". ms below 0 (nothing measured
 // yet) leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
 // Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, serverMs, and the server's shown name.

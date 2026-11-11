@@ -106,6 +106,7 @@
 #include "online_screens.h"
 #include "online_screens_page.h"
 #include "online_page.h"       // every servers.cfg line on its own row, with its yes and its access (2026-11-11)
+#include "host_page.h"         // the server a game is hosted on, chosen by the player on its own page (2026-11-11)
 #include "server_yes_page.h"
 #include "host_wait_rules.h"   // a host's wait for the server, and a failed host's line (PO's rulings, 2026-11-10)
 
@@ -1862,14 +1863,15 @@ static void DrawTheHostLine(void)
 // screens (PO, 2026-11-10). Added 2026-11-10 by Melanikus (Third) for the AvP port. Each press is a row selected and Enter, as a player
 // does, and one fixed line in the log (PressTheRowForARun):
 // 1. the Multiplayer page, pictured (multiplayer.png);
-// 2. Start game, which opens the game's page (through the yes page's way in, as every way online does), with the run's game on it,
-//    pictured (host-config.png), and its Start row, which opens the species page (host-species.png);
+// 2. Start game, which opens the host page (host-on.png), where the run chooses its server as a player does (hoston=; modified 2026-11-11
+//    by Melanikus for the AvP port, the owner's "No auto choice, they choose": a run that names none hosts nothing), which opens the
+//    game's page with the run's game on it, pictured (host-config.png), and its Start row, which opens the species page (host-species.png);
 // 3. that page's Start row. With a server that has answered, that hosts at once. With a server that hasn't
 //    answered yet, the page waits for it as a player's does (AHostWaits, HostWaitFrame): "Asking the server..." is pictured
 //    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
 //    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.
 // True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
-static void HostOnChoiceForARun(void);   // below, with the Host on row
+static bool ChooseOnTheHostPageForARun(void);   // below, the host page's part of a run
 
 static bool HostThroughTheRowsForARun(int level)
 {
@@ -1877,9 +1879,6 @@ static bool HostThroughTheRowsForARun(int level)
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
-
-	// A run has nobody to choose a server on the Host on row, so it chooses as a player would (added 2026-11-11)
-	HostOnChoiceForARun();
 
 	// (Modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": there's no Host row to set any more; every game is hosted
 	// online.)
@@ -1890,9 +1889,21 @@ static bool HostThroughTheRowsForARun(int level)
 	// HostByItselfThroughTheRelay has it)
 	netGameData.skirmishMode = FALSE;
 
-	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_CONFIG, "Start game") || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG)
+	// Start game opens the host page, with nothing chosen (modified 2026-11-11 by Melanikus for the AvP port); the run chooses its server
+	// there as a player does, and that opens the game's page
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_CONFIG, "Start game") || AvPMenus.CurrentMenu != AVPMENU_HOST_ON)
 	{
-		LogErrorString("hudson: Start game didn't open the game's page");
+		LogErrorString("hudson: Start game didn't open the host page");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	MenuSecondsForARun(1);
+	MenuFrameForARun("host-on.png");
+
+	if (!ChooseOnTheHostPageForARun() || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG)
+	{
+		LogErrorString("hudson: no server was chosen on the host page, so the game's page didn't open");
 		ReleaseAllAvPMenuGfx();
 		return false;
 	}
@@ -1964,78 +1975,16 @@ static bool HostThroughTheRowsForARun(int level)
 	return hosted;
 }
 
-// THE HOST ON ROW (the owner's rulings, 2026-11-11: "they will choose their friends' server, not least ping", "No auto choice, they
-// choose"): the Multiplayer page's row for the server a game is hosted on. Its choices are "choose a server", then every line that has
-// approved this PC (RelayList_ApprovedLines), in servers.cfg's order, each by its own name, made safe, and its round trip from the list's
-// last visit to it. It starts on "choose a server" at every start of the game, nothing is ever chosen for the player, and nothing hosts
-// until they choose: Start game and Co-op campaign say so here, and the host itself refuses too. With no line approved, its one choice says
-// where to ask. Added 2026-11-11 by Melanikus for the AvP port.
-static int hostOnPlaces[kServersCfgMostLines];
-static int hostOnCount = 0;
-static char hostOnWords[kServersCfgMostLines + 1][64];
-static char *hostOnNames[kServersCfgMostLines + 1];
-
-static char **HostOnChoices(void)
+// THE HOST PAGE'S PART OF A HUDSON RUN (hostrow=online with hoston=, hudson_plan.h): the run presses the row of the line it names, as a
+// player does, once that line can be hosted on, and that opens the game's page. Nothing is chosen for a player, and a run that names no
+// line hosts nothing (the owner, 2026-11-11: "No auto choice, they choose"). Added 2026-11-11 by Melanikus for the AvP port, in place of
+// the Multiplayer page's Host on row; Third's hoston= gives the name. True once a line was chosen.
+static bool ChooseOnTheHostPageForARun(void)
 {
-	int const approved = RelayList_ApprovedLines(hostOnPlaces, kServersCfgMostLines);
-	hostOnCount = approved < 0 ? 0 : approved > kServersCfgMostLines ? kServersCfgMostLines : approved;
-	snprintf(hostOnWords[0], sizeof(hostOnWords[0]), "%s", GetTextString(hostOnCount > 0 ? TEXTSTRING_HOSTON_CHOOSE : TEXTSTRING_HOSTON_NONE));
-	hostOnNames[0] = hostOnWords[0];
-
-	for (int i = 0; i < hostOnCount; i++)
-	{
-		RelayListLineNow now;
-		char name[kServersCfgNameLetters + 1] = "?";
-		bool const known = RelayList_LineNow(hostOnPlaces[i], &now);
-
-		if (known)
-		{
-			OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));
-		}
-
-		if (known && now.pingMs >= 0)
-		{
-			snprintf(hostOnWords[i + 1], sizeof(hostOnWords[i + 1]), "%s, %d ms", name, now.pingMs);
-		}
-		else
-		{
-			snprintf(hostOnWords[i + 1], sizeof(hostOnWords[i + 1]), "%s", name);
-		}
-
-		hostOnNames[i + 1] = hostOnWords[i + 1];
-	}
-
-	return hostOnNames;
-}
-
-// Each frame on the Multiplayer page: the row's choices again, and the line hosted on is the one the row shows, or none for its first
-static void HostOnFollowsTheRow(void)
-{
-	MenuData_SetHostOnChoices(HostOnChoices(), hostOnCount);
-	int const want = MP_HostOnChoice > 0 && MP_HostOnChoice <= hostOnCount ? hostOnPlaces[MP_HostOnChoice - 1] : -1;
-
-	if (RelayList_HostLine() != want)
-	{
-		(void)RelayList_HostOn(want);
-	}
-}
-
-// A Hudson run's choice on the Host on row (hostrow=): the row's first approved line, as a player could choose it, and the run's log
-// says so. Only HostThroughTheRowsForARun calls this; nothing chooses for a player (added 2026-11-11 by Melanikus for the AvP port).
-static void HostOnChoiceForARun(void)
-{
-	HostOnFollowsTheRow();
-
-	if (hostOnCount > 0)
-	{
-		MP_HostOnChoice = 1;
-		HostOnFollowsTheRow();
-		LogString("hudson: the run chooses the Host on row's first server, as a player could");
-	}
-	else
-	{
-		LogString("hudson: the Host on row has no server that has approved this copy, so nothing can be hosted");
-	}
+	// HOSTON= GOES HERE (Third): wait, with a time limit, for HostPage_RowCanBeChosen(HostPage_RowNamed(name)), then press it with
+	// PressTheRowForARun(AVPMENU_ELEMENT_HOSTLINE, row, ...), as a player does. Until then, a run names no line, so it hosts nothing.
+	LogErrorString("hudson: no server named for the host page, and nothing is chosen for a player: nothing is hosted");
+	return false;
 }
 
 extern void AvP_UpdateMenus(void)
@@ -2046,10 +1995,10 @@ extern void AvP_UpdateMenus(void)
 	// A host waiting for the server, and the line under the rows (added 2026-11-10, PO's rulings Q3 and Q4)
 	HostWaitFrame();
 
-	// The Host on row follows the approved lines, and the line hosted on follows the row (added 2026-11-11)
-	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER)
+	// The host page adds up each line's players from the find's games, when they come (added 2026-11-11, in place of the Host on row)
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_HOST_ON)
 	{
-		HostOnFollowsTheRow();
+		HostPage_Frame();
 	}
 
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
@@ -2727,10 +2676,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Online access row is there when servers.cfg names a server
 			// (modified 2026-11-10 by Melanikus for the AvP port, beta.2: it was -dev only for beta.1). They're set before the page's rows
 			// are counted.
-			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the Online page's row is there when servers.cfg has
-			// any line, and every line's state is asked for here (a visit to each line with a yes), so the host page's list has it
-			char **const hostOnChoices = HostOnChoices();
-			MenuData_SetMultiplayerRows(RelayList_LineCount() > 0, hostOnChoices, hostOnCount);
+			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): every line's state is asked for here (a visit to
+			// each line with a yes, PO's call), so the pages after this one start from this moment's answers; the host page asks again as it
+			// opens. The Host on row is gone: Start game and Co-op campaign open the host page instead.
+			MenuData_SetMultiplayerRows();
 			RelayList_FindGames();
 
 			//skirmishMode must be false
@@ -2750,6 +2699,19 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				{
 					SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
 				}
+				return;
+			}
+			break;
+		}
+
+		// The host page (host_page.h): Start game and Co-op campaign open it every time, with nothing chosen. Its rows are written before
+		// they're counted, and the menus start on its first, the question, which chooses nothing. Added 2026-11-11 by Melanikus for the AvP
+		// port, in place of the Multiplayer page's Host on row.
+		case AVPMENU_HOST_ON:
+		{
+			if (!HostPage_Opened(AvPMenus.MenuElements, kHostPageRowRoom))
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
 				return;
 			}
 			break;
@@ -3004,6 +2966,14 @@ static void RenderMenu(void)
 		OnlineLines_DrawTop(AvPMenus.CurrentlySelectedElement);
 	}
 
+	// The host page draws its own rows, a screenful at a time, and its words around them (host_page.h; added 2026-11-11)
+	bool const hostPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_HOST_ON;
+
+	if (hostPage)
+	{
+		HostPage_DrawTop(AvPMenus.CurrentlySelectedElement);
+	}
+
 	// The yes page's words, above its rows (#175's last part)
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
 	{
@@ -3097,6 +3067,11 @@ static void RenderMenu(void)
 			{
 				RenderMenuElement(elementPtr, e, OnlinePage_ControlTop(e));
 			}
+		}
+		else if (hostPage)
+		{
+			// Every row of the host page is drawn by the page: the question, and each line's in its screenful
+			HostPage_DrawRow(elementPtr, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement);
 		}
 		else if (onlinePage)
 		{
@@ -4364,6 +4339,10 @@ static bool HostsOnline(void)
 	return RelayList_HostLine() >= 0;
 }
 
+// Where Start game or Co-op campaign was going when it opened the host page: the game's page, or the co-op campaign's. Only those two
+// rows set it, and the host page's chosen row goes there (added 2026-11-11 by Melanikus for the AvP port).
+static enum AVPMENU_ID hostPageGoesTo = AVPMENU_MULTIPLAYER_CONFIG;
+
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -4404,12 +4383,14 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 				// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: a line's yes is said only on its own row of the
 				// Online page, so no row here asks for one: server_yes_page.h, THE ONE WAY IN.)
-				// Added 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): Start game and Co-op campaign
-				// host on the server the Host on row shows, and with none chosen they don't open, and say so
-				if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&
+				// Added 2026-11-11 by Melanikus for the AvP port (the owner's rulings: "No auto choice, they choose", "Yes 'host' <ny - ping>,
+				// <eu - ping>, <we - ping> on host screen"): Start game and Co-op campaign open the host page first, every time, with nothing
+				// chosen, and go on to their own page only once the player has chosen a server there (AVPMENU_ELEMENT_HOSTLINE, below)
+				if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER &&
 					(elementPtr->MenuToGoTo == AVPMENU_MULTIPLAYER_CONFIG || elementPtr->MenuToGoTo == AVPMENU_COOP_HOST))
 				{
-					ShowTheHostLine(AVPMENU_MULTIPLAYER, GetTextString(TEXTSTRING_HOSTON_CHOOSE_FIRST));
+					hostPageGoesTo = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);
+					SetupNewMenu(AVPMENU_HOST_ON);
 					break;
 				}
 
@@ -4422,6 +4403,22 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				}
 
 				SetupNewMenu(page);
+			}
+			break;
+		}
+		// A row of the host page (host_page.h; added 2026-11-11 by Melanikus for the AvP port): the menus go on, to where Start game or
+		// Co-op campaign was going, only when HostPage_PressedRow chose a line. Otherwise the page says why, and nothing is chosen.
+		case AVPMENU_ELEMENT_HOSTLINE:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && HostPage_PressedRow(elementPtr->MaxValue))
+			{
+				// The co-op page hosts as it opens, so online it first waits here for the server's answer (PO's ruling Q3)
+				if (hostPageGoesTo == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
+				{
+					break;
+				}
+
+				SetupNewMenu(hostPageGoesTo);
 			}
 			break;
 		}
@@ -5741,6 +5738,11 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
+			break;
+		}
+		case AVPMENU_ELEMENT_HOSTLINE:
+		{
+			// The host page draws its own rows (host_page.h, HostPage_DrawRow): nothing is drawn here (added 2026-11-11)
 			break;
 		}
 		case AVPMENU_ELEMENT_LOADMPCONFIG:

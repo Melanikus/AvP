@@ -316,7 +316,7 @@ bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
 		case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;
 		case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;
 		case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;
-		default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED; break;
+		default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_NOTAPPROVED_BEFORE; break;
 	}
 
 	if (words < 0)
@@ -324,7 +324,13 @@ bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
 		return false;
 	}
 
-	if (now.state == kRelayLineNoAnswer && why[0])
+	// A line not approved yet is said in PO's ruling's own words (R-SRV-P3): "Not approved on <name> yet: ask on the Online page" (modified
+	// 2026-11-11 by Melanikus for the AvP port; the name goes between the two parts, so a % in the text file is only a letter)
+	if (words == TEXTSTRING_NOTAPPROVED_BEFORE)
+	{
+		_snprintf(out, size - 1, "%s%s%s", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER));
+	}
+	else if (now.state == kRelayLineNoAnswer && why[0])
 	{
 		_snprintf(out, size - 1, "%s: %s %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);
 	}

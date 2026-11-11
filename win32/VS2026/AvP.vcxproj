@@ -379,6 +379,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\mp_config.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\host_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\server_yes_page.cpp" />
@@ -711,6 +712,8 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\mp_config.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page_rules.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page_rules.h" />

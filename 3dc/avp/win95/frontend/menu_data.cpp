@@ -33,6 +33,7 @@
 #include "user_io.h"
 #include "menu_data.h"
 #include "online_page.h"          // the Online page's room for rows, and its question's rows
+#include "host_page_rules.h"      // the host page's room for rows (2026-11-11)
 #include "view_settings.h"
 #include "hud_scale.h"
 #include "menus.h"
@@ -456,22 +457,17 @@ static AVPMENU_ELEMENT AvPMenu_PredatorLevels[] =
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
-// The Multiplayer page. Modified 2026-11-10 by Melanikus for the AvP port (beta.2, PO's rulings; and #175 2b's Servers row, always
-// there, under the Host row): two of its rows are there only when
-// servers.cfg names a server, the Host row (where a host's game is hosted, just above the host rows) and the Online access row (last; it was
-// -dev only for beta.1, the owner's ruling of 2026-11-09). So the rows are written each time the page opens (MenuData_SetMultiplayerRows,
-// below). Until then it has its four rows of 1999, and room for the two. With no server named, nothing leads to the Online access pages.
+// The Multiplayer page: the player's name, the Online row (every servers.cfg line, with its yes and its access), then Start game, Co-op
+// campaign and Join game, as in 1999. The rows are written each time the page opens (MenuData_SetMultiplayerRows, below); until then it
+// has its four rows of 1999, and room for the Online row. Modified 2026-11-10 and 2026-11-11 by Melanikus for the AvP port (beta.2): the
+// Online row in place of the Servers and Online access rows, and no Host on row: Start game and Co-op campaign open the host page, where
+// the player chooses the server (host_page.h).
 static AVPMENU_ELEMENT const PlayerNameRow = {AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_MULTIPLAYER_PLAYERNAME},	{NET_PLAYERNAMELENGTH-1},	{(int*)MP_PlayerName},	{0},	TEXTSTRING_MULTIPLAYER_PLAYERNAME_HELP};
 static AVPMENU_ELEMENT const OnlineRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ONLINE_ROW},	{AVPMENU_ONLINE},	{0},	{0},	TEXTSTRING_ONLINE_ROW_HELP};
 static AVPMENU_ELEMENT const StartGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_STARTGAME},	{AVPMENU_MULTIPLAYER_CONFIG},	{0},	{0},	TEXTSTRING_MULTIPLAYER_STARTGAME_HELP};
 static AVPMENU_ELEMENT const CoopRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP};
 static AVPMENU_ELEMENT const JoinGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP};
 static AVPMENU_ELEMENT const EndOfTheRows = {AVPMENU_ELEMENT_ENDOFMENU};
-
-// The server a game is hosted on (menu_data.h, MP_HostOnChoice; added 2026-11-11 by Melanikus for the AvP port). Its choices and their
-// count are written as the page opens, and each frame after (MenuData_SetHostOnChoices).
-int MP_HostOnChoice = 0;
-static AVPMENU_ELEMENT const HostOnRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,	{TEXTSTRING_MULTIPLAYER_HOSTON},	{0},	{&MP_HostOnChoice},	{0},	TEXTSTRING_MULTIPLAYER_HOSTON_HELP};
 
 static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 {
@@ -481,17 +477,15 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	JoinGameRow,
 	EndOfTheRows,
 
-	// Room for the Online row and the Host on row, and one more end
-	EndOfTheRows,
+	// Room for the Online row, and one more end
 	EndOfTheRows,
 	EndOfTheRows
 };
 
 static int const kMultiplayerRowRoom = sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]);
-static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 8,
-	"the page's four rows of 1999, the Online row, the Host on row a line brings, and two ends");
+static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 7, "the page's four rows of 1999, the Online row, and two ends");
 
-void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int hostOnCount)
+void MenuData_SetMultiplayerRows(void)
 {
 	int row = 0;
 	AvPMenu_Multiplayer[row++] = PlayerNameRow;
@@ -499,13 +493,6 @@ void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int ho
 	// Every servers.cfg line, each with its yes and its access (online_page.h). Always there, so that even with no servers.cfg at all its
 	// page can say why (modified 2026-11-11 by Melanikus for the AvP port: the Online page, in place of the Servers row)
 	AvPMenu_Multiplayer[row++] = OnlineRow;
-
-	// The server a game is hosted on, just above the rows that host (added 2026-11-11 by Melanikus for the AvP port)
-	if (aServerIsNamed)
-	{
-		AvPMenu_Multiplayer[row++] = HostOnRow;
-	}
-
 	AvPMenu_Multiplayer[row++] = StartGameRow;
 	AvPMenu_Multiplayer[row++] = CoopRow;
 	AvPMenu_Multiplayer[row++] = JoinGameRow;
@@ -515,29 +502,12 @@ void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int ho
 	{
 		AvPMenu_Multiplayer[row++] = EndOfTheRows;
 	}
-
-	MenuData_SetHostOnChoices(hostOnNames, hostOnCount);
 }
 
-void MenuData_SetHostOnChoices(char **hostOnNames, int hostOnCount)
-{
-	int const count = hostOnCount < 0 ? 0 : hostOnCount;
-
-	for (int row = 0; row < kMultiplayerRowRoom; row++)
-	{
-		if (AvPMenu_Multiplayer[row].ElementID == AVPMENU_ELEMENT_TEXTSLIDER_POINTER && AvPMenu_Multiplayer[row].SliderValuePtr == &MP_HostOnChoice)
-		{
-			AvPMenu_Multiplayer[row].TextSliderStringPointer = hostOnNames;
-			AvPMenu_Multiplayer[row].MaxSliderValue = count;
-		}
-	}
-
-	// A choice that isn't among them any more (a line no longer approved) goes back to none: it's never moved onto another line
-	if (MP_HostOnChoice < 0 || MP_HostOnChoice > count)
-	{
-		MP_HostOnChoice = 0;
-	}
-}
+// The host page (host_page.h): its rows are written as it opens, the question, a row for each servers.cfg line, and the end, so only its
+// first is set here. The rest are never read before then: the menus count a page's rows up to its end. Added 2026-11-11 by Melanikus for
+// the AvP port, in place of the Multiplayer page's Host on row.
+static AVPMENU_ELEMENT AvPMenu_HostOn[kHostPageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };
 
 // The Online page (online_page.h): its rows are written as it opens, a row for each servers.cfg line, then its own four and the end, so
 // only its first is set here. The rest are never read before then: the menus count a page's rows up to its end. Added 2026-11-11 by
@@ -1166,6 +1136,9 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_MULTIPLAYER_JOINING
 	{AVPMENU_FONT_BIG,TEXTSTRING_MULTIPLAYER_JOININGGAME,		AvPMenu_Multiplayer_Joining,		AVPMENU_MULTIPLAYER_JOINING,	0},
+
+	// AVPMENU_HOST_ON (host_page.h, 2026-11-11): Esc goes back to the Multiplayer page, with nothing chosen
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_HOSTPAGE_TITLE,			AvPMenu_HostOn,					AVPMENU_MULTIPLAYER, 0},
 
 	// AVPMENU_CONTROLS
 	{AVPMENU_FONT_SMALL,TEXTSTRING_MOUSECONTROLS_TITLE,			AvPMenu_ControlsOptions,			AVPMENU_OPTIONS,	0},
