@@ -572,6 +572,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
+    <ClInclude Include="..\..\3dc\avp\floor_is_lava.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_view.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_build.h" />

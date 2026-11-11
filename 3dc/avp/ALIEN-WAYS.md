@@ -35,8 +35,11 @@ While it's being made and filmed, alien ways is a developer feature, on only wit
 A number outside its range is ignored, and the log says so. The command line comes from outside the game, so it's checked (AvP's third
 rule: input is hostile).
 
-**When it ships**, the user's ruling is that it's always on, in every mode, with no setting for players. That's one line in
-`AlienWays_On` (alien_ways.cpp).
+**When it ships**, the user's ruling is that it's on, in every mode, with no setting on any menu. The way to put 1999's aliens back and
+compare is the console, as for NEWDYNAMICCOLLISIONS (#180): `FLOORISLAVA` switches it, `FLOORISLAVA ON` and `FLOORISLAVA OFF` say which
+(floor_is_lava.h). What it asks counts from the next level's start, because the map is built then: each level's start reads
+`FloorIsLavaAsked` into `AlienWaysSwitchedOn`, and the log says which it is. `-dev -alienways` asks the same way, for films. Until the
+flip, `FloorIsLavaAsked` starts at 0; the flip is that one value, after the films. (Modified 2026-11-11 by Melanikus (Third).)
 
 **Where it runs:** only on the machine that runs the aliens. That's single player, or the host of a network game (`AvP.NetworkAIServer`).
 A machine that joined a network game only draws the aliens the host sends it, so it has no map.
@@ -327,7 +330,8 @@ in `tests/takeouts/`: every row breaks one thing in a copy of the code, and the 
 | alien_ways_claims_test | the claims on a made-up map of 15 polygons, with hostile numbers and the memory limit; the flankers' weights are tried in the map and guide tests |
 | alien_ways_lookahead_test | the aim on made-up ways: straight, bends, steps, seams between walls, stretches of no length, refusals, the map's farthest corners |
 | alien_ways_stuck_test | every word of the stuck and let-go lines |
-| alien_ways_view_test | the developer view's lines and colours |
+| alien_ways_view_test | the developer view's lines and colours, and its own switch |
+| floor_is_lava_test | the console's FLOORISLAVA: its words, refusing any others; and, by reading the game's source, that it's a player's command, not a cheat, and counts at a level's start |
 
 The tests that "read the game's source" check that the game calls alien ways where and how it should. The game itself can't run in a test.
 

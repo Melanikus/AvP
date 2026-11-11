@@ -106,6 +106,7 @@
 #include "FastFile.h"
 #include "console.h"
 #include "new_dynamic_collisions.h"
+#include "floor_is_lava.h"
 
 #if debug
 #define MainTextPrint 1
@@ -455,9 +456,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 		// The map aliens will find their way along walls and ceilings by ("For Aliens, Floor is lava", #109). A developer's switch while it's
 		// being built and filmed; when it ships it's always on, with no setting (alien_ways.h).
+		// (Modified 2026-11-11 by Melanikus (Third) for the AvP port: it asks for them as the console's FLOORISLAVA ON does, since each level's
+		// start reads FloorIsLavaAsked; the -dev switches below still ask for AlienWaysSwitchedOn, set here at once. floor_is_lava.h)
 		if (devSwitch("-alienways"))
 		{
 			AlienWaysSwitchedOn = 1;
+			FloorIsLavaAsked = 1;
 			LogString("alien ways: the map is built at each level's start (-alienways)");
 		}
 		// The grid every NPC will share (npc_grid.h) for the aliens' searches, instead of the polygon map, which is still built as the fallback

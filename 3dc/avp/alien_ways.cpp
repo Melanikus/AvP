@@ -31,6 +31,7 @@
 #include "alien_ways_level.h"
 #include "alien_ways_stuck.h"
 #include "npc_grid.h"
+#include "floor_is_lava.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -52,6 +53,9 @@ int AlienWaysSwitchedOn = 0;
 int AlienWaysGridSwitchedOn = 0;
 int AlienWaysMoverSwitchedOn = 0;
 int AlienWaysViewSwitchedOn = 0;
+// What the console's FLOORISLAVA asks (floor_is_lava.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109). 0 until the flip:
+// only -dev -alienways sets it then, for films
+int FloorIsLavaAsked = 0;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 int AlienWaysWatchPlace = -1;
 
@@ -428,6 +432,11 @@ void AlienWays_LevelStart()
 {
 	// Whatever was left of the last level goes first
 	AlienWays_LevelEnd();
+
+	// What the console's FLOORISLAVA asked counts from here, for the whole level (floor_is_lava.h). Added 2026-11-11 by Melanikus (Third)
+	// for the AvP port: the ways are on or off for a level as a whole, as their map is built at its start
+	AlienWaysSwitchedOn = FloorIsLavaAsked ? 1 : 0;
+	LogString(FloorIsLava_Words(AlienWaysSwitchedOn));
 
 	// How far ahead along their ways the aliens aim (-alienwaysaim)
 	theGuide.SetAimAhead(AlienWaysAimAheadMm);
