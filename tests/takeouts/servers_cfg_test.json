@@ -190,7 +190,7 @@
 				{
 					"file": "3dc/servers_cfg.cpp",
 					"from": "if (letter >= 'a' && letter <= 'f')",
-					"to": "if ((letter >= 'a' && letter <= 'f') || (letter >= 'A' && letter <= 'F'))"
+					"to": "letter = static_cast<char>(letter | 0x20); if (letter >= 'a' && letter <= 'f')"
 				}
 			]
 		},

@@ -148,19 +148,8 @@ inline bool NetIdentity_IdFromHex(const char *hex, uint8_t out[kNetIdentityIdByt
 	return true;
 }
 
-// A fingerprint as 32 small hex digits, as the list writes it, ended with a 0
-inline void NetIdentity_FingerprintHex(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kNetIdentityFingerprintHexBytes])
-{
-	static const char kDigits[] = "0123456789abcdef";
-
-	for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
-	{
-		out[2 * i] = kDigits[fingerprint[i] >> 4];
-		out[2 * i + 1] = kDigits[fingerprint[i] & 0x0F];
-	}
-
-	out[2 * kNetIdentityFingerprintBytes] = 0;
-}
+// (The writer of a fingerprint as 32 hex digits went on 2026-11-10: the game no longer writes one since a listing names its host by the
+// whole id, above. REMOVED-CODE.md says where it is.)
 
 // A fingerprint from its 32 hex digits, as a listing gives it. Only small letters are taken, as the list writes them, and exactly 32
 // digits with nothing after them: anything else is refused (false, with out wiped), because a listing is input from outside the game.

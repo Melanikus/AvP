@@ -83,6 +83,7 @@
 #include "RenderList.h"
 #include "VertexBuffer.h"
 #include "FmvCutscenes.h"
+#include "menu_shape.h"   // the menus' one scale on a wide screen (MenuShape_WidthShare)
 #include "surface_normals.h"
 #include "shoulder_lamp.h"
 #include "view_settings.h"
@@ -322,12 +323,25 @@ inline float FMV_HPos2DC(int32_t pos)
 	return (float(pos / (float)480) * 2) - 1;
 }
 
+// True only while the menus' starfield is drawn (menus.cpp, DrawMainMenusBackdrop), which keeps the screen's whole width while everything
+// else of the menus keeps its true shape (menu_shape.h says why: the owner's choice, 2026-11-10). Each quad's place is worked out as it's
+// drawn (DrawQuad), so this only has to be true around that one draw. Added 2026-11-10 by Melanikus for the AvP port.
+bool MenuBackdropFullWidth = false;
+
+// How much of the screen's width the menus' grid takes (menu_shape.h): the 4:3 part in the middle of a wider screen, so the grid has one
+// scale both ways; the whole of a 4:3 or narrower one, as always. Films are drawn by FMV_WPos2DC, above, and keep the whole width, as does
+// the starfield (MenuBackdropFullWidth). Added 2026-11-10 by Melanikus for the AvP port.
+static float MenuWidthShare(void)
+{
+	return MenuShape_WidthShare(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, MenuBackdropFullWidth);
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
 	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
-		return (float(pos / (float)640) * 2) - 1;
+		return ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();
 	}
 	else {
 		return (float(pos / (float)ScreenDescriptorBlock.SDB_Width) * 2) - 1;
