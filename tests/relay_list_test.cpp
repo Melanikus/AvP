@@ -1009,17 +1009,20 @@ static void TestTheMenus()
 	Check(set != std::string::npos && join != std::string::npos && unset != std::string::npos && set < join && join < unset &&
 		CountOf(menus, "Net_SetRelayJoinWaitHook(") == 2, "and that's only for as long as the join waits");
 
-	// The wait is called from inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL, in the
-	// first footage's log). So the wait's drawing closes the menus' frame once, before its first frame of its own, and a new one is opened
-	// for the menus' loop to finish once the wait is over, however it ended.
+	// A player's Enter starts the join inside the menus' own frame, and Direct3D refuses a frame opened inside another (D3DERR_INVALIDCALL,
+	// in the first footage's log). So the wait's drawing closes the frame that's open once, before its first frame of its own, and gives one
+	// back for the menus' loop to finish once the wait is over. Modified 2026-11-10 by Melanikus for the AvP port (#202): only a frame that
+	// was open is closed, and only one it closed is given back, since a Hudson run presses the row between frames, with none open
+	// (online_screens_test, "The join's own frames", holds the details).
 	std::string const joining = SourceSlice(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const closesTheMenus = joining.find("if (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}");
+	size_t const closesTheMenus = joining.find("if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}\n\n\t\tjoinDrewFrames = true;");
 	size_t const opensItsOwn = joining.find("ThisFramesRenderingHasBegun();");
 	Check(closesTheMenus != std::string::npos && opensItsOwn != std::string::npos && closesTheMenus < opensItsOwn,
-		"the join's wait closes the menus' open frame, once, before it opens one of its own");
+		"the join's wait closes the frame that's open, once, before it opens one of its own");
 	std::string const waitOver = SourceSlice(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();"),
-		"and once it's over, a new frame is opened for the menus, only if the wait drew any");
+	Check(Has(waitOver, "if (joinDrewFrames)\n\t{\n\t\tjoinDrewFrames = false;") &&
+		Has(waitOver, "if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();"),
+		"and once it's over, a frame is given back for the menus, only if the wait drew any and closed theirs");
 	size_t const over = menus.find("OnlinePage_JoinWaitOver();");
 	Check(unset != std::string::npos && over != std::string::npos && unset < over && over < menus.find("if (joined != NET_FAIL)", unset) &&
 		CountOf(menus, "OnlinePage_JoinWaitOver();") == 1, "which the menus ask for straight after the join, before what it did is looked at");
@@ -1162,6 +1165,8 @@ static void TestAccessCodes()
 
 	// The same examples are in the server's own test of its approve command, so both sides make the same code from the same fingerprint.
 	// They were worked out a second way, with whole-number arithmetic rather than bit by bit (Fourth's access-code.js, 2026-11-09).
+	// Modified 2026-11-10 by Melanikus for the AvP port: the code is 8 letters now (relay_list_text.h, RelayAccess_Code), each example's
+	// the first 8 of its 16 before, worked out again in Node with the game's alphabet; the 80th bit's two examples moved to the 40th.
 	struct Example
 	{
 		const char *fingerprint;
@@ -1170,15 +1175,15 @@ static void TestAccessCodes()
 	};
 
 	Example const examples[] = {
-		{ "00000000000000000000000000000000", "2222-2222-2222-2222", "all 0 is the alphabet's first letter, 16 times" },
-		{ "ffffffffffffffffffffffffffffffff", "ZZZZ-ZZZZ-ZZZZ-ZZZZ", "all 1s is its last" },
-		{ "000102030405060708090a0b0c0d0e0f", "222J-62S6-2N52-G42B", "a fingerprint counting up" },
-		{ "0123456789abcdef0123456789abcdef", "26KN-CTWB-PH8Y-Y2B5", "another" },
-		{ "f0e1d2c3b4a5968778695a4b3c2d1e0f", "Y5JX-7JXN-NQDA-GY5B", "and one counting down" },
-		{ "80000000000000000000000000000000", "J222-2222-2222-2222", "the highest bit of the first byte is the first letter's highest" },
-		{ "00000000000000000001000000000000", "2222-2222-2222-2223", "the 80th bit is the last letter's lowest" },
-		{ "0000000000000000000000ffffffffff", "2222-2222-2222-2222", "bits past the 80th make no difference" },
-		{ "08421084210842108421000000000000", "3333-3333-3333-3333", "and each letter is exactly 5 bits" }
+		{ "00000000000000000000000000000000", "2222-2222", "all 0 is the alphabet's first letter, 8 times" },
+		{ "ffffffffffffffffffffffffffffffff", "ZZZZ-ZZZZ", "all 1s is its last" },
+		{ "000102030405060708090a0b0c0d0e0f", "222J-62S6", "a fingerprint counting up" },
+		{ "0123456789abcdef0123456789abcdef", "26KN-CTWB", "another" },
+		{ "f0e1d2c3b4a5968778695a4b3c2d1e0f", "Y5JX-7JXN", "and one counting down" },
+		{ "80000000000000000000000000000000", "J222-2222", "the highest bit of the first byte is the first letter's highest" },
+		{ "00000000010000000000000000000000", "2222-2223", "the 40th bit is the last letter's lowest" },
+		{ "0000000000ffffffffffffffffffffff", "2222-2222", "bits past the 40th make no difference" },
+		{ "08421084210000000000000000000000", "3333-3333", "and each letter is exactly 5 bits" }
 	};
 
 	for (size_t i = 0; i < sizeof(examples) / sizeof(examples[0]); i++)
@@ -1192,7 +1197,7 @@ static void TestAccessCodes()
 
 		if (read && strcmp(code, examples[i].code) != 0)
 		{
-			printf("          it made %.20s, not %s\n", code, examples[i].code);
+			printf("          it made %.10s, not %s\n", code, examples[i].code);
 		}
 	}
 }
@@ -1243,6 +1248,14 @@ static void TestAccessNames()
 	Check(name[0] == '\0', "a name with nothing left is empty, for the player to type one");
 	RelayAccess_NameFromProfile(NULL, 16, name);
 	Check(name[0] == '\0', "and so is no name at all");
+
+	// Whether letters were left out, for the page to say so (Secondary's dry run of beta.2, T2.2; added 2026-11-09)
+	Check(RelayAccess_NameLeftLettersOut("Jos\xE9 \"Hicks\"", 16) && RelayAccess_NameLeftLettersOut("a\\b", 16) &&
+		RelayAccess_NameLeftLettersOut("Tab\there", 16), "an accent, \", \\ or anything not printable is a letter left out");
+	Check(!RelayAccess_NameLeftLettersOut("Melanikus", 16) && !RelayAccess_NameLeftLettersOut("  Ripley  ", 16) &&
+		!RelayAccess_NameLeftLettersOut("ABCDEFGHIJKLMNOPQRST", 32), "spaces at the ends, and the cut to 15, aren't letters left out");
+	Check(!RelayAccess_NameLeftLettersOut("ABC\xE9", 3) && !RelayAccess_NameLeftLettersOut(NULL, 16),
+		"and a profile's name is read no further than its room, nor at all when there's none");
 
 	// The page's words for each reason are access_page_test's to check (AccessPage_NameText)
 }

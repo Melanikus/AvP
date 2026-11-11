@@ -1505,6 +1505,7 @@ enum TEXTSTRING_ID
 	// The Online access page (server #24, access_page.cpp), only with -dev for now. Added 2026-11-09 by Melanikus for the AvP port.
 	TEXTSTRING_ACCESS_ROW,               // the Multiplayer page's row, and the page's title
 	TEXTSTRING_ACCESS_ROW_HELP,
+	TEXTSTRING_ACCESS_EXPLAIN_ASKS,      // "Request access asks", then the server's name (2026-11-10), then the two lines below
 	TEXTSTRING_ACCESS_EXPLAIN,           // what Request access does, above the rows, before anything is sent: two lines of the table,
 	TEXTSTRING_ACCESS_EXPLAIN_MORE,      // since each holds at most 199 characters, drawn as one paragraph
 	TEXTSTRING_ACCESS_NAME,
@@ -1543,6 +1544,15 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ACCESS_NEWID_NO,
 	TEXTSTRING_ACCESS_NEWID_MADE,
 	TEXTSTRING_ACCESS_NEWID_FAILED,
+	TEXTSTRING_ACCESS_NAME_LEFT_OUT,     // the profile's name had letters the rule won't take, left out of the name to send (beta.2, 2026-11-09)
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE,         // the Multiplayer page's Host row: where a host's game is hosted (2026-11-10, PO's ruling)
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE,  // its first choice, with the server's name after it in brackets
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME,  // its second
+	TEXTSTRING_MULTIPLAYER_HOSTWHERE_HELP,    // what each means, in plain words
+	TEXTSTRING_HOST_ASKING,                  // a host waiting for the server's first answer (host_wait_rules.h, 2026-11-10, PO's ruling Q3)
+	TEXTSTRING_HOST_FAILED,                  // a failed online host's line, before the game's own words for why (Q4)
+	TEXTSTRING_HOST_FAILED_PLAIN,            // a failed host's line when there's no why to give
+	TEXTSTRING_HOST_NO_ANSWER,               // the wait gave up: the server didn't answer in kHostWaitMostMs
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,

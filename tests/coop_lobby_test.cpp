@@ -755,7 +755,10 @@ static void TestThePages()
 		Check(Has(hostPage, row) && Has(joinPage, row), std::string("both pages have the row ") + row + ", which the code looks for by name");
 	}
 
-	Check(Has(data, "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},"), "the multiplayer page leads to the host's page");
+	// Modified 2026-11-10 by Melanikus for the AvP port: the Multiplayer page's rows are written as it opens (menu_data.cpp,
+	// MenuData_SetMultiplayerRows), so the row is a constant, and the page writes it there
+	Check(Has(data, "static AVPMENU_ELEMENT const CoopRow = {AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},") &&
+		Has(data, "\tAvPMenu_Multiplayer[row++] = CoopRow;\n"), "the multiplayer page leads to the host's page");
 	Check(Has(menus, "SetupNewMenu(Net_CoopLobbyState() != kCoopLobbyNone ? AVPMENU_COOP_JOIN : AVPMENU_MULTIPLAYER_CONFIG_JOIN);"), "a joiner lands on the lobby page only for a lobby game");
 
 	std::string const hostFrame = Between(pages, "static CoopPageAnswer HostEveryFrame(void)\n{", "\n}\n");

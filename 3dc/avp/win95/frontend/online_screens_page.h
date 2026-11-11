@@ -57,6 +57,11 @@ int OnlinePage_SessionForRow(int menuRow);
 void OnlinePage_JoinFailed(const char *why);
 void OnlinePage_JoinGivenUp(void);
 
+// The check code's two grey help lines under its own line at codeTop, each wrapped to the words' box and spaced by its height, nothing
+// below limit (online_screens.h, OnlineScreens_HelpLines): for the joining page here, and for the host's "asks to join" rows in
+// menus.cpp. Added 2026-11-10 by Melanikus for the AvP port, after the two lines were drawn on top of each other.
+void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit);
+
 // The page's drawing, each frame: J1's tail and words, or on the list the column headings, "No open sessions" for an empty table, and a
 // failed join's line. Then each game's row of the menu, as bright as the menu has it (BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT for the
 // selected one). The Search box and the Refresh row are drawn by the menus themselves, each at OnlinePage_ControlTop of its row.

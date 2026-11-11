@@ -3103,6 +3103,11 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 	}
 }
 
+bool ThisFramesRenderingIsOpen()
+{
+	return frameIsOpen;
+}
+
 void ThisFramesRenderingHasBegun()
 {
 	surfacePicturesAreFromThisFrame = false;

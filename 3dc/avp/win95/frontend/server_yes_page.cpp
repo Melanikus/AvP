@@ -54,6 +54,42 @@ bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo)
 	return true;
 }
 
+// Which way online a row is, by the page it's on and the page it goes to (added 2026-11-10 by Melanikus for the AvP port). Find games is
+// the Join game page's row; the Open address page's row goes to the same games page, but for a typed address on this network, which uses
+// no server, so it asks nothing.
+static ServerYesWay WayOf(enum AVPMENU_ID from, enum AVPMENU_ID goTo)
+{
+	if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)
+	{
+		return kServerYesWayAccess;
+	}
+
+	if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_MULTIPLAYER_CONFIG || goTo == AVPMENU_COOP_HOST))
+	{
+		return kServerYesWayHost;
+	}
+
+	if (from == AVPMENU_MULTIPLAYERJOINGAME && goTo == AVPMENU_MULTIPLAYERSELECTSESSION)
+	{
+		return kServerYesWayFindGames;
+	}
+
+	return kServerYesNotAWay;
+}
+
+enum AVPMENU_ID ServerYesPage_WayIn(enum AVPMENU_ID from, enum AVPMENU_ID goTo, bool hostsOnline)
+{
+	ServerYesWay const way = WayOf(from, goTo);
+
+	if (!ServerYes_WayAsks(way, hostsOnline))
+	{
+		return goTo;
+	}
+
+	// After a No: Find games goes on to its page with this network's games only, every other way back to the Multiplayer page
+	return ServerYesPage_Needed(goTo, ServerYes_NoGoesOn(way) ? goTo : AVPMENU_MULTIPLAYER) ? AVPMENU_SERVER_YES : goTo;
+}
+
 bool ServerYesPage_Opened(void)
 {
 	haveShown = RelayList_LineToAgree(&shown);

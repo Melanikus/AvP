@@ -1008,6 +1008,12 @@ bool Auto()
 	return DevMode != 0;
 }
 '@ + "`n") }; Reason = 'D: 3dc/relay_auto.cpp line 3 names DevMode' },
+    @{ What = 'D: and on the online pages (the access page, the yes page, the online screens)'; None = $false; Files = @{ '3dc/avp/win95/frontend/access_page.cpp' = (@'
+bool AccessPage_QuestionOpened(void)
+{
+	return DevMode != 0;
+}
+'@ + "`n") }; Reason = 'D: 3dc/avp/win95/frontend/access_page.cpp line 3 names DevMode' },
     @{ What = 'D: DevMode in a comment, or outside the network''s files, is let through'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 // Nothing here asks DevMode
 '@ + "`n") }; '3dc/menus.cpp' = (@'
