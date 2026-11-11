@@ -4,6 +4,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   in a Hudson run with a marine, the hive and the squad don't run, unless the run asked for a fight
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   at a game's start the alien ways map is built for the level, and each frame the log hears once how that went (alien_ways.h);
 //   a level's start asks d3d_hud.cpp how big the HUD is drawn, for every species, in place of the motion tracker's width / 640
 //   (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 //   the lift's change of environment, which could never be asked for, is no longer looked for each frame (#135)
@@ -16,6 +17,7 @@
 #include "gamedef.h"
 #include "dynblock.h"
 #include "dynamics.h"
+#include "alien_ways.h"
 #include "tables.h"
 #include "bh_types.h"
 #include "bh_alien.h"
@@ -259,6 +261,8 @@ void StartGame(void)
 	InitObjectVisibilities();
 	InitPheromoneSystem();
 	BuildFarModuleLocs();
+	// The map of walls and ceilings an alien can find its way along. Only with -alienways for now, and it's built on a thread of its own.
+	AlienWays_LevelStart();
 	InitHive();
 //	InitSquad();
 
@@ -363,6 +367,10 @@ void UpdateGame(void)
 	-------------------------------------------------*/
 	PlayerPheromoneSystem();
 	AiPheromoneSystem();
+
+	// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual
+	// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.
+	AlienWays_Frame();
 
 	/*-------------- Patrick 11/1/97 ----------------
 	Call the alien hive management function
