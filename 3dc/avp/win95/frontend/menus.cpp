@@ -4544,6 +4544,299 @@ static bool HostsOnline(void)
 // rows set it, and the host page's chosen row goes there (added 2026-11-11 by Melanikus for the AvP port).
 static enum AVPMENU_ID hostPageGoesTo = AVPMENU_MULTIPLAYER_CONFIG;
 
+// InteractWithMenuElement's case AVPMENU_ELEMENT_KEYCONFIGOK, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithKeyConfigOk(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		switch (AvPMenus.CurrentMenu)
+		{
+			case AVPMENU_MARINEKEYCONFIG:
+			{
+				MarineInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				MarineInputSecondaryConfig = PlayerInputSecondaryConfig;
+				{
+					AutoWeaponChangeOn = AutoWeaponChangeOn_Temp;
+				}
+				break;
+			}
+			case AVPMENU_PREDATORKEYCONFIG:
+			{
+				PredatorInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				PredatorInputSecondaryConfig = PlayerInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_ALIENKEYCONFIG:
+			{
+				AlienInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				AlienInputSecondaryConfig = PlayerInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_CONTROLS:
+			{
+				ControlMethods = PlayerControlMethods;
+				break;
+			}
+			case AVPMENU_JOYSTICKCONTROLS:
+			{
+				JoystickControlMethods = PlayerJoystickControlMethods;
+				break;
+			}
+		}
+		
+		SaveUserProfile(UserProfilePtr);
+
+		if(AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
+		{
+			SetupNewMenu(AVPMENU_INGAME);
+		}
+		else
+		{
+			SetupNewMenu(AVPMENU_OPTIONS);
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_USERPROFILE, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithUserProfile(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		/* a profile has been selected */
+		int i;
+		UserProfilePtr = GetFirstUserProfile();
+		for (i=0; i<UserProfileNumber; i++)
+			UserProfilePtr = GetNextUserProfile();
+
+		if (UserProfileNumber)
+		{
+			// Edmond too
+			GetSettingsFromUserProfile();
+			// Edmond
+			if (LobbiedGame == LobbiedGame_Server)
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG);			// Edmond
+			}
+			else if (LobbiedGame == LobbiedGame_Client)
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
+			}
+			else
+				SetupNewMenu(AVPMENU_MAIN);
+		}
+		else
+		{
+			SetupNewMenu(AVPMENU_USERPROFILEENTERNAME);
+		}
+	}
+	else if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		if (*elementPtr->SliderValuePtr<elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr+=1;
+			EpisodeSelectScrollOffset-=ONE_FIXED;
+		}
+	}
+	else
+	{
+		if (*elementPtr->SliderValuePtr>0)
+		{
+			*elementPtr->SliderValuePtr-=1;
+			EpisodeSelectScrollOffset+=ONE_FIXED;
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_CHEATMODE_ENVIRONMENT_TEXTSLIDER, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithCheatModeEnvironmentSlider(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
+	{
+		*elementPtr->SliderValuePtr+=1;
+		if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr=0;
+		}
+		CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,TRUE);
+	}
+	else
+	{
+		*elementPtr->SliderValuePtr-=1;
+		if (*elementPtr->SliderValuePtr<0)
+		{
+			*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
+		}
+		CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,FALSE);
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_SPECIES_TEXTSLIDER, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithSpeciesSlider(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
+	{
+		*elementPtr->SliderValuePtr+=1;
+		if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr=0;
+		}
+		GetNextAllowedSpecies(elementPtr->SliderValuePtr,TRUE);
+	}
+	else
+	{
+		*elementPtr->SliderValuePtr-=1;
+		if (*elementPtr->SliderValuePtr<0)
+		{
+			*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
+		}
+		GetNextAllowedSpecies(elementPtr->SliderValuePtr,FALSE);
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_RESETKEYCONFIG, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithResetKeyConfig(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		switch (AvPMenus.CurrentMenu)
+		{
+			case AVPMENU_MARINEKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultMarineInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultMarineInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_PREDATORKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultPredatorInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultPredatorInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_ALIENKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultAlienInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultAlienInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_CONTROLS:
+			{
+				PlayerControlMethods = DefaultControlMethods;
+				break;
+			}
+			case AVPMENU_JOYSTICKCONTROLS:
+			{
+				PlayerJoystickControlMethods = DefaultJoystickControlMethods;
+				break;
+			}
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_NUMBERFIELD, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithNumberField(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if(interactionID == AVPMENU_ELEMENT_INTERACTION_DECREASE)
+	{
+		(*elementPtr->NumberPtr)--;
+		if(*elementPtr->NumberPtr<0)
+		{
+			*elementPtr->NumberPtr=0;
+		}
+	}
+	else if(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		(*elementPtr->NumberPtr)++;
+		if(*elementPtr->NumberPtr>elementPtr->MaxValue)
+		{
+			*elementPtr->NumberPtr=elementPtr->MaxValue;
+		}
+	}
+	else
+	{
+		*elementPtr->NumberPtr=0;
+		AvPMenus.UserEnteringNumber = 1;
+		KeyboardEntryQueue_Clear();
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_BUTTONSETTING, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithButtonSetting(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT) {
+		return;
+	}
+	/* else let it fall through */
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		if (*elementPtr->SliderValuePtr < elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr += 1;
+			EpisodeSelectScrollOffset -= ONE_FIXED;
+		}
+	}
+	else
+	{
+		if (*elementPtr->SliderValuePtr > 0)
+		{
+			*elementPtr->SliderValuePtr -= 1;
+			EpisodeSelectScrollOffset += ONE_FIXED;
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_SAVESETTINGS, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithSaveSettings(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		SetDetailLevelsFromMenu();
+		SaveUserProfile(UserProfilePtr);
+		
+		if (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
+		{
+			if (AvPMenus.CurrentMenu == AVPMENU_DETAILLEVELS)
+			{
+				SetupNewMenu(AVPMENU_INGAMEAVOPTIONS);
+			}
+			else
+			{
+				SetupNewMenu(AVPMENU_INGAME);
+			}
+		}
+		else
+		{
+			SetupNewMenu(AvPMenusData[AvPMenus.CurrentMenu].ParentMenu);
+		}
+	}
+	return;
+}
+
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -4655,28 +4948,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 		case AVPMENU_ELEMENT_NUMBERFIELD:
 		{
-			if(interactionID == AVPMENU_ELEMENT_INTERACTION_DECREASE)
-			{
-				(*elementPtr->NumberPtr)--;
-				if(*elementPtr->NumberPtr<0)
-				{
-					*elementPtr->NumberPtr=0;
-				}
-			}
-			else if(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				(*elementPtr->NumberPtr)++;
-				if(*elementPtr->NumberPtr>elementPtr->MaxValue)
-				{
-					*elementPtr->NumberPtr=elementPtr->MaxValue;
-				}
-			}
-			else
-			{
-				*elementPtr->NumberPtr=0;
-				AvPMenus.UserEnteringNumber = 1;
-				KeyboardEntryQueue_Clear();
-			}
+			InteractWithNumberField(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_DUMMYTEXTFIELD:
@@ -4730,25 +5002,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_SPECIES_TEXTSLIDER:
 		{
-			if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
-			{
-				*elementPtr->SliderValuePtr+=1;
-				if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr=0;
-				}
-				GetNextAllowedSpecies(elementPtr->SliderValuePtr,TRUE);
-			}
-			else
-			{
-				*elementPtr->SliderValuePtr-=1;
-				if (*elementPtr->SliderValuePtr<0)
-				{
-					*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
-				}
-				GetNextAllowedSpecies(elementPtr->SliderValuePtr,FALSE);
-			}
+			InteractWithSpeciesSlider(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_CHEATMODE_SPECIES_TEXTSLIDER:
@@ -4799,25 +5053,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_CHEATMODE_ENVIRONMENT_TEXTSLIDER:
 		{
-			if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
-			{
-				*elementPtr->SliderValuePtr+=1;
-				if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr=0;
-				}
-				CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,TRUE);
-			}
-			else
-			{
-				*elementPtr->SliderValuePtr-=1;
-				if (*elementPtr->SliderValuePtr<0)
-				{
-					*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
-				}
-				CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,FALSE);
-			}
+			InteractWithCheatModeEnvironmentSlider(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -4836,51 +5072,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		
 		case AVPMENU_ELEMENT_USERPROFILE:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				/* a profile has been selected */
-				int i;
-				UserProfilePtr = GetFirstUserProfile();
-				for (i=0; i<UserProfileNumber; i++)
-					UserProfilePtr = GetNextUserProfile();
-
-				if (UserProfileNumber)
-				{
-					// Edmond too
-					GetSettingsFromUserProfile();
-					// Edmond
-					if (LobbiedGame == LobbiedGame_Server)
-					{
-						SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG);			// Edmond
-					}
-					else if (LobbiedGame == LobbiedGame_Client)
-					{
-						SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
-					}
-					else
-						SetupNewMenu(AVPMENU_MAIN);
-				}
-				else
-				{
-					SetupNewMenu(AVPMENU_USERPROFILEENTERNAME);
-				}
-			}
-			else if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				if (*elementPtr->SliderValuePtr<elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr+=1;
-					EpisodeSelectScrollOffset-=ONE_FIXED;
-				}
-			}
-			else
-			{
-				if (*elementPtr->SliderValuePtr>0)
-				{
-					*elementPtr->SliderValuePtr-=1;
-					EpisodeSelectScrollOffset+=ONE_FIXED;
-				}
-			}
+			InteractWithUserProfile(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
@@ -5060,27 +5252,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_BUTTONSETTING:
 		{
-			
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT) {
-				break;
-			}
-			/* else let it fall through */
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				if (*elementPtr->SliderValuePtr < elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr += 1;
-					EpisodeSelectScrollOffset -= ONE_FIXED;
-				}
-			}
-			else
-			{
-				if (*elementPtr->SliderValuePtr > 0)
-				{
-					*elementPtr->SliderValuePtr -= 1;
-					EpisodeSelectScrollOffset += ONE_FIXED;
-				}
-			}
+			InteractWithButtonSetting(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -5393,92 +5565,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_KEYCONFIGOK:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				switch (AvPMenus.CurrentMenu)
-				{
-					case AVPMENU_MARINEKEYCONFIG:
-					{
-						MarineInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						MarineInputSecondaryConfig = PlayerInputSecondaryConfig;
-						{
-							AutoWeaponChangeOn = AutoWeaponChangeOn_Temp;
-						}
-						break;
-					}
-					case AVPMENU_PREDATORKEYCONFIG:
-					{
-						PredatorInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						PredatorInputSecondaryConfig = PlayerInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_ALIENKEYCONFIG:
-					{
-						AlienInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						AlienInputSecondaryConfig = PlayerInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_CONTROLS:
-					{
-						ControlMethods = PlayerControlMethods;
-						break;
-					}
-					case AVPMENU_JOYSTICKCONTROLS:
-					{
-						JoystickControlMethods = PlayerJoystickControlMethods;
-						break;
-					}
-				}
-				
-				SaveUserProfile(UserProfilePtr);
-
-				if(AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
-				{
-					SetupNewMenu(AVPMENU_INGAME);
-				}
-				else
-				{
-					SetupNewMenu(AVPMENU_OPTIONS);
-				}
-			}
+			InteractWithKeyConfigOk(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_RESETKEYCONFIG:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				switch (AvPMenus.CurrentMenu)
-				{
-					case AVPMENU_MARINEKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultMarineInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultMarineInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_PREDATORKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultPredatorInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultPredatorInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_ALIENKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultAlienInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultAlienInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_CONTROLS:
-					{
-						PlayerControlMethods = DefaultControlMethods;
-						break;
-					}
-					case AVPMENU_JOYSTICKCONTROLS:
-					{
-						PlayerJoystickControlMethods = DefaultJoystickControlMethods;
-						break;
-					}
-				}
-			}
+			InteractWithResetKeyConfig(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -5491,27 +5583,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 		case AVPMENU_ELEMENT_SAVESETTINGS:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				SetDetailLevelsFromMenu();
-				SaveUserProfile(UserProfilePtr);
-				
-				if (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
-				{
-					if (AvPMenus.CurrentMenu == AVPMENU_DETAILLEVELS)
-					{
-						SetupNewMenu(AVPMENU_INGAMEAVOPTIONS);
-					}
-					else
-					{
-						SetupNewMenu(AVPMENU_INGAME);
-					}
-				}
-				else
-				{
-					SetupNewMenu(AvPMenusData[AvPMenus.CurrentMenu].ParentMenu);
-				}
-			}
+			InteractWithSaveSettings(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 	
