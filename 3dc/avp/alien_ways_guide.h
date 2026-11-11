@@ -347,6 +347,10 @@ public:
 	// has: up to most of them, for the log's once-a-second line (lanes, #138)
 	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
 
+	// Which alien has one of the guide's places, for the log to name it by its id (alien_ways_stuck.h): false, with who untouched, for a place
+	// that isn't one or that no alien has. Added 2026-11-11 by Melanikus for the AvP port (#109).
+	bool WhoAt(size_t slot, AlienWaysWho *who) const;
+
 	// What every guided alien's way is now, for the developer view: up to most of them. The points are good until the next Frame or Clear.
 	size_t Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const;
 

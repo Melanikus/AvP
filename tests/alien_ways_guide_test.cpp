@@ -236,6 +236,13 @@ static void FirstWay()
 		"its place is given for the once-a-second line: the guide's first place, where it is, on the floor");
 	Check(guide.GuidedPlaces(slots, places, kinds, 0) == 0, "with no room, no place is given");
 
+	// Which alien has a place, for the log to name it by its id (added 2026-11-11 by Melanikus for the AvP port, #109)
+	AlienWaysWho atFirst = { 0, 0 };
+	AlienWaysWho untouched = { 7, 7 };
+	Check(guide.WhoAt(0, &atFirst) && atFirst.place == Alien(1).place && atFirst.name == Alien(1).name
+		&& !guide.WhoAt(1, &untouched) && !guide.WhoAt(kAlienWaysMostFollowers, &untouched) && untouched.place == 7 && untouched.name == 7,
+		"the guide says which alien has its first place, and nothing, touching nothing, for a place no alien has or that isn't one");
+
 	const AlienWaysPoint *points[4];
 	int counts[4], headings[4];
 	Check(guide.Shown(points, counts, headings, 4) == 1 && counts[0] == 6 && headings[0] == 1, "the view is shown its way: 6 points, heading for the second");
@@ -1810,7 +1817,7 @@ static void SourceOfTheGame()
 		"SOURCE: resting after a stuck, it's held back from avoiding as well, before the tests run (added 2026-11-11 by Melanikus (Third), #109)");
 	Check(Has(ways, "bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)\n{\n\treturn alien && AlienWays_On() && ReadyMap() && theGuide.RestingAfterStuck(WhoIs(alien));"),
 		"SOURCE: held back while it rests after a stuck, or waits for a re-plan's way, and never with the switch off");
-	Check(Has(ways, "case kAlienWaysOutcomeRestEnded:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u at %s, resting after a stuck and held back from avoiding"),
+	Check(Has(ways, "case kAlienWaysOutcomeRestEnded:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s, resting after a stuck and held back from avoiding"),
 		"SOURCE: the log says when a rest ends early for a re-plan");
 
 	// THE SLIDE, the game's half (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): its velocity and turn after the way's own,
@@ -1830,7 +1837,7 @@ static void SourceOfTheGame()
 		Has(ways, "\tif (frameNumber == 1)\n\t{\n\t\tfor (int i = 0; i < NumActiveStBlocks; i++)\n\t\t{\n\t\t\tEndSlide(ActiveStBlockList[i]);"),
 		"SOURCE: and back when it's let go, when no way steers it, and at a level's first frame for one a saved game kept mid-slide");
 	Check(Has(ways, "\ttheGuide.SetSlides(true);\n"), "SOURCE: the game turns the slide on at a level's start");
-	Check(Has(ways, "case kAlienWaysOutcomeSlide:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u slides %.1f m past a stuck at %s to %s"),
+	Check(Has(ways, "case kAlienWaysOutcomeSlide:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s slides %.1f m past a stuck at %s to %s"),
 		"SOURCE: the log has a line for each slide, how far, from where and to where");
 	Check(Has(near, "\tif (!onAWay && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tdynPtr->UseStandardGravity=0;"),
 		"SOURCE: in Approach, a climbing alien the guide has keeps clinging when no way steers it (KeepsClinging)");
@@ -1900,7 +1907,8 @@ static void SourceOfTheGame()
 	Check(Has(ways, "(line.toTheTarget ? \" (its target)\" : \" (on the way to its target)\")"), "SOURCE: and the log says which goal a search took");
 	Check(Has(steer, "\t\task.goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));"),
 		"SOURCE: otherwise the goal's polygons are looked for in the module the goal is in, found from where it is");
-	Check(Has(ways, "case kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u stuck at %s, heading for %s"),
+	// Modified 2026-11-11 by Melanikus for the AvP port (#109): the line names the alien by its place and id (alien_ways_stuck.h)
+	Check(Has(ways, "case kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s stuck at %s, heading for %s"),
 		"SOURCE: an alien found stuck is a line in the log");
 
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "told = true;");
@@ -1943,7 +1951,7 @@ static void SourceOfTheGame()
 	// code, and the log says when one is handed over
 	Check(Has(ways, "if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who) || theGuide.HandedOver(ask.who))"),
 		"SOURCE: the mover leaves an alien handed over near its target to the game's own last stretch");
-	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u at %s is %.1f m from its target at %s, in clear sight"),
+	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s is %.1f m from its target at %s, in clear sight"),
 		"SOURCE: the log says when an alien is handed over, and how far from its target");
 	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
 		"SOURCE: whether it can see its target clearly is the game's own test for a pounce (R-LAVA-5: only in clear view)");

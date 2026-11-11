@@ -502,6 +502,17 @@ size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds,
 	return found;
 }
 
+bool AlienWaysGuide::WhoAt(size_t slot, AlienWaysWho *who) const
+{
+	if (slot >= kAlienWaysMostFollowers || !followers[slot].used || !who)
+	{
+		return false;
+	}
+
+	*who = followers[slot].who;
+	return true;
+}
+
 size_t AlienWaysGuide::Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const
 {
 	size_t shown = 0;

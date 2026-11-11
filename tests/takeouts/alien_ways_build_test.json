@@ -220,8 +220,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n}",
-					"to": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n\ttheBuild.Stop();\n}"
+					"from": "\tstd::vector<Seen>().swap(seen);\n\ttoldSeenFull = false;\n}",
+					"to": "\tstd::vector<Seen>().swap(seen);\n\ttoldSeenFull = false;\n\ttheBuild.Stop();\n}"
 				}
 			]
 		},

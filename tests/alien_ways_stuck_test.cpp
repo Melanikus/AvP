@@ -18,8 +18,12 @@
 #include <ctype.h>
 #include <stdio.h>
 
+#include <stdint.h>
+#include <string.h>
+
 #include <algorithm>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -27,6 +31,17 @@
 #include "alien_ways_stuck.h"
 
 static int checksFailed = 0;
+
+// An alien's name as the game keeps it, 8 bytes, and that name as the guide's number for it (AlienWaysWho::name is a memcpy of it, in
+// alien_ways.cpp's WhoIs). Added 2026-11-11 by Melanikus for the AvP port (#109).
+static unsigned char const kName[8] = { 0x0a, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f, 0x60, 0x71 };
+
+static uint64_t NameOf(const unsigned char bytes[8])
+{
+	uint64_t name = 0;
+	memcpy(&name, bytes, sizeof(name));
+	return name;
+}
 
 static void Check(bool good, const std::string &what)
 {
@@ -201,10 +216,50 @@ static void TestTheWords()
 	AlienWaysStuckFacts gone;
 	Check(AlienWaysStuck_Details(gone) == ". It's no longer one of the game's live aliens, so nothing more can be said", "an alien that's gone is said to be gone");
 
-	Check(AlienWaysStuck_LetGoLine(6, -4600, 1900, 19500) == "alien ways: an alien at (-4.6, 1.9, 19.5) stopped being guided, in Avoidance",
-		"an alien let go is said with where it is and the state it's in");
+	// Modified 2026-11-11 by Melanikus for the AvP port (#109): the let-go line names the alien by its place and id
+	Check(AlienWaysStuck_LetGoLine(1, NameOf(kName), 6, -4600, 1900, 19500) == "alien ways: alien 1 (id 0a1b2c3d4e5f6071) at (-4.6, 1.9, 19.5) stopped being guided, in Avoidance",
+		"an alien let go is said by its place and id, with where it is and the state it's in");
 	Check(AlienWaysStuck_LetGoLinesStop() == "alien ways: 100 aliens let go in this level, so no more lines about that until the next one",
 		"and the line after the most a level has says that's all");
+}
+
+// THE IDS, AND THE LINES THAT FOLLOW ONE ALIEN (alien_ways_stuck.h). Added 2026-11-11 by Melanikus for the AvP port (#109).
+static void TestTheIds()
+{
+	printf("An alien's id, and the reached and leaving lines:\n");
+
+	Check(AlienWaysStuck_Id(NameOf(kName)) == "0a1b2c3d4e5f6071",
+		"an id is the 8 bytes of the alien's name as 16 small hex digits, in the name's own order, as Hudson's blow line prints the alien that struck");
+	unsigned char const allOn[8] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	Check(AlienWaysStuck_Id(0) == "0000000000000000" && AlienWaysStuck_Id(NameOf(allOn)) == "ffffffffffffffff",
+		"a name of all 0s or all 1s is still 16 digits, two a byte, with none dropped or doubled");
+	Check(AlienWaysStuck_Who(2, NameOf(kName)) == "alien 2 (id 0a1b2c3d4e5f6071)", "an alien is named by its place in the guide, then its id");
+
+	Check(AlienWaysStuck_ReachedLine(0, NameOf(kName), 12400, 1.94) == "alien ways: alien 0 (id 0a1b2c3d4e5f6071) reached its target, 12.4 s after its first way, at 1.9 m",
+		"an alien that reached its target says how long after its first way, and how far from its target");
+	Check(AlienWaysStuck_ReachedLine(0, NameOf(kName), -1, 1.5) == "alien ways: alien 0 (id 0a1b2c3d4e5f6071) reached its target, before any way was found for it, at 1.5 m",
+		"one that reached it before the guide found it any way says so, with no time");
+	Check(AlienWaysStuck_ReachedLine(0, NameOf(kName), 0, -1.0) == "alien ways: alien 0 (id 0a1b2c3d4e5f6071) reached its target, 0.0 s after its first way, at an unknown distance",
+		"and one whose target isn't known says the distance isn't known, not a number below 0");
+
+	const char *const words[] = { "dead", "gone", "far", "target gone" };
+	bool allSaid = true;
+
+	for (int why = 0; why < kAlienWaysLeavingKinds; why++)
+	{
+		allSaid = allSaid && AlienWaysStuck_LeavesLine(1, NameOf(kName), why) == std::string("alien ways: alien 1 (id 0a1b2c3d4e5f6071) leaves the guide: ") + words[why];
+	}
+
+	Check(kAlienWaysLeavingKinds == 4 && allSaid, "an alien that left the guide says why in one of four ways: dead, gone, far or target gone");
+	Check(AlienWaysStuck_LeavesLine(1, NameOf(kName), kAlienWaysLeavingKinds) == "alien ways: alien 1 (id 0a1b2c3d4e5f6071) leaves the guide: an unknown reason"
+		&& AlienWaysStuck_LeavesLine(1, NameOf(kName), -1) == "alien ways: alien 1 (id 0a1b2c3d4e5f6071) leaves the guide: an unknown reason",
+		"a reason that isn't one of them is said to be unknown, and nothing past the list is read");
+
+	// The forms Primary's count reads (AvP-docs\tools\primary\stuck\stuck-count.js), so a change here that it can't read fails here first
+	std::regex const reached("^alien ways: alien (\\d+) \\(id [0-9a-f]{16}\\) reached its target, ([0-9.]+) s after its first way, at ([0-9.]+) m$");
+	std::regex const leaves("^alien ways: alien (\\d+) \\(id [0-9a-f]{16}\\) leaves the guide: (dead|gone|far|target gone)$");
+	Check(std::regex_match(AlienWaysStuck_ReachedLine(2, NameOf(kName), 3000, 2.0), reached) && std::regex_match(AlienWaysStuck_LeavesLine(2, NameOf(kName), kAlienWaysLeavesFar), leaves),
+		"the reached and leaving lines are in the forms agreed with Primary's count");
 }
 
 static void TestTheGameUsesIt()
@@ -234,7 +289,8 @@ static void TestTheGameUsesIt()
 	Check(ComesBefore(frame, "\t\tAlienWaysStateHistory_Note(&w.history, StateOf(alien));\n", "theGuide.Frame(ReadyMap()"),
 		"every frame each watched alien's state is noted, whatever state it's in, before the guide's turn");
 	Check(Has(frame, "\t\tif (!alien)\n\t\t{\n\t\t\tw = Watched();\n\t\t\tcontinue;"), "and one that's gone is taken off the list");
-	Check(Has(frame, "if (letGo && letGoLines < kAlienWaysMostLetGoLines)") && Has(frame, "if (letGoLines == kAlienWaysMostLetGoLines)"),
+	// Modified 2026-11-11 by Melanikus for the AvP port (#109): every alien let go is a line, a dead or gone one too
+	Check(Has(frame, "\t\tif (letGoLines < kAlienWaysMostLetGoLines)\n") && Has(frame, "if (letGoLines == kAlienWaysMostLetGoLines)"),
 		"an alien let go is a line, up to the most a level has, and then one line says so");
 
 	std::string const steer = Between(ways, "bool AlienWays_Steer(", "bool AlienWays_Following(");
@@ -245,12 +301,61 @@ static void TestTheGameUsesIt()
 	// and the check holds wherever in the function they are
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "\n}\n");
 	Check(Has(end, "\t\tw = Watched();") && Has(end, "\tletGoLines = 0;"), "and the list is emptied at a level's end");
+
+	// THE IDS IN THE GAME'S LINES (added 2026-11-11 by Melanikus for the AvP port, #109), in the same cut of TellHowASearchWent as above
+	size_t named = 0;
+
+	for (size_t at = tell.find("alien.c_str(), "); at != std::string::npos; at = tell.find("alien.c_str(), ", at + 1))
+	{
+		named++;
+	}
+
+	Check(Has(tell, "std::string const alien = AlienWaysStuck_Who(line.follower, line.who.name);") && named == 8 && !Has(tell, "\"alien ways: alien %u"),
+		"each of a search's eight lines names its alien by its place and its id, and none by its place alone");
+	Check(Has(tell, "if (line.outcome == kAlienWaysOutcomeFound || line.outcome == kAlienWaysOutcomeAllFloor)")
+		&& Has(tell, "if (s && s->firstWayMs < 0)\n\t\t{\n\t\t\ts->firstWayMs = clockMs;"),
+		"an alien's first way found starts the clock its reached line gives, and a later way doesn't restart it");
+	Check(Has(frame, "theGuide.WhoAt(slots[i], &who);") && Has(frame, "AlienWaysStuck_Who(slots[i], who.name) + \" at \""),
+		"the once-a-second places name each alien by its place and its id");
+	std::string const wouldHave = Between(ways, "void AlienWays_WouldHaveAvoided(", "bool AlienWays_Following(");
+	Check(Has(wouldHave, "AlienWaysStuck_Who(SlotOf(who), who.name).c_str(), Metres(at).c_str(), module,"),
+		"a line about a test that would have sent an alien off names it by its place and its id too");
+	Check(ComesBefore(steer, "Seen *const seenNow = SeenFor(ask.who.name, true);", "if (theGuide.Steer(map, ask, &towards))")
+		&& Has(steer, "if (seenNow && ask.hasTarget)\n\t{\n\t\tseenNow->hasTarget = true;\n\t\tseenNow->target = ask.target;"),
+		"an alien that asks for a way is on the seen list, with the target it's coming for, kept when an ask has none");
+	Check(ComesBefore(frame, "\t\t\ts->slot = slot;\n", "theGuide.Frame(ReadyMap()"),
+		"each alien's place in the guide is noted every frame before the guide's turn, so one let go can still be named by it");
+
+	// REACHED: the first frame in Attack, once an alien a level, before the guide's turn lets it go for Attack
+	Check(ComesBefore(frame, "alien->I_SBtype != I_BehaviourAlien || !alien->DynPtr || StateOf(alien) != ABS_Attack)", "theGuide.Frame(ReadyMap()")
+		&& Has(frame, "for (int i = 0; i < NumActiveStBlocks && reachedLines < kAlienWaysMostReachedLines; i++)"),
+		"every live alien in its own Attack is looked at, up to the most reached lines a level has, before the guide's turn");
+	Check(Has(frame, "if (!s || s->reached)\n\t\t{\n\t\t\tcontinue;") && ComesBefore(frame, "s->reached = true;", "LogString(AlienWaysStuck_ReachedLine(SlotOf(who), who.name, "
+		"s->firstWayMs < 0 ? -1 : clockMs - s->firstWayMs, MetresToItsTarget(alien, *s)));"),
+		"only an alien that has asked for a way gets a reached line, once, with the time since its first way and its distance to its target");
+
+	// LEAVES THE GUIDE: why, in alien_ways_stuck.h's order, and the let-go line for a state of its own otherwise
+	std::string const why = Between(ways, "static int WhyItLeaves(", "static double MetresToItsTarget(");
+	size_t const dead = why.find("return BlockOf(who) ? kAlienWaysLeavesDead : kAlienWaysLeavesGone;");
+	size_t const dying = why.find("if (StateOf(alien) == ABS_Dying || alien->SBDamageBlock.Health <= 0)");
+	size_t const far = why.find("if (!alien->SBdptr)");
+	size_t const target = why.find("if (!target || target->SBDamageBlock.Health <= 0)");
+	Check(dead != std::string::npos && dying != std::string::npos && far != std::string::npos && target != std::string::npos && dead < dying && dying < far && far < target
+		&& Has(why, "return -1;"), "an alien let go is dead, gone, far or without its target, asked in that order, or else left for a state of its own");
+	Check(Has(frame, "int const why = WhyItLeaves(lapsed[i], letGo);") && Has(frame, "LogString(why >= 0 || !letGo ? AlienWaysStuck_LeavesLine(slot, lapsed[i].name, why)"),
+		"so the line for an alien let go says why it left, or the state it left for");
+
+	// Nothing of the seen list carries into the next level, or past a restart, where a remade alien can have an old one's name
+	std::string const restarts = Between(ways, "void AlienWays_LevelRestarts()", "\n}\n");
+	Check(Has(end, "\tstd::vector<Seen>().swap(seen);") && Has(end, "\treachedLines = 0;") && Has(restarts, "\tstd::vector<Seen>().swap(seen);"),
+		"the seen list is emptied at a level's end and when it restarts");
 }
 
 int main()
 {
 	TestTheStates();
 	TestTheWords();
+	TestTheIds();
 	TestTheGameUsesIt();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");

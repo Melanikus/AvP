@@ -10,7 +10,13 @@
 //          gravity off, touching the floor yes; its gravity (0.00, 1.00, 0.00) and its body's down (0.00, 1.00, 0.00), 0 degrees apart;
 //          obstructed 11 frames running; in module genent03; the game's own goal (1.4, 1.9, 27.3)
 //
-//     alien ways: an alien at (-4.6, 1.9, 19.5) stopped being guided, in Avoidance
+//     alien ways: alien 3 (id 0a1b2c3d4e5f6071) at (-4.6, 1.9, 19.5) stopped being guided, in Avoidance
+//
+// and, since 2026-11-11 (below), the lines for an alien that reached its target or left the guide for another reason, each naming the alien
+// by its id as well as its place in the guide:
+//
+//     alien ways: alien 0 (id 0a1b2c3d4e5f6071) reached its target, 12.4 s after its first way, at 1.9 m
+//     alien ways: alien 0 (id 0a1b2c3d4e5f6071) leaves the guide: dead
 //
 // The first part of the stuck line is alien_ways.cpp's, and this gives the rest. The game's numbers are copied into plain ones first
 // (AlienWaysStuckFacts), so this knows nothing of the game and tests/alien_ways_stuck_test.cpp can try every word of it.
@@ -19,7 +25,9 @@
 #define ALIEN_WAYS_STUCK_H
 
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <string>
 
@@ -170,15 +178,105 @@ static inline std::string AlienWaysStuck_Details(const AlienWaysStuckFacts &fact
 	return line;
 }
 
-// The line for an alien the guide stops guiding, which happens when it leaves the state that asks for a way
-static inline std::string AlienWaysStuck_LetGoLine(int stateNow, double x, double y, double z)
+// AN ALIEN'S ID IN THE LOG. Added 2026-11-11 by Melanikus for the AvP port (#109, Primary's encounter count).
+//
+// "alien N" in a line is the guide's place for the alien, 0 to 2, and another alien gets the same place once this one is let go, so N alone
+// can't follow one alien through a log. The id can: it's the 8 bytes of the alien's name in the game (its STRATEGYBLOCK's SBname, which the
+// guide keeps as AlienWaysWho::name), as 16 hex digits in the name's own byte order. A name lasts as long as the alien. Hudson's line for a
+// blow on him prints the striking alien's name the same way (hudson.cpp, AlienWords), so a blow can be put beside that alien's own lines.
+// Every line that names an alien says "alien N (id S)". One caution for a reader: when a level restarts, a remade alien can get an old one's
+// name (alien_ways.cpp, AlienWays_LevelRestarts), so an id is one alien's only between a level's start or restart and the next.
+static inline std::string AlienWaysStuck_Id(uint64_t name)
 {
-	char text[160];
+	unsigned char bytes[sizeof(name)];
+	memcpy(bytes, &name, sizeof(bytes));
 
-	snprintf(text, sizeof(text), "alien ways: an alien at (%.1f, %.1f, %.1f) stopped being guided, in %s", x / 1000.0, y / 1000.0, z / 1000.0,
-		AlienWaysStuck_StateName(stateNow));
+	char text[2 * sizeof(bytes) + 1] = {};
+
+	for (size_t i = 0; i < sizeof(bytes); i++)
+	{
+		snprintf(text + 2 * i, 3, "%02x", bytes[i]);
+	}
+
 	return text;
 }
+
+static inline std::string AlienWaysStuck_Who(size_t slot, uint64_t name)
+{
+	return "alien " + std::to_string(static_cast<unsigned long long>(slot)) + " (id " + AlienWaysStuck_Id(name) + ")";
+}
+
+// The line for an alien the guide stops guiding because it went into a state that doesn't ask for a way (Attack, Jump, Hunt...).
+// Modified 2026-11-11 by Melanikus for the AvP port: it names the alien, "alien N (id S)", where it said "an alien".
+static inline std::string AlienWaysStuck_LetGoLine(size_t slot, uint64_t name, int stateNow, double x, double y, double z)
+{
+	char text[192];
+
+	snprintf(text, sizeof(text), "alien ways: %s at (%.1f, %.1f, %.1f) stopped being guided, in %s", AlienWaysStuck_Who(slot, name).c_str(),
+		x / 1000.0, y / 1000.0, z / 1000.0, AlienWaysStuck_StateName(stateNow));
+	return text;
+}
+
+// REACHED. The line for an alien that has reached its target: the first frame it's in its own Attack state, once an alien a level. 1999's
+// code puts an alien into Attack in one place only, from Approach when it's within ALIEN_ATTACKDISTANCE_MIN (2 m) of its target
+// (bh_near.cpp), and its claws strike only in Attack. So a blow on a marine always comes after this line for the alien that struck, if the
+// guide ever guided it. A Pounce isn't a reach: it starts 3 to 8 m out. sinceFirstWayMs is how long it was since the guide found this
+// alien's first way, or below 0 if it never found one; metres is how far it is from its target then, or below 0 if its target isn't known.
+// Added 2026-11-11 by Melanikus for the AvP port (#109; the form agreed with Primary, for his count of encounters that end with the alien
+// at the marine).
+static inline std::string AlienWaysStuck_ReachedLine(size_t slot, uint64_t name, long long sinceFirstWayMs, double metres)
+{
+	char when[64];
+	char where[48];
+
+	if (sinceFirstWayMs < 0)
+	{
+		snprintf(when, sizeof(when), "before any way was found for it");
+	}
+	else
+	{
+		snprintf(when, sizeof(when), "%.1f s after its first way", sinceFirstWayMs / 1000.0);
+	}
+
+	if (metres < 0.0)
+	{
+		snprintf(where, sizeof(where), "at an unknown distance");
+	}
+	else
+	{
+		snprintf(where, sizeof(where), "at %.1f m", metres);
+	}
+
+	return "alien ways: " + AlienWaysStuck_Who(slot, name) + " reached its target, " + when + ", " + where;
+}
+
+// LEAVES THE GUIDE. Why an alien the guide was guiding stopped being guided, when it isn't for a state of its own (that's the let-go line,
+// above), in the order alien_ways.cpp asks:
+//   dead          it's dying, or its block is still in the game but no longer an alien (a corpse);
+//   gone          its block isn't in the game at all any more;
+//   far           it's out of view, so the game runs it by its far AI (no display block), which also moves it without walking;
+//   target gone   the target it last came for isn't in the game any more, or is dead.
+// Added 2026-11-11 by Melanikus for the AvP port (#109, Primary's encounter count).
+enum AlienWaysLeaving
+{
+	kAlienWaysLeavesDead,
+	kAlienWaysLeavesGone,
+	kAlienWaysLeavesFar,
+	kAlienWaysLeavesTargetGone,
+	kAlienWaysLeavingKinds
+};
+
+static const char *const kAlienWaysLeavingWords[] = { "dead", "gone", "far", "target gone" };
+static_assert(sizeof(kAlienWaysLeavingWords) / sizeof(kAlienWaysLeavingWords[0]) == kAlienWaysLeavingKinds, "a word for every way of leaving");
+
+static inline std::string AlienWaysStuck_LeavesLine(size_t slot, uint64_t name, int why)
+{
+	const char *const words = why >= 0 && why < kAlienWaysLeavingKinds ? kAlienWaysLeavingWords[why] : "an unknown reason";
+	return "alien ways: " + AlienWaysStuck_Who(slot, name) + " leaves the guide: " + words;
+}
+
+// How many reached lines a level gets, one an alien at most: far more aliens than any level makes, and still a limit on the log
+static const int kAlienWaysMostReachedLines = 1000;
 
 // The line once a level has had kAlienWaysMostLetGoLines of them
 static inline std::string AlienWaysStuck_LetGoLinesStop()

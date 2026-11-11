@@ -500,8 +500,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "\t\tcase kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u stuck at %s, heading for %s",
-					"to": "\t\tcase 99:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u was at %s, going to %s"
+					"from": "\t\tcase kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s stuck at %s, heading for %s",
+					"to": "\t\tcase 99:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s was at %s, going to %s"
 				}
 			]
 		},
@@ -1960,8 +1960,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "alien %u slides %.1f m past a stuck at %s to %s",
-					"to": "alien %u slides past a stuck at %s to %s"
+					"from": "%s slides %.1f m past a stuck at %s to %s",
+					"to": "%s slides past a stuck at %s to %s"
+				}
+			]
+		},
+		{
+			"name": "the guide never says which alien has a place",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t*who = followers[slot].who;\n\treturn true;",
+					"to": "\treturn false;"
 				}
 			]
 		}
