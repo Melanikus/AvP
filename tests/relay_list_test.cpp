@@ -937,7 +937,8 @@ static void TestTheCalls()
 	// A line just given its yes is found at once, so its games and its ping come without leaving the page (the owner's "all authorized ones
 	// show up")
 	std::string const yesGiven = SourceSlice(source, "bool RelayList_AgreeToTheLineAt(int place)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(yesGiven, "\tRelayList_FindGames();\n\treturn true;\n"), "a yes starts a find, as it's given");
+	// (The slice ends before the function's closing line, so its last line has no line end in it)
+	Check(Has(yesGiven, "\tRelayList_FindGames();\n\treturn true;"), "a yes starts a find, as it's given");
 
 	std::string const agreed =SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
