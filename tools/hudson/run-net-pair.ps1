@@ -208,14 +208,18 @@ if ($CheckTheWatch)
 
     # -RemoteRelay and -ServersLine (relay-words.ps1; modified 2026-11-10 by Melanikus for the AvP port, #175, in place of -RelayListPin,
     # -RelayServerName, -RelayKey and -LocalRelayPin): each is taken as it should be, or refused with its own reason
-    $notAnAddress = "-RemoteRelay is one plain IPv4 address, as a servers.cfg line gives it, and never a name"
+    $notAnAddress = "-RemoteRelay is plain IPv4 addresses with commas between, as servers.cfg lines give them, and never a name"
     $notOnAnother = "-RemoteRelay's address isn't one a relay on another machine can have"
     $remoteWordCases = @(
         @('', ''), @($exampleRelay, ''), @('192.168.1.20', ''),
         @('127.0.0.1', $notOnAnother), @('0.1.2.3', $notOnAnother), @('224.0.0.1', $notOnAnother), @('255.255.255.255', $notOnAnother), @('169.254.1.1', $notOnAnother),
         @('nyc3.relay.avpx.test', $notAnAddress), @('203.0.113.050', $notAnAddress), @('203.0.113.256', $notAnAddress), @('203.0.113', $notAnAddress),
         @('203.0.113.50.1', $notAnAddress), @('203.0.113.50.', $notAnAddress), @("203.0.113.50`n", $notAnAddress), @(' 203.0.113.50', $notAnAddress),
-        @('203.0.113.50:443', $notAnAddress), @('::1', $notAnAddress)
+        @('203.0.113.50:443', $notAnAddress), @('::1', $notAnAddress),
+        # Several addresses (added 2026-11-11 by Melanikus (Third)): taken with commas and no spaces, each checked as one is, none twice, at most 8
+        @("$exampleRelay,203.0.113.60", ''), @("$exampleRelay, 203.0.113.60", $notAnAddress), @("$exampleRelay,,203.0.113.60", $notAnAddress), @("$exampleRelay,", $notAnAddress),
+        @("$exampleRelay,127.0.0.1", $notOnAnother), @("$exampleRelay,$exampleRelay", '-RemoteRelay names an address twice'),
+        @('1.1.1.1,1.1.1.2,1.1.1.3,1.1.1.4,1.1.1.5,1.1.1.6,1.1.1.7,1.1.1.8,1.1.1.9', '-RemoteRelay names at most 8 addresses, as many lines as one find asks')
     )
     foreach ($case in $remoteWordCases)
     {
@@ -232,7 +236,7 @@ if ($CheckTheWatch)
     $badAddress = "-ServersLine's address is one plain IPv4 address, or that and :<list port>:<relay port>"
     $badPort = "-ServersLine's ports are 1 to 65535"
     $needsRemote = "-ServersLine names another machine, so it needs -RemoteRelay with the same address: a run leaves this machine only when asked to"
-    $notRemotes = "-ServersLine's address isn't -RemoteRelay's"
+    $notRemotes = "-ServersLine's address isn't one of -RemoteRelay's"
     $not443 = "-ServersLine's list beyond this machine is at port 443, the only HTTPS port run-net-pair's watch lets through"
     $lineCases = @(
         @("127.0.0.1:8443:27500 $fingerprint Hudson", '', ''), @("127.0.0.1 $fingerprint Hudson", '', ''), @("$exampleRelay $fingerprint New York (Mel's server)", $exampleRelay, ''),
@@ -258,6 +262,29 @@ if ($CheckTheWatch)
         $said = Get-HudsonServersLineRefusal $case[0] $case[1]
         if ($said -cne $case[2]) { $wrong += "-ServersLine [$($case[0])] with -RemoteRelay [$($case[1])]: refused with [$said], and it should be [$($case[2])]" }
     }
+
+    # Several lines, as run-hudson.ps1 takes them (added 2026-11-11 by Melanikus (Third)): "|" between, each line by the rules above, no
+    # server twice, no address given that no line names; and the line in use is the first, or the one picked
+    $other = "203.0.113.60 $fingerprint Frankfurt"
+    $both = "$exampleRelay,203.0.113.60"
+    $first = "$exampleRelay $fingerprint New York"
+    $severalCases = @(
+        @("$first | $other", $both, ''), @("$first|$other", $both, ''), @("$other | $first", $both, ''), @($first, $exampleRelay, ''),
+        @("$first | $other", $exampleRelay, $notRemotes), @($first, $both, "-RemoteRelay's 203.0.113.60 isn't the address of any -ServersLine line"),
+        @("$first | $first", $exampleRelay, "-ServersLine names one server's address twice"), @("$first | ", $exampleRelay, $empty),
+        @("$first || $other", $both, $empty), @("$first`n$other", $both, $shape)
+    )
+    foreach ($case in $severalCases)
+    {
+        $said = Get-HudsonServersLinesRefusal $case[0] $case[1]
+        if ($said -cne $case[2]) { $wrong += "-ServersLine's lines [$($case[0])] with -RemoteRelay [$($case[1])]: refused with [$said], and it should be [$($case[2])]" }
+    }
+    foreach ($case in @(@(0, $exampleRelay), @(1, $exampleRelay), @(2, '203.0.113.60'), @(3, '')))
+    {
+        $said = Get-HudsonLineInUseAddress "$first | $other" $case[0]
+        if ($said -cne $case[1]) { $wrong += "the line in use, picking $($case[0]): [$said], and it should be [$($case[1])]" }
+    }
+    if (((Get-HudsonServersLines "$first | $other") -join "`n") -cne "$first`n$other") { $wrong += "several lines don't go into servers.cfg one under another, in order" }
 
     # The servers.cfg a run writes (relay-words.ps1, added 2026-11-10 by Melanikus for the AvP port, #175), tried in a folder made for the
     # purpose under this user's temporary folder, with a name nothing else has, and taken away after. Each: what's tried, and whether it
@@ -336,7 +363,7 @@ if ($CheckTheWatch)
         $wrong | ForEach-Object { Write-Host "run-net-pair: the watch is wrong: $_" }
         exit 1
     }
-    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count + $remoteCases.Count + 2) kinds of socket, the relay's words on all $($remoteWordCases.Count + $lineCases.Count) cases, and the servers.cfg a run writes on all $($fileChecks.Count)"
+    Write-Host "run-net-pair: the watch's rule is right on all $($cases.Count + $remoteCases.Count + 2) kinds of socket, the relay's words on all $($remoteWordCases.Count + $lineCases.Count + $severalCases.Count + 5) cases, and the servers.cfg a run writes on all $($fileChecks.Count)"
     exit 0
 }
 
@@ -395,6 +422,9 @@ $remoteRelayRoute = ''
 # -RemoteRelay and -ServersLine, by the rules run-hudson.ps1 uses too (relay-words.ps1), which checks them again for each game
 $relayWordsRefusal = Get-HudsonRemoteRelayRefusal $RemoteRelay
 if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
+# One server for a pair, for now (added 2026-11-11 by Melanikus (Third)): run-hudson.ps1 takes several lines, but this watch lets one relay
+# through, so several are refused here, plainly, rather than half-watched. A card: the pair with the shipped servers.cfg's every line
+if (@(Get-HudsonRemoteRelays $RemoteRelay).Count -gt 1 -or @(Get-HudsonServersLines $ServersLine).Count -gt 1) { Stop-Here "a pair takes one -ServersLine line and one -RemoteRelay address for now: its watch lets one relay through" }
 if ($RemoteRelay) { $Relay = [switch]::Present }
 if ($Relay -and -not $ServersLine) { Stop-Here "-Relay needs -ServersLine: the games find their server only in servers.cfg, and each run writes that one line there" }
 if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }

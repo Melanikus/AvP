@@ -214,6 +214,11 @@ param(
     # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
     [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
     [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
+    # Modified 2026-11-11 by Melanikus (Third) for the AvP port (the owner: every copy reads the shipped servers.cfg, every line through the
+    # same code): -ServersLine may be several lines with "|" between, in the file's order, and -RemoteRelay their addresses with "," between
+    # (relay-words.ps1). The game's line in use is the first, or the one -PickLine picks; a host or a join goes through that line's relay
+    # alone (remoterelay=)
+    [int]$PickLine = 0,         # 2 to 8: the run picks that line of -ServersLine, as a player does on the Servers page, for this run alone. Left out, the first
     # (The v2 draft's switch went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
     [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
     # Added 2026-11-10 by Melanikus for the AvP port, to see how the menus are drawn at a screen size (menu_shape.h):
@@ -268,8 +273,11 @@ if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
 # -RemoteRelay gives its address. The game reads it again by its own rules.
 if ($Relay -and -not $ServersLine) { Stop-Here "-Relay needs -ServersLine: the game finds its server only in servers.cfg, and the run writes that one line there" }
 if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }
-$serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
+# Every line, each to its shape, and no address given that no line names (modified 2026-11-11 by Melanikus (Third): one line or several)
+$serversLineRefusal = if ($ServersLine) { Get-HudsonServersLinesRefusal $ServersLine $RemoteRelay } else { '' }
 if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
+if ($PickLine -ne 0 -and ($PickLine -lt 2 -or $PickLine -gt @(Get-HudsonServersLines $ServersLine).Count)) { Stop-Here "-PickLine is a line of -ServersLine other than the first (the first is in use without it): 2 to the number of lines" }
+$lineInUseAddress = if ($ServersLine) { Get-HudsonLineInUseAddress $ServersLine $PickLine } else { '' }
 # No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
@@ -465,8 +473,12 @@ if ($HostRow) { $arguments += " hostrow=$HostRow" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
 # remoterelay= keeps a network run's game traffic to that one relay, and Hudson takes it only with net=. An -Access run through a server
-# beyond this machine has no game traffic: it calls the list, at the address its settings name, so it gets the settings' lines alone
-if ($RemoteRelay -and $Net) { $arguments += " remoterelay=$RemoteRelay" }
+# beyond this machine has no game traffic: it calls the list, at the address its settings name, so it gets the settings' lines alone.
+# Modified 2026-11-11 by Melanikus (Third): with several lines, it's the line in use's address, the only relay a host or a join goes
+# through (Secondary, 2026-11-11: the relay's keys come only from the line in use; the list asks every line the run said yes to)
+if ($RemoteRelay -and $Net) { $arguments += " remoterelay=$lineInUseAddress" }
+# The pick, held for the run alone (Secondary's run-only pick; its word, as the demo's build takes it)
+if ($PickLine -ne 0) { $arguments += " pick=$PickLine" }
 if ($KillKind) { $arguments += " killkind=$KillKind killat=$($KillAt -replace 'm', '-') killer=$Killer" }
 if ($BotStay) { $arguments += " botstay=yes" }
 if ($BotOwn) { $arguments += " botown=yes" }
@@ -531,7 +543,8 @@ if ($PortNumber -ne 0)
 # Hudson's runs (relay-words.ps1). A run without -Relay takes away the one a run left, so it reaches no server. The line was checked to its
 # shape above. With -RemoteRelay, the game is told the line's address with remoterelay= too, and uses that relay alone (networking.cpp,
 # TheRemoteRelay).
-$serversRefusal = Set-HudsonServersFile $folder $ServersLine
+# Every line, one under another, in the order given (modified 2026-11-11 by Melanikus (Third))
+$serversRefusal = Set-HudsonServersFile $folder ((Get-HudsonServersLines $ServersLine) -join "`n")
 if ($serversRefusal) { Stop-Here $serversRefusal }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
