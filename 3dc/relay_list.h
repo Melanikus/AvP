@@ -188,6 +188,76 @@ int const kRelayLineNoAnswer = 3;    // it couldn't be reached, its keys don't m
 int const kRelayLineNotAsked = 4;    // past the first kRelayListMostVisits agreed lines, so not asked this time
 int RelayList_LineGamesState(int place, const char **why);
 
+// ---- ONE MODEL FOR EVERY LINE. Added 2026-11-11 by Melanikus for the AvP port (PO's design from the owner's rulings of that day: "They
+// don't PICK a server, all authorized ones show up", "UNIFY THE UI", "they will choose their friends' server, not least ping", "No auto
+// choice, they choose"). A line is its PLACE among servers.cfg's good lines: 0 to RelayList_LineCount() - 1, in the file's order, fixed for
+// the whole run. Every line goes through the same code: the same yes, the same key check, the same calls, the same states, with no first
+// line and no line "in use". Each call to a line's server is a visit of its own (relay_list.cpp, THE VISITS): its state made fresh from the
+// line alone, its key checked against the line's fingerprint before anything else goes, the call made, its result copied out, everything
+// of the visit wiped. Only the main thread calls these, and each returns at once; answers come a moment later.
+// The one-line calls above (RelayList_LineToAgree, RelayList_AgreeToTheLine, RelayList_AskForAccess, RelayList_AccessCame,
+// RelayList_AskForRelayKeys, RelayList_RelayKeysCame) now go through these, for the line in use, until the pages and networking.cpp ask
+// by line; then they go, with the pick.
+
+// Where the player stands with a line's server, from its last answer this run (nothing is kept past the run: PO, 2026-11-11). These are
+// the pages' meanings, not the list's own answers (relay_list_text.h's RelayAccessAnswer), which they're made from.
+int const kRelayAccessNotAsked = 0;          // not asked this run
+int const kRelayAccessAsking = 1;            // asked; no answer yet
+int const kRelayAccessWaitingApproval = 2;   // the server has the request, and a person hasn't approved it yet
+int const kRelayAccessIsApproved = 3;        // its games can be joined, and a game can be hosted on it
+int const kRelayAccessIsRefused = 4;         // refused, or approved and then revoked: it stays so
+int const kRelayAccessNoAnswer = 5;          // the request got no answer it could use: accessWhy says why
+
+// One line, as the pages show it
+struct RelayListLineNow
+{
+	RelayListLineToAgree line;   // its name, address, where it is and its key's two ends, as the yes page shows them
+	int lineNumber;              // its number in servers.cfg, counted from 1
+	bool ours;                   // one of the servers the game ships with, told from what the game holds, never from the file
+	int state;                   // kRelayLine...: no yes, being asked, answered, no answer (why), or not asked (past kRelayListMostVisits)
+	const char *why;             // kRelayLineNoAnswer's why, in the game's own fixed words; NULL otherwise
+	int pingMs;                  // the last visit's round trip to its server, in ms, about one round trip; -1 when none was measured
+	int access;                  // kRelayAccess...
+	const char *accessWhy;       // kRelayAccessNoAnswer's why, fixed words of the game's own; NULL otherwise
+	int games;                   // how many of the last find's games (RelayList_FoundAllGames) are its own
+};
+
+// False, with out wiped, for a place out of range
+bool RelayList_LineNow(int place, RelayListLineNow *out);
+
+// The yes, per line. Every line needs it, the ones the game ships with too ("Every line asks the player once at first use", 2026-11-10).
+// Kept in servers-trusted.cfg by the line's hash (its address, ports and fingerprint), never its name or place, so a line whose key
+// changed asks again. LineToAgreeAt: true, with out filled, for a line without the yes. AgreeToTheLineAt: false, with nothing changed,
+// for a place out of range; a yes that couldn't be kept holds for this run. A Hudson run's yes (yespage=) is held for the run alone.
+bool RelayList_LineToAgreeAt(int place, RelayListLineToAgree *out);
+bool RelayList_AgreeToTheLineAt(int place);
+
+// Access, per line: the request goes to that line's server, after its yes, as a visit of its own. Only the page's own press sends one, or
+// the page opening on a line this run has asked. The body is the same for every line (there's one identity). AccessCameOn: once for each
+// answer, true with the line it was for, so the page can redraw that row; the answer itself is in RelayList_LineNow (access, accessWhy).
+bool RelayList_AskForAccessOn(int place, const char *name, const uint8_t statics[kNetIdentityStaticBytes],
+	const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
+bool RelayList_AccessCameOn(int *place);
+
+// Joining any game, through ITS OWN line. RelayOf: that line's relay, its address (as ENetAddress.host keeps it) and relay port, straight
+// from servers.cfg; nothing is looked up. AskForRelayKeysOn: that line's server's relay keys, proved by that line's fingerprint, on a
+// visit to that line; with a region, only if it's that relay's own region; with NULL or "" (a host's asking), the region comes back with
+// the keys. False, with nothing asked, for a place out of range, a line without the yes, or a word that isn't a region.
+// RelayKeysCameOn: for the newest asking, waiting, the keys (with the line they're for and its relay's region), or refused with why.
+bool RelayList_RelayOf(int place, uint32_t *address, int *port);
+bool RelayList_AskForRelayKeysOn(int place, const char *region);
+int RelayList_RelayKeysCameOn(int *place, char region[kRelayListRegionLetters + 1], uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes], const char **why);
+
+// Hosting, on the line the PLAYER chose: no default, no automatic choice. ApprovedLines: the lines a host can choose, for the host page's
+// "Host on:" row, in the file's order (each with its ping in RelayList_LineNow); 0 when there's none. HostOn: the player's choice, refused
+// for a line that isn't approved. HostLine: the line the open room is on, or else the choice, or -1. A room keeps its line for its whole
+// life; a choice made while it's open is for the next. Every listing call of the room (RelayList_HostRoomOpened and the rest) goes to that
+// line's server, and its relay is RelayList_RelayOf(RelayList_HostLine()).
+int RelayList_ApprovedLines(int *places, int most);
+bool RelayList_HostOn(int place);
+int RelayList_HostLine(void);
+
 // ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
 // AvP port. Only the Online access page calls these. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: they no longer ask
 // -dev, which decides nothing online. The page has its own way in.)

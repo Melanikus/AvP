@@ -102,6 +102,12 @@ namespace
 	TheServer theServer = {};
 	ServersCfgFileRead theFile;   // what servers.cfg said, for the server lists (RelayList_LineAt and the rest)
 
+	// The line the player chose for the next room (RelayList_HostOn), and the line the open room is on: -1 for none. The room keeps its
+	// line for its whole life; a choice made while it's open is for the next one. Main thread only. Added 2026-11-11 by Melanikus for the
+	// AvP port (the owner: "they will choose their friends' server", "No auto choice, they choose").
+	int hostChoice = -1;
+	int hostRoomLine = -1;
+
 	const ServersCfgServer *Server(void)
 	{
 		if (!theServer.read)
@@ -235,11 +241,15 @@ namespace
 	const char *const kKeyUnread = "the relay server's key couldn't be read, so nothing was sent to it";
 	const char *const kKeysDontMatch = "the relay server's keys don't match its line in " SERVERS_CFG_FILE_NAME ", so nothing more is sent to it";
 	const char *const kNotCheckedYet = "the relay server's keys haven't been checked yet, so nothing was sent to it";
+	const char *const kLineNotAgreed = "you haven't said yes to that server yet, so nothing was sent to it";   // added 2026-11-11
 
 	// Where the server's key stands: not checked yet (only the first call may go), checked and good, or refused for the rest of the run
 	int const kKeyNotChecked = 0;
 	int const kKeyGood = 1;
 	int const kKeyRefused = 2;
+	// The list's own state when the line in use hasn't had its yes (added 2026-11-11 by Melanikus for the AvP port, one model for every
+	// line): it has no server, so nothing is ever sent through it. Each line's calls go on visits of their own, each after its own yes.
+	int const kKeyNoLine = 3;
 
 	struct Shared;
 
@@ -256,6 +266,7 @@ namespace
 		bool closed;     // it wasn't, or it couldn't be read, so the callback closed the call before its first byte went
 		uint8_t shown[kNetServerFingerprintMostKeyBytes];
 		size_t shownSize;
+		ULONGLONG sentAt;   // when the check passed and the request was about to go, for the round trip (added 2026-11-11); 0 if it never did
 	};
 
 	// Everything the two threads share. Made once and never freed: the list's thread may still be using it as the game closes.
@@ -296,11 +307,19 @@ namespace
 		const char *keysWhy;             // NULL: the keys came, whole; or fixed words saying why not
 		uint8_t keysP384[kNetCryptoP384PublicBytes];
 		uint8_t keysKem[kNetPqKemPublicBytes];
+		// Which line the asking is for, as the main thread copied it after its yes, and the region its server's own relay has, which came
+		// with the keys (added 2026-11-11, one model for every line: a game's keys come from the game's own line)
+		int keysPlace;
+		ServersCfgServer keysLine;
+		int keysAnsweredPlace;
+		char keysGotRegion[kRelayListRegionLetters + 1];
 
 		// The host's game. listingNumber goes up each time the listing changes, a newer pass included.
 		bool hostWanted;
 		Listing listing;
 		int listingNumber;
+		int hostPlace;                 // the line the room is on, by its place, as the main thread chose it after its yes (added 2026-11-11)
+		ServersCfgServer hostLine;     // and that line, as the main thread copied it
 
 		// A game that should come off the list, known by its region and code
 		bool endWanted;
@@ -323,15 +342,11 @@ namespace
 		int count;
 		const char *why;
 
-		// Asking for online access: a request wanted, with its body and the fingerprint its answer must be about, and an answer waiting
-		// for the main thread (added 2026-11-09, server #24)
-		bool accessWanted;
+		// Asking for online access: the request's body and the fingerprint its answer must be about (added 2026-11-09, server #24). The
+		// same for every line, as there's one identity (PO, 2026-11-11); which lines to ask, and their answers, are below, by line.
 		char accessBody[kRelayAccessMostBodyBytes + 1];
 		uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
-		bool accessReady;
-		bool accessAnswered;
-		RelayAccessAnswer accessAnswer;
-		const char *accessWhy;
+		char accessAnswerText[kRelayAccessMostAnswerBytes];   // a visit's own room for its answer (it was one for all: modified 2026-11-11)
 
 		// News for the main thread to write in the log: the last kMostNews pieces, each a fixed text of the game's own, kept in turn round
 		// the ring. newsNumber is how many pieces there have ever been, so piece n is at news[n % kMostNews].
@@ -360,6 +375,23 @@ namespace
 		int allCount;
 		int lineStates[kServersCfgMostLines];
 		const char *lineWhys[kServersCfgMostLines];
+
+		// ONE MODEL FOR EVERY LINE (added 2026-11-11 by Melanikus for the AvP port; the owner's rulings: "all authorized ones show up",
+		// "UNIFY THE UI"). What the pages show of each good line, by its place: the last visit's round trip (-1 for none), its games, and
+		// where the player stands with its server's access (asked for by RelayList_AskForAccessOn, each its own visit). Nothing here is kept
+		// past the run, and nothing in it is anything a server sent but the answers' own fixed meanings.
+		int linePings[kServersCfgMostLines];
+		int lineGames[kServersCfgMostLines];
+		bool accessWantedOn[kServersCfgMostLines];
+		ServersCfgServer accessLines[kServersCfgMostLines];   // the lines to ask, as the main thread copied them after their yes
+		bool accessAskingOn[kServersCfgMostLines];
+		bool accessReadyOn[kServersCfgMostLines];
+		bool accessAnsweredOn[kServersCfgMostLines];
+		RelayAccessAnswer accessAnswerOn[kServersCfgMostLines];
+		const char *accessWhyOn[kServersCfgMostLines];
+
+		// This server's own (a visit's): the round trip of its first call, GET /v1/relay-keys, in ms, or -1 if it didn't come back
+		int pingMs;
 	};
 
 	Shared *shared = NULL;
@@ -393,6 +425,7 @@ namespace
 		DWORD status;
 		const char *why;      // when it didn't work
 		size_t bytes;
+		int ms;               // from the request going to its answer coming, about one round trip, at most a minute; -1 when not measured (2026-11-11)
 	};
 
 	void CloseAll(HINTERNET request, HINTERNET connection, HINTERNET session)
@@ -483,6 +516,12 @@ namespace
 			check->closed = true;
 			WinHttpCloseHandle(request);
 		}
+		else
+		{
+			// The connection and its secure handshake are done by now, so from here to the answer is about one round trip (added
+			// 2026-11-11 by Melanikus for the AvP port: the pages' ping, for each line)
+			check->sentAt = GetTickCount64();
+		}
 	}
 
 	// Added 2026-11-09 by Melanikus for the AvP port: the call's request, or NULL once the key's check has closed it, so a request that's
@@ -496,17 +535,36 @@ namespace
 	// answer longer than that is refused as too big, without the rest being read. check says whether this is the first call, which keeps
 	// the key the list shows (only CheckTheServer makes it), or a later one, which goes only to the key that matched (modified 2026-11-10,
 	// #175).
+	// Where a server's key stands, read under its lock: the main thread can change it too, as the player's yes to the line in use gives
+	// the list's own state that line's server (RelayList_AgreeToTheLineAt). Added 2026-11-11 by Melanikus for the AvP port.
+	int KeyStateOf(Shared *s)
+	{
+		EnterCriticalSection(&s->lock);
+		int const state = s->keyState;
+		LeaveCriticalSection(&s->lock);
+		return state;
+	}
+
 	Answer CallChecked(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)
 	{
-		Answer a = { false, 0, kCantStart, 0 };
+		Answer a = { false, 0, kCantStart, 0, -1 };
 
 		// This call is this server's, and its key check is held to this server's key alone (modified 2026-11-11, all servers' games)
 		check.owner = s;
 
-		// Nothing goes to a server whose keys didn't match its line, and nothing but the first call goes before they're checked
-		if (s->keyState == kKeyRefused || (!check.keepIt && s->keyState != kKeyGood))
+		// Nothing goes to a server whose keys didn't match its line, and nothing but the first call goes before they're checked. And
+		// nothing at all through a state that has no server (kKeyNoLine).
+		int const keyNow = KeyStateOf(s);
+
+		if (keyNow == kKeyNoLine)
 		{
-			a.why = s->keyState == kKeyRefused ? kKeysDontMatch : kNotCheckedYet;
+			a.why = kNoServer;
+			return a;
+		}
+
+		if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood))
+		{
+			a.why = keyNow == kKeyRefused ? kKeysDontMatch : kNotCheckedYet;
 			return a;
 		}
 
@@ -619,6 +677,12 @@ namespace
 		bool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));
 		bool const answered = bodyWent && !check.closed && WinHttpReceiveResponse(request, NULL);
 
+		if (answered && check.sentAt != 0)
+		{
+			ULONGLONG const took = GetTickCount64() - check.sentAt;
+			a.ms = took > 60000 ? 60000 : static_cast<int>(took);
+		}
+
 		// WinHTTP sends a call again only for a redirect or a sign-in, which are both off. If it ever did, the check ran again, and may have
 		// closed the call: then nothing more is done with the request, and it isn't closed a second time.
 		if (check.closed)
@@ -717,9 +781,16 @@ namespace
 
 	const char *CheckTheServer(Shared *s)
 	{
-		if (s->keyState != kKeyNotChecked)
+		int const keyNow = KeyStateOf(s);
+
+		if (keyNow == kKeyNoLine)
 		{
-			return s->keyState == kKeyGood ? NULL : kKeysDontMatch;
+			return kNoServer;
+		}
+
+		if (keyNow != kKeyNotChecked)
+		{
+			return keyNow == kKeyGood ? NULL : kKeysDontMatch;
 		}
 
 		// A new asking: until it ends, the server stands as "no answer yet", not as the last asking left it (#188)
@@ -732,6 +803,12 @@ namespace
 		memset(&first, 0, sizeof(first));
 		first.keepIt = true;
 		Answer const a = CallChecked(s, L"GET", L"/v1/relay-keys", NULL, s->keysAnswer, sizeof(s->keysAnswer), first);
+
+		// Its round trip, for the pages' ping column (added 2026-11-11): only for a call that came back
+		if (a.worked)
+		{
+			s->pingMs = a.ms;
+		}
 
 		if (!a.worked)
 		{
@@ -783,7 +860,7 @@ namespace
 
 		if (unchecked)
 		{
-			Answer const none = { false, 0, unchecked, 0 };
+			Answer const none = { false, 0, unchecked, 0, -1 };
 			return none;
 		}
 
@@ -831,9 +908,48 @@ namespace
 		return out;
 	}
 
-	// Puts the host's game on the list with a POST, or renews it with a PUT. True if the list has this listing now.
+	Shared *NewServer(const ServersCfgServer &line);   // below, with Start
+	void ForgetTheVisit(Shared *visit);                // below, with Start
+
+	// The line the host's game is listed on (added 2026-11-11 by Melanikus for the AvP port, one model for every line): its own state,
+	// made from that line alone when a room opens on it and kept for the room's whole life, so every POST, PUT and DELETE of the listing
+	// goes to that line's server, held to its key. The list's thread's alone. It's wiped and given back once the game is off the list, or
+	// when a room opens on another line, so nothing of one line's hosting is left for the next.
+	Shared *hostServer = NULL;
+	int hostServerPlace = -1;
+
+	void ForgetTheHostLine(void)
+	{
+		if (hostServer)
+		{
+			ForgetTheVisit(hostServer);
+		}
+
+		hostServer = NULL;
+		hostServerPlace = -1;
+	}
+
+	void UseTheHostLine(int place, const ServersCfgServer &line)
+	{
+		if (hostServer && hostServerPlace == place)
+		{
+			return;
+		}
+
+		ForgetTheHostLine();
+		hostServer = NewServer(line);
+		hostServerPlace = hostServer ? place : -1;
+	}
+
+	// Puts the host's game on the list with a POST, or renews it with a PUT, on the host's line. True if the list has this listing now.
 	bool SendTheListing(const Listing &l)
 	{
+		if (!hostServer)
+		{
+			Tell(shared, kCantStart);
+			return false;
+		}
+
 		char body[kRelayListMostBodyBytes + 1];
 		RelayListListing const send = ListingToSend(l);
 
@@ -847,7 +963,7 @@ namespace
 			}
 
 			bool const posting = !onTheList.listed;
-			Answer const a = Call(shared, posting ? L"POST" : L"PUT", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
+			Answer const a = Call(hostServer, posting ? L"POST" : L"PUT", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
 
 			if (!a.worked)
 			{
@@ -892,7 +1008,7 @@ namespace
 	{
 		char body[kRelayListMostBodyBytes + 1];
 
-		if (!RelayList_EndingBody(onTheList.region, onTheList.code, onTheList.owner, body, sizeof(body)))
+		if (!hostServer || !RelayList_EndingBody(onTheList.region, onTheList.code, onTheList.owner, body, sizeof(body)))
 		{
 			return;
 		}
@@ -901,7 +1017,7 @@ namespace
 
 		// 204: taken off. 404: the list had forgotten it already, which is what's wanted too. Either way, a listing the host stops
 		// renewing goes from the list by itself within 45 seconds.
-		Answer const a = Call(shared, L"DELETE", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
+		Answer const a = Call(hostServer, L"DELETE", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
 
 		if (!a.worked)
 		{
@@ -926,9 +1042,6 @@ namespace
 	// said, can never reach another's. Only lines the main thread chose are visited (RelayList_FindGames): each has had the player's yes,
 	// so nothing goes to a server before its yes. The line in use keeps its own lasting state (shared) for hosting, access and the relay's
 	// keys; for its games it's visited like any other line.
-
-	Shared *NewServer(const ServersCfgServer &line);   // below, with Start
-	void ForgetTheVisit(Shared *visit);                // below, with Start
 
 	// One visit's call for the games, held to its own server's key. NULL with *count games in visit->gamesRead, or fixed words saying why not.
 	const char *VisitTheLine(Shared *visit, int *count)
@@ -1010,6 +1123,8 @@ namespace
 			{
 				shared->lineStates[place] = why ? kRelayLineNoAnswer : kRelayLineAnswered;
 				shared->lineWhys[place] = why;
+				shared->linePings[place] = visit ? visit->pingMs : -1;
+				shared->lineGames[place] = why ? 0 : (got < kRelayListMostGames ? got : kRelayListMostGames);
 			}
 
 			// The line in use's games are also its own answer, for joining (RelayList_FoundGames)
@@ -1030,65 +1145,111 @@ namespace
 			}
 		}
 
+		// The line in use wasn't among them when it hasn't had its yes: its own answer still comes, with no games and why, so nothing that
+		// waits for it (RelayList_FoundGames) waits forever (added 2026-11-11)
+		bool inUseVisited = false;
+
+		for (int v = 0; v < count; v++)
+		{
+			inUseVisited = inUseVisited || places[v] == inUse;
+		}
+
 		EnterCriticalSection(&shared->lock);
+
+		if (!inUseVisited)
+		{
+			shared->count = 0;
+			shared->why = kLineNotAgreed;
+			shared->answerReady = true;
+		}
+
 		shared->allReady = true;
 		LeaveCriticalSection(&shared->lock);
 	}
 
 	// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, for networking.cpp.
 	// Modified 2026-11-10 (#175): they're the keys the server's check took (CheckTheServer), which its line's fingerprint has already
-	// proved, so nothing more is asked for. They're handed over only for the region the check gave, the one relay the server has.
-	void ReadTheRelayKeys(const char *region, int asking)
+	// proved, so nothing more is asked for. Modified 2026-11-11 (one model for every line): they're fetched on a visit to the line they're
+	// asked for, the game's own (or the host's), never a line "in use": that line's state made fresh from it alone, its server checked
+	// against its fingerprint, the keys copied out, everything of the visit wiped. With a region, they're handed over only if it's the one
+	// that server's own relay has; with none (a host's asking), the region comes back with them.
+	void ReadTheRelayKeysOn(int place, const ServersCfgServer &line, const char *region, int asking)
 	{
-		const char *why = CheckTheServer(shared);
+		Shared *const visit = NewServer(line);
+		const char *why = visit ? CheckTheServer(visit) : kCantStart;
 		uint8_t p384[kNetCryptoP384PublicBytes] = {};
 		uint8_t kem[kNetPqKemPublicBytes] = {};
+		char gotRegion[kRelayListRegionLetters + 1] = {};
 
-		if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)
+		if (!why && region[0] && strncmp(region, visit->relayRegion, sizeof(visit->relayRegion)) != 0)
 		{
-			why = "the relay asked about isn't the one the server in " SERVERS_CFG_FILE_NAME " has";
+			why = "the relay asked about isn't the one that server in " SERVERS_CFG_FILE_NAME " has";
 		}
 
 		if (!why)
 		{
-			memcpy(p384, shared->relayP384, sizeof(p384));
-			memcpy(kem, shared->relayKem, sizeof(kem));
+			memcpy(p384, visit->relayP384, sizeof(p384));
+			memcpy(kem, visit->relayKem, sizeof(kem));
+			memcpy(gotRegion, visit->relayRegion, kRelayListRegionLetters);
+			gotRegion[kRelayListRegionLetters] = 0;
 		}
 
 		EnterCriticalSection(&shared->lock);
 		shared->keysAnswered = asking;
+		shared->keysAnsweredPlace = place;
 		shared->keysWhy = why;
 		memcpy(shared->keysP384, p384, sizeof(p384));
 		memcpy(shared->keysKem, kem, sizeof(kem));
+		memcpy(shared->keysGotRegion, gotRegion, sizeof(gotRegion));
 		LeaveCriticalSection(&shared->lock);
-		Tell(shared, why ? why : "the relay's keys are the ones its server's line proved");
+
+		if (visit)
+		{
+			Tell(visit, why ? why : "the relay's keys are the ones its server's line proved");
+			PassOnTheNews(visit, line.lineNumber);
+			ForgetTheVisit(visit);
+		}
 	}
 
-	// The answer to an access request: read as hostile (relay_list_text.h), about this PC's own fingerprint, and kept only if all of it is
-	// right. Added 2026-11-09 by Melanikus for the AvP port (server #24).
-	char accessAnswerText[kRelayAccessMostAnswerBytes];
-
-	void AskForAccess(const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+	// An access request to one line's server, and its answer. Added 2026-11-09 by Melanikus for the AvP port (server #24). Modified
+	// 2026-11-11 (one model for every line): it was the one server's; now it's a visit to the line it's for, like any other call: that
+	// line's state made fresh from the line alone, its key checked against the line's fingerprint before a byte of the request goes, the
+	// answer read as hostile (relay_list_text.h), about this PC's own fingerprint, and kept only if all of it is right, then everything of
+	// the visit wiped. The answer goes to that line's place alone. The main thread asked only for a line the player has said yes to.
+	void AskForAccessOn(int place, const ServersCfgServer &line, const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])
 	{
-		Answer const a = Call(shared, L"POST", L"/v1/access-requests", body, accessAnswerText, sizeof(accessAnswerText));
+		Shared *const visit = NewServer(line);
 		RelayAccessAnswer answer = kRelayAccessWaiting;
-		const char *why = a.why;
+		const char *why = kCantStart;
 
-		if (a.worked)
+		if (visit)
 		{
-			RelayListRefusal const refusal = RelayList_ReadAccess(static_cast<int>(a.status), accessAnswerText, a.bytes, fingerprint, &answer);
-			why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+			Answer const a = Call(visit, L"POST", L"/v1/access-requests", body, visit->accessAnswerText, sizeof(visit->accessAnswerText));
+			why = a.why;
+
+			if (a.worked)
+			{
+				RelayListRefusal const refusal = RelayList_ReadAccess(static_cast<int>(a.status), visit->accessAnswerText, a.bytes, fingerprint, &answer);
+				why = (refusal == kRelayListAccepted) ? NULL : RelayList_RefusalWords(refusal);
+			}
+
+			// Only fixed words go in the log: what the answer was, or why there was none
+			Tell(visit, why ? why : RelayAccess_AnswerWords(answer));
 		}
 
-		// Only fixed words go in the log: what the answer was, or why there was none
-		Tell(shared, why ? why : RelayAccess_AnswerWords(answer));
-
 		EnterCriticalSection(&shared->lock);
-		shared->accessAnswered = (why == NULL);
-		shared->accessAnswer = answer;
-		shared->accessWhy = why;
-		shared->accessReady = true;
+		shared->accessAnsweredOn[place] = (why == NULL);
+		shared->accessAnswerOn[place] = answer;
+		shared->accessWhyOn[place] = why;
+		shared->accessAskingOn[place] = false;
+		shared->accessReadyOn[place] = true;
 		LeaveCriticalSection(&shared->lock);
+
+		if (visit)
+		{
+			PassOnTheNews(visit, line.lineNumber);
+			ForgetTheVisit(visit);
+		}
 	}
 
 	DWORD WINAPI ListThread(void *)
@@ -1116,6 +1277,8 @@ namespace
 			bool const host = shared->hostWanted;
 			Listing const listing = shared->listing;
 			int const number = shared->listingNumber;
+			int const hostPlace = shared->hostPlace;
+			ServersCfgServer const hostLine = shared->hostLine;
 
 			bool const relays = shared->relaysWanted;
 			shared->relaysWanted = false;
@@ -1129,11 +1292,19 @@ namespace
 			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
 			keysRegion[kRelayListRegionLetters] = 0;
 			int const keysAsking = shared->keysAsked;
-			bool const access = shared->accessWanted;
-			shared->accessWanted = false;
+			int const keysPlace = shared->keysPlace;
+			ServersCfgServer const keysLine = shared->keysLine;
+
+			// Access requests, one for each line asked, each a visit of its own (modified 2026-11-11, one model for every line)
+			bool accessOn[kServersCfgMostLines];
+			ServersCfgServer accessLines[kServersCfgMostLines];
+			memcpy(accessOn, shared->accessWantedOn, sizeof(accessOn));
+			memset(shared->accessWantedOn, 0, sizeof(shared->accessWantedOn));
+			memcpy(accessLines, shared->accessLines, sizeof(accessLines));
 			char accessBody[kRelayAccessMostBodyBytes + 1];
 			uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
 			memcpy(accessBody, shared->accessBody, sizeof(accessBody));
+			accessBody[kRelayAccessMostBodyBytes] = 0;   // it ends within its room, whatever the copy held
 			memcpy(accessFingerprint, shared->accessFingerprint, sizeof(accessFingerprint));
 			LeaveCriticalSection(&shared->lock);
 
@@ -1141,6 +1312,12 @@ namespace
 			if (end && onTheList.listed && SameField(endRegion, onTheList.region) && SameField(endCode, onTheList.code))
 			{
 				TakeOffTheList();
+			}
+
+			// A room that ended leaves nothing of its line behind (added 2026-11-11)
+			if (end && !host)
+			{
+				ForgetTheHostLine();
 			}
 
 			// Every end asked for up to now has been seen to, so a game that's quitting can stop waiting (RelayList_BeforeQuitting)
@@ -1156,6 +1333,8 @@ namespace
 
 			if (host)
 			{
+				UseTheHostLine(hostPlace, hostLine);
+
 				// Another room is another game, not yet on the list. The one before it, if it was, goes when the list forgets it.
 				if (!SameField(listing.region, onTheList.region) || !SameField(listing.code, onTheList.code))
 				{
@@ -1191,12 +1370,15 @@ namespace
 
 			if (keys)
 			{
-				ReadTheRelayKeys(keysRegion, keysAsking);
+				ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);
 			}
 
-			if (access)
+			for (int place = 0; place < kServersCfgMostLines; place++)
 			{
-				AskForAccess(accessBody, accessFingerprint);
+				if (accessOn[place])
+				{
+					AskForAccessOn(place, accessLines[place], accessBody, accessFingerprint);
+				}
 			}
 		}
 	}
@@ -1215,9 +1397,9 @@ namespace
 	// beta.2's screens). A Hudson run's line is agreed without a yes, as nobody is there to answer, unless the run asks to see the yes page
 	// as a player would (HudsonTest_RelayListShowsTheYesPage, below). Then it's agreed only after the run's own press of Yes, which is held
 	// here, for this run alone: never added to the kept yeses, and never written to servers-trusted.cfg, so a test run can't leave a yes
-	// for the player of this PC. Both start false, and only a Hudson run ever sets them.
+	// for the player of this PC. They start off (false, none), and only a Hudson run ever sets them.
 	bool hudsonRunShowsTheYesPage = false;
-	bool hudsonRunSaidYes = false;
+	ServersTrustYeses hudsonRunYeses = {};   // each line the run said yes to, by its hash (modified 2026-11-11: one for each line)
 
 	// Whether a line may be used: a Hudson run's always (nobody is there to answer), or with yespage= only after its own Yes this run;
 	// anyone else's only once the player has said yes to it. The kept yeses are read the first time this is asked; a file that can't be
@@ -1226,7 +1408,8 @@ namespace
 	{
 		if (HudsonRunIsOn)
 		{
-			return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;
+			uint8_t runHash[kServersTrustHashBytes];
+			return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));
 		}
 
 		if (!yesesRead)
@@ -1270,6 +1453,7 @@ namespace
 		made->relayAddress = htonl(line.address);
 		made->relayPort = line.relayPort;
 		made->keyState = kKeyNotChecked;
+		made->pingMs = -1;
 
 		// The version is fixed for the run (added 2026-11-09 by Melanikus for the AvP port; networking.h)
 		made->version = kMultiplayerVersion;
@@ -1296,19 +1480,28 @@ namespace
 			return false;
 		}
 
-		// Nothing is made, and nothing goes to the line's server or its relay, before the player's yes to the line (#175's last part)
+		// Nothing goes to a line's server or its relay before the player's yes to that line (#175's last part). Modified 2026-11-11 by
+		// Melanikus for the AvP port (one model for every line): the list's thread starts whichever lines have had their yes, as each line's
+		// calls are visits of its own, each asked only after its own yes. The state made here has the line in use's server only once the
+		// player has said yes to it; until then it has none (kKeyNoLine), and nothing is ever sent through it.
 		const ServersCfgServer *const line = Server();
 
-		if (!line || !TheLineIsAgreed(*line))
+		if (!line)
 		{
 			return false;
 		}
 
+		bool const lineAgreed = TheLineIsAgreed(*line);
 		Shared *made = NewServer(*line);
 
 		if (!made)
 		{
 			return false;
+		}
+
+		if (!lineAgreed)
+		{
+			made->keyState = kKeyNoLine;
 		}
 
 		made->wake = CreateEventW(NULL, FALSE, FALSE, NULL);
@@ -1449,6 +1642,18 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 		return;
 	}
 
+	// The line the room is on: the one the player chose to host on (RelayList_HostOn), or, until networking.cpp hosts by the chosen line,
+	// the line in use (that goes with the pick). Only a line the player has said yes to.
+	int const place = hostChoice >= 0 ? hostChoice : theServer.inUse;
+
+	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
+	{
+		LogString("Relay list: the game's server hasn't had the player's yes, so the game isn't put on the list");
+		return;
+	}
+
+	hostRoomLine = place;
+
 	Listing l;
 	memset(&l, 0, sizeof(l));
 	memcpy(l.region, region, strlen(region) + 1);
@@ -1463,6 +1668,8 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 	shared->hostWanted = true;
 	shared->listing = l;
 	shared->listingNumber++;
+	shared->hostPlace = place;
+	shared->hostLine = theFile.servers[place];
 	LeaveCriticalSection(&shared->lock);
 
 	Wake();
@@ -1530,6 +1737,8 @@ void RelayList_HostSessionNow(const SessionDescription &session)
 
 void RelayList_HostRoomClosed(void)
 {
+	hostRoomLine = -1;
+
 	if (!shared)
 	{
 		return;
@@ -1716,61 +1925,103 @@ static bool ShowTheLine(const ServersCfgServer *line, RelayListLineToAgree *out)
 	return true;
 }
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
-bool RelayList_LineToAgree(RelayListLineToAgree *out)
+// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h. Modified 2026-11-11 (one model for every line):
+// each line has its own yes, asked for by its place. Every line needs it, the ones the game ships with too (the owner, 2026-11-10: "Every
+// line asks the player once at first use").
+bool RelayList_LineToAgreeAt(int place, RelayListLineToAgree *out)
 {
-	const ServersCfgServer *const line = Server();
-
-	if (!out || !line || TheLineIsAgreed(*line))
+	if (!out)
 	{
 		return false;
 	}
 
-	return ShowTheLine(line, out);
+	memset(out, 0, sizeof(*out));
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount || TheLineIsAgreed(theFile.servers[place]))
+	{
+		return false;
+	}
+
+	return ShowTheLine(&theFile.servers[place], out);
 }
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
-bool RelayList_AgreeToTheLine(void)
+bool RelayList_AgreeToTheLineAt(int place)
 {
-	const ServersCfgServer *const line = Server();
+	Server();
 	uint8_t hash[kServersTrustHashBytes];
 
-	if (!line || !LineHash(*line, hash))
+	if (place < 0 || place >= theFile.serverCount || !LineHash(theFile.servers[place], hash))
 	{
 		return false;
 	}
+
+	std::string const which = SERVERS_CFG_FILE_NAME " line " + std::to_string(theFile.servers[place].lineNumber);
 
 	// A Hudson run's Yes (yespage=, above) holds for that run alone. It goes nowhere near the kept yeses or their file, so this PC's
 	// player is still asked. Added 2026-11-10 by Melanikus (Third) for the AvP port.
 	if (HudsonRunIsOn)
 	{
-		hudsonRunSaidYes = true;
-		LogString("Relay list: the Hudson run said yes to the server in " SERVERS_CFG_FILE_NAME ", for this run only: nothing is kept");
-		return true;
-	}
+		if (!ServersTrust_Has(hudsonRunYeses, hash) && hudsonRunYeses.count < kServersTrustMostYeses)
+		{
+			ServersTrust_Add(&hudsonRunYeses, hash);
+		}
 
-	// The kept yeses are read first, so that writing the file again keeps them. With every place taken, the oldest yes goes, and its line
-	// is asked about again the next time it's used.
-	TheLineIsAgreed(*line);
-
-	if (!ServersTrust_Has(yeses, hash) && yeses.count >= kServersTrustMostYeses)
-	{
-		memmove(yeses.hashes[0], yeses.hashes[1], sizeof(yeses.hashes[0]) * (kServersTrustMostYeses - 1));
-		yeses.count = kServersTrustMostYeses - 1;
-	}
-
-	ServersTrust_Add(&yeses, hash);
-
-	if (NetIdentityStore_KeepTrust(yeses))
-	{
-		LogString("Relay list: the player said yes to the server in " SERVERS_CFG_FILE_NAME ", and it's kept for the next time");
+		LogString("Relay list: the Hudson run said yes to " + which + ", for this run only: nothing is kept");
 	}
 	else
 	{
-		LogString("Relay list: the player said yes to the server in " SERVERS_CFG_FILE_NAME ", but it couldn't be kept, so it holds for this run only");
+		// The kept yeses are read first, so that writing the file again keeps them. With every place taken, the oldest yes goes, and its
+		// line is asked about again the next time it's used.
+		TheLineIsAgreed(theFile.servers[place]);
+
+		if (!ServersTrust_Has(yeses, hash) && yeses.count >= kServersTrustMostYeses)
+		{
+			memmove(yeses.hashes[0], yeses.hashes[1], sizeof(yeses.hashes[0]) * (kServersTrustMostYeses - 1));
+			yeses.count = kServersTrustMostYeses - 1;
+		}
+
+		ServersTrust_Add(&yeses, hash);
+
+		if (NetIdentityStore_KeepTrust(yeses))
+		{
+			LogString("Relay list: the player said yes to " + which + ", and it's kept for the next time");
+		}
+		else
+		{
+			LogString("Relay list: the player said yes to " + which + ", but it couldn't be kept, so it holds for this run only");
+		}
+	}
+
+	// The list may have started before the line in use had its yes, with no server of its own (Start, kKeyNoLine). From this yes on, it
+	// has that line's server, its key not yet checked, as it would have had if the yes had come first.
+	if (shared && place == theServer.inUse)
+	{
+		EnterCriticalSection(&shared->lock);
+
+		if (shared->keyState == kKeyNoLine)
+		{
+			shared->keyState = kKeyNotChecked;
+		}
+
+		LeaveCriticalSection(&shared->lock);
 	}
 
 	return true;
+}
+
+// The one-line pair, for the yes page until it's asked from the one Online page's rows (Fourth's): the line in use's yes, through the same
+// per-line code. They go with the pick (relay_list.h).
+bool RelayList_LineToAgree(RelayListLineToAgree *out)
+{
+	Server();
+	return RelayList_LineToAgreeAt(theServer.inUse, out);
+}
+
+bool RelayList_AgreeToTheLine(void)
+{
+	Server();
+	return RelayList_AgreeToTheLineAt(theServer.inUse);
 }
 
 // ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see relay_list.h.
@@ -2043,18 +2294,41 @@ int RelayList_LineGamesState(int place, const char **why)
 	return state;
 }
 
-// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): see relay_list.h
-bool RelayList_AskForRelayKeys(const char *region)
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): see relay_list.h. Modified 2026-11-11 (one model for
+// every line): asked by the line's place, the game's own or the host's, and fetched on a visit to that line alone.
+bool RelayList_AskForRelayKeysOn(int place, const char *region)
 {
-	if (!region || !RelayList_IsRegion(region) || !Start())
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	// A region is a region's word, or none (a host's asking: the line's own comes back with the keys)
+	if (region && region[0] && !RelayList_IsRegion(region))
+	{
+		return false;
+	}
+
+	// Nothing goes to a line's server before the player's yes to that line
+	if (!TheLineIsAgreed(theFile.servers[place]) || !Start())
 	{
 		return false;
 	}
 
 	EnterCriticalSection(&shared->lock);
 	shared->keysWanted = true;
+	shared->keysPlace = place;
+	shared->keysLine = theFile.servers[place];
 	// The region is at most kRelayListRegionLetters (RelayList_IsRegion, above); it's copied no further than that, and ended (Snyk Code)
-	strncpy(shared->keysRegion, region, kRelayListRegionLetters);
+	memset(shared->keysRegion, 0, sizeof(shared->keysRegion));
+
+	if (region && region[0])
+	{
+		strncpy(shared->keysRegion, region, kRelayListRegionLetters);
+	}
+
 	shared->keysRegion[kRelayListRegionLetters] = 0;
 	shared->keysAsked++;
 	LeaveCriticalSection(&shared->lock);
@@ -2063,17 +2337,22 @@ bool RelayList_AskForRelayKeys(const char *region)
 	return true;
 }
 
-int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
+int RelayList_RelayKeysCameOn(int *place, char region[kRelayListRegionLetters + 1], uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes], const char **why)
 {
+	*place = -1;
+	memset(region, 0, kRelayListRegionLetters + 1);
 	memset(p384, 0, kNetCryptoP384PublicBytes);
 	memset(kem, 0, kNetPqKemPublicBytes);
 	*why = NULL;
 
 	if (!shared)
 	{
-		*why = "no relay server is set";
+		*why = kNoServer;
 		return kRelayKeysRefused;
 	}
+
+	WriteTheNews();
 
 	EnterCriticalSection(&shared->lock);
 	int came = kRelayKeysWaiting;
@@ -2083,16 +2362,65 @@ int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem
 	{
 		came = shared->keysWhy ? kRelayKeysRefused : kRelayKeysCame;
 		*why = shared->keysWhy;
+		*place = shared->keysAnsweredPlace;
 
 		if (came == kRelayKeysCame)
 		{
 			memcpy(p384, shared->keysP384, kNetCryptoP384PublicBytes);
 			memcpy(kem, shared->keysKem, kNetPqKemPublicBytes);
+			memcpy(region, shared->keysGotRegion, kRelayListRegionLetters);
+			region[kRelayListRegionLetters] = 0;
 		}
 	}
 
 	LeaveCriticalSection(&shared->lock);
 	return came;
+}
+
+// The one-line pair, for networking.cpp until it asks by the game's line (Primary's): the line in use's keys, through the same per-line
+// code. They go with the pick (relay_list.h).
+bool RelayList_AskForRelayKeys(const char *region)
+{
+	if (!region || !RelayList_IsRegion(region))
+	{
+		return false;
+	}
+
+	Server();
+	return RelayList_AskForRelayKeysOn(theServer.inUse, region);
+}
+
+int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes], const char **why)
+{
+	int place = -1;
+	char region[kRelayListRegionLetters + 1];
+	return RelayList_RelayKeysCameOn(&place, region, p384, kem, why);
+}
+
+// The line's relay, straight from its servers.cfg line: nothing is looked up, and nothing is sent (added 2026-11-11, one model for every
+// line). The address as ENetAddress.host keeps it: the first number in the lowest byte (network order on x86).
+bool RelayList_RelayOf(int place, uint32_t *address, int *port)
+{
+	if (address)
+	{
+		*address = 0;
+	}
+
+	if (port)
+	{
+		*port = 0;
+	}
+
+	Server();
+
+	if (!address || !port || place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	*address = htonl(theFile.servers[place].address);
+	*port = theFile.servers[place].relayPort;
+	return true;
 }
 
 // Removed 2026-11-10 by Melanikus for the AvP port (#175): RelayList_RelayKeyFingerprint and the -dev setting it read, RelayKey. The relay's
@@ -2108,24 +2436,34 @@ bool RelayList_WhyIsNoConnection(const char *why)
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
 
-bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): a request goes to the line the page's row is for, as a
+// visit of its own (AskForAccessOn, above), and its answer is that line's alone. Only the page's own press sends one, or the page opening on
+// a line this run has asked (access_page.cpp's rules). Nothing is kept past the run (PO, 2026-11-11): after a restart the page asks again.
+bool RelayList_AskForAccessOn(int place, const char *name, const uint8_t statics[kNetIdentityStaticBytes],
+	const uint8_t fingerprint[kNetIdentityFingerprintBytes])
 {
-	// Without the fingerprint the answer has to be about, nothing. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: -dev
-	// decides nothing online, so this no longer asks it. Only the Online access page calls this, and the page has its own way in.)
+	// Without the fingerprint the answer has to be about, nothing
 	if (!fingerprint)
 	{
 		return false;
 	}
 
-	// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): an access request goes only to the server a servers.cfg line names,
-	// as only then is the list's key checked before a byte is sent: Call (above) runs CheckTheServer first, and CallChecked closes the call
-	// if the key the list shows isn't the one the line's fingerprint matched. The 8-letter access code is safe only then (relay_list_text.h,
-	// RelayAccess_Code): to a list Windows merely trusts, someone on the way could drop the player's request and send one with a key made
-	// to match its code instead. With no line, nothing is made or sent, and the page says why (access_page.cpp, Ask). With a line the
-	// player hasn't said yes to, Start (above) refuses, so no request goes before the yes either.
-	if (!Server())
+	// An access request goes only to a server a servers.cfg line names, as only then is the list's key checked before a byte is sent:
+	// Call runs CheckTheServer first, and CallChecked closes the call if the key the list shows isn't the one the line's fingerprint
+	// matched. The 8-letter access code is safe only then (relay_list_text.h, RelayAccess_Code): to a list Windows merely trusts, someone on
+	// the way could drop the player's request and send one with a key made to match its code instead. (PO's ruling, 2026-11-10.)
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
 	{
-		LogString("Relay list: an access request goes only to the server a " SERVERS_CFG_FILE_NAME " line names, and none does, so nothing was sent");
+		LogString("Relay list: an access request goes only to a server a " SERVERS_CFG_FILE_NAME " line names, and this one isn't, so nothing was sent");
+		return false;
+	}
+
+	// And only after the player's yes to that line, as anything sent to its server is (#175's last part)
+	if (!TheLineIsAgreed(theFile.servers[place]))
+	{
+		LogString("Relay list: an access request waits for the player's yes to its server, so nothing was sent");
 		return false;
 	}
 
@@ -2140,18 +2478,19 @@ bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentity
 	EnterCriticalSection(&shared->lock);
 	memcpy(shared->accessBody, body, sizeof(body));
 	memcpy(shared->accessFingerprint, fingerprint, kNetIdentityFingerprintBytes);
-	shared->accessWanted = true;
+	shared->accessLines[place] = theFile.servers[place];
+	shared->accessWantedOn[place] = true;
+	shared->accessAskingOn[place] = true;
+	shared->accessReadyOn[place] = false;
 	LeaveCriticalSection(&shared->lock);
 
 	Wake();
 	return true;
 }
 
-bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why)
+bool RelayList_AccessCameOn(int *place)
 {
-	*answered = false;
-	*answer = kRelayAccessWaiting;
-	*why = NULL;
+	*place = -1;
 
 	if (!shared)
 	{
@@ -2161,16 +2500,249 @@ bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char 
 	WriteTheNews();
 
 	EnterCriticalSection(&shared->lock);
-	bool const ready = shared->accessReady;
+
+	for (int p = 0; p < kServersCfgMostLines && *place < 0; p++)
+	{
+		if (shared->accessReadyOn[p])
+		{
+			shared->accessReadyOn[p] = false;
+			*place = p;
+		}
+	}
+
+	LeaveCriticalSection(&shared->lock);
+	return *place >= 0;
+}
+
+// The one-line pair, for the access page until it's the one Online page's rows (Fourth's): the line in use's request and answer, through
+// the same per-line code. They go with the pick (relay_list.h).
+bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes])
+{
+	if (!Server())
+	{
+		LogString("Relay list: an access request goes only to the server a " SERVERS_CFG_FILE_NAME " line names, and none does, so nothing was sent");
+		return false;
+	}
+
+	return RelayList_AskForAccessOn(theServer.inUse, name, statics, fingerprint);
+}
+
+bool RelayList_AccessCame(bool *answered, RelayAccessAnswer *answer, const char **why)
+{
+	*answered = false;
+	*answer = kRelayAccessWaiting;
+	*why = NULL;
+	int const place = theServer.inUse;
+
+	if (!shared || place < 0 || place >= kServersCfgMostLines)
+	{
+		return false;
+	}
+
+	WriteTheNews();
+
+	EnterCriticalSection(&shared->lock);
+	bool const ready = shared->accessReadyOn[place];
 
 	if (ready)
 	{
-		shared->accessReady = false;
-		*answered = shared->accessAnswered;
-		*answer = shared->accessAnswer;
-		*why = shared->accessWhy;
+		shared->accessReadyOn[place] = false;
+		*answered = shared->accessAnsweredOn[place];
+		*answer = shared->accessAnswerOn[place];
+		*why = shared->accessWhyOn[place];
 	}
 
 	LeaveCriticalSection(&shared->lock);
 	return ready;
+}
+
+// ---- ONE MODEL FOR EVERY LINE: each line's state for the pages, and the line a host hosts on. Added 2026-11-11 by Melanikus for the AvP
+// port (the owner's rulings, 2026-11-11: "all authorized ones show up", "UNIFY THE UI", "they will choose their friends' server", "No auto
+// choice, they choose"). See relay_list.h. Only the main thread calls these; none of them contacts anything.
+
+// The servers the game ships with: the same lines as servers.cfg at the repository's root, compiled into the game, so a line is told as
+// one of ours at run time from what this game itself holds, never from the file, which anyone can change. A line is ours when its address,
+// ports and fingerprint (its hash, the same one its yes is) are one of these; its name doesn't count. relay_list_test checks these are
+// exactly the shipped file's server lines, so the two can't drift apart.
+static const char kShippedServers[] =
+	"104.131.35.41  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York\n"
+	"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n";
+
+static bool LineIsOurs(int place)
+{
+	static ServersCfgFileRead shipped;
+	static uint8_t shippedHashes[kServersCfgMostLines][kServersTrustHashBytes];
+	static bool shippedHashed[kServersCfgMostLines];
+	static bool shippedRead = false;
+
+	if (!shippedRead)
+	{
+		shippedRead = true;
+		ServersCfg_Read(kShippedServers, sizeof(kShippedServers) - 1, &shipped);
+
+		for (int i = 0; i < shipped.serverCount && i < kServersCfgMostLines; i++)
+		{
+			shippedHashed[i] = LineHash(shipped.servers[i], shippedHashes[i]);
+		}
+	}
+
+	if (place < 0 || place >= theFile.serverCount || !theServer.hashed[place])
+	{
+		return false;
+	}
+
+	for (int i = 0; i < shipped.serverCount && i < kServersCfgMostLines; i++)
+	{
+		if (shippedHashed[i] && memcmp(shippedHashes[i], theServer.hashes[place], kServersTrustHashBytes) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// The player's access on a line, in the pages' terms, from that line's last answer this run
+static int AccessOn(int place, const char **why)
+{
+	*why = NULL;
+
+	if (!shared || place < 0 || place >= kServersCfgMostLines)
+	{
+		return kRelayAccessNotAsked;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	bool const asking = shared->accessAskingOn[place];
+	bool const answered = shared->accessAnsweredOn[place];
+	RelayAccessAnswer const answer = shared->accessAnswerOn[place];
+	const char *const failed = shared->accessWhyOn[place];
+	LeaveCriticalSection(&shared->lock);
+
+	if (asking)
+	{
+		return kRelayAccessAsking;
+	}
+
+	if (!answered)
+	{
+		*why = failed;
+		return failed ? kRelayAccessNoAnswer : kRelayAccessNotAsked;
+	}
+
+	switch (answer)
+	{
+		case kRelayAccessWaiting:
+			return kRelayAccessWaitingApproval;
+		case kRelayAccessApproved:
+			return kRelayAccessIsApproved;
+		case kRelayAccessRefused:
+		case kRelayAccessRevoked:
+			return kRelayAccessIsRefused;
+		default:
+			// The list didn't take the request (its name, key or shape), or wasn't taking any just then: in the game's own words for that answer
+			*why = RelayAccess_AnswerWords(answer);
+			return kRelayAccessNoAnswer;
+	}
+}
+
+bool RelayList_LineNow(int place, RelayListLineNow *out)
+{
+	if (!out)
+	{
+		return false;
+	}
+
+	memset(out, 0, sizeof(*out));
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	ServersCfgServer const &line = theFile.servers[place];
+
+	if (!ShowTheLine(&line, &out->line))
+	{
+		memset(out, 0, sizeof(*out));
+		return false;
+	}
+
+	out->lineNumber = line.lineNumber;
+	out->ours = LineIsOurs(place);
+	out->pingMs = -1;
+	out->access = AccessOn(place, &out->accessWhy);
+
+	// A line without the yes is that, whatever an earlier find said: nothing has gone to it since, and nothing will until the yes
+	if (!TheLineIsAgreed(line))
+	{
+		out->state = kRelayLineNoYes;
+		return true;
+	}
+
+	out->state = kRelayLineAsking;
+
+	if (shared)
+	{
+		EnterCriticalSection(&shared->lock);
+		int const state = shared->lineStates[place];
+		out->why = shared->lineWhys[place];
+		out->pingMs = shared->linePings[place];
+		out->games = shared->lineGames[place];
+		LeaveCriticalSection(&shared->lock);
+
+		// A find from before the yes counted it as without one; until a find after the yes has ended, it's being asked
+		out->state = state == kRelayLineNoYes ? kRelayLineAsking : state;
+	}
+
+	if (out->state != kRelayLineNoAnswer)
+	{
+		out->why = NULL;
+	}
+
+	return true;
+}
+
+int RelayList_ApprovedLines(int *places, int most)
+{
+	int count = 0;
+	Server();
+
+	for (int place = 0; places && place < theFile.serverCount && count < most; place++)
+	{
+		const char *why = NULL;
+
+		if (TheLineIsAgreed(theFile.servers[place]) && AccessOn(place, &why) == kRelayAccessIsApproved)
+		{
+			places[count++] = place;
+		}
+	}
+
+	return count;
+}
+
+bool RelayList_HostOn(int place)
+{
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
+	{
+		return false;
+	}
+
+	const char *why = NULL;
+
+	if (AccessOn(place, &why) != kRelayAccessIsApproved)
+	{
+		return false;
+	}
+
+	hostChoice = place;
+	return true;
+}
+
+int RelayList_HostLine(void)
+{
+	return hostRoomLine >= 0 ? hostRoomLine : hostChoice;
 }
