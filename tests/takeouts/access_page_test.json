@@ -65,12 +65,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: relay_list.cpp sends a request without -dev",
+			"name": "SOURCE: relay_list.cpp sends a request with no fingerprint",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "if (!DevMode || !fingerprint)",
-					"to": "if (!fingerprint)"
+					"from": "\tif (!fingerprint)\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn false;\n\t}"
 				}
 			]
 		},

@@ -22,11 +22,11 @@ struct SessionDescription;
 
 // The server's name, as people see it: its servers.cfg line's (servers_cfg.h). Empty when there's none, and then there's no relay: hosting
 // and joining are as they are without one. Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing in AliensVsPredator.cfg names a
-// server any more. Until protocol version 2 is on for players, there's a server only with -dev, so a player's game reaches none.
+// server any more. Modified again the same day (#175 PR 3b): -dev decides nothing here, so a player's game has the line as its server.
 //
-// servers.cfg is read the first time this is asked, and kept for the whole run, and -dev is read with it. So it must never be asked before
-// winmain.cpp has read -dev from the command line. Only the menus and hosting ask, long after; relay_list_test checks that winmain.cpp
-// itself never does. The screens make the name safe before drawing it, as they do anything from outside the game.
+// servers.cfg is read the first time this is asked, and kept for the whole run. Only the menus and hosting ask, long after the game has
+// started; relay_list_test checks that winmain.cpp itself never does, as it did when -dev was read with it. The screens make the name
+// safe before drawing it, as they do anything from outside the game.
 const char *Relay_ServerName(void);
 
 // ---- A host's game. networking.cpp calls these. Nothing here keeps the session itself, only what the list shows of it.
@@ -88,12 +88,12 @@ void RelayList_FindGames(void);
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
 
 // ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
-// AvP port. Only the Online access page calls these, and that page is only there with -dev (the owner's ruling: nothing a release game
-// does may reach a server yet), so these refuse without -dev as well, whatever calls them.
+// AvP port. Only the Online access page calls these. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: they no longer ask
+// -dev, which decides nothing online. The page has its own way in.)
 
 // Sends the request: the player's name, this PC's public halves, and the fingerprint the answer has to be about. Only when the player has
 // pressed the page's row for it, or (PO's ruling) when the page opens after the player has sent one this run. False, with nothing sent,
-// without -dev, with no list set, or if the name or key can't be sent (RelayList_AccessBody). The answer comes a moment later.
+// with no fingerprint, with no list set, or if the name or key can't be sent (RelayList_AccessBody). The answer comes a moment later.
 bool RelayList_AskForAccess(const char *name, const uint8_t statics[kNetIdentityStaticBytes], const uint8_t fingerprint[kNetIdentityFingerprintBytes]);
 
 // Once for each answer: true, with answered true and what the list said, or answered false and why in fixed words of the game's own (never

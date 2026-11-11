@@ -1414,8 +1414,6 @@ static bool RelayHostStart(const char **why)
 	return true;
 }
 
-// No relay answered the echoes, or the room on the relay is gone: the game is open on this network instead, as it would be with no relays
-// at all, so a player can still join it here (Fourth's cold read, finding 4). why is the game's own fixed words.
 // The log's line at the end of a game's time through the relay: how many of its datagrams went out sealed, and how many came in and
 // opened. Counts only, never what was in them. Then they start again from 0. (Added 2026-11-09 by Melanikus for the AvP port.)
 static void RelayLogSealedCounts()
@@ -1647,9 +1645,11 @@ static void RelayHostLeave()
 	relayPicking = false;
 	relayRoomListed = false;
 
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3b): the host is destroyed next, and until then it hears nothing, never
+	// everyone (tools/check-online-play.ps1's rule L: no host's intercept is ever cleared)
 	if (host)
 	{
-		host->intercept = NULL;
+		host->intercept = NothingIntercept;
 	}
 }
 

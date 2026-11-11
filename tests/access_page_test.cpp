@@ -188,8 +188,10 @@ static void TestOnlyWithDev()
 		"and a page that refuses sends the menus back to the Multiplayer page");
 
 	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccess(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(ask.find("if (!DevMode || !fingerprint)\n\t{\n\t\treturn false;") != std::string::npos && ask.find("if (!DevMode") < ask.find("Wake();"),
-		"relay_list.cpp refuses the call without -dev, whatever asks it, before anything is sent");
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3b): -dev decides nothing online, so relay_list.cpp no longer asks it; the
+	// page itself is the way in, and it stays -dev only until the access page's own pull request opens it (PO, 2026-11-10)
+	Check(ask.find("if (!fingerprint)\n\t{\n\t\treturn false;") != std::string::npos && ask.find("if (!fingerprint)") < ask.find("Wake();")
+		&& !Has(ask, "DevMode"), "relay_list.cpp refuses the call with no fingerprint to ask about, before anything is sent, and never asks -dev");
 
 	// The pages' only way to the network is that one call, made from two places: a pressed row, and the opening once a request was sent
 	bool const noOtherWay = !Has(page, "WinHttp") && !Has(page, "socket(") && !Has(page, "RelayList_FindGames") && !Has(page, "RelayList_FindRelays") &&
