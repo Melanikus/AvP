@@ -1734,92 +1734,56 @@ void DeallocateRifLoadedShapeheader(SHAPEHEADER *shp)
 	// this should be changed if it is to be done
 	// a different way
 	*/
+	// Modified 2026-11-11 by Melanikus for the AvP port (SAVE-HOSTILE-1): this part is built only with the level memory pool off, which
+	// only the sanitizer build does, and it had never been compiled. The 1999 code had a second way here for "multi-view sprite" shapes:
+	// it freed their animation frames as a bigger kind of frame that this game doesn't have, so it couldn't compile. Nothing in this game
+	// makes such a frame. The loader makes every frame a plain TXANIMFRAME with one array of numbers (SetupAnimOnTriangle and
+	// SetupAnimOnQuad, below), and mslhand.cpp frees them the same way. But a shape's flags come from the level's file, and a level can
+	// say anything, so taking that way because of a flag would free memory as the wrong shape. So the flag isn't read here: every frame is
+	// freed as the frame the loader made. save_test_rules_test checks that, and REMOVED-CODE.md says how to read the old way.
 	if (shp->items)
 	{
-		if (shp->shapeflags & ShapeFlag_MultiViewSprite)
+		for (int i = 0; i < shp->numitems; i++)
 		{
-			TXANIMHEADER **thlist = (TXANIMHEADER **)shp->sh_textures[0];
-
-			for (int j = 1; thlist[j] != 0; j++)
+			if (is_textured(shp->items[i][0]))
 			{
-				int k;
-				TXANIMHEADER *th = thlist[j];
+				int UVIndex = (shp->items[i][3] & 0xffff0000) >> 16;
+				max_num_texs = max(max_num_texs, shp->items[i][3] & 0x7fff);
 
-				for (k = 0; k < th->txa_numframes; k++)
+				if (shp->items[i][2]& iflag_txanim)
 				{
-					txanimframe_mvs *tf = (txanimframe_mvs *)&th->txa_framedata[k];
+					int j;
+					TXANIMHEADER **thlist = (TXANIMHEADER **)shp->sh_textures[UVIndex];
 
-					if (tf->txf_uvdata[0])
+					for (j = 1; thlist[j] != 0; j++)
 					{
-						DeallocateMem(tf->txf_uvdata[0]);
-					}
+						int k;
+						TXANIMHEADER *th = thlist[j];
 
-					if (tf->txf_uvdata)
-					{
-						DeallocateMem(tf->txf_uvdata);
-					}
-
-					if (tf->txf_images)
-					{
-						DeallocateMem(tf->txf_images);
-					}
-				}
-
-				if (th->txa_framedata)
-				{
-					DeallocateMem(th->txa_framedata);
-				}
-
-				DeallocateMem(th);
-			}
-
-			DeallocateMem(thlist);
-			shp->sh_textures[0] = 0;
-		}
-		else
-		{
-			for (i = 0; i < shp->numitems; i++)
-			{
-				if (is_textured(shp->items[i][0]))
-				{
-					int UVIndex = (shp->items[i][3] & 0xffff0000) >> 16;
-					max_num_texs = max(max_num_texs, shp->items[i][3] & 0x7fff);
-
-					if (shp->items[i][2]& iflag_txanim)
-					{
-						int j;
-						TXANIMHEADER **thlist = (TXANIMHEADER **)shp->sh_textures[UVIndex];
-
-						for (j = 1; thlist[j] != 0; j++)
+						for (k = 0; k < th->txa_numframes; k++)
 						{
-							int k;
-							TXANIMHEADER *th = thlist[j];
-
-							for (k = 0; k < th->txa_numframes; k++)
+							if (th->txa_framedata[k].txf_uvdata)
 							{
-								if (th->txa_framedata[k].txf_uvdata)
-								{
-									DeallocateMem(th->txa_framedata[k].txf_uvdata);
-								}
+								DeallocateMem(th->txa_framedata[k].txf_uvdata);
 							}
-
-							if (th->txa_framedata)
-							{
-								DeallocateMem(th->txa_framedata);
-							}
-
-							DeallocateMem(th);
 						}
 
-						DeallocateMem(thlist);
-						shp->sh_textures[UVIndex] = 0;
-					}
-					else
-					{
-						if (shp->sh_textures[UVIndex])
+						if (th->txa_framedata)
 						{
-							DeallocateMem(shp->sh_textures[UVIndex]);
+							DeallocateMem(th->txa_framedata);
 						}
+
+						DeallocateMem(th);
+					}
+
+					DeallocateMem(thlist);
+					shp->sh_textures[UVIndex] = 0;
+				}
+				else
+				{
+					if (shp->sh_textures[UVIndex])
+					{
+						DeallocateMem(shp->sh_textures[UVIndex]);
 					}
 				}
 			}
@@ -1836,7 +1800,7 @@ void DeallocateRifLoadedShapeheader(SHAPEHEADER *shp)
 
 	if (shp->sh_localtextures)
 	{
-		for (i = 0; i < (max_num_texs + 1); i++)
+		for (int i = 0; i < (max_num_texs + 1); i++)
 		{
 			DeallocateMem(shp->sh_localtextures[i]);
 		}

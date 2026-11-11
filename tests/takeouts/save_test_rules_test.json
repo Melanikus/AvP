@@ -136,6 +136,26 @@
 					"to": "<PreprocessorDefinitions>USE_LEVEL_MEMORY_POOL=0;USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: with the pool off, a shape is freed by the level's multi-view sprite flag again",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "\tif (shp->items)\n\t{\n\t\tfor (int i = 0; i < shp->numitems; i++)",
+					"to": "\tif (shp->items && !(shp->shapeflags & ShapeFlag_MultiViewSprite))\n\t{\n\t\tfor (int i = 0; i < shp->numitems; i++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with the pool off, a frame is freed as the multi-view kind",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "DeallocateMem(th->txa_framedata[k].txf_uvdata);",
+					"to": "DeallocateMem(((txanimframe_mvs *)&th->txa_framedata[k])->txf_uvdata);"
+				}
+			]
 		}
 	]
 }

@@ -194,6 +194,27 @@ static void ThePool()
 		builds.find("USE_LEVEL_MEMORY_POOL") == std::string::npos, "and nothing a player's game is built from asks for it off");
 	Check(project.find("EnableASAN") == std::string::npos && packaging.find("fsanitize") == std::string::npos && builds.find("fsanitize") == std::string::npos &&
 		builds.find("EnableASAN") == std::string::npos, "nor for the sanitizer: that's a local build of its own, never a player's");
+
+	// With the pool off, a shape is freed piece by piece (DeallocateRifLoadedShapeheader in chunk_load.cpp). The 1999 code there chose how to
+	// free a shape's animation frames by the shape's "multi-view sprite" flag, which comes from the level's file, and freed them as a kind of
+	// frame this game never makes. So that part must free every frame as the loader made it, whatever the flag says (added 2026-11-11 by
+	// Melanikus for the AvP port, SAVE-HOSTILE-1).
+	std::string const chunkLoad = ReadText("3dc/win95/chunk_load.cpp");
+	size_t const freeing = chunkLoad.find("void DeallocateRifLoadedShapeheader(SHAPEHEADER *shp)");
+	size_t const poolOff = freeing == std::string::npos ? std::string::npos : chunkLoad.find("#if !USE_LEVEL_MEMORY_POOL", freeing);
+	size_t const poolOffEnds = poolOff == std::string::npos ? std::string::npos : chunkLoad.find("#endif  //!USE_LEVEL_MEMORY_POOL", poolOff);
+	Check(freeing != std::string::npos && poolOff != std::string::npos && poolOffEnds != std::string::npos,
+		"chunk_load.cpp's piece-by-piece freeing of a shape, for the pool off, was found");
+
+	if (poolOffEnds != std::string::npos)
+	{
+		std::string const poolOffPart = chunkLoad.substr(poolOff, poolOffEnds - poolOff);
+		Check(poolOffPart.find("& ShapeFlag_MultiViewSprite") == std::string::npos,
+			"with the pool off, a shape's frames are freed without asking the level's multi-view sprite flag");
+		Check(poolOffPart.find("txanimframe_mvs") == std::string::npos, "and never as the multi-view frame this game doesn't have");
+		Check(poolOffPart.find("DeallocateMem(th->txa_framedata[k].txf_uvdata);") != std::string::npos,
+			"each frame's numbers are freed as the loader made them, one array a frame");
+	}
 }
 
 int main()
