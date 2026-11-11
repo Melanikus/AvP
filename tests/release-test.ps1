@@ -653,6 +653,24 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 
 static bool RelayHostStart(const char **why)
 {
+	int const line = RelayList_HostLine();
+
+	if (line < 0)
+	{
+		*why = kNoServerChosen;
+		return false;
+	}
+
+	if (!host || !RelayLookUp(line, &relayCandidates[0]))
+	{
+		return false;
+	}
+
+	if (!RelayV2Begin(relayCandidates[0], line, NULL, true, why))
+	{
+		return false;
+	}
+
 	host->intercept = RelayIntercept;
 	host->sendHook = RelaySealedSend;
 	return true;
@@ -668,21 +686,78 @@ static void RelayHostGiveUp(const char *reason)
 	RelayHostNews(kNetRelayHostEnded, reason);
 }
 
-void Net_TimeTheRelayForThePage(void)
+static bool RelayLookUp(int line, ENetAddress *out)
 {
-	pageTimingSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+	uint32_t address = 0;
+	int port = 0;
 
-	if (enet_socket_bind(pageTimingSocket, &any) < 0)
+	if (!RelayList_RelayOf(line, &address, &port) || port < 1)
 	{
-		return;
+		return false;
 	}
+
+	out->host = address;
+	out->port = static_cast<uint16_t>(port);
+	return true;
+}
+
+static bool RelayV2Begin(const ENetAddress &relay, int line, const char *region, bool times, const char **why)
+{
+	if (!RelayList_AskForRelayKeysOn(line, region))
+	{
+		*why = "the relay's keys couldn't be asked for";
+		return false;
+	}
+
+	relayV2Address = relay;
+	relayV2Line = line;
+	return true;
+}
+
+static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
+{
+	const char *listWhy = NULL;
+	int keysLine = -1;
+	char keysRegion[kRelayListRegionLetters + 1] = "";
+	int const came = RelayList_RelayKeysCameOn(&keysLine, keysRegion, relayV2Keys.p384, relayV2Keys.kem, &listWhy);
+
+	if (came != kRelayKeysCame || keysLine != relayV2Line)
+	{
+		*why = listWhy;
+		return kRelayV2None;
+	}
+
+	return kRelayV2Ready;
+}
+
+static uint16_t RelayHandshake(int line, const char *region, const char *code)
+{
+	const char *channelWhy = NULL;
+	return RelayV2Begin(relayAddress, line, region, false, &channelWhy) ? 27501 : 0;
+}
+
+static uint16_t RelayJoin(int line, const char *region, const char *code)
+{
+	relayJoinFailedWhy = kNetRelayNoRelay;
+	relayEndToEndJoinFailed = NULL;
+	return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+}
+
+bool Net_AddRelaySession(const RelayListGame &game, int line)
+{
+	if (line < 0 || line >= RelayList_LineCount())
+	{
+		return false;
+	}
+
+	return AddRelaySession(line, game.code, game.region);
 }
 
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
 {
 	bool const online = !netGameData.skirmishMode;
 
-	if (online && !Relay_ServerName()[0])
+	if (online && RelayList_HostLine() < 0)
 	{
 		return NET_FAIL;
 	}
@@ -692,11 +767,6 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
 	{
 		return NET_FAIL;
-	}
-
-	if (online)
-	{
-		RelayList_FindRelays();
 	}
 
 	if (!netGameData.skirmishMode)
@@ -746,7 +816,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 	if (SessionData[sessionNumber].throughRelay)
 	{
-		uint16_t const relayPort = RelayJoin(SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);
+		uint16_t const relayPort = RelayJoin(SessionData[sessionNumber].serverLine, SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);
 
 		if (relayPort == 0)
 		{
@@ -980,7 +1050,7 @@ void Weaker()
 		LetEveryoneIn();
 	}
 }
-'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 157 names DevMode' },
+'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 227 names DevMode' },
     @{ What = 'D: and in any relay_ file'; None = $false; Files = @{ '3dc/relay_auto.cpp' = (@'
 bool Auto()
 {
@@ -1251,7 +1321,7 @@ void Sneak(void)
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
 '@); To = (@'
 	if (false)
-'@) } }; Reason = 'Y: Net_HostGame (3dc/networking.cpp line 61) must host nothing online before the player''s yes' },
+'@) } }; Reason = 'H: Net_HostGame (3dc/networking.cpp line 136) must refuse a chosen line without the player''s yes' },
     @{ What = 'V: a v2 draft switch named anywhere is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 bool Which()
 {
@@ -1311,19 +1381,19 @@ static bool RelayHostStart
 		}
 
 		Con_PrintMessage
-'@) } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+'@) } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
     @{ What = 'S: a host handed over before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		const char *notOnline = NULL;
 '@ + "`n"); To = (@'
 		const char *notOnline = NULL;
 		if (Plain()) { return NET_OK; }
-'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
     @{ What = 'S: the relay asked only sometimes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (!RelayHostStart(&notOnline))
 '@ + "`n"); To = (@'
 		if (Sometimes())
 		if (!RelayHostStart(&notOnline))
-'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
     @{ What = 'S: a host made in a block of its own before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
 '@ + "`n"); To = (@'
@@ -1332,12 +1402,12 @@ static bool RelayHostStart
 			host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
 			return NET_OK;
 		}
-'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
     @{ What = 'S: a lost relay that leaves the host hearing anyone is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		host->intercept = NothingIntercept;
 '@ + "`n"); To = (@'
 		host->intercept = AnyoneIntercept;
-'@ + "`n") } }; Reason = 'S: RelayHostGiveUp (3dc/networking.cpp line 41) must end the online game, which then hears nothing' },
+'@ + "`n") } }; Reason = 'S: RelayHostGiveUp (3dc/networking.cpp line 59) must end the online game, which then hears nothing' },
     @{ What = 'S: a joiner that connects when handshake B fails is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (relayEndToEndJoinFailed)
 		{
@@ -1346,96 +1416,169 @@ static bool RelayHostStart
 		}
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 111) must make handshake B (RelayEndToEndJoin) before it connects' },
+'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 181) must make handshake B (RelayEndToEndJoin) before it connects' },
     @{ What = 'P: a host with no server named is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	if (online && !Relay_ServerName()[0])
+	if (online && RelayList_HostLine() < 0)
 '@ + "`n"); To = (@'
 	if (false)
-'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
     @{ What = 'P: and one refused only inside another block'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	if (online && !Relay_ServerName()[0])
+	if (online && RelayList_HostLine() < 0)
 	{
 		return NET_FAIL;
 	}
 '@ + "`n"); To = (@'
 	if (Later())
 	{
-		if (online && !Relay_ServerName()[0])
+		if (online && RelayList_HostLine() < 0)
 		{
 			return NET_FAIL;
 		}
 	}
-'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
     @{ What = 'P: and a skirmish made online is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	bool const online = !netGameData.skirmishMode;
 '@ + "`n"); To = (@'
 	bool online = !netGameData.skirmishMode;
 	online = false;
-'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
     @{ What = 'P: a join that isn''t through the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (!SessionData[sessionNumber].throughRelay)
 '@ + "`n"); To = (@'
 	if (false)
-'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 111) must refuse a game that isn''t through the relay first' },
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 181) must refuse a game that isn''t through the relay first' },
     @{ What = 'P: and one refused only sometimes'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (!SessionData[sessionNumber].throughRelay)
 '@ + "`n"); To = (@'
 	if (Sometimes())
 	if (!SessionData[sessionNumber].throughRelay)
-'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 111) must refuse a game that isn''t through the relay first' },
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 181) must refuse a game that isn''t through the relay first' },
     @{ What = 'P: an ENet host made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Elsewhere()
 {
 	host = Net_MakeENetHost(NULL, 1, 0, 0, 0);
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes an ENet host: only Net_HostGame and Net_ConnectToSession may' },
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes an ENet host: only Net_HostGame and Net_ConnectToSession may' },
     @{ What = 'P: and one made without Net_MakeENetHost'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void ByItself()
 {
 	host = enet_host_create(NULL, 1, 1, 0, 0);
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes an ENet host by itself: only Net_MakeENetHost' },
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes an ENet host by itself: only Net_MakeENetHost' },
     @{ What = 'P: a socket that sends to the whole network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Everyone()
 {
 	enet_socket_set_option(s, ENET_SOCKOPT_BROADCAST, 1);
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes a socket that sends to the whole network' },
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes a socket that sends to the whole network' },
     @{ What = 'P: a socket made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Listen()
 {
 	s = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes a socket: only LoopbackOnlyAddress and Net_TimeTheRelayForThePage may' },
-    @{ What = 'P: a port given to any other socket is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes a socket: only LoopbackOnlyAddress may' },
+    @{ What = 'P: a socket given a port is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	enet_socket_connect(probe, &to);
 '@ + "`n"); To = (@'
 	enet_socket_bind(probe, &any);
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 14 gives a socket a port: only Net_TimeTheRelayForThePage may' },
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 14 gives a socket a port: nothing may' },
     @{ What = 'P: a search that asks this network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	NumberOfSessionsFound = 0;
 '@ + "`n"); To = (@'
 	NumberOfSessionsFound = 0;
 	Ask(ENET_HOST_BROADCAST);
-'@ + "`n") } }; Reason = 'P: Net_FindAvPSessions (3dc/networking.cpp line 150) must only start the list of games found again' },
+'@ + "`n") } }; Reason = 'P: Net_FindAvPSessions (3dc/networking.cpp line 220) must only start the list of games found again' },
     @{ What = 'P: the plain game''s own names coming back are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
 {
 	return 0;
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 155 names HomeIntercept' },
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 225 names HomeIntercept' },
     @{ What = 'P: a host''s intercept cleared is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Forget()
 {
 	host->intercept = NULL;
 }
-'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 clears a host''s intercept' }
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 clears a host''s intercept' },
+    @{ What = 'J: a join through a relay chosen by its region is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+'@ + "`n"); To = (@'
+	return RelayLookUpByRegion(region, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+'@ + "`n") } }; Reason = 'J: RelayJoin (3dc/networking.cpp line 119) must take the relay of the game''s own line' },
+    @{ What = 'J: a line''s relay read from anywhere but the list''s code is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!RelayList_RelayOf(line, &address, &port) || port < 1)
+'@ + "`n"); To = (@'
+	address = TheRelayFor(region);
+	if (port < 1)
+'@ + "`n") } }; Reason = 'J: RelayLookUp (3dc/networking.cpp line 69) must read a line''s relay from the list''s code alone' },
+    @{ What = 'J: keys taken for another line than the one asked are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (came != kRelayKeysCame || keysLine != relayV2Line)
+'@ + "`n"); To = (@'
+	if (came != kRelayKeysCame)
+'@ + "`n") } }; Reason = 'J: a relay''s keys must be asked of its own line' },
+    @{ What = 'J: keys asked for without a line are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!RelayList_AskForRelayKeysOn(line, region))
+'@ + "`n"); To = (@'
+	if (!RelayList_AskForTheKeysOf(region))
+'@ + "`n") } }; Reason = 'J: a relay''s keys must be asked of its own line' },
+    @{ What = 'J: a join through another line than its game''s is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+RelayJoin(SessionData[sessionNumber].serverLine,
+'@); To = (@'
+RelayJoin(0,
+'@) } }; Reason = 'J: Net_ConnectToSession (3dc/networking.cpp line 181) must join through the game''s own line' },
+    @{ What = 'J: a relay reached from outside the network''s file is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Elsewhere()
+{
+	RelayJoin(0, region, code);
+}
+'@ + "`n") }; Reason = 'J: 3dc/menus.cpp line 3 reaches a relay from outside the network''s own file' },
+    @{ What = 'J: a game from no line kept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (line < 0 || line >= RelayList_LineCount())
+'@ + "`n"); To = (@'
+	if (false)
+'@ + "`n") } }; Reason = 'J: Net_AddRelaySession (3dc/networking.cpp line 126) must drop a game from no line first' },
+    @{ What = 'J: a one-server call named again is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void TheOldWay()
+{
+	RelayList_Relays(relays, &named);
+}
+'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 names RelayList_Relays, a call for the one server' },
+    @{ What = 'J: the network''s file reading servers.cfg itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ReadIt()
+{
+	ServersCfg_ReadTheGames(&file);
+}
+'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 calls the servers.cfg reader itself' },
+    @{ What = 'H: a host whose missing choice is refused only later is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (line < 0)
+	{
+		*why = kNoServerChosen;
+		return false;
+	}
+
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'H: RelayHostStart (3dc/networking.cpp line 34) must take the relay of the chosen line alone, and refuse first with none' },
+    @{ What = 'H: a host on another line than the chosen one is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!host || !RelayLookUp(line, &relayCandidates[0]))
+'@ + "`n"); To = (@'
+	if (!host || !RelayLookUp(0, &relayCandidates[0]))
+'@ + "`n") } }; Reason = 'H: RelayHostStart (3dc/networking.cpp line 34) must take the relay of the chosen line alone, and refuse first with none' },
+    @{ What = 'H: a relay host started from anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ElsewhereHosted()
+{
+	RelayHostStart(&why);
+}
+'@ + "`n") } }; Reason = 'H: 3dc/networking.cpp line 227 starts a host through a relay: only Net_HostGame may' }
 )
 
 foreach ($case in $onlineCases)
