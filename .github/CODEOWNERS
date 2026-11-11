@@ -5,3 +5,13 @@
 /vcpkg.json                 @Melanikus
 /vcpkg-configuration.json   @Melanikus
 /vcpkg-overlay-ports/       @Melanikus
+
+# The scripts that decide whether a test, a take-out list or a reused result passes: a change to one is a change to the gate itself,
+# just as a workflow file is (added 2026-11-11 by Melanikus for the AvP port, with the CI plan's reuse of earlier results, tests/reuse/)
+/tests/reuse/               @Melanikus
+/tests/build.ps1            @Melanikus
+/tests/every_test/          @Melanikus
+/tests/takeouts/run.ps1     @Melanikus
+/tests/takeouts/share.ps1   @Melanikus
+/tests/takeouts/run-batch.ps1 @Melanikus
+/tests/takeouts/sanitize.ps1 @Melanikus
