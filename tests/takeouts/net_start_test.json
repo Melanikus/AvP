@@ -3054,6 +3054,16 @@
 					"to": "\tif (false)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: an unusable PortNumber falls back to the port an earlier start took, not the game's own",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tnetPortNumber = (uint32_t)NetSettingOrOwn(\"PortNumber\", port, port >= 1 && port <= 65535, (int)kNetGamePort);\n",
+					"to": "\tnetPortNumber = (uint32_t)NetSettingOrOwn(\"PortNumber\", port, port >= 1 && port <= 65535, (int)netPortNumber);\n"
+				}
+			]
 		}
 	]
 }

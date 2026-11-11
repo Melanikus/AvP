@@ -3556,6 +3556,10 @@ static bool LogMentions(const char *words);   // further down
 // what Net_ConnectToSession gave.
 static NetResult JoinThroughTheChannel()
 {
+	// A join is a new game, whose host behind the relay starts handshake B afresh, whatever the last join was and however it ended (the
+	// host gone, Escape, the console). EndTheGame resets it too, but not every test ends a game that way. (Added 2026-11-11 by Melanikus
+	// for the AvP port: every join goes through the relay now, since the plain join went, so every join meets this host.)
+	scriptedHostSide.Reset();
 	ResetTheStandInChannel();
 	datagramsWaiting.clear();
 	NumberOfSessionsFound = 0;
@@ -4087,7 +4091,11 @@ static void TestTheKeptIdentity()
 		relayNamed = true;   // as the tests after this expect (2026-11-11)
 	}
 
-	// The player's yes: refused while a game is open, then a new one made and kept, and nothing left to ask
+	// The player's yes: refused while a game is open, then a new one made and kept, and nothing left to ask. (Modified 2026-11-11 by
+	// Melanikus for the AvP port: there's no game at home any more, which needed no identity, so the game the yes is refused in is hosted
+	// through the line's relay, sealed, and that needs a usable identity first: here, the one kept from earlier runs.)
+	storeFinds = kNetIdentityStoreLoaded;
+	RestartTheNetwork();
 	Check(HostAGame() == NET_OK, "a game hosted through its line's relay");
 	int const makesBeforeYes = storeMakes;
 	Check(!Net_MakeNewIdentity() && storeMakes == makesBeforeYes && LogHas("net: a new identity isn't made while a network game is open"),
@@ -4231,9 +4239,12 @@ static void TestTheSettingsFile()
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "and a host plays on the game's own port");
 	Check(hostIncomingBandwidth == 0 && hostOutgoingBandwidth == 0, "with as much speed as there is, not four thousand million bytes a second");
 
+	// Modified 2026-11-11 by Melanikus for the AvP port (the owner's "LAN is dead"): 23514 was kept for the search for games on this network,
+	// which is gone, so it's a port like any other now. And a port the game can't use, after one it took, falls back to the game's own,
+	// never to the one before (kNetGamePort).
 	StartAgainWith(23514, 0, 0);
-	Check(LogHas("net: the settings file's PortNumber is 23514, which the game can't use, so it uses 23513"), "the port a search uses isn't used for the game as well");
-	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "so the host still opens both");
+	Check(!LogHas("net: the settings file's PortNumber"), "the port the search on this network used is an ordinary port, now the search is gone");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23514, "and the host plays on it");
 
 	StartAgainWith(65536, 0, 0);
 	Check(LogHas("net: the settings file's PortNumber is 65536, which the game can't use, so it uses 23513"), "nor a port past the last there is");

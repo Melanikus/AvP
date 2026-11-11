@@ -191,7 +191,10 @@ static const int kMostBytesEachSecond = 512 * 1024;
 static unsigned int bytesSecond[kMostClients + 1];
 static int bytesUsed[kMostClients + 1];
 
-static uint32_t netPortNumber = 23513;
+// The game's own port, which the settings file's PortNumber can change; one the game can't use falls back to this, never to whatever an
+// earlier start of the network took (added 2026-11-11 by Melanikus for the AvP port)
+static uint32_t const kNetGamePort = 23513;
+static uint32_t netPortNumber = kNetGamePort;
 
 static uint32_t incomingBandwidth = 0;
 static uint32_t outgoingBandwidth = 0;
@@ -2074,10 +2077,10 @@ const char* Net_MessageTypeToString(uint32_t messageType)
 }
 
 // (Removed 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2, "Everything over nyc3": the search for games on this
-// network. That was the socket for finding games (OpenDiscoverySocket, CloseDiscoverySocket), the question sent to the whole network or a
-// typed address (AskAboutGames), the answers read and kept (Net_UpdateSessionList, Net_AddSession, Net_StopSearchingForSessions), and the
-// host's side, which answered anyone who asked, from anywhere (Net_CheckForSessionRequest, and its log, net_search_log.h). Every game is
-// now found on the server's online list, and played through its relay, sealed. REMOVED-CODE.md says where it was.)
+// network. That was the socket for finding games, the question sent to the whole network or a typed address, the answers read and kept,
+// and the host's side, which answered anyone who asked, from anywhere, with its log. Every game is now found on the server's online list,
+// and played through its relay, sealed. REMOVED-CODE.md names each function that went, and says where it was. (Modified 2026-11-11: the
+// names are left to REMOVED-CODE.md, so a test that looks for them anywhere in this file finds them only if they come back.)
 
 // A number from the settings file, if the game can use it; if not, the game's own number, and the log says so. Only the number is written
 // in the log, never the file's text, so nothing in the file can make a line that isn't ours.
@@ -2105,11 +2108,11 @@ NetResult Net_Initialise()
 	// The player's own settings. The settings file can hold any number, so each one is checked, and one the game can't use is put back to
 	// the game's own, with a line in the log saying so. The port is the one the host plays on: it has to be a port there is. A speed of 0
 	// means "as much as there is", and one below 0 means nothing.
-	int const port = Config_GetInt("[Networking]", "PortNumber", (int)netPortNumber);
+	int const port = Config_GetInt("[Networking]", "PortNumber", (int)kNetGamePort);
 	int const incoming = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
 	int const outgoing = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
 
-	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535, (int)netPortNumber);
+	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535, (int)kNetGamePort);
 	incomingBandwidth = (uint32_t)NetSettingOrOwn("IncomingBandwidth", incoming, incoming >= 0, 0);
 	outgoingBandwidth = (uint32_t)NetSettingOrOwn("OutgoingBandwidth", outgoing, outgoing >= 0, 0);
 
