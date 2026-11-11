@@ -123,29 +123,34 @@ static void TestTheWiring()
 	size_t const yes = rows.find("{TEXTSTRING_SERVERYES_YES},\t{kServerYesRowYes}");
 	Check(no != std::string::npos && yes != std::string::npos && no < yes && rows.find("AVPMENU_ELEMENT_ENDOFMENU") > yes,
 		"the page has its two rows, No first, so an Enter pressed by chance sends nothing");
-	Check(Has(data, "{AVPMENU_FONT_SMALL,\tTEXTSTRING_SERVERYES_TITLE,\t\t\tAvPMenu_ServerYes,\t\t\t\t\tAVPMENU_MULTIPLAYER, 0},") &&
-		Has(data, "== AVPMENU_SERVERS + 1,"), "its title is the question, and Esc goes back to the Multiplayer page");
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the page is one line's, opened from that line's row on
+	// the Online page, and it goes back there
+	Check(Has(data, "{AVPMENU_FONT_SMALL,\tTEXTSTRING_SERVERYES_TITLE,\t\t\tAvPMenu_ServerYes,\t\t\t\t\tAVPMENU_ONLINE, 0},") &&
+		Has(data, "== AVPMENU_SERVER_YES + 1,"), "its title is the question, and Esc goes back to the Online page");
 
 	std::string const opening = SourceSlice(menus, "case AVPMENU_SERVER_YES:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(opening, "if (!ServerYesPage_Opened())\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\t\t\t\treturn;"),
-		"a page with no line waiting for a yes goes back to the Multiplayer page");
+	Check(Has(opening, "if (!ServerYesPage_Opened())\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_ONLINE);\n\t\t\t\treturn;"),
+		"a page whose line has no yes waiting goes back to the Online page");
 	Check(Has(menus, "AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)\n\t{\n\t\t// The rows' top, as RenderMenu places them on this page (modified 2026-11-10: so its words stay above them)\n\t\tServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);"),
 		"the page's words are drawn on it, told where its rows start");
-	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_ONLINE_ACCESS:\n\t\t{\n\t\t\tenum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;", "\n\t\t}\n",
+	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_ONLINE_ACCESS:\n\t\t{\n\t\t\tenum AVPMENU_ID page = AVPMENU_ONLINE;", "\n\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	size_t const ours = pressing.find("if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)");
-	Check(ours != std::string::npos && ours < pressing.find("AccessPage_Pressed(") &&
-		Has(pressing, "ServerYesPage_Pressed(elementPtr->MaxValue, &page)"), "its rows are pressed as its own, never as the access page's");
+	Check(ours != std::string::npos && ours < pressing.find("OnlineLines_Pressed(") &&
+		Has(pressing, "ServerYesPage_Pressed(elementPtr->MaxValue, &page)"), "its rows are pressed as its own, never as the Online page's");
 
 	std::string const pressed = SourceSlice(page, "bool ServerYesPage_Pressed(int row, enum AVPMENU_ID *page)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const agreeing = SourceSlice(pressed, "case kServerYesAgreeAndGoOn:", "case kServerYesGoBack:", kSliceEndAfterTheStart, FailedSlice);
 	std::string const goingBack = SourceSlice(pressed, "case kServerYesGoBack:", "case kServerYesNothing:", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(agreeing, "if (!RelayList_AgreeToTheLine())") && agreeing.find("RelayList_AgreeToTheLine") < agreeing.find("*page = goToAfterYes;"),
-		"a yes is kept before the page goes on, and a yes that couldn't be given goes back instead");
-	Check(Has(goingBack, "*page = backToAfterNo;") && !Has(goingBack, "RelayList_"), "a no goes back, and tells the list nothing");
+	Check(Has(agreeing, "RelayList_AgreeToTheLineAt(linePlace);") && agreeing.find("RelayList_AgreeToTheLineAt") < agreeing.find("*page = AVPMENU_ONLINE;"),
+		"a yes is kept for the page's own line before the page goes back to the Online page");
+	Check(Has(goingBack, "*page = AVPMENU_ONLINE;") && !Has(goingBack, "RelayList_"), "a no goes back too, and tells the list nothing");
 
-	std::string const needed = SourceSlice(page, "bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(needed, "if (!RelayList_LineToAgree(&waiting))\n\t{\n\t\treturn false;"), "the page is needed only while the list has a line waiting for a yes");
+	std::string const openFor = SourceSlice(page, "bool ServerYesPage_OpenFor(int place)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const opened = SourceSlice(page, "bool ServerYesPage_Opened(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(openFor, "if (!RelayList_LineToAgreeAt(place, &waiting))\n\t{\n\t\treturn false;") && openFor.find("return false;") < openFor.find("linePlace = place;") &&
+		Has(opened, "haveShown = linePlace >= 0 && RelayList_LineToAgreeAt(linePlace, &shown);"),
+		"the page is opened only for a line still waiting for its yes, and shows that line, read again as it opens");
 	std::string const drawing = SourceSlice(page, "void ServerYesPage_Draw(int rowsTop)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(drawing, "OnlineScreens_SafeName(shown.name, sizeof(shown.name), name, sizeof(name));") &&
 		drawing.find("OnlineScreens_SafeName") < drawing.find("RenderSmallMenuText(name"), "the server's name, from a file from outside the game, is made safe before it's drawn");
@@ -251,9 +256,16 @@ static void TestEveryHostIsOnline()
 	// THE HOST ON ROW (the owner's rulings, 2026-11-11: "they will choose their friends' server", "No auto choice, they choose")
 	Check(Has(data, "int MP_HostOnChoice = 0;") && Has(data, "static AVPMENU_ELEMENT const HostOnRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_HOSTON},\t{0},\t{&MP_HostOnChoice},\t{0},\tTEXTSTRING_MULTIPLAYER_HOSTON_HELP};") &&
 		!Has(header, "HostOnChoice =") && CountOf(menus, "MP_HostOnChoice = ") == 1 &&
-		Has(SourceSlice(menus, "static void HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "MP_HostOnChoice = 1;") &&
-		CountOf(menus, "HostOnChoiceForARun();") == 1 && Has(SourceSlice(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "HostOnChoiceForARun();"),
-		"the Host on row starts on its first choice, \"choose a server\", at every start of the game, and nothing sets it for the player: only a Hudson run's own rows choose (hostrow=)");
+		Has(SourceSlice(menus, "static bool HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "MP_HostOnChoice = choice;") &&
+		CountOf(menus, "!HostOnChoiceForARun()") == 1 && Has(SourceSlice(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "if (!HostOnChoiceForARun())"),
+		"the Host on row starts on its first choice, \"choose a server\", at every start of the game, and nothing sets it for the player: only a Hudson run's own rows choose (hostrow= with hoston=)");
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port: a Hudson run chooses by the name hoston= gives, and never the row's first
+	// line by default ("No auto choice, they choose")
+	std::string const runChoice = SourceSlice(menus, "static bool HostOnChoiceForARun(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(runChoice, "const char *const name = Hudson_HostOnName();") && Has(runChoice, "(choice = HostOnChoiceNamed(name)) == 0") &&
+		Has(runChoice, "if (choice == 0)\n\t{") && !Has(runChoice, "MP_HostOnChoice = 1;") &&
+		Has(SourceSlice(menus, "static int HostOnChoiceNamed(const char *name)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "strcmp(now.line.name, name) == 0"),
+		"a Hudson run's choice is the line hoston= names, letter for letter, waited for; with no such line nothing is chosen, never the first by default");
 	std::string const choices = SourceSlice(menus, "static char **HostOnChoices(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(choices, "int const approved = RelayList_ApprovedLines(hostOnPlaces, kServersCfgMostLines);") &&
 		Has(choices, "GetTextString(hostOnCount > 0 ? TEXTSTRING_HOSTON_CHOOSE : TEXTSTRING_HOSTON_NONE)") &&

@@ -19,6 +19,8 @@
 //   access= and accesswait= press the Online access page's rows, and answer= and answerafter= the host's answer to a player asking to join
 // Modified 2026-11-10 by Melanikus (Third) for the AvP port:
 //   yespage= shows an access run the yes page and presses one of its rows, and hostrow= hosts through the Multiplayer page's Host row
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   hoston= names the server a host through the rows chooses on the Host on row, and joinon= the server whose game a Find games run joins
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -200,6 +202,17 @@ enum
 	kHudsonHostRowOnline
 };
 
+// hoston= and joinon=: the server a run hosts on, or joins a game on, named as servers.cfg names its line. The owner's rulings, 2026-11-11:
+// "they will choose their friends' server" and "No auto choice, they choose". So a host through the rows (hostrow=online) must name its
+// server, and nothing is ever chosen for it. hoston= waits, up to kHudsonMostHostOnSeconds, for that server to be on the Multiplayer page's
+// Host on row (a server is there only once it has approved this copy), chooses it, and pictures the page. joinon= makes a Find games run
+// (findgames=yes) press a game listed by that server, and no other. A plan's words are split at spaces, so a space in the name is written
+// as _ (New_York for "New York"); the name is then compared with the line's own, letter for letter. So a name with an _ of its own can't be
+// named, and no line is chosen by a guess. The name is 1 to kHudsonLongestServerName letters, digits, - and ., with single _ between them.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game.
+int const kHudsonLongestServerName = 31;          // servers.cfg's own most (servers_cfg.h, kServersCfgNameLetters); menus.cpp checks they agree
+int const kHudsonMostHostOnSeconds = 90;          // past the list's first visit to every line, at the menus' start
+
 int const kHudsonDefaultAccessWaitSeconds = 70;   // past the list's one call a minute from one address
 int const kHudsonLeastAccessWaitSeconds = 61;
 int const kHudsonMostAccessWaitSeconds = 3600;
@@ -345,6 +358,8 @@ struct HudsonPlan
 	bool menuPictures;    // menus=pictures: a run that stays at the menus, pictures four pages (main, Multiplayer, Online access, Options) and the intro's copyright screen and logo, and ends, pressing nothing that sends. For seeing how the menus are drawn at a screen size (menu_shape.h). Added 2026-11-10 by Melanikus for the AvP port
 	int yesPage;          // yespage=: from kHudsonYesPage...: an access run sees the yes page and presses that row. 0 for none: the line needs no yes, as before (added 2026-11-10)
 	int hostRow;          // hostrow=: from kHudsonHostRow...: a net=host run hosts through the Multiplayer page's Host row, as a player does. 0 for none: it hosts from the code, as before (added 2026-11-10)
+	char hostOn[kHudsonLongestServerName + 1];   // hoston=: the server's name, each _ turned back into a space; "" for none (added 2026-11-11)
+	char joinOn[kHudsonLongestServerName + 1];   // joinon=: the same, for the game a Find games run presses; "" for any (added 2026-11-11)
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -436,6 +451,11 @@ extern const char *const kHudsonRefusedHostRowWord;
 extern const char *const kHudsonRefusedHostRowWithoutHost;
 extern const char *const kHudsonRefusedHostRowWithRelayAuto;
 extern const char *const kHudsonRefusedHostRowWithCoop;
+extern const char *const kHudsonRefusedHostRowWithoutHostOn;
+extern const char *const kHudsonRefusedHostOnName;
+extern const char *const kHudsonRefusedHostOnWithoutHostRow;
+extern const char *const kHudsonRefusedJoinOnName;
+extern const char *const kHudsonRefusedJoinOnWithoutFindGames;
 extern const char *const kHudsonRefusedBotWeapon;
 extern const char *const kHudsonRefusedDeathWay;
 extern const char *const kHudsonRefusedVsync;

@@ -185,3 +185,46 @@ function Set-HudsonServersFile([string]$folder, [string]$line)
     if ($ours) { [System.IO.File]::Replace($temporary, $path, [NullString]::Value) } else { [System.IO.File]::Move($temporary, $path) }
     return ''
 }
+
+# -ShippedServers (added 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game): the
+# copy keeps the build's own servers.cfg, every line it ships, and the run writes nothing into it. Returns '' when the file beside bin\ in
+# $folder is that one, or why not: it has to be a plain file (not a link), no bigger than any servers.cfg can be, not one a run wrote, and
+# have exactly the SHA-256 $sha (the build's own file's, given by whoever made the copy). With $remoteRelay, one of its lines has to start
+# with that address, so the one relay beyond this machine a net= run may use is one the file ships. The game reads the file again by its
+# own rules, which are the last word.
+function Get-HudsonShippedServersRefusal([string]$folder, [string]$sha, [string]$remoteRelay)
+{
+    $path = Get-HudsonServersFilePath $folder
+    if (-not $path) { return "-ShippedServers needs the game in a folder called bin: the game reads servers.cfg only beside its bin folder" }
+    if (-not (Test-Path -LiteralPath $path)) { return "$path isn't there, so there are no shipped servers to keep" }
+
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return "$path isn't a plain file" }
+    if ($item.Length -gt 16384) { return "$path is bigger than any servers.cfg can be" }
+
+    # Read once, and both the hash and the text are of those same bytes
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    $found = ([System.BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+    $hasher.Dispose()
+    if ($found -cne $sha) { return "$path has the SHA-256 $found, not the build's own $sha" }
+
+    $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+    if ($text.StartsWith("$hudsonServersFileMark`n", [System.StringComparison]::Ordinal)) { return "$path was written by a Hudson run, so it isn't the build's own" }
+
+    if ($remoteRelay)
+    {
+        $lineThere = $false
+        foreach ($fileLine in ($text -split "`n"))
+        {
+            $bare = $fileLine.Trim([char[]]@(' ', "`t", "`r"))
+            foreach ($after in @(' ', "`t", ':'))
+            {
+                if ($bare.StartsWith("$remoteRelay$after", [System.StringComparison]::Ordinal)) { $lineThere = $true }
+            }
+        }
+        if (-not $lineThere) { return "-RemoteRelay $remoteRelay isn't the address of any line in $path" }
+    }
+
+    return ''
+}

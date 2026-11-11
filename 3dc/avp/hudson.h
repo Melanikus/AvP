@@ -154,6 +154,11 @@ int Hudson_YesPagePress();
 // hostrow= (hudson_plan.h, kHudsonHostRow...): where a host through the Multiplayer page's Host row hosts; none outside a run, or for a
 // host from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port
 int Hudson_HostRow();
+// hoston= and joinon= (hudson_plan.h): the servers.cfg line name a host through the rows chooses on the Host on row, and the one whose
+// game a Find games run joins, each as servers.cfg keeps it (one space for each _ the plan wrote); "" outside a run or when none is named.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port
+const char *Hudson_HostOnName();
+const char *Hudson_JoinOnName();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);

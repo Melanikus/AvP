@@ -1073,7 +1073,8 @@ static void TestTheMenus()
 	size_t const rows = setup.find("MakeSelectSessionMenu();");
 	Check(search != std::string::npos && put != std::string::npos && rows != std::string::npos && search < put && put < rows,
 		"the relay's games go back on the page each time it's set up, after the LAN's search and before its rows are made");
-	Check(Has(menus, "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())"), "and an answer from the list sets the page up again");
+	// (Modified 2026-11-11 by Melanikus for the AvP port: the list is the page's only answer, as nothing on this network is searched any more)
+	Check(Has(menus, "if (TheRelayGamesHaveCome())"), "and an answer from the list sets the page up again");
 
 	// The join's wait through a relay, up to about 26 seconds: the window keeps answering Windows, Esc or closing the game gives it up, and
 	// the hook is there only while that one join waits

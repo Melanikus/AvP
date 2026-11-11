@@ -98,6 +98,7 @@ param(
     # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host hosts through the Multiplayer page's rows, online
     # (run-hudson.ps1's -HostRow, Hudson's hostrow=)
     [string]$HostRow = '',
+    [string]$HostOn = '',          # with -HostRow: the server the host chooses on the Host on row, by its servers.cfg name (run-hudson.ps1's -HostOn; added 2026-11-11 by Melanikus (Third))
     # The host alone walks, as run-hudson.ps1's -WalkFrom, -WalkTo and -LookAt: x,y,z in the level's own mm, where an m stands for a
     # minus sign. He's put at -HostWalkFrom about 3 seconds into the level, walks to -HostWalkTo, and looks at -HostLookAt. The joiner
     # stays where the level starts him. For a lift's car that should stay put as the host comes near it (#189). The walk doesn't wait
@@ -412,6 +413,8 @@ if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-P
 # (the owner's ruling for beta.2: "Everything over nyc3"): online only, as the game at home and its joiner by a typed address are gone
 if ($HostRow -and $HostRow -cnotmatch '\A(online)\z') { Stop-Here "-HostRow is online: beta.2 hosts online only, through a server's relay" }
 if ($HostRow -and -not $Relay) { Stop-Here "-HostRow hosts through the server servers.cfg names, so it needs -Relay and -ServersLine" }
+if ($HostRow -and -not $HostOn) { Stop-Here "-HostRow needs -HostOn, the server the host chooses on the Host on row: nothing is chosen for a player" }
+if ($HostOn -and -not $HostRow) { Stop-Here "-HostOn chooses on the Host on row, which only -HostRow online goes through, so it needs -HostRow online" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -519,6 +522,7 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($word -eq 'host' -and $HostAnswerAfter -ne 0) { $words += @('-AnswerAfter', "$HostAnswerAfter") }
     if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }
     if ($word -eq 'host' -and $HostRow) { $words += @('-HostRow', $HostRow) }
+    if ($word -eq 'host' -and $HostOn) { $words += @('-HostOn', $HostOn) }
     if ($FilmMenus) { $words += '-FilmMenus' }
     if ($PageHold -ne 0) { $words += @('-PageHold', "$PageHold") }
     if ($NoFilm) { $words += '-NoFilm' }
