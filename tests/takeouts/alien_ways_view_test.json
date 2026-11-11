@@ -130,8 +130,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)",
-					"to": "if (!AlienWaysSwitchedOn)"
+					"from": "if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)",
+					"to": "if (!AlienWaysViewSwitchedOn)"
 				}
 			]
 		},
@@ -140,8 +140,48 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "if (toyFinalFlush && AlienWaysSwitchedOn)",
+					"from": "if (toyFinalFlush && AlienWaysViewSwitchedOn)",
 					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways are drawn whenever they're on, with no view switch (every player would see them)",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && AlienWaysViewSwitchedOn)",
+					"to": "if (toyFinalFlush && AlienWaysSwitchedOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the drawing itself doesn't ask for the view's switch",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)",
+					"to": "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view's switch works without -alienways",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (AlienWaysSwitchedOn)",
+					"to": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view is on without its switch",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int AlienWaysViewSwitchedOn = 0;",
+					"to": "int AlienWaysViewSwitchedOn = 1;"
 				}
 			]
 		},

@@ -62,6 +62,19 @@ static bool Has(const std::string &text, const char *what)
 	return text.find(what) != std::string::npos;
 }
 
+// How many times a piece of text is in the text (added 2026-11-11 by Melanikus (Third), as alien_ways_build_test has it)
+static size_t CountOf(std::string const &text, char const *wanted)
+{
+	size_t count = 0;
+
+	for (std::string::size_type at = text.find(wanted); at != std::string::npos; at = text.find(wanted, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
 	std::string::size_type const start = text.find(from);
@@ -187,17 +200,25 @@ static void TestJoiningTheGame()
 {
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
 	std::string const ways = ReadSourceFile("3dc/avp/alien_ways.h");
+	std::string const winmain = ReadSourceFile("3dc/avp/win95/winmain.cpp");
 
-	Check(!render.empty() && !ways.empty(), "the game's files are there to read");
+	Check(!render.empty() && !ways.empty() && !winmain.empty(), "the game's files are there to read");
+
+	// The view has its own developer switch, -alienwaysview, which needs -alienways, and nothing else turns it on, so no player ever sees the
+	// lines once the ways are on for everyone (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109, PO's decision R-LAVA-P2)
+	Check(Has(winmain, "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (AlienWaysSwitchedOn)\n\t\t\t{\n\t\t\t\tAlienWaysViewSwitchedOn = 1;"),
+		"the view's own switch is a developer's, and it needs -alienways");
+	Check(CountOf(winmain, "AlienWaysViewSwitchedOn = 1;") == 1 && !Has(render, "AlienWaysViewSwitchedOn = 1;"), "and nothing else turns the view on");
+	Check(Has(ReadSourceFile("3dc/avp/alien_ways.cpp"), "\nint AlienWaysViewSwitchedOn = 0;\n"), "and it starts off");
 
 	std::string const draw = Between(render, "static void DrawAlienWays()\n{", "\n}\n");
-	Check(Has(draw, "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)\n\t{\n\t\treturn;"), "the view is only drawn with the developer switch that makes the ways, and never in a network game");
+	Check(Has(draw, "if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)\n\t{\n\t\treturn;"), "the view is only drawn with its own developer switch, and never in a network game");
 	Check(Has(draw, "size_t const count = AlienWays_WaysToShow(shown, kMostShown);"), "it draws the ways the alien ways code gives it, on the game's thread");
 	Check(Has(draw, "AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);"), "through this frame's view, with the point each alien is heading for");
 	Check(Has(draw, "device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);") && Has(draw, "device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);"), "tested against the level's depth, so a wall hides a way behind it, and leaving the depth as it was");
 	Check(Has(draw, "asItWas->Apply();") && Has(draw, "D3DPT_LINELIST"), "drawn as lines, with the card put back as it was");
 
-	Check(Has(render, "if (toyFinalFlush && AlienWaysSwitchedOn)\n\t{\n\t\tDrawAlienWays();"), "in the frame's last drawing, when the whole level is in the depth buffer");
+	Check(Has(render, "if (toyFinalFlush && AlienWaysViewSwitchedOn)\n\t{\n\t\tDrawAlienWays();"), "in the frame's last drawing, when the whole level is in the depth buffer, with its own switch");
 
 	std::string const network = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()\n{", "\n}\n");
 	Check(Has(network, "LogString(\"alien ways view: this is a network game, so the aliens' ways aren't drawn\");"), "a network game says once in the log that the ways aren't drawn");

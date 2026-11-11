@@ -781,8 +781,9 @@ static bool ExecuteBuffer()
 		DrawNormalLines();
 	}
 
-	// The ALIEN WAYS view, the same way: in the frame's last drawing, so a wall hides a way behind it
-	if (toyFinalFlush && AlienWaysSwitchedOn)
+	// The ALIEN WAYS view, the same way: in the frame's last drawing, so a wall hides a way behind it. Only with its own switch, -alienwaysview
+	// (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109: no player ever sees the lines, even with the ways on)
+	if (toyFinalFlush && AlienWaysViewSwitchedOn)
 	{
 		DrawAlienWays();
 	}
@@ -7957,7 +7958,7 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 // aliens are going, through the walls.
 static void DrawAlienWays()
 {
-	if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)
+	if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)
 	{
 		return;
 	}
@@ -8241,11 +8242,11 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 		LogString("normal lines: this is a network game, so they're off");
 	}
 
-	// The aliens' ways aren't drawn in a network game (DrawAlienWays asks too). The switch stays, because it also makes the map the machine running
-	// the aliens finds their ways with. The log says so once.
+	// The aliens' ways aren't drawn in a network game (DrawAlienWays asks too), even with -alienwaysview. The switch stays, as it's set once at
+	// start. The log says so once, and only when the view was asked for (modified 2026-11-11 by Melanikus (Third), #109).
 	static bool saidAlienWaysArentDrawn = false;
 
-	if (AlienWaysSwitchedOn && !saidAlienWaysArentDrawn)
+	if (AlienWaysViewSwitchedOn && !saidAlienWaysArentDrawn)
 	{
 		saidAlienWaysArentDrawn = true;
 		LogString("alien ways view: this is a network game, so the aliens' ways aren't drawn");

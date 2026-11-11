@@ -50,6 +50,12 @@ extern int AlienWaysGridSwitchedOn;
 // exe can film the grid with the mover and without it. Set once, at start, by winmain.cpp.
 extern int AlienWaysMoverSwitchedOn;
 
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): 1 when -alienwaysview was given too (with -dev
+// and -alienways). Then each alien's way is drawn over the level as coloured lines (alien_ways_view.h, drawn by d3d_render.cpp), for films.
+// Its own switch, so the lines stay a developer's tool when the ways are on for every player: no player ever sees them. Set once, at start,
+// by winmain.cpp.
+extern int AlienWaysViewSwitchedOn;
+
 // How far along its way an alien aims, in mm, so it curves round bends instead of running corner to corner (alien_ways_lookahead.h).
 // kAlienWaysAimAheadMm, 1.5 m, unless -alienwaysaim=N gives another, from 0 to 10000; 0 aims at the way's next point, as before, for a film
 // to compare the two. Set once, at start, by winmain.cpp; the guide is given it at each level's start.
