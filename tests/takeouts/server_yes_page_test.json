@@ -175,12 +175,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the list starts after a No, before the player's yes",
+			"name": "SOURCE: after a No, the list's own state has the server before the player's yes",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
-					"to": "\t\tif (!line)"
+					"from": "\t\tif (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}\n",
+					"to": ""
 				}
 			]
 		},

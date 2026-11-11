@@ -208,14 +208,15 @@ static void TestTheWaysOnline()
 	Check(CountOf(menus, "ServerYesPage_WayIn(") == 1 && CountOf(menus, "ServerYesPage_Needed(") == 0,
 		"the menus ask in that one place, never as a page opens");
 
-	// After a No nothing goes to the server: the No tells the list nothing (section 3), and the list's thread is made in one place, Start,
-	// only after the player's yes to the line
+	// After a No nothing goes to the server: the No tells the list nothing (section 3). Modified 2026-11-11 by Melanikus for the AvP port
+	// (one model for every line): the list's thread may run for other lines, but its own state has no server until the line in use has its
+	// yes, and every call refuses a state with none (relay_list_test reads each line's own gate).
 	std::string const starting = SourceSlice(list, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
+	size_t const noLine = starting.find("if (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}");
 	size_t const thread = starting.find("CreateThread(");
-	Check(gate != std::string::npos && thread != std::string::npos && gate < thread && CountOf(list, "CreateThread(") == 1 &&
-		CountOf(list, "new (std::nothrow) Shared") == 1 && gate < starting.find("new (std::nothrow) Shared"),
-		"after a No the list's thread isn't started: it's made in Start alone, after the yes, so nothing goes to the server");
+	Check(noLine != std::string::npos && thread != std::string::npos && noLine < thread && CountOf(list, "CreateThread(") == 1 &&
+		Has(list, "if (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}"),
+		"after a No the list's own state has no server, from before its thread starts, and every call refuses it, so nothing goes to the server");
 }
 
 // NO HOST ROW: EVERY GAME IS HOSTED ONLINE (the owner's ruling for beta.2, 2026-11-10: "Remove At home from beta.2", "Everything over

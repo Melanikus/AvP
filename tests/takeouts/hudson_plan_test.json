@@ -10512,8 +10512,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (HudsonRunIsOn)\n\t{\n\t\thudsonRunSaidYes = true;",
-					"to": "\tif (false)\n\t{\n\t\thudsonRunSaidYes = true;"
+					"from": "\tif (HudsonRunIsOn)\n\t{\n\t\tif (!ServersTrust_Has(hudsonRunYeses, hash)",
+					"to": "\tif (false)\n\t{\n\t\tif (!ServersTrust_Has(hudsonRunYeses, hash)"
 				}
 			]
 		},
@@ -10522,8 +10522,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;",
-					"to": "return true;"
+					"from": "return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));",
+					"to": "return !hudsonRunShowsTheYesPage || LineHash(line, runHash);"
 				}
 			]
 		},

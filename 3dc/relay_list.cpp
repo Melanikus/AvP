@@ -2151,37 +2151,24 @@ void RelayList_FindGames(void)
 	// The lines to visit (added 2026-11-11, THE VISITS): every good line the player has said yes to, in the file's order, at most
 	// kRelayListMostVisits of them. A line without its yes isn't visited, so nothing goes to its server. The yeses are the main thread's,
 	// so they're asked here, and the list's thread is handed copies of the lines.
-	// The line in use is always one of them: its answer is the one joins and relay_auto wait for (RelayList_FoundGames), so however
-	// many lines come before it, a place is kept for it until it's reached (added 2026-11-11: with more than kRelayListMostVisits agreed
-	// lines before it, it was never visited, and that answer never came).
-	ServersCfgServer lines[kRelayListMostVisits];
+	// Which of them, and each line's state: RelayList_ChooseVisits (relay_list_text.h), which keeps a place for the line in use, as joins
+	// and relay_auto wait for its answer (RelayList_FoundGames). Each line's yes is asked here first, one by one.
+	int const count = theFile.serverCount < kServersCfgMostLines ? theFile.serverCount : kServersCfgMostLines;
+	bool agreed[kServersCfgMostLines] = {};
+
+	for (int place = 0; place < count; place++)
+	{
+		agreed[place] = TheLineIsAgreed(theFile.servers[place]);
+	}
+
 	int places[kRelayListMostVisits];
 	int states[kServersCfgMostLines];
-	int visits = 0;
-	bool inUseToCome = theServer.inUse >= 0 && theServer.inUse < theFile.serverCount;
+	int const visits = RelayList_ChooseVisits(agreed, count, theServer.inUse, places, states);
+	ServersCfgServer lines[kRelayListMostVisits];
 
-	for (int place = 0; place < theFile.serverCount && place < kServersCfgMostLines; place++)
+	for (int v = 0; v < visits; v++)
 	{
-		if (place == theServer.inUse)
-		{
-			inUseToCome = false;
-		}
-
-		if (!TheLineIsAgreed(theFile.servers[place]))
-		{
-			states[place] = kRelayLineNoYes;
-		}
-		else if (visits >= kRelayListMostVisits - (inUseToCome ? 1 : 0))
-		{
-			states[place] = kRelayLineNotAsked;
-		}
-		else
-		{
-			lines[visits] = theFile.servers[place];
-			places[visits] = place;
-			visits++;
-			states[place] = kRelayLineAsking;
-		}
+		lines[v] = theFile.servers[places[v]];
 	}
 
 	EnterCriticalSection(&shared->lock);
@@ -2190,9 +2177,11 @@ void RelayList_FindGames(void)
 	memcpy(shared->visitPlaces, places, sizeof(int) * static_cast<size_t>(visits));
 	shared->visitInUse = theServer.inUse;
 
-	for (int place = 0; place < theFile.serverCount && place < kServersCfgMostLines; place++)
+	for (int place = 0; place < count; place++)
 	{
 		shared->lineStates[place] = states[place];
+		shared->linePings[place] = -1;   // until this find measures it again
+		shared->lineGames[place] = 0;
 		shared->lineWhys[place] = NULL;
 	}
 
