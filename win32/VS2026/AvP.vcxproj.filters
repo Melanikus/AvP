@@ -1127,6 +1127,9 @@
     <ClInclude Include="..\..\3dc\avp\save_test_rules.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\save_level_record.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\huddefs.h">
       <Filter>Header Files</Filter>
     </ClInclude>

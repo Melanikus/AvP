@@ -50,6 +50,7 @@
 #include "user_profile.h"
 #include "savegame.h"
 #include "save_checks.h"
+#include "save_level_record.h"
 #include "huffman.hpp"
 #include "fmvCutscenes.h"
 #define UseLocalAssert TRUE
@@ -437,6 +438,88 @@ static BOOL SaveGameAllowed()
 	return TRUE;
 }
 
+// ---- The level record (SAVE-HOSTILE-1, part c; save_level_record.h says why). Added 2026-11-10 by Melanikus for the AvP port.
+
+// The level that's loaded, as system.cpp noted it when it loaded: what a new save records, and what a load is held to
+static SaveLevelRecord levelLoaded;
+static bool levelLoadedHasRecord = false;
+
+// The record's block, as it's stored in the save: its header, then the record's 52 bytes
+typedef struct level_identity_save_block
+{
+	SAVE_BLOCK_HEADER header;
+	SaveLevelRecord record;
+} LEVEL_IDENTITY_SAVE_BLOCK;
+
+void SaveGame_NoteTheLevel(const char *name, unsigned int fileBytes, const unsigned char sum[16])
+{
+	levelLoadedHasRecord = SaveLevel_Make(name, fileBytes, sum, &levelLoaded);
+}
+
+// The record, first in the save's body, so a load reads it before anything that would change the level
+static void SaveLevelIdentity(void)
+{
+	if (!levelLoadedHasRecord)
+	{
+		LogString("save: this save carries no level record: the level wasn't read from a file, or its name isn't one a record can hold");
+		return;
+	}
+
+	LEVEL_IDENTITY_SAVE_BLOCK *block = NULL;
+	GET_SAVE_BLOCK_POINTER(LEVEL_IDENTITY_SAVE_BLOCK, block);
+	block->header.type = SaveBlock_LevelIdentity;
+	block->header.size = sizeof(*block);
+	block->record = levelLoaded;
+}
+
+// Whether the save's first block lets the load go on (PO's ruling, 2026-11-10): a record of this level, and this copy of it, or no record
+// at all (a save made before saves had one, which loads as it always did). A record that's refused as it's read, one of another level or
+// another copy of this one, or one on a level with no record of its own to compare it with, stops the load. A record is used up here, so
+// the blocks after it load as before.
+static bool TheSaveIsForThisLevel(void)
+{
+	SAVE_BLOCK_HEADER const *const header = (SAVE_BLOCK_HEADER const *)LoadInfo.BufferPos;
+
+	if (LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER) || header->type != SaveBlock_LevelIdentity)
+	{
+		LogString("save: this save has no level record, as saves made before it don't, so it's loaded as it always was");
+		return true;
+	}
+
+	if (header->size < (int)sizeof(SAVE_BLOCK_HEADER) || header->size > LoadInfo.BufferSpaceLeft)
+	{
+		LogString(std::string("save: not loaded: ") + SaveLevel_RefusalWords(kSaveLevelWrongSize));
+		return false;
+	}
+
+	SaveLevelRecord saved;
+	SaveLevelRefusal const read = SaveLevel_Read(header + 1, (size_t)header->size - sizeof(SAVE_BLOCK_HEADER), &saved);
+
+	if (read != kSaveLevelRead)
+	{
+		LogString(std::string("save: not loaded: ") + SaveLevel_RefusalWords(read));
+		return false;
+	}
+
+	if (!levelLoadedHasRecord)
+	{
+		LogString(std::string("save: not loaded: the save is for level ") + saved.name + ", and this level has no record to hold it to");
+		return false;
+	}
+
+	SaveLevelMatch const match = SaveLevel_Compare(saved, levelLoaded);
+	LogString(SaveLevel_LoadLine(match, saved, levelLoaded));
+
+	if (match != kSaveLevelSameLevel)
+	{
+		return false;
+	}
+
+	LoadInfo.BufferPos += header->size;
+	LoadInfo.BufferSpaceLeft -= header->size;
+	return true;
+}
+
 void SaveGame()
 {
 	char filename[MAX_PATH];
@@ -474,6 +557,9 @@ void SaveGame()
 	SaveLevelHeader();
 
 	headerLength = SaveInfo.BufferSpaceUsed;
+
+	// The level record first, so a load is held to it before anything changes the level (added 2026-11-10, SAVE-HOSTILE-1 part c)
+	SaveLevelIdentity();
 
 	SaveDeadStrategies();
 
@@ -727,6 +813,13 @@ void LoadSavedGame()
 		}
 	}
 
+	// The level record, first in the body, before any block can change the level (added 2026-11-10 by Melanikus for the AvP port,
+	// SAVE-HOSTILE-1 part c): a save for another level, or another copy of this one, isn't loaded
+	if (!terminal_error && !TheSaveIsForThisLevel())
+	{
+		terminal_error = TRUE;
+	}
+
 	//go through loading things
 	while(LoadInfo.BufferSpaceLeft && !terminal_error)
 	{
@@ -841,6 +934,13 @@ void LoadSavedGame()
 
 			case SaveBlock_SoundState :
 				Load_SoundState_NoRef(header);
+				break;
+
+			// A level record anywhere but first, where TheSaveIsForThisLevel has already used it up, is one the game never writes:
+			// a second one, or one moved after blocks that have changed the level (added 2026-11-10, SAVE-HOSTILE-1 part c)
+			case SaveBlock_LevelIdentity :
+				LogString("save: not loaded: its level record isn't first, where the game writes it");
+				terminal_error = TRUE;
 				break;
 
 			default :
