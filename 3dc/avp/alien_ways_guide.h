@@ -135,6 +135,25 @@ int const kAlienWaysTakeBackRange = 10000;        // mm
 int const kAlienWaysRestStillFor = 1000;          // ms
 int const kAlienWaysRestMovedOn = 300;            // mm: a cell of the grid
 
+// THE SLIDE. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner's ruling R-LAVA-4b ("if there is nothing we can do
+// we'll get them to 'cheat' a bit (clip through places they're stuck)"), and how it must be: "Linearly collision free (animated with
+// walking) interpolates to the next node's postion and orientation", "When it gets stuck for more than 0.5 secs", "Should look like
+// normally walking, we're just... giving it a free of collisions nudge to the next node", "as long as they're small gaps and we keep the
+// collisioning system on otherwise". His ruling R-LAVA-7: no finer grid; the snags the grid can't see are the slide's job.
+// - An alien on its way that makes no headway (kAlienWaysHeadway nearer the point it's heading for) for kAlienWaysSlideAfterStuck slides to
+//   that point: the one its stuck line would name, never a later one, as a way round a thin wall can have points on both sides of it close
+//   together.
+// - Only a small gap: that point less than kAlienWaysMostSlide from it, and the alien no more than kAlienWaysMostOffTheWayToSlide across
+//   its surface from the stretch it's on, as a straight line from further off is what could cross a thin wall. Otherwise the watchdog
+//   takes it, as before. The game refuses one whose end is in a module the alien's module can't see into (alien_ways.cpp).
+// - The game moves it at its own speed, so its walk or crawl plays as ever, straight to that point, with the level's walls not in its way
+//   and no gravity, as 1999's queen climbs out of her pit (bh_queen.cpp): it's still a body, so it can be hit, and can hit. Its body turns
+//   on the way onto the point's face. Collisions and gravity are back as it arrives, or if it takes longer than kAlienWaysMostSlideMs.
+int const kAlienWaysSlideAfterStuck = 500;        // ms
+int const kAlienWaysMostSlide = 1000;             // mm
+int const kAlienWaysMostOffTheWayToSlide = 500;   // mm
+int const kAlienWaysMostSlideMs = 1500;           // ms
+
 // An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
 // Checked here, where both are known, so the game's own build stops if one of them is changed alone.
 static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
@@ -202,8 +221,10 @@ enum AlienWaysOutcome
 	kAlienWaysOutcomeStuck,         // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
 	kAlienWaysOutcomeHandedOver,    // not a search: an alien in clear sight of its target, near it, was left to the game's own last stretch
 	                                // (THE HAND-OVER; from: where it was, to: its target). Added 2026-11-11 by Melanikus (Third), #109.
-	kAlienWaysOutcomeRestEnded      // not a search: an alien resting after a stuck didn't get on, so it re-plans now (THE REST, HELD FROM
+	kAlienWaysOutcomeRestEnded,     // not a search: an alien resting after a stuck didn't get on, so it re-plans now (THE REST, HELD FROM
 	                                // AVOIDING; from: where it is; replan: which re-plan). Added 2026-11-11 by Melanikus (Third), #109.
+	kAlienWaysOutcomeSlide          // not a search: an alien stuck on its way slides to the point it was heading for (THE SLIDE; from: where
+	                                // it is; to: that point). Added 2026-11-11 by Melanikus (Third), #109.
 };
 
 // What the watchdog did with an alien found stuck (THE WATCHDOG, above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
@@ -308,6 +329,20 @@ public:
 	// well. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
 	bool HandedOver(const AlienWaysWho &who) const;
 
+	// THE SLIDE (above). Whether this alien slides now, and if so: the point it slides to, with its kind and facing, where it set off from,
+	// and the point of its way after that one (the same point, if it's the way's last), for the game to move it and turn its body. And the
+	// game's word that the slide is over: arrived (it got to the point, which it has then reached), or not (refused, as its end is in a
+	// module the alien's can't see into; the watchdog has it from there). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	bool Sliding(const AlienWaysWho &who, AlienWaysPoint *to, AlienWaysXYZ *from, AlienWaysXYZ *next) const;
+	void SlideEnded(const AlienWaysWho &who, bool arrived);
+
+	// Whether an alien the guide has is to keep clinging to what it's on when no way steers it this frame: resting after a stuck, waiting
+	// for its next way, or handed over but still further off than kAlienWaysHandOverRange. Only the game's own curve at its target, within
+	// that range and in clear sight, decides its gravity, as in 1999. Without this, 1999's Approach gives a far alien standard gravity every
+	// frame, and one on a wall or a ceiling falls (Secondary's read of the owner's play: 7 of his 16 stucks). Added 2026-11-11 by Melanikus
+	// (Third) for the AvP port (#109).
+	bool KeepsClinging(const AlienWaysWho &who) const;
+
 	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
 	// has: up to most of them, for the log's once-a-second line (lanes, #138)
 	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
@@ -344,6 +379,10 @@ public:
 	// point is reached, and whether the alien is stuck, still go by the next point. Kept through Clear: it's a setting, not part of a level.
 	void SetAimAhead(int mm) { aimAheadMm = mm; }
 
+	// Whether aliens slide (THE SLIDE, above). Off as a guide starts, so a test asks for it; the game turns it on at each level's start. Kept
+	// through Clear, as a setting. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	void SetSlides(bool on) { slidesOn = on; }
+
 private:
 	struct Follower
 	{
@@ -379,6 +418,12 @@ private:
 		bool handedOver;                    // THE HAND-OVER: the game's own last stretch has it (added 2026-11-11 by Melanikus (Third))
 		AlienWaysXYZ restFrom;              // THE REST, HELD FROM AVOIDING: where it was when it last moved on in its rest...
 		long long restMovedAt;              // ...and when (added 2026-11-11 by Melanikus (Third))
+		bool sliding;                       // THE SLIDE: it slides now (added 2026-11-11 by Melanikus (Third))...
+		int slidePoint;                     // ...to this point of its way...
+		long long slideAt;                  // ...since then...
+		AlienWaysXYZ slideFrom;             // ...from here
+		long long slideTriedFor;            // the headway clock (headwayAt) a slide was last tried for, so one refused isn't tried every frame
+		bool clings;                        // KeepsClinging (added 2026-11-11 by Melanikus (Third))
 
 		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
 		AlienWaysWho target;
@@ -441,6 +486,7 @@ private:
 	bool claimsTried, claimsOn;
 
 	int aimAheadMm;                     // SetAimAhead
+	bool slidesOn;                      // SetSlides (added 2026-11-11 by Melanikus (Third), #109)
 	static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims have room for every alien the guide has");
 };
 

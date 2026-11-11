@@ -1794,6 +1794,176 @@
 					"to": "resting after a stuck, moved less than"
 				}
 			]
+		},
+		{
+			"name": "a guide slides aliens without being asked to",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "aimAheadMm(0), slidesOn(false)",
+					"to": "aimAheadMm(0), slidesOn(true)"
+				}
+			]
+		},
+		{
+			"name": "a slide waits as long as the watchdog",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "now - follower.headwayAt >= kAlienWaysSlideAfterStuck &&",
+					"to": "now - follower.headwayAt >= kAlienWaysNoHeadwayFor &&"
+				}
+			]
+		},
+		{
+			"name": "a gap of a whole metre slides",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "toNext < kAlienWaysMostSlide &&",
+					"to": "toNext <= kAlienWaysMostSlide &&"
+				}
+			]
+		},
+		{
+			"name": "an alien far off its way's line slides",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "<= kAlienWaysMostOffTheWayToSlide)",
+					"to": "<= 1e9)"
+				}
+			]
+		},
+		{
+			"name": "a slide refused is tried again while the alien makes no headway",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.slideTriedFor != follower.headwayAt &&",
+					"to": "true &&"
+				}
+			]
+		},
+		{
+			"name": "a slide is never given up",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (now - follower.slideAt <= kAlienWaysMostSlideMs && follower.slidePoint < follower.count)\n",
+					"to": "\t\tif (follower.slidePoint < follower.count)\n"
+				}
+			]
+		},
+		{
+			"name": "the game isn't told the point after the one it slides to",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t*next = AlienWaysXYZ{ after.x, after.y, after.z };\n",
+					"to": "\t*next = *from;\n"
+				}
+			]
+		},
+		{
+			"name": "an alien in the game's own curve is made to cling",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tfollower.clings = !(follower.handedOver && toTarget <= kAlienWaysHandOverRange);\n",
+					"to": "\tfollower.clings = true;\n"
+				}
+			]
+		},
+		{
+			"name": "a handed-over alien beyond the game's own curve is let fall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tfollower.clings = !(follower.handedOver && toTarget <= kAlienWaysHandOverRange);\n",
+					"to": "\tfollower.clings = !follower.handedOver;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sliding alien's velocity isn't set by the slide",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tAlienWays_Slide(sbPtr);   // a stuck one",
+					"to": "\t\t// a stuck one"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sliding alien keeps the level's walls",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tdynamics->OnlyCollideWithObjects = 1;\n\tdynamics->GravityOn = 0;\n",
+					"to": "\tdynamics->GravityOn = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide's walls aren't put back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\talien->DynPtr->OnlyCollideWithObjects = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien let go mid-slide keeps sliding's walls and gravity",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\talien->DynPtr->UseStandardGravity = 1;\n\t\tEndSlide(alien);\n",
+					"to": "\t\talien->DynPtr->UseStandardGravity = 1;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never turns the slide on",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.SetSlides(true);\n",
+					"to": "\ttheGuide.SetSlides(false);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide into a module its own can't see into isn't refused",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))",
+					"to": "if (!there)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a climbing alien the guide has isn't kept clinging",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (!onAWay && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say how far a slide goes",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "alien %u slides %.1f m past a stuck at %s to %s",
+					"to": "alien %u slides past a stuck at %s to %s"
+				}
+			]
 		}
 	]
 }

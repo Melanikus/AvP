@@ -929,6 +929,152 @@ static void RestEndsEarly()
 	Check(stuck.stuck && !ended && !asked, "one that keeps moving on rests its full 3 s, asking for nothing");
 }
 
+// THE SLIDE (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner's rulings R-LAVA-4b and R-LAVA-7:
+// half a second stuck on a small gap, and it slides, its walls off, to the point it was heading for.
+// Held where ask says, 100 ms a frame, for up to most ms, until it slides: how many ms that took, and its line, if it did
+static int HeldTillItSlides(AlienWaysGuide &guide, AlienWaysMap &map, const AlienWaysAsk &ask, int most, AlienWaysReport *line, bool *stuck)
+{
+	AlienWaysXYZ towards;
+	*stuck = false;
+
+	for (int ms = 0; ms <= most; ms += 100)
+	{
+		guide.Steer(&map, ask, &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			*stuck = *stuck || reports[r].outcome == kAlienWaysOutcomeStuck;
+
+			if (reports[r].outcome == kAlienWaysOutcomeSlide)
+			{
+				*line = reports[r];
+				return ms;
+			}
+		}
+	}
+
+	return -1;
+}
+
+static void Slides()
+{
+	printf("The slide: half a second stuck on a small gap, and it slides to the point it was heading for\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	AlienWaysPoint to;
+	AlienWaysXYZ from, next;
+	AlienWaysReport line = {};
+	bool stuck = false;
+
+	// Off as a guide starts: held 900 mm from the wall's foot it heads for, it's found stuck at 1.5 s, as before
+	AlienWaysXYZ const near = Beside(900, 0, 500);
+	{
+		const std::unique_ptr<AlienWaysGuide> offRoom(new AlienWaysGuide);
+		AlienWaysGuide &off = *offRoom;
+		GuidedAlien(off, Alien(1));
+		off.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		Check(HeldTillItSlides(off, map, Ask(Alien(1), near, kGoal, 13), 1700, &line, &stuck) < 0 && stuck,
+			"a guide doesn't slide aliens till it's asked to: held there, it's found stuck, as before");
+	}
+
+	// On: it takes its way up at the start, comes 100 mm nearer the wall's foot, and is held there. Half a second on, it slides.
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	guide.SetSlides(true);
+	GuidedAlien(guide, Alien(1));
+	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	int const took = HeldTillItSlides(guide, map, Ask(Alien(1), near, kGoal, 13), 1700, &line, &stuck);
+	Check(took >= 400 && took <= 600 && !stuck, "with no headway for half a second, 0.9 m from the point it heads for, it slides (" + std::to_string(took) + " ms)");
+	Check(Same(line.from, near) && Same(line.to, kOntoTheWall), "its line says from where, and to the point it was heading for");
+	Check(guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall) && Same(from, near) && Same(next, kUpTheWall),
+		"the game is told it slides: to that point, from there, and the point after it, to head on along its way");
+	Check(guide.Steer(&map, Ask(Alien(1), near, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "while it slides, it heads for that point");
+
+	// The game puts it there, clinging to the wall, 450 mm out from it: it has reached that point, and heads on up the wall
+	guide.SlideEnded(Alien(1), true);
+	AlienWaysAsk there = Ask(Alien(1), Beside(450, 0, 500), kGoal, 13);
+	there.down = IntoTheWall();
+	Check(!guide.Sliding(Alien(1), &to, &from, &next) && guide.Steer(&map, there, &towards) && Same(towards, kUpTheWall),
+		"arrived, it slides no more, and heads on for the next point, up the wall");
+
+	// No slide from 1 m off: held at the start, 1 m from the wall's foot, it's found stuck at 1.5 s, as before
+	{
+		const std::unique_ptr<AlienWaysGuide> farRoom(new AlienWaysGuide);
+		AlienWaysGuide &far = *farRoom;
+		far.SetSlides(true);
+		GuidedAlien(far, Alien(1));
+		Check(HeldTillItSlides(far, map, Ask(Alien(1), kStart, kGoal, 13), 1700, &line, &stuck) < 0 && stuck,
+			"1 m from the point it heads for is no small gap: it's found stuck at 1.5 s, as before");
+	}
+
+	// Nor 600 mm across its surface from the stretch it's on: a straight line from there is what could cross a thin wall
+	{
+		const std::unique_ptr<AlienWaysGuide> offWayRoom(new AlienWaysGuide);
+		AlienWaysGuide &offWay = *offWayRoom;
+		offWay.SetSlides(true);
+		GuidedAlien(offWay, Alien(1));
+		offWay.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		Check(HeldTillItSlides(offWay, map, Ask(Alien(1), Beside(500, 0, 1100), kGoal, 13), 1700, &line, &stuck) < 0 && stuck,
+			"0.8 m from the point but 0.6 m across from the stretch it's on, it doesn't slide: it's found stuck at 1.5 s");
+	}
+
+	// Refused by the game (its end in a module its own can't see into): no slide, none tried again while it makes no headway, and the
+	// watchdog finds it stuck
+	{
+		const std::unique_ptr<AlienWaysGuide> refusedRoom(new AlienWaysGuide);
+		AlienWaysGuide &refused = *refusedRoom;
+		refused.SetSlides(true);
+		GuidedAlien(refused, Alien(1));
+		refused.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		bool const slid = HeldTillItSlides(refused, map, Ask(Alien(1), near, kGoal, 13), 1700, &line, &stuck) >= 0;
+		refused.SlideEnded(Alien(1), false);
+		bool const again = HeldTillItSlides(refused, map, Ask(Alien(1), near, kGoal, 13), 2000, &line, &stuck) >= 0;
+		Check(slid && !refused.Sliding(Alien(1), &to, &from, &next) && !again && stuck,
+			"refused, it slides no more, isn't made to slide again while it makes no headway, and is found stuck");
+	}
+
+	// One the game never brings to its point is given up after kAlienWaysMostSlideMs, and the watchdog has it
+	{
+		const std::unique_ptr<AlienWaysGuide> longRoom(new AlienWaysGuide);
+		AlienWaysGuide &tooLong = *longRoom;
+		tooLong.SetSlides(true);
+		GuidedAlien(tooLong, Alien(1));
+		tooLong.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		bool const slid = HeldTillItSlides(tooLong, map, Ask(Alien(1), near, kGoal, 13), 1700, &line, &stuck) >= 0;
+		bool stillAt1400 = false;
+
+		for (int ms = 0; ms < 1700; ms += 100)
+		{
+			tooLong.Steer(&map, Ask(Alien(1), near, kGoal, 13), &towards);
+			Frame(tooLong, map, 100);
+			stillAt1400 = ms == 1300 ? tooLong.Sliding(Alien(1), &to, &from, &next) : stillAt1400;
+		}
+
+		Check(slid && stillAt1400 && !tooLong.Sliding(Alien(1), &to, &from, &next), "a slide that doesn't get there in 1.5 s is given up");
+	}
+}
+
+// KeepsClinging (alien_ways_guide.h): an alien the guide has keeps clinging when no way steers it, but for the game's own curve at its
+// target, near it and in clear sight. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+static void Clinging()
+{
+	printf("Clinging: the guide's aliens don't fall, but in the game's own last stretch\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	Check(!guide.KeepsClinging(Alien(1)), "an alien the guide doesn't have is the game's own");
+	GuidedAlien(guide, Alien(1));
+	Check(guide.KeepsClinging(Alien(1)), "one it has, waiting for its way or on it, keeps clinging");
+	Check(!guide.Steer(&map, AtItsTarget(kStart, AlienWaysXYZ{ 1000, 0, 8400 }), &towards) && guide.HandedOver(Alien(1)) && !guide.KeepsClinging(Alien(1)),
+		"handed over 7.9 m from its target, in clear sight, the game's own curve decides");
+	Check(!guide.Steer(&map, AtItsTarget(kStart, kGoal), &towards) && guide.HandedOver(Alien(1)) && guide.KeepsClinging(Alien(1)),
+		"still handed over at 9 m, beyond the game's own curve, it keeps clinging (Secondary's H1)");
+}
+
 static void HandOver()
 {
 	printf("The hand-over: near its target, in plain view, an alien is the game's own, as in 1999\n");
@@ -1667,6 +1813,28 @@ static void SourceOfTheGame()
 	Check(Has(ways, "case kAlienWaysOutcomeRestEnded:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u at %s, resting after a stuck and held back from avoiding"),
 		"SOURCE: the log says when a rest ends early for a re-plan");
 
+	// THE SLIDE, the game's half (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): its velocity and turn after the way's own,
+	// the level's walls and gravity off for it as 1999's queen has them, back on in every other case, and the game turns it on
+	Check(Has(near, "NPCSetVelocity(sbPtr, &wayDirection, alienStatusPointer->MaxSpeed);\n\t\tAlienWays_Slide(sbPtr);"),
+		"SOURCE: on a frame its way steers it, a sliding alien's velocity and turn come after the way's own");
+	std::string const slide = Between(ways, "void AlienWays_Slide(STRATEGYBLOCK *alien)\n{", "bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)");
+	Check(Has(slide, "\tdynamics->OnlyCollideWithObjects = 1;\n\tdynamics->GravityOn = 0;") && Has(slide, "status->MaxSpeed"),
+		"SOURCE: it slides through the level's walls with no gravity, at its own speed, still a body that can be hit");
+	Check(Has(slide, "MODULE *const there = ModuleFromPosition(&where, alien->containingModule);") && Has(slide, "theGuide.SlideEnded(who, false);")
+		&& Has(slide, "if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))"),
+		"SOURCE: a slide that ends in a module its own can't see into is refused");
+	Check(Has(slide, "\t\tEndSlide(alien);\n\t\ttheGuide.SlideEnded(who, true);"), "SOURCE: arrived, its walls and gravity are back");
+	Check(Has(ways, "static void EndSlide(STRATEGYBLOCK *alien)\n{\n\tif (alien && alien->DynPtr && alien->I_SBtype == I_BehaviourAlien)\n\t{\n\t\talien->DynPtr->OnlyCollideWithObjects = 0;\n\t\talien->DynPtr->GravityOn = 1;"),
+		"SOURCE: walls and gravity back are 1999's alien's own");
+	Check(Has(ways, "\t\talien->DynPtr->UseStandardGravity = 1;\n\t\tEndSlide(alien);") && Has(ways, "\t// No way steers it this frame, so no slide either") &&
+		Has(ways, "\tif (frameNumber == 1)\n\t{\n\t\tfor (int i = 0; i < NumActiveStBlocks; i++)\n\t\t{\n\t\t\tEndSlide(ActiveStBlockList[i]);"),
+		"SOURCE: and back when it's let go, when no way steers it, and at a level's first frame for one a saved game kept mid-slide");
+	Check(Has(ways, "\ttheGuide.SetSlides(true);\n"), "SOURCE: the game turns the slide on at a level's start");
+	Check(Has(ways, "case kAlienWaysOutcomeSlide:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u slides %.1f m past a stuck at %s to %s"),
+		"SOURCE: the log has a line for each slide, how far, from where and to where");
+	Check(Has(near, "\tif (!onAWay && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tdynPtr->UseStandardGravity=0;"),
+		"SOURCE: in Approach, a climbing alien the guide has keeps clinging when no way steers it (KeepsClinging)");
+
 	// The same in Wander (Fourth's hook there)
 	std::string const wander = Between(near, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Wait(STRATEGYBLOCK *sbPtr)\n{");
 	Check(Has(wander, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander"),
@@ -1842,6 +2010,8 @@ int main()
 	LetGoForgetsIt();
 	HandOver();
 	RestEndsEarly();
+	Slides();
+	Clinging();
 	AskingAgain();
 	FailedRenewal();
 	FoundAnywhere();

@@ -910,6 +910,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		/* Stick to whatever it's touching, and go along it towards the way's next point */
 		dynPtr->UseStandardGravity=0;
 		NPCSetVelocity(sbPtr, &wayDirection, alienStatusPointer->MaxSpeed);
+		AlienWays_Slide(sbPtr);   // a stuck one slides past what stopped it (alien_ways.h; added 2026-11-11 by Melanikus (Third), #109)
 		alienStatusPointer->CurveTimeOut=0; /* forces curve init next time curving is used */
 		onAWay = true;
 	}
@@ -1182,6 +1183,15 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	// alien is held back from avoiding as well, so 1999's Avoidance can't carry it off from its target in that rest (Primary's placed runs:
 	// from 19 m out to 37 m). The game's own code still moves it, and the guide ends the rest early when it doesn't get on (THE REST, HELD
 	// FROM AVOIDING, alien_ways_guide.h). Only with -alienways.
+	// And it keeps clinging to what it's on then, as do an alien waiting for its next way and one handed over but not yet near its target, so
+	// 1999's far branch above can't drop it off a wall or a ceiling (Secondary's read: 7 of the owner's 16 stucks fell so). Only the game's
+	// own curve at its target, near it and in clear sight, decides its gravity, as in 1999 (KeepsClinging, alien_ways_guide.h; added
+	// 2026-11-11 by Melanikus (Third) for the AvP port, #109).
+	if (!onAWay && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))
+	{
+		dynPtr->UseStandardGravity=0;
+	}
+
 	onAWay = onAWay || AlienWays_HoldsBackAvoiding(sbPtr);
 
 	/* test here for impeding collisions, and not being able to reach target... */

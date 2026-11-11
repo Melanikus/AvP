@@ -226,6 +226,17 @@ static STRATEGYBLOCK *LiveAlien(const AlienWaysWho &who)
 	return 0;
 }
 
+// THE SLIDE (alien_ways_guide.h): the level's walls and its gravity back, as 1999's alien always has them (DYNAMICS_TEMPLATE_ALIEN_NPC,
+// and nothing of 1999's alien code changes either), whether it was sliding or not. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static void EndSlide(STRATEGYBLOCK *alien)
+{
+	if (alien && alien->DynPtr && alien->I_SBtype == I_BehaviourAlien)
+	{
+		alien->DynPtr->OnlyCollideWithObjects = 0;
+		alien->DynPtr->GravityOn = 1;
+	}
+}
+
 // An alien that's no longer guided gets the game's usual gravity back
 static void GiveGravityBack(const AlienWaysWho &who)
 {
@@ -234,6 +245,7 @@ static void GiveGravityBack(const AlienWaysWho &who)
 	if (alien)
 	{
 		alien->DynPtr->UseStandardGravity = 1;
+		EndSlide(alien);
 	}
 }
 
@@ -445,6 +457,14 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			details = StuckDetails(line.who);
 			break;
 
+		// THE SLIDE (alien_ways_guide.h), each one. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+		case kAlienWaysOutcomeSlide:
+			snprintf(text, sizeof(text), "alien ways: alien %u slides %.1f m past a stuck at %s to %s, with no headway for %.1f s: the level's walls and its gravity are off till it gets there",
+				static_cast<unsigned>(line.follower),
+				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
+				Metres(line.from).c_str(), Metres(line.to).c_str(), kAlienWaysSlideAfterStuck / 1000.0);
+			break;
+
 		// THE REST, HELD FROM AVOIDING (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 		case kAlienWaysOutcomeRestEnded:
 			snprintf(text, sizeof(text), "alien ways: alien %u at %s, resting after a stuck and held back from avoiding, moved less than %.1f m in %.1f s: it re-plans now, re-plan %d of %d this minute",
@@ -521,6 +541,10 @@ void AlienWays_LevelStart()
 
 	// How far ahead along their ways the aliens aim (-alienwaysaim)
 	theGuide.SetAimAhead(AlienWaysAimAheadMm);
+
+	// Aliens slide past a small snag (THE SLIDE, alien_ways_guide.h; the owner's rulings R-LAVA-4b and R-LAVA-7). Added 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109.
+	theGuide.SetSlides(true);
 
 	if (!AlienWays_On())
 	{
@@ -625,6 +649,16 @@ void AlienWays_Frame()
 	// Each watched alien's state this frame, whatever state it's in, so a stuck line can say where its last frames went. One that's gone is
 	// taken off the list.
 	frameNumber++;
+
+	// At a level's first frame, any alien a saved game kept mid-slide gets its walls and gravity back (THE SLIDE). Added 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109.
+	if (frameNumber == 1)
+	{
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			EndSlide(ActiveStBlockList[i]);
+		}
+	}
 
 	for (Watched &w : watched)
 	{
@@ -996,6 +1030,9 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 		return DirectionTo(ask.at, towards, direction);
 	}
 
+	// No way steers it this frame, so no slide either (THE SLIDE; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	EndSlide(alien);
+
 	// No way to follow yet, or none at all. Without the mover, the game's own code steers it, as before. With it, it heads straight for its
 	// goal, holding on to whatever it's on, while the guide asks for a way as it always does; but in the rest after it was found stuck, the
 	// game's own code has it, as before, to get it free. And handed over near its target, the game's own last stretch has it (modified
@@ -1052,6 +1089,181 @@ bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
 }
 
 // Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): THE REST, HELD FROM AVOIDING (alien_ways_guide.h)
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): KeepsClinging (alien_ways_guide.h)
+bool AlienWays_KeepsClinging(STRATEGYBLOCK *alien)
+{
+	return alien && AlienWays_On() && ReadyMap() && theGuide.KeepsClinging(WhoIs(alien));
+}
+
+// THE SLIDE's turn of the body: its down, and its heading squared to it, as the rows of its orientation, in 65536ths. A heading that
+// lies along the down keeps the body's own. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+static void TurnBody(DYNAMICSBLOCK *dynamics, const double downIn[3], const double headingIn[3])
+{
+	double down[3] = { downIn[0], downIn[1], downIn[2] };
+	double const downLength = sqrt(down[0] * down[0] + down[1] * down[1] + down[2] * down[2]);
+
+	if (!(downLength > 1e-6))
+	{
+		return;
+	}
+
+	for (int k = 0; k < 3; k++)
+	{
+		down[k] /= downLength;
+	}
+
+	double ahead[3] = { headingIn[0], headingIn[1], headingIn[2] };
+	double along = ahead[0] * down[0] + ahead[1] * down[1] + ahead[2] * down[2];
+
+	for (int k = 0; k < 3; k++)
+	{
+		ahead[k] -= along * down[k];
+	}
+
+	double aheadLength = sqrt(ahead[0] * ahead[0] + ahead[1] * ahead[1] + ahead[2] * ahead[2]);
+
+	if (!(aheadLength > 1e-3))
+	{
+		ahead[0] = dynamics->OrientMat.mat31;
+		ahead[1] = dynamics->OrientMat.mat32;
+		ahead[2] = dynamics->OrientMat.mat33;
+		along = ahead[0] * down[0] + ahead[1] * down[1] + ahead[2] * down[2];
+
+		for (int k = 0; k < 3; k++)
+		{
+			ahead[k] -= along * down[k];
+		}
+
+		aheadLength = sqrt(ahead[0] * ahead[0] + ahead[1] * ahead[1] + ahead[2] * ahead[2]);
+
+		if (!(aheadLength > 1e-3))
+		{
+			return;
+		}
+	}
+
+	for (int k = 0; k < 3; k++)
+	{
+		ahead[k] /= aheadLength;
+	}
+
+	// The first row is the second crossed with the third, as in the game's own matrices: down (0, 1, 0) and ahead (0, 0, 1) give (1, 0, 0)
+	double const side[3] = { down[1] * ahead[2] - down[2] * ahead[1], down[2] * ahead[0] - down[0] * ahead[2], down[0] * ahead[1] - down[1] * ahead[0] };
+	dynamics->OrientMat.mat11 = static_cast<int>(lround(side[0] * 65536.0));
+	dynamics->OrientMat.mat12 = static_cast<int>(lround(side[1] * 65536.0));
+	dynamics->OrientMat.mat13 = static_cast<int>(lround(side[2] * 65536.0));
+	dynamics->OrientMat.mat21 = static_cast<int>(lround(down[0] * 65536.0));
+	dynamics->OrientMat.mat22 = static_cast<int>(lround(down[1] * 65536.0));
+	dynamics->OrientMat.mat23 = static_cast<int>(lround(down[2] * 65536.0));
+	dynamics->OrientMat.mat31 = static_cast<int>(lround(ahead[0] * 65536.0));
+	dynamics->OrientMat.mat32 = static_cast<int>(lround(ahead[1] * 65536.0));
+	dynamics->OrientMat.mat33 = static_cast<int>(lround(ahead[2] * 65536.0));
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: THE SLIDE, the game's half (alien_ways.h; #109)
+void AlienWays_Slide(STRATEGYBLOCK *alien)
+{
+	if (!alien || !alien->DynPtr || !alien->containingModule || !AlienWays_On() || !ReadyMap())
+	{
+		return;
+	}
+
+	AlienWaysWho const who = WhoIs(alien);
+	DYNAMICSBLOCK *const dynamics = alien->DynPtr;
+	AlienWaysPoint to;
+	AlienWaysXYZ from, next;
+
+	if (!theGuide.Sliding(who, &to, &from, &next))
+	{
+		EndSlide(alien);
+		return;
+	}
+
+	// The face it slides onto: its down is the point's facing turned round. A point with no facing known is taken by its kind; on a wall
+	// of no known facing, the body's own down is kept.
+	double faceDown[3] = { -to.facing[0] / 32767.0, -to.facing[1] / 32767.0, -to.facing[2] / 32767.0 };
+
+	if (!AlienWays_FacingKnown(to))
+	{
+		faceDown[0] = to.kind == kAlienWaysWall ? dynamics->OrientMat.mat21 / 65536.0 : 0.0;
+		faceDown[1] = to.kind == kAlienWaysFloor ? 1.0 : (to.kind == kAlienWaysCeiling ? -1.0 : dynamics->OrientMat.mat22 / 65536.0);
+		faceDown[2] = to.kind == kAlienWaysWall ? dynamics->OrientMat.mat23 / 65536.0 : 0.0;
+	}
+
+	// Where it ends: the point, out from its face as far as the alien's place sits from what it clings to (its box doesn't turn: 900 mm
+	// tall, 450 round), so it doesn't start in the face when the walls come back
+	double const outBy = to.kind == kAlienWaysCeiling ? 900.0 : (to.kind == kAlienWaysWall ? 450.0 : 0.0);
+	double const end[3] = { to.x - faceDown[0] * outBy, to.y - faceDown[1] * outBy, to.z - faceDown[2] * outBy };
+	double const at[3] = { static_cast<double>(dynamics->Position.vx), static_cast<double>(dynamics->Position.vy), static_cast<double>(dynamics->Position.vz) };
+
+	// On its first frame (the walls still on): one whose end is in a module its own can't see into is refused, so it can't cross into a
+	// room its way doesn't go through (PO, 2026-11-11). The watchdog has it then.
+	if (!dynamics->OnlyCollideWithObjects)
+	{
+		VECTORCH where = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1])), static_cast<int>(lround(end[2])) };
+		MODULE *const there = ModuleFromPosition(&where, alien->containingModule);
+
+		if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))
+		{
+			theGuide.SlideEnded(who, false);
+			LogString("alien ways: an alien's slide to " + Metres(AlienWaysXYZ{ to.x, to.y, to.z }) + " is refused, as it ends in a module its own can't see into");
+			return;
+		}
+	}
+
+	dynamics->OnlyCollideWithObjects = 1;
+	dynamics->GravityOn = 0;
+
+	// Its own speed, as on its way, so its walk or crawl plays as ever (the game's own animation goes by its velocity)
+	ALIEN_STATUS_BLOCK const *const status = static_cast<ALIEN_STATUS_BLOCK const *>(alien->SBdataptr);
+	double const speed = status ? static_cast<double>(status->MaxSpeed) : 0.0;
+	double const frameTravel = speed * static_cast<double>(NormalFrameTime) / 65536.0;
+	double const toEnd[3] = { end[0] - at[0], end[1] - at[1], end[2] - at[2] };
+	double const left = sqrt(toEnd[0] * toEnd[0] + toEnd[1] * toEnd[1] + toEnd[2] * toEnd[2]);
+	double const whole[3] = { end[0] - from.x, end[1] - from.y, end[2] - from.z };
+	double const total = sqrt(whole[0] * whole[0] + whole[1] * whole[1] + whole[2] * whole[2]);
+	bool const past = toEnd[0] * whole[0] + toEnd[1] * whole[1] + toEnd[2] * whole[2] <= 0.0;
+	double const onward[3] = { next.x - static_cast<double>(to.x), next.y - static_cast<double>(to.y), next.z - static_cast<double>(to.z) };
+
+	// Arrived, or it would be within this frame: put on its end, clinging to the face, turned onto it and heading on along its way, with
+	// the walls and gravity back
+	if (left <= std::max(frameTravel, 30.0) || past || !(speed > 0.0))
+	{
+		dynamics->Position.vx = static_cast<int>(lround(end[0]));
+		dynamics->Position.vy = static_cast<int>(lround(end[1]));
+		dynamics->Position.vz = static_cast<int>(lround(end[2]));
+		dynamics->LinVelocity.vx = dynamics->LinVelocity.vy = dynamics->LinVelocity.vz = 0;
+		bool const onwardKnown = onward[0] * onward[0] + onward[1] * onward[1] + onward[2] * onward[2] > 1.0;
+		TurnBody(dynamics, faceDown, onwardKnown ? onward : whole);
+		dynamics->GravityDirection.vx = static_cast<int>(lround(faceDown[0] * 65536.0));
+		dynamics->GravityDirection.vy = static_cast<int>(lround(faceDown[1] * 65536.0));
+		dynamics->GravityDirection.vz = static_cast<int>(lround(faceDown[2] * 65536.0));
+		dynamics->UseStandardGravity = 0;
+		EndSlide(alien);
+		theGuide.SlideEnded(who, true);
+		return;
+	}
+
+	// On its way: straight for its end, its body turned as far onto the face as it has come of the slide
+	dynamics->LinVelocity.vx = static_cast<int>(lround(toEnd[0] / left * speed));
+	dynamics->LinVelocity.vy = static_cast<int>(lround(toEnd[1] / left * speed));
+	dynamics->LinVelocity.vz = static_cast<int>(lround(toEnd[2] / left * speed));
+	double const done = total > 0.0 ? std::max(0.0, std::min(1.0, 1.0 - left / total)) : 1.0;
+	double const bodyDown[3] = { dynamics->OrientMat.mat21 / 65536.0, dynamics->OrientMat.mat22 / 65536.0, dynamics->OrientMat.mat23 / 65536.0 };
+	double const share = std::min(1.0, done + 0.25);
+	double down[3] = { bodyDown[0] + (faceDown[0] - bodyDown[0]) * share, bodyDown[1] + (faceDown[1] - bodyDown[1]) * share, bodyDown[2] + (faceDown[2] - bodyDown[2]) * share };
+
+	// Turning right round (a down and a face opposite each other) has no way between them: it takes the face's down at once
+	if (down[0] * down[0] + down[1] * down[1] + down[2] * down[2] < 0.04)
+	{
+		down[0] = faceDown[0];
+		down[1] = faceDown[1];
+		down[2] = faceDown[2];
+	}
+
+	TurnBody(dynamics, down, toEnd);
+}
+
 bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)
 {
 	return alien && AlienWays_On() && ReadyMap() && theGuide.RestingAfterStuck(WhoIs(alien));

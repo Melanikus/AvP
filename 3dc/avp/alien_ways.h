@@ -117,6 +117,17 @@ bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
 // (#109; Primary's placed runs: in that rest, 1999's Avoidance carried an alien from 19 m off its target to 37 m).
 bool AlienWays_HoldsBackAvoiding(struct strategyblock *alien);
 
+// THE SLIDE (alien_ways_guide.h), the game's half. Approach (bh_near.cpp) calls it on a frame the alien's way steers it, once its
+// velocity is set. If the guide has it sliding, its velocity goes straight for the point it slides to, at its own speed, and so off the
+// surface it's on, which a way's velocity never does; its body turns, as it goes, onto that point's face; and the level's walls and its
+// gravity are off till it gets there, as 1999's queen climbs out of her pit. Otherwise, any slide's walls and gravity are put back.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; the owner's rulings R-LAVA-4b and R-LAVA-7).
+void AlienWays_Slide(struct strategyblock *alien);
+
+// Whether an alien the alien ways have keeps clinging to what it's on this frame, though no way steers it (KeepsClinging,
+// alien_ways_guide.h). False with the switch off. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+bool AlienWays_KeepsClinging(struct strategyblock *alien);
+
 // The guide's place for this alien: the N of the log's "alien N" lines, so another line can name the same alien. -1 when it has none, and
 // with the switch off. A place is given again once its alien is let go, so it names an alien only together with when. Added 2026-11-11 by
 // Melanikus (Third) for the AvP port, for Hudson's per-alien lines (#109).

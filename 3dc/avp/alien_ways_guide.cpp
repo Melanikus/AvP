@@ -37,6 +37,22 @@ namespace
 		return sqrt(dx * dx + dy * dy + dz * dz);
 	}
 
+	// How far p is from the straight stretch from a to b across the surface an alien with that down is on, leaving out how far it is up
+	// from the surface: the game keeps an alien's place at its box's foot, half a metre or so out from a wall it clings to (THE SLIDE).
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	double AcrossToStretch(AlienWaysXYZ p, AlienWaysXYZ down, const AlienWaysPoint &a, const AlienWaysPoint &b)
+	{
+		double const abx = static_cast<double>(b.x) - a.x, aby = static_cast<double>(b.y) - a.y, abz = static_cast<double>(b.z) - a.z;
+		double const apx = static_cast<double>(p.x) - a.x, apy = static_cast<double>(p.y) - a.y, apz = static_cast<double>(p.z) - a.z;
+		double const length = abx * abx + aby * aby + abz * abz;
+		double t = length > 0.0 ? (apx * abx + apy * aby + apz * abz) / length : 0.0;
+		t = std::max(0.0, std::min(1.0, t));
+		double const dx = apx - t * abx, dy = apy - t * aby, dz = apz - t * abz;
+		double const downLength = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+		double const upFromIt = downLength > 0.0 ? (dx * down.x + dy * down.y + dz * down.z) / downLength : 0.0;
+		return sqrt(std::max(0.0, dx * dx + dy * dy + dz * dz - upFromIt * upFromIt));
+	}
+
 	// Whether an alien at at, with down its down, has reached point. Across the surface it's on, it has to be within kAlienWaysReached. Up and
 	// down from the surface, it may be as far as kAlienWaysBodyHeight, because the game keeps an alien's position at its middle, not its feet,
 	// and the way's points are on the surfaces themselves.
@@ -158,7 +174,7 @@ bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool 
 }
 
 AlienWaysGuide::AlienWaysGuide()
-	: grid(nullptr), searchOnGrid(false), searchTooFar(false), aimAheadMm(0)
+	: grid(nullptr), searchOnGrid(false), searchTooFar(false), aimAheadMm(0), slidesOn(false)
 {
 	Clear();
 }
@@ -198,6 +214,9 @@ void AlienWaysGuide::Clear()
 		followers[f].restUntil = 0;
 		followers[f].stuckUntil = 0;
 		followers[f].handedOver = false;
+		followers[f].sliding = false;
+		followers[f].slideTriedFor = -1;
+		followers[f].clings = true;
 		ForgetTheWatchdog(&followers[f]);
 	}
 }
@@ -314,6 +333,9 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.restUntil = 0;
 			follower.stuckUntil = 0;
 			follower.handedOver = false;
+			follower.sliding = false;
+			follower.slideTriedFor = -1;
+			follower.clings = true;
 			follower.count = 0;
 			follower.keptCount = 0;
 			follower.heading = 0;
@@ -335,6 +357,9 @@ void AlienWaysGuide::DropTheWay(Follower *follower)
 	claims.Remove(static_cast<int>(follower - followers));
 	follower->count = 0;
 	follower->heading = 0;
+
+	// A slide is along its way, so it goes with it (THE SLIDE; added 2026-11-11 by Melanikus (Third), #109)
+	follower->sliding = false;
 }
 
 // Frees an alien's place: its way, its search if one is running, and everything the guide knew about it
@@ -396,6 +421,65 @@ bool AlienWaysGuide::HandedOver(const AlienWaysWho &who) const
 {
 	int const f = Find(who);
 	return f >= 0 && followers[f].handedOver;
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: THE SLIDE (alien_ways_guide.h; #109)
+bool AlienWaysGuide::Sliding(const AlienWaysWho &who, AlienWaysPoint *to, AlienWaysXYZ *from, AlienWaysXYZ *next) const
+{
+	int const f = Find(who);
+
+	if (f < 0 || !followers[f].sliding || followers[f].slidePoint < 1 || followers[f].slidePoint >= followers[f].count || !to || !from || !next)
+	{
+		return false;
+	}
+
+	Follower const &follower = followers[f];
+	*to = follower.points[follower.slidePoint];
+	*from = follower.slideFrom;
+	AlienWaysPoint const &after = follower.points[follower.slidePoint + 1 < follower.count ? follower.slidePoint + 1 : follower.slidePoint];
+	*next = AlienWaysXYZ{ after.x, after.y, after.z };
+	return true;
+}
+
+void AlienWaysGuide::SlideEnded(const AlienWaysWho &who, bool arrived)
+{
+	int const f = Find(who);
+
+	if (f < 0 || !followers[f].sliding)
+	{
+		return;
+	}
+
+	Follower &follower = followers[f];
+	follower.sliding = false;
+
+	// Refused: no other slide is tried till it makes headway again, and the watchdog has it, its clock running on
+	if (!arrived)
+	{
+		follower.slideTriedFor = follower.headwayAt;
+		return;
+	}
+
+	// Arrived: it has reached that point of its way, and heads for the next, its clock started again there
+	AlienWaysPoint const &reached = follower.points[follower.slidePoint];
+	follower.heading = follower.slidePoint + 1;
+	follower.fresh = false;
+	follower.passedAPoint = true;
+	follower.nearest = DBL_MAX;
+	follower.headwayAt = now;
+	follower.headwayFrom = AlienWaysXYZ{ reached.x, reached.y, reached.z };
+
+	if (follower.heading >= follower.count)
+	{
+		DropTheWay(&follower);
+	}
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): KeepsClinging (alien_ways_guide.h)
+bool AlienWaysGuide::KeepsClinging(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && followers[f].clings;
 }
 
 size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
@@ -1042,6 +1126,10 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	double const toTarget = Distance(ask.at, ask.goal);
 	follower.handedOver = ask.goalIsTheTarget && ask.targetInSight && toTarget <= (wasHandedOver ? kAlienWaysTakeBackRange : kAlienWaysHandOverRange);
 
+	// Only the game's own curve at its target, within kAlienWaysHandOverRange and in clear sight, decides its gravity; otherwise one the
+	// guide has keeps clinging (KeepsClinging; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	follower.clings = !(follower.handedOver && toTarget <= kAlienWaysHandOverRange);
+
 	if (follower.handedOver)
 	{
 		if (!wasHandedOver)
@@ -1131,6 +1219,24 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 		return false;
 	}
 
+	// THE SLIDE (alien_ways_guide.h): while it slides, it heads for the point it slides to, and nothing else is looked at. One that takes
+	// too long is over, and the watchdog has it from here, its clock started again. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+	if (follower.sliding)
+	{
+		if (now - follower.slideAt <= kAlienWaysMostSlideMs && follower.slidePoint < follower.count)
+		{
+			AlienWaysPoint const &to = follower.points[follower.slidePoint];
+			*towards = AlienWaysXYZ{ to.x, to.y, to.z };
+			follower.guided = true;
+			return true;
+		}
+
+		follower.sliding = false;
+		follower.slideTriedFor = now;
+		follower.headwayAt = now;
+		follower.nearest = DBL_MAX;
+	}
+
 	// A new way starts where the alien was when its search began. It may have gone on since, so it takes the way up at the stretch nearest to
 	// where it is now, not at the first one, which could be behind it by now and make it look off the way.
 	if (follower.count > 0 && follower.fresh)
@@ -1196,6 +1302,39 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			follower.nearest = toNext;
 			follower.headwayAt = now;
 			follower.headwayFrom = ask.at;
+		}
+		else if (slidesOn && now - follower.headwayAt >= kAlienWaysSlideAfterStuck && follower.slideTriedFor != follower.headwayAt &&
+			toNext < kAlienWaysMostSlide && AcrossToStretch(ask.at, ask.down, follower.points[follower.heading - 1], follower.points[follower.heading]) <= kAlienWaysMostOffTheWayToSlide)
+		{
+			// THE SLIDE (alien_ways_guide.h): to the point it's heading for, and no other, at once. The log hears of it. Added 2026-11-11 by
+			// Melanikus (Third) for the AvP port (#109; the owner's rulings R-LAVA-4b and R-LAVA-7).
+			if (reportsRead)
+			{
+				reportCount = 0;
+				reportsRead = false;
+			}
+
+			AlienWaysPoint const &to = follower.points[follower.heading];
+			AlienWaysReport line = {};
+			line.outcome = kAlienWaysOutcomeSlide;
+			line.follower = static_cast<size_t>(f);
+			line.who = follower.who;
+			line.from = ask.at;
+			line.to = AlienWaysXYZ{ to.x, to.y, to.z };
+			line.fromKind = KindUnder(ask.down);
+			line.toKind = static_cast<int>(to.kind);
+			line.toTheTarget = ask.goalIsTheTarget;
+			line.shutPolygon = -1;
+			AddReport(line);
+
+			follower.sliding = true;
+			follower.slidePoint = follower.heading;
+			follower.slideAt = now;
+			follower.slideFrom = ask.at;
+			follower.slideTriedFor = follower.headwayAt;
+			*towards = line.to;
+			follower.guided = true;
+			return true;
 		}
 		else if (now - follower.headwayAt >= kAlienWaysNoHeadwayFor)
 		{
@@ -1291,6 +1430,14 @@ bool AlienWaysGuide::Drive(const AlienWaysMap *map, const AlienWaysWho &who, Ali
 	}
 
 	Follower &follower = followers[f];
+
+	// A slide goes on through a frame nothing asked, to the same point (THE SLIDE; added 2026-11-11 by Melanikus (Third), #109)
+	if (follower.sliding && !follower.steered && follower.slidePoint < follower.count)
+	{
+		AlienWaysPoint const &to = follower.points[follower.slidePoint];
+		*towards = AlienWaysXYZ{ to.x, to.y, to.z };
+		return true;
+	}
 
 	// Only on a frame Steer wasn't asked, and with a way it has taken up. Nothing here touches steered or steeredAt, so Drive never makes it
 	// look asked. Two things need no test of their own: Frame lets an alien go once half a second has passed since it was asked, so one found
