@@ -1,0 +1,348 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a fingerprint that differs only in its last byte is the same",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "for (size_t i = 0; i < kKillerMarineFingerprintBytes; i++)\n\t{\n\t\tdifferences |=",
+					"to": "for (size_t i = 0; i < kKillerMarineFingerprintBytes - 1; i++)\n\t{\n\t\tdifferences |="
+				}
+			]
+		},
+		{
+			"name": "only the last byte of a fingerprint is compared",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "differences |= static_cast<uint8_t>(a[i] ^ b[i]);",
+					"to": "differences = static_cast<uint8_t>(a[i] ^ b[i]);"
+				}
+			]
+		},
+		{
+			"name": "every fingerprint is the same as every other: the mode is on when it should be off",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return differences == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "no fingerprint is the same as any other: the mode is off when it should be on",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return differences == 0;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint of zeros but its first byte is nobody",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\t\tany |= fingerprint[i];",
+					"to": "\t\tany = fingerprint[i];"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint of zeros but its last byte is nobody",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "for (size_t i = 0; i < kKillerMarineFingerprintBytes; i++)\n\t{\n\t\tany |=",
+					"to": "for (size_t i = 0; i < kKillerMarineFingerprintBytes - 1; i++)\n\t{\n\t\tany |="
+				}
+			]
+		},
+		{
+			"name": "a player of all zeros matches an entry of zeros",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "if (KillerMarine_IsNobody(inTheGame[player]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "more players than a game has still turns the mode on",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "if (inTheGame == NULL || list == NULL || count > kKillerMarineMostPlayers)",
+					"to": "if (inTheGame == NULL || list == NULL)"
+				}
+			]
+		},
+		{
+			"name": "the last player in the game isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "for (size_t player = 0; player < count; player++)",
+					"to": "for (size_t player = 0; player + 1 < count; player++)"
+				}
+			]
+		},
+		{
+			"name": "the last entry of a list isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "for (size_t entry = 0; entry < listCount; entry++)",
+					"to": "for (size_t entry = 0; entry + 1 < listCount; entry++)"
+				}
+			]
+		},
+		{
+			"name": "the game asks an empty list",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return KillerMarine_ListedPlayerIn(inTheGame, count, kKillerMarineList, kKillerMarineListCount);",
+					"to": "return KillerMarine_ListedPlayerIn(inTheGame, count, kKillerMarineList, 0);"
+				}
+			]
+		},
+		{
+			"name": "the line says the mode is off when it's on",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\tif (who != NULL)\n\t{\n\t\tsnprintf",
+					"to": "\tif (who == NULL)\n\t{\n\t\tsnprintf"
+				}
+			]
+		},
+		{
+			"name": "the line writes the fingerprint",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\"killer marine: Kill Olde mode is on, because %s is in the game\", who->name);",
+					"to": "\"killer marine: Kill Olde mode is on, because %.16s is in the game\", reinterpret_cast<const char *>(who->fingerprint));"
+				}
+			]
+		},
+		{
+			"name": "a line with nowhere to go is written anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\tif (out == NULL)\n\t{\n\t\treturn;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "he may act as soon as he sees",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "&& KillerMarine_MsFrom(eyes->seeingSince, now) >= kKillerMarineReactionMs;",
+					"to": "&& KillerMarine_MsFrom(eyes->seeingSince, now) >= 0;"
+				}
+			]
+		},
+		{
+			"name": "the reaction time is 400 ms",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "uint32_t const kKillerMarineReactionMs = 500;",
+					"to": "uint32_t const kKillerMarineReactionMs = 400;"
+				}
+			]
+		},
+		{
+			"name": "losing sight isn't a break",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\t\teyes->seeing = false;\n\t\treturn;",
+					"to": "\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "after a break, the wait doesn't start again",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\t\teyes->seeingSince = now;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "after a break, what he saw before it is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\t\teyes->seeingSince = now;\n\t\teyes->count = 0;",
+					"to": "\t\teyes->seeingSince = now;"
+				}
+			]
+		},
+		{
+			"name": "being told nothing for any time is no break",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "bool const unbroken = eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) <= kKillerMarineStaleMs;",
+					"to": "bool const unbroken = eyes->seeing;"
+				}
+			]
+		},
+		{
+			"name": "being told nothing for exactly 250 ms is a break",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "bool const unbroken = eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) <= kKillerMarineStaleMs;",
+					"to": "bool const unbroken = eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) < kKillerMarineStaleMs;"
+				}
+			]
+		},
+		{
+			"name": "told nothing for any time, he may still act",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) <= kKillerMarineStaleMs\n",
+					"to": "return eyes->seeing\n"
+				}
+			]
+		},
+		{
+			"name": "told nothing for exactly 250 ms, he may not act",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) <= kKillerMarineStaleMs\n",
+					"to": "return eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now) < kKillerMarineStaleMs\n"
+				}
+			]
+		},
+		{
+			"name": "having lost sight, he may still act",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "return eyes->seeing && KillerMarine_MsFrom(eyes->lastLook, now)",
+					"to": "return KillerMarine_MsFrom(eyes->lastLook, now)"
+				}
+			]
+		},
+		{
+			"name": "the clock going back to 0 is taken as a break",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\treturn now - then;",
+					"to": "\treturn now > then ? now - then : 0;"
+				}
+			]
+		},
+		{
+			"name": "he aims by his newest glimpse, however recent: his aim follows a turn at once",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "if (KillerMarine_MsFrom(eyes->kept[place].at, now) >= kKillerMarineReactionMs)",
+					"to": "if (KillerMarine_MsFrom(eyes->kept[place].at, now) >= 0)"
+				}
+			]
+		},
+		{
+			"name": "a speed is told from two glimpses however close together",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "if (msBetween >= kKillerMarineSpeedOverMs)",
+					"to": "if (msBetween >= 1)"
+				}
+			]
+		},
+		{
+			"name": "his aim isn't carried forward across",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "*x = KillerMarine_CarriedForward(seen.x, before.x, msBetween, msSince);",
+					"to": "*x = seen.x;"
+				}
+			]
+		},
+		{
+			"name": "his aim isn't carried forward up or down",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "*y = KillerMarine_CarriedForward(seen.y, before.y, msBetween, msSince);",
+					"to": "*y = seen.y;"
+				}
+			]
+		},
+		{
+			"name": "his aim isn't carried forward along",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "*z = KillerMarine_CarriedForward(seen.z, before.z, msBetween, msSince);",
+					"to": "*z = seen.z;"
+				}
+			]
+		},
+		{
+			"name": "his aim is carried forward by the time between two glimpses, not the time since",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "(static_cast<double>(seen) - before) * msSince / msBetween",
+					"to": "(static_cast<double>(seen) - before)"
+				}
+			]
+		},
+		{
+			"name": "with no speed to tell, he doesn't aim at all",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\t*x = seen.x;\n\t*y = seen.y;\n\t*z = seen.z;\n\treturn true;",
+					"to": "\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "every look keeps a glimpse, so with fast frames none is old enough",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "if (eyes->count == 0 || KillerMarine_MsFrom(eyes->kept[eyes->newest].at, now) >= kKillerMarineEveryMs)",
+					"to": "if (eyes->count == 0 || KillerMarine_MsFrom(eyes->kept[eyes->newest].at, now) >= 0)"
+				}
+			]
+		},
+		{
+			"name": "a sum past the largest position isn't kept at the edge",
+			"changes": [
+				{
+					"file": "3dc/avp/killer_marine.h",
+					"from": "\tif (value >= 2147483647.0)\n\t{\n\t\treturn INT32_MAX;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn INT32_MAX;\n\t}"
+				}
+			]
+		}
+	]
+}
