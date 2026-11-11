@@ -13,6 +13,7 @@
 // - The game never waits for it. If the writer falls behind and the queue is full, that picture is dropped, and the log and the result say how many were, so a film with gaps can't look clean.
 // - It does slow a frame, because reading a finished frame back from the card takes time. So a run that measures time can't have it, and the cost goes in the log.
 
+#include <stddef.h>
 #include <stdint.h>
 
 enum
@@ -22,7 +23,10 @@ enum
 	kHudsonVideoMostWidth = 4096,    // about the most an H.264 encoder takes
 	kHudsonVideoMostHeight = 2304,
 	kHudsonVideoBreakAtPicture = 60, // break=video makes the writer fail here, about two seconds in, to prove that a run survives it
-	kHudsonVideoFinishWaitMilliseconds = 20000 // how long the end of a run waits for the film to be finished, so that a stuck writer can't hold it up
+	kHudsonVideoFinishWaitMilliseconds = 20000, // how long the end of a run waits for the film to be finished, so that a stuck writer can't hold it up
+	kHudsonVideoCutWaitMilliseconds = 5000,     // film=menus: how long a cut between two clips waits for the first to be finished. Shorter, because the game is
+	                                            // still going, perhaps in a network game; a clip that isn't finished by then ends the run's film there
+	kHudsonVideoLongestStep = 40                // film=menus: the most letters in a step's name, the end of a clip's name
 };
 
 long long const kHudsonVideoMostBytes = 2000000000LL;    // one file's limit, about 2 GB. At 1920x1080 that's about 20 minutes
@@ -71,3 +75,12 @@ int HudsonVideo_BitsPerSecond(int width, int height);
 
 // Copies a picture of 4 bytes a pixel out of the card's rows, which may be longer than the picture is wide, into rows with no gaps between them. It gives back false, and copies nothing, if the rows are said to be too short to hold the picture.
 bool HudsonVideo_CopyPicture(uint8_t *to, int width, int height, const uint8_t *from, int pitch);
+
+// film=menus (hudson_plan.h): a run's film is cut into clips, one for each step of the menus, and each clip is named after the step that
+// ended it once it's finished. This makes that name from the film's own: "hudson-video-2026-11-10-145152-clip01.mp4" and the step
+// "join-list.png" give "hudson-video-2026-11-10-145152-clip01-join-list.mp4". A step is a picture's name (its ".png" is left off) or a word
+// like "before-level". Only small letters, digits and '-' may be in either name, and a film's name starts "hudson-video-" and ends ".mp4",
+// so the result is always a plain file name in the same folder: it can't climb out of it or name anything else. It gives back false, and
+// writes nothing, if either name isn't like that, the step is empty or longer than kHudsonVideoLongestStep, or the result doesn't fit in
+// out. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase films.
+bool HudsonVideo_ClipName(const char *filmName, const char *step, char *out, size_t outSize);

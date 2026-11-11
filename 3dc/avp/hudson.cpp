@@ -489,8 +489,15 @@ static const char *WordForTheEnemy()
 // Something can still go wrong after that: the result is written before the shutdown starts, and the shutdown can stick, or fail an assert. Then the file would go on saying exit=0 about a run that ended
 // another way, so whatever comes later adds a line of its own, saying what really happened. The exit code Windows reports is always the last word.
 // A run's film. See hudson_video.h. The file's name has the time in it, so that a run started by hand can't write over the last one. run-hudson.ps1 moves it to the folder it keeps a run in.
-static char videoName[64] = { 0 };
+static char videoName[128] = { 0 };
 static volatile LONG videoGrabs = 0, videoGrabMicroseconds = 0, videoGrabWorstMicroseconds = 0;
+
+// film=menus (hudson_plan.h): the film starts at the menus and is cut into clips, each named after the step that ends it
+// (TakeVideoFrame). Only the game's own thread touches these. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static char clipEndsAt[64] = "";   // the picture of the menus whose clip ends at the next frame given to the film (Hudson_SaveThePage)
+static int clipNumber = 0;         // the clip being filmed, from 1
+static char filmStamp[32] = "";    // when the first clip started: the same in every clip's name, so a run's clips sort together
+static bool filmGivenUp = false;   // a clip didn't finish in time, so the writer can't start again, and the rest of the run has no film
 static volatile LONG videoSaidItStopped = 0, videoSaidItDropped = 0;
 
 static void SayIfTheVideoHasNews(const HudsonVideoFacts &facts)
@@ -759,8 +766,51 @@ static void WatchForFramesStopping()
 	LogString(line);
 }
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): whether a hudson-stop file in the run's own folder
+// asks the run to end (hudson_plan.h, HudsonPlan_StopFileCounts says which files count). Only the file's kind and date are looked at,
+// never what's in it. One that doesn't count is said once in the log, and left alone.
+static long long runStartedFileTime = 0;
+
+static bool AStopFileAsksToEnd()
+{
+	static bool saidIgnored = false;
+	char const *const folder = GetSaveFolderPath();
+
+	// Before the run's start is known, no file can be shown to be newer than it, so none counts
+	if (!folder || folder[0] == 0 || runStartedFileTime == 0)
+	{
+		return false;
+	}
+
+	WIN32_FILE_ATTRIBUTE_DATA file;
+
+	if (!GetFileAttributesExA((std::string(folder) + kHudsonStopFileName).c_str(), GetFileExInfoStandard, &file))
+	{
+		return false;
+	}
+
+	bool const isFolder = (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	bool const isLink = (file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+	long long const writtenAt = ((long long)file.ftLastWriteTime.dwHighDateTime << 32) | file.ftLastWriteTime.dwLowDateTime;
+
+	if (HudsonPlan_StopFileCounts(true, isFolder, isLink, writtenAt, runStartedFileTime))
+	{
+		return true;
+	}
+
+	if (!saidIgnored)
+	{
+		saidIgnored = true;
+		LogErrorString(std::string("hudson: a ") + kHudsonStopFileName + " is in the run's folder, but it's a folder, a link, or older than this run, so it doesn't stop it");
+	}
+
+	return false;
+}
+
 static unsigned __stdcall WatchdogThread(void *)
 {
+	DWORD stopLookedAt = 0;
+
 	for (;;)
 	{
 		Sleep(kWatchdogLooksEveryMilliseconds);
@@ -784,6 +834,18 @@ static unsigned __stdcall WatchdogThread(void *)
 		if (GetTickCount() - startedAt > (DWORD)plan.seconds * 1000)
 		{
 			EndAtOnce("it went past its time limit", kHudsonExitOutOfTime);
+		}
+
+		// #198: someone asked it to end, with a hudson-stop file. It ends the same way as at its time limit: the result written and the
+		// film finished (WriteResult), then the game ended. Looked for once a second, not every turn, since it asks the disk.
+		if (GetTickCount() - stopLookedAt >= 1000)
+		{
+			stopLookedAt = GetTickCount();
+
+			if (AStopFileAsksToEnd())
+			{
+				EndAtOnce("it was stopped by hand: a hudson-stop file asked it to end", kHudsonExitStoppedByHand);
+			}
 		}
 	}
 }
@@ -815,6 +877,11 @@ void Hudson_ReadCommandLine(const char *commandLine)
 	HudsonBreaksPrisms = plan.breakPrisms;
 	HudsonWayOfDying = plan.deathWay;
 	startedAt = GetTickCount();
+
+	// When the run started, as Windows dates a file, so a hudson-stop file left from an earlier run is too old to count (#198)
+	FILETIME now;
+	GetSystemTimeAsFileTime(&now);
+	runStartedFileTime = ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;
 }
 
 // The part of the first screen that isn't the main one left free by any taskbar, in the game's own numbers. False if there's only one screen. Defined further down.
@@ -4834,7 +4901,22 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 	SYSTEMTIME now;
 
 	GetLocalTime(&now);
-	_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+
+	if (plan.filmMenus)
+	{
+		// film=menus: one of the run's clips, with the time the first started and its own number, so no clip has another's name
+		if (filmStamp[0] == 0)
+		{
+			_snprintf(filmStamp, sizeof(filmStamp) - 1, "%04d-%02d-%02d-%02d%02d%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+		}
+
+		clipNumber++;
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%s-clip%02d.mp4", filmStamp, clipNumber);
+	}
+	else
+	{
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+	}
 
 	HudsonVideoWriter_Start((std::string(folder) + videoName).c_str(), (int)filmSize->Width, (int)filmSize->Height, plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, kHudsonVideoMostBytes);
 }
@@ -4843,11 +4925,20 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds)
 {
 	static IDirect3DSurface9 *copy = 0;
+	static D3DSURFACE_DESC copySize;
 
 	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
 	IDirect3DSurface9 *screen = 0;
 	D3DSURFACE_DESC size;
 	char why[200] = { 0 };
+
+	// film=menus: a clip can start at another size than the one before (the menus and the level may differ), and the copy has to be the
+	// clip's size, so one of another size is let go and made again below (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))
+	{
+		copy->Release();
+		copy = 0;
+	}
 
 	HRESULT hr = device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen);
 
@@ -4865,6 +4956,7 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 		if (SUCCEEDED(hr) && !copy)
 		{
 			hr = device->CreateOffscreenPlainSurface(filmSize.Width, filmSize.Height, filmSize.Format, D3DPOOL_SYSTEMMEM, &copy, NULL);
+			copySize = filmSize;
 		}
 
 		if (SUCCEEDED(hr))
@@ -4905,15 +4997,87 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 	}
 }
 
+// film=menus: a clip that has just been finished gets the step that ended it at the end of its name (hudson_video.h, HudsonVideo_ClipName:
+// a plain name in the same folder). MoveFileA never replaces a file that's already there, so no clip can be written over. If it can't be
+// renamed, it keeps its numbered name, which is unique too, and the log says so. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static void NameTheClip(const char *step)
+{
+	char const *const folder = GetSaveFolderPath();
+	char clipName[sizeof(videoName)];
+
+	if (!folder || folder[0] == 0 || !HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName)))
+	{
+		LogErrorString(std::string("video: a clip couldn't be named after its step, so it keeps the name ") + videoName);
+		return;
+	}
+
+	if (!MoveFileA((std::string(folder) + videoName).c_str(), (std::string(folder) + clipName).c_str()))
+	{
+		LogErrorString(std::string("video: ") + videoName + " couldn't be renamed " + clipName + ", so it keeps its name");
+		return;
+	}
+
+	// The new name's letters, then the 0 that ends them on a line of its own. clipName is as big as videoName and HudsonVideo_ClipName
+	// ended it, so it has at most sizeof(videoName) - 1 letters, and the 0 always fits.
+	size_t const clipLength = strnlen(clipName, sizeof(clipName) - 1);
+
+	memcpy(videoName, clipName, clipLength);
+	videoName[clipLength] = 0;
+	LogString(std::string("video: the clip ") + videoName + " is finished");
+}
+
+// film=menus: ends the clip being filmed at a step (a picture of the menus, or the level's first frame), names it after that step, and
+// starts the next. A clip with nothing in it isn't cut, so no clip is empty. The cut waits a little for the writer to finish
+// (kHudsonVideoCutWaitMilliseconds), because the game, perhaps a network game, is still going; a clip that isn't finished by then can't
+// be followed by another (hudson_video_writer.h), so the rest of the run has no film, and the log says so. True if the next clip started.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static bool CutTheFilm(const char *step, D3DSURFACE_DESC *filmSize)
+{
+	HudsonVideoFacts facts;
+
+	if (filmGivenUp)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_GetFacts(&facts);
+
+	if (!facts.started || facts.written == 0)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);
+	HudsonVideoWriter_GetFacts(&facts);
+	SayIfTheVideoHasNews(facts);
+
+	if (!facts.finishedInTime)
+	{
+		filmGivenUp = true;
+		LogErrorString(std::string("video: the clip ") + videoName + " wasn't finished in time at its end, so the rest of this run has no film");
+		return false;
+	}
+
+	char line[200] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "video: a clip of %ld pictures ends at %s (%ld dropped)", facts.written, step, facts.dropped);
+	LogString(line);
+	NameTheClip(step);
+	StartTheVideo(filmSize);
+	return true;
+}
+
 // Takes this moment's picture, if one's due. Reading a frame back is the only part that costs the game anything, so it isn't done unless a picture is wanted, and what it costs goes in the log.
 static void TakeVideoFrame()
 {
 	static bool triedToStart = false;
+	static bool levelClipCut = false;
 	static D3DSURFACE_DESC filmSize;
 	static LARGE_INTEGER started, ticksPerSecond;
 
-	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before
-	if (framesDone < 1)
+	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before. With
+	// film=menus (hudson_plan.h) it starts at the first frame drawn, the menus' too (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (framesDone < 1 && !plan.filmMenus)
 	{
 		return;
 	}
@@ -4924,6 +5088,18 @@ static void TakeVideoFrame()
 		StartTheVideo(&filmSize);
 		QueryPerformanceFrequency(&ticksPerSecond);
 		QueryPerformanceCounter(&started);
+	}
+
+	// film=menus: the level's first frame ends the clip of the menus and the loading, so the level starts a clip of its own. Each clip's
+	// clock starts at 0.
+	if (plan.filmMenus && framesDone >= 1 && !levelClipCut)
+	{
+		levelClipCut = true;
+
+		if (CutTheFilm("before-level", &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
 	}
 
 	LARGE_INTEGER before;
@@ -4955,6 +5131,20 @@ static void TakeVideoFrame()
 
 	HudsonVideoWriter_GetFacts(&facts);
 	SayIfTheVideoHasNews(facts);
+
+	// film=menus: a picture of the menus (Hudson_SaveThePage) ends this clip, after the frames up to it are in it
+	if (clipEndsAt[0])
+	{
+		char step[sizeof(clipEndsAt)];
+
+		memcpy(step, clipEndsAt, sizeof(step));
+		clipEndsAt[0] = 0;
+
+		if (CutTheFilm(step, &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
+	}
 }
 
 // The other game of the pair starts once this file is there, because the host only answers once it's playing: tools/hudson/run-net-pair.ps1 waits for it. It says nothing that matters, and the next run clears it.
@@ -5047,6 +5237,14 @@ void Hudson_SaveThePage(const char *name)
 	{
 		LogErrorString(std::string("hudson: couldn't save ") + name);
 	}
+
+	// film=menus: this page's picture ends a clip, named after it, at the film's next frame (TakeVideoFrame). Added 2026-11-10 by
+	// Melanikus (Third) for the AvP port.
+	if (plan.filmMenus && plan.recordVideo)
+	{
+		_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, "%s", name);
+		clipEndsAt[sizeof(clipEndsAt) - 1] = '\0';
+	}
 }
 
 // ---- The presses a player makes (access= and answer=, hudson_plan.h). Added 2026-11-09 by Melanikus for the AvP port.
@@ -5072,6 +5270,12 @@ int Hudson_AnswerPress()
 int Hudson_AnswerAfterSeconds()
 {
 	return HudsonRunIsOn ? plan.answerAfterSeconds : 0;
+}
+
+// pagehold= (with film=menus): the seconds each page the menus picture is held first. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds()
+{
+	return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;
 }
 
 bool Hudson_JoinsThroughFindGames()
@@ -9055,39 +9259,86 @@ static bool Hudson_WayIsClear(STRATEGYBLOCK *me, STRATEGYBLOCK *target)
 	return Hudson_WayIsClearTo(me, middle, target->SBdptr);
 }
 
-// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, on the first side with room, and Hudson_SmokeTest puts him back after it.
+// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, to a spot beside him, and Hudson_SmokeTest puts him back after it.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port (#203): a spot used to need only a clear way to it, and on jockey one put the joiner's eyes somewhere dark, with nothing on the
+// screen. Now it also needs floor not far below, room above, and a clear view of the host's middle (HudsonPlan_SmokeSpotIsGood), and eight directions are tried, at 3 m and then 5 m.
 static void Hudson_SmokeGoOver(STRATEGYBLOCK *me, STRATEGYBLOCK *other)
 {
 	static const int kCloseEnoughToSee = 8000; // millimetres
-	static const int kStandsThisFarAway = 3000;
-	static const int kSides[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+	static const int kDistances[2] = { 3000, 5000 };
+	static const int kSides[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
 
 	if (plan.netMode != kHudsonNetJoin || VectorDistance(&me->DynPtr->Position, &other->DynPtr->Position) <= kCloseEnoughToSee)
 	{
 		return;
 	}
 
-	VECTORCH there = other->DynPtr->Position;
+	VECTORCH const there = other->DynPtr->Position;
+	VECTORCH middle;
 
-	for (int side = 0; side < 4; side++)
+	GetTargetingPointOfObject_Far(other, &middle);
+
+	for (int d = 0; d < 2; d++)
 	{
-		VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
-
-		FindPolygonInLineOfSight(&direction, &there, 0, other->SBdptr);
-
-		if (!LOS_ObjectHitPtr || LOS_Lambda > kStandsThisFarAway + 1000)
+		for (int side = 0; side < 8; side++)
 		{
-			VECTORCH place = { there.vx + kSides[side][0] * kStandsThisFarAway, there.vy, there.vz + kSides[side][1] * kStandsThisFarAway };
+			VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
+			VECTORCH from = there;
+
+			Normalise(&direction);
+
+			// Nothing in the way to the spot, and a metre past it
+			FindPolygonInLineOfSight(&direction, &from, 0, other->SBdptr);
+
+			if (LOS_ObjectHitPtr && LOS_Lambda <= kDistances[d] + 1000)
+			{
+				continue;
+			}
+
+			VECTORCH place = { there.vx + MUL_FIXED(direction.vx, kDistances[d]), there.vy, there.vz + MUL_FIXED(direction.vz, kDistances[d]) };
+
+			// Something to stand on below it (y goes down), and room above it
+			VECTORCH down = { 0, ONE_FIXED, 0 };
+			VECTORCH up = { 0, -ONE_FIXED, 0 };
+			VECTORCH at = place;
+
+			FindPolygonInLineOfSight(&down, &at, 0, other->SBdptr);
+			bool const floorHit = LOS_ObjectHitPtr != 0;
+			int const floorBelow = LOS_Lambda;
+
+			at = place;
+			FindPolygonInLineOfSight(&up, &at, 0, other->SBdptr);
+			bool const ceilingHit = LOS_ObjectHitPtr != 0;
+			int const ceilingAbove = LOS_Lambda;
+
+			// And nothing between it and his middle, but him
+			VECTORCH toHim = { middle.vx - place.vx, middle.vy - place.vy, middle.vz - place.vz };
+			int const howFar = VectorDistance(&place, &middle);
+
+			at = place;
+			Normalise(&toHim);
+			FindPolygonInLineOfSight(&toHim, &at, 0, me->SBdptr);
+			bool const wayClear = !LOS_ObjectHitPtr || LOS_ObjectHitPtr == other->SBdptr || LOS_Lambda >= howFar;
+
+			if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))
+			{
+				continue;
+			}
+
+			char line[300];
 
 			smokeCameFrom = me->DynPtr->Position;
 			smokeWentOver = true;
 			MoveThePlayerTo(place);
-			LogString("smoke: they started too far apart to see each other, so the joiner has gone over to the host");
+			_snprintf(line, sizeof(line) - 1, "smoke: they started too far apart to see each other, so the joiner has gone over to the host, %d mm to one side, with floor %d mm below, %s above, and a clear view of him",
+				kDistances[d], floorBelow, ceilingHit ? "room" : "open sky");
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
 			return;
 		}
 	}
 
-	LogString("smoke: they started too far apart to see each other, and the joiner found no room beside the host");
+	LogString("smoke: they started too far apart to see each other, and the joiner found no spot beside the host, 3 or 5 m away in 8 directions, with floor, room and a clear view of him");
 }
 
 // The user's rule: "if 2 hudsons join they should always look at each other as a 'smoke test' before acting". On every first join and each level's start, in any mode, each player turns to the other, one right and one left

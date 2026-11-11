@@ -4732,8 +4732,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "seenFilm = true;\n\n\t\t\tif (!WordIs(value, valueLength, \"no\"))",
-					"to": "seenFilm = true;\n\n\t\t\tif (false)"
+					"from": "else if (!WordIs(value, valueLength, \"no\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFilmUnknown;",
+					"to": "else if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFilmUnknown;"
 				}
 			]
 		},
@@ -4752,7 +4752,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->recordVideo && seenFilm)",
+					"from": "if (plan->recordVideo && seenFilm && !plan->filmMenus)",
 					"to": "if (false)"
 				}
 			]
@@ -4762,7 +4762,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
 					"to": "if (false)"
 				}
 			]
@@ -4772,8 +4772,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
-					"to": "if (!seenFilm && !saidOnlyNumbers)"
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
+					"to": "if ((!seenFilm || plan->filmMenus) && !saidOnlyNumbers)"
 				}
 			]
 		},
@@ -4782,8 +4782,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
-					"to": "if (plan->machineShared && !seenFilm)"
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
+					"to": "if (plan->machineShared && (!seenFilm || plan->filmMenus))"
 				}
 			]
 		},
@@ -4792,7 +4792,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"from": "if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)",
 					"to": "if (plan->machineShared && !saidOnlyNumbers)"
 				}
 			]
@@ -8932,7 +8932,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }",
+					"from": "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }",
 					"to": ""
 				}
 			]
@@ -9904,6 +9904,586 @@
 					"file": "3dc/avp/hudson_plan.cpp",
 					"from": "\tif (seenMenus && (plan->netMode != kHudsonNetNone || seenAccess))",
 					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for access=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" access=$Access\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Access takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "'\\A(request|check|newid)\\z'",
+					"to": "'\\A(request|check|newid|yes)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Access goes with -Net",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Access -and $Net) {",
+					"to": "if ($false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for accesswait=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" accesswait=$AccessWait\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -AccessWait takes 60 seconds, inside the list's minute",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$AccessWait -lt 61",
+					"to": "$AccessWait -lt 60"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for answer=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" answer=$Answer\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -Answer takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$Answer -cnotmatch '\\A(letin|no)\\z'",
+					"to": "$Answer -cnotmatch '\\A(letin|no|maybe)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for answerafter=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" answerafter=$AnswerAfter\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -AnswerAfter takes 16 seconds",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$AnswerAfter -gt 15",
+					"to": "$AnswerAfter -gt 16"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for findgames=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "\" findgames=yes\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an -Access run gets -relayjoin",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if (-not $Relay -or -not $Net) { '' }",
+					"to": "if (-not $Relay) { '' }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's host never gets its answer",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$words += @('-Answer', $HostAnswer)",
+					"to": "$words += @()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's -HostAnswer takes a word Hudson doesn't",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$HostAnswer -cnotmatch '\\A(letin|no)\\z'",
+					"to": "$HostAnswer -cnotmatch '\\A(letin|no|maybe)\\z'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair's joiner never gets Find Games",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$JoinFindGames) { $words += '-FindGames' }",
+					"to": "$JoinFindGames) { }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an -Access run is told the relay's name, which Hudson refuses without net=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($RemoteRelay -and $Net) {",
+					"to": "if ($RemoteRelay) {"
+				}
+			]
+		},
+		{
+			"name": "film=menus: the film still starts at the level",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (framesDone < 1 && !plan.filmMenus)",
+					"to": "if (framesDone < 1)"
+				}
+			]
+		},
+		{
+			"name": "film=menus: the level's first frame never ends the menus' clip",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.filmMenus && framesDone >= 1 && !levelClipCut)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "film=menus: a picture of the menus never ends a clip",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, \"%s\", name);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "film=menus: an empty clip is cut too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!facts.started || facts.written == 0)",
+					"to": "if (!facts.started)"
+				}
+			]
+		},
+		{
+			"name": "film=menus: a clip not finished in time is followed by another",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "filmGivenUp = true;",
+					"to": "filmGivenUp = false;"
+				}
+			]
+		},
+		{
+			"name": "film=menus: a cut waits as long as a run's end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);",
+					"to": "HudsonVideoWriter_Finish(kHudsonVideoFinishWaitMilliseconds);"
+				}
+			]
+		},
+		{
+			"name": "film=menus: a clip has no number of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\"hudson-video-%s-clip%02d.mp4\", filmStamp, clipNumber",
+					"to": "\"hudson-video-%s.mp4\", filmStamp"
+				}
+			]
+		},
+		{
+			"name": "film=menus: a clip of another size keeps the old copy",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (copy && (copySize.Width != filmSize.Width",
+					"to": "if (false && (copySize.Width != filmSize.Width"
+				}
+			]
+		},
+		{
+			"name": "film=menus: pagehold= holds without film=menus",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;",
+					"to": "return HudsonRunIsOn ? plan.pageHoldSeconds : 0;"
+				}
+			]
+		},
+		{
+			"name": "film=menus isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (WordIs(value, valueLength, \"menus\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "film=menus makes no film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(!seenFilm || plan->filmMenus)",
+					"to": "!seenFilm"
+				}
+			]
+		},
+		{
+			"name": "film=menus with record=video is refused as both ways",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->recordVideo && seenFilm && !plan->filmMenus)",
+					"to": "if (plan->recordVideo && seenFilm)"
+				}
+			]
+		},
+		{
+			"name": "film=menus in a run with no film is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->filmMenus && !plan->recordVideo)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "pagehold= without film=menus is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenPageHold && !plan->filmMenus)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "pagehold= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenPageHold)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "pagehold=0 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->pageHoldSeconds < 1 ||",
+					"to": "if (plan->pageHoldSeconds < 0 ||"
+				}
+			]
+		},
+		{
+			"name": "pagehold=11 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->pageHoldSeconds > kHudsonMostPageHoldSeconds",
+					"to": "plan->pageHoldSeconds > kHudsonMostPageHoldSeconds + 1"
+				}
+			]
+		},
+		{
+			"name": "pagehold= never holds a page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "pagehold= holds the joiner's let in too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "MenuFrameForARun(picture, !letIn);",
+					"to": "MenuFrameForARun(picture);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host with -Answer hosts with -relayhost, which lets every joiner in",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script never asks for film=menus",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($FilmMenus) { $arguments += \" film=menus\" }",
+					"to": "if ($FilmMenus) { }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -FilmMenus without -WhileInUse goes on",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($FilmMenus -and -not $WhileInUse) {",
+					"to": "if ($false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair never gives its games -FilmMenus",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($FilmMenus) { $words += '-FilmMenus' }",
+					"to": "if ($FilmMenus) { }"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file that's a folder counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isLink && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file that's a link counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file older than the run counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && !isLink;"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file written as the run started doesn't count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return there && !isFolder && !isLink && writtenAt > runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: no stop file counts as one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return there && !isFolder && !isLink && writtenAt >= runStartedAt;",
+					"to": "return !isFolder && !isLink && writtenAt >= runStartedAt;"
+				}
+			]
+		},
+		{
+			"name": "#198: the watchdog never ends the run for a stop file",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndAtOnce(\"it was stopped by hand: a hudson-stop file asked it to end\", kHudsonExitStoppedByHand);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "#198: a stop file is looked for before the run's start is known",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!folder || folder[0] == 0 || runStartedFileTime == 0)",
+					"to": "if (!folder || folder[0] == 0)"
+				}
+			]
+		},
+		{
+			"name": "#198: the stop file is looked for every turn",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (GetTickCount() - stopLookedAt >= 1000)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "#195: answer= with -relayhost is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, \"-relayhost\") && !CommandLineHasWord(commandLine, \"-askjoiners\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "#195: -askjoiners beside -relayhost doesn't count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "CommandLineHasWord(commandLine, \"-relayhost\") && !CommandLineHasWord(commandLine, \"-askjoiners\"))",
+					"to": "CommandLineHasWord(commandLine, \"-relayhost\"))"
+				}
+			]
+		},
+		{
+			"name": "#195: -relayhost refuses a host with no answer= too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, \"-relayhost\")",
+					"to": "if (CommandLineHasWord(commandLine, \"-relayhost\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson host's co-op game keeps the deathmatch list's number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tlevel = coopPlace;",
+					"to": "\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "#203: a spot over nothing will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "bool const standsOnSomething = floorHit && floorBelow >= 0 && floorBelow <= kHudsonSmokeMostDrop;",
+					"to": "bool const standsOnSomething = true;"
+				}
+			]
+		},
+		{
+			"name": "#203: a spot over a deep drop will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "floorBelow <= kHudsonSmokeMostDrop;",
+					"to": "floorBelow <= kHudsonSmokeMostDrop + 1;"
+				}
+			]
+		},
+		{
+			"name": "#203: a spot under a low ceiling will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "bool const hasRoom = !ceilingHit || ceilingAbove >= kHudsonSmokeLeastHeadroom;",
+					"to": "bool const hasRoom = true;"
+				}
+			]
+		},
+		{
+			"name": "#203: a spot with something in the way will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return standsOnSomething && hasRoom && wayClear;",
+					"to": "return standsOnSomething && hasRoom;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: #203: the go-over takes any spot",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: #203: a DirectX error doesn't fail the pair",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($directXErrors -gt 0) { exit 112 }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: #203: pair.txt doesn't count DirectX errors",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$lines += \"d3d_errors_$game=$($errors.Count)\"",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "film=menus: the renamed clip's name isn't ended with its own 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "videoName[clipLength] = 0;",
+					"to": ";"
 				}
 			]
 		}

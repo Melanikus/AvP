@@ -32,7 +32,8 @@
 //   AvPx.exe -dev -hudson level=derelict frames=5000 rooms=1 lighting=normals shadows=on record=pictures
 //
 // A run that says machine=shared also makes a film of itself, an mp4 in its folder, unless it says film=no or record=numbers. record=pictures keeps a film as well. Taking a film's pictures slows the frames, so a run that measures time has no film,
-// and asking for one by name, with record=video, is refused:
+// and asking for one by name, with record=video, is refused. film=menus starts the film at the menus instead of the level, cut into a clip for each page the menus picture, and pagehold=4 holds each
+// of those pages 4 seconds first, so the film shows it (added 2026-11-10 by Melanikus (Third) for the AvP port):
 //
 //   AvPx.exe -dev -hudson level=derelict frames=400000 seconds=1200 rooms=40 views=2 holdseconds=2 machine=shared
 //
@@ -179,6 +180,7 @@ int const kHudsonLeastAccessWaitSeconds = 61;
 int const kHudsonMostAccessWaitSeconds = 3600;
 int const kHudsonDefaultAnswerAfterSeconds = 3;
 int const kHudsonMostAnswerAfterSeconds = 15;     // well inside the 20 s a Hudson joiner waits for the host's word (menus.cpp)
+int const kHudsonMostPageHoldSeconds = 10;        // pagehold=: well inside the joiner's 40 s for the host's word, and the list's 15 s patience
 
 // What a hostile run does, beyond sending each bad message in turn.
 // drain: this client uses up the other machine's blocks with messages, inside every limit.
@@ -273,6 +275,9 @@ struct HudsonPlan
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
+	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
+	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
+	int pageHoldSeconds;  // pagehold=: with film=menus, each page the menus picture is held this many seconds first, 1 to 10, so the film shows it. 0 for none
 	bool breakVideo;      // break=video: the encoder fails for real part way, to prove that a run survives it. It needs a run with a film
 	bool breakPrisms;     // break=prisms: don't send the shadow prisms to the card, so that vision=check can be seen to notice. It needs vision=
 	bool vision;          // vision=check: read the frame's pictures once a view, and say what's missing. See hudson_vision.h
@@ -364,6 +369,16 @@ double HudsonPlan_OnePictureCovers(double wallLength, double pictureCoordinatesR
 // Is a run being asked for? It needs both words, each on its own. Without them, none of this exists.
 bool HudsonPlan_IsAskedFor(const char *commandLine);
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port). A file of this name in the run's own folder
+// (HudsonRun\My Games\Aliens versus Predator, or the second copy's) asks the run to end, as if it had reached its time: so its result is
+// written and its film finished, which closing the window doesn't promise. tools\hudson\stop-run.ps1 makes it.
+static const char *const kHudsonStopFileName = "hudson-stop";
+
+// Whether a hudson-stop file ends the run. It has to be there, a plain file (never a folder, and never a link, which could be anyone's
+// file), and written after the run started (in the same units as runStartedAt), so one left from an earlier run can't end this one at
+// once. Only that it's there counts, never what's in it, so nothing in it is ever read.
+bool HudsonPlan_StopFileCounts(bool there, bool isFolder, bool isLink, long long writtenAt, long long runStartedAt);
+
 // Reads what comes after -hudson, up to the next word starting with a dash. Gives back 0 if it's all good, or one of the reasons below.
 const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan);
 
@@ -386,6 +401,7 @@ extern const char *const kHudsonRefusedAnswerWithoutHost;
 extern const char *const kHudsonRefusedAnswerAfterNotANumber;
 extern const char *const kHudsonRefusedAnswerAfterOutOfRange;
 extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
+extern const char *const kHudsonRefusedAnswerWithRelayHost;
 extern const char *const kHudsonRefusedFindGamesWord;
 extern const char *const kHudsonRefusedFindGamesWithoutJoin;
 extern const char *const kHudsonRefusedBotWeapon;
@@ -520,6 +536,10 @@ extern const char *const kHudsonRefusedNetMeasuresTime;
 extern const char *const kHudsonRefusedNetNotAlone;
 extern const char *const kHudsonRefusedFilmUnknown;
 extern const char *const kHudsonRefusedFilmBothWays;
+extern const char *const kHudsonRefusedFilmMenusWithoutFilm;
+extern const char *const kHudsonRefusedPageHoldNotANumber;
+extern const char *const kHudsonRefusedPageHoldOutOfRange;
+extern const char *const kHudsonRefusedPageHoldWithoutFilmMenus;
 extern const char *const kHudsonRefusedBreakVideoWithoutVideo;
 extern const char *const kHudsonRefusedBreakUnknown;
 extern const char *const kHudsonRefusedBreakWithoutVision;
@@ -663,5 +683,17 @@ enum
 
 // Whether the test is still going on, or has passed or failed. If it failed, *why says what was wrong, the first thing that was. It's only passed when all of it is true at once.
 int HudsonPlan_SmokeVerdict(const HudsonSmokeFacts &facts, const char **why);
+
+// #203: when the two start too far apart to see each other (a big deathmatch map), the joiner goes to a spot beside the other player.
+// A spot only did if the way to it was clear, and on jockey one put the joiner's eyes somewhere dark, where nothing was on the screen.
+// Now a spot also needs something to stand on not far below it, room for a body above it, and nothing between it and the other player's
+// middle. Distances are millimetres along a ray from the spot, at the other player's own height; a ray that hit nothing says hit = false.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+enum
+{
+	kHudsonSmokeMostDrop = 2500,      // the floor at most this far below the spot
+	kHudsonSmokeLeastHeadroom = 1000  // and nothing nearer than this above it
+};
+bool HudsonPlan_SmokeSpotIsGood(bool floorHit, int floorBelow, bool ceilingHit, int ceilingAbove, bool wayClear);
 
 #endif

@@ -71,6 +71,7 @@
 #include "env_info.h"
 #include "custom_maps.h"
 #include "coop_menu.h"
+#include "level_lists.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -465,7 +466,7 @@ static void StartNetworkGameForHudsonRun(void)
 	extern int MultiplayerEpisodeForEnvironment(int environment);
 
 	int const onTheList = MultiplayerEpisodeForEnvironment(Hudson_Environment());
-	int const level = onTheList >= 0 ? onTheList : 0;
+	int level = onTheList >= 0 ? onTheList : 0;
 
 	SetDefaultMultiplayerConfig();
 	netGameData.gameType = NGT_Individual;
@@ -488,6 +489,17 @@ static void StartNetworkGameForHudsonRun(void)
 
 		netGameData.gameType = NGT_Coop;
 		netGameData.disableFriendlyFire = Hudson_NoFriendlyFire();
+
+		// The game's level number is the campaign level's place on the co-op list, as the host's own menu gives it (coop_menu.cpp), not
+		// the deathmatch list's, which has no campaign level: derelict came out as -1, then 0, and the games page named it "Stranded" (the
+		// showcase of 2026-11-10, Secondary's trace). A campaign with no such level (-1) keeps the number above. Modified 2026-11-10 by
+		// Melanikus (Third) for the AvP port.
+		int const coopPlace = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);
+
+		if (coopPlace >= 0)
+		{
+			level = coopPlace;
+		}
 	}
 
 	// hostile=yes and no campaign: a species game, the only kind that keeps the species scores one of the bad messages aims at
@@ -723,9 +735,22 @@ static bool PressTheRowForARun(enum AVPMENU_ELEMENT_ID kind, int value, const ch
 	return false;
 }
 
-// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown
-static void MenuFrameForARun(const char *picture)
+// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown.
+// pagehold= (Hudson_PageHoldSeconds, with film=menus): a page to be pictured is first held, as it is, that many seconds, so the run's film
+// shows it before the picture ends its clip. holdFirst is false for a page the other game is waiting on this one to leave (the host's
+// yes), which isn't held. Modified 2026-11-10 by Melanikus (Third) for the AvP port.
+static void MenuFrameForARun(const char *picture, bool holdFirst = true)
 {
+	if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)
+	{
+		DWORD const holdStarted = GetTickCount();
+
+		while (bRunning && (DWORD)(GetTickCount() - holdStarted) < (DWORD)Hudson_PageHoldSeconds() * 1000u)
+		{
+			MenuFrameForARun(NULL);
+		}
+	}
+
 	CheckForWindowsMessages();
 	ThisFramesRenderingHasBegun();
 	DrawMainMenusBackdrop();
@@ -855,7 +880,8 @@ static bool JoinThroughFindGamesForARun(void)
 			askingPictured = true;
 		}
 
-		MenuFrameForARun(picture);
+		// Let in is never held (pagehold=, MenuFrameForARun): once the host has said yes, it's waiting for this game to go on to the level
+		MenuFrameForARun(picture, !letIn);
 	}
 
 	ReleaseAllAvPMenuGfx();
