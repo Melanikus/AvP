@@ -51,6 +51,7 @@ extern int ModuleArraySize;
 int AlienWaysSwitchedOn = 0;
 int AlienWaysGridSwitchedOn = 0;
 int AlienWaysMoverSwitchedOn = 0;
+int AlienWaysViewSwitchedOn = 0;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 int AlienWaysWatchPlace = -1;
 

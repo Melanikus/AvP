@@ -27,7 +27,8 @@ While it's being made and filmed, alien ways is a developer feature, on only wit
 
 | Switch | What it does |
 |---|---|
-| `-dev -alienways` | Builds the map at each level's start, guides the aliens, and draws the developer view (section 12). Without it, none of this runs. |
+| `-dev -alienways` | Builds the map at each level's start and guides the aliens. Without it, none of this runs. |
+| `-dev -alienways -alienwaysview` | Also draws the developer view (section 12), for films. Its own switch, so no player ever sees the lines once the ways are on for everyone. |
 | `-dev -alienwaysaim=N` | How far ahead along its way an alien aims, in mm, 0 to 10000. The default is 1500. 0 aims at the next point of the way, as before the look-ahead was added, so a film can compare the two. |
 | `-dev -alienwayswatch=N` | One line in the log every frame for the alien in the guide's place N (0 to 63): what its state did, whether it was steered or kept driving, its grip and speed, its target and the marine scent near it. Off by default, and it stops after 6,000 lines a level. |
 
@@ -306,7 +307,7 @@ Each kind of line has a limit a level, so a long level can't fill the log.
 
 ## 12. The developer view
 
-With `-dev -alienways`, each alien's way is drawn in the level as lines, coloured by what each stretch is on: gold for the floor, blue for a
+With `-dev -alienways -alienwaysview`, each alien's way is drawn in the level as lines, coloured by what each stretch is on: gold for the floor, blue for a
 wall, purple for a ceiling. A small cross marks each point. The stretch the alien is on and the point it's heading for are white. The lines go
 through the same sums as the level's own polygons, so a wall hides a way behind it. The view is never drawn in a network game, where seeing an
 alien's way through a wall would be cheating.

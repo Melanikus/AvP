@@ -36,6 +36,7 @@
 //   -alienwaysaim=N, with -dev, says how far along its way an alien aims, in mm, from 0 to 10000; 0 is the aim before the look-ahead
 //   -alienwayswatch=N, with -dev, gives the alien with the guide's place N, from 0 to 63, a line in the log every frame (alien_ways.h)
 //   -alienwaysgrid, with -dev and -alienways, has the aliens search the grid every NPC will share, with the polygon map as the fallback
+//   -alienwaysview, with -dev and -alienways, draws each alien's way over the level, for films (added 2026-11-11 by Melanikus (Third))
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
@@ -487,6 +488,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			else
 			{
 				LogString("alien ways: -alienwaysmover needs -alienwaysgrid too, so it was ignored");
+			}
+		}
+
+		// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): the developer's view of the aliens' ways,
+		// coloured lines through the level (alien_ways_view.h), drawn only when asked for, so it stays a filming tool when the ways are on for
+		// every player. It draws the ways, so it needs -alienways too.
+		if (devSwitch("-alienwaysview"))
+		{
+			if (AlienWaysSwitchedOn)
+			{
+				AlienWaysViewSwitchedOn = 1;
+				LogString("alien ways: each alien's way is drawn over the level (-alienwaysview)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwaysview needs -alienways too, so it was ignored");
 			}
 		}
 		extern int ShadowFlickerOn;
