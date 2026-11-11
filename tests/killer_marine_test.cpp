@@ -15,12 +15,26 @@
 //   frame every millisecond, and after many seconds; and a sum past the edge of the game's numbers stops at the edge.
 // - By reading the game's files: the numbers the header copies (16 bytes a fingerprint, 8 players) are the game's, and a joiner's
 //   fingerprint is still wiped to zeros until his handshake is done.
+// - The marine who fights like a player (bh_marine.cpp), by reading the game's files with their comments taken out (added 2026-11-10,
+//   the card's second piece):
+//   - who he is: only HudsonTest_FightsLikeAPlayer makes him, only with a pulse rifle, and he's known by his whole name;
+//   - his sight: only a real ray, never without display blocks (when the game's sight test answers by rooms, through walls), and never a
+//     cloaked target; his eyes are told every frame;
+//   - his gun: both fire functions his pulse rifle can reach send him to his own first; his own fires only once his eyes say he may, at
+//     where they say he aims, by a ray (FindPolygonInLineOfSight) whose hit alone is hurt (HandleWeaponImpact) by the player's ammunition,
+//     at the player's rate, turned by the player's judder; and nothing in it is the 1999 marine's way (no dice roll, no VerifyHitShot,
+//     no damage called directly); the far-away firing hurts nobody;
+//   - his targets: any living player, of any species;
+//   - the judder: one sum, Weapon_RecoilJudder, which a player's gun and his both use;
+//   - all of it in code that's compiled: none of it inside an #if (#179's lesson: a test passed on code nothing compiled).
 //
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this with tests/killer_marine_test.args, and the program gives back a non-zero result if any check failed.
-// tests/takeouts/killer_marine_test.json proves each check can fail.
+// tests/takeouts/killer_marine_test.json proves each check can fail. The pieces of source are taken by tests/source_slice.h, so a marker
+// that has moved fails by name.
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +45,7 @@
 #include <string>
 
 #include "killer_marine.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -68,6 +83,123 @@ static std::string ReadSourceFile(char const *name)
 static bool Has(std::string const &text, char const *words)
 {
 	return text.find(words) != std::string::npos;
+}
+
+// Whether first is in text, and second after it (both have to be there)
+static bool ComesBefore(std::string const &text, char const *first, char const *second)
+{
+	std::string::size_type const a = text.find(first);
+
+	return a != std::string::npos && text.find(second, a) != std::string::npos;
+}
+
+// How many times words are in text
+static int Count(std::string const &text, char const *words)
+{
+	int count = 0;
+	std::string const looked(words);
+
+	for (std::string::size_type at = text.find(looked); at != std::string::npos; at = text.find(looked, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
+// A file's code with its comments taken out, so that a comment that names something can't pass or fail a check. Strings and characters
+// are kept as they are, so a // inside one isn't taken for a comment.
+static std::string JustTheCode(std::string const &text)
+{
+	std::string out;
+	std::string::size_type i = 0;
+
+	while (i < text.size())
+	{
+		char const c = text[i];
+
+		if (c == '"' || c == '\'')
+		{
+			std::string::size_type j = i + 1;
+
+			while (j < text.size() && text[j] != c && text[j] != '\n')
+			{
+				j += text[j] == '\\' ? 2 : 1;
+			}
+
+			j = (std::min)(j + 1, text.size());
+			out.append(text, i, j - i);
+			i = j;
+		}
+		else if (c == '/' && i + 1 < text.size() && text[i + 1] == '/')
+		{
+			while (i < text.size() && text[i] != '\n')
+			{
+				i++;
+			}
+		}
+		else if (c == '/' && i + 1 < text.size() && text[i + 1] == '*')
+		{
+			std::string::size_type const end = text.find("*/", i + 2);
+			i = end == std::string::npos ? text.size() : end + 2;
+		}
+		else
+		{
+			out += c;
+			i++;
+		}
+	}
+
+	return out;
+}
+
+// How many #if blocks are open at a place in a file's code (each #if, #ifdef or #ifndef opens one, each #endif closes one). Code at 0 is
+// compiled whatever is defined; code inside one may be compiled by nothing (#179). -1 if the words aren't there.
+static int OpenIfsAt(std::string const &code, char const *words)
+{
+	std::string::size_type const at = code.find(words);
+
+	if (at == std::string::npos)
+	{
+		return -1;
+	}
+
+	int open = 0;
+	std::istringstream lines(code.substr(0, at));
+	std::string line;
+
+	while (std::getline(lines, line))
+	{
+		std::string::size_type const first = line.find_first_not_of(" \t");
+
+		if (first == std::string::npos)
+		{
+			continue;
+		}
+
+		if (line.compare(first, 3, "#if") == 0)
+		{
+			open++;
+		}
+		else if (line.compare(first, 6, "#endif") == 0)
+		{
+			open--;
+		}
+	}
+
+	return open;
+}
+
+// How tests/source_slice.h fails a check when a marker isn't there
+static void FailBecause(std::string const &why)
+{
+	Check(false, why);
+}
+
+// The text from one marker up to the next one after it, by tests/source_slice.h: a marker that isn't there is a failed check of its own
+static std::string Between(std::string const &text, char const *from, char const *to)
+{
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, FailBecause);
 }
 
 // ----- Kill Olde mode
@@ -425,6 +557,150 @@ static void TestTheAim()
 	Check(KillerMarine_AimPoint(&eyes, start + 1248, &x, &y, &z) && x == INT32_MIN, "and one past the smallest stops there");
 }
 
+// ----- The marine who fights like a player (bh_marine.cpp), by reading the game's files
+
+// What nothing of his fighting may do: the 1999 marine's way of hurting, the dice roll, and anything that throws
+static char const *const kNotHisWay[] = {
+	"CauseDamageToObject", "CauseDamageToHModel", "VerifyHitShot", "ProjectNPCShot", "CastLOSProjectile", "HitLocationRoll",
+	"DischargeLOSWeapon_Core", "LobAGrenade", "FastRandom", "Skill", "Accuracy", "Ammo_Type",
+};
+
+static bool NoneOfThe1999Way(std::string const &code)
+{
+	for (size_t i = 0; i < sizeof(kNotHisWay) / sizeof(kNotHisWay[0]); i++)
+	{
+		if (Has(code, kNotHisWay[i]))
+		{
+			return false;
+		}
+	}
+
+	return !code.empty();
+}
+
+static void TestTheFighter()
+{
+	puts("The marine who fights like a player (bh_marine.cpp):");
+
+	std::string const marine = JustTheCode(ReadSourceFile("3dc/avp/bh_marine.cpp"));
+	std::string const marineHeader = JustTheCode(ReadSourceFile("3dc/avp/bh_marine.h"));
+	std::string const sight = JustTheCode(ReadSourceFile("3dc/avp/ai_sight.cpp"));
+
+	Check(!marine.empty() && !marineHeader.empty() && !sight.empty(), "the game's three files are read");
+	Check(Has(marine, "#include \"killer_marine.h\"") && Has(marine, "#include \"targeting.h\""), "bh_marine.cpp reads the rules, and the judder's sum");
+
+	// Who he is
+	std::string const makesHim = Between(marine, "void HudsonTest_FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string const isHe = Between(marine, "static bool FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+
+	Check(Has(marineHeader, "void HudsonTest_FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr);"),
+		"he's made by a HudsonTest_ function, which tools/check-hudson-asleep.ps1 lets only Hudson's own files call");
+	Check(Count(marine, "someoneFightsLikeAPlayer = ") == 2 && Has(marine, "static bool someoneFightsLikeAPlayer = false;")
+		&& Has(makesHim, "someoneFightsLikeAPlayer = "), "nobody fights like a player until that function says so, and nothing else changes it");
+	Check(Count(marine, "memcpy(fighterName") == 1 && Count(marine, "memset(fighterName") == 1 && Has(makesHim, "memcpy(fighterName, sbPtr->SBname, sizeof(fighterName));")
+		&& Has(makesHim, "memset(fighterName, 0, sizeof(fighterName));"), "and nothing else changes which marine he is");
+	Check(Has(makesHim, "&& marineStatus->My_Weapon->id == MNPCW_PulseRifle;"), "only a marine with a pulse rifle can be him");
+	Check(Has(isHe, "return someoneFightsLikeAPlayer && sbPtr != NULL && memcmp(sbPtr->SBname, fighterName, sizeof(fighterName)) == 0;"),
+		"he's known by the whole of his name");
+
+	// His sight
+	std::string const sees = Between(marine, "static bool Fighter_Sees(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target)\n{", "\n}\n");
+	std::string const looks = Between(marine, "static void Fighter_Looks(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string const behaviour = Between(marine, "void MarineBehaviour(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+
+	Check(Has(sight, "if ((target->SBdptr==NULL)||(sbPtr->SBdptr==NULL)) {") && Has(sight, "IsModuleVisibleFromModule(target->containingModule,sbPtr->containingModule)"),
+		"(the game's sight test, without display blocks, answers by which rooms can see which: through walls)");
+	Check(Has(sees, "if (target == NULL || target->DynPtr == NULL || sbPtr->SBdptr == NULL || target->SBdptr == NULL)\n\t{\n\t\treturn false;\n\t}"),
+		"so without a display block for either of them, he can't see");
+	Check(Has(sees, "if (TargetIsACloakedGhost(target))\n\t{\n\t\treturn false;\n\t}"), "a cloaked player is hidden from him");
+	Check(Has(sees, "return NPCCanSeeTarget(sbPtr, target, MARINE_NEAR_VIEW_WIDTH) != 0;")
+		&& ComesBefore(sees, "sbPtr->SBdptr == NULL || target->SBdptr == NULL", "NPCCanSeeTarget("),
+		"otherwise he sees by the real ray, after the display blocks are checked");
+	Check(Has(looks, "bool const sees = Fighter_Sees(sbPtr, target);") && Has(looks, "KillerMarine_Look(&fighterEyes, timeGetTime(), sees, where.vx, where.vy, where.vz);"),
+		"his eyes are told what that sight says, by the machine's clock");
+	Check(Has(behaviour, "if (FightsLikeAPlayer(sbPtr)) {\n\t\tFighter_Looks(sbPtr);\n\t}"), "every frame, whatever he's doing");
+
+	// His gun
+	std::string const fires = Between(marine, "static STATE_RETURN_CONDITION Execute_MNS_FighterFires(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string const aFrame = Between(marine, "static void Fighter_FiresAFrame(STRATEGYBLOCK *sbPtr, const VECTORCH *aim, int speed)\n{", "\n}\n");
+	std::string const discharge = Between(marine, "static STATE_RETURN_CONDITION Execute_MNS_DischargeLOSWeapon(STRATEGYBLOCK *sbPtr)\n{",
+		"marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);");
+	std::string const panic = Between(marine, "static STATE_RETURN_CONDITION Execute_MNS_PanicFireLOSWeapon(STRATEGYBLOCK *sbPtr)\n{",
+		"marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);");
+	std::string const farAway = Between(marine, "static STATE_RETURN_CONDITION Execute_MFS_Firing(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string table = Between(marine, "MARINE_WEAPON_DATA NPC_Marine_Weapons[] = {", "MNPCW_Flamethrower,");
+
+	table.erase(std::unique(table.begin(), table.end(), [](char a, char b) { return isspace((unsigned char)a) && isspace((unsigned char)b); }), table.end());
+	std::replace_if(table.begin(), table.end(), [](char c) { return isspace((unsigned char)c) != 0; }, ' ');
+	Check(Has(table, "MNPCW_PulseRifle, SFX_MUZZLE_FLASH_AMORPHOUS, Execute_MNS_DischargeLOSWeapon, NULL, Execute_MNS_PanicFireLOSWeapon,"),
+		"(a pulse rifle fires through Execute_MNS_DischargeLOSWeapon, panics through Execute_MNS_PanicFireLOSWeapon, and has no misfire)");
+	Check(Has(discharge, "if (FightsLikeAPlayer(sbPtr)) {\n\t\treturn Execute_MNS_FighterFires(sbPtr);\n\t}"), "its firing sends him to his own, before anything else");
+	Check(Has(panic, "if (FightsLikeAPlayer(sbPtr)) {\n\t\treturn Execute_MNS_FighterFires(sbPtr);\n\t}"), "and so does its panic fire");
+	Check(!farAway.empty() && !Has(farAway, "CauseDamage") && !Has(farAway, "HandleWeaponImpact") && !Has(farAway, "VerifyHitShot")
+		&& !Has(farAway, "ProjectNPCShot") && !Has(farAway, "CastLOSProjectile") && !Has(farAway, "LobAGrenade"),
+		"(and a marine's firing far from the player hurts nobody)");
+
+	Check(Has(fires, "if (!facesIt || !KillerMarine_AimPoint(&fighterEyes, now, &x, &y, &z)) {\n\t\tEndMarineMuzzleFlash(sbPtr);\n\t\treturn SRC_No_Change;\n\t}")
+		&& ComesBefore(fires, "!KillerMarine_AimPoint(&fighterEyes, now, &x, &y, &z)", "Fighter_FiresAFrame(sbPtr, &aim, speed);"),
+		"he fires only once his eyes say he may, and give him where to aim");
+	Check(Has(fires, "aim.vx = x;\n\taim.vy = y;\n\taim.vz = z;\n\tFighter_FiresAFrame(sbPtr, &aim, speed);"), "and at where they say, not where the target really is");
+	Check(Count(marine, "Fighter_FiresAFrame(") == 2, "nothing else fires his gun");
+	Check(Has(aFrame, "TEMPLATE_WEAPON_DATA const *const gun = &TemplateWeapon[WEAPON_PULSERIFLE];")
+		&& Has(aFrame, "fighterRoundsOwed += MUL_FIXED(gun->FiringRate, NormalFrameTime);"), "it's a player's pulse rifle, at a player's rate");
+	Check(Has(aFrame, "Weapon_RecoilJudder(gun, speed, &judder);") && Has(aFrame, "RotateVector(&shot, &judder);")
+		&& Has(aFrame, "RotateVector(&shot, &towardsTheAim);"), "each shot is turned by the player's judder, then pointed where he aims");
+	Check(Has(aFrame, "FindPolygonInLineOfSight(&shot, &muzzle, 0, sbPtr->SBdptr);")
+		&& Has(aFrame, "if (LOS_ObjectHitPtr) {\n\t\tHandleWeaponImpact(&LOS_Point, LOS_ObjectHitPtr->ObStrategyBlock, gun->PrimaryAmmoID, &shot, rounds * ONE_FIXED, LOS_HModel_Section);\n\t}"),
+		"it's a ray, and only what the ray reaches is hurt, by the player's ammunition: never through a wall");
+	Check(NoneOfThe1999Way(aFrame) && NoneOfThe1999Way(fires) && NoneOfThe1999Way(looks) && NoneOfThe1999Way(sees),
+		"nothing of his fighting is the 1999 marine's: no dice roll, no VerifyHitShot, no grenade, no damage called directly");
+
+	// His targets
+	std::string const targets = Between(marine, "static int Fighter_TargetFilter(STRATEGYBLOCK *candidate)\n{", "\n}\n");
+
+	Check(Has(marine, "if (FightsLikeAPlayer(me) ? Fighter_TargetFilter(candidate) : Marine_TargetFilter(candidate)) {"), "he chooses targets by his own filter");
+	Check(Has(targets, "case I_BehaviourMarinePlayer:\n\t\t\tcase I_BehaviourAlienPlayer:\n\t\t\tcase I_BehaviourPredatorPlayer:\n\t\t\t\treturn 1;"),
+		"any living player is his target, a marine as well");
+
+	// All of it compiled
+	char const *const places[] = {
+		"void HudsonTest_FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)\n{", "static bool FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)\n{",
+		"static bool Fighter_Sees(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target)\n{", "\t\tFighter_Looks(sbPtr);\n",
+		"KillerMarine_Look(&fighterEyes, timeGetTime(), sees,", "return Execute_MNS_FighterFires(sbPtr);",
+		"\tFighter_FiresAFrame(sbPtr, &aim, speed);", "HandleWeaponImpact(&LOS_Point, LOS_ObjectHitPtr->ObStrategyBlock, gun->PrimaryAmmoID",
+		"FightsLikeAPlayer(me) ? Fighter_TargetFilter(candidate)",
+	};
+	bool compiled = true;
+
+	for (size_t i = 0; i < sizeof(places) / sizeof(places[0]); i++)
+	{
+		compiled = compiled && OpenIfsAt(marine, places[i]) == 0;
+	}
+
+	Check(compiled, "all of it is in code that's compiled, inside no #if");
+}
+
+static void TestTheJudder()
+{
+	puts("The judder, one sum for a player and for him (targeting.cpp):");
+
+	std::string const targeting = JustTheCode(ReadSourceFile("3dc/avp/targeting.cpp"));
+	std::string const judder = Between(targeting, "void Weapon_RecoilJudder(const TEMPLATE_WEAPON_DATA *twPtr, int speed, MATRIXCH *out)\n{", "\n}\n");
+	std::string const players = Between(targeting, "void CalculateWhereGunIsPointing(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA *weaponPtr)\n{", "\n}\n");
+
+	Check(Has(judder, "judder.EulerX=(FastRandom()%twPtr->RecoilMaxXTilt)-twPtr->RecoilMaxXTilt/2;")
+		&& Has(judder, "judder.EulerY=(FastRandom()%twPtr->RecoilMaxYTilt)-twPtr->RecoilMaxYTilt/2;"), "a random tilt up to the gun's own limits");
+	Check(Has(judder, "judder.EulerX = MUL_FIXED(judder.EulerX,(ONE_FIXED+(speed<<2)));") && Has(judder, "judder.EulerY = MUL_FIXED(judder.EulerY,(ONE_FIXED+(speed<<2)));"),
+		"more the faster the shooter moves");
+	Check(Has(judder, "CreateEulerMatrix(&judder, out);"), "given back as a turn");
+	Check(Has(players, "Weapon_RecoilJudder(twPtr, speed, &juddermat);") && Has(players, "RotateVector(&GunMuzzleDirectionInVS, &juddermat);"),
+		"a player's gun takes its judder from it, by how fast he moves");
+	Check(Count(targeting, "RecoilMaxXTilt") == Count(judder, "RecoilMaxXTilt") && Count(targeting, "RecoilMaxYTilt") == Count(judder, "RecoilMaxYTilt")
+		&& Count(judder, "RecoilMaxXTilt") == 3, "and the sum is nowhere else");
+	Check(OpenIfsAt(targeting, "void Weapon_RecoilJudder(") == 0 && OpenIfsAt(targeting, "Weapon_RecoilJudder(twPtr, speed, &juddermat);") == 0,
+		"in code that's compiled, inside no #if");
+}
+
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -437,6 +713,8 @@ int main()
 	TestTheLine();
 	TestTheWait();
 	TestTheAim();
+	TestTheFighter();
+	TestTheJudder();
 
 	if (checksFailed != 0)
 	{

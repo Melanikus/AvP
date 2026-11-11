@@ -1,3 +1,7 @@
+// Modified 2026-11-10 by Melanikus for the AvP port (#210, "a bot that can kill Olde"):
+//   a Hudson run can make one marine fight like a player: he sees only by a real ray, acts only 500 ms after he started seeing,
+//   fires a player's pulse rifle as a player does (never the 1999 dice roll), and takes any living player as a target;
+//   every other marine is exactly as it was
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   in a Hudson run, a marine's landing is told to Hudson, by the game's own rule for whether it would kill, instead of being skipped;
 //   outside a run, a fall is exactly as it was
@@ -93,6 +97,8 @@
 #include "user_profile.h"
 #include "hudson.h"
 #include "lamp_pick.h"
+#include "killer_marine.h"
+#include "targeting.h"
 
 extern int LightIntensityAtPoint(VECTORCH *pointPtr);   // kshape.cpp
 
@@ -203,6 +209,7 @@ static void MarineFireFlameThrower(STRATEGYBLOCK *sbPtr);
 static void	Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr);
 static void	Marine_MirrorSuspectPoint(STRATEGYBLOCK *sbPtr);
 static int MarineCanSeeTarget(STRATEGYBLOCK *sbPtr);
+static void Fighter_Looks(STRATEGYBLOCK *sbPtr);
 static int MarineCanSeeObject(STRATEGYBLOCK *sbPtr,STRATEGYBLOCK *target);
 static int MarineIsAwareOfTarget(STRATEGYBLOCK *sbPtr);
 static int MarineShouldBeCrawling(STRATEGYBLOCK *sbPtr);
@@ -1741,6 +1748,48 @@ void Marine_TakesNoNoticeOfTheSquad(STRATEGYBLOCK *sbPtr)
 	marineStatus->using_squad_suspicion = 0;
 }
 
+// THE MARINE WHO FIGHTS LIKE A PLAYER (#210, "a bot that can kill Olde"). Nobody, in a normal game. Only a Hudson run makes one, with
+// HudsonTest_FightsLikeAPlayer: tools/check-hudson-asleep.ps1 (its rule 5) proves that nothing of the game's calls a HudsonTest_ function,
+// and tests/killer_marine_test.cpp proves that nothing else here changes who he is. He's known by his name, never kept as a pointer,
+// because the game can destroy him at any moment and give another marine the same memory.
+//
+// Only how he fights is different, and it's all in the "fights like a player" part below, and in what that calls:
+//   - his eyes (Fighter_Looks): he sees his target only by a real ray from his eyes, and may act only once he has seen it for 500 ms
+//     without a break (killer_marine.h, rule 2);
+//   - his gun (Execute_MNS_FighterFires): a player's pulse rifle, fired as a player fires it: a ray towards where he aims, turned by the
+//     gun's recoil judder, which hurts only what it reaches, so never through a wall. Never the 1999 marine's dice roll;
+//   - his targets (Fighter_TargetFilter): any player who's alive, of any species, as in a game where everyone is against everyone.
+static bool someoneFightsLikeAPlayer = false;
+static char fighterName[SB_NAME_LENGTH];         // his name
+static char fighterTargetName[SB_NAME_LENGTH];   // the name of the target his eyes are on, or all zeros for none
+static KillerMarineEyes fighterEyes;
+static int fighterRoundsOwed = 0;                // the part of a round his gun owes, in 16.16, as a player's gun counts it
+
+// Makes this marine the one who fights like a player, or nobody, with NULL. Only a marine with a pulse rifle can be: it's the one gun he
+// fires as a player does (the owner's choice for the first version, 2026-11-10). Any other, and nobody is.
+void HudsonTest_FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)
+{
+	MARINE_STATUS_BLOCK const *const marineStatus =
+		(sbPtr != NULL && sbPtr->I_SBtype == I_BehaviourMarine) ? (const MARINE_STATUS_BLOCK *)sbPtr->SBdataptr : NULL;
+
+	someoneFightsLikeAPlayer = marineStatus != NULL && marineStatus->My_Weapon != NULL && marineStatus->My_Weapon->id == MNPCW_PulseRifle;
+	memset(fighterName, 0, sizeof(fighterName));
+	memset(fighterTargetName, 0, sizeof(fighterTargetName));
+	KillerMarine_EyesShut(&fighterEyes);
+	fighterRoundsOwed = 0;
+
+	if (someoneFightsLikeAPlayer)
+	{
+		memcpy(fighterName, sbPtr->SBname, sizeof(fighterName));
+	}
+}
+
+// Whether this is the marine who fights like a player
+static bool FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr)
+{
+	return someoneFightsLikeAPlayer && sbPtr != NULL && memcmp(sbPtr->SBname, fighterName, sizeof(fighterName)) == 0;
+}
+
 // What he and his squad suspect, and how long each has left to worry about it, for a test's log. A time of 0 means nothing is suspected.
 void Marine_WhatHeAndHisSquadSuspect(const STRATEGYBLOCK *sbPtr, int *hisTime, VECTORCH *hisPoint, int *squadTime, VECTORCH *squadPoint)
 {
@@ -2851,6 +2900,12 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 	/* Now hearing. */
 
 	DoMarineHearing(sbPtr);
+
+	// The marine who fights like a player (#210) keeps his own eyes on his target, every frame, whatever he's doing, so that his 500 ms
+	// count from when he first saw it
+	if (FightsLikeAPlayer(sbPtr)) {
+		Fighter_Looks(sbPtr);
+	}
 
 	/* That was senses. Now courage. */
 	if (marineStatusPointer->Android==0) {
@@ -11031,6 +11086,209 @@ static void DischargeLOSWeapon_Core(STRATEGYBLOCK *sbPtr)
 
 }
 
+// ----- The marine who fights like a player (#210): his sight, his eyes, his targets and his gun. Who he is: FightsLikeAPlayer, above.
+
+// Whether he can see this target. Only by a real ray from his eyes to it, through nothing, after the view-cone test (NPCCanSeeTarget).
+// If either of them has no display block, which is what happens far from this machine's own player, NPCCanSeeTarget answers by which
+// rooms can see which, and that sees through walls: so then he can't see it at all, and he never fires. A cloaked Predator is as hidden
+// from him as from the game's other marines.
+static bool Fighter_Sees(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target)
+{
+	if (target == NULL || target->DynPtr == NULL || sbPtr->SBdptr == NULL || target->SBdptr == NULL)
+	{
+		return false;
+	}
+
+	if (TargetIsACloakedGhost(target))
+	{
+		return false;
+	}
+
+	if (target->I_SBtype == I_BehaviourPredator && ((PREDATOR_STATUS_BLOCK *)target->SBdataptr)->CloakStatus == PCLOAK_On)
+	{
+		return false;
+	}
+
+	return NPCCanSeeTarget(sbPtr, target, MARINE_NEAR_VIEW_WIDTH) != 0;
+}
+
+// What his eyes see this frame (killer_marine.h, rule 2). Asked once a frame, from MarineBehaviour, whatever he's doing. A new target
+// starts them again.
+static void Fighter_Looks(STRATEGYBLOCK *sbPtr)
+{
+	MARINE_STATUS_BLOCK *const marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	STRATEGYBLOCK *const target = marineStatusPointer->Target;
+	char targetName[SB_NAME_LENGTH];
+	VECTORCH where = {0, 0, 0};
+
+	memset(targetName, 0, sizeof(targetName));
+
+	if (target != NULL)
+	{
+		memcpy(targetName, target->SBname, sizeof(targetName));
+	}
+
+	if (memcmp(targetName, fighterTargetName, sizeof(targetName)) != 0)
+	{
+		KillerMarine_EyesShut(&fighterEyes);
+		memcpy(fighterTargetName, targetName, sizeof(fighterTargetName));
+	}
+
+	bool const sees = Fighter_Sees(sbPtr, target);
+
+	if (sees)
+	{
+		GetTargetingPointOfObject_Far(target, &where);
+	}
+
+	KillerMarine_Look(&fighterEyes, timeGetTime(), sees, where.vx, where.vy, where.vz);
+}
+
+// Whom he takes as a target: any player who's alive, on this machine or another, of any species, because in his game everyone is against
+// everyone. (The game's other marines leave a marine player alone, as one of theirs.) Anything that isn't a player, as the others do.
+static int Fighter_TargetFilter(STRATEGYBLOCK *candidate)
+{
+	if (candidate->I_SBtype == I_BehaviourNetGhost)
+	{
+		NETGHOSTDATABLOCK const *const ghost = static_cast<NETGHOSTDATABLOCK *>(candidate->SBdataptr);
+
+		// A dead player's ghost has already turned into a corpse, so it isn't one of these
+		switch (ghost->type)
+		{
+			case I_BehaviourMarinePlayer:
+			case I_BehaviourAlienPlayer:
+			case I_BehaviourPredatorPlayer:
+				return 1;
+			default:
+				return 0;
+		}
+	}
+
+	return Marine_TargetFilter(candidate);
+}
+
+// One frame of his gun: a player's pulse rifle, fired the way a player's is (FireAutomaticWeapon and PlayerFireLineOfSightAmmo, in
+// weapons.cpp). The gun owes FiringRate times the frame's time in rounds, and fires the whole ones. They all go along one ray, from his
+// gun's muzzle towards where he aims, turned by the gun's recoil judder (Weapon_RecoilJudder, the same sum as a player's, from how fast
+// he's moving). Only what the ray reaches is hurt, by the player's ammunition, through HandleWeaponImpact: a wall in the way takes them.
+static void Fighter_FiresAFrame(STRATEGYBLOCK *sbPtr, const VECTORCH *aim, int speed)
+{
+	MARINE_STATUS_BLOCK *const marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	TEMPLATE_WEAPON_DATA const *const gun = &TemplateWeapon[WEAPON_PULSERIFLE];
+
+	/* look after the gun flash and the sound, as the game's other marines do */
+	if (marineStatusPointer->myGunFlash) {
+		MaintainMarineGunFlash(sbPtr);
+	} else {
+		CreateMarineGunFlash(sbPtr);
+	}
+
+	if (marineStatusPointer->soundHandle != SOUND_NOACTIVEINDEX) {
+		Sound_Update3d(marineStatusPointer->soundHandle, &(sbPtr->DynPtr->Position));
+	} else {
+		Sound_Play(marineStatusPointer->My_Weapon->StartSound, "d", &(sbPtr->DynPtr->Position));
+		Sound_Play(marineStatusPointer->My_Weapon->LoopSound, "del", &(sbPtr->DynPtr->Position), &(marineStatusPointer->soundHandle));
+	}
+
+	fighterRoundsOwed += MUL_FIXED(gun->FiringRate, NormalFrameTime);
+
+	int rounds = fighterRoundsOwed >> ONE_FIXED_SHIFT;
+
+	fighterRoundsOwed &= ONE_FIXED - 1;
+
+	if (marineStatusPointer->clipammo != -1) {
+		if (rounds > marineStatusPointer->clipammo) {
+			rounds = marineStatusPointer->clipammo;
+		}
+
+		marineStatusPointer->clipammo -= rounds;
+	}
+
+	if (rounds <= 0 || marineStatusPointer->My_Gunflash_Section == NULL) {
+		return;
+	}
+
+	VECTORCH muzzle = marineStatusPointer->My_Gunflash_Section->World_Offset;
+	VECTORCH shot;
+
+	shot.vx = aim->vx - muzzle.vx;
+	shot.vy = aim->vy - muzzle.vy;
+	shot.vz = aim->vz - muzzle.vz;
+
+	// Aiming at his own muzzle, there's no way to point: no shot
+	if (shot.vx == 0 && shot.vy == 0 && shot.vz == 0) {
+		return;
+	}
+
+	Normalise(&shot);
+
+	// The judder turns the shot as seen from the gun, pointing along z, and that's then turned to point at where he aims
+	MATRIXCH towardsTheAim;
+	MATRIXCH judder;
+
+	MakeMatrixFromDirection(&shot, &towardsTheAim);
+	Weapon_RecoilJudder(gun, speed, &judder);
+	shot.vx = 0;
+	shot.vy = 0;
+	shot.vz = ONE_FIXED;
+	RotateVector(&shot, &judder);
+	RotateVector(&shot, &towardsTheAim);
+	Normalise(&shot);
+
+	FindPolygonInLineOfSight(&shot, &muzzle, 0, sbPtr->SBdptr);
+
+	if (LOS_ObjectHitPtr) {
+		HandleWeaponImpact(&LOS_Point, LOS_ObjectHitPtr->ObStrategyBlock, gun->PrimaryAmmoID, &shot, rounds * ONE_FIXED, LOS_HModel_Section);
+	}
+}
+
+// His firing, in place of the game's own for a pulse rifle, and of its panic fire: he never panics into firing wildly, because that fires
+// by the 1999 dice roll. He stands still and turns to face his target (where it is, he knows, as the game's marines always have). He fires
+// only when his eyes say he may, and then at where he aims (killer_marine.h), never at where the target really is.
+static STATE_RETURN_CONDITION Execute_MNS_FighterFires(STRATEGYBLOCK *sbPtr)
+{
+	MARINE_STATUS_BLOCK *const marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	uint32_t const now = timeGetTime();
+	int const speed = Approximate3dMagnitude(&sbPtr->DynPtr->LinVelocity);   // before he stands still: a player's judder is from how fast he moves
+	VECTORCH facing;
+	int32_t x, y, z;
+
+	marineStatusPointer->HModelController.Playing = 1;
+	sbPtr->DynPtr->LinVelocity.vx = 0;
+	sbPtr->DynPtr->LinVelocity.vy = 0;
+	sbPtr->DynPtr->LinVelocity.vz = 0;
+
+	if (marineStatusPointer->Target == NULL || !fighterEyes.seeing) {
+		EndMarineMuzzleFlash(sbPtr);
+		return SRC_Request_Wait;
+	}
+
+	if (marineStatusPointer->clipammo == 0) {
+		EndMarineMuzzleFlash(sbPtr);
+		return SRC_Request_Reload;
+	}
+
+	NPCGetTargetPosition(&(marineStatusPointer->weaponTarget), marineStatusPointer->Target);
+	facing.vx = marineStatusPointer->weaponTarget.vx - sbPtr->DynPtr->Position.vx;
+	facing.vy = 0;
+	facing.vz = marineStatusPointer->weaponTarget.vz - sbPtr->DynPtr->Position.vz;
+
+	bool const facesIt = NPCOrientateToVector(sbPtr, &facing, NPC_TURNRATE, NULL) && marineStatusPointer->HModelController.Tweening == Controller_NoTweening;
+
+	if (!facesIt || !KillerMarine_AimPoint(&fighterEyes, now, &x, &y, &z)) {
+		EndMarineMuzzleFlash(sbPtr);
+		return SRC_No_Change;
+	}
+
+	VECTORCH aim;
+
+	aim.vx = x;
+	aim.vy = y;
+	aim.vz = z;
+	Fighter_FiresAFrame(sbPtr, &aim, speed);
+	return SRC_No_Change;
+}
+
 static STATE_RETURN_CONDITION Execute_MNS_DischargeLOSWeapon(STRATEGYBLOCK *sbPtr)
 {
 	MARINE_STATUS_BLOCK *marineStatusPointer;
@@ -11038,6 +11296,12 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeLOSWeapon(STRATEGYBLOCK *sbPt
 	int correctlyOrientated,range;
 
 	LOCALASSERT(sbPtr);
+
+	// The marine who fights like a player fires as a player does, and only so (#210)
+	if (FightsLikeAPlayer(sbPtr)) {
+		return Execute_MNS_FighterFires(sbPtr);
+	}
+
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
 	LOCALASSERT(marineStatusPointer);
 
@@ -11565,7 +11829,8 @@ STRATEGYBLOCK *Marine_GetNewTarget(VECTORCH *marinepos, STRATEGYBLOCK *me)
 						}
 					}
 
-					if (Marine_TargetFilter(candidate)) {
+					// The marine who fights like a player has targets of his own (#210)
+					if (FightsLikeAPlayer(me) ? Fighter_TargetFilter(candidate) : Marine_TargetFilter(candidate)) {
 
 						dist=Approximate3dMagnitude(&offset);
 
@@ -15255,6 +15520,12 @@ static STATE_RETURN_CONDITION Execute_MNS_PanicFireLOSWeapon(STRATEGYBLOCK *sbPt
 	int volleytime,volleyrounds;
 
 	LOCALASSERT(sbPtr);
+
+	// The marine who fights like a player never panics into firing wildly: he fires as a player does, and only so (#210)
+	if (FightsLikeAPlayer(sbPtr)) {
+		return Execute_MNS_FighterFires(sbPtr);
+	}
+
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
 	LOCALASSERT(marineStatusPointer);
 

@@ -343,6 +343,271 @@
 					"to": "\tif (false)\n\t{\n\t\treturn INT32_MAX;\n\t}"
 				}
 			]
+		},
+		{
+			"name": "his firing doesn't send him to his own",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t// The marine who fights like a player fires as a player does, and only so (#210)\n\tif (FightsLikeAPlayer(sbPtr)) {\n\t\treturn Execute_MNS_FighterFires(sbPtr);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "his panic fire doesn't send him to his own",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t// The marine who fights like a player never panics into firing wildly: he fires as a player does, and only so (#210)\n\tif (FightsLikeAPlayer(sbPtr)) {\n\t\treturn Execute_MNS_FighterFires(sbPtr);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "he sees without display blocks, by rooms, through walls",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (target == NULL || target->DynPtr == NULL || sbPtr->SBdptr == NULL || target->SBdptr == NULL)",
+					"to": "if (target == NULL || target->DynPtr == NULL)"
+				}
+			]
+		},
+		{
+			"name": "a cloaked player isn't hidden from him",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (TargetIsACloakedGhost(target))\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "he sees by the 1999 test, with its dice",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "return NPCCanSeeTarget(sbPtr, target, MARINE_NEAR_VIEW_WIDTH) != 0;",
+					"to": "return MarineCanSeeTarget(sbPtr) != 0;"
+				}
+			]
+		},
+		{
+			"name": "his eyes always see",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "KillerMarine_Look(&fighterEyes, timeGetTime(), sees, where.vx, where.vy, where.vz);",
+					"to": "KillerMarine_Look(&fighterEyes, timeGetTime(), true, where.vx, where.vy, where.vz);"
+				}
+			]
+		},
+		{
+			"name": "his eyes aren't told every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (FightsLikeAPlayer(sbPtr)) {\n\t\tFighter_Looks(sbPtr);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "something else makes a marine fight like a player",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (FightsLikeAPlayer(sbPtr)) {\n\t\tFighter_Looks(sbPtr);\n\t}\n",
+					"to": "\tsomeoneFightsLikeAPlayer = true;\n\tif (FightsLikeAPlayer(sbPtr)) {\n\t\tFighter_Looks(sbPtr);\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a marine with any gun can be made him",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": " && marineStatus->My_Weapon->id == MNPCW_PulseRifle;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "he's known by part of his name",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "memcmp(sbPtr->SBname, fighterName, sizeof(fighterName)) == 0",
+					"to": "memcmp(sbPtr->SBname, fighterName, 4) == 0"
+				}
+			]
+		},
+		{
+			"name": "he fires before his eyes say he may",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!facesIt || !KillerMarine_AimPoint(&fighterEyes, now, &x, &y, &z)) {",
+					"to": "if (!facesIt || !(KillerMarine_AimPoint(&fighterEyes, now, &x, &y, &z) || true)) {"
+				}
+			]
+		},
+		{
+			"name": "he aims at where the target really is",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\taim.vx = x;\n\taim.vy = y;\n\taim.vz = z;\n",
+					"to": "\taim = marineStatusPointer->weaponTarget;\n"
+				}
+			]
+		},
+		{
+			"name": "his gun fires twice a frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tFighter_FiresAFrame(sbPtr, &aim, speed);\n\treturn SRC_No_Change;",
+					"to": "\tFighter_FiresAFrame(sbPtr, &aim, speed);\n\tFighter_FiresAFrame(sbPtr, &aim, speed);\n\treturn SRC_No_Change;"
+				}
+			]
+		},
+		{
+			"name": "his gun isn't a player's pulse rifle",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "TEMPLATE_WEAPON_DATA const *const gun = &TemplateWeapon[WEAPON_PULSERIFLE];",
+					"to": "TEMPLATE_WEAPON_DATA const *const gun = &TemplateWeapon[WEAPON_MINIGUN];"
+				}
+			]
+		},
+		{
+			"name": "his gun fires faster than a player's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "fighterRoundsOwed += MUL_FIXED(gun->FiringRate, NormalFrameTime);",
+					"to": "fighterRoundsOwed += MUL_FIXED(gun->FiringRate * 2, NormalFrameTime);"
+				}
+			]
+		},
+		{
+			"name": "his shots have no judder",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tRotateVector(&shot, &judder);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "his shots hurt the target directly, the 1999 way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "HandleWeaponImpact(&LOS_Point, LOS_ObjectHitPtr->ObStrategyBlock, gun->PrimaryAmmoID, &shot, rounds * ONE_FIXED, LOS_HModel_Section);",
+					"to": "CauseDamageToObject(marineStatusPointer->Target, &TemplateAmmo[gun->PrimaryAmmoID].MaxDamage[AvP.Difficulty], rounds * ONE_FIXED, NULL);"
+				}
+			]
+		},
+		{
+			"name": "his shots have no ray",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tFindPolygonInLineOfSight(&shot, &muzzle, 0, sbPtr->SBdptr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "his shots go through VerifyHitShot, which lets a wall through",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tFindPolygonInLineOfSight(&shot, &muzzle, 0, sbPtr->SBdptr);\n",
+					"to": "\tVerifyHitShot(sbPtr, marineStatusPointer->Target, &muzzle, &shot, gun->PrimaryAmmoID, rounds, 100000);\n\tFindPolygonInLineOfSight(&shot, &muzzle, 0, sbPtr->SBdptr);\n"
+				}
+			]
+		},
+		{
+			"name": "a marine firing far from the player hurts his target",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t/* I can't deal with this right now.  Better wait instead. */",
+					"to": "\tif (marineStatusPointer->Target) CauseDamageToObject(marineStatusPointer->Target, &TemplateAmmo[AMMO_10MM_CULW_NPC].MaxDamage[AvP.Difficulty], ONE_FIXED, NULL);"
+				}
+			]
+		},
+		{
+			"name": "his targets are the 1999 marine's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "FightsLikeAPlayer(me) ? Fighter_TargetFilter(candidate) : Marine_TargetFilter(candidate)",
+					"to": "Marine_TargetFilter(candidate)"
+				}
+			]
+		},
+		{
+			"name": "a marine player isn't his target",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tswitch (ghost->type)\n\t\t{\n\t\t\tcase I_BehaviourMarinePlayer:\n",
+					"to": "\t\tswitch (ghost->type)\n\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "his sight is put inside an #if",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "static bool Fighter_Sees(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target)\n{",
+					"to": "#if 1\nstatic bool Fighter_Sees(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target)\n{"
+				},
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\treturn NPCCanSeeTarget(sbPtr, target, MARINE_NEAR_VIEW_WIDTH) != 0;\n}\n",
+					"to": "\treturn NPCCanSeeTarget(sbPtr, target, MARINE_NEAR_VIEW_WIDTH) != 0;\n}\n#endif\n"
+				}
+			]
+		},
+		{
+			"name": "a player's judder isn't from how fast he moves",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "Weapon_RecoilJudder(twPtr, speed, &juddermat);",
+					"to": "Weapon_RecoilJudder(twPtr, 0, &juddermat);"
+				}
+			]
+		},
+		{
+			"name": "a player's gun keeps a judder sum of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "\t\t\t\t\tWeapon_RecoilJudder(twPtr, speed, &juddermat);\n",
+					"to": "\t\t\t\t\tWeapon_RecoilJudder(twPtr, speed, &juddermat);\n\t\t\t\t\tif (twPtr->RecoilMaxXTilt > 0) { juddermat.mat11 = ONE_FIXED; }\n"
+				}
+			]
+		},
+		{
+			"name": "the judder doesn't grow with how fast the shooter moves",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "\tjudder.EulerX = MUL_FIXED(judder.EulerX,(ONE_FIXED+(speed<<2)));\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

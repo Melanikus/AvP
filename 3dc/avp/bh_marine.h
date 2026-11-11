@@ -1,3 +1,5 @@
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   HudsonTest_FightsLikeAPlayer, for a Hudson run's marine who fights like a player (#210)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   CreateMarineBot, Marine_GuardAndFace and Marine_GuardThisSpot can be called from other files
 //   so can Marine_TakesNoNoticeOfTheSquad and Marine_WhatHeAndHisSquadSuspect, for a test
@@ -392,6 +394,8 @@
 	void Marine_GuardThisSpot(STRATEGYBLOCK *sbPtr, const VECTORCH *spot, AIMODULE *module);
 	void Marine_Hurry(STRATEGYBLOCK *sbPtr);
 	void Marine_TakesNoNoticeOfTheSquad(STRATEGYBLOCK *sbPtr);
+	// #210: only Hudson's files may call it (tools/check-hudson-asleep.ps1)
+	void HudsonTest_FightsLikeAPlayer(const STRATEGYBLOCK *sbPtr);
 	void Marine_WhatHeAndHisSquadSuspect(const STRATEGYBLOCK *sbPtr, int *hisTime, VECTORCH *hisPoint, int *squadTime, VECTORCH *squadPoint);
 	void MakeMarineNear(STRATEGYBLOCK *sbPtr);
 	void MakeMarineFar(STRATEGYBLOCK *sbPtr);

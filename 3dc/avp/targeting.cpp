@@ -1,5 +1,8 @@
 /* KJL 14:30:27 06/05/98 - weapon targeting code */
 // AvP port by Barry Duncan.
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   a rapid-fire gun's recoil judder is worked out by Weapon_RecoilJudder, which the marine who fights like a player (#210) uses too;
+//   a player's judder is exactly what it was, with the same random numbers taken in the same order
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the smart gun can see the M79's grenades, like other grenades;
 //   a ghost of an NPC can be locked on to as the real one can, in a game that plays as single player
@@ -78,6 +81,42 @@ DISPLAYBLOCK *SmartTarget_GetNewTarget(void);
 int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate);
 int PrintDebuggingText(const char* t, ...);
 
+// The turn a rapid-fire gun's recoil gives a shot: a random tilt up and down and from side to side, up to the weapon's RecoilMaxXTilt
+// and RecoilMaxYTilt, more the faster the shooter is moving. speed is how fast, in the game's mm a second (about 15000 for a running
+// marine). out is the turn, to apply to the direction the gun points in, as seen from the gun. Moved here unchanged from
+// CalculateWhereGunIsPointing, below, 2026-11-10 (#210): a player's gun and the marine who fights like a player (bh_marine.cpp) both take
+// their judder from here, so neither can be steadier than the other.
+void Weapon_RecoilJudder(const TEMPLATE_WEAPON_DATA *twPtr, int speed, MATRIXCH *out)
+{
+	EULER judder;
+
+	if (twPtr->RecoilMaxXTilt > 0)
+	{
+		judder.EulerX=(FastRandom()%twPtr->RecoilMaxXTilt)-twPtr->RecoilMaxXTilt/2;
+	}
+	else
+	{
+		judder.EulerX=0;
+	}
+	if (twPtr->RecoilMaxYTilt > 0)
+	{
+		judder.EulerY=(FastRandom()%twPtr->RecoilMaxYTilt)-twPtr->RecoilMaxYTilt/2;
+	}
+	else
+	{
+		judder.EulerY = 0;
+	}
+	judder.EulerZ = 0;
+
+	judder.EulerX = MUL_FIXED(judder.EulerX,(ONE_FIXED+(speed<<2)));
+	judder.EulerY = MUL_FIXED(judder.EulerY,(ONE_FIXED+(speed<<2)));
+
+	judder.EulerX&=wrap360;
+	judder.EulerY&=wrap360;
+
+	CreateEulerMatrix(&judder, out);
+}
+
 void CalculateWhereGunIsPointing(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA *weaponPtr)
 {
 	VIEWDESCRIPTORBLOCK *VDBPtr = ActiveVDBList[0];
@@ -107,7 +146,6 @@ void CalculateWhereGunIsPointing(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA
 		{
 			if ((twPtr->PrimaryIsRapidFire)||(weaponPtr->WeaponIDNumber == WEAPON_TWO_PISTOLS)) 
 			{
-				EULER judder;
 				MATRIXCH juddermat;
 
 				if (twPtr->RecoilMaxRandomZ>  0) 
@@ -121,31 +159,7 @@ void CalculateWhereGunIsPointing(TEMPLATE_WEAPON_DATA *twPtr, PLAYER_WEAPON_DATA
 					int speed=Approximate3dMagnitude(&Player->ObStrategyBlock->DynPtr->LinVelocity);
 					/* speed should be between ~0 and ~27000 (jumping alien). ~15000 is a moving marine. */
 
-					if (twPtr->RecoilMaxXTilt > 0) 
-					{
-						judder.EulerX=(FastRandom()%twPtr->RecoilMaxXTilt)-twPtr->RecoilMaxXTilt/2;
-					}
-					else
-					{
-						judder.EulerX=0;
-					}
-					if (twPtr->RecoilMaxYTilt > 0) 
-					{
-						judder.EulerY=(FastRandom()%twPtr->RecoilMaxYTilt)-twPtr->RecoilMaxYTilt/2;
-					}
-					else
-					{
-						judder.EulerY = 0;
-					}
-					judder.EulerZ = 0;
-
-					judder.EulerX = MUL_FIXED(judder.EulerX,(ONE_FIXED+(speed<<2)));
-					judder.EulerY = MUL_FIXED(judder.EulerY,(ONE_FIXED+(speed<<2)));
-
-					judder.EulerX&=wrap360;
-					judder.EulerY&=wrap360;
-
-					CreateEulerMatrix(&judder, &juddermat);
+					Weapon_RecoilJudder(twPtr, speed, &juddermat);
 					RotateVector(&GunMuzzleDirectionInVS, &juddermat);
 				}
 			}
