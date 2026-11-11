@@ -1104,6 +1104,26 @@
 					"to": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsWallsAndGravityOff);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: OLD: weapon_m79 copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a file outside the loaders' list copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->CollisionReportPtr = 0;\n",
+					"to": "\tlive->CollisionReportPtr = 0;\n\t// *live = block->dynamics;\n"
+				}
+			]
 		}
 	]
 }

@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -508,7 +509,7 @@ static int CountOf(std::string const &text, char const *words)
 static void TestTheLoadersAsk()
 {
 	std::string const avp = "3dc/avp/";
-	char const *const usingDynamics[] = { "bh_agun", "bh_alien", "bh_corpse", "bh_debris", "bh_facehugger", "bh_marine", "bh_platform_lift", "bh_predator", "bh_queen", "bh_weapon", "bh_xeno", "bonusabilities", "player", "pvisible" };
+	char const *const usingDynamics[] = { "bh_agun", "bh_alien", "bh_corpse", "bh_debris", "bh_facehugger", "bh_marine", "bh_platform_lift", "bh_predator", "bh_queen", "bh_weapon", "bh_xeno", "bonusabilities", "player", "pvisible", "weapon_m79" };
 
 	for (char const *const name : usingDynamics)
 	{
@@ -531,14 +532,56 @@ static void TestTheLoadersAsk()
 		{ "bh_platform_lift", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bh_predator", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 },
 		{ "bh_queen", ", &block->dynamics, kSaveHoldsWallsAndGravityOff);", 1 }, { "bh_weapon", ", &block->dynamics, kSaveHoldsGravityOff);", 13 },
 		{ "bh_xeno", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bonusabilities", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 },
-		{ "player", ", &block->dynamics, kSaveHoldsGravityOff);", 1 }, { "pvisible", ", &block->dynamics, kSaveHoldsGravityOff);", 1 } };
+		{ "player", ", &block->dynamics, kSaveHoldsGravityOff);", 1 }, { "pvisible", ", &block->dynamics, kSaveHoldsGravityOff);", 1 },
+		{ "weapon_m79", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 } };
+	int loaders = 0;
 
 	for (Holds const &h : holds)
 	{
 		std::string const text = ReadSourceFile((avp + h.name + ".cpp").c_str());
 		Check(CountOf(text, h.says) == h.count && CountOf(text, "Save_RestoreDynamics(") == h.count,
 			(std::string("each of ") + h.name + "'s loaders says what of its walls and gravity its save can hold off").c_str());
+		loaders += CountOf(text, "Save_RestoreDynamics(");
 	}
+
+	// Secondary's read of a23b233f, S1 (added 2026-11-11 by Melanikus (Third) for the AvP port, SAVE-HOSTILE-1): all 28 loaders of a saved
+	// dynamics block ask, the M79 grenade's too, and no file of the game's own code copies a saved one straight over. Every file is read,
+	// so a loader added later that copies one is found too.
+	Check(loaders == 28, ("all 28 loaders of a saved dynamics block put it back through the check (" + std::to_string(loaders) + ")").c_str());
+	std::string const here = __FILE__;
+	std::string::size_type const testsAt = here.rfind("tests");
+	size_t filesRead = 0;
+	std::string plainCopies;
+
+	for (char const *const top : { "3dc", "win32" })
+	{
+		std::filesystem::path const folder = std::filesystem::path(here.substr(0, testsAt)) / top;
+		std::error_code missing;
+
+		for (std::filesystem::recursive_directory_iterator walk(folder, missing), end; !missing && walk != end; walk.increment(missing))
+		{
+			std::string const ext = walk->path().extension().string();
+
+			if (!walk->is_regular_file() || (ext != ".cpp" && ext != ".c" && ext != ".h"))
+			{
+				continue;
+			}
+
+			std::ifstream file(walk->path(), std::ios::binary);
+			std::stringstream all;
+			all << file.rdbuf();
+			std::string const text = all.str();
+			filesRead++;
+
+			if (Has(text, "= block->dynamics;") || Has(text, "=block->dynamics;"))
+			{
+				plainCopies += " " + walk->path().filename().string();
+			}
+		}
+	}
+
+	Check(filesRead > 300 && plainCopies.empty(), ("no file of the game's own code copies a saved dynamics block straight over (" +
+		std::to_string(filesRead) + " files read" + (plainCopies.empty() ? std::string() : ";" + plainCopies) + ")").c_str());
 
 	Check(CountOf(ReadSourceFile("3dc/avp/save_checks.h"), "kSaveHoldsWallsAndGravityOff") == 2 && CountOf(ReadSourceFile("3dc/avp/bh_queen.cpp"), "kSaveHoldsWallsAndGravityOff") == 1,
 		"only the queen's loader keeps a save's walls off");
