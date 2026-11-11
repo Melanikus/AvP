@@ -223,7 +223,8 @@ namespace
 		kKindRegion,
 		kKindCode,
 		kKindNumber,   // a whole number from least to most
-		kKindFingerprint,  // a host's fingerprint: 32 hex digits, small letters, kept as its 16 bytes
+		kKindFingerprint,  // an identity's fingerprint: 32 hex digits, small letters, kept as its 16 bytes (an access answer's "fp")
+		kKindHostId,       // a host's whole id: 96 hex digits, small letters, kept as its 48 bytes (a game's "id", added 2026-11-10)
 		kKindHexBytes      // exactly mostLetters hex digits, small letters, kept as half as many bytes (a relay's keys; added 2026-11-09)
 	};
 
@@ -271,10 +272,10 @@ namespace
 		long most;
 		char *text;
 		long *number;
-		uint8_t *bytes;   // a fingerprint's 16 bytes; every other kind leaves it out, which makes it NULL
+		uint8_t *bytes;   // a fingerprint's 16 bytes, or a host id's 48; every other kind leaves it out, which makes it NULL
 	};
 
-	// The longest field names are 11 (levelNumber, fingerprint). A name longer than this is no field the protocol has.
+	// The longest field names are 11 (levelNumber). A name longer than this is no field the protocol has.
 	const size_t kMostFieldNameLetters = 16;
 	const int kMostFields = 16;
 
@@ -310,6 +311,20 @@ namespace
 				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes)))
 				{
 					return kRelayListBadFingerprint;
+				}
+
+				return why;
+			}
+
+			case kKindHostId:
+			{
+				// As a fingerprint is, by net_identity.h's own rule for an id: exactly 96 hex digits, small letters, and nothing after them
+				char hex[kNetIdentityIdHexBytes];
+				why = ReadString(r, hex, kNetIdentityIdHexBytes - 1, &length);
+
+				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_IdFromHex(hex, rule.bytes)))
+				{
+					return kRelayListBadHostId;
 				}
 
 				return why;
@@ -594,7 +609,6 @@ namespace
 	{
 		RelayListGame *games;
 		int ourVersion;
-		bool fingerprints;   // whether each game carries its host's fingerprint: only a v2 draft's do (RelayList_ReadGames)
 	};
 
 	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
@@ -603,7 +617,7 @@ namespace
 		RelayListGame &game = g.games[place];
 		long gameStyle = 0, levelNumber = 0, coopLobby = 0, players = 0, maxPlayers = 0, version = 0, hostMs = 0, seconds = 0;
 
-		// Every game carries its host's fingerprint (net_identity.h), so a joiner knows which host to expect: a game without one is refused,
+		// Every game carries its host's id (net_identity.h), so a joiner knows which host to expect: a game without one is refused,
 		// as a game missing any of its fields is, and the whole answer with it
 		FieldRule const rules[] =
 		{
@@ -620,17 +634,10 @@ namespace
 			{ "version", kKindNumber, 0, 1, kRelayListMostVersion, NULL, &version },
 			{ "hostMs", kKindNumber, 0, 0, kRelayListMostHostMs, NULL, &hostMs },
 			{ "seconds", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },
-			{ "fingerprint", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }
+			{ "id", kKindHostId, 0, 0, 0, NULL, NULL, game.hostId }
 		};
 
-		// Modified 2026-11-09 by Melanikus for the AvP port: the fingerprint is the last rule, and only a v2 draft's games have it. Without,
-		// the rules are version 1's, so a game is read exactly as version 1 reads it, and its fingerprint is left all 0.
-		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0])) - (g.fingerprints ? 0 : 1);
-
-		if (!g.fingerprints)
-		{
-			memset(game.fingerprint, 0, sizeof(game.fingerprint));
-		}
+		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0]));
 
 		RelayListRefusal const why = ReadEntry(r, rules, ruleCount);
 
@@ -820,18 +827,18 @@ namespace
 		return code && Relay_IsCode(code, strnlen(code, kRelayCodeLetters + 1));
 	}
 
-	// A fingerprint a host can list its game with: one was given, and it isn't all 0, which is what one never made looks like. A real one is
-	// the start of a SHA-384 sum, which is all 0 so rarely that it never happens.
-	bool IsAFingerprint(const uint8_t *fingerprint)
+	// A host id a host can list its game with: one was given, and it isn't all 0, which is what one never made looks like. A real one is a
+	// SHA-384 sum, which is all 0 so rarely that it never happens.
+	bool IsAHostId(const uint8_t *hostId)
 	{
-		if (!fingerprint)
+		if (!hostId)
 		{
 			return false;
 		}
 
-		for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
+		for (size_t i = 0; i < kNetIdentityIdBytes; i++)
 		{
-			if (fingerprint[i] != 0)
+			if (hostId[i] != 0)
 			{
 				return true;
 			}
@@ -840,11 +847,11 @@ namespace
 		return false;
 	}
 
-	// A fingerprint as the list wants it, written by net_identity.h's own writer: 32 hex digits, small letters, in quotes
-	void AddFingerprint(Writer &w, const uint8_t *fingerprint)
+	// A host id as the list wants it, written by net_identity.h's own writer: 96 hex digits, small letters, in quotes
+	void AddHostId(Writer &w, const uint8_t *hostId)
 	{
-		char hex[kNetIdentityFingerprintHexBytes];
-		NetIdentity_FingerprintHex(fingerprint, hex);
+		char hex[kNetIdentityIdHexBytes];
+		NetIdentity_IdHex(hostId, hex);
 
 		AddChar(w, '"');
 		Add(w, hex);
@@ -928,7 +935,8 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 		case kRelayListEndsTooSoon: return "the answer stops before its end";
 		case kRelayListNotWhatComesNext: return "the answer has something else where a , : } or ] has to be";
 		case kRelayListMoreAfterTheEnd: return "the answer has more after its end";
-		case kRelayListBadFingerprint: return "a game's fingerprint isn't 32 hex digits";
+		case kRelayListBadFingerprint: return "an answer's fingerprint isn't 32 hex digits";
+		case kRelayListBadHostId: return "a game's host id isn't 96 hex digits";
 		case kRelayListBadStatus: return "the answer has an HTTP status the protocol never gives an access request";
 		case kRelayListBadWord: return "the answer's state or error isn't one of the protocol's words for its status";
 		case kRelayListNotOurKey: return "the answer is about another key than this PC's";
@@ -937,12 +945,12 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 	return "the answer was refused for a reason with no words";
 }
 
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
 {
 	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
 	*count = 0;
 	int n = 0;
-	GamesInto into = { games, ourVersion, fingerprints };
+	GamesInto into = { games, ourVersion };
 	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
 
 	if (why == kRelayListAccepted)
@@ -1028,7 +1036,7 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char re
 	return why;
 }
 
-bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, const uint8_t *owner, char *body, size_t room)
+bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
 {
 	Writer w = { body, room, 0, room > 0 };
 
@@ -1041,7 +1049,7 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, cons
 		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
 		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
 		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
-		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || (withFingerprint && !IsAFingerprint(l.fingerprint)))
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || !IsAHostId(l.hostId))
 	{
 		return false;
 	}
@@ -1084,12 +1092,9 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, cons
 	AddName(w, "version");
 	AddNumber(w, static_cast<unsigned long long>(l.version));
 
-	// Only a v2 draft's listing carries the fingerprint (modified 2026-11-09 by Melanikus for the AvP port): version 1's has no such field
-	if (withFingerprint)
-	{
-		AddName(w, "fingerprint");
-		AddFingerprint(w, l.fingerprint);
-	}
+	// The host's id (modified 2026-11-09 by Melanikus for the AvP port): "id", all 48 bytes, since 2026-11-10 (SERVER-BLOCKERS item 6)
+	AddName(w, "id");
+	AddHostId(w, l.hostId);
 
 	AddName(w, "hostMs");
 	AddNumber(w, static_cast<unsigned long long>(l.hostMs));

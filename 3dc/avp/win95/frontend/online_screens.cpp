@@ -500,7 +500,6 @@ static const char *const kWords[] =
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
 	"Your game's room on the relay has gone",                     // kOnlineWordsRelayGone
-	"The host runs another test build of the v2 draft",           // kOnlineWordsOtherBuild
 	"Read it to the host: the same 6 digits on both screens means nobody is in between",  // kOnlineWordsCheckCodeMeans
 	"Ask the player for theirs: the same 6 digits on both screens means nobody is in between"   // kOnlineWordsCheckCodeMeansHost
 };

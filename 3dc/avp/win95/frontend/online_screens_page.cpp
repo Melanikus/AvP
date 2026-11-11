@@ -4,7 +4,8 @@
 // lit by the menus' own highlight glow (Menus/glowy_middle.RIM), drawn the way the HUD draws the motion tracker's turning disc.
 //
 // Modified 2026-11-09 by Melanikus for the AvP port: the check code on the joiner's asking screen and for the host's waiting request
-// (CRYPTO.md section 8), and the words for a host that's another v2 test build (JBLD).
+// (CRYPTO.md section 8). (The words for a host that's another v2 test build, JBLD, went on 2026-11-10 with the v2 draft's same-commit
+// rule, #175 PR 3a.)
 
 #include "3dc.h"
 #include "inline.h"
@@ -344,7 +345,6 @@ void OnlinePage_Opened(void)
 	searchBox[0] = '\0';
 	lastGameKept = false;
 	StartFetching();
-	Net_ForgetRelayTimes();
 }
 
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why)
@@ -437,9 +437,6 @@ static int VisibleIndexOf(const OnlineGameKey &key)
 bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 {
 	(void)listChanged;   // the rows are read from the list every frame: there are at most ten, and that keeps them right whatever changed
-
-	// The joiner's round trip to each relay, for the ping column. It starts by itself once the list has named the relays (Fifth's).
-	Net_TimeRelaysForJoining();
 
 	PageState const stateBefore = pageState;
 	OnlineRow before[kOnlineMostRows];
@@ -963,9 +960,6 @@ bool OnlinePage_JoinEnded(void)
 			return true;
 		case kNetJoinAnswerNoAnswer:
 			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));
-			return true;
-		case kNetJoinAnswerOtherBuild:
-			SayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));
 			return true;
 		case kNetJoinAnswerWaiting:
 			// The host's no, busy and no answer all come as answers (networking.h), so a request still waiting when the join ends was Esc

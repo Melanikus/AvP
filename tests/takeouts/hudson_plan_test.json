@@ -9708,16 +9708,6 @@
 			]
 		},
 		{
-			"name": "a -NetV2 run doesn't tell the game -netv2",
-			"changes": [
-				{
-					"file": "tools/hudson/run-hudson.ps1",
-					"from": "if ($NetV2) { $relaySwitch += ' -netv2' }\n",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "a -SecondCopy run doesn't tell the game -secondcopy",
 			"changes": [
 				{
@@ -9752,7 +9742,7 @@
 			"changes": [
 				{
 					"file": "tools/hudson/run-net-pair.ps1",
-					"from": "    if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }\n",
+					"from": "    if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }\n",
 					"to": ""
 				}
 			]

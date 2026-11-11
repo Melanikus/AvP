@@ -792,9 +792,8 @@ static void TestTheCheckCode()
 		Has(menus, "OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))\n\t{\n\t\tRenderSmallMenuText(relayNews, MENU_CENTREX, 40,"),
 		"so the co-op host page holds it back while it answers, and never draws it over the check code");
 
-	std::string const ended = Between(page, "bool OnlinePage_JoinEnded(void)", "\n}\n");
-	Check(Has(ended, "case kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));"),
-		"a host that's another test build of the v2 draft is said so, not taken for a join that just failed");
+	// (Removed 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: the answer for a host that's another test build of the v2 draft went
+	// with the draft's same-commit rule.)
 }
 
 int main()

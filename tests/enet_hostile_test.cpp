@@ -1024,11 +1024,12 @@ static void TestTheTokenForAConnect()
 	enet_host_destroy(host);
 }
 
-// Added 2026-11-09 by Melanikus for the AvP port: what a CONNECT says reaches the host as it was. The v2 draft (networking.h) puts its
-// commit in a CONNECT's data, and the host checks it on its CONNECT event (JBLD). Patch 006 sends the CONNECT twice, the second time with
-// the token: that's the same command, with only the token copied in (006's enet_protocol_put_cookie_in_connect), so its data is the first's
-// (host.c, enet_host_connect), and the host's event gets it from the CONNECT it took (protocol.c, enet_protocol_handle_connect, then the
-// event's data). This proves it on the real thing, for 0 (every game without the draft), a commit, and every bit set.
+// Added 2026-11-09 by Melanikus for the AvP port: what a CONNECT says reaches the host as it was. Patch 006 sends the CONNECT twice, the
+// second time with the token: that's the same command, with only the token copied in (006's enet_protocol_put_cookie_in_connect), so its
+// data is the first's (host.c, enet_host_connect), and the host's event gets it from the CONNECT it took (protocol.c,
+// enet_protocol_handle_connect, then the event's data). This proves it on the real thing, for 0 (what every game says), another number, and
+// every bit set. Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): the game's CONNECT says 0 and its host doesn't look at it,
+// since the v2 draft's same-commit word (JBLD) went; this stays as the proof that patch 006's second CONNECT changes nothing but the token.
 static void TestAConnectsData()
 {
 	enet_uint32 const said[] = { 0, 0x5a1e7c03u, 0xFFFFFFFFu };

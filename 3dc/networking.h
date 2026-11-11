@@ -90,13 +90,11 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 
 // SEALED OR NOTHING (#188). Added 2026-11-10 by Melanikus for the AvP port, for the owner's boundary (2026-11-09 night): beyond the home
 // network a game is sealed, through the relay, or it doesn't happen; a plain game, as LAN always was, is only ever between addresses on the
-// home network (net_checks.h's NetAddress_IsThisNetwork: 10/8, 172.16/12, 192.168/16, 127/8 and 169.254/16). For now only with the v2
-// draft (Net_V2DraftOn, below): without it, every one of these is as it was. #175's last part turns it on for every player.
+// home network (net_checks.h's NetAddress_IsThisNetwork: 10/8, 172.16/12, 192.168/16, 127/8 and 169.254/16). For every game (#175 PR 3a).
 //   - Net_HostGame, with a server in servers.cfg (Relay_ServerName, relay_list.h), hosts online: through that server's relay, sealed, or
 //     not at all. It never opens on this network instead, and never opens the search port. With no server, it's a home game, as below.
 //   - Net_HostAtHome hosts a home game, whatever servers.cfg says: plain, found by a search on this network, and deaf to every address
-//     that isn't on the home network, so a forwarded router port can't bring in a joiner from the internet. Without the draft it's
-//     Net_HostGame.
+//     that isn't on the home network, so a forwarded router port can't bring in a joiner from the internet.
 //   - Net_HostFailedWhy: why the last of the two gave NET_FAIL for one of online play's reasons, in the game's own fixed words. NULL if it
 //     didn't fail, or failed for one of the game's older reasons (networking not started, the session or player not made), which the
 //     screen says in its own words. When it's only that the server hasn't answered yet, Net_ServerState says kNetServerAsking: the screen
@@ -106,7 +104,7 @@ const char *Net_HostFailedWhy(void);
 
 // Where the online server stands, for a host's screen before it hosts, and while it waits. It only reads, so a screen can ask every
 // frame. Net_HostGame asks the server when it hasn't been asked; so does the games page (RelayList_FindRelays).
-int const kNetServerNone = 0;      // no server in servers.cfg, or the draft is off: a host's game is a home game
+int const kNetServerNone = 0;      // no server in servers.cfg: a host's game is a home game
 int const kNetServerAsking = 1;    // the server is being asked, or hasn't been yet, and hasn't answered: wait, then host
 int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
@@ -114,11 +112,11 @@ int const kNetServerCantUse = 3;   // the server can't be used just now: why say
 int Net_ServerState(const char **why);
 
 // Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game on this network whose host isn't on the home network
-// (from a typed address, or a search's answer), with the draft. The game's own fixed words, or NULL if it wasn't refused that way.
+// (from a typed address, or a search's answer). The game's own fixed words, or NULL if it wasn't refused that way.
 const char *Net_JoinRefusedWhy(void);
 
-// Whether the last search left the typed address unasked, as it isn't on the home network (with the draft): the words for the games
-// page, or NULL if it was asked or there was none
+// Whether the last search left the typed address unasked, as it isn't on the home network: the words for the games page, or NULL if it
+// was asked or there was none
 const char *Net_TypedAddressRefusedWhy(void);
 
 // What a search for games is told about this one, for a game from the co-op campaign page, whose level changes as the host changes its rows.
@@ -173,22 +171,16 @@ Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in 
 Version 113 - 112, and whether a marine player's shoulder lamp is on, in a spare bit after landingNoise in a player's state, for the mode that plays like single player
 Version 114 - 113, and a joiner asks the host first: its request to join (its "let me in", with its name) is held until the host answers yes, or closes it with no, busy or no answer
 Version 115 - a -dev v2 draft (-dev -netv2), for good: two 115 copies play only if they're the same build (JBLD); never a players' number. Players' v2 will take the next free number (116 or later).
+Version 116 - version 2 for every game (#175 PR 3a): through a relay, only its sealed channel, handshakes A and B and sealed datagrams, the listing carrying the host's 48-byte id; no plain game beyond the home network; no same-commit word in the CONNECT
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 114; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 116; // bjd - my version, not directplay compatible
 
-// Added 2026-11-09 by Melanikus for the AvP port: PROTOCOL VERSION 2'S DRAFT, for tests only (Secondary's ruling, accepted by PO). Version 2
-// (the relays' handshakes and sealed datagrams) is written but not finished, so a player's game never uses it: it's on only in a copy
-// started with -dev -netv2, made by tools/build-and-package.ps1 (so it knows the commit it was made from). That copy speaks 115, and every
-// other speaks kMultiplayerVersion, the players' number, exactly as before: with the draft off, nothing of version 2 runs at all. Two 115
-// copies play only if they were made from the same commit, because drafts change what they send: the joiner puts its commit in ENet's
-// CONNECT, and the host closes any other at once with kNetJoinRefusedOtherBuild.
-int const kNetV2DraftVersion = 115;
-extern bool NetV2DraftAsked;   // the command line had -netv2 (winmain.cpp). It counts only with -dev, in a build that knows its commit.
-bool Net_V2DraftOn(void);      // whether this copy runs the draft: -dev, -netv2, and a build that knows its commit
-int Net_OurVersion(void);      // kNetV2DraftVersion with the draft on, else kMultiplayerVersion: the version this copy says and asks for
+// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): protocol version 2's draft, which only -dev -netv2 turned on and which spoke
+// 115, is now every game's protocol, at 116 (above). Its switch (Net_V2DraftOn, NetV2DraftAsked, -netv2) is gone, and with it beta.1's
+// version 1 relay path and the draft's same-commit rule (JBLD): the version is what two builds must share.
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -284,12 +276,9 @@ int const kNetRelayJoinStepReaching = 1;
 int const kNetRelayJoinStepIntroducing = 2;
 int Net_RelayJoinStep();
 
-// The joiner's round trip to each relay, for the games page's ping column (PROTOCOL.md: 3 echoes to each relay the list names, the lowest
-// kept; a game's estimate is this and its hostMs). Net_TimeRelaysForJoining goes each frame the page is up, and starts once the list has
-// named its relays; Net_ForgetRelayTimes, when the page opens, so they're timed again. Net_JoinerMsToRelay gives a region's time in ms, or
-// -1 until it's timed, or if its relay didn't answer.
-void Net_TimeRelaysForJoining();
-void Net_ForgetRelayTimes();
+// The joiner's round trip to its relay, for the ping column and the line in play: in ms, from the channel's own timing once a join has made
+// it, for that relay's region; -1 before, or for any other region (modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: version
+// 1's timing of every relay with plain echoes, before a join, went with version 1). Only reads.
 int Net_JoinerMsToRelay(const char *region);
 
 // A game from the relays' list (relay_list_text.h's RelayListGame) goes on the list of sessions, to be joined with Net_ConnectToSession like
@@ -318,7 +307,6 @@ void Net_LetEveryJoinerIn(bool yes);
 unsigned int const kNetJoinRefusedNo = 0x4A4E4F2Eu;         // "JNO.": the host said no
 unsigned int const kNetJoinRefusedBusy = 0x4A425359u;       // "JBSY": the host was answering another joiner
 unsigned int const kNetJoinRefusedNoAnswer = 0x4A4E4141u;   // "JNAA": nobody answered in time
-unsigned int const kNetJoinRefusedOtherBuild = 0x4A424C44u; // "JBLD": a v2 draft made from another commit (added 2026-11-09 by Melanikus for the AvP port)
 
 // The joiner's side: where its request has got to
 int const kNetJoinAnswerNone = 0;       // no request: not joining, or not yet connected
@@ -327,7 +315,6 @@ int const kNetJoinAnswerYes = 2;        // let in: the host gave it its player I
 int const kNetJoinAnswerNo = 3;
 int const kNetJoinAnswerBusy = 4;
 int const kNetJoinAnswerNoAnswer = 5;   // the host's limit passed, or the connection closed with no answer
-int const kNetJoinAnswerOtherBuild = 6; // the host is a v2 draft made from another commit (JBLD), so the two can't play (added 2026-11-09 by Melanikus for the AvP port)
 int Net_JoinAnswerNow();
 
 // THE CHECK CODE. Added 2026-11-09 by Melanikus for the AvP port (protocol version 2, CRYPTO.md section 8: "always shown on the join
@@ -353,8 +340,8 @@ int const kNetRelayHostFinding = 1;    // timing the relays the list named, to o
 int const kNetRelayHostListed = 2;     // the room is open, and the game is going on the list: region and ms say through which relay, and how far
 int const kNetRelayHostNoRelay = 3;    // no relay answered, or none could be used: the game is open on this network only
 int const kNetRelayHostRoomGone = 4;   // the room on the relay has gone (why says why), so the game is open on this network instead
-// Added 2026-11-10 by Melanikus for the AvP port (#188): with the v2 draft, an online game that loses its relay can't go on sealed, so it
-// has ended (why says why). Nothing reaches the host any more, and nothing on this network can find or join it: the screen ends the game.
+// Added 2026-11-10 by Melanikus for the AvP port (#188): an online game that loses its relay can't go on sealed, so it has ended (why says
+// why). Nothing reaches the host any more, and nothing on this network can find or join it: the screen ends the game.
 int const kNetRelayHostEnded = 5;
 struct NetRelayHostState
 {

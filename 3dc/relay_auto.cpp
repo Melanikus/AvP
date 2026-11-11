@@ -127,7 +127,7 @@ int RelayAuto_FindAGame(void)
 
 		if (!haveChosen && RelayList_FoundGames(games, &count, &why))
 		{
-			int const picked = why ? -1 : RelayAuto_PickGame(games, count, Net_OurVersion());
+			int const picked = why ? -1 : RelayAuto_PickGame(games, count, kMultiplayerVersion);
 
 			// The list's answer was refused: its words are the game's own (relay_list.h), said once each time they change
 			if (why && why != lastWhy)
