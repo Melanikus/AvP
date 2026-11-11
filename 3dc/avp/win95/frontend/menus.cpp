@@ -4368,7 +4368,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				// Modified 2026-11-10 by Melanikus for the AvP port (#175's last part, PO's rulings): a way online asks for the player's yes to
 				// the server in servers.cfg first, as its row is pressed (server_yes_page.h, ServerYesPage_WayIn). Every other row goes where it
 				// always went.
-				enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());
+				const enum AVPMENU_ID page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());
 
 				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)
 				if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
