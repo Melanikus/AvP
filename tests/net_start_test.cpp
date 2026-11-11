@@ -100,27 +100,14 @@ bool RelayList_Relays(RelayListRelay *relays, int *count)
 // Added 2026-11-10 by Melanikus for the AvP port (#188): the server servers.cfg names, and where it stands. There's a server when the list
 // names relays (relayNamed), and it's good then, and still to answer when it doesn't, unless a test says otherwise.
 static int serverInTheFile = -1;          // -1: as relayNamed says; 0: no server in the file; 1: a server
-static int serverStateGiven = -1;         // -1: as relayNamed says; otherwise the kRelayServer... the stand-in gives
-static const char *serverStateWhy = NULL; // with serverStateGiven
+static int lineStateGiven = -1;           // -1: as relayNamed says (answered, or still asked); otherwise the line's kRelayLine... state
+static const char *lineStateWhy = NULL;   // with lineStateGiven kRelayLineNoAnswer: the list's why (modified 2026-11-11: each line's own state)
 static int serverAsked = 0;               // RelayList_FindRelays's calls
 
 const char *Relay_ServerName(void)
 {
 	bool const set = serverInTheFile < 0 ? relayNamed : serverInTheFile == 1;
 	return set ? "Test server" : "";
-}
-
-int RelayList_ServerState(const char **why)
-{
-	*why = NULL;
-
-	if (serverStateGiven >= 0)
-	{
-		*why = serverStateWhy;
-		return serverStateGiven;
-	}
-
-	return relayNamed ? kRelayServerGood : kRelayServerAsking;
 }
 
 void RelayList_FindRelays(void)
@@ -218,8 +205,8 @@ int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem
 // Added 2026-11-11 by Melanikus for the AvP port (one model for every line): the per-line calls networking.cpp makes. Here there's one
 // good line, place 0, whenever the stand-ins above say servers.cfg names a server (Relay_ServerName). Its relay is the one the list hands
 // over above (relayAddressNamed, at 27500) while relayNamed says the list names it; its keys are the test's own, as above; and it's the
-// line hosted on, unless a test says otherwise (hostLineGiven). A line's state is what RelayList_ServerState's stand-in says, and this PC
-// is approved on it.
+// line hosted on, unless a test says otherwise (hostLineGiven). A line's state is answered while relayNamed says so, still asked when
+// it doesn't, or the one a test gives (lineStateGiven), and this PC is approved on it.
 static int hostLineGiven = -2;       // -2: the first line while relayNamed says so, else none; otherwise the line RelayList_HostLine gives
 static int linesInTheFile = 1;       // how many good lines there are when servers.cfg names a server; a second line's relay is elsewhere
 static enet_uint32 const kSecondRelayHost = 0x0D0C0B0B;
@@ -282,11 +269,8 @@ bool RelayList_LineNow(int place, RelayListLineNow *out)
 	out->pingMs = -1;
 	out->access = kRelayAccessIsApproved;
 
-	const char *why = NULL;
-	int const state = RelayList_ServerState(&why);
-	out->state = state == kRelayServerGood ? kRelayLineAnswered : state == kRelayServerNeedsYes ? kRelayLineNoYes
-		: state == kRelayServerCantUse ? kRelayLineNoAnswer : kRelayLineAsking;
-	out->why = state == kRelayServerCantUse ? why : NULL;
+	out->state = lineStateGiven >= 0 ? lineStateGiven : relayNamed ? kRelayLineAnswered : kRelayLineAsking;
+	out->why = out->state == kRelayLineNoAnswer ? lineStateWhy : NULL;
 	return true;
 }
 
@@ -4196,28 +4180,28 @@ static void TestSealedOrNothing()
 	EndTheGame();
 
 	// The chosen line's server hasn't answered yet: not hosted, nothing made, and the screen told to wait for it
-	serverStateGiven = kRelayServerAsking;
+	lineStateGiven = kRelayLineAsking;
 	int const hostsBeforeTheAnswer = hostsCreated;
 	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the server hasn't answered yet") == 0
 		&& Net_ServerState(&why) == kNetServerAsking && hostsCreated == hostsBeforeTheAnswer,
 		"an online host whose chosen server hasn't answered yet isn't hosted, makes nothing, and the screen is told to wait for it");
 
 	// One whose server can't be used: not hosted, with the list's own words
-	serverStateGiven = kRelayServerCantUse;
-	serverStateWhy = "the relay server couldn't be reached";
+	lineStateGiven = kRelayLineNoAnswer;
+	lineStateWhy = "the relay server couldn't be reached";
 	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the relay server couldn't be reached") == 0
 		&& Net_ServerState(&why) == kNetServerCantUse && why != NULL && strcmp(why, "the relay server couldn't be reached") == 0 && hostsCreated == hostsBeforeTheAnswer,
 		"and one whose server can't be reached isn't hosted either, saying the list's words, and makes nothing");
 
 	// One whose line the player hasn't said yes to: nothing is made, and nothing is sent anywhere
-	serverStateGiven = kRelayServerNeedsYes;
-	serverStateWhy = NULL;
+	lineStateGiven = kRelayLineNoYes;
+	lineStateWhy = NULL;
 	size_t const sentBeforeTheYes = datagramsSentTo.size();
 	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "you haven't said yes to the server in servers.cfg yet") == 0
 		&& Net_ServerState(&why) == kNetServerNeedsYes && hostsCreated == hostsBeforeTheAnswer && datagramsSentTo.size() == sentBeforeTheYes,
 		"before the yes, no host is made and nothing is sent anywhere");
-	serverStateGiven = -1;
-	serverStateWhy = NULL;
+	lineStateGiven = -1;
+	lineStateWhy = NULL;
 	EndTheGame();
 
 	// A plain game, from anywhere, isn't joined: refused before anything is opened, saying why
