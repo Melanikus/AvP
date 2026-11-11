@@ -197,7 +197,88 @@ void AlienWaysGuide::Clear()
 		followers[f].mapNext = false;
 		followers[f].restUntil = 0;
 		followers[f].stuckUntil = 0;
+		ForgetTheWatchdog(&followers[f]);
 	}
+}
+
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port: THE WATCHDOG (alien_ways_guide.h; #109).
+// Nothing shut for it and no re-plans counted, as for an alien the guide has never seen: when it's let go, and at a level's start and end.
+// Those are the only ways a place is freed, so an alien that takes one always finds it so. A place's time of 0 is free from the start,
+// because the guide's time starts at 0 and only goes on.
+void AlienWaysGuide::ForgetTheWatchdog(Follower *follower)
+{
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		follower->shutPolygon[s] = -1;
+		follower->shutUntil[s] = 0;
+	}
+
+	for (int r = 0; r < kAlienWaysMostReplans; r++)
+	{
+		follower->replanCountsUntil[r] = 0;
+	}
+
+	follower->replanning = false;
+	follower->passedAPoint = false;
+	follower->headwayFrom = AlienWaysXYZ{ 0, 0, 0 };
+}
+
+// The polygon is shut for this alien, and only it, for kAlienWaysShutFor from now. One shut already is shut for longer. Otherwise it goes
+// in a free place, or, with none free, in the place of the one shut longest ago: every shut lasts as long, so that's the one that ends first.
+// A polygon of -1, not known, shuts nothing.
+void AlienWaysGuide::ShutForIt(Follower *follower, int polygon)
+{
+	if (polygon < 0)
+	{
+		return;
+	}
+
+	size_t place = 0;
+
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		if (now < follower->shutUntil[s] && follower->shutPolygon[s] == polygon)
+		{
+			follower->shutUntil[s] = now + kAlienWaysShutFor;
+			return;
+		}
+
+		if (follower->shutUntil[s] < follower->shutUntil[place])
+		{
+			place = s;
+		}
+	}
+
+	follower->shutPolygon[place] = polygon;
+	follower->shutUntil[place] = now + kAlienWaysShutFor;
+}
+
+// THE CAP: whether this alien may re-plan now. It may if fewer than kAlienWaysMostReplans of its re-plans were in the last
+// kAlienWaysReplansWithin. If so, this one is counted, and the answer is which one it is, from 1, for the log. 0 means its re-plans are used up.
+int AlienWaysGuide::TakeAReplan(Follower *follower)
+{
+	int freePlace = -1;
+	int counted = 0;
+
+	for (int r = 0; r < kAlienWaysMostReplans; r++)
+	{
+		if (now < follower->replanCountsUntil[r])
+		{
+			counted++;
+		}
+		else if (freePlace < 0)
+		{
+			freePlace = r;
+		}
+	}
+
+	if (freePlace < 0)
+	{
+		return 0;
+	}
+
+	follower->replanCountsUntil[freePlace] = now + kAlienWaysReplansWithin;
+	return counted + 1;
 }
 
 int AlienWaysGuide::Find(const AlienWaysWho &who) const
@@ -268,6 +349,10 @@ void AlienWaysGuide::LetGo(int f)
 	follower.queued = false;
 	follower.keptCount = 0;
 	DropTheWay(&follower);
+
+	// What the watchdog kept for it goes too (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109), so nothing piles up across
+	// a level as aliens die or go, and an alien later given this place starts with nothing shut
+	ForgetTheWatchdog(&follower);
 }
 
 bool AlienWaysGuide::Forget(const AlienWaysWho &who)
@@ -299,7 +384,7 @@ bool AlienWaysGuide::GuidedThisFrame(const AlienWaysWho &who) const
 bool AlienWaysGuide::RestingAfterStuck(const AlienWaysWho &who) const
 {
 	int const f = Find(who);
-	return f >= 0 && now < followers[f].stuckUntil;
+	return f >= 0 && (now < followers[f].stuckUntil || (followers[f].replanning && followers[f].count == 0));
 }
 
 size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
@@ -513,6 +598,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		line.to = follower.last.goal;
 		line.toTheTarget = follower.last.goalIsTheTarget;
 		line.waitedMs = now - follower.askedAt;
+		line.afterReplan = follower.replanning;
 
 		// It starts on a polygon of the kind it's standing on: an alien low on a wall starts on the wall, not the floor just below it.
 		// If there's none of that kind near, the nearest of any kind. Its own module's polygons are looked through first. If none of them is
@@ -589,16 +675,22 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		bool const flanker = follower.ranked && follower.flanker;
 		const char *why = nullptr;
 
+		// What the search keeps off: the doors shut now, and the polygons shut for this alien alone (THE WATCHDOG). Both searches take it.
+		// Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109): the map's search takes it too, so a re-plan's way keeps off the
+		// polygons shut for it whichever search finds it.
+		const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to);
+
 		if (onGrid)
 		{
 			why = grid->StartSearch(follower.last.at, follower.last.goal, kNpcGridAlien, kAlienWaysFloorPrice, kAlienWaysGridMostLooks,
-				claimsOn ? &claims : nullptr, next, ShutForTheGrid(*map),
+				claimsOn ? &claims : nullptr, next, shut,
 				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
 		}
 		else
 		{
 			why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
-				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
+				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor,
+				shut);
 		}
 
 		line.onGrid = onGrid;
@@ -663,24 +755,51 @@ AlienWaysSearch AlienWaysGuide::WorkOnGrid(int looksAllowed)
 	return result == kNpcGridFound ? kAlienWaysFound : kAlienWaysNoWay;
 }
 
-// The doors shut now, as the grid's search takes them: a byte for each polygon of the map, not 0 where that polygon is part of a door that's
-// shut. The map keeps whether a door is shut by the door's number (Secondary's catch), so each polygon's door is looked up. Made when a search
-// starts, and kept untouched until the next one starts, as the grid needs. Nothing on a level with no doors.
-const std::vector<uint8_t> *AlienWaysGuide::ShutForTheGrid(const AlienWaysMap &map)
+// What a search keeps off, as both searches take it: a byte for each polygon of the map, not 0 where the search keeps off that polygon.
+// - The doors shut now. The map keeps whether a door is shut by the door's number (Secondary's catch), so each polygon's door is looked up.
+// - Modified 2026-11-11 by Melanikus (Third) for the AvP port (THE WATCHDOG, alien_ways_guide.h; #109): the polygons shut for this alien
+//   alone, and not yet open again, but never from or to, the polygons it and its goal are on. Shut, the one it's on would leave its start
+//   boxed in on the grid, and its goal's would leave nowhere to arrive.
+// Made when a search starts, and kept untouched until the next one starts, as both searches need. Nothing, when nothing is kept off.
+const std::vector<uint8_t> *AlienWaysGuide::ShutForTheSearch(const AlienWaysMap &map, const Follower &follower, int from, int to)
 {
-	if (map.Doors() <= 0)
+	size_t const polygons = map.Polygons();
+
+	// Whether the alien's place s holds a polygon this search keeps off: still shut, one of the map's, and neither from nor to
+	auto const keptOff = [&](size_t s)
+	{
+		int const polygon = follower.shutPolygon[s];
+		return now < follower.shutUntil[s] && polygon >= 0 && static_cast<size_t>(polygon) < polygons && polygon != from && polygon != to;
+	};
+
+	bool itsOwn = false;
+
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		itsOwn = itsOwn || keptOff(s);
+	}
+
+	if (map.Doors() <= 0 && !itsOwn)
 	{
 		return nullptr;
 	}
 
-	gridShut.assign(map.Polygons(), 0);
+	searchShut.assign(polygons, 0);
 
-	for (size_t p = 0; p < gridShut.size(); p++)
+	for (size_t p = 0; p < searchShut.size() && map.Doors() > 0; p++)
 	{
-		gridShut[p] = map.DoorShut(map.DoorOf(static_cast<int>(p))) ? 1 : 0;
+		searchShut[p] = map.DoorShut(map.DoorOf(static_cast<int>(p))) ? 1 : 0;
 	}
 
-	return &gridShut;
+	for (size_t s = 0; s < kAlienWaysMostShut; s++)
+	{
+		if (keptOff(s))
+		{
+			searchShut[static_cast<size_t>(follower.shutPolygon[s])] = 1;
+		}
+	}
+
+	return &searchShut;
 }
 
 // The search has ended: the alien it was for gets the way, or is told there's none
@@ -703,6 +822,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	line.arrivalDegrees = -1;
 	line.onGrid = searchOnGrid;
 	line.tooFar = searchOnGrid && searchTooFar;
+	line.afterReplan = follower.replanning;
 	searching = -1;
 
 	std::vector<AlienWaysPoint> const &way = searchOnGrid ? grid->Way() : map->Way();
@@ -801,12 +921,36 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 		AddReport(line);
 		DropTheWay(&follower);
 		follower.restUntil = now + kAlienWaysAskAgainAfter;
+		follower.replanning = false;
 		return;
 	}
+
+	// THE CLOCK (alien_ways_guide.h): a way that comes while the alien is following one keeps the no-headway clock going, unless the alien
+	// has moved kAlienWaysMovedOn since it last made headway. Worked out before the new way takes the old one's place. Added 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109.
+	bool const keepTheClock = follower.count > 0 && Distance(follower.last.at, follower.headwayFrom) < kAlienWaysMovedOn;
 
 	for (size_t p = 0; p < count; p++)
 	{
 		follower.points[p] = way[p];
+	}
+
+	// The map polygon at each point, for the watchdog to shut the one at a point the alien couldn't reach: on the map, the polygon the way
+	// is on from that point on; on the grid, the one under the point's cell. -1 where it isn't known. Added 2026-11-11 by Melanikus (Third)
+	// for the AvP port, #109.
+	std::vector<uint32_t> const *const cells = searchOnGrid ? &grid->WayCells() : nullptr;
+	std::vector<int> const *const onPolygons = searchOnGrid ? nullptr : &map->WayPolygons();
+
+	for (size_t p = 0; p < count; p++)
+	{
+		if (cells)
+		{
+			follower.pointPolygons[p] = p < cells->size() ? grid->PolygonOf((*cells)[p]) : -1;
+		}
+		else
+		{
+			follower.pointPolygons[p] = p < onPolygons->size() ? (*onPolygons)[p] : -1;
+		}
 	}
 
 	follower.count = static_cast<int>(count);
@@ -816,7 +960,14 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	follower.wayAt = now;
 	follower.wayGoal = searchGoal;
 	follower.nearest = DBL_MAX;
-	follower.headwayAt = now;
+	follower.passedAPoint = false;
+	follower.replanning = false;
+
+	if (!keepTheClock)
+	{
+		follower.headwayAt = now;
+		follower.headwayFrom = follower.last.at;
+	}
 
 	// The way's claims, in place of the old way's, so the other aliens' searches pay more where it goes
 	if (claimsOn)
@@ -836,6 +987,9 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 // An alien with no way is left to the game's own code till then.
 void AlienWaysGuide::NoNewWay(Follower *follower, AlienWaysXYZ goal)
 {
+	// A re-plan that found nothing is over (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	follower->replanning = false;
+
 	if (follower->count > 0)
 	{
 		follower->wayAt = now;
@@ -911,6 +1065,8 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			follower.heading++;
 			follower.nearest = DBL_MAX;
 			follower.headwayAt = now;
+			follower.headwayFrom = ask.at;
+			follower.passedAPoint = true;
 		}
 
 		if (follower.heading >= follower.count)
@@ -928,14 +1084,21 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	{
 		double const toNext = Distance(ask.at, follower.points[follower.heading]);
 
-		if (toNext + kAlienWaysHeadway <= follower.nearest)
+		// Modified 2026-11-11 by Melanikus (Third) for the AvP port (THE CLOCK, alien_ways_guide.h; #109): the first measure on a way, or
+		// since the last point reached, only says where headway counts from. It isn't headway itself, or a new way would restart the clock.
+		if (follower.nearest >= DBL_MAX)
+		{
+			follower.nearest = toNext;
+		}
+		else if (toNext + kAlienWaysHeadway <= follower.nearest)
 		{
 			follower.nearest = toNext;
 			follower.headwayAt = now;
+			follower.headwayFrom = ask.at;
 		}
 		else if (now - follower.headwayAt >= kAlienWaysNoHeadwayFor)
 		{
-			// Stuck: the game's own code has it for a while, and nothing is asked till then. The log hears of it, with where it was heading.
+			// Stuck. The log hears of it, with where it was heading and what the watchdog does next.
 			if (reportsRead)
 			{
 				reportCount = 0;
@@ -950,8 +1113,34 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			line.to = AlienWaysXYZ{ follower.points[follower.heading].x, follower.points[follower.heading].y, follower.points[follower.heading].z };
 			line.fromKind = KindUnder(ask.down);
 			line.toTheTarget = ask.goalIsTheTarget;
-			AddReport(line);
+
+			// THE WATCHDOG (alien_ways_guide.h). Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109; R-LAVA-P3).
+			// The polygon at the point it couldn't reach is shut for it alone, whatever it does next, a rest included.
+			line.shutPolygon = follower.pointPolygons[follower.heading];
+			ShutForIt(&follower, line.shutPolygon);
 			DropTheWay(&follower);
+
+			// Stuck before reaching any point of this way, it's stuck where the way starts, and a search from here would start on the same
+			// cell: it rests first, while the game's own code moves it. Otherwise it re-plans at once, if the cap allows.
+			line.replan = follower.passedAPoint ? TakeAReplan(&follower) : 0;
+			line.afterStuck = !follower.passedAPoint ? kAlienWaysRestsAtTheStart : (line.replan > 0 ? kAlienWaysReplans : kAlienWaysRestsCapped);
+			AddReport(line);
+
+			if (line.afterStuck == kAlienWaysReplans)
+			{
+				// A search for this alien that's running started before the polygon was shut, so it's dropped, and the new one starts now
+				if (searching == f)
+				{
+					searching = -1;
+				}
+
+				follower.queued = true;
+				follower.askedAt = now;
+				follower.replanning = true;
+				return false;
+			}
+
+			// The rest, as before the watchdog: the game's own code has it for a while, and nothing is asked till then
 			follower.queued = false;
 			follower.restUntil = now + kAlienWaysRestAfterStuck;
 			follower.stuckUntil = follower.restUntil;
@@ -1013,6 +1202,8 @@ bool AlienWaysGuide::Drive(const AlienWaysMap *map, const AlienWaysWho &who, Ali
 		follower.heading++;
 		follower.nearest = DBL_MAX;
 		follower.headwayAt = now;
+		follower.headwayFrom = at;
+		follower.passedAPoint = true;
 	}
 
 	// Used up, or off the way: the next Steer drops it. Until then the game steers it as it always did.

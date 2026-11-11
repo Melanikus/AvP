@@ -83,6 +83,33 @@ int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this m
 int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
 int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
 
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port: THE CLOCK and THE WATCHDOG (#109; PO's ruling R-LAVA-P3, in AvP-docs\RULINGS.md).
+//
+// THE CLOCK. Until now, every new way started the no-headway clock again. A way is searched for again whenever its goal moves 3 m, which is
+// every half second or so when the marine runs. So an alien stuck at one spot kept getting new ways, and was never found stuck. In the
+// owner's own play (2026-11-11, genshd1), one alien got 12 ways in 5 seconds from the same spot, and was found stuck only when he stopped
+// running. Now a new way that comes while the alien is following one keeps the clock going, unless the alien has moved kAlienWaysMovedOn
+// since it last made headway.
+int const kAlienWaysMovedOn = 1000;               // mm
+//
+// THE WATCHDOG. What an alien found stuck does next:
+// - The polygon at the point it couldn't reach is SHUT FOR IT, and for no other alien, for kAlienWaysShutFor. Its searches keep off it,
+//   on the grid and on the map, except when that polygon is the one it's on, or its goal's. It can have up to kAlienWaysMostShut such
+//   polygons at once; one more takes the place of the one shut longest ago.
+// - If it was stuck after it had reached a point of this way, it RE-PLANS AT ONCE: it asks for a new way from where it is, with nothing
+//   in between, instead of resting.
+// - If it was stuck before it reached any point of this way, it's stuck where the way starts. A search from the same spot would start on
+//   the same cell, so it rests kAlienWaysRestAfterStuck first, as before, while the game's own code moves it. In the owner's play that
+//   rest got it out every time. Its next search keeps off the polygon it was heading for.
+// - THE CAP: at most kAlienWaysMostReplans re-plans in any kAlienWaysReplansWithin. Stuck again past that, it rests, as before. So an
+//   alien can never spin from one re-plan to the next.
+// Each alien's shut polygons and re-plans are its own, and they are forgotten when it's let go (dead, or gone). Nothing is shared
+// between aliens. The 1999 attack and pounce aren't touched: the guide is only asked while an alien is coming for its target.
+int const kAlienWaysShutFor = 20000;              // ms
+size_t const kAlienWaysMostShut = 4;
+int const kAlienWaysMostReplans = 3;
+int const kAlienWaysReplansWithin = 60000;        // ms: a minute
+
 // An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
 // Checked here, where both are known, so the game's own build stops if one of them is changed alone.
 static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
@@ -148,6 +175,14 @@ enum AlienWaysOutcome
 	kAlienWaysOutcomeStuck          // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
 };
 
+// What the watchdog did with an alien found stuck (THE WATCHDOG, above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+enum AlienWaysAfterStuck
+{
+	kAlienWaysReplans,              // it asks for a new way at once
+	kAlienWaysRestsAtTheStart,      // it was stuck before reaching any point of its way: it rests first
+	kAlienWaysRestsCapped           // its re-plans in the last minute are used up: it rests
+};
+
 struct AlienWaysReport
 {
 	AlienWaysOutcome outcome;
@@ -174,6 +209,15 @@ struct AlienWaysReport
 	bool onGrid;                    // the search was the grid's (UseGrid): looks are cells, cost is -1, and polygons holds the cell of each
 	                                // point of the way instead
 	bool tooFar;                    // on the grid: it looked at kAlienWaysGridMostLooks cells without reaching the goal (outcome NoWay)
+
+	// Added 2026-11-11 by Melanikus (Third) for the AvP port (THE WATCHDOG, above; #109).
+	// For kAlienWaysOutcomeStuck: what it does next; which re-plan of the last minute this is (1 to kAlienWaysMostReplans; 0 if it rests);
+	// and the polygon shut for it, or -1 if the point's polygon isn't known.
+	AlienWaysAfterStuck afterStuck;
+	int replan;
+	int shutPolygon;
+	// For a search's outcome: the search was asked for by a re-plan
+	bool afterReplan;
 };
 
 class AlienWaysGuide
@@ -225,6 +269,8 @@ public:
 	// Modified 2026-11-08 by Melanikus for the AvP port: for the mover (alien_ways.cpp, #149).
 	// Whether this alien was found stuck lately and is still in the kAlienWaysRestAfterStuck that follows, when the game's own code has it.
 	// The mover leaves it to that code then, rather than heading it straight for its goal again, which is how it got stuck.
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port (THE WATCHDOG, above; #109): also while it waits for a re-plan's way, which
+	// is the same: it was found stuck, and has no way yet.
 	bool RestingAfterStuck(const AlienWaysWho &who) const;
 
 	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
@@ -286,6 +332,16 @@ private:
 		long long headwayAt;                // when it last got kAlienWaysHeadway nearer
 		AlienWaysPoint points[kAlienWaysMostWayPoints];
 
+		// Added 2026-11-11 by Melanikus (Third) for the AvP port (THE CLOCK and THE WATCHDOG, above; #109)
+		AlienWaysXYZ headwayFrom;           // where it was when it last made headway
+		bool passedAPoint;                  // it has reached a point of this way since it took the way up
+		int pointPolygons[kAlienWaysMostWayPoints];   // the map polygon at each point of the way, or -1: on the grid, the one under the
+		                                    // point's cell
+		int shutPolygon[kAlienWaysMostShut];          // the polygons shut for it alone...
+		long long shutUntil[kAlienWaysMostShut];      // ...each until then. One whose time has come is free.
+		long long replanCountsUntil[kAlienWaysMostReplans];   // each re-plan counts against the cap until a minute after it; then it's free
+		bool replanning;                    // the search it's waiting for was asked for by a re-plan
+
 		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
 		AlienWaysWho target;
 		bool flanker;                       // ...and it's past the first kAlienWaysDirectAliens of them
@@ -301,8 +357,13 @@ private:
 	void StartNext(AlienWaysMap *map);
 	void Finish(AlienWaysMap *map, AlienWaysSearch result);
 	AlienWaysSearch WorkOnGrid(int looksAllowed);
-	const std::vector<uint8_t> *ShutForTheGrid(const AlienWaysMap &map);
+	const std::vector<uint8_t> *ShutForTheSearch(const AlienWaysMap &map, const Follower &follower, int from, int to);
 	void NoNewWay(Follower *follower, AlienWaysXYZ goal);
+
+	// THE WATCHDOG (above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	void ForgetTheWatchdog(Follower *follower);
+	void ShutForIt(Follower *follower, int polygon);
+	int TakeAReplan(Follower *follower);
 	void AddReport(const AlienWaysReport &line);
 
 	long long now;
@@ -318,13 +379,13 @@ private:
 	int searchFrames;
 	bool searchFlanker;                 // the search running is a flanker's
 
-	// The grid (UseGrid), whether the search running is on it, whether it gave up for looking at too many cells, the doors shut when it
-	// started, a byte for each map polygon (ShutForTheGrid: it has to stay as it is until the search ends), and a found way's map polygons,
-	// each once in a row, for its claims
+	// The grid (UseGrid), whether the search running is on it, whether it gave up for looking at too many cells, the polygons the search
+	// keeps off, a byte for each map polygon (ShutForTheSearch: the doors shut when it started, and the polygons shut for its alien; it has to
+	// stay as it is until the search ends), and a found way's map polygons, each once in a row, for its claims
 	NpcGrid *grid;
 	bool searchOnGrid;
 	bool searchTooFar;
-	std::vector<uint8_t> gridShut;
+	std::vector<uint8_t> searchShut;
 	std::vector<int> gridWayPolygons;
 
 	AlienWaysReport report[kAlienWaysMostFollowers];

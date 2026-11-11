@@ -20,8 +20,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\tfollower.used = false;\n\tfollower.guided = false;\n\tfollower.queued = false;\n\tDropTheWay(&follower);\n}",
-					"to": "\tDropTheWay(&follower);\n}"
+					"from": "\tfollower.used = false;\n\tfollower.guided = false;\n\tfollower.queued = false;\n\tfollower.keptCount = 0;\n\tDropTheWay(&follower);\n",
+					"to": "\tDropTheWay(&follower);\n"
 				}
 			]
 		},
@@ -480,8 +480,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t\t\tline.toTheTarget = ask.goalIsTheTarget;\n\t\t\tAddReport(line);\n",
-					"to": "\t\t\tline.toTheTarget = ask.goalIsTheTarget;\n"
+					"from": "(line.replan > 0 ? kAlienWaysReplans : kAlienWaysRestsCapped);\n\t\t\tAddReport(line);\n",
+					"to": "(line.replan > 0 ? kAlienWaysReplans : kAlienWaysRestsCapped);\n"
 				}
 			]
 		},
@@ -1270,8 +1270,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
-					"to": "nullptr, next,\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
+					"from": "nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor,\n\t\t\t\tshut);",
+					"to": "nullptr, next,\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor,\n\t\t\t\tshut);"
 				}
 			]
 		},
@@ -1280,8 +1280,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "ShutForTheGrid(*map),\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
-					"to": "ShutForTheGrid(*map),\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
+					"from": "next, shut,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
+					"to": "next, shut,\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
 				}
 			]
 		},
@@ -1382,6 +1382,206 @@
 					"file": "3dc/avp/alien_ways.cpp",
 					"from": "\t\t\tdetails += \". Places (m):\";\n",
 					"to": "\t\t\tdetails += \".\";\n"
+				}
+			]
+		},
+		{
+			"name": "the clock: a new way always starts the clock again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "bool const keepTheClock = follower.count > 0 && Distance",
+					"to": "bool const keepTheClock = false && Distance"
+				}
+			]
+		},
+		{
+			"name": "the clock: a new way never starts the clock again, however far the alien has moved",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "Distance(follower.last.at, follower.headwayFrom) < kAlienWaysMovedOn;",
+					"to": "Distance(follower.last.at, follower.headwayFrom) < 1e12;"
+				}
+			]
+		},
+		{
+			"name": "the clock: the first measure on a new way counts as headway",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (follower.nearest >= DBL_MAX)\n\t\t{\n\t\t\tfollower.nearest = toNext;\n\t\t}\n\t\telse if (toNext + kAlienWaysHeadway <= follower.nearest)",
+					"to": "\t\tif (toNext + kAlienWaysHeadway <= follower.nearest)"
+				}
+			]
+		},
+		{
+			"name": "the watchdog shuts nothing for a stuck alien",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tShutForIt(&follower, line.shutPolygon);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon is shut for 200 s, not 20",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower->shutUntil[place] = now + kAlienWaysShutFor;",
+					"to": "follower->shutUntil[place] = now + 10 * kAlienWaysShutFor;"
+				}
+			]
+		},
+		{
+			"name": "a stuck at its way's start is taken as one with its re-plans used up",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "line.afterStuck = !follower.passedAPoint ? kAlienWaysRestsAtTheStart :",
+					"to": "line.afterStuck = false ? kAlienWaysRestsAtTheStart :"
+				}
+			]
+		},
+		{
+			"name": "an alien stuck after reaching a point rests, as before the watchdog",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "line.replan = follower.passedAPoint ? TakeAReplan(&follower) : 0;",
+					"to": "line.replan = 0;"
+				}
+			]
+		},
+		{
+			"name": "the cap never counts a re-plan",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (now < follower->replanCountsUntil[r])\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a re-plan counts against the cap for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower->replanCountsUntil[freePlace] = now + kAlienWaysReplansWithin;",
+					"to": "follower->replanCountsUntil[freePlace] = now + 1000000000LL;"
+				}
+			]
+		},
+		{
+			"name": "an alien let go keeps what was shut for it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "starts with nothing shut\n\tForgetTheWatchdog(&follower);\n",
+					"to": "starts with nothing shut\n"
+				}
+			]
+		},
+		{
+			"name": "the map's search goes over a polygon shut for its alien",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "bool const givenAsShut = searchShut &&",
+					"to": "bool const givenAsShut = false && searchShut &&"
+				}
+			]
+		},
+		{
+			"name": "the guide's searches are given nothing shut for the alien",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tsearchShut[static_cast<size_t>(follower.shutPolygon[s])] = 1;\n",
+					"to": "\t\t\t(void)s;\n"
+				}
+			]
+		},
+		{
+			"name": "a re-plan's search doesn't say it is one",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tline.afterReplan = follower.replanning;\n\tsearching = -1;\n",
+					"to": "\tsearching = -1;\n"
+				}
+			]
+		},
+		{
+			"name": "the mover heads an alien at its goal while it waits for a re-plan's way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " || (followers[f].replanning && followers[f].count == 0)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a re-plan doesn't ask for a way at once",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t\tfollower.queued = true;\n\t\t\t\tfollower.askedAt = now;\n\t\t\t\tfollower.replanning = true;\n",
+					"to": "\t\t\t\tfollower.replanning = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the stuck line says nothing of what the watchdog does",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "kAlienWaysNoHeadwayFor / 1000.0, AfterStuckWords(line).c_str());",
+					"to": "kAlienWaysNoHeadwayFor / 1000.0, \"\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the stuck line doesn't say which polygon is shut",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\"polygon %d is shut for it for %.0f s\", line.shutPolygon, kAlienWaysShutFor / 1000.0",
+					"to": "\"a polygon is shut for it\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a re-plan's search line doesn't say so",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tdetails = \". After a re-plan\" + details;\n",
+					"to": "\t\tdetails = details;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map's search isn't given what's shut for the alien",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "kAlienWaysClaimMostPriceFactor,\n\t\t\t\tshut);",
+					"to": "kAlienWaysClaimMostPriceFactor);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the searches aren't given what's shut for the alien searching",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to);",
+					"to": "const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to) ? nullptr : nullptr;"
 				}
 			]
 		}

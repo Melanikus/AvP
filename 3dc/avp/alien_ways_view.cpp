@@ -2,6 +2,8 @@
 // port (issue #109). See alien_ways_view.h.
 #include "alien_ways_view.h"
 
+#include <algorithm>
+
 uint32_t AlienWaysView_ColourOf(AlienWaysKind kind)
 {
 	switch (kind)
@@ -112,4 +114,41 @@ size_t AlienWaysView_AddKeptWay(const float *matrix, const AlienWaysPoint *point
 	}
 
 	return added;
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): thicker lines (alien_ways_view.h)
+size_t AlienWaysView_Thicken(std::vector<AlienWaysViewEnd> *ends, float aside)
+{
+	if (!ends || !(aside > 0.0f && aside < 1.0f))
+	{
+		return 0;
+	}
+
+	// Right, left, up and down on the screen
+	static const float kMoves[4][2] = { { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } };
+	size_t const before = ends->size();
+	size_t const lines = before / 2;
+	ends->reserve(std::min(before * 5, kAlienWaysViewMostThickEnds));
+
+	for (int m = 0; m < 4; m++)
+	{
+		for (size_t line = 0; line < lines; line++)
+		{
+			if (ends->size() + 2 > kAlienWaysViewMostThickEnds)
+			{
+				return ends->size() - before;
+			}
+
+			for (size_t e = 0; e < 2; e++)
+			{
+				// A copy first, then added: the list can move in memory as it grows
+				AlienWaysViewEnd moved = (*ends)[line * 2 + e];
+				moved.x += kMoves[m][0] * aside * moved.z;
+				moved.y += kMoves[m][1] * aside * moved.z;
+				ends->push_back(moved);
+			}
+		}
+	}
+
+	return ends->size() - before;
 }

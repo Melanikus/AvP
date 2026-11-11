@@ -14,6 +14,7 @@
 #include "alien_ways_view.h"
 
 #include <climits>
+#include <math.h>
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
@@ -245,8 +246,41 @@ static void TestJoiningTheGame()
 	std::string const network = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()\n{", "\n}\n");
 	Check(Has(network, "LogString(\"alien ways view: this is a network game, so the aliens' ways aren't drawn\");"), "a network game says once in the log that the ways aren't drawn");
 
-	Check(Has(ways, "struct AlienWaysShown\n{\n\tconst AlienWaysPoint *points;\n\tint count;\n\tint heading;\n};") && Has(ways, "size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);"), "the alien ways code gives the ways in the shape the view reads");
+	// Modified 2026-11-11 by Melanikus (Third): fd9da61a marks a kept way (the owner's ask, the view keeps each alien's last way, dimmed)
+	Check(Has(ways, "struct AlienWaysShown\n{\n\tconst AlienWaysPoint *points;\n\tint count;\n\tint heading;\n\tbool kept;") && Has(ways, "size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);"), "the alien ways code gives the ways in the shape the view reads");
+	Check(Has(draw, "\tAlienWaysView_Thicken(&ends, kAlienWaysViewAside);\n") && Has(draw, "if (ends.empty())\n\t{\n\t\treturn;\n\t}\n\n\t// Every line about three pixels wide"),
+		"every way's lines are thickened, kept ways too, once they're all in the list (added 2026-11-11 by Melanikus (Third), the owner's ask)");
 	Check(Has(ReadSourceFile("win32/VS2026/AvP.vcxproj"), "3dc\\avp\\alien_ways_view.cpp"), "and the game builds the view");
+}
+
+// Thicker lines (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; the owner: "let's make the line of alien path a bit
+// thicker so I can see it better"): every line is drawn four more times, moved right, left, up and down by a share of each end's depth
+static bool Close(const AlienWaysViewEnd &end, float x, float y, float z)
+{
+	return fabsf(end.x - x) < 0.01f && fabsf(end.y - y) < 0.01f && fabsf(end.z - z) < 0.01f;
+}
+
+static void TestThicker()
+{
+	std::vector<AlienWaysViewEnd> ends;
+	AlienWaysViewEnd const a = { 100.0f, 200.0f, 1000.0f, 0xff112233u }, b = { -100.0f, 50.0f, 4000.0f, 0xff112233u };
+	ends.push_back(a);
+	ends.push_back(b);
+	Check(AlienWaysView_Thicken(&ends, 0.001f) == 8 && ends.size() == 10, "one line becomes five: four copies are added");
+	Check(Close(ends[0], 100.0f, 200.0f, 1000.0f) && Close(ends[1], -100.0f, 50.0f, 4000.0f), "the line itself is left as it was");
+	Check(Close(ends[2], 101.0f, 200.0f, 1000.0f) && Close(ends[3], -96.0f, 50.0f, 4000.0f), "the first copy is moved right, each end by a thousandth of its depth");
+	Check(Close(ends[4], 99.0f, 200.0f, 1000.0f) && Close(ends[5], -104.0f, 50.0f, 4000.0f), "the second left");
+	Check(Close(ends[6], 100.0f, 201.0f, 1000.0f) && Close(ends[7], -100.0f, 54.0f, 4000.0f), "the third up");
+	Check(Close(ends[8], 100.0f, 199.0f, 1000.0f) && Close(ends[9], -100.0f, 46.0f, 4000.0f), "the fourth down");
+	Check(CountColour(ends, 0xff112233u) == 10, "every copy in its line's own colour, so a kept way stays dimmed");
+	Check(AlienWaysView_Thicken(&ends, 0.0f) == 0 && AlienWaysView_Thicken(&ends, -0.5f) == 0 && AlienWaysView_Thicken(&ends, 1.0f) == 0
+		&& AlienWaysView_Thicken(0, 0.001f) == 0 && ends.size() == 10, "a move of nothing, less, or a whole depth, or no list, adds nothing");
+
+	ends.assign(kAlienWaysViewMostThickEnds - 3, AlienWaysViewEnd());
+	Check(AlienWaysView_Thicken(&ends, 0.001f) == 2 && ends.size() == kAlienWaysViewMostThickEnds - 1,
+		"near the most a frame may hold, only the copies that fit go in, each a whole line, and nothing past the most");
+	ends.clear();
+	Check(AlienWaysView_Thicken(&ends, 0.001f) == 0 && ends.empty(), "an empty list stays empty");
 }
 
 int main()
@@ -259,6 +293,8 @@ int main()
 	TestTheLimits();
 	puts("4. joining the game");
 	TestJoiningTheGame();
+	puts("5. thicker lines");
+	TestThicker();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 

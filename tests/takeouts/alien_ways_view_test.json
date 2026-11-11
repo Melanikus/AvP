@@ -234,6 +234,56 @@
 					"to": "\tsize_t const added = AlienWaysView_AddWay(matrix, points, count, 1, ends);\n"
 				}
 			]
+		},
+		{
+			"name": "the ways' lines aren't thickened",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tAlienWaysView_Thicken(&ends, kAlienWaysViewAside);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a thickened line's copies are moved to one side only",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "{ { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } }",
+					"to": "{ { 1.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f } }"
+				}
+			]
+		},
+		{
+			"name": "a thickened line's copies are moved by a set amount, not by their depth",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "moved.x += kMoves[m][0] * aside * moved.z;",
+					"to": "moved.x += kMoves[m][0] * aside * 1000.0f;"
+				}
+			]
+		},
+		{
+			"name": "thickening goes past the most a frame may hold",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (ends->size() + 2 > kAlienWaysViewMostThickEnds)",
+					"to": "if (ends->size() + 2 > kAlienWaysViewMostThickEnds + 100)"
+				}
+			]
+		},
+		{
+			"name": "any move is taken to thicken by, a whole depth or none",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (!ends || !(aside > 0.0f && aside < 1.0f))",
+					"to": "if (!ends)"
+				}
+			]
 		}
 	]
 }

@@ -308,9 +308,12 @@ public:
 	// aliens' ways are (lanes, #138). claims has to stay as it is made until the search ends; its counts can change in the meantime. Never
 	// less than 1, so the search's guess stays a lower bound, and never more than claimMost, so a way is never dearer than claimMost times
 	// the cheapest: 1.5 for most aliens, 2.5 for a flanker (alien_ways_guide.h).
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port (the guide's watchdog, #109): shut, if given, has a byte for each polygon, not
+	// 0 for one the search keeps off, as it keeps off a shut door: never the goal's own polygon. The guide gives the doors shut now and the
+	// polygons shut for the searching alien alone. shut has to stay as it is until the search ends, as the grid's search takes it.
 	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
 		const AlienWaysClaims *claims = nullptr, int searcher = -1, double claimStep = kAlienWaysClaimPriceStep,
-		double claimMost = kAlienWaysClaimMostPriceFactor);
+		double claimMost = kAlienWaysClaimMostPriceFactor, const std::vector<uint8_t> *shut = nullptr);
 
 	// Carries on, looking at up to this many polygons, and says how it stands. Asked again after it's ended, it gives the same answer.
 	AlienWaysSearch Work(int polygonsAllowed);
@@ -422,6 +425,7 @@ private:
 	const AlienWaysClaims *searchClaims;   // the claims the search prices by, or none
 	int searchSearcher;                    // and whose search it is, so its own claims don't count
 	double searchClaimStep, searchClaimMost;   // and how much each claim weighs for this searcher, and the most a polygon can cost it
+	const std::vector<uint8_t> *searchShut;    // the polygons it keeps off besides the doors (StartSearch's shut), or none
 	AlienWaysXYZ goalAt;
 	int looks;
 	bool cutShort;

@@ -519,8 +519,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "\t\t\tif (other != toNode && doorShutInSearch[doorOf[other]] != 0)\n",
-					"to": "\t\t\tif (false)\n"
+					"from": "\t\t\tif (other != toNode && (doorShutInSearch[doorOf[other]] != 0 || givenAsShut))\n",
+					"to": "\t\t\tif (other != toNode && givenAsShut)\n"
 				}
 			]
 		},
@@ -529,8 +529,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
-					"to": "if (doorShutInSearch[doorOf[other]] != 0)"
+					"from": "if (other != toNode && (doorShutInSearch[doorOf[other]] != 0 || givenAsShut))",
+					"to": "if (doorShutInSearch[doorOf[other]] != 0 || (other != toNode && givenAsShut))"
 				}
 			]
 		},
@@ -539,8 +539,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
-					"to": "if (other != toNode && doorShut[doorOf[other]] != 0)"
+					"from": "if (other != toNode && (doorShutInSearch[doorOf[other]] != 0 || givenAsShut))",
+					"to": "if (other != toNode && (doorShut[doorOf[other]] != 0 || givenAsShut))"
 				}
 			]
 		},

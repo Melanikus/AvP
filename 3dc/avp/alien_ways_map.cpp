@@ -276,7 +276,8 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 AlienWaysMap::AlienWaysMap()
 	: ready(false), limits(AlienWays_UsualLimits()), stopAsked(false), stopAtLook(0), stopLooks(0), leftOut(0), bytesKept(0), bytesBuilding(0), bytesBuildingTop(0), bytesBuildingUsed(0),
 	  edgeSteps(0), cornerTests(0), heapSize(0), searchNumber(0), state(kAlienWaysNoWay), fromNode(-1), toNode(-1), price(1), searchClaims(nullptr),
-	  searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep), searchClaimMost(kAlienWaysClaimMostPriceFactor), looks(0), cutShort(false)
+	  searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep), searchClaimMost(kAlienWaysClaimMostPriceFactor), searchShut(nullptr), looks(0),
+	  cutShort(false)
 {
 	goalAt.x = goalAt.y = goalAt.z = 0;
 }
@@ -292,6 +293,7 @@ void AlienWaysMap::LetGo()
 	ready = false;
 	searchClaims = nullptr;
 	searchSearcher = -1;
+	searchShut = nullptr;
 	leftOut = bytesKept = bytesBuilding = bytesBuildingTop = bytesBuildingUsed = edgeSteps = cornerTests = 0;
 	GiveBack(&mapNumber);
 	GiveBack(&middleX); GiveBack(&middleY); GiveBack(&middleZ);
@@ -1106,7 +1108,7 @@ double AlienWaysMap::PriceOf(int node) const
 }
 
 const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
-	const AlienWaysClaims *claims, int searcher, double claimStep, double claimMost)
+	const AlienWaysClaims *claims, int searcher, double claimStep, double claimMost, const std::vector<uint8_t> *shut)
 {
 	if (!ready)
 	{
@@ -1149,6 +1151,7 @@ const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int t
 	price = floorPrice;
 	searchClaims = claims;
 	searchSearcher = searcher;
+	searchShut = shut;
 
 	// A step or most that isn't a number, or would make a polygon cheaper, is taken as the usual (a guide's own numbers come here, but the
 	// map checks what it's given)
@@ -1242,8 +1245,12 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 				continue;
 			}
 
-			// A door that was shut when this search started is kept off, unless it's the goal's own polygon (DOORS, in alien_ways_map.h)
-			if (other != toNode && doorShutInSearch[doorOf[other]] != 0)
+			// A door that was shut when this search started is kept off, unless it's the goal's own polygon (DOORS, in alien_ways_map.h). So is
+			// a polygon the search was given as shut (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109: the guide's watchdog). A
+			// list too short for this polygon says nothing about it (Tao 3: what it's given is checked, not trusted).
+			bool const givenAsShut = searchShut && static_cast<size_t>(other) < searchShut->size() && (*searchShut)[static_cast<size_t>(other)] != 0;
+
+			if (other != toNode && (doorShutInSearch[doorOf[other]] != 0 || givenAsShut))
 			{
 				continue;
 			}

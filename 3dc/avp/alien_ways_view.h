@@ -62,4 +62,20 @@ uint32_t AlienWaysView_Dimmed(uint32_t colour);
 // it added, as AlienWaysView_AddWay does. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; the owner's ask).
 size_t AlienWaysView_AddKeptWay(const float *matrix, const AlienWaysPoint *points, int count, std::vector<AlienWaysViewEnd> *ends);
 
+// THICKER LINES. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; the owner: "let's make the line of alien path a bit thicker
+// so I can see it better"). The card draws a line one pixel wide, whatever its distance. So each line is drawn four more times, moved a
+// little to the right, the left, up and down on the screen, which makes it about three pixels wide in the same colours, kept ways too.
+// A move that's the same on the screen near and far is a move of the same share of the line's depth, so each end moves by aside times its
+// own depth (its z in the card's numbers). kAlienWaysViewAside is about a pixel and a third on a 2560-wide screen with the game's usual
+// view, and about a pixel at 1920: near enough, as only the look matters.
+static const float kAlienWaysViewAside = 0.001f;
+
+// The most ends once thickened: every line five times
+static const size_t kAlienWaysViewMostThickEnds = kAlienWaysViewMostEnds * 5;
+
+// Adds the four moved copies of every line in ends (each two ends, in order, is a line), each end moved by aside times its depth, and gives
+// back how many ends it added. A copy that would take ends past kAlienWaysViewMostThickEnds isn't added, nor any after it. An aside that
+// isn't between 0 and 1 adds nothing (Tao 3: a number given is checked, not trusted).
+size_t AlienWaysView_Thicken(std::vector<AlienWaysViewEnd> *ends, float aside);
+
 #endif

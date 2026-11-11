@@ -7988,6 +7988,10 @@ static void DrawAlienWays()
 		return;
 	}
 
+	// Every line about three pixels wide, so the ways are easier to see (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109;
+	// the owner's ask, alien_ways_view.h)
+	AlienWaysView_Thicken(&ends, kAlienWaysViewAside);
+
 	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
 	IDirect3DStateBlock9 *asItWas = 0;
 

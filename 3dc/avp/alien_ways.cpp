@@ -339,6 +339,44 @@ static std::string Metres(AlienWaysXYZ point)
 	return text;
 }
 
+// What the watchdog does with an alien found stuck, for its line in the log: the end of the line's first part (THE WATCHDOG, in
+// alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+static std::string AfterStuckWords(const AlienWaysReport &line)
+{
+	char shut[96];
+
+	if (line.shutPolygon >= 0)
+	{
+		snprintf(shut, sizeof(shut), "polygon %d is shut for it for %.0f s", line.shutPolygon, kAlienWaysShutFor / 1000.0);
+	}
+	else
+	{
+		snprintf(shut, sizeof(shut), "nothing is shut for it, as the point's polygon isn't known");
+	}
+
+	char words[256];
+
+	switch (line.afterStuck)
+	{
+		case kAlienWaysReplans:
+			snprintf(words, sizeof(words), ": it re-plans at once, re-plan %d of %d this minute, and %s", line.replan, kAlienWaysMostReplans, shut);
+			break;
+
+		case kAlienWaysRestsAtTheStart:
+			snprintf(words, sizeof(words), ", before reaching any point of its way: the game's own code has it for %.1f s first, and %s",
+				kAlienWaysRestAfterStuck / 1000.0, shut);
+			break;
+
+		case kAlienWaysRestsCapped:
+		default:
+			snprintf(words, sizeof(words), ", with its %d re-plans this minute used: the game's own code has it for %.1f s, and %s",
+				kAlienWaysMostReplans, kAlienWaysRestAfterStuck / 1000.0, shut);
+			break;
+	}
+
+	return words;
+}
+
 // One line in the log for each search that ended
 static void TellHowASearchWent(const AlienWaysReport &line)
 {
@@ -397,10 +435,10 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 		}
 
 		case kAlienWaysOutcomeStuck:
-			snprintf(text, sizeof(text), "alien ways: alien %u stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s: the game's own code has it for %.1f s",
+			snprintf(text, sizeof(text), "alien ways: alien %u stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s%s",
 				static_cast<unsigned>(line.follower), Metres(line.from).c_str(), Metres(line.to).c_str(),
 				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
-				kAlienWaysNoHeadwayFor / 1000.0, kAlienWaysRestAfterStuck / 1000.0);
+				kAlienWaysNoHeadwayFor / 1000.0, AfterStuckWords(line).c_str());
 			details = StuckDetails(line.who);
 			break;
 
@@ -409,6 +447,13 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			snprintf(text, sizeof(text), "alien ways: alien %u %s: the search was refused: %s", static_cast<unsigned>(line.follower), where.c_str(),
 				line.why ? line.why : "no reason given");
 			break;
+	}
+
+	// A search a re-plan asked for says so, so a film can follow an alien from its stuck line to the way it got next (THE WATCHDOG, in
+	// alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	if (line.outcome != kAlienWaysOutcomeStuck && line.afterReplan)
+	{
+		details = ". After a re-plan" + details;
 	}
 
 	// The polygons its way is on, for measuring how several aliens' ways stack (lanes, #138)

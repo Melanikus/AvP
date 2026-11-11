@@ -381,6 +381,98 @@ static void OffTheWay()
 	Check(guide.Steer(&map, Ask(Alien(1), { 1000, 0, 4000 }, kGoal, 13), &towards) && guide.Guided(Alien(1)), "and is guided again on the new way");
 }
 
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109), for THE CLOCK and THE WATCHDOG (alien_ways_guide.h; PO's ruling R-LAVA-P3).
+// The corridor's two walls: the one its way takes (kWallX), and the other, which a way takes when that one is shut.
+static int TheWall()
+{
+	return kWallX == 0 ? 10 : 11;
+}
+
+static int OtherWall()
+{
+	return kWallX == 0 ? 11 : 10;
+}
+
+// Whether a line is of a way found by that wall: tile 0, the wall, tile 9
+static bool ByTheWall(const AlienWaysReport &line, int wall)
+{
+	return line.outcome == kAlienWaysOutcomeFound && line.polygonCount == 3 && line.polygons[0] == 0 && line.polygons[1] == wall && line.polygons[2] == 9;
+}
+
+// The down of an alien clinging to what a point of a way in the corridor is on
+static AlienWaysXYZ DownOn(const AlienWaysPoint &point)
+{
+	switch (point.kind)
+	{
+		case kAlienWaysWall: return AlienWaysXYZ{ point.x <= 1000 ? -65536 : 65536, 0, 0 };
+		case kAlienWaysCeiling: return AlienWaysXYZ{ 0, -65536, 0 };
+		default: return kUpright65536;
+	}
+}
+
+// An alien held where ask says, a frame of 100 ms at a time, for up to most ms, until it's found stuck. Says whether it was, how many ms of
+// holding that took, its stuck line, whether the mover was to leave it alone just after (RestingAfterStuck, before the next frame), and
+// the line after the stuck one in that same frame, if there was one: a re-plan's search, when it was asked for at once.
+struct Held
+{
+	bool stuck;
+	int took;
+	AlienWaysReport line;
+	bool resting;
+	bool hasNext;
+	AlienWaysReport next;
+	AlienWaysAsk ask;
+};
+
+static Held HeldTillStuck(AlienWaysGuide &guide, AlienWaysMap &map, const AlienWaysAsk &ask, int most)
+{
+	Held held = {};
+	held.ask = ask;
+	AlienWaysXYZ towards;
+
+	for (int ms = 0; ms <= most && !held.stuck; ms += 100)
+	{
+		guide.Steer(&map, ask, &towards);
+		bool const resting = guide.RestingAfterStuck(ask.who);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count && !held.stuck; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeStuck && reports[r].who.place == ask.who.place)
+			{
+				held.stuck = true;
+				held.took = ms;
+				held.line = reports[r];
+				held.resting = resting;
+				held.hasNext = r + 1 < count;
+				held.next = held.hasNext ? reports[r + 1] : AlienWaysReport();
+			}
+		}
+	}
+
+	return held;
+}
+
+// An alien put at the second point of the way it has now, clinging to what that point is on, so it has reached a point of its way, then
+// held there till it's stuck. Nothing is held, and nothing found stuck, if it has no way of 3 points or more.
+static Held HeldAtItsSecondPoint(AlienWaysGuide &guide, AlienWaysMap &map, const AlienWaysWho &who)
+{
+	int const place = guide.PlaceOf(who);
+	const AlienWaysPoint *points = nullptr;
+
+	if (place < 0 || guide.WayOf(static_cast<size_t>(place), &points) < 3 || !points)
+	{
+		Held none = {};
+		return none;
+	}
+
+	AlienWaysAsk there = Ask(who, AlienWaysXYZ{ points[1].x, points[1].y, points[1].z }, kGoal, 13);
+	there.down = DownOn(points[1]);
+	return HeldTillStuck(guide, map, there, 3000);
+}
+
 static void Stuck()
 {
 	printf("No headway\n");
@@ -409,6 +501,7 @@ static void Stuck()
 	bool asked = false, guided = false;
 	int stuckReports = 0;
 	bool stuckSaysWhere = false;
+	AlienWaysReport stuckLine = {};
 
 	for (ms = 0; ms < 2900; ms += 100)
 	{
@@ -422,6 +515,7 @@ static void Stuck()
 			{
 				stuckReports++;
 				stuckSaysWhere = Same(reports[r].from, kStart) && Same(reports[r].to, kOntoTheWall) && reports[r].who.place == Alien(1).place && reports[r].who.name == Alien(1).name;
+				stuckLine = reports[r];
 			}
 			else
 			{
@@ -446,11 +540,283 @@ static void Stuck()
 		Check(guide.Kept(keptPoints, keptCounts, 0) == 0, "with no room, nothing is kept for the view");
 	}
 	Check(stuckReports == 1 && stuckSaysWhere, "being stuck is reported once, with who it is, where it was and where it was heading");
+
+	// THE WATCHDOG (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): held at its start, it never reached a point of its way,
+	// so it's stuck where its way starts. A search from the same spot would start on the same polygon, so it rests first, as before, and
+	// the wall it was heading for is shut for it.
+	Check(stuckLine.afterStuck == kAlienWaysRestsAtTheStart && stuckLine.replan == 0 && stuckLine.shutPolygon == TheWall(),
+		"stuck before reaching any point of its way, it rests first, uses no re-plan, and the wall it was heading for is shut for it");
 	Frame(guide, map, 100);
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(guide, map, 16);
 	const AlienWaysReport *reports = nullptr;
 	Check(ReportsOf(guide, &reports) == 1 && guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "then it asks again, and is guided again");
+	Check(ByTheWall(reports[0], OtherWall()) && !reports[0].afterReplan,
+		"by the other wall, as the one it was stuck heading for is shut for it; and its line doesn't call it a re-plan");
+}
+
+// THE CLOCK (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). In the owner's own play an alien got a new
+// way every half second as the running marine moved its goal, made no headway, and was never found stuck while he ran.
+static void TheClock()
+{
+	printf("The clock: new ways don't hide an alien that's stuck\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	AlienWaysXYZ const nearer = { 1000, 0, 5500 };   // 4 m from kGoal: a goal that moves between the two asks for a new way each time
+
+	// Held at the start while its goal moves 4 m every 400 ms: a new way every 400 ms, and still found stuck 1.5 s after the first
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	int firstWayAt = -1, stuckAt = -1, ways = 0;
+
+	for (int ms = 0; ms < 4000 && stuckAt < 0; ms += 100)
+	{
+		guide.Steer(&map, Ask(Alien(1), kStart, (ms / 400) % 2 == 0 ? kGoal : nearer, 13), &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeFound)
+			{
+				ways++;
+				firstWayAt = firstWayAt < 0 ? ms : firstWayAt;
+			}
+			else if (reports[r].outcome == kAlienWaysOutcomeStuck && stuckAt < 0)
+			{
+				stuckAt = ms;
+			}
+		}
+	}
+
+	Check(ways >= 4, "its goal moving 4 m every 400 ms, an alien held at the start gets a new way each time");
+	Check(firstWayAt >= 0 && stuckAt >= firstWayAt + 1400 && stuckAt <= firstWayAt + 1700,
+		"and making no headway, it's found stuck 1.5 s after its first way all the same: a new way doesn't start the clock again");
+
+	// One that has moved 1 m since it last made headway (here further from its next point, so it made none) starts the clock again with
+	// its new way: it's found stuck 1.5 s after that way, not after its first
+	const std::unique_ptr<AlienWaysGuide> movedRoom(new AlienWaysGuide);
+	AlienWaysGuide &moved = *movedRoom;
+	AlienWaysXYZ const along = { 1000, 0, 1700 };   // 1.2 m on from the start, and further from the wall's foot it was heading for
+	int newWayAt = -1;
+	firstWayAt = stuckAt = -1;
+
+	for (int ms = 0; ms < 4000 && stuckAt < 0; ms += 100)
+	{
+		bool const hasMoved = ms >= 1000;
+		moved.Steer(&map, Ask(Alien(1), hasMoved ? along : kStart, hasMoved ? nearer : kGoal, 13), &towards);
+		Frame(moved, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(moved, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeFound && firstWayAt < 0)
+			{
+				firstWayAt = ms;
+			}
+			else if (reports[r].outcome == kAlienWaysOutcomeFound && hasMoved && newWayAt < 0)
+			{
+				newWayAt = ms;
+			}
+			else if (reports[r].outcome == kAlienWaysOutcomeStuck && stuckAt < 0)
+			{
+				stuckAt = ms;
+			}
+		}
+	}
+
+	Check(firstWayAt == 0 && newWayAt == 1000, "an alien that has moved on 1.2 m, its goal 4 m on too, gets a new way");
+	Check(stuckAt >= newWayAt + 1400 && stuckAt <= newWayAt + 1700, "and the clock starts again with it: it's found stuck 1.5 s after that way");
+}
+
+// THE WATCHDOG (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's ruling R-LAVA-P3).
+// Stuck after it has reached a point of its way, an alien asks for a new way at once, with the polygon it couldn't reach shut for it; and
+// THE CAP: at most three re-plans in a minute, then it rests, as before the watchdog.
+static void ReplansAtOnce()
+{
+	printf("The watchdog: stuck along its way, an alien re-plans at once, three times a minute at most\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	GuidedAlien(guide, Alien(1));
+
+	// It takes its way up at the start, then steps onto the wall, so it has reached the way's second point, and stays there, 500 mm up,
+	// heading for the point 1.5 m up the wall
+	AlienWaysAsk onTheWall = Ask(Alien(1), Beside(300, -500, 500), kGoal, 13);
+	onTheWall.down = IntoTheWall();
+	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	Check(guide.Steer(&map, onTheWall, &towards) && Same(towards, kUpTheWall), "on the wall, it heads up it");
+	Held const held = HeldTillStuck(guide, map, onTheWall, 3000);
+	Check(held.stuck && held.took >= 1400 && held.took <= 1600, "held there, it's found stuck after 1.5 s");
+	Check(held.line.afterStuck == kAlienWaysReplans && held.line.replan == 1 && held.line.shutPolygon == TheWall(),
+		"it re-plans at once, its first re-plan this minute, and the wall it was heading up is shut for it");
+	Check(held.resting, "until its new way comes, the mover leaves it to the game's own code, as in a rest");
+	Check(held.hasNext && held.next.outcome == kAlienWaysOutcomeFound && held.next.afterReplan && Same(held.next.from, Beside(300, -500, 500)),
+		"in that same frame its new way is found, from where it is, and its line says it came of a re-plan");
+	Check(held.next.polygonCount >= 1 && held.next.polygons[0] == TheWall(),
+		"the polygon it's on is never shut for its own search: the new way starts on that wall");
+	Check(!guide.RestingAfterStuck(Alien(1)) && guide.Steer(&map, onTheWall, &towards), "with its new way, it's guided again");
+
+	// Each time it's put at its new way's second point and held there: stuck after reaching a point, so the 2nd and 3rd re-plans, then
+	// the 4th time in that minute it rests
+	int replans[3] = { -1, -1, -1 };
+	AlienWaysAfterStuck after[3] = { kAlienWaysRestsAtTheStart, kAlienWaysRestsAtTheStart, kAlienWaysRestsAtTheStart };
+	Held last = {};
+
+	for (int k = 0; k < 3; k++)
+	{
+		last = HeldAtItsSecondPoint(guide, map, Alien(1));
+		replans[k] = last.stuck ? last.line.replan : -1;
+		after[k] = last.line.afterStuck;
+	}
+
+	Check(replans[0] == 2 && replans[1] == 3 && after[0] == kAlienWaysReplans && after[1] == kAlienWaysReplans,
+		"stuck twice more along its ways, it re-plans twice more: its 2nd and 3rd in this minute");
+	Check(last.stuck && after[2] == kAlienWaysRestsCapped && replans[2] == 0 && last.resting && !last.hasNext,
+		"the 4th time in that minute its re-plans are used up: it rests, as before the watchdog, and asks for nothing");
+
+	// A minute on, its re-plans count no more. It's held at the same spot meanwhile, asked about every frame of 400 ms, so it's kept.
+	for (int ms = 0; ms < 61000; ms += 400)
+	{
+		guide.Steer(&map, last.ask, &towards);
+		Frame(guide, map, 400);
+	}
+
+	bool guided = false;
+
+	for (int ms = 0; ms < 6000 && !guided; ms += 100)
+	{
+		guided = guide.Steer(&map, last.ask, &towards);
+		Frame(guide, map, 100);
+	}
+
+	Held const later = HeldAtItsSecondPoint(guide, map, Alien(1));
+	Check(guided && later.stuck && later.line.afterStuck == kAlienWaysReplans && later.line.replan == 1,
+		"a minute later, stuck along its way, it re-plans again: the first of a new minute");
+}
+
+// A polygon is shut for 20 s. An alien held at the start is stuck there, heading for the wall's foot, so that wall is shut for it; then
+// by the other wall the same, so both are. With both shut its ways are all floor, which the game's own code walks as well, so it rests.
+// Once the first wall's 20 s are up, its way goes by that wall again.
+static void ShutForTwentySeconds()
+{
+	printf("The watchdog: a polygon is shut for an alien for 20 s\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	std::vector<int> times;
+	std::vector<AlienWaysReport> lines;
+
+	for (int ms = 0; ms < 30000; ms += 100)
+	{
+		guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			times.push_back(ms);
+			lines.push_back(reports[r]);
+		}
+	}
+
+	// In order: its first stuck, the way after it, its second stuck, then the first way by the first wall again
+	size_t const none = lines.size();
+	size_t firstStuck = none, byTheOther = none, secondStuck = none, byTheFirstAgain = none;
+	bool allFloorMeanwhile = false;
+
+	for (size_t i = 0; i < lines.size(); i++)
+	{
+		bool const stuck = lines[i].outcome == kAlienWaysOutcomeStuck;
+
+		if (firstStuck == none)
+		{
+			firstStuck = stuck ? i : none;
+		}
+		else if (byTheOther == none)
+		{
+			byTheOther = lines[i].outcome == kAlienWaysOutcomeFound ? i : none;
+		}
+		else if (secondStuck == none)
+		{
+			secondStuck = stuck ? i : none;
+		}
+		else if (byTheFirstAgain == none)
+		{
+			allFloorMeanwhile = allFloorMeanwhile || lines[i].outcome == kAlienWaysOutcomeAllFloor;
+			byTheFirstAgain = ByTheWall(lines[i], TheWall()) ? i : none;
+		}
+	}
+
+	Check(firstStuck != none && lines[firstStuck].afterStuck == kAlienWaysRestsAtTheStart && lines[firstStuck].shutPolygon == TheWall(),
+		"held at the start, it's stuck there: it rests, and the wall it was heading for is shut for it");
+	Check(byTheOther != none && ByTheWall(lines[byTheOther], OtherWall()), "after its rest its way goes by the other wall");
+	Check(secondStuck != none && lines[secondStuck].shutPolygon == OtherWall(), "stuck at the start again, that wall is shut for it too");
+	Check(allFloorMeanwhile, "with both walls shut its ways are all floor, so it rests: the map's search keeps off what's shut for it");
+	Check(byTheFirstAgain != none && times[byTheFirstAgain] - times[firstStuck] >= kAlienWaysShutFor
+		&& times[byTheFirstAgain] - times[firstStuck] <= kAlienWaysShutFor + 3000,
+		"once the first wall's 20 s are up, its next way goes by that wall again, and not before");
+}
+
+// What's shut for one alien isn't shut for another
+static void NotShared()
+{
+	printf("The watchdog: what's shut for one alien is shut for it alone\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	Held const held = HeldTillStuck(guide, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	Check(held.stuck && held.line.shutPolygon == TheWall(), "one alien is stuck at the start, and the wall is shut for it");
+
+	// While it rests, a second alien asks from the same place. The first has no way now, so it claims nothing that could send the second round.
+	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	guide.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
+	Frame(guide, map, 100);
+	const AlienWaysReport *reports = nullptr;
+	size_t const count = ReportsOf(guide, &reports);
+	bool second = false;
+
+	for (size_t r = 0; r < count; r++)
+	{
+		second = second || (reports[r].who.place == Alien(2).place && ByTheWall(reports[r], TheWall()));
+	}
+
+	Check(second, "another alien's way goes by that wall: it isn't shut for it");
+}
+
+// An alien let go takes nothing shut with it, so nothing piles up across a level as aliens die or go (PO, 2026-11-11)
+static void LetGoForgetsIt()
+{
+	printf("The watchdog: an alien let go, dead or gone, leaves nothing shut\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const AlienWaysReport *reports = nullptr;
+
+	// Dead: the game lets it go at once (Forget). Asking again, it's an alien the guide has never seen: the wall isn't shut for it.
+	const std::unique_ptr<AlienWaysGuide> deadRoom(new AlienWaysGuide);
+	AlienWaysGuide &dead = *deadRoom;
+	Held const killed = HeldTillStuck(dead, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	Check(killed.stuck && killed.line.shutPolygon == TheWall(), "stuck at the start, the wall is shut for it");
+	dead.Forget(Alien(1));
+	dead.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	Frame(dead, map, 100);
+	Check(ReportsOf(dead, &reports) == 1 && ByTheWall(reports[0], TheWall()), "let go at once and asking again, its way goes by that wall: nothing is shut for it");
+
+	// Gone: nothing asks about it for half a second, so the guide lets it go
+	const std::unique_ptr<AlienWaysGuide> goneRoom(new AlienWaysGuide);
+	AlienWaysGuide &gone = *goneRoom;
+	Held const away = HeldTillStuck(gone, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	Check(away.stuck && away.line.shutPolygon == TheWall(), "another stuck at the start, the wall shut for it");
+	Frame(gone, map, kAlienWaysForgetAfter);
+	gone.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	Frame(gone, map, 100);
+	Check(ReportsOf(gone, &reports) == 1 && ByTheWall(reports[0], TheWall()), "nothing asked about it for half a second, then asking again: nothing is shut for it");
 }
 
 static void AskingAgain()
@@ -1159,7 +1525,9 @@ static void SourceOfTheGame()
 	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");
 
 	std::string const guidedNow = Between(ways, "bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)", "size_t AlienWays_WaysToShow(");
-	Check(Has(ways, "\tdetails += polygons;\n\tLogString(std::string(text) + details);") && Has(ways, "polygons = line.onGrid ? \". Cells:\" : \". Polygons:\";"),
+	// Modified 2026-11-11 by Melanikus (Third): fd9da61a puts a found way's places between the polygons and the line's end, so the two are
+	// checked in order, not side by side
+	Check(ComesBefore(ways, "\tdetails += polygons;\n", "\tLogString(std::string(text) + details);\n") && Has(ways, "polygons = line.onGrid ? \". Cells:\" : \". Polygons:\";"),
 		"SOURCE: a search's line lists the polygons its way is on, or the grid's cells on a way found on the grid");
 	Check(Has(ways, "\tif (clockMs / 1000 != placesSecond)\n\t{\n\t\tplacesSecond = clockMs / 1000;"), "SOURCE: and once a second a line says where the guided aliens are");
 	Check(Has(guidedNow, "return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));"),
@@ -1215,10 +1583,24 @@ static void SourceOfTheGame()
 	// A flanker's search goes with a flanker's step and most (the map test tries what those do), and the game says which target each is for.
 	// The search starts in two places, the grid's and the old map's, each checked by the words before its step, so neither can lose the
 	// flanker's step unseen (modified 2026-11-11 by Melanikus (Third) for the AvP port: one check matched either, so the old map's could go)
-	Check(Has(guideSource, "ShutForTheGrid(*map),\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
+	Check(Has(guideSource, "next, shut,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
 		"SOURCE: a flanker searches the grid with a flanker's step and most");
-	Check(Has(guideSource, "claimsOn ? &claims : nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
+	Check(Has(guideSource, "claimsOn ? &claims : nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor,\n\t\t\t\tshut);"),
 		"SOURCE: a flanker searches with a flanker's step and most");
+
+	// THE WATCHDOG (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): both searches keep off what's shut for the alien, the
+	// grid's as well as the map's, which only the map's is tried by here; and the log says what the watchdog did
+	Check(Has(guideSource, "const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to);"),
+		"SOURCE: both searches are given what's shut for the alien searching");
+	std::string const afterStuck = Between(ways, "static std::string AfterStuckWords(const AlienWaysReport &line)", "// One line in the log for each search that ended");
+	Check(Has(ways, "kAlienWaysNoHeadwayFor / 1000.0, AfterStuckWords(line).c_str());")
+		&& Has(afterStuck, "case kAlienWaysReplans:\n\t\t\tsnprintf(words, sizeof(words), \": it re-plans at once, re-plan %d of %d this minute, and %s\"")
+		&& Has(afterStuck, "case kAlienWaysRestsAtTheStart:") && Has(afterStuck, "case kAlienWaysRestsCapped:"),
+		"SOURCE: a stuck line says whether the alien re-plans, rests at its way's start, or rests with its re-plans used up");
+	Check(Has(afterStuck, "\"polygon %d is shut for it for %.0f s\", line.shutPolygon, kAlienWaysShutFor / 1000.0"),
+		"SOURCE: and which polygon is shut for it, and for how long");
+	Check(Has(ways, "if (line.outcome != kAlienWaysOutcomeStuck && line.afterReplan)\n\t{\n\t\tdetails = \". After a re-plan\" + details;"),
+		"SOURCE: a search a re-plan asked for says so in its line");
 	Check(Has(ways, "\task.hasTarget = target != 0;\n\task.target = target ? WhoIs(target) : AlienWaysWho{ 0, 0 };"),
 		"SOURCE: the game tells the guide which target an alien is coming for");
 	Check(!level.empty(), "SOURCE: the level's lister can be read");
@@ -1275,6 +1657,11 @@ int main()
 	TakenUpWhereItIs();
 	OffTheWay();
 	Stuck();
+	TheClock();
+	ReplansAtOnce();
+	ShutForTwentySeconds();
+	NotShared();
+	LetGoForgetsIt();
 	AskingAgain();
 	FailedRenewal();
 	FoundAnywhere();
