@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for the grappling hook (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /* KJL 16:14:35 09/09/98 - BonusAbilities.c */
@@ -422,7 +424,7 @@ void LoadStrategy_Grapple(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Position)
 	COPYELEMENT_LOAD(Orientation)
 	
-	Save_RestoreDynamics(GrapplingHook.DispPtr->ObStrategyBlock->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(GrapplingHook.DispPtr->ObStrategyBlock->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 }
 
 void SaveStrategy_Grapple(STRATEGYBLOCK* sbPtr)

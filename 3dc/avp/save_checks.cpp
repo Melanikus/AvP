@@ -271,7 +271,10 @@ bool Save_NumberIsInRange(int number, int lowest, int highest)
 //
 // An angle is looked up in the sine and cosine tables, which have 4096 places, and not every lookup keeps it in range. An angle goes round
 // in steps of 4096, so taking it to that range is still the same angle.
-void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
+//
+// The level's walls and gravity come back as the object was made, unless its kind can hold them off (THE WALLS AND GRAVITY A SAVE CAN HOLD,
+// save_checks.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109 and SAVE-HOSTILE-1).
+void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved, int canHold)
 {
 	if (!live)
 	{
@@ -281,6 +284,8 @@ void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
 	int const ownMass = live->Mass;
 	const DYN_TYPE ownType = live->DynamicsType;
 	const TOPPLE_FORCE ownTopple = live->ToppleForce;
+	unsigned int const ownWalls = live->OnlyCollideWithObjects;
+	unsigned int const ownGravity = live->GravityOn;
 
 	*live = *saved;
 
@@ -307,6 +312,18 @@ void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
 	{
 		Save_NoteRefused("a topple force");
 		live->ToppleForce = ownTopple;
+	}
+
+	if (!(canHold & 2) && live->OnlyCollideWithObjects != ownWalls)
+	{
+		Save_NoteRefused("the level's walls for an object");
+		live->OnlyCollideWithObjects = ownWalls;
+	}
+
+	if (!(canHold & 1) && live->GravityOn != ownGravity)
+	{
+		Save_NoteRefused("an object's gravity");
+		live->GravityOn = ownGravity;
 	}
 
 	live->OrientEuler.EulerX &= wrap360;

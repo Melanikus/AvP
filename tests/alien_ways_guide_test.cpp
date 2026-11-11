@@ -1972,9 +1972,11 @@ static void SourceOfTheGame()
 	Check(Has(slide, "\t\tEndSlide(alien);\n\t\ttheGuide.SlideEnded(who, true);"), "SOURCE: arrived, its walls and gravity are back");
 	Check(Has(ways, "static void EndSlide(STRATEGYBLOCK *alien)\n{\n\tif (alien && alien->DynPtr && alien->I_SBtype == I_BehaviourAlien)\n\t{\n\t\talien->DynPtr->OnlyCollideWithObjects = 0;\n\t\talien->DynPtr->GravityOn = 1;"),
 		"SOURCE: walls and gravity back are 1999's alien's own");
+	// A game saved mid-slide gets the alien's walls and gravity back as it loads (save_checks_test, THE WALLS AND GRAVITY A SAVE CAN HOLD;
+	// modified 2026-11-11 by Melanikus (Third) for the AvP port, #109), so the level's first frame has nothing to do for it
 	Check(Has(ways, "\t\talien->DynPtr->UseStandardGravity = 1;\n\t\tEndSlide(alien);") && Has(ways, "\t// No way steers it this frame, so no slide either") &&
-		Has(ways, "\tif (frameNumber == 1)\n\t{\n\t\tfor (int i = 0; i < NumActiveStBlocks; i++)\n\t\t{\n\t\t\tEndSlide(ActiveStBlockList[i]);"),
-		"SOURCE: and back when it's let go, when no way steers it, and at a level's first frame for one a saved game kept mid-slide");
+		!Has(ways, "if (frameNumber == 1)"),
+		"SOURCE: and back when it's let go, and when no way steers it; a saved game is its loader's");
 	Check(Has(ways, "\ttheGuide.SetSlides(true);\n"), "SOURCE: the game turns the slide on at a level's start");
 	Check(Has(ways, "case kAlienWaysOutcomeSlide:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s slides %.1f m past a stuck at %s to %s"),
 		"SOURCE: the log has a line for each slide, how far, from where and to where");

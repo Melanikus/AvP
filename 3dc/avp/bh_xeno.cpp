@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a xenoborg (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a xenoborg's block starts cleared, and the pointers to its moving parts are set as soon as it's made, not on its
 //   first turn, so waking it before then can't write through whatever the memory last held
@@ -5225,7 +5227,7 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 	xenoStatusPointer->Target = Save_TargetWithAPlace(FindSBWithName(xenoStatusPointer->Target_SBname));
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

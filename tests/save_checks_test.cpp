@@ -177,7 +177,7 @@ static void TestDynamics()
 	saved.ToppleForce = TOPPLE_FORCE_FULL;
 	saved.OrientEuler.EulerY = 4095;
 	saved.GravityOn = 1;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.Position.vx == 1234 && live.Position.vy == -5678 && live.LinVelocity.vz == 99, "where it is and how it moves come from the save");
 	Check(live.Mass == 30, "a real mass comes from the save");
 	Check(live.DynamicsType == DYN_TYPE_NRBB_COLLISIONS, "a real collision type comes from the save");
@@ -189,20 +189,20 @@ static void TestDynamics()
 	MakeLive(live);
 	saved.DynamicsType = DYN_TYPE_NO_COLLISIONS;
 	saved.ToppleForce = TOPPLE_FORCE_NONE;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.DynamicsType == DYN_TYPE_NO_COLLISIONS, "the first collision type is real");
 	Check(live.ToppleForce == TOPPLE_FORCE_NONE, "the first topple force is real");
 
 	MakeLive(live);
 	saved.DynamicsType = DYN_TYPE_CUBOID_COLLISIONS;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.DynamicsType == DYN_TYPE_CUBOID_COLLISIONS, "the last collision type is real");
 
 	// a crafted save
 	MakeLive(live);
 	memset(&saved, 0xFF, sizeof(saved));
 	saved.Position.vx = 42;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.CollisionReportPtr == 0, "an address in the save never gets in");
 	Check(live.Mass == 100, "a mass of -1 keeps the object's own");
 	Check(live.DynamicsType == DYN_TYPE_SPHERE_COLLISIONS, "a collision type of -1 keeps the object's own");
@@ -214,7 +214,7 @@ static void TestDynamics()
 	saved.Mass = 0;
 	saved.DynamicsType = (enum DYN_TYPE)(DYN_TYPE_CUBOID_COLLISIONS + 1);
 	saved.ToppleForce = (enum TOPPLE_FORCE)(TOPPLE_FORCE_FULL + 1);
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.Mass == 100, "a mass of 0 keeps the object's own");
 	Check(live.DynamicsType == DYN_TYPE_SPHERE_COLLISIONS, "one collision type past the end keeps the object's own");
 	Check(live.ToppleForce == TOPPLE_FORCE_ALIEN, "one topple force past the end keeps the object's own");
@@ -228,7 +228,7 @@ static void TestDynamics()
 	saved.PrevOrientEuler.EulerX = -4096;
 	saved.PrevOrientEuler.EulerY = 2147483647;
 	saved.PrevOrientEuler.EulerZ = 5000;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(live.OrientEuler.EulerX == 0, "an angle of 4096 is the same as 0");
 	Check(live.OrientEuler.EulerY == 4095, "an angle of -1 is the same as 4095");
 	Check(live.OrientEuler.EulerZ == 7, "an angle many turns round comes back in range");
@@ -237,8 +237,72 @@ static void TestDynamics()
 	Check(live.PrevOrientEuler.EulerZ == 904, "the last frame's third angle too");
 
 	// nothing to write to
-	Save_RestoreDynamics(0, &saved);
+	Save_RestoreDynamics(0, &saved, kSaveHoldsWallsAndGravityOff);
 	Check(true, "an object with no dynamics block is left alone");
+}
+
+// THE WALLS AND GRAVITY A SAVE CAN HOLD (save_checks.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, SAVE-HOSTILE-1): a
+// save taken while an alien slid holds its walls and gravity off, and a save made to can hold either off for anything. Each kind keeps
+// only what its own code can turn off, and the rest comes back as the object was made, counted as refused.
+static void CheckRefusedBy(const char *check, int count, const char *what);
+static void CheckNothingRefused(const char *what);
+
+static void TestWallsAndGravity()
+{
+	DYNAMICSBLOCK live, saved;
+	char words[200] = { 0 };
+
+	// Made as 1999 makes an alien: the level's walls stop it, and gravity pulls it
+	MakeLive(live);
+	live.OnlyCollideWithObjects = 0;
+	live.GravityOn = 1;
+	memset(&saved, 0, sizeof(saved));
+	saved.Mass = 30;
+	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
+	saved.ToppleForce = TOPPLE_FORCE_FULL;
+	saved.Position.vx = 777;
+	saved.OnlyCollideWithObjects = 1;
+	saved.GravityOn = 0;
+	Save_StartCountingRefusals();
+
+	// An alien saved mid-slide (or a save made so): it comes back with the level's walls and its gravity, where it was, and both are refused
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsNeitherOff);
+	Check(live.OnlyCollideWithObjects == 0 && live.GravityOn == 1 && live.Position.vx == 777,
+		"an alien saved with the level's walls and its gravity off comes back with both, where it was");
+	Save_DescribeRefusals(words, sizeof(words));
+	Check(strcmp(words, "save: 2 values refused, by the level's walls for an object 1, an object's gravity 1") == 0, "and both are counted as refused");
+	Save_StartCountingRefusals();
+
+	// The same save of a thrown flare: its gravity is as saved, as its own code turns it off, but never its walls
+	MakeLive(live);
+	live.GravityOn = 1;
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsGravityOff);
+	Check(live.OnlyCollideWithObjects == 0 && live.GravityOn == 0, "a kind that turns its own gravity off keeps the gravity saved, but not the walls off");
+	CheckRefusedBy("the level's walls for an object", 1, "and only the walls are refused");
+
+	// The queen, climbing out of her pit: both as saved, nothing refused
+	MakeLive(live);
+	live.GravityOn = 1;
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
+	Check(live.OnlyCollideWithObjects == 1 && live.GravityOn == 0, "the queen's walls and gravity are as saved, as she turns both off");
+	CheckNothingRefused("and nothing is refused");
+
+	// An alien's real save, walls and gravity on: as saved, nothing refused
+	MakeLive(live);
+	live.GravityOn = 1;
+	saved.OnlyCollideWithObjects = 0;
+	saved.GravityOn = 1;
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsNeitherOff);
+	Check(live.OnlyCollideWithObjects == 0 && live.GravityOn == 1, "an alien saved as 1999 has it loads as it was");
+	CheckNothingRefused("and nothing is refused");
+
+	// Gravity alone off, for an alien: refused alone
+	MakeLive(live);
+	live.GravityOn = 1;
+	saved.GravityOn = 0;
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsNeitherOff);
+	Check(live.OnlyCollideWithObjects == 0 && live.GravityOn == 1, "an alien saved with only its gravity off has it back");
+	CheckRefusedBy("an object's gravity", 1, "and only the gravity is refused");
 }
 
 // A good value has to count nothing, and a bad one has to count against the check that refused it and no other. If only the total were looked at, a later check could hide a missing one. The
@@ -296,7 +360,7 @@ static void TestCountingRefusals()
 	saved.Mass = 30;
 	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
 	saved.ToppleForce = TOPPLE_FORCE_FULL;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	CheckNothingRefused("everything a real save holds counts nothing, and -1 for none is one of those");
 
 	// each bad value, named
@@ -332,25 +396,25 @@ static void TestCountingRefusals()
 	saved.Mass = 0;
 	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
 	saved.ToppleForce = TOPPLE_FORCE_FULL;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	CheckRefusedBy("a mass", 1, "a mass of nothing");
 
 	MakeLive(live);
 	saved.Mass = 30;
 	saved.DynamicsType = (enum DYN_TYPE)9999;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	CheckRefusedBy("a kind of dynamics", 1, "a kind of dynamics that isn't one");
 
 	MakeLive(live);
 	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
 	saved.ToppleForce = (enum TOPPLE_FORCE)9999;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	CheckRefusedBy("a topple force", 1, "a topple force that isn't one");
 
 	MakeLive(live);
 	saved.ToppleForce = TOPPLE_FORCE_FULL;
 	saved.CollisionReportPtr = (struct collisionreport *)&live;
-	Save_RestoreDynamics(&live, &saved);
+	Save_RestoreDynamics(&live, &saved, kSaveHoldsWallsAndGravityOff);
 	CheckRefusedBy("an address in a dynamics block", 1, "an address where a real save holds nothing");
 
 	// several kinds in one line, and a line too small for them
@@ -457,6 +521,28 @@ static void TestTheLoadersAsk()
 	Check(CountOf(ReadSourceFile("3dc/avp/bh_weapon.cpp"), "Save_RestoreDynamics(") == 13, "every thrown weapon's loader asks");
 	Check(CountOf(ReadSourceFile("3dc/avp/bh_debris.cpp"), "Save_RestoreDynamics(") == 2, "and both of debris'");
 
+	// THE WALLS AND GRAVITY A SAVE CAN HOLD (save_checks.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109, SAVE-HOSTILE-1):
+	// each loader says what its kind's own code turns off. Only the queen can be saved with the level's walls off.
+	struct Holds { const char *name; const char *says; int count; };
+	Holds const holds[] = {
+		{ "bh_agun", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bh_alien", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 },
+		{ "bh_corpse", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bh_debris", ", &block->dynamics, kSaveHoldsNeitherOff);", 2 },
+		{ "bh_facehugger", ", &block->dynamics, kSaveHoldsGravityOff);", 1 }, { "bh_marine", ", &block->dynamics, kSaveHoldsGravityOff);", 1 },
+		{ "bh_platform_lift", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bh_predator", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 },
+		{ "bh_queen", ", &block->dynamics, kSaveHoldsWallsAndGravityOff);", 1 }, { "bh_weapon", ", &block->dynamics, kSaveHoldsGravityOff);", 13 },
+		{ "bh_xeno", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 }, { "bonusabilities", ", &block->dynamics, kSaveHoldsNeitherOff);", 1 },
+		{ "player", ", &block->dynamics, kSaveHoldsGravityOff);", 1 }, { "pvisible", ", &block->dynamics, kSaveHoldsGravityOff);", 1 } };
+
+	for (Holds const &h : holds)
+	{
+		std::string const text = ReadSourceFile((avp + h.name + ".cpp").c_str());
+		Check(CountOf(text, h.says) == h.count && CountOf(text, "Save_RestoreDynamics(") == h.count,
+			(std::string("each of ") + h.name + "'s loaders says what of its walls and gravity its save can hold off").c_str());
+	}
+
+	Check(CountOf(ReadSourceFile("3dc/avp/save_checks.h"), "kSaveHoldsWallsAndGravityOff") == 2 && CountOf(ReadSourceFile("3dc/avp/bh_queen.cpp"), "kSaveHoldsWallsAndGravityOff") == 1,
+		"only the queen's loader keeps a save's walls off");
+
 	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
 	Check(Has(menus, "if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))"), "a save slot's numbers are asked about when the menu lists it");
 
@@ -537,6 +623,7 @@ int main()
 	TestRanges();
 	TestDynamics();
 	TestCountingRefusals();
+	TestWallsAndGravity();
 	TestTargets();
 	TestTheLoadersAsk();
 

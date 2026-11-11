@@ -1,3 +1,6 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls off for a marine; its gravity is as saved, as its own code turns it off
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   in a Hudson run, a marine's landing is told to Hudson, by the game's own rule for whether it would kill, instead of being skipped;
 //   outside a run, a fall is exactly as it was
@@ -18645,7 +18648,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	marineStatusPointer->My_Weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

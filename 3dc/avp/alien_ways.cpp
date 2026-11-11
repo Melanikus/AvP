@@ -806,16 +806,6 @@ void AlienWays_Frame()
 	// taken off the list.
 	frameNumber++;
 
-	// At a level's first frame, any alien a saved game kept mid-slide gets its walls and gravity back (THE SLIDE). Added 2026-11-11 by
-	// Melanikus (Third) for the AvP port, #109.
-	if (frameNumber == 1)
-	{
-		for (int i = 0; i < NumActiveStBlocks; i++)
-		{
-			EndSlide(ActiveStBlockList[i]);
-		}
-	}
-
 	for (Watched &w : watched)
 	{
 		if (!w.used)
