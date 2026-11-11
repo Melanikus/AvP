@@ -26,12 +26,14 @@ on:
 permissions:
   contents: read
 
-# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
-# going. On 2026-11-11 this check was started on six heads at once, its jobs took every runner the account has, and new runs couldn't
-# start at all. Added 2026-11-11 by Melanikus for the AvP port.
+# One run at a time for each pull request, and for each branch a run is started on by hand. Here a newer run WAITS for the one going
+# to finish, and never stops it: on 2026-11-11 runs of this check stopped half-way, with jobs still queued, left those jobs stuck where
+# nothing could cancel or delete them, holding the account's runners, and new runs couldn't start at all. GitHub keeps one waiting run
+# for a group: a third run replaces the one waiting, before any of its jobs is queued. This doesn't limit several branches at once;
+# fewer jobs per run is the next step of the plan. Added 2026-11-11 by Melanikus for the AvP port.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   choose:
