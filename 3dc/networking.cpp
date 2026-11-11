@@ -1016,7 +1016,8 @@ static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
 	{
 		const char *listWhy = NULL;
 		int keysLine = -1;
-		int const came = RelayList_RelayKeysCameOn(&keysLine, relayV2Keys.p384, relayV2Keys.kem, &listWhy);
+		char keysRegion[kRelayListRegionLetters + 1] = "";
+		int const came = RelayList_RelayKeysCameOn(&keysLine, keysRegion, relayV2Keys.p384, relayV2Keys.kem, &listWhy);
 
 		if (came == kRelayKeysWaiting)
 		{
@@ -1030,6 +1031,13 @@ static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
 			*why = listWhy ? listWhy : "the relay's keys couldn't be had";
 			RelayV2Forget();
 			return kRelayV2None;
+		}
+
+		// A host asks with no region: its relay's own region comes with the keys, and the room is opened in it (2026-11-11)
+		if (!relayV2Region[0])
+		{
+			strncpy(relayV2Region, keysRegion, kRelayListRegionLetters);
+			relayV2Region[kRelayListRegionLetters] = 0;
 		}
 
 		relayV2Step = relayV2Times ? kRelayV2Timing : kRelayV2Handshake;

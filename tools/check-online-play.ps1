@@ -963,7 +963,7 @@ $keysAsked = Get-OneDefinition 'RelayV2Begin' 'J' $netFile 'the start of a chann
 $keysCame = Get-OneDefinition 'RelayV2Turn' 'J' $netFile 'a channel''s turn'
 
 if (-not (Test-Refusal $keysAsked.Flat 'if (!RelayList_AskForRelayKeysOn(line, region)) {' 'return false;') -or -not $keysAsked.Flat.Contains('relayV2Line = line;') -or
-    -not $keysCame.Flat.Contains('int const came = RelayList_RelayKeysCameOn(&keysLine, relayV2Keys.p384, relayV2Keys.kem, &listWhy);') -or
+    -not $keysCame.Flat.Contains('int const came = RelayList_RelayKeysCameOn(&keysLine, keysRegion, relayV2Keys.p384, relayV2Keys.kem, &listWhy);') -or
     -not (Test-FormBlock $keysCame.Flat 'if (came != kRelayKeysCame || keysLine != relayV2Line) {' @('return kRelayV2None;')))
 {
     Stop-Check "J: a relay's keys must be asked of its own line (RelayV2Begin: RelayList_AskForRelayKeysOn(line, region), relayV2Line = line;) and taken only for that line (RelayV2Turn: if (came != kRelayKeysCame || keysLine != relayV2Line) { ... return kRelayV2None; })"
