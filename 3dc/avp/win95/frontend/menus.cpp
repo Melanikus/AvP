@@ -897,14 +897,39 @@ static int JoinableGameRowForARun(const char *name, int *linesWithAGame)
 	return row;
 }
 
+// Whether any line's access request is still on its way (online_page.h): the Multiplayer page asks every line with the yes as it opens
+static bool ALineIsStillAskingForARun(void)
+{
+	for (int place = 0; place < OnlineLines_LineCount(); place++)
+	{
+		if (OnlineLines_AskingOn(place))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool JoinThroughFindGamesForARun(void)
 {
 	LoadAllAvPMenuGfx();
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
-	SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);
-	MenuSecondsForARun(1);
 
-	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	// The Multiplayer page first, then its Join Game row, as a player comes to Find Games (modified 2026-11-11 by Melanikus (Third) for the
+	// AvP port): opening that page asks every line with the yes where this PC stands (OnlineLines_AskTheAgreedLines), and a game is
+	// joinable only on a line that has approved this copy this run. Going straight to Join Game, as the run did before, asked nothing.
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, "Join Game") && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERJOINGAME;
+
+	if (!joined)
+	{
+		LogErrorString("hudson: the Multiplayer page's Join Game didn't open its page");
+	}
+
+	MenuSecondsForARun(1);
+	joined = joined && PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
 	const char *const joinOn = Hudson_JoinOnName();
 	int approvedPlaces[kServersCfgMostLines];
 	int row = -1;
@@ -912,15 +937,15 @@ static bool JoinThroughFindGamesForARun(void)
 	int approved = 0;
 	DWORD const started = GetTickCount();
 
-	// The list's games come within a few seconds of the page opening; at most 30 s. It waits on until the named game is there and every
-	// server that has approved this copy has a game on the page, so the picture shows them all.
+	// The list's games come within a few seconds of the page opening; at most 30 s. It waits on until every line's answer has come, the
+	// named game is there, and every server that has approved this copy has a game on the page, so the picture shows them all.
 	while (joined && bRunning && (DWORD)(GetTickCount() - started) < 30000u)
 	{
 		MenuFrameForARun(NULL);
 		row = JoinableGameRowForARun(joinOn, &linesWithAGame);
 		approved = RelayList_ApprovedLines(approvedPlaces, kServersCfgMostLines);
 
-		if (row >= 0 && linesWithAGame >= approved)
+		if (row >= 0 && linesWithAGame >= approved && !ALineIsStillAskingForARun())
 		{
 			break;
 		}
