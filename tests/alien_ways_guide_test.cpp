@@ -133,6 +133,7 @@ static AlienWaysAsk Ask(const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ g
 	ask.goalIsTheTarget = false;
 	ask.hasTarget = false;
 	ask.target = AlienWaysWho{ 0, 0 };
+	ask.targetInSight = false;
 	return ask;
 }
 
@@ -825,6 +826,70 @@ static void LetGoForgetsIt()
 	gone.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(gone, map, 100);
 	Check(ReportsOf(gone, &reports) == 1 && ByTheWall(reports[0], TheWall()), "nothing asked about it for half a second, then asking again: nothing is shut for it");
+}
+
+// THE HAND-OVER (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner: "I would expect this place
+// to have a quick/bugless alien reaching you, seems though our weight is causing him to move away when he's in 'pounce' range". The
+// game's pounce has to start on a flat floor, which a guided alien keeps off.
+static AlienWaysAsk AtItsTarget(AlienWaysXYZ at, AlienWaysXYZ target)
+{
+	AlienWaysAsk ask = Ask(Alien(1), at, target, 13);
+	ask.goalIsTheTarget = true;
+	ask.targetInSight = true;
+	return ask;
+}
+
+static void HandOver()
+{
+	printf("The hand-over: near its target, in plain view, an alien is the game's own, as in 1999\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const AlienWaysReport *reports = nullptr;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	GuidedAlien(guide, Alien(1));
+
+	// 9 m from its target, which it can see: past kAlienWaysHandOverRange, so it's guided
+	Check(guide.Steer(&map, AtItsTarget(kStart, kGoal), &towards) && !guide.HandedOver(Alien(1)), "9 m from its target, in plain view, it's guided");
+
+	// Its target 7.9 m off, its module in view, but with no clear sight of it (behind a crate, say): no hand-over. The owner's ruling
+	// R-LAVA-5: the game's own code takes over only "when we're in clear view".
+	AlienWaysXYZ const nearer = { 1000, 0, 8400 };
+	AlienWaysAsk unseen = AtItsTarget(kStart, nearer);
+	unseen.targetInSight = false;
+	Check(guide.Steer(&map, unseen, &towards) && !guide.HandedOver(Alien(1)), "7.9 m from its target but with no clear sight of it, it's still guided");
+
+	// In clear sight at 7.9 m: handed over, its way dropped, and the log hears of it once
+	Check(!guide.Steer(&map, AtItsTarget(kStart, nearer), &towards) && guide.HandedOver(Alien(1)) && !guide.Guided(Alien(1)),
+		"its target 7.9 m off, it's handed over: the game's own last stretch has it, its pounce too");
+	Frame(guide, map, 16);
+	size_t const said = ReportsOf(guide, &reports);
+	Check(said == 1 && reports[0].outcome == kAlienWaysOutcomeHandedOver && Same(reports[0].from, kStart) && Same(reports[0].to, nearer),
+		"the log hears of it, with where the alien is and where its target is");
+	const AlienWaysPoint *points[4];
+	int counts[4], headings[4];
+	Check(guide.Shown(points, counts, headings, 4) == 0, "and no way is shown as followed");
+
+	// Back at 9 m it's still the game's own, as it's taken back only past kAlienWaysTakeBackRange, so one near the line doesn't flip
+	Check(!guide.Steer(&map, AtItsTarget(kStart, kGoal), &towards) && guide.HandedOver(Alien(1)), "its target back at 9 m, it's still the game's own");
+	Frame(guide, map, 16);
+	Check(ReportsOf(guide, &reports) == 0, "asking for no way, and with nothing more in the log");
+
+	// At 10.5 m it's taken back. Its old way was dropped, so it has none yet, and asks for one
+	AlienWaysXYZ const further = { 1000, 0, 11000 };
+	Check(!guide.Steer(&map, AtItsTarget(kStart, further), &towards) && !guide.HandedOver(Alien(1)),
+		"its target 10.5 m off, it's taken back, with no way yet: the old one was dropped");
+	Frame(guide, map, 16);
+	Check(ReportsOf(guide, &reports) == 1 && reports[0].outcome != kAlienWaysOutcomeHandedOver, "and it asks for a new one");
+
+	// A goal 5 m off that isn't the target itself, such as the way into the next room, is no hand-over
+	const std::unique_ptr<AlienWaysGuide> otherRoom(new AlienWaysGuide);
+	AlienWaysGuide &other = *otherRoom;
+	GuidedAlien(other, Alien(1));
+	AlienWaysAsk notTheTarget = Ask(Alien(1), kStart, AlienWaysXYZ{ 1000, 0, 5500 }, 13);
+	notTheTarget.targetInSight = true;
+	other.Steer(&map, notTheTarget, &towards);
+	Check(!other.HandedOver(Alien(1)), "a goal 5 m off that isn't its target itself is no hand-over");
 }
 
 static void AskingAgain()
@@ -1609,6 +1674,15 @@ static void SourceOfTheGame()
 		"SOURCE: and which polygon is shut for it, and for how long");
 	Check(Has(ways, "if (line.outcome != kAlienWaysOutcomeStuck && line.afterReplan)\n\t{\n\t\tdetails = \". After a re-plan\" + details;"),
 		"SOURCE: a search a re-plan asked for says so in its line");
+
+	// THE HAND-OVER (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the mover leaves a handed-over alien to the game's own
+	// code, and the log says when one is handed over
+	Check(Has(ways, "if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who) || theGuide.HandedOver(ask.who))"),
+		"SOURCE: the mover leaves an alien handed over near its target to the game's own last stretch");
+	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u at %s is %.1f m from its target at %s, in clear sight"),
+		"SOURCE: the log says when an alien is handed over, and how far from its target");
+	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
+		"SOURCE: whether it can see its target clearly is the game's own test for a pounce (R-LAVA-5: only in clear view)");
 	Check(Has(ways, "\task.hasTarget = target != 0;\n\task.target = target ? WhoIs(target) : AlienWaysWho{ 0, 0 };"),
 		"SOURCE: the game tells the guide which target an alien is coming for");
 	Check(!level.empty(), "SOURCE: the level's lister can be read");
@@ -1670,6 +1744,7 @@ int main()
 	ShutForTwentySeconds();
 	NotShared();
 	LetGoForgetsIt();
+	HandOver();
 	AskingAgain();
 	FailedRenewal();
 	FoundAnywhere();

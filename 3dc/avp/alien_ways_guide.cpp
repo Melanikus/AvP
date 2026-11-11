@@ -197,6 +197,7 @@ void AlienWaysGuide::Clear()
 		followers[f].mapNext = false;
 		followers[f].restUntil = 0;
 		followers[f].stuckUntil = 0;
+		followers[f].handedOver = false;
 		ForgetTheWatchdog(&followers[f]);
 	}
 }
@@ -310,6 +311,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.askedAt = 0;
 			follower.restUntil = 0;
 			follower.stuckUntil = 0;
+			follower.handedOver = false;
 			follower.count = 0;
 			follower.keptCount = 0;
 			follower.heading = 0;
@@ -385,6 +387,13 @@ bool AlienWaysGuide::RestingAfterStuck(const AlienWaysWho &who) const
 {
 	int const f = Find(who);
 	return f >= 0 && (now < followers[f].stuckUntil || (followers[f].replanning && followers[f].count == 0));
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: THE HAND-OVER (alien_ways_guide.h; #109)
+bool AlienWaysGuide::HandedOver(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && followers[f].handedOver;
 }
 
 size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
@@ -1024,6 +1033,46 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	follower.steeredAt = now;
 	follower.guided = false;
 	follower.last = ask;
+
+	// THE HAND-OVER (alien_ways_guide.h): its target in clear sight and near, the last stretch is the game's own, as in 1999, a rest or
+	// not. Taken back only further off. The log hears of each hand-over once. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	bool const wasHandedOver = follower.handedOver;
+	double const toTarget = Distance(ask.at, ask.goal);
+	follower.handedOver = ask.goalIsTheTarget && ask.targetInSight && toTarget <= (wasHandedOver ? kAlienWaysTakeBackRange : kAlienWaysHandOverRange);
+
+	if (follower.handedOver)
+	{
+		if (!wasHandedOver)
+		{
+			if (reportsRead)
+			{
+				reportCount = 0;
+				reportsRead = false;
+			}
+
+			AlienWaysReport line = {};
+			line.outcome = kAlienWaysOutcomeHandedOver;
+			line.follower = static_cast<size_t>(f);
+			line.who = follower.who;
+			line.from = ask.at;
+			line.to = ask.goal;
+			line.fromKind = KindUnder(ask.down);
+			line.toTheTarget = true;
+			line.shutPolygon = -1;
+			AddReport(line);
+		}
+
+		// Its way and its claims go, and it asks for nothing: when it's taken back it asks again, from wherever it is then
+		DropTheWay(&follower);
+		follower.queued = false;
+
+		if (searching == f)
+		{
+			searching = -1;
+		}
+
+		return false;
+	}
 
 	if (now < follower.restUntil)
 	{

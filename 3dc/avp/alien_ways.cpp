@@ -24,6 +24,9 @@
 #include "bh_alien.h"
 #include "pheromone.h"
 #include "pfarlocs.h"
+#include "los.h"
+#include "targeting.h"
+#include "ai_sight.h"
 
 #include "alien_ways.h"
 #include "alien_ways_build.h"
@@ -440,6 +443,14 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
 				kAlienWaysNoHeadwayFor / 1000.0, AfterStuckWords(line).c_str());
 			details = StuckDetails(line.who);
+			break;
+
+		// THE HAND-OVER (alien_ways_guide.h), once each time. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+		case kAlienWaysOutcomeHandedOver:
+			snprintf(text, sizeof(text), "alien ways: alien %u at %s is %.1f m from its target at %s, in clear sight: the game's own last stretch has it, as in 1999 (its curve, its pounce, its attack), till it's %.1f m off",
+				static_cast<unsigned>(line.follower), Metres(line.from).c_str(),
+				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
+				Metres(line.to).c_str(), kAlienWaysTakeBackRange / 1000.0);
 			break;
 
 		case kAlienWaysOutcomeRefused:
@@ -942,6 +953,24 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 		ask.goalIsTheTarget = true;
 	}
 
+	// Whether it can see its target clearly, for THE HAND-OVER (alien_ways_guide.h): the game's own test for a pounce ("Do we have a clear
+	// line of sight?", AlienIsAbleToPounce in bh_near.cpp), which casts a ray, so it's only asked near a target whose module is in view. The
+	// owner's ruling R-LAVA-5: the game's own code takes over only "when we're in clear view". Added 2026-11-11 by Melanikus (Third) for the
+	// AvP port, #109.
+	ask.targetInSight = false;
+
+	if (ask.goalIsTheTarget && alien->SBdptr && target->SBdptr)
+	{
+		double const dx = static_cast<double>(ask.goal.x) - ask.at.x, dy = static_cast<double>(ask.goal.y) - ask.at.y, dz = static_cast<double>(ask.goal.z) - ask.at.z;
+
+		if (dx * dx + dy * dy + dz * dz <= static_cast<double>(kAlienWaysTakeBackRange) * kAlienWaysTakeBackRange)
+		{
+			VECTORCH targetPoint;
+			GetTargetingPointOfObject(target->SBdptr, &targetPoint);
+			ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;
+		}
+	}
+
 	// The alien goes on the watched list, if it isn't on it, with the goal the game's own code picked for it this frame (alien_ways_stuck.h)
 	Watched *const w = WatchedFor(ask.who, true);
 	w->hasGoal = true;
@@ -963,8 +992,9 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 
 	// No way to follow yet, or none at all. Without the mover, the game's own code steers it, as before. With it, it heads straight for its
 	// goal, holding on to whatever it's on, while the guide asks for a way as it always does; but in the rest after it was found stuck, the
-	// game's own code has it, as before, to get it free.
-	if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who))
+	// game's own code has it, as before, to get it free. And handed over near its target, the game's own last stretch has it (modified
+	// 2026-11-11 by Melanikus (Third) for the AvP port, #109; THE HAND-OVER, alien_ways_guide.h).
+	if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who) || theGuide.HandedOver(ask.who))
 	{
 		return false;
 	}

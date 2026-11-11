@@ -110,6 +110,19 @@ size_t const kAlienWaysMostShut = 4;
 int const kAlienWaysMostReplans = 3;
 int const kAlienWaysReplansWithin = 60000;        // ms: a minute
 
+// THE HAND-OVER. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+// The owner: "I would expect this place to have a quick/bugless alien reaching you, seems though our weight is causing him to move away
+// when he's in 'pounce' range". The game's pounce (AlienIsAbleToPounce, bh_near.cpp) has to start on a flat floor, and with the floor
+// dear a guided alien keeps off it all the way in. So a guided alien in pounce range could never pounce.
+// Now, when an alien's goal is its target itself, it can see it clearly (AlienWaysAsk::targetInSight: the game's own line-of-sight test
+// for a pounce), and it's within kAlienWaysHandOverRange, the guide lets it go. The last stretch is then the game's own, as in 1999: its
+// curve at the target, still climbing what it touches, its pounce and its attack. The owner's ruling R-LAVA-5 (2026-11-11): "The
+// original game should only take over (walk directly/pounce) when we're in clear view/end of the path". 8 m is both where 1999's pounce can start (ALIEN_POUNCE_STARTMAXRANGE) and where 1999's alien starts curving at its target
+// (ALIEN_CURVETOPLAYERDIST). The guide takes it back only beyond kAlienWaysTakeBackRange, so an alien near the line doesn't flip between
+// the two every frame.
+int const kAlienWaysHandOverRange = 8000;         // mm
+int const kAlienWaysTakeBackRange = 10000;        // mm
+
 // An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
 // Checked here, where both are known, so the game's own build stops if one of them is changed alone.
 static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
@@ -162,6 +175,8 @@ struct AlienWaysAsk
 	bool goalIsTheTarget;           // the goal is the target itself, not a point on the way to it: only so the log can say which
 	bool hasTarget;                 // it's coming for a target, whether or not the goal is the target itself...
 	AlienWaysWho target;            // ...and which: the aliens coming for one target are counted, for the flankers (kAlienWaysDirectAliens)
+	bool targetInSight;             // it can see its target clearly, by the game's own test, worked out only when the goal is the target
+	                                // and it's near (THE HAND-OVER). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 };
 
 // How one search went, for the log
@@ -172,7 +187,9 @@ enum AlienWaysOutcome
 	kAlienWaysOutcomeAllFloor,      // a way, but all of it on the floor: the game's own code does that as well, and climbs when it can
 	kAlienWaysOutcomeNoPolygon,     // the alien, or its goal, wasn't near enough to any polygon to start on
 	kAlienWaysOutcomeRefused,       // the map wouldn't start the search: why says why
-	kAlienWaysOutcomeStuck          // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
+	kAlienWaysOutcomeStuck,         // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
+	kAlienWaysOutcomeHandedOver     // not a search: an alien in plain view of its target, near it, was left to the game's own last stretch
+	                                // (THE HAND-OVER; from: where it was, to: its target). Added 2026-11-11 by Melanikus (Third), #109.
 };
 
 // What the watchdog did with an alien found stuck (THE WATCHDOG, above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
@@ -273,6 +290,10 @@ public:
 	// is the same: it was found stuck, and has no way yet.
 	bool RestingAfterStuck(const AlienWaysWho &who) const;
 
+	// Whether this alien is handed over to the game's own last stretch now (THE HAND-OVER, above). The mover leaves it to that code as
+	// well. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+	bool HandedOver(const AlienWaysWho &who) const;
+
 	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
 	// has: up to most of them, for the log's once-a-second line (lanes, #138)
 	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
@@ -341,6 +362,7 @@ private:
 		long long shutUntil[kAlienWaysMostShut];      // ...each until then. One whose time has come is free.
 		long long replanCountsUntil[kAlienWaysMostReplans];   // each re-plan counts against the cap until a minute after it; then it's free
 		bool replanning;                    // the search it's waiting for was asked for by a re-plan
+		bool handedOver;                    // THE HAND-OVER: the game's own last stretch has it (added 2026-11-11 by Melanikus (Third))
 
 		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
 		AlienWaysWho target;

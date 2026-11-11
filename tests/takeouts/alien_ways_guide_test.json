@@ -1584,6 +1584,126 @@
 					"to": "const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to) ? nullptr : nullptr;"
 				}
 			]
+		},
+		{
+			"name": "the guide never hands an alien over near its target",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.handedOver = ask.goalIsTheTarget && ask.targetInSight && toTarget <=",
+					"to": "follower.handedOver = false && ask.targetInSight && toTarget <="
+				}
+			]
+		},
+		{
+			"name": "a goal that isn't the target itself is handed over too",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.handedOver = ask.goalIsTheTarget && ask.targetInSight && toTarget <=",
+					"to": "follower.handedOver = ask.targetInSight && toTarget <="
+				}
+			]
+		},
+		{
+			"name": "an alien is handed over with no clear sight of its target",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.handedOver = ask.goalIsTheTarget && ask.targetInSight && toTarget <=",
+					"to": "follower.handedOver = ask.goalIsTheTarget && toTarget <="
+				}
+			]
+		},
+		{
+			"name": "a handed-over alien is taken back as soon as it's past the hand-over's range",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "(wasHandedOver ? kAlienWaysTakeBackRange : kAlienWaysHandOverRange)",
+					"to": "(wasHandedOver ? kAlienWaysHandOverRange : kAlienWaysHandOverRange)"
+				}
+			]
+		},
+		{
+			"name": "an alien is handed over as far off as it's taken back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "(wasHandedOver ? kAlienWaysTakeBackRange : kAlienWaysHandOverRange)",
+					"to": "(wasHandedOver ? kAlienWaysTakeBackRange : kAlienWaysTakeBackRange)"
+				}
+			]
+		},
+		{
+			"name": "a handed-over alien keeps its way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t// Its way and its claims go, and it asks for nothing: when it's taken back it asks again, from wherever it is then\n\t\tDropTheWay(&follower);\n",
+					"to": "\t\t// Its way and its claims go, and it asks for nothing: when it's taken back it asks again, from wherever it is then\n"
+				}
+			]
+		},
+		{
+			"name": "the log never hears of a hand-over",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tline.outcome = kAlienWaysOutcomeHandedOver;\n",
+					"to": "\t\t\tline.outcome = kAlienWaysOutcomeStuck;\n"
+				}
+			]
+		},
+		{
+			"name": "the log hears of a hand-over every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (!wasHandedOver)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the guide never says an alien is handed over",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\treturn f >= 0 && followers[f].handedOver;",
+					"to": "\treturn f >= 0 && false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mover heads a handed-over alien for its goal",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": " || theGuide.HandedOver(ask.who))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say how near a handed-over alien is",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "is %.1f m from its target at %s, in clear sight: the game",
+					"to": "is %.1f m from its target at %s, near: the game"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never says whether an alien can see its target",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(",
+					"to": "ask.targetInSight = false && IsThisObjectVisibleFromThisPosition_WithIgnore("
+				}
+			]
 		}
 	]
 }
