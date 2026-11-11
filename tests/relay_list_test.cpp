@@ -724,13 +724,13 @@ static void TestTheCalls()
 
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): the list is its servers.cfg line's, trusted by its key alone (relay_list.cpp's
 	// top, TRUSTED BY ITS KEY ALONE). The call is CallChecked; Call is every call after the first.
-	std::string const call = SourceSlice(source, "Answer CallChecked(const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const call = SourceSlice(source, "Answer CallChecked(Shared *s, const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(call, "WINHTTP_FLAG_SECURE)"), "every call is HTTPS");
 	Check(Has(call, "WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;") && !Has(source, "TLS1_1") && !Has(source, "PROTOCOL_TLS1 ") &&
 		!Has(source, "PROTOCOL_SSL") && !Has(source, "PROTOCOL_ALL"), "with TLS 1.2 or newer, and nothing older named anywhere");
 
 	// Nothing goes to a server whose keys didn't match its line, and nothing but the first call goes before they're checked
-	size_t const refusedFirst = call.find("if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood))");
+	size_t const refusedFirst = call.find("if (s->keyState == kKeyRefused || (!check.keepIt && s->keyState != kKeyGood))");
 	size_t const sessionOpened = call.find("WinHttpOpen(");
 	Check(refusedFirst != std::string::npos && sessionOpened != std::string::npos && refusedFirst < sessionOpened,
 		"a call to a server whose keys didn't match, or any but the first before they're checked, ends before anything is opened");
@@ -753,10 +753,15 @@ static void TestTheCalls()
 		Has(keyCheck, "CertFreeCertificateContext(certificate);"),
 		"the key's check reads the list's key from its certificate just before the first byte, and gives the certificate back");
 	Check(Has(keyCheck, "if (check->keepIt)\n\t\t{\n\t\t\tcheck->matched = read;") &&
-		Has(keyCheck, "bool const sameSize = read && check->shownSize == shared->goodKeySize;") &&
-		Has(keyCheck, "differences |= static_cast<uint8_t>(check->shown[i] ^ shared->goodKey[i]);") &&
+		Has(keyCheck, "bool const sameSize = read && check->shownSize == server->goodKeySize;") &&
+		Has(keyCheck, "differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);") &&
 		Has(keyCheck, "check->matched = sameSize && differences == 0;"),
 		"the first call keeps the key it was shown; every other must be shown the key that matched, every byte compared");
+	// (Added 2026-11-11 by Melanikus for the AvP port: each server has its own state, so the key a call is held to is its own server's, the
+	// one the call was made for, never another's)
+	Check(Has(call, "check.owner = s;") && Has(keyCheck, "Shared const *const server = check->owner;") &&
+		Has(keyCheck, "if (status != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST || !check || check->closed || !check->owner)"),
+		"and the key it's held to is the one its own server's check matched, and a check with no server never passes");
 	Check(Has(keyCheck, "if (!check->matched)\n\t\t{\n\t\t\tcheck->closed = true;\n\t\t\tWinHttpCloseHandle(request);"),
 		"and a key that isn't that one, or none it could read, closes the call there, unsent");
 	size_t const closedSaid = call.find("if (check.closed)\n\t\t{\n\t\t\ta.why = check.looked ? kKeyChanged : kKeyUnread;");
@@ -790,27 +795,28 @@ static void TestTheCalls()
 	Check(Has(call, "if (got >= room)") && Has(call, "a.why = kTooBig;"), "an answer bigger than its room is refused, not read on");
 
 	// The first call, and the check of the server against its line
-	std::string const first = SourceSlice(source, "const char *CheckTheServer(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(first, "first.keepIt = true;") && Has(first, "CallChecked(L\"GET\", L\"/v1/relay-keys\", NULL, keysAnswer, sizeof(keysAnswer), first)") &&
+	std::string const first = SourceSlice(source, "const char *CheckTheServer(Shared *s)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(first, "first.keepIt = true;") && Has(first, "CallChecked(s, L\"GET\", L\"/v1/relay-keys\", NULL, s->keysAnswer, sizeof(s->keysAnswer), first)") &&
 		CountOf(source, "keepIt = true;") == 1, "SOURCE: the one call that keeps the key it's shown is GET /v1/relay-keys, which asks for nothing and sends nothing");
-	Check(Has(first, "RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, keys.p384, keys.kem)") &&
-		Has(first, "bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint);") &&
-		Has(first, "shared->keyState = good ? kKeyGood : kKeyRefused;"),
+	Check(Has(first, "RelayList_ReadRelayKeys(s->keysAnswer, a.bytes, region, keys.p384, keys.kem)") &&
+		Has(first, "bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);") &&
+		Has(first, "s->keyState = good ? kKeyGood : kKeyRefused;"),
 		"its answer is read as hostile, and the key it was shown and the relay's keys must make the line's fingerprint, or the server is refused for the run");
-	std::string const later = SourceSlice(source, "Answer Call(const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const checkedFirst = later.find("const char *const unchecked = CheckTheServer();");
-	size_t const laterCall = later.find("return CallChecked(method, path, body, answer, room, check);");
-	Check(checkedFirst != std::string::npos && laterCall != std::string::npos && checkedFirst < laterCall && Has(later, "check.keepIt = false;"),
+	std::string const later = SourceSlice(source, "Answer Call(Shared *s, const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const checkedFirst = later.find("const char *const unchecked = CheckTheServer(s);");
+	size_t const laterCall = later.find("return CallChecked(s, method, path, body, answer, room, check);");
+	Check(checkedFirst != std::string::npos && laterCall != std::string::npos && checkedFirst < laterCall && Has(later, "check.keepIt = false;") &&
+		Has(later, "KeyCheck &check = s->laterCheck;"),
 		"every later call checks the server first, and goes only to the key that matched");
 	Check(!Has(source, "getaddrinfo") && !Has(source, "gethostbyname") && !Has(source, "Config_Get"),
 		"nothing is looked up by name, and nothing about a server is read from the settings file");
-	Check(Has(source, "char gamesAnswer[kRelayListMostGamesBytes];") && Has(source, "RelayList_ReadGames(gamesAnswer, a.bytes, shared->version, gamesRead"),
+	Check(Has(source, "char gamesAnswer[kRelayListMostGamesBytes];") && Has(source, "RelayList_ReadGames(visit->gamesAnswer, a.bytes, visit->version, visit->gamesRead, count);"),
 		"the list of games is read into 56 KB, and through the hostile reader, for this version");
 
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): the version is this copy's, kMultiplayerVersion, read once when the
 	// list starts, and every game and listing carries its host's id (the v2 draft's switch went with version 1)
 	Check(Has(source, "made->version = kMultiplayerVersion;") && !Has(source, "v2Draft")
-		&& Has(source, "L\"/v1/games?version=%d\", shared->version);") && Has(source, "RelayList_ListingBody(send, onTheList.listed"),
+		&& Has(source, "L\"/v1/games?version=%d\", visit->version);") && Has(source, "RelayList_ListingBody(send, onTheList.listed"),
 		"SOURCE: the list asks for this copy's version's games, and reads and writes hosts' ids always");
 	std::string const relaysGiven = SourceSlice(source, "bool RelayList_Relays(RelayListRelay *relays, int *count)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(relaysGiven, "bool const known = shared->keyState == kKeyGood;") && Has(relaysGiven, "relays[0].address = shared->relayAddress;") &&
@@ -828,7 +834,7 @@ static void TestTheCalls()
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (Snyk Code): each piece is a copy of its text, kept with its end, never a pointer
 	// handed from one thread to the other, and it's ended again at the last place of its room before it's written
-	std::string const tell = SourceSlice(source, "void Tell(const char *news)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const tell = SourceSlice(source, "void Tell(Shared *s, const char *news)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(tell, "size_t const letters = strnlen(news, kMostNewsLetters);") && Has(tell, "memcpy(kept, news, letters);") && Has(tell, "kept[letters] = 0;"),
 		"each piece of news is kept as a copy of at most kMostNewsLetters letters, with its end");
 	Check(Has(news, "piece[kMostNewsLetters] = 0;"), "and it's ended again at the last place of its room before it's written");
@@ -845,15 +851,21 @@ static void TestTheCalls()
 		Has(theServer, "theServer.line = theFile.servers[theServer.inUse];") && !Has(theServer, ".name"),
 		"the server is a good line of servers.cfg, read from the game's folder, and the log never says its name");
 	std::string const starting = SourceSlice(source, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(starting, "if (!Relay_ServerName()[0])") && Has(starting, "L\"%u.%u.%u.%u\", (line->address >> 24) & 0xFFu,") &&
-		Has(starting, "made->port = static_cast<INTERNET_PORT>(line->listPort);") && Has(starting, "made->relayPort = line->relayPort;"),
-		"and the list is started only for it, at its address, written as four numbers, and its ports");
+	// (Modified 2026-11-11 by Melanikus for the AvP port: a server's state is made in one place, NewServer, for the line in use and for each
+	// visit alike, from its line alone)
+	std::string const making = SourceSlice(source, "Shared *NewServer(const ServersCfgServer &line)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(starting, "if (!Relay_ServerName()[0])") && Has(starting, "Shared *made = NewServer(*line);") &&
+		Has(making, "L\"%u.%u.%u.%u\", (line.address >> 24) & 0xFFu,") && Has(making, "made->port = static_cast<INTERNET_PORT>(line.listPort);") &&
+		Has(making, "made->relayPort = line.relayPort;") && Has(making, "memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));") &&
+		Has(making, "made->keyState = kKeyNotChecked;") && CountOf(source, "new (std::nothrow) Shared") == 1,
+		"and the list is started only for it, at its address, written as four numbers, its ports and its fingerprint, its key not yet checked");
 
 	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): THE PLAYER'S YES. The list needs the whole game (WinHTTP, the store,
 	// the main thread), so its side of the gate is read in the code; servers_trust_test tries the yes's hash and its file, and net_start_test
 	// what networking.cpp does before it.
 	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
-	Check(gate != std::string::npos && gate < starting.find("new (std::nothrow) Shared") && gate < starting.find("swprintf(made->server"),
+	size_t const madeAt = starting.find("Shared *made = NewServer(*line);");
+	Check(gate != std::string::npos && madeAt != std::string::npos && gate < madeAt,
 		"the list starts only for a line the player has said yes to: before it makes anything, or writes the server it would call");
 	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
@@ -920,12 +932,12 @@ static void TestTheCalls()
 	// Added 2026-11-10 by Melanikus for the AvP port (#188): where the server stands, so a host waits for an answer that hasn't come and is
 	// never told "no relay" for that alone (networking.h's Net_ServerState). Each asking starts as "no answer yet", and each way the check
 	// ends without one keeps its words; keys that don't match stay refused.
-	std::string const check = SourceSlice(source, "const char *CheckTheServer(void)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const startsAgain = check.find("shared->serverWhy = NULL;");
-	size_t const asks = check.find("Answer const a = CallChecked(L\"GET\", L\"/v1/relay-keys\"");
+	std::string const check = SourceSlice(source, "const char *CheckTheServer(Shared *s)\n\t{", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const startsAgain = check.find("s->serverWhy = NULL;");
+	size_t const asks = check.find("Answer const a = CallChecked(s, L\"GET\", L\"/v1/relay-keys\"");
 	Check(startsAgain != std::string::npos && asks != std::string::npos && startsAgain < asks,
 		"SOURCE: each check of the server starts as \"no answer yet\", whatever the last one ended with");
-	Check(Has(check, "return CantUse(a.why);") && Has(check, "return CantUse(kSaidNo);") && Has(check, "return CantUse(RelayList_RefusalWords(refusal));"),
+	Check(Has(check, "return CantUse(s, a.why);") && Has(check, "return CantUse(s, kSaidNo);") && Has(check, "return CantUse(s, RelayList_RefusalWords(refusal));"),
 		"SOURCE: and a check that couldn't reach the server, was told no, or had its answer refused keeps why, for the host's screen");
 	std::string const state = SourceSlice(source, "int RelayList_ServerState(const char **why)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(state, "if (shared->keyState == kKeyGood)\n\t{\n\t\tstate = kRelayServerGood;")
@@ -1598,7 +1610,7 @@ static void TestRelayKeys()
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): they're the keys the server's check took (CheckTheServer, whose own checks
 	// are in TestTheCalls), proved by the server's servers.cfg line, and handed over only for its relay's region
 	std::string const fetch = SourceSlice(source, "void ReadTheRelayKeys(const char *region, int asking)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const checked = fetch.find("const char *why = CheckTheServer();");
+	size_t const checked = fetch.find("const char *why = CheckTheServer(shared);");
 	size_t const sameRegion = fetch.find("if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)");
 	size_t const given = fetch.find("memcpy(p384, shared->relayP384, sizeof(p384));");
 	Check(checked != std::string::npos && sameRegion != std::string::npos && given != std::string::npos && checked < sameRegion && sameRegion < given,
@@ -1677,7 +1689,7 @@ static void TestTheServerLists()
 		"and a file not used at all says why in the game's own words");
 
 	// Start gives back everything it made when it can't start the list, in one place (PO's ruling): the lock, both events and the memory
-	size_t const made = starting.find("Shared *made = new (std::nothrow) Shared;");
+	size_t const made = starting.find("Shared *made = NewServer(*line);");
 	std::string const afterMade = made == std::string::npos ? std::string() : starting.substr(made);
 	size_t const cleanUp = afterMade.find("if (!thread)\n\t\t{");
 	std::string const giveBack = cleanUp == std::string::npos ? std::string() : afterMade.substr(cleanUp);

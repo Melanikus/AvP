@@ -406,17 +406,22 @@ static void TestOnlyToTheLinesServer()
 		"with a line, the request is queued only once the list has started");
 	std::string const starting = SourceSlice(list, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const yes = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
-	Check(yes != std::string::npos && yes < starting.find("new (std::nothrow) Shared"),
+	// (Modified 2026-11-11 by Melanikus for the AvP port: the list's state is made by NewServer now, one for each server, so the yes
+	// comes before that. A text that isn't there is never "after" the yes: find gives npos, so it's looked for on its own too.)
+	size_t const made = starting.find("Shared *made = NewServer(*line);");
+	Check(yes != std::string::npos && made != std::string::npos && yes < made,
 		"and the list starts only for a line the player has said yes to, so a line without the yes sends no request either");
 
 	// The request goes through Call alone, which checks the server's key against the line before a byte of it leaves
 	std::string const thread = SourceSlice(list, "void AskForAccess(const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])", "\n\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
-	std::string const call = SourceSlice(list, "Answer Call(const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)", "\n\t}\n",
-		kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(thread, "Answer const a = Call(L\"POST\", L\"/v1/access-requests\", body, accessAnswerText, sizeof(accessAnswerText));") &&
-		CountOf(list, "/v1/access-requests") == 1, "the request goes out in one place, through Call");
-	Check(call.find("const char *const unchecked = CheckTheServer();") < call.find("CallChecked(") && Has(call, "check.keepIt = false;"),
+	// (Modified 2026-11-11 by Melanikus for the AvP port: Call and CheckTheServer take the server they're for, as there's one for each line)
+	std::string const call = SourceSlice(list, "Answer Call(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)",
+		"\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(thread, "Answer const a = Call(shared, L\"POST\", L\"/v1/access-requests\", body, accessAnswerText, sizeof(accessAnswerText));") &&
+		CountOf(list, "/v1/access-requests") == 1, "the request goes out in one place, through Call, to the line in use");
+	size_t const checked = call.find("const char *const unchecked = CheckTheServer(s);");
+	Check(checked != std::string::npos && checked < call.find("CallChecked(") && Has(call, "check.keepIt = false;"),
 		"and Call checks the server first, then sends only to the key that matched, never keeping a new one");
 
 	Check(Has(page, "stateLine = !Relay_ServerName()[0] ? TEXTSTRING_ACCESS_NO_SERVER : TEXTSTRING_ACCESS_CANT_REACH;"),

@@ -149,7 +149,7 @@ static void TestTheList()
 	std::string const source = ReadSource("3dc/relay_list.cpp");
 	Check(source.size() > 50000, "relay_list.cpp was found and read");
 
-	std::string const call = SourceSlice(source, "Answer CallChecked(const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)\n\t{",
+	std::string const call = SourceSlice(source, "Answer CallChecked(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)\n\t{",
 		"\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// On the call's session, before it's connected: the one place this Windows takes them (part 1). The list's thread writes nothing
 	// to the log itself; the call's words go back to the main thread with its answer, as every other refusal's do.
