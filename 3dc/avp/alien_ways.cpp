@@ -1336,11 +1336,16 @@ bool AlienWays_KeepsClinging(STRATEGYBLOCK *alien)
 // THE SLIDE's checks of its end (Secondary's review, S5): whether the alien's box, with its foot at end, is clear of the level and of
 // anything else. The box is CE_ALIEN's crouched (extents.cpp): 450 mm round, 900 tall from its foot, up. Rays go from its middle to each of
 // its faces and corners, and each must reach that far with nothing in the way. Added 2026-11-11 by Melanikus (Third) for the AvP port.
-static bool EndBoxClear(STRATEGYBLOCK *alien, const double end[3])
+// Modified 2026-11-11 by Melanikus (Third), #109 (PUSH CLEAR, alien_ways_guide.h): it gives the rays stopped short, each with its way, how
+// far short and the facing of what it met, and how many; none is a clear box.
+static int const kEndBoxRays = 14;
+
+static int EndBoxHits(STRATEGYBLOCK *alien, const double end[3], AlienWaysBoxHit hits[kEndBoxRays])
 {
-	static const int kWays[][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }, { 0, 1, 0 },
+	static const int kWays[kEndBoxRays][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }, { 0, 1, 0 },
 		{ 1, -1, 1 }, { 1, -1, -1 }, { -1, -1, 1 }, { -1, -1, -1 }, { 1, 1, 1 }, { 1, 1, -1 }, { -1, 1, 1 }, { -1, 1, -1 } };
 	VECTORCH middle = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1] - 450.0)), static_cast<int>(lround(end[2])) };
+	int count = 0;
 
 	for (const int *way : kWays)
 	{
@@ -1353,11 +1358,58 @@ static bool EndBoxClear(STRATEGYBLOCK *alien, const double end[3])
 
 		if (LOS_Lambda < reach)
 		{
+			AlienWaysBoxHit &hit = hits[count++];
+			double const facing[3] = { static_cast<double>(LOS_ObjectNormal.vx), static_cast<double>(LOS_ObjectNormal.vy), static_cast<double>(LOS_ObjectNormal.vz) };
+			double const facingLength = sqrt(facing[0] * facing[0] + facing[1] * facing[1] + facing[2] * facing[2]);
+			hit.inBy = reach - static_cast<double>(LOS_Lambda);
+
+			for (int k = 0; k < 3; k++)
+			{
+				hit.way[k] = way[k] / sqrt(axes);
+				hit.facing[k] = facingLength > 0.0 ? facing[k] / facingLength : 0.0;
+			}
+		}
+	}
+
+	return count;
+}
+
+// PUSH CLEAR (alien_ways_guide.h): whether the box at end is clear of the level, as it is or pushed, and the push, in whole millimetres,
+// so the end the rays last said is clear is the end it slides to. Up to kAlienWaysPushRounds pushes, each from the rays sent again, and
+// never more than kAlienWaysMostPush in all. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+static bool PushEndClear(STRATEGYBLOCK *alien, const double end[3], AlienWaysXYZ *push)
+{
+	*push = AlienWaysXYZ{ 0, 0, 0 };
+
+	for (int round = 0; round <= kAlienWaysPushRounds; round++)
+	{
+		double const at[3] = { end[0] + push->x, end[1] + push->y, end[2] + push->z };
+		AlienWaysBoxHit hits[kEndBoxRays];
+		int const count = EndBoxHits(alien, at, hits);
+
+		if (count == 0)
+		{
+			return true;
+		}
+
+		if (round == kAlienWaysPushRounds)
+		{
+			return false;
+		}
+
+		double more[3];
+		AlienWays_PushOutOf(hits, count, more);
+		push->x += static_cast<int>(lround(more[0]));
+		push->y += static_cast<int>(lround(more[1]));
+		push->z += static_cast<int>(lround(more[2]));
+
+		if (sqrt(static_cast<double>(push->x) * push->x + static_cast<double>(push->y) * push->y + static_cast<double>(push->z) * push->z) > kAlienWaysMostPush)
+		{
 			return false;
 		}
 	}
 
-	return true;
+	return false;
 }
 
 // THE SLIDE's check of its line (Secondary's review, S3): from where the alien is to its end, every 250 mm, the module it's in is its own,
@@ -1502,19 +1554,35 @@ void AlienWays_Slide(STRATEGYBLOCK *alien)
 	}
 
 	// Where it ends: the point, out from its face as far as the alien's place sits from what it clings to (its box doesn't turn: 900 mm
-	// tall, 450 round), so it doesn't start in the face when the walls come back
-	double const outBy = to.kind == kAlienWaysCeiling ? 900.0 : (to.kind == kAlienWaysWall ? 450.0 : 0.0);
-	double const end[3] = { to.x - faceDown[0] * outBy, to.y - faceDown[1] * outBy, to.z - faceDown[2] * outBy };
+	// tall, 450 round), so it doesn't start in the face when the walls come back, and kAlienWaysSlideClear more, so its own face is never
+	// in its box (THE SLIDE'S END, CLEAR, alien_ways_guide.h; modified 2026-11-11 by Melanikus (Third), #109)
+	double const outBy = kAlienWaysSlideClear + (to.kind == kAlienWaysCeiling ? 900.0 : (to.kind == kAlienWaysWall ? 450.0 : 0.0));
+	double end[3] = { to.x - faceDown[0] * outBy, to.y - faceDown[1] * outBy, to.z - faceDown[2] * outBy };
 	double const at[3] = { static_cast<double>(dynamics->Position.vx), static_cast<double>(dynamics->Position.vy), static_cast<double>(dynamics->Position.vz) };
 
-	// On its first frame (the walls still on), two checks, and the watchdog has it if either fails (Secondary's review, S3 and S5; PO,
-	// 2026-11-11, from the owner's "keep the collisioning system on otherwise": it must never come back on inside a wall):
-	// - its line goes only where an alien can get to, module by module, so it can't cross into a room its way doesn't go through;
-	// - its box at the end is clear of the level.
+	// On its first frame (the walls still on), its checks, and the watchdog has it if any fails (Secondary's review, S3 and S5, and his
+	// re-review, S5b; PO, 2026-11-11, from the owner's "keep the collisioning system on otherwise": it must never come back on inside a wall):
+	// - its box at the end is clear of the level, pushed clear if need be (PUSH CLEAR, alien_ways_guide.h), and, pushed, the guide's own
+	//   checks pass again for where it ends: its gap, and no face hidden behind the one it's on;
+	// - its line, to where it ends, goes only where an alien can get to, module by module, so it can't cross into a room its way doesn't
+	//   go through.
 	if (!dynamics->OnlyCollideWithObjects)
 	{
-		const char *const why = !LineGoesOnlyWhereItCan(alien, end) ? "its line goes into a module it can't get to from the one before" :
-			(!EndBoxClear(alien, end) ? "its box there wouldn't be clear of the level" : 0);
+		AlienWaysXYZ push = { 0, 0, 0 };
+		const char *why = !PushEndClear(alien, end, &push) ? "its box there wouldn't be clear of the level, even pushed up to 0.3 m" : 0;
+		bool const pushed = !why && (push.x != 0 || push.y != 0 || push.z != 0);
+
+		if (pushed && theGuide.PushSlide(who, push, &why))
+		{
+			end[0] += push.x;
+			end[1] += push.y;
+			end[2] += push.z;
+		}
+
+		if (!why && !LineGoesOnlyWhereItCan(alien, end))
+		{
+			why = "its line goes into a module it can't get to from the one before";
+		}
 
 		if (why)
 		{
@@ -1522,6 +1590,15 @@ void AlienWays_Slide(STRATEGYBLOCK *alien)
 			LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + "'s slide to " + Metres(AlienWaysXYZ{ to.x, to.y, to.z }) +
 				" is refused, as " + why);
 			return;
+		}
+
+		if (pushed)
+		{
+			char howFar[32];
+			snprintf(howFar, sizeof(howFar), "%.2f m", sqrt(static_cast<double>(push.x) * push.x + static_cast<double>(push.y) * push.y +
+				static_cast<double>(push.z) * push.z) / 1000.0);
+			LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + "'s slide end is pushed " + howFar + " clear of the level, to " +
+				Metres(AlienWaysXYZ{ static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1])), static_cast<int>(lround(end[2])) }));
 		}
 	}
 

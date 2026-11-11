@@ -1940,8 +1940,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "const char *const why = !LineGoesOnlyWhereItCan(alien, end) ?",
-					"to": "const char *const why = false ?"
+					"from": "if (!why && !LineGoesOnlyWhereItCan(alien, end))",
+					"to": "if (false)"
 				}
 			]
 		},
@@ -2030,8 +2030,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "(!EndBoxClear(alien, end) ?",
-					"to": "(false ?"
+					"from": "const char *why = !PushEndClear(alien, end, &push) ?",
+					"to": "const char *why = false ?"
 				}
 			]
 		},
@@ -2082,6 +2082,116 @@
 					"file": "3dc/avp/bh_near.cpp",
 					"from": "\tif (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n",
 					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide's end sits right at its box's reach from its face",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "double const outBy = kAlienWaysSlideClear + (",
+					"to": "double const outBy = 0 + ("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pushed end isn't checked by the guide again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (pushed && theGuide.PushSlide(who, push, &why))",
+					"to": "if (pushed)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a push is never capped",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": ") > kAlienWaysMostPush)\n",
+					"to": ") > 1e9)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box still not clear after its last push slides all the same",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (round == kAlienWaysPushRounds)\n\t\t{\n\t\t\treturn false;",
+					"to": "\t\tif (round == kAlienWaysPushRounds)\n\t\t{\n\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a push of any length is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (by > kAlienWaysMostPush)\n",
+					"to": "\t\tif (by > 1e9)\n"
+				}
+			]
+		},
+		{
+			"name": "a pushed end's gap isn't looked at again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\telse if (!(Distance(touched, pushed) < kAlienWaysMostSlide))\n",
+					"to": "\t\telse if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pushed end may go onto a hidden face",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "grid->JoinOf(fromCell, toCell) == kNpcGridJoinThrough",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "Sliding gives the point as it was, not pushed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tto->y += follower.slidePush.y;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a face's facing isn't turned toward the box's middle",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tif (along > 0.0)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the push leaves out the clearance",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tby += kAlienWaysSlideClear;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "two rays on one face push twice",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tmost[k] = std::max(most[k], out[k] * by);\n\t\t\tleast[k] = std::min(least[k], out[k] * by);\n",
+					"to": "\t\t\tleast[k] += out[k] * by;\n"
 				}
 			]
 		}

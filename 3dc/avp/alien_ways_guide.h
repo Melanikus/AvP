@@ -162,6 +162,40 @@ int const kAlienWaysMostSlide = 1000;             // mm
 int const kAlienWaysMostOffTheWayToSlide = 500;   // mm
 int const kAlienWaysMostSlideMs = 1500;           // ms
 
+// THE SLIDE'S END, CLEAR. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; Secondary's re-review of 94421180, S5b, and PO's
+// ruling). On the slide's first film (94421180 at SHED06, 3 runs) 10 of its 13 slides were refused, each as its box at the end "wouldn't be
+// clear of the level". The end was exactly as far out from its face as the box reaches (450 mm from a wall, 900 under a ceiling, 0 over
+// a floor), so the ray from the box's middle to that face met it right at its reach, and a millimetre of rounding refused it or not, at
+// random. Near a corner, the box went into the other face too, by 0.15 to 0.3 m (Secondary's geometry of the owner's snags).
+// - The end is kAlienWaysSlideClear further out from its face, so its own face is never in its box.
+// - PUSH CLEAR: where the box at the end is still in the level, it's pushed clear rather than refused. Each ray from the box's middle that's
+//   stopped short of the box's face asks to move the box out of what it met (AlienWays_PushOutOf), and the rays are sent again, up to
+//   kAlienWaysPushRounds times. A push of more than kAlienWaysMostPush in all is refused, and so is a box that still isn't clear. Then every
+//   other check of the slide is made again for where it ends now: its gap under kAlienWaysMostSlide and never onto a hidden face (the
+//   guide's, PushSlide), and its line only where an alien gets to (the game's). It slides only with all of them passed, so the level's
+//   walls come back on with its box clear of every face: it never comes back on inside one ("keep the collisioning system on otherwise").
+int const kAlienWaysSlideClear = 25;              // mm
+int const kAlienWaysMostPush = 300;               // mm
+int const kAlienWaysPushRounds = 3;
+
+// One of the rays the game sends from the box's middle at a slide's end that was stopped short: its way (of length 1), how far short of
+// the box's face it was stopped (mm), and the facing of what it met (of length 1), or all 0 when that isn't known
+struct AlienWaysBoxHit
+{
+	double way[3];
+	double inBy;
+	double facing[3];
+};
+
+// PUSH CLEAR (above): how far to move the box so it's out of everything its rays met, in mm. Each hit asks to be moved out from the face
+// it met, along that face's facing turned toward the box's middle, by as far as the box goes past the face that way (its inBy along the
+// ray, times how squarely the ray met the face), and kAlienWaysSlideClear more, so the face isn't met right at the box's reach again.
+// With no facing known, back along its ray. Then, axis by axis, the most any hit asks one way and the most any asks the other are added,
+// so two rays meeting one face (one to the box's side and one to its corner) don't push twice, and hits on two opposite faces cancel as
+// far as they can: no push makes a box fit a gap narrower than it, and the rays sent again say so. Added 2026-11-11 by Melanikus (Third)
+// for the AvP port, #109.
+void AlienWays_PushOutOf(const AlienWaysBoxHit *hits, int count, double push[3]);
+
 // An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
 // Checked here, where both are known, so the game's own build stops if one of them is changed alone.
 static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
@@ -344,6 +378,13 @@ public:
 	bool Sliding(const AlienWaysWho &who, AlienWaysPoint *to, AlienWaysXYZ *from, AlienWaysXYZ *next) const;
 	void SlideEnded(const AlienWaysWho &who, bool arrived);
 
+	// PUSH CLEAR (above): the game has pushed the slide's end clear of the level by push (mm). The guide makes its own checks again for the
+	// point that gives, as it made them when the slide began: no push of more than kAlienWaysMostPush, the gap from where the alien's box
+	// touched as it set off under kAlienWaysMostSlide, and no THROUGH join (npc_grid.h) on the grid from where it set off onto it. On yes it
+	// keeps the push, and Sliding gives the point moved by it from then on. On no it keeps nothing, why says why in words, and the game
+	// refuses the slide. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	bool PushSlide(const AlienWaysWho &who, AlienWaysXYZ push, const char **why);
+
 	// Whether an alien the guide has is to keep clinging to what it's on when no way steers it this frame: resting after a stuck, waiting
 	// for its next way, or handed over but still further off than kAlienWaysHandOverRange. Only the game's own curve at its target, within
 	// that range and in clear sight, decides its gravity, as in 1999. Without this, 1999's Approach gives a far alien standard gravity every
@@ -434,7 +475,9 @@ private:
 		bool sliding;                       // THE SLIDE: it slides now (added 2026-11-11 by Melanikus (Third))...
 		int slidePoint;                     // ...to this point of its way...
 		long long slideAt;                  // ...since then...
-		AlienWaysXYZ slideFrom;             // ...from here
+		AlienWaysXYZ slideFrom;             // ...from here...
+		AlienWaysXYZ slideDown;             // ...with this down...
+		AlienWaysXYZ slidePush;             // ...and its point pushed by this (PUSH CLEAR; added 2026-11-11 by Melanikus (Third))
 		long long slideTriedFor;            // the headway clock (headwayAt) a slide was last tried for, so one refused isn't tried every frame
 		bool clings;                        // KeepsClinging (added 2026-11-11 by Melanikus (Third))
 

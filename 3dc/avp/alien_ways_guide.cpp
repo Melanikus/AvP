@@ -551,6 +551,9 @@ bool AlienWaysGuide::Sliding(const AlienWaysWho &who, AlienWaysPoint *to, AlienW
 
 	Follower const &follower = followers[f];
 	*to = follower.points[follower.slidePoint];
+	to->x += follower.slidePush.x;   // PUSH CLEAR: where its end was pushed to, if it was (added 2026-11-11 by Melanikus (Third), #109)
+	to->y += follower.slidePush.y;
+	to->z += follower.slidePush.z;
 	*from = follower.slideFrom;
 	AlienWaysPoint const &after = follower.points[follower.slidePoint + 1 < follower.count ? follower.slidePoint + 1 : follower.slidePoint];
 	*next = AlienWaysXYZ{ after.x, after.y, after.z };
@@ -588,6 +591,108 @@ void AlienWaysGuide::SlideEnded(const AlienWaysWho &who, bool arrived)
 	if (follower.heading >= follower.count)
 	{
 		DropTheWay(&follower);
+	}
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): PUSH CLEAR (alien_ways_guide.h)
+bool AlienWaysGuide::PushSlide(const AlienWaysWho &who, AlienWaysXYZ push, const char **why)
+{
+	int const f = Find(who);
+	const char *said = 0;
+
+	if (f < 0 || !followers[f].sliding || followers[f].slidePoint < 1 || followers[f].slidePoint >= followers[f].count)
+	{
+		said = "it isn't sliding";
+	}
+	else
+	{
+		Follower &follower = followers[f];
+		AlienWaysPoint const &point = follower.points[follower.slidePoint];
+		AlienWaysXYZ const pushed = { point.x + push.x, point.y + push.y, point.z + push.z };
+		double const by = sqrt(static_cast<double>(push.x) * push.x + static_cast<double>(push.y) * push.y + static_cast<double>(push.z) * push.z);
+		AlienWaysXYZ const touched = TouchPoint(follower.slideFrom, follower.slideDown, KindUnder(follower.slideDown));
+
+		if (by > kAlienWaysMostPush)
+		{
+			said = "its end would be pushed too far to be clear of the level";
+		}
+		else if (!(Distance(touched, pushed) < kAlienWaysMostSlide))
+		{
+			said = "pushed clear of the level, its gap would be too wide";
+		}
+		else if (grid)
+		{
+			uint32_t const fromCell = grid->NearestCell(follower.slideFrom.x, follower.slideFrom.y, follower.slideFrom.z, kNpcGridAlien, kNpcGridReach);
+			uint32_t const toCell = grid->NearestCell(pushed.x, pushed.y, pushed.z, kNpcGridAlien, kNpcGridReach);
+
+			if (fromCell != kNpcGridNoCell && toCell != kNpcGridNoCell && grid->JoinOf(fromCell, toCell) == kNpcGridJoinThrough)
+			{
+				said = "pushed clear of the level, it would go onto a face hidden behind the one it's on";
+			}
+		}
+
+		if (!said)
+		{
+			follower.slidePush = push;
+		}
+	}
+
+	if (why)
+	{
+		*why = said;
+	}
+
+	return !said;
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): PUSH CLEAR's sum (alien_ways_guide.h)
+void AlienWays_PushOutOf(const AlienWaysBoxHit *hits, int count, double push[3])
+{
+	double most[3] = { 0.0, 0.0, 0.0 }, least[3] = { 0.0, 0.0, 0.0 };
+
+	for (int h = 0; hits && h < count; h++)
+	{
+		AlienWaysBoxHit const &hit = hits[h];
+		double out[3] = { -hit.way[0], -hit.way[1], -hit.way[2] };
+		double by = hit.inBy;
+		double const facingLength = sqrt(hit.facing[0] * hit.facing[0] + hit.facing[1] * hit.facing[1] + hit.facing[2] * hit.facing[2]);
+
+		// The face's facing, turned toward the box's middle (against the ray), and how squarely the ray met it. A facing along the face
+		// itself says nothing of which way is out, and the ray's own way back is kept.
+		if (facingLength > 0.5)
+		{
+			double n[3] = { hit.facing[0] / facingLength, hit.facing[1] / facingLength, hit.facing[2] / facingLength };
+			double along = n[0] * hit.way[0] + n[1] * hit.way[1] + n[2] * hit.way[2];
+
+			if (along > 0.0)
+			{
+				n[0] = -n[0];
+				n[1] = -n[1];
+				n[2] = -n[2];
+				along = -along;
+			}
+
+			if (along < -1e-3)
+			{
+				out[0] = n[0];
+				out[1] = n[1];
+				out[2] = n[2];
+				by = hit.inBy * -along;
+			}
+		}
+
+		by += kAlienWaysSlideClear;
+
+		for (int k = 0; k < 3; k++)
+		{
+			most[k] = std::max(most[k], out[k] * by);
+			least[k] = std::min(least[k], out[k] * by);
+		}
+	}
+
+	for (int k = 0; k < 3; k++)
+	{
+		push[k] = most[k] + least[k];
 	}
 }
 
@@ -1463,6 +1568,8 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			follower.slidePoint = follower.heading;
 			follower.slideAt = now;
 			follower.slideFrom = ask.at;
+			follower.slideDown = ask.down;
+			follower.slidePush = AlienWaysXYZ{ 0, 0, 0 };
 			follower.slideTriedFor = follower.headwayAt;
 			*towards = line.to;
 			follower.guided = true;

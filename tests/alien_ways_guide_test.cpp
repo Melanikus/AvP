@@ -1019,6 +1019,20 @@ static void Slides()
 		"the game is told it slides: to that point, from there, and the point after it, to head on along its way");
 	Check(guide.Steer(&map, Ask(Alien(1), near, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "while it slides, it heads for that point");
 
+	// PUSH CLEAR (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the game pushes its end clear of the
+	// level, and the guide checks the slide again for where it ends then. More than 0.3 m is refused; so is a push that makes its gap 1 m
+	// or more (150 mm further from it, into the wall: 1.05 m). Neither changes the point. A push of 0.2 m up is kept: it slides to the
+	// point 0.2 m higher, from where it was.
+	const char *why = 0;
+	bool const tooFar = !guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -310, 0 }, &why) && why != 0;
+	bool const tooWide = !guide.PushSlide(Alien(1), AlienWaysXYZ{ -kAwayFromWall * 150, 0, 0 }, &why) && why != 0;
+	Check(tooFar && tooWide && guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall),
+		"a push of more than 0.3 m, or one that makes its gap 1 m or more, is refused, and the point is as it was");
+	Check(guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -200, 0 }, &why) && why == 0 && guide.Sliding(Alien(1), &to, &from, &next) &&
+		Same(AlienWaysXYZ{ to.x, to.y, to.z }, AlienWaysXYZ{ kOntoTheWall.x, kOntoTheWall.y - 200, kOntoTheWall.z }) && Same(from, near),
+		"a push of 0.2 m up is kept: it slides to the point 0.2 m higher, from where it was");
+	Check(!guide.PushSlide(Alien(2), AlienWaysXYZ{ 0, -10, 0 }, &why) && why != 0, "an alien that isn't sliding has no end to push");
+
 	// The game puts it there, clinging to the wall, 450 mm out from it: it has reached that point, and heads on up the wall
 	guide.SlideEnded(Alien(1), true);
 	AlienWaysAsk there = Ask(Alien(1), Beside(450, 0, 500), kGoal, 13);
@@ -1081,6 +1095,61 @@ static void Slides()
 
 		Check(slid && stillAt1400 && !tooLong.Sliding(Alien(1), &to, &from, &next), "a slide that doesn't get there in 1.5 s is given up");
 	}
+}
+
+// PUSH CLEAR (alien_ways_guide.h): the sum of the rays a slide's end box sends that were stopped short. Added 2026-11-11 by Melanikus
+// (Third) for the AvP port (#109). A hit: its ray's way (made length 1 here), how far short it was stopped, and the facing it met.
+static AlienWaysBoxHit Hit(double wx, double wy, double wz, double inBy, double fx, double fy, double fz)
+{
+	double const w = sqrt(wx * wx + wy * wy + wz * wz);
+	AlienWaysBoxHit const hit = { { wx / w, wy / w, wz / w }, inBy, { fx, fy, fz } };
+	return hit;
+}
+
+static bool PushIs(const double push[3], double x, double y, double z)
+{
+	return fabs(push[0] - x) < 0.01 && fabs(push[1] - y) < 0.01 && fabs(push[2] - z) < 0.01;
+}
+
+static void PushClear()
+{
+	printf("Push clear: a slide's end box moved out of what its rays met\n");
+	double push[3];
+	double const clear = kAlienWaysSlideClear;
+
+	AlienWays_PushOutOf(nullptr, 0, push);
+	Check(PushIs(push, 0, 0, 0), "nothing met, nothing moved");
+
+	// A floor 20 mm into the box: the ray down met it squarely (y goes down, so a floor faces -y). Up by 20 mm, and the clearance.
+	AlienWaysBoxHit const floorDown = Hit(0, 1, 0, 20, 0, -1, 0);
+	AlienWays_PushOutOf(&floorDown, 1, push);
+	Check(PushIs(push, 0, -(20 + clear), 0), "a floor 20 mm into the box: up by 20 mm and kAlienWaysSlideClear more");
+
+	// The same floor met by a corner's ray too, 30 mm short along it: that's 17 mm into the floor, so the push is the ray down's alone
+	AlienWaysBoxHit const floorTwice[2] = { floorDown, Hit(1, 1, 1, 30, 0, -1, 0) };
+	AlienWays_PushOutOf(floorTwice, 2, push);
+	Check(PushIs(push, 0, -(20 + clear), 0), "one floor met by two rays is pushed out of once");
+
+	// A ray down and across, meeting a floor whose facing is given the wrong way round: it's turned toward the box's middle, and the box
+	// goes straight up, by as far as it went into the floor, 20 mm along the ray at 45 degrees
+	AlienWaysBoxHit const turned = Hit(1, 1, 0, 20, 0, 1, 0);
+	AlienWays_PushOutOf(&turned, 1, push);
+	Check(PushIs(push, 0, -(20.0 / sqrt(2.0) + clear), 0), "a face's facing the wrong way round is turned toward the box's middle");
+
+	// No facing known: back along the ray
+	AlienWaysBoxHit const unknown = Hit(0, 0, 1, 50, 0, 0, 0);
+	AlienWays_PushOutOf(&unknown, 1, push);
+	Check(PushIs(push, 0, 0, -(50 + clear)), "with no facing known, back along its ray");
+
+	// A corner: a wall 40 mm in on +x, and the floor 20 mm in. Out of each.
+	AlienWaysBoxHit const corner[2] = { Hit(1, 0, 0, 40, -1, 0, 0), floorDown };
+	AlienWays_PushOutOf(corner, 2, push);
+	Check(PushIs(push, -(40 + clear), -(20 + clear), 0), "into a corner of a wall and the floor: out of each");
+
+	// Two walls either side, 40 mm and 10 mm in: they cancel as far as they can, and the rays sent again say whether the box fits
+	AlienWaysBoxHit const sides[2] = { Hit(1, 0, 0, 40, -1, 0, 0), Hit(-1, 0, 0, 10, 1, 0, 0) };
+	AlienWays_PushOutOf(sides, 2, push);
+	Check(PushIs(push, -30, 0, 0), "between two walls 40 mm and 10 mm in: 30 mm from the nearer, as the two cancel as far as they can");
 }
 
 // KeepsClinging (alien_ways_guide.h): an alien the guide has keeps clinging when no way steers it, but for the game's own curve at its
@@ -1848,18 +1917,33 @@ static void SourceOfTheGame()
 		"SOURCE: it slides through the level's walls with no gravity, at its own speed, still a body that can be hit");
 	// Secondary's review of the slide (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109): S3, its line goes only where an
 	// alien gets to, module by module by the game's own routes, not merely into a module seen (through glass, say); S5, its box at the end is
-	// clear of the level; either failing, it's refused
-	Check(Has(slide, "const char *const why = !LineGoesOnlyWhereItCan(alien, end) ?") && Has(slide, "(!EndBoxClear(alien, end) ?")
-		&& Has(slide, "\t\t\ttheGuide.SlideEnded(who, false);"),
-		"SOURCE: a slide whose line goes where an alien can't get to, or whose box at the end isn't clear of the level, is refused");
+	// clear of the level; S5b and PO's ruling (THE SLIDE'S END, CLEAR): pushed clear if need be, and then the guide's checks made again, and
+	// the line looked at to where it ends now; any failing, it's refused
+	Check(Has(slide, "const char *why = !PushEndClear(alien, end, &push) ?") && Has(slide, "if (pushed && theGuide.PushSlide(who, push, &why))")
+		&& Has(slide, "if (!why && !LineGoesOnlyWhereItCan(alien, end))") && Has(slide, "\t\t\ttheGuide.SlideEnded(who, false);")
+		&& slide.find("theGuide.PushSlide(who, push, &why)") < slide.find("!LineGoesOnlyWhereItCan(alien, end)"),
+		"SOURCE: a slide whose box at the end isn't clear even pushed, whose push the guide refuses, or whose line to where it then ends goes "
+		"where an alien can't get to, is refused");
+	Check(Has(slide, "double const outBy = kAlienWaysSlideClear + (to.kind == kAlienWaysCeiling ? 900.0 : (to.kind == kAlienWaysWall ? 450.0 : 0.0));"),
+		"SOURCE: its end is kAlienWaysSlideClear further out from its face than its box reaches, so its own face is never in its box");
 	std::string const slideLine = Between(ways, "static bool LineGoesOnlyWhereItCan(STRATEGYBLOCK *alien, const double end[3])", "// THE SLIDE's turn of the body:");
 	Check(Has(slideLine, "int const steps = std::max(1, static_cast<int>(ceil(length / 250.0)));") && Has(slideLine, "MODULE *const here = ModuleFromPosition(&where, before);")
 		&& Has(slideLine, "for (AIMODULE **link = was ? was->m_link_ptrs : 0; link && *link && !linked; link++)"),
 		"SOURCE: its line is looked at every 250 mm, and each module it goes into is one the game's routes link to the one before");
-	std::string const endBox = Between(ways, "static bool EndBoxClear(STRATEGYBLOCK *alien, const double end[3])", "static bool LineGoesOnlyWhereItCan(");
+	std::string const endBox = Between(ways, "static int EndBoxHits(STRATEGYBLOCK *alien, const double end[3], AlienWaysBoxHit hits[kEndBoxRays])",
+		"static bool PushEndClear(");
 	Check(Has(endBox, "VECTORCH middle = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1] - 450.0)), static_cast<int>(lround(end[2])) };")
-		&& Has(endBox, "FindPolygonInLineOfSight(&direction, &middle, 0, alien->SBdptr);") && Has(endBox, "if (LOS_Lambda < reach)"),
-		"SOURCE: the end box's clear by rays from its middle to its faces and corners, the alien itself left out");
+		&& Has(endBox, "FindPolygonInLineOfSight(&direction, &middle, 0, alien->SBdptr);") && Has(endBox, "if (LOS_Lambda < reach)")
+		&& Has(endBox, "hit.inBy = reach - static_cast<double>(LOS_Lambda);"),
+		"SOURCE: the end box's clear by rays from its middle to its faces and corners, the alien itself left out, and each ray stopped short "
+		"says how far short and what it met");
+	// PUSH CLEAR (alien_ways_guide.h): the rays sent again after each push, a box not clear after the last refused, and never more than
+	// kAlienWaysMostPush in all (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	std::string const pushClear = Between(ways, "static bool PushEndClear(STRATEGYBLOCK *alien, const double end[3], AlienWaysXYZ *push)",
+		"static bool LineGoesOnlyWhereItCan(");
+	Check(Has(pushClear, "for (int round = 0; round <= kAlienWaysPushRounds; round++)") && Has(pushClear, "int const count = EndBoxHits(alien, at, hits);")
+		&& Has(pushClear, "if (round == kAlienWaysPushRounds)\n\t\t{\n\t\t\treturn false;") && Has(pushClear, ") > kAlienWaysMostPush)\n\t\t{\n\t\t\treturn false;"),
+		"SOURCE: a slide's end is pushed clear at most kAlienWaysPushRounds times, its rays sent again each time, and at most kAlienWaysMostPush in all");
 	// S2: a slide is Approach's alone; whenever the guide isn't sliding an alien, or it's in any other state, its walls and gravity are back
 	Check(Has(ways, "\t\tif (sliding && StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\ttheGuide.SlideEnded(ask.who, false);")
 		&& Has(ways, "\t\tif (!sliding || StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\tEndSlide(alien);"),
@@ -1869,6 +1953,10 @@ static void SourceOfTheGame()
 	Check(Has(guideCode, "Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide")
 		&& Has(guideCode, "grid->JoinOf(grid->NearestCell(ask.at.x, ask.at.y, ask.at.z, kNpcGridAlien, kNpcGridReach), follower.pointCells[follower.heading]) == kNpcGridJoinThrough"),
 		"SOURCE: a slide's gap is from where its box touches, and it never slides across a join onto a hidden face");
+	// PUSH CLEAR, the guide's half the corridor here can't show, having no grid: a push onto a face hidden behind the one it set off from is
+	// refused (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	Check(Has(guideCode, "if (fromCell != kNpcGridNoCell && toCell != kNpcGridNoCell && grid->JoinOf(fromCell, toCell) == kNpcGridJoinThrough)"),
+		"SOURCE: a slide's end pushed onto a face hidden behind the one it set off from is refused");
 	// S4: in Wander too, a climbing alien the guide has keeps clinging when no way steers it
 	Check(Has(near, "\tif (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tdynPtr->UseStandardGravity=0;"),
 		"SOURCE: in Wander, a climbing alien the guide has keeps clinging when no way steers it");
@@ -2061,6 +2149,7 @@ int main()
 	HandOver();
 	RestEndsEarly();
 	Slides();
+	PushClear();
 	Clinging();
 	AskingAgain();
 	FailedRenewal();
