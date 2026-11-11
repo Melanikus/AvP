@@ -72,7 +72,8 @@ servers.cfg has one line per server: its address, written plainly, its fingerpri
 - **The address** is four numbers with dots, never a name. The server's list of games answers HTTPS on port 443 there, and its relay on port 27500, unless the line gives both ports, as `address:listport:relayport`.
 - **The fingerprint** proves the server. Before the game sends the server anything that matters, it checks the server's keys against the fingerprint, and a server whose keys don't match is sent nothing more. Take a server's line only from whoever runs that server.
 - **The name** is what the game shows, up to 31 letters.
-- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped. For now the game uses the first good line, once you've said yes to it.
+- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped.
+- **Which server:** the one you picked among the good lines, or the first good line if you've picked none, once you've said yes to it. A pick is used from the next start of the game, never halfway through one. The game keeps it in `%LOCALAPPDATA%\AVPx\servers-picked.cfg`, as a hash of the line and never as an address, so it can only choose among the lines servers.cfg has. A picked line still needs your yes, like any other.
 
 Two copies of the game on one PC: start the second with `-dev -secondcopy`, so it keeps its own settings, log and saves in `Documents\My Games\Aliens versus Predator (second copy)`.
 
@@ -112,7 +113,9 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 |---|---|---|
 | `Relay list: the game is on the list` and `… off the list` | a host's game was listed, then taken off | nothing |
 | `Relay list: no games from the list, because …` | reading the list failed. The reason is the game's own: "no relay server is set" (no good line in servers.cfg), "the relay server couldn't be reached", "… took too long to answer", "… secure connection couldn't be made", "… said no", "the relay server's keys don't match its line in servers.cfg, …", or a reason the list's answer was refused, such as "the answer has more after its end" | for "couldn't be reached" or "took too long", check your connection. For the keys, see below. Send us any other |
-| `Relay list: the server is servers.cfg line N` (with `, on this PC` or `, on this network` for a server at home) | which line of servers.cfg the game uses | nothing |
+| `Relay list: the server is servers.cfg line N` (with `, on this PC` or `, on this network` for a server at home, and `, the player's pick` when it's the line you picked) | which line of servers.cfg the game uses | nothing |
+| `Relay list: the player picked servers.cfg line N, for the next start` (or `…, but the pick couldn't be kept, so the next start uses the line it would have`) | you picked a server. The game uses it from its next start | start the game again to use it |
+| `Relay list: servers-picked.cfg isn't used, so the first good line is: …` | the file of your pick isn't one the game wrote (a line it never writes, two picks, a link, or not your Windows user's), so no pick is taken from it | nothing: pick again, and the file is written whole again |
 | `Relay list: servers.cfg line N isn't used: …` | that line was skipped. The reason says what's wrong with it, such as "its fingerprint isn't 64 small hex digits", "its address can't be a server's", or "another line has the same name, so neither is used". The line itself is never written in the log | fix that line, or get it again from whoever runs the server |
 | `Relay list: servers.cfg isn't used: …`, or `Relay list: there's no servers.cfg in the game's folder, …` (and the other lines about finding the file) | the whole file was skipped, such as one over 16 KB or of more than 64 lines, or the game couldn't find or read it | put a good servers.cfg beside the game's `bin` folder |
 | `Relay list: the relay server's keys match its line in servers.cfg` | the server proved it's the one the line names | nothing |

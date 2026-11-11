@@ -1823,6 +1823,156 @@
 					"to": "\tunsigned int const a = line->address;\n\tsnprintf(out->address, sizeof(out->address), \"%u.%u.%u.%u:%d:%d\", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,\n\t\tline->listPort, line->relayPort);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a picked line skips the yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": "\t\tif (!line || (!theServer.pickNow.there && !TheLineIsAgreed(*line)))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picked line isn't said to need its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (line && !TheLineIsAgreed(*line))",
+					"to": "if (line && !theServer.pickNow.there && !TheLineIsAgreed(*line))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pick is used at once, halfway through the run",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tmemcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);",
+					"to": "\tmemcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);\n\ttheServer.line = theFile.servers[place];\n\ttheServer.inUse = place;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pick is never read",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "NetTrustStoreResult const picked = NetIdentityStore_LoadPick(&theServer.pickNow, &why);",
+					"to": "NetTrustStoreResult const picked = kNetTrustStoreNoFile;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first good line is always used, whatever the pick",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "theServer.inUse = ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);",
+					"to": "theServer.inUse = theFile.serverCount > 0 ? 0 : -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pick that couldn't be kept still counts as the pick",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!NetIdentityStore_KeepPick(theServer.hashes[place]))",
+					"to": "\ttheServer.pickNow.there = true;\n\tif (!NetIdentityStore_KeepPick(theServer.hashes[place]))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pick adds a yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\ttheServer.pickNow.there = true;",
+					"to": "\tServersTrust_Add(&yeses, theServer.hashes[place]);\n\ttheServer.pickNow.there = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the server list starts the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "int RelayList_LineCount(void)\n{\n\tServer();",
+					"to": "int RelayList_LineCount(void)\n{\n\tStart();\n\tServer();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the next start's line is said to be this run's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "out->nextStart = place == ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);",
+					"to": "out->nextStart = place == theServer.inUse;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every line is shown as having its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "out->agreed = TheLineIsAgreed(line);",
+					"to": "out->agreed = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused line's words are another line's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "*words = ServersCfg_LineWords(theFile.refused[place].why);",
+					"to": "*words = ServersCfg_LineWords(theFile.refused[0].why);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line past the good ones is shown",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (place < 0 || place >= theFile.serverCount)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line",
+					"to": "\tif (place < 0)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start keeps what it made when it can't start the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tDeleteCriticalSection(&made->lock);\n\t\t\tdelete made;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start leaves its first event open when it can't start the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (made->wake)\n\t\t\t{\n\t\t\t\tCloseHandle(made->wake);\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's thread starts without its events",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (made->wake && made->endDone)\n\t\t{\n\t\t\tshared = made;",
+					"to": "if (true)\n\t\t{\n\t\t\tshared = made;"
+				}
+			]
 		}
 	]
 }

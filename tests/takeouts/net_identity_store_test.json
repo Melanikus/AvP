@@ -383,6 +383,56 @@
 					"to": "\treturn NetIdentityStore_KeepTrustTo("
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a Hudson run reads the player's pick",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\t// A Hudson run reads no pick, as it reads no yes: its servers.cfg is its own copy's\n\tif (SaveFolder_IsAHudsonRun())",
+					"to": "\t// A Hudson run reads no pick, as it reads no yes: its servers.cfg is its own copy's\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run keeps the player's pick",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\treturn !SaveFolder_IsAHudsonRun() && NetIdentityStore_KeepPickTo(",
+					"to": "\treturn NetIdentityStore_KeepPickTo("
+				}
+			]
+		},
+		{
+			"name": "the pick's text the game didn't write is taken",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "\treturn TextRead(ServersTrust_ReadPick(reinterpret_cast<const char *>(keptText), size, out, NULL), said);",
+					"to": "\tServersTrust_ReadPick(reinterpret_cast<const char *>(keptText), size, out, NULL);\n\treturn kNetTrustStoreRead;"
+				}
+			]
+		},
+		{
+			"name": "the pick's file is refused in the yeses' words",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "KeptHashesWords const words = { kPickNotThisUsers, kPickIsALink, kPickCantRead };",
+					"to": "KeptHashesWords const words = { kTrustNotThisUsers, kTrustIsALink, kTrustCantRead };"
+				}
+			]
+		},
+		{
+			"name": "the pick is kept in the yeses' file",
+			"changes": [
+				{
+					"file": "3dc/net_identity_store.cpp",
+					"from": "const wchar_t *const kPickFileName = L\"servers-picked.cfg\";",
+					"to": "const wchar_t *const kPickFileName = L\"servers-trusted.cfg\";"
+				}
+			]
 		}
 	]
 }

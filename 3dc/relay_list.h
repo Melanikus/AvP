@@ -106,6 +106,42 @@ bool RelayList_LineToAgree(RelayListLineToAgree *out);
 // line.
 bool RelayList_AgreeToTheLine(void);
 
+// ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port. For the Online page
+// and the Find games page: every good line, so the player sees the servers they have and picks one, and every refused line by its number,
+// so someone following an instruction can see what to fix. Only the main thread calls these, and none of them contacts anything: they
+// read what servers.cfg said when it was read, once a run (relay_list.cpp, Server).
+// THE PICK is kept in servers-picked.cfg (net_identity_store.h) as the line's hash, the same 64 hex digits as its yes (servers_trust.h):
+// it can only choose among the lines servers.cfg has, it can't add a server, and it isn't an address. It's used from the next start of
+// the game, never halfway through a run: the line in use for this run stays in use until the game starts again. A picked line still
+// needs its yes before anything goes to it, as any line does. A Hudson run reads and keeps no pick.
+
+// One good line, as the pages show it
+struct RelayListLineShown
+{
+	RelayListLineToAgree line;   // its name, address, where it is and its key's two ends, as the yes page shows them
+	int lineNumber;              // its number in servers.cfg, counted from 1, as an editor shows it
+	bool inUse;                  // the line this run uses
+	bool nextStart;              // the line the next start will use: the player's pick, or the first good line when there's none
+	bool agreed;                 // the player has said yes to it (a Hudson run's always has)
+};
+
+// How many good lines there are (0 to 64), in the file's order, and one of them. False, with out wiped, for a place out of range.
+int RelayList_LineCount(void);
+bool RelayList_LineAt(int place, RelayListLineShown *out);
+
+// How many lines were refused, and one of them: its number in servers.cfg, and the game's own words for why (servers_cfg.h,
+// ServersCfg_LineWords), never anything from the line. False, with lineNumber 0 and words NULL, for a place out of range.
+int RelayList_RefusedLineCount(void);
+bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words);
+
+// Why no line of servers.cfg is used at all, in the game's own words: no file, a file that isn't one, one that couldn't be read, or one
+// refused whole (too big, too many lines). NULL when the file was read, whatever its lines said.
+const char *RelayList_FileWords(void);
+
+// The player picks a good line, for the next start. True when the pick is kept. False, with nothing changed, for a place out of range, in
+// a Hudson run, or when servers-picked.cfg couldn't be written (the log says which).
+bool RelayList_PickLine(int place);
+
 // ---- Finding games. The menus call these.
 
 // Asks the list for the games of this version of the game. The answer comes a moment later, through RelayList_FoundGames.
