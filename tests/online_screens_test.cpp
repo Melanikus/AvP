@@ -905,12 +905,13 @@ static void TestTheHelpLines()
 		!Has(menus, "MENU_CENTREX, 74, ONE_FIXED / 2") && !Has(menus, "MENU_CENTREX, 84, ONE_FIXED / 2"),
 		"and so does the host's, under its code at 58, above its answer rows");
 	std::string const helpers = Between(page, "void OnlinePage_DrawCheckCodeHelp(", "\n}\n");
-	Check(Has(helpers, "int const firstWidth = first ? BalancedWidth(first, widest) : widest;") &&
-		Has(helpers, "int const secondWidth = second ? BalancedWidth(second, widest) : widest;") &&
+	// (OnlinePage_BalancedWidth since 2026-11-10, when the yes page came to share it: online_screens_page.h)
+	Check(Has(helpers, "int const firstWidth = first ? OnlinePage_BalancedWidth(first, widest) : widest;") &&
+		Has(helpers, "int const secondWidth = second ? OnlinePage_BalancedWidth(second, widest) : widest;") &&
 		Has(helpers, "SmallFontString_WrappedLines(first, firstWidth)") && Has(helpers, "SmallFontString_WrappedLines(second, secondWidth)") &&
 		Has(page, "int const left = OnlineScreens_HelpBoxLeft(width);\n\tRECT area = { left, top, left + width, top + lines * kOnlineHelpLineHeight };"),
 		"each text is wrapped to the narrowest width that keeps its lines, its lines counted by the wrapping rule itself, and drawn into a box that tall, in the middle");
-	std::string const balanced = Between(page, "static int BalancedWidth(const char *text, int widest)", "\n}\n");
+	std::string const balanced = Between(page, "int OnlinePage_BalancedWidth(const char *text, int widest)", "\n}\n");
 	Check(Has(balanced, "if (SmallFontString_WrappedLines(text, middle) == lines)\n\t\t{\n\t\t\twide = middle;") && Has(balanced, "return wide;"),
 		"and that width is the narrowest found to keep as many lines as the widest gives");
 	Check(Has(menus, "area.top    = 420;") && kOnlineHelpPageBottom == 420, "the joining page's limit is where the menus draw their help line, 420");

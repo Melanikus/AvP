@@ -9,12 +9,19 @@
 #include "language.h"
 #include "relay_list.h"
 #include "server_yes_page.h"
+#include "hud_layout.h"
+// The names made safe and cut to a width, and the online pages' own measures (modified 2026-11-10 by Melanikus for the AvP port: these
+// headers in place of the one name this file used to repeat)
+#include "online_screens.h"
+#include "online_screens_page.h"
 
 #include <stdio.h>
 #include <string.h>
 
-// The names the screens make safe before drawing them (online_screens.cpp): a letter the game's font doesn't have shows as ?
-void OnlineScreens_SafeName(const char *from, size_t mostBytes, char *to, size_t toSize);
+// server_yes_rules.h's copies of the fonts' heights and the menus' edges must be the game's own: it can't include the game's headers, so
+// the check is here, where the game is built (added 2026-11-10)
+static_assert(kServerYesBigLine == MENU_FONT_HEIGHT && kServerYesSmallLine == HUD_FONT_HEIGHT, "the yes page's lines are spaced by the fonts' own heights");
+static_assert(kServerYesLeft == MENU_LEFTXEDGE && kServerYesRight == MENU_RIGHTXEDGE, "the yes page's widest box is the menus' own edges");
 
 namespace
 {
@@ -122,30 +129,45 @@ bool ServerYesPage_Pressed(int row, enum AVPMENU_ID *page)
 	return false;
 }
 
-void ServerYesPage_Draw(void)
+// Modified 2026-11-10 by Melanikus for the AvP port: each part in its place (server_yes_rules.h, THE PAGE'S LAYOUT). The name was drawn in
+// the big font on top of the page's title, and the owner's words ended with a last word alone.
+void ServerYesPage_Draw(int rowsTop)
 {
 	if (!haveShown)
 	{
 		return;
 	}
 
-	// The server's name, large: it comes from servers.cfg, a file from outside the game, so it's made safe before it's drawn
+	// What the server's owner does and sees: wrapped to the narrowest width that keeps its lines, and its lines counted by the very rule
+	// that wraps them, so the parts above and the rows below are placed around exactly what's drawn
+	char *const owner = GetTextString(TEXTSTRING_SERVERYES_OWNER);
+	int const widest = kServerYesRight - kServerYesLeft;
+	int const ownerWidth = OnlinePage_BalancedWidth(owner, widest);
+	ServerYesLayout const at = ServerYes_Layout(SmallFontString_WrappedLines(owner, ownerWidth), rowsTop);
+
+	// The server's name, on its own line under the page's title. It comes from servers.cfg, a file from outside the game, so it's made
+	// safe before it's drawn, and cut to the menus' edges by the small font's own widths.
 	char name[sizeof(shown.name) + 1];
 	OnlineScreens_SafeName(shown.name, sizeof(shown.name), name, sizeof(name));
-	RenderMenuText(name, MENU_CENTREX, 60, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	OnlineScreens_FitToWidth(name, widest, OnlinePage_SmallWidth);
+	RenderSmallMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 	// Where it is, and its key's two ends. The address was written out again from its four numbers, and the key's digits are hex.
 	char where[96];
 	ServerYes_WhereLine(shown.address, WhereWords(shown.place), where, sizeof(where));
-	RenderSmallMenuText(where, MENU_CENTREX, 98, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	RenderSmallMenuText(where, MENU_CENTREX, at.whereTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 	char key[64];
 	ServerYes_KeyLine(GetTextString(TEXTSTRING_SERVERYES_KEY), shown.keyStart, shown.keyEnd, key, sizeof(key));
-	RenderSmallMenuText(key, MENU_CENTREX, 116, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+	RenderSmallMenuText(key, MENU_CENTREX, at.keyTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 
-	// What the server's owner does and sees
-	int x = 0;
-	int y = 0;
-	RECT area = { 60, 140, 580, 190 };
-	RenderSmallFontString_Wrapped(GetTextString(TEXTSTRING_SERVERYES_OWNER), &area, ONE_FIXED, &x, &y);
+	// The owner's words, in a box exactly as tall as the lines that fit above the rows, in the middle of the menus' edges
+	if (at.ownerLines > 0)
+	{
+		int x = 0;
+		int y = 0;
+		int const left = ServerYes_BoxLeft(ownerWidth);
+		RECT area = { left, at.ownerTop, left + ownerWidth, at.ownerTop + at.ownerLines * kServerYesSmallLine };
+		RenderSmallFontString_Wrapped(owner, &area, ONE_FIXED, &x, &y);
+	}
 }

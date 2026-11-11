@@ -168,8 +168,9 @@ static bool ThereIsAList(void)
 	return Relay_ServerName()[0] != '\0';
 }
 
-// The small font's width for a letter, never more than its widest (menu_gfx.cpp's SmallLetterWidth, which is that file's own)
-static int SmallWidth(int letter)
+// The small font's width for a letter, never more than its widest (menu_gfx.cpp's SmallLetterWidth, which is that file's own). Shared with
+// the yes page since 2026-11-10 (online_screens_page.h).
+int OnlinePage_SmallWidth(int letter)
 {
 	int const width = AAFontWidths[letter & 255];
 	return width < 0 ? 0 : (width > 17 ? 17 : width);
@@ -670,7 +671,7 @@ static_assert(kOnlineHelpLeft == MENU_LEFTXEDGE && kOnlineHelpRight == MENU_RIGH
 // The narrowest width, at most widest, that keeps the text to as many lines as widest gives it: so a text of two lines is cut into two of
 // about the same length, never a full line and a last word on its own (the owner, 2026-11-10). A narrower box can only give it as many
 // lines or more, so the narrowest that keeps the count is found by halving the gap between a width too narrow and one that keeps it.
-static int BalancedWidth(const char *text, int widest)
+int OnlinePage_BalancedWidth(const char *text, int widest)
 {
 	int const lines = SmallFontString_WrappedLines(text, widest);
 
@@ -721,8 +722,8 @@ static void HelpText(const char *text, int width, int top, int lines)
 void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit)
 {
 	int const widest = kOnlineHelpRight - kOnlineHelpLeft;
-	int const firstWidth = first ? BalancedWidth(first, widest) : widest;
-	int const secondWidth = second ? BalancedWidth(second, widest) : widest;
+	int const firstWidth = first ? OnlinePage_BalancedWidth(first, widest) : widest;
+	int const secondWidth = second ? OnlinePage_BalancedWidth(second, widest) : widest;
 	OnlineHelpLines const at = OnlineScreens_HelpLines(codeTop, first ? SmallFontString_WrappedLines(first, firstWidth) : 0,
 		second ? SmallFontString_WrappedLines(second, secondWidth) : 0, limit);
 	HelpText(first, firstWidth, at.firstTop, at.firstLines);
@@ -772,7 +773,7 @@ static void DrawCell(const char *text, int column, int y, int alpha)
 	char fitted[kOnlineRowLetters];
 
 	Put(fitted, sizeof(fitted), text);
-	OnlineScreens_FitToWidth(fitted, kColumns[column].width - 6, SmallWidth);
+	OnlineScreens_FitToWidth(fitted, kColumns[column].width - 6, OnlinePage_SmallWidth);
 	RenderSmallMenuText(fitted, kColumns[column].x, y, alpha, AVPMENUFORMAT_LEFTJUSTIFIED);
 }
 

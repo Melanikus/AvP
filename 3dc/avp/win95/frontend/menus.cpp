@@ -2700,7 +2700,8 @@ static void RenderMenu(void)
 	// above (access_page_rules.h)
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
 	{
-		ServerYesPage_Draw();
+		// The rows' top, as RenderMenu places them on this page (modified 2026-11-10: so its words stay above them)
+		ServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);
 	}
 
 	// A host's "Asking the server...", or why it failed, under the rows of the page it was pressed on (added 2026-11-10, PO's rulings)

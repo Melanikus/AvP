@@ -14,6 +14,7 @@
 
 #include "server_yes_rules.h"
 #include "host_wait_rules.h"
+#include "online_screens.h"   // a name cut to a width (added 2026-11-10, the page's layout)
 #include "source_slice.h"
 
 static int checksFailed = 0;
@@ -128,7 +129,8 @@ static void TestTheWiring()
 	std::string const opening = SourceSlice(menus, "case AVPMENU_SERVER_YES:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(opening, "if (!ServerYesPage_Opened())\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\t\t\t\treturn;"),
 		"a page with no line waiting for a yes goes back to the Multiplayer page");
-	Check(Has(menus, "AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)\n\t{\n\t\tServerYesPage_Draw();"), "the page's words are drawn on it");
+	Check(Has(menus, "AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)\n\t{\n\t\t// The rows' top, as RenderMenu places them on this page (modified 2026-11-10: so its words stay above them)\n\t\tServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);"),
+		"the page's words are drawn on it, told where its rows start");
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_ONLINE_ACCESS:\n\t\t{\n\t\t\tenum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;", "\n\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	size_t const ours = pressing.find("if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)");
@@ -144,9 +146,9 @@ static void TestTheWiring()
 
 	std::string const needed = SourceSlice(page, "bool ServerYesPage_Needed(enum AVPMENU_ID goTo, enum AVPMENU_ID backTo)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(needed, "if (!RelayList_LineToAgree(&waiting))\n\t{\n\t\treturn false;"), "the page is needed only while the list has a line waiting for a yes");
-	std::string const drawing = SourceSlice(page, "void ServerYesPage_Draw(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const drawing = SourceSlice(page, "void ServerYesPage_Draw(int rowsTop)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(drawing, "OnlineScreens_SafeName(shown.name, sizeof(shown.name), name, sizeof(name));") &&
-		drawing.find("OnlineScreens_SafeName") < drawing.find("RenderMenuText(name"), "the server's name, from a file from outside the game, is made safe before it's drawn");
+		drawing.find("OnlineScreens_SafeName") < drawing.find("RenderSmallMenuText(name"), "the server's name, from a file from outside the game, is made safe before it's drawn");
 
 	size_t const question = words.find("\"Play online through this server?\",\n\t\"on the internet\",\n\t\"on this PC\",\n\t\"on your own network\",\n\t\"key\",\n");
 	Check(question != std::string::npos && words.find("\"Its owner approves their own players, and sees your name, your key and your address while you play.\",\n\t\"Yes, use this server\",\n\t\"No, not now\",\n") > question,
@@ -357,6 +359,65 @@ static void TestTheHostsWait()
 		"the wait's and the failed host's words, in langenum.h's order");
 }
 
+// THE PAGE'S LAYOUT (server_yes_rules.h). Added 2026-11-10 by Melanikus for the AvP port, from the Hudson pair's picture on rc1: the name
+// drawn on top of the title, and the owner's words ending with a word alone. The rules are tried here; how the page uses them is read.
+
+// Every letter 20 wide: wider than any of the small font's (17 at most), so a 31-letter name is wider than the menus' edges
+static int TwentyWide(int)
+{
+	return 20;
+}
+
+static void TestTheLayout()
+{
+	printf("7. the page's layout: the title, the name, the lines, the owner's words, the rows\n");
+
+	// A two-row page's rows start where RenderMenu puts them, MENU_CENTREY (280) less half their height: about 255 to 265
+	ServerYesLayout const at = ServerYes_Layout(2, 255);
+	Check(at.nameTop >= kServerYesTitleTop + kServerYesBigLine, "the name's line starts under the title's, never on it");
+	Check(at.whereTop >= at.nameTop + kServerYesSmallLine && at.keyTop >= at.whereTop + kServerYesSmallLine &&
+		at.ownerTop >= at.keyTop + kServerYesSmallLine, "and each line under the one before it, by its own height");
+	Check(at.ownerLines == 2 && at.bottom == at.ownerTop + 2 * kServerYesSmallLine && at.bottom <= 255 - kServerYesAboveRows,
+		"the owner's two lines are drawn whole, and end above the rows with a line to spare");
+
+	ServerYesLayout const tight = ServerYes_Layout(10, 255);
+	Check(tight.ownerLines < 10 && tight.ownerLines > 0 && tight.bottom <= 255 - kServerYesAboveRows,
+		"words that wouldn't fit above the rows are cut to the lines that do: nothing is drawn into the rows");
+	Check(ServerYes_Layout(2, 150).ownerLines == 0 && ServerYes_Layout(-3, 255).ownerLines == 0, "with no room, or no lines, none is drawn");
+
+	// A 31-letter name, the longest a servers.cfg line may have, cut to the menus' edges by its font's widths: its box, centred, lies
+	// between the edges, under the title's
+	char name[32];
+	memset(name, 'W', 31);
+	name[31] = 0;
+	int const widest = kServerYesRight - kServerYesLeft;
+	OnlineScreens_FitToWidth(name, widest, TwentyWide);
+	int const nameWidth = static_cast<int>(strlen(name)) * 20;
+	Check(nameWidth <= widest && strlen(name) < 31 && name[strlen(name) - 1] == '.',
+		"a 31-letter name too wide for the menus' edges is cut to them, and shows it was cut");
+	Check(320 - nameWidth / 2 >= kServerYesLeft && 320 + nameWidth / 2 <= kServerYesRight && at.nameTop >= kServerYesTitleTop + kServerYesBigLine,
+		"so the title's box and the name's never overlap, whatever the name");
+
+	Check(ServerYes_BoxLeft(300) == kServerYesLeft + (widest - 300) / 2 && ServerYes_BoxLeft(widest) == kServerYesLeft &&
+		ServerYes_BoxLeft(0) == kServerYesLeft, "words wrapped narrower than the edges are centred between them");
+
+	// How the page uses them, read in the code
+	std::string const page = ReadSource("3dc/avp/win95/frontend/server_yes_page.cpp");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const drawing = SourceSlice(page, "void ServerYesPage_Draw(int rowsTop)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(drawing, "int const ownerWidth = OnlinePage_BalancedWidth(owner, widest);") &&
+		Has(drawing, "ServerYesLayout const at = ServerYes_Layout(SmallFontString_WrappedLines(owner, ownerWidth), rowsTop);"),
+		"the owner's words are wrapped to their balanced width, and their lines counted by the wrapping rule itself");
+	Check(Has(drawing, "OnlineScreens_FitToWidth(name, widest, OnlinePage_SmallWidth);") &&
+		Has(drawing, "RenderSmallMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);") &&
+		!Has(drawing, "RenderMenuText("), "the name is cut to the edges by the small font's widths, and drawn on its own line, never in the title's font");
+	Check(Has(drawing, "RECT area = { left, at.ownerTop, left + ownerWidth, at.ownerTop + at.ownerLines * kServerYesSmallLine };"),
+		"the owner's words are drawn into a box exactly as tall as the lines that fit");
+	Check(Has(menus, "RenderMenuText(textPtr, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);") && kServerYesTitleTop == 70 &&
+		Has(menus, "\t\telse\n\t\t{\n\t\t\ty = MENU_CENTREY - AvPMenus.MenuHeight / 2;\n\t\t}"),
+		"the layout's title and rows are where RenderMenu draws them");
+}
+
 int main()
 {
 	TestTheRows();
@@ -365,6 +426,7 @@ int main()
 	TestTheWaysOnline();
 	TestWhereAHostHosts();
 	TestTheHostsWait();
+	TestTheLayout();
 
 	if (checksFailed)
 	{

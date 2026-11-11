@@ -42,7 +42,8 @@ bool ServerYesPage_Opened(void);
 // backTo after the no, with nothing sent.
 bool ServerYesPage_Pressed(int row, enum AVPMENU_ID *page);
 
-// The page's words, above its rows
-void ServerYesPage_Draw(void);
+// The page's words, above its rows, which start at rowsTop (server_yes_rules.h, THE PAGE'S LAYOUT). Modified 2026-11-10 by Melanikus for
+// the AvP port: the rows' top is given, so nothing is drawn into them.
+void ServerYesPage_Draw(int rowsTop);
 
 #endif

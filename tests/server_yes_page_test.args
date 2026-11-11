@@ -1,4 +1,5 @@
 /std:c++17 /EHsc /MD /J /W3 /sdl /FC /we4834 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
 /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
-/I3dc/avp/win95/frontend /Itests
+/I3dc /I3dc/avp/win95/frontend /Itests
 tests/server_yes_page_test.cpp
+3dc/avp/win95/frontend/online_screens.cpp
