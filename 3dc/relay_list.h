@@ -150,11 +150,43 @@ void HudsonTest_RelayListShowsTheYesPage(void);
 // ---- Finding games. The menus call these.
 
 // Asks the list for the games of this version of the game. The answer comes a moment later, through RelayList_FoundGames.
+// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: Find games lists every server servers.cfg names, "all servers go
+// through the same pipeline"): it asks every good line the player has said yes to, one after another, in the file's order, each a visit
+// of its own (relay_list.cpp, THE VISITS). A line without the yes isn't asked: nothing goes to its server. The answers come through
+// RelayList_FoundAllGames and RelayList_LineGamesState once every visit has ended, and the line in use's through RelayList_FoundGames too.
 void RelayList_FindGames(void);
 
 // Once for each answer: true, with the games, newest first (games has room for kRelayListMostGames). An answer that failed is true with
 // no games, and why says why in words for the page, fixed words of the game's own, never the list's. False while there's no new answer.
+// These are the line in use's alone, the server a game is hosted on and joined through (relay_auto.cpp and the joins use these).
 bool RelayList_FoundGames(RelayListGame *games, int *count, const char **why);
+
+// ---- Every agreed line's games (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling). For the page of games found.
+
+// One game, and the good line it was listed on: its place among the good lines, as RelayList_LineAt numbers them. The page names the
+// server by that line (RelayList_LineAt's line.name, made safe), never by anything the server sent. Only a game whose line is the one in
+// use (RelayListLineShown.inUse) can be joined tonight; one on another line says to pick that line on the Servers page.
+struct RelayListServerGame
+{
+	RelayListGame game;
+	int line;
+};
+
+int const kRelayListMostVisits = 8;                                                // the most good lines asked in one find
+int const kRelayListMostAllGames = kRelayListMostVisits * kRelayListMostGames;    // the most games of all of them together
+
+// Once for each find, after every visit has ended: true, with every agreed line's games, each tagged with its line, in the lines' order
+// and each line's newest first. games has room for kRelayListMostAllGames. False while there's no new answer.
+bool RelayList_FoundAllGames(RelayListServerGame *games, int *count);
+
+// How a good line stands after the last find (place: as RelayList_LineAt numbers them), and why, in the game's own fixed words, when
+// it's kRelayLineNoAnswer. Asking means no find has ended since it was asked, or none has been asked.
+int const kRelayLineNoYes = 0;       // the player hasn't said yes to it: it isn't asked, and its row says to say yes to see its games
+int const kRelayLineAsking = 1;
+int const kRelayLineAnswered = 2;    // its games are among RelayList_FoundAllGames's (it may have none)
+int const kRelayLineNoAnswer = 3;    // it couldn't be reached, its keys don't match its line, or its answer was refused: why says which
+int const kRelayLineNotAsked = 4;    // past the first kRelayListMostVisits agreed lines, so not asked this time
+int RelayList_LineGamesState(int place, const char **why);
 
 // ---- Asking for online access (server #24): relay_list_text.h says what's sent and why it's safe. Added 2026-11-09 by Melanikus for the
 // AvP port. Only the Online access page calls these. (Modified 2026-11-10 by Melanikus for the AvP port, #175 PR 3b: they no longer ask

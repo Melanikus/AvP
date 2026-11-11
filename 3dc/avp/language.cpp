@@ -235,6 +235,7 @@ static char OurTextStrings[][200] =
 	"Used from the next start of the game.",
 	"The pick couldn't be kept. The log says why.",
 	"Games from",
+	"and",
 	"Find Games",
 	"Press ENTER to see the games on the server's online list.",
 	"Search",

@@ -1196,6 +1196,7 @@ static bool PeerIsThroughRelay(const ENetPeer *peer)
 static const char *const kNotThroughTheList = "that game isn't on the online list, and a game is played only through a server's relay, sealed";
 static const char *const kNoServerSet = "no server is set in servers.cfg, and a game is hosted only through a server's relay, sealed";
 static const char *const kServerNotYet = "the server hasn't answered yet";
+static const char *const kOnAnotherServer = "that game is on another server in servers.cfg: pick it on the Servers page, and it's used from the next start";   // 2026-11-11
 static const char *const kServerNotAgreed = "you haven't said yes to the server in servers.cfg yet";   // #175's last part (2026-11-10)
 static const char *const kRelayCantBeUsed = "the server's relay can't be used";
 static const char *const kNoIdentity = "this game's identity couldn't be made";
@@ -2103,7 +2104,15 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 
 // The list's own record of a game (relay_list_text.h, Fourth's, checked there to PROTOCOL.md): each number is checked again for the room it's
 // kept in here, before it's narrowed, and the rest goes to AddRelaySession
-bool Net_AddRelaySession(const RelayListGame &game)
+// Whether a good line is the one this run uses (-1 is). Added 2026-11-11 by Melanikus for the AvP port: this run has the relay keys of
+// that line alone, so a game listed by another line's server can be shown but not joined.
+static bool OnTheLineInUse(int line)
+{
+	RelayListLineShown shown;
+	return line < 0 || (RelayList_LineAt(line, &shown) && shown.inUse);
+}
+
+bool Net_AddRelaySession(const RelayListGame &game, int line)
 {
 	if (game.gameStyle < 0 || game.gameStyle > 255 || game.levelNumber < 0 || game.levelNumber > 100 || game.coopLobby < 0 || game.coopLobby > 255)
 	{
@@ -2111,8 +2120,22 @@ bool Net_AddRelaySession(const RelayListGame &game)
 		return false;
 	}
 
-	return AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
-		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.hostId);
+	if (!AddRelaySession(game.code, game.region, game.name, game.players, game.maxPlayers, game.version, static_cast<uint16_t>(game.gameStyle),
+		static_cast<uint16_t>(game.levelNumber), game.level, static_cast<uint8_t>(game.coopLobby), game.hostId))
+	{
+		return false;
+	}
+
+	// The line that listed it, and whether this run can join it (added 2026-11-11 by Melanikus for the AvP port)
+	SESSION_DESC &added = SessionData[NumberOfSessionsFound - 1];
+	added.serverLine = line;
+
+	if (!OnTheLineInUse(line))
+	{
+		added.AllowedToJoin = false;
+	}
+
+	return true;
 }
 
 // Added 2026-11-09 by Melanikus for the AvP port: where a game from the relays' list is on the list of sessions, by its region and code, as
@@ -3739,6 +3762,15 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	{
 		joinRefusedWhy = kNotThroughTheList;
 		Con_PrintError(std::string("Net_ConnectToSession - ") + kNotThroughTheList);
+		return NET_FAIL;
+	}
+
+	// Added 2026-11-11 by Melanikus for the AvP port: a game another line's server listed isn't joined tonight, as this run has the relay
+	// keys of the line it uses alone. Refused before anything is opened, with the reason.
+	if (!OnTheLineInUse(SessionData[sessionNumber].serverLine))
+	{
+		joinRefusedWhy = kOnAnotherServer;
+		Con_PrintError(std::string("Net_ConnectToSession - ") + kOnAnotherServer);
 		return NET_FAIL;
 	}
 

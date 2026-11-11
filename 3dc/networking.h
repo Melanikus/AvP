@@ -289,7 +289,9 @@ bool Net_RelayBeingTimed(const char *region);
 // one found on this network. False if it isn't one this game can join, or it's on the list already, or the list is full (MAX_NO_OF_SESSIONS):
 // nothing is ever written past it. Only on the game's main thread, like the list of sessions.
 struct RelayListGame;
-bool Net_AddRelaySession(const RelayListGame &game);
+// line: the good line whose server listed it (RelayList_LineAt's place), or -1 for the line this run uses. A game from any other line is
+// on the list, but can't be joined (added 2026-11-11 by Melanikus for the AvP port)
+bool Net_AddRelaySession(const RelayListGame &game, int line = -1);
 
 // Where a game from the relays' list is on the list of sessions, by its region and its code's 8 letters; -1 if it isn't there
 int Net_FindRelaySession(const char *region, const char *code);

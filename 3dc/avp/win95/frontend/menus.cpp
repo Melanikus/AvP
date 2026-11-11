@@ -178,7 +178,9 @@ static void SetupNewMenu(enum AVPMENU_ID menuID);
 
 // The relay server's games, for the page of games found: the last good answer, kept here so that they can be put back each time the page
 // is set up again. The page's list is emptied whenever a new search of the LAN starts, and these would go with it.
-static RelayListGame relayGamesFound[kRelayListMostGames];
+// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every server in servers.cfg goes through the same page): every
+// agreed line's games, each with the line that listed it
+static RelayListServerGame relayGamesFound[kRelayListMostAllGames];
 static int relayGamesKept = 0;
 
 // Puts the kept relay games on the page's list, after whatever the LAN found. Net_AddRelaySession leaves out a game that's there already,
@@ -187,7 +189,7 @@ static void PutTheRelayGamesOnThePage(void)
 {
 	for (int i = 0; i < relayGamesKept; i++)
 	{
-		(void)Net_AddRelaySession(relayGamesFound[i]);
+		(void)Net_AddRelaySession(relayGamesFound[i].game, relayGamesFound[i].line);
 	}
 }
 
@@ -196,22 +198,43 @@ static void PutTheRelayGamesOnThePage(void)
 static bool TheRelayGamesHaveCome(void)
 {
 	int count = 0;
-	const char *why = NULL;
 
-	if (!RelayList_FoundGames(relayGamesFound, &count, &why))
+	// Modified 2026-11-11 by Melanikus for the AvP port: every agreed line's games, once every visit of the find has ended
+	if (!RelayList_FoundAllGames(relayGamesFound, &count))
 	{
 		return false;
 	}
 
-	relayGamesKept = why ? 0 : count;
+	relayGamesKept = count < 0 ? 0 : count > kRelayListMostAllGames ? kRelayListMostAllGames : count;
 
-	if (why)
+	// The list failed only when no line answered: then the first line's why, in the list code's own words, as before
+	const char *why = NULL;
+	bool anyAnswered = false;
+
+	for (int place = 0; place < RelayList_LineCount(); place++)
 	{
-		LogString(std::string("Relay list: no games from the list, because ") + why);
+		const char *lineWhy = NULL;
+		int const state = RelayList_LineGamesState(place, &lineWhy);
+		anyAnswered = anyAnswered || state == kRelayLineAnswered;
+
+		if (state == kRelayLineNoAnswer && !why)
+		{
+			why = lineWhy;
+			LogString(std::string("Relay list: a server gave no games, because ") + (lineWhy ? lineWhy : "it didn't answer"));
+		}
 	}
 
+	why = anyAnswered ? NULL : why;
+
 	// The page's ping column needs each game's hostMs, and it says why the list failed
-	OnlinePage_RelayGamesCame(relayGamesFound, relayGamesKept, why);
+	static RelayListGame gamesForThePage[kRelayListMostAllGames];
+
+	for (int i = 0; i < relayGamesKept; i++)
+	{
+		gamesForThePage[i] = relayGamesFound[i].game;
+	}
+
+	OnlinePage_RelayGamesCame(gamesForThePage, relayGamesKept, why);
 
 	return relayGamesKept > 0;
 }

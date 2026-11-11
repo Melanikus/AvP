@@ -362,6 +362,10 @@ typedef struct
 	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
 	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
 	uint8_t relayHostId[kNetIdentityIdBytes];   // its host's whole id, from the list: who handshake B must find it's talking to
+	// Which good line of servers.cfg listed it: its place as RelayList_LineAt numbers them, or -1 for the line this run uses. The page names
+	// the game's server by that line, never by anything the server sent (added 2026-11-11 by Melanikus for the AvP port: every server in
+	// servers.cfg goes through the same page)
+	int serverLine;
 	// What the games page shows (online_screens.h). The host sent these, so they're hostile: the page draws the name only after
 	// OnlineScreens_SafeName, and checks the numbers before it uses them.
 	char levelName[kRelayListLevelLetters + 1];      // the level's name, as the host said it
