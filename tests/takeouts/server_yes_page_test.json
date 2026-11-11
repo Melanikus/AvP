@@ -513,6 +513,16 @@
 					"to": "\t\tif (false && session >= 0)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a game stays greyed after its line approves this PC",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (approvedNow != approvedWhenPut)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
 		}
 	]
 }

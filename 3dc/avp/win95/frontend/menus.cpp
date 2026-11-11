@@ -204,6 +204,28 @@ static void PutTheRelayGamesOnThePage(void)
 	}
 }
 
+// Which lines have approved this PC now, one bit for each line's place (servers.cfg has at most 64), so the games page sees the moment
+// that changes, and the approvals the list was last put on the page with (added 2026-11-11 by Melanikus for the AvP port)
+static_assert(kServersCfgMostLines <= 64, "one bit for each line");
+static uint64_t approvedWhenPut = 0;
+
+static uint64_t TheApprovedLines(void)
+{
+	int places[kServersCfgMostLines];
+	int const count = RelayList_ApprovedLines(places, kServersCfgMostLines);
+	uint64_t lines = 0;
+
+	for (int i = 0; i < count && i < kServersCfgMostLines; i++)
+	{
+		if (places[i] >= 0 && places[i] < kServersCfgMostLines)
+		{
+			lines |= uint64_t(1) << places[i];
+		}
+	}
+
+	return lines;
+}
+
 // Each frame of the page of games found: whether an answer has come from the relay server's list with games to show. An answer that
 // failed is written in the log, in the game's own words, never the server's.
 static bool TheRelayGamesHaveCome(void)
@@ -2346,10 +2368,22 @@ extern void AvP_UpdateMenus(void)
 			listChanged = true;
 		}
 
+		// A line's approval came, or went, while the page is open (the Multiplayer page asked each line as it opened): the list starts again
+		// from the games kept, so a game is greyed or joinable as its line stands now, never as it stood when it came (added 2026-11-11 by
+		// Melanikus for the AvP port)
+		uint64_t const approvedNow = TheApprovedLines();
+
+		if (approvedNow != approvedWhenPut)
+		{
+			Net_FindAvPSessions();
+			listChanged = true;
+		}
+
 		// After a search, which may have emptied the list, the relay's games go back on it
 		if (listChanged)
 		{
 			PutTheRelayGamesOnThePage();
+			approvedWhenPut = approvedNow;
 		}
 
 		// The rows shown, kept steady (online_screens_page.h). When they change, the page's rows are made again, with the selection on the
