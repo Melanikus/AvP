@@ -222,6 +222,8 @@ void AlienWaysGuide::ForgetTheWatchdog(Follower *follower)
 	follower->replanning = false;
 	follower->passedAPoint = false;
 	follower->headwayFrom = AlienWaysXYZ{ 0, 0, 0 };
+	follower->restFrom = AlienWaysXYZ{ 0, 0, 0 };
+	follower->restMovedAt = 0;
 }
 
 // The polygon is shut for this alien, and only it, for kAlienWaysShutFor from now. One shut already is shut for longer. Otherwise it goes
@@ -1076,6 +1078,56 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 
 	if (now < follower.restUntil)
 	{
+		// THE REST, HELD FROM AVOIDING (alien_ways_guide.h): resting after a stuck, held back from avoiding, an alien that hasn't moved on
+		// for a while ends its rest and re-plans now, if THE CAP allows. A rest that follows no stuck, after a search that found nothing,
+		// is left as it is. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
+		if (now < follower.stuckUntil)
+		{
+			if (Distance(ask.at, follower.restFrom) >= kAlienWaysRestMovedOn)
+			{
+				follower.restFrom = ask.at;
+				follower.restMovedAt = now;
+			}
+			else if (now - follower.restMovedAt >= kAlienWaysRestStillFor)
+			{
+				int const replan = TakeAReplan(&follower);
+
+				// With its re-plans used up it rests on, and is looked at again a while on, rather than every frame
+				follower.restMovedAt = now;
+
+				if (replan > 0)
+				{
+					if (reportsRead)
+					{
+						reportCount = 0;
+						reportsRead = false;
+					}
+
+					AlienWaysReport line = {};
+					line.outcome = kAlienWaysOutcomeRestEnded;
+					line.follower = static_cast<size_t>(f);
+					line.who = follower.who;
+					line.from = ask.at;
+					line.to = ask.goal;
+					line.fromKind = KindUnder(ask.down);
+					line.toTheTarget = ask.goalIsTheTarget;
+					line.replan = replan;
+					line.shutPolygon = -1;
+					AddReport(line);
+
+					follower.restUntil = follower.stuckUntil = now;
+					follower.queued = true;
+					follower.askedAt = now;
+					follower.replanning = true;
+
+					if (searching == f)
+					{
+						searching = -1;
+					}
+				}
+			}
+		}
+
 		return false;
 	}
 
@@ -1189,10 +1241,13 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 				return false;
 			}
 
-			// The rest, as before the watchdog: the game's own code has it for a while, and nothing is asked till then
+			// The rest, as before the watchdog: the game's own code has it for a while, and nothing is asked till then. Where it is now is
+			// where it starts from, for THE REST, HELD FROM AVOIDING (added 2026-11-11 by Melanikus (Third) for the AvP port, #109).
 			follower.queued = false;
 			follower.restUntil = now + kAlienWaysRestAfterStuck;
 			follower.stuckUntil = follower.restUntil;
+			follower.restFrom = ask.at;
+			follower.restMovedAt = now;
 			return false;
 		}
 	}

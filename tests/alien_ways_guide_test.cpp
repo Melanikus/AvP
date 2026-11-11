@@ -504,6 +504,8 @@ static void Stuck()
 	bool stuckSaysWhere = false;
 	AlienWaysReport stuckLine = {};
 
+	// It shuffles 400 mm back and forth meanwhile, so the rest isn't ended early (THE REST, HELD FROM AVOIDING: modified 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109)
 	for (ms = 0; ms < 2900; ms += 100)
 	{
 		Frame(guide, map, 100);
@@ -524,7 +526,7 @@ static void Stuck()
 			}
 		}
 
-		guided = guided || guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		guided = guided || guide.Steer(&map, Ask(Alien(1), AlienWaysXYZ{ 1000, 0, 500 + 400 * ((ms / 400) % 2) }, kGoal, 13), &towards);
 	}
 
 	Check(!asked && !guided, "for the next 3 s it's left to the game's own code, and asks for no way");
@@ -678,6 +680,25 @@ static void ReplansAtOnce()
 		"stuck twice more along its ways, it re-plans twice more: its 2nd and 3rd in this minute");
 	Check(last.stuck && after[2] == kAlienWaysRestsCapped && replans[2] == 0 && last.resting && !last.hasNext,
 		"the 4th time in that minute its re-plans are used up: it rests, as before the watchdog, and asks for nothing");
+
+	// Held still in that rest, it doesn't end it early either: it has no re-plan left (THE REST, HELD FROM AVOIDING; added 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109)
+	bool endedEarly = false;
+
+	for (int ms = 0; ms < 2500; ms += 100)
+	{
+		guide.Steer(&map, last.ask, &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			endedEarly = endedEarly || reports[r].outcome == kAlienWaysOutcomeRestEnded;
+		}
+	}
+
+	Check(!endedEarly, "held still in that rest, it doesn't end it early: it has no re-plan left");
 
 	// A minute on, its re-plans count no more. Meanwhile it's asked about every frame of 400 ms, so it's kept, but for a goal no polygon is
 	// near, so it gets no way: it's never stuck, and nothing more is shut for it. Then, from the start again, it steps onto the wall and is
@@ -837,6 +858,75 @@ static AlienWaysAsk AtItsTarget(AlienWaysXYZ at, AlienWaysXYZ target)
 	ask.goalIsTheTarget = true;
 	ask.targetInSight = true;
 	return ask;
+}
+
+// THE REST, HELD FROM AVOIDING (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). Held back from
+// avoiding in its rest after a stuck, an alien that doesn't get on mustn't stand pushing a wall the whole rest (PO, 2026-11-11).
+static void RestEndsEarly()
+{
+	printf("The rest after a stuck: one that doesn't move on re-plans after 1 s\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+
+	// Held at the start, it's stuck there (a rest, with the wall shut for it), and held there still: 1 s into its rest it re-plans, and its
+	// new way goes by the other wall, long before the 3 s are up
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	Held const held = HeldTillStuck(guide, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	Check(held.stuck && held.line.afterStuck == kAlienWaysRestsAtTheStart, "held at the start, it's stuck there, and rests");
+	int endedAt = -1, wayAt = -1, replan = 0;
+	bool afterReplan = false, byTheOther = false;
+
+	for (int ms = 0; ms < 3000 && wayAt < 0; ms += 100)
+	{
+		guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeRestEnded && endedAt < 0)
+			{
+				endedAt = ms;
+				replan = reports[r].replan;
+			}
+			else if (reports[r].outcome == kAlienWaysOutcomeFound && endedAt >= 0 && wayAt < 0)
+			{
+				wayAt = ms;
+				afterReplan = reports[r].afterReplan;
+				byTheOther = ByTheWall(reports[r], OtherWall());
+			}
+		}
+	}
+
+	Check(endedAt >= 800 && endedAt <= 1200 && replan == 1, "not having moved on, it ends its rest after 1 s, with its first re-plan of the minute (" +
+		std::to_string(endedAt) + " ms)");
+	Check(wayAt >= endedAt && wayAt <= endedAt + 200 && afterReplan && byTheOther,
+		"and its new way comes at once, a re-plan's, by the other wall: the one it was stuck heading for is shut for it");
+
+	// One that moves on, 400 mm every 400 ms, rests its full 3 s, as the game's own code is getting it free
+	const std::unique_ptr<AlienWaysGuide> movingRoom(new AlienWaysGuide);
+	AlienWaysGuide &moving = *movingRoom;
+	Held const stuck = HeldTillStuck(moving, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
+	bool ended = false, asked = false;
+
+	for (int ms = 0; ms < 2800; ms += 100)
+	{
+		AlienWaysXYZ const at = { 1000, 0, 500 + 400 * ((ms / 400) % 2) };
+		moving.Steer(&map, Ask(Alien(1), at, kGoal, 13), &towards);
+		Frame(moving, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(moving, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			ended = ended || reports[r].outcome == kAlienWaysOutcomeRestEnded;
+			asked = asked || reports[r].outcome == kAlienWaysOutcomeFound;
+		}
+	}
+
+	Check(stuck.stuck && !ended && !asked, "one that keeps moving on rests its full 3 s, asking for nothing");
 }
 
 static void HandOver()
@@ -1570,10 +1660,16 @@ static void SourceOfTheGame()
 	Check(Has(tests, "\t\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t\t}\n\t\telse if(!onAWay && NPC_CannotReachTarget("),
 		"SOURCE: nor does turning back as it goes round by the walls, and the log says so");
 	Check(Has(tests, "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)\n\t{"), "SOURCE: and the other avoidance, switched off in this game, is kept off a way too");
+	Check(ComesBefore(tests, "\tonAWay = onAWay || AlienWays_HoldsBackAvoiding(sbPtr);\n", "/* test here for impeding collisions, and not being able to reach target... */"),
+		"SOURCE: resting after a stuck, it's held back from avoiding as well, before the tests run (added 2026-11-11 by Melanikus (Third), #109)");
+	Check(Has(ways, "bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)\n{\n\treturn alien && AlienWays_On() && ReadyMap() && theGuide.RestingAfterStuck(WhoIs(alien));"),
+		"SOURCE: held back while it rests after a stuck, or waits for a re-plan's way, and never with the switch off");
+	Check(Has(ways, "case kAlienWaysOutcomeRestEnded:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u at %s, resting after a stuck and held back from avoiding"),
+		"SOURCE: the log says when a rest ends early for a re-plan");
 
 	// The same in Wander (Fourth's hook there)
 	std::string const wander = Between(near, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Wait(STRATEGYBLOCK *sbPtr)\n{");
-	Check(Has(wander, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)"),
+	Check(Has(wander, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander"),
 		"SOURCE: in Wander, an alien steered by its way this frame is marked so, by the guide");
 	Check(!Has(wander, "onAWay = (dynPtr->UseStandardGravity"), "SOURCE: in Wander, the mark isn't read from gravity, which the state's own code can turn off with no way");
 	Check(Has(wander, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Wander\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
@@ -1584,7 +1680,7 @@ static void SourceOfTheGame()
 
 	// The same in Hunt (Fourth's hook there)
 	std::string const hunt = Between(near, "static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)\n{");
-	Check(Has(hunt, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)"),
+	Check(Has(hunt, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt"),
 		"SOURCE: in Hunt, an alien steered by its way this frame is marked so, by the guide");
 	Check(!Has(hunt, "onAWay = (dynPtr->UseStandardGravity"), "SOURCE: in Hunt, the mark isn't read from gravity, which the state's own code can turn off with no way");
 	Check(Has(hunt, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Hunt\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
@@ -1745,6 +1841,7 @@ int main()
 	NotShared();
 	LetGoForgetsIt();
 	HandOver();
+	RestEndsEarly();
 	AskingAgain();
 	FailedRenewal();
 	FoundAnywhere();

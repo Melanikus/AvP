@@ -1178,6 +1178,12 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		InitWaypointManager(&alienStatusPointer->waypointManager);
 	}
 
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109): resting after it was found stuck, or waiting for a re-plan's way, an
+	// alien is held back from avoiding as well, so 1999's Avoidance can't carry it off from its target in that rest (Primary's placed runs:
+	// from 19 m out to 37 m). The game's own code still moves it, and the guide ends the rest early when it doesn't get on (THE REST, HELD
+	// FROM AVOIDING, alien_ways_guide.h). Only with -alienways.
+	onAWay = onAWay || AlienWays_HoldsBackAvoiding(sbPtr);
+
 	/* test here for impeding collisions, and not being able to reach target... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:
 	//   on a frame its way steers it (onAWay), these tests still run, but they don't send the alien off to avoid anything. To climb, an alien on
@@ -1541,7 +1547,7 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
 	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
-	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander): the way's branch above ran, and never with the switch off
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander; modified 2026-11-11 by Melanikus (Third), #109): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:
@@ -2066,7 +2072,7 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
 	// Not read from gravity: this state's own 1999 code turns gravity off for a crouched alien that can climb, with no way at all
-	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt): the way's branch above ran, and never with the switch off
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt; modified 2026-11-11 by Melanikus (Third), #109): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:

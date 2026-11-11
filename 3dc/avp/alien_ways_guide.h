@@ -123,6 +123,18 @@ int const kAlienWaysReplansWithin = 60000;        // ms: a minute
 int const kAlienWaysHandOverRange = 8000;         // mm
 int const kAlienWaysTakeBackRange = 10000;        // mm
 
+// THE REST, HELD FROM AVOIDING. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's go, after Primary's placed runs of the
+// owner's spots: in its 3 s rest after a stuck, 1999's Avoidance carried one alien from 19 m off its target to 37 m, and its next way was
+// 62.5 m against 36.7 m).
+// - While an alien rests after it was found stuck, or waits for a re-plan's way (RestingAfterStuck), the game's own code still moves it.
+//   But it isn't let send it off to avoid something: the game asks AlienWays_HoldsBackAvoiding (alien_ways.h), as it does while a way
+//   steers it.
+// - So that it can't stand pushing a wall for the whole rest: if it hasn't moved kAlienWaysRestMovedOn in kAlienWaysRestStillFor, the rest
+//   ends and it re-plans at once, within THE CAP. The polygon it was stuck at is shut for it already, so the new way goes round it. With
+//   its re-plans used up, it rests on.
+int const kAlienWaysRestStillFor = 1000;          // ms
+int const kAlienWaysRestMovedOn = 300;            // mm: a cell of the grid
+
 // An alien's number in the claims (alien_ways_claims.h) is its place in the guide, so the two have to hold the same number of aliens.
 // Checked here, where both are known, so the game's own build stops if one of them is changed alone.
 static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims hold as many aliens as the guide has places");
@@ -188,8 +200,10 @@ enum AlienWaysOutcome
 	kAlienWaysOutcomeNoPolygon,     // the alien, or its goal, wasn't near enough to any polygon to start on
 	kAlienWaysOutcomeRefused,       // the map wouldn't start the search: why says why
 	kAlienWaysOutcomeStuck,         // not a search: an alien made no headway, so its way was dropped (from: where it was, to: where it was heading)
-	kAlienWaysOutcomeHandedOver     // not a search: an alien in plain view of its target, near it, was left to the game's own last stretch
+	kAlienWaysOutcomeHandedOver,    // not a search: an alien in clear sight of its target, near it, was left to the game's own last stretch
 	                                // (THE HAND-OVER; from: where it was, to: its target). Added 2026-11-11 by Melanikus (Third), #109.
+	kAlienWaysOutcomeRestEnded      // not a search: an alien resting after a stuck didn't get on, so it re-plans now (THE REST, HELD FROM
+	                                // AVOIDING; from: where it is; replan: which re-plan). Added 2026-11-11 by Melanikus (Third), #109.
 };
 
 // What the watchdog did with an alien found stuck (THE WATCHDOG, above). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
@@ -363,6 +377,8 @@ private:
 		long long replanCountsUntil[kAlienWaysMostReplans];   // each re-plan counts against the cap until a minute after it; then it's free
 		bool replanning;                    // the search it's waiting for was asked for by a re-plan
 		bool handedOver;                    // THE HAND-OVER: the game's own last stretch has it (added 2026-11-11 by Melanikus (Third))
+		AlienWaysXYZ restFrom;              // THE REST, HELD FROM AVOIDING: where it was when it last moved on in its rest...
+		long long restMovedAt;              // ...and when (added 2026-11-11 by Melanikus (Third))
 
 		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
 		AlienWaysWho target;

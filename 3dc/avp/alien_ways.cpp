@@ -445,6 +445,12 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			details = StuckDetails(line.who);
 			break;
 
+		// THE REST, HELD FROM AVOIDING (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+		case kAlienWaysOutcomeRestEnded:
+			snprintf(text, sizeof(text), "alien ways: alien %u at %s, resting after a stuck and held back from avoiding, moved less than %.1f m in %.1f s: it re-plans now, re-plan %d of %d this minute",
+				static_cast<unsigned>(line.follower), Metres(line.from).c_str(), kAlienWaysRestMovedOn / 1000.0, kAlienWaysRestStillFor / 1000.0, line.replan, kAlienWaysMostReplans);
+			break;
+
 		// THE HAND-OVER (alien_ways_guide.h), once each time. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 		case kAlienWaysOutcomeHandedOver:
 			snprintf(text, sizeof(text), "alien ways: alien %u at %s is %.1f m from its target at %s, in clear sight: the game's own last stretch has it, as in 1999 (its curve, its pounce, its attack), till it's %.1f m off",
@@ -1043,6 +1049,12 @@ bool AlienWays_Following(STRATEGYBLOCK *alien)
 bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
 {
 	return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109): THE REST, HELD FROM AVOIDING (alien_ways_guide.h)
+bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)
+{
+	return alien && AlienWays_On() && ReadyMap() && theGuide.RestingAfterStuck(WhoIs(alien));
 }
 
 int AlienWays_PlaceOf(const STRATEGYBLOCK *alien)

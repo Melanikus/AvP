@@ -580,7 +580,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander; modified 2026-11-11 by Melanikus (Third), #109)",
 					"to": "\tbool const onAWay = false;   // (Wander)"
 				}
 			]
@@ -620,7 +620,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt; modified 2026-11-11 by Melanikus (Third), #109)",
 					"to": "\tbool const onAWay = false;   // (Hunt)"
 				}
 			]
@@ -660,7 +660,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt; modified 2026-11-11 by Melanikus (Third), #109)",
 					"to": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)"
 				}
 			]
@@ -670,7 +670,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander; modified 2026-11-11 by Melanikus (Third), #109)",
 					"to": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)"
 				}
 			]
@@ -1702,6 +1702,96 @@
 					"file": "3dc/avp/alien_ways.cpp",
 					"from": "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(",
 					"to": "ask.targetInSight = false && IsThisObjectVisibleFromThisPosition_WithIgnore("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Approach, an alien resting after a stuck isn't held back from avoiding",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tonAWay = onAWay || AlienWays_HoldsBackAvoiding(sbPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never holds back an alien's avoidance in its rest",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\treturn alien && AlienWays_On() && ReadyMap() && theGuide.RestingAfterStuck(WhoIs(alien));",
+					"to": "\treturn alien && AlienWays_On() && ReadyMap() && false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, the mark leaves out an alien resting after a stuck",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander",
+					"to": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, the mark leaves out an alien resting after a stuck",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt",
+					"to": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt"
+				}
+			]
+		},
+		{
+			"name": "a rest after a stuck never ends early",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\telse if (now - follower.restMovedAt >= kAlienWaysRestStillFor)\n",
+					"to": "\t\t\telse if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien moving on in its rest isn't noticed, and its rest ends early",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tif (Distance(ask.at, follower.restFrom) >= kAlienWaysRestMovedOn)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a rest ends early even with its re-plans used up",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t\tif (replan > 0)\n\t\t\t\t{\n\t\t\t\t\tif (reportsRead)",
+					"to": "\t\t\t\tif (true)\n\t\t\t\t{\n\t\t\t\t\tif (reportsRead)"
+				}
+			]
+		},
+		{
+			"name": "the log never hears of a rest ended early",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t\t\tline.outcome = kAlienWaysOutcomeRestEnded;\n",
+					"to": "\t\t\t\t\tline.outcome = kAlienWaysOutcomeStuck;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log's line for a rest ended early says nothing of being held back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "resting after a stuck and held back from avoiding, moved less than",
+					"to": "resting after a stuck, moved less than"
 				}
 			]
 		}

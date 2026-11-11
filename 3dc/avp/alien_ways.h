@@ -111,6 +111,12 @@ bool AlienWays_Following(struct strategyblock *alien);
 // in a frame nothing asked. Hunt and Wander (bh_near.cpp) use it to hold back the game's own avoidance only while a way really steers them.
 bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
 
+// Whether the game's own avoidance is to be held back for this alien although no way steers it: it rests after it was found stuck, or
+// waits for a re-plan's way (THE REST, HELD FROM AVOIDING, alien_ways_guide.h). Approach, Hunt and Wander (bh_near.cpp) hold back their
+// avoidance then, as they do while a way steers them. False with the switch off. Added 2026-11-11 by Melanikus (Third) for the AvP port
+// (#109; Primary's placed runs: in that rest, 1999's Avoidance carried an alien from 19 m off its target to 37 m).
+bool AlienWays_HoldsBackAvoiding(struct strategyblock *alien);
+
 // The guide's place for this alien: the N of the log's "alien N" lines, so another line can name the same alien. -1 when it has none, and
 // with the switch off. A place is given again once its alien is let go, so it names an alien only together with when. Added 2026-11-11 by
 // Melanikus (Third) for the AvP port, for Hudson's per-alien lines (#109).
