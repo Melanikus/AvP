@@ -83,10 +83,14 @@ Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, insid
    Don't verify while you're testing: it puts Steam's exe back over ours.
 
 ## 3. Co-op in five lines
-1. **The host** chooses **Co-op campaign** on the Multiplayer page, picks the campaign, the level and the difficulty, and
-   presses **Start** when everyone's in. Everyone plays the campaign's species. The host's page says who'll be left behind.
-2. **Each joiner** chooses **Join Existing Game**, then **Find Games**, which lists the games on the same network (two PCs at home,
-   say). Or **Open IP Address**, to type the host's address: the only way over the internet. **The host lets each joiner in:** the
+1. **Everyone** first opens **Online** on the Multiplayer page, says yes to a server, and asks its owner to let this PC in (give the
+   owner the access code the page shows). Every game is played through a server, sealed: there's no game on a home network alone,
+   and no joining by an address.
+2. **The host**, once a server has approved them, chooses **Co-op campaign**, then the server to host on, the campaign, the level
+   and the difficulty, and presses **Start** when everyone's in. Everyone plays the campaign's species. The host's page says who'll
+   be left behind.
+3. **Each joiner** chooses **Join Existing Game**, then **Find Games**, which lists the games of every server that has approved
+   this PC (a server's games show greyed until it has). **The host lets each joiner in:** the
    host sees "*name* asks to join", and chooses **Let *name* in** or **Say no to *name*** at the top of the in-game menu (Esc), or of
    the Co-op campaign page. A request nobody answers in 30 seconds counts as no. Everyone needs the same beta: one beta can't play
    with another.
@@ -154,8 +158,8 @@ If your Windows user name is also an ordinary word, such as "admin", that word i
 oddly. That's on purpose: it leaves out too much rather than too little.
 
 ## Stay safe
-- **Only play co-op with people you trust,** on a LAN or by IP address. The network code has had a lot of hardening, but this
-  is a test build.
+- **Only play co-op with people you trust.** Every game goes through a server in servers.cfg, sealed, and each server's owner
+  approves who plays on it. The network code has had a lot of hardening, but this is a test build.
 - **Only load your own saves and maps,** or maps from people you trust.
 - **Your antivirus may warn about the build:** it's new and unsigned. Don't run a build your antivirus blocks, and don't turn
   your antivirus off. Tell us instead.
