@@ -3,6 +3,8 @@
 //   declares SaveBlockArrayFits, the shared check that a counted list from a save file fits its block and array
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a block for a gun's own state
+// Modified 2026-11-10 by Melanikus for the AvP port (SAVE-HOSTILE-1, part c):
+//   a block for the level record, which level a save was made on (save_level_record.h), and the call that notes the level loaded
 #ifndef savegame_h_
 #define savegame_h_ 1
 
@@ -35,6 +37,9 @@ typedef enum save_block_type
 	SaveBlock_WeaponsCGlobals,
 	SaveBlock_SoundState,
 	SaveBlock_GunOwnState, // one gun's own state, straight after the player. See weapon_hooks.h
+	// The level record: which level the save was made on, first in a new save's body (save_level_record.h). Last, so every block an older
+	// save holds keeps its number.
+	SaveBlock_LevelIdentity,
 }SAVE_BLOCK_TYPE;
 
 
@@ -106,5 +111,10 @@ extern BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, c
 extern void SaveGame();
 extern void LoadSavedGame();
 extern void ResetNumberOfSaves();
+
+// The level that's loaded, as each new save records it and each load is held to (save_level_record.h): its name from the game's list of
+// levels, and its file's size and MD5 sum as the level loader worked them out. system.cpp calls it as each level loads. A level with no
+// record (one that wasn't read from a file) makes saves with none, and a save with a record isn't loaded on it.
+extern void SaveGame_NoteTheLevel(const char *name, unsigned int fileBytes, const unsigned char sum[16]);
 
 #endif
