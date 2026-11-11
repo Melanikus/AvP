@@ -2312,10 +2312,13 @@ static void TestTourAndSharedMachine()
 			"SOURCE: the run asks for the page once, with yespage=, before the menus");
 		std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
 		std::string const access = Between(menus, "static void RunTheAccessPagesForHudson(void)", "static int StartLevelForHudsonRun(void)");
-		Check(ComesBefore(access, "PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, \"Online access\")", "asAsked = AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;")
-			&& ComesBefore(access, "MenuFrameForARun(asAsked ? \"server-yes.png\" : NULL);", "PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo,")
-			&& ComesBefore(access, "kServerYesRowNo,", "if (asAsked && press == kHudsonAccessNewId)"),
-			"SOURCE: the yes page the Online access row opened is pictured and its row pressed, before the access page's own rows");
+		// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the Online page, then each line's own yes page, opened
+		// from that line's row, pictured and its row pressed, before that line's access request
+		Check(ComesBefore(access, "PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, \"Online\")", "for (int place = 0; asAsked && place < lines; place++)")
+			&& ComesBefore(access, "if (Hudson_YesPagePress() != kHudsonYesPageNone && OnlineLines_NeedsTheYes(place))", "AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;")
+			&& ComesBefore(access, "snprintf(picture, sizeof(picture), \"server-yes-%d.png\", place + 1);", "PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo,")
+			&& ComesBefore(access, "kServerYesRowNo,", "\"a line's row, for its access request\""),
+			"SOURCE: each line's yes page, opened from that line's row on the Online page, is pictured and its row pressed, before that line's access request");
 		std::string const rows = Between(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "extern void AvP_UpdateMenus(void)");
 		Check(!Has(rows, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);") && ComesBefore(rows, "MenuFrameForARun(\"multiplayer.png\");", "\"Start game\")")
 			&& ComesBefore(rows, "\"Start game\")", "\"Start, to the species page\")") && ComesBefore(rows, "\"Start, to the species page\")", "PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, \"Start\")"),
