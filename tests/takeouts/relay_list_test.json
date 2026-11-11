@@ -540,8 +540,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tRelayList_FindGames();\n\n\t\t\t//skirmishMode must be false",
-					"to": "\t\t\t//skirmishMode must be false"
+					"from": "\t\t\tRelayList_FindGames();\n\n\t\t\t// And where this PC stands",
+					"to": "\t\t\t// And where this PC stands"
 				}
 			]
 		},
