@@ -1642,13 +1642,13 @@ void RelayList_HostRoomOpened(const char *region, const char code[kRelayCodeLett
 		return;
 	}
 
-	// The line the room is on: the one the player chose to host on (RelayList_HostOn), or, until networking.cpp hosts by the chosen line,
-	// the line in use (that goes with the pick). Only a line the player has said yes to.
-	int const place = hostChoice >= 0 ? hostChoice : theServer.inUse;
+	// The line the room is on: the one the player chose to host on (RelayList_HostOn), and only while it's approved. With none chosen,
+	// nothing is listed anywhere: there's no default and no automatic choice (the owner, 2026-11-11: "No auto choice, they choose").
+	int const place = RelayList_HostLine();
 
-	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
+	if (place < 0)
 	{
-		LogString("Relay list: the game's server hasn't had the player's yes, so the game isn't put on the list");
+		LogString("Relay list: no server was chosen to host on, so the game isn't put on any list");
 		return;
 	}
 
@@ -2722,9 +2722,16 @@ int RelayList_ApprovedLines(int *places, int most)
 	return count;
 }
 
+// A choice the host page's row no longer shows can never be hosted on: -1 clears it (the row back on "choose a server")
 bool RelayList_HostOn(int place)
 {
 	Server();
+
+	if (place == -1)
+	{
+		hostChoice = -1;
+		return true;
+	}
 
 	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
 	{
@@ -2744,5 +2751,19 @@ bool RelayList_HostOn(int place)
 
 int RelayList_HostLine(void)
 {
-	return hostRoomLine >= 0 ? hostRoomLine : hostChoice;
+	if (hostRoomLine >= 0)
+	{
+		return hostRoomLine;
+	}
+
+	// A choice whose line stopped being approved (refused, revoked, or no answer since) is no choice: it's cleared, so it can't be hosted on
+	const char *why = NULL;
+
+	if (hostChoice >= 0 && (hostChoice >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[hostChoice]) ||
+		AccessOn(hostChoice, &why) != kRelayAccessIsApproved))
+	{
+		hostChoice = -1;
+	}
+
+	return hostChoice;
 }
