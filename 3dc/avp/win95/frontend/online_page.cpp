@@ -607,6 +607,11 @@ bool OnlineLines_AskingOn(int place)
 	return place >= 0 && place < lineCount && RelayList_LineNow(place, &now) && now.access == kRelayAccessAsking;
 }
 
+bool OnlineLines_SaysTheNewIdentityWasMade(void)
+{
+	return answer == TEXTSTRING_ACCESS_NEWID_MADE;
+}
+
 bool OnlineLines_NeedsTheYes(int place)
 {
 	RelayListLineNow now;

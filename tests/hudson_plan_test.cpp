@@ -2319,6 +2319,13 @@ static void TestTourAndSharedMachine()
 			&& ComesBefore(access, "snprintf(picture, sizeof(picture), \"server-yes-%d.png\", place + 1);", "PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo,")
 			&& ComesBefore(access, "kServerYesRowNo,", "\"a line's row, for its access request\""),
 			"SOURCE: each line's yes page, opened from that line's row on the Online page, is pictured and its row pressed, before that line's access request");
+		// access=newid (added 2026-11-11 by Melanikus for the AvP port, PO after the owner's picture run): it waits for every line's answer to
+		// the Multiplayer page's asks, at most 30 s, before Make a new identity, and the run passes only if the page says one was made
+		Check(ComesBefore(access, "while (bRunning && ALineIsStillAskingForARun() && (DWORD)(GetTickCount() - waitStarted) < 30000u)", "\"Make a new identity\")")
+			&& Has(access, "if (ALineIsStillAskingForARun())\n\t\t{\n\t\t\tLogErrorString(\"hudson: a line's access request was still on its way after 30 s, so no new identity was made\");\n\t\t\tasAsked = false;")
+			&& ComesBefore(access, "\"Yes, make a new identity\")", "if (asAsked && !OnlineLines_SaysTheNewIdentityWasMade())\n\t\t{\n\t\t\tLogErrorString(")
+			&& Has(ReadSourceFile("3dc/avp/win95/frontend/online_page.cpp"), "bool OnlineLines_SaysTheNewIdentityWasMade(void)\n{\n\treturn answer == TEXTSTRING_ACCESS_NEWID_MADE;\n}"),
+			"SOURCE: access=newid waits for every line's answer before Make a new identity, at most 30 s, and passes only if a new identity was made");
 		std::string const rows = Between(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "extern void AvP_UpdateMenus(void)");
 		Check(!Has(rows, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);") && ComesBefore(rows, "MenuFrameForARun(\"multiplayer.png\");", "\"Start game\")")
 			&& ComesBefore(rows, "\"Start game\")", "\"Start, to the species page\")") && ComesBefore(rows, "\"Start, to the species page\")", "PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, \"Start\")"),
