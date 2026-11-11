@@ -241,6 +241,70 @@ static void PlayersWords(const SESSION_DESC &session, const char *bracket, char 
 	words[size - 1] = '\0';
 }
 
+// The good line a game came from (SESSION_DESC's serverLine), or the one this run uses for -1. False when there's no such line.
+// Added 2026-11-11 by Melanikus for the AvP port.
+static bool LineOfTheGame(int line, RelayListLineShown *out)
+{
+	if (line >= 0)
+	{
+		return RelayList_LineAt(line, out);
+	}
+
+	for (int place = 0; place < RelayList_LineCount(); place++)
+	{
+		if (RelayList_LineAt(place, out) && out->inUse)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// "Games from New York", "Games from New York and Frankfurt", "Games from New York, Frankfurt and Sydney": every good line whose server
+// answered the last find, each by its own name in servers.cfg, made safe, and only ever a %s's argument. Before any has answered, the
+// name of the line this run uses, as before. False with no server named at all. Added 2026-11-11 by Melanikus for the AvP port (the
+// owner's ruling: every server in servers.cfg goes through the same page).
+static bool ServersTheGamesComeFrom(char *out, size_t size)
+{
+	char names[kRelayListMostVisits][kServersCfgNameLetters + 1];
+	int named = 0;
+
+	for (int place = 0; place < RelayList_LineCount() && named < kRelayListMostVisits; place++)
+	{
+		RelayListLineShown shown;
+		const char *why = NULL;
+
+		if (RelayList_LineGamesState(place, &why) == kRelayLineAnswered && RelayList_LineAt(place, &shown))
+		{
+			OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));
+			named++;
+		}
+	}
+
+	if (named == 0)
+	{
+		if (!Relay_ServerName()[0])
+		{
+			return false;
+		}
+
+		OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, names[0], sizeof(names[0]));
+		named = 1;
+	}
+
+	int used = snprintf(out, size, "%s %s", GetTextString(TEXTSTRING_FINDGAMES_FROM), names[0]);
+
+	for (int i = 1; i < named && used > 0 && (size_t)used < size; i++)
+	{
+		int const more = i == named - 1 ? snprintf(out + used, size - used, " %s %s", GetTextString(TEXTSTRING_FINDGAMES_AND), names[i])
+			: snprintf(out + used, size - used, ", %s", names[i]);
+		used = more < 0 ? -1 : used + more;
+	}
+
+	return true;
+}
+
 // The rows as the networking code's list has them now
 static int LiveRows(OnlineRow *rows, int most)
 {
@@ -280,6 +344,16 @@ static int LiveRows(OnlineRow *rows, int most)
 			int const joinerMs = Net_JoinerMsToRelay(row.region);
 			OnlineScreens_PingWords(true, joinerMs < 0 && Net_RelayBeingTimed(row.region) ? kOnlineJoinerMsMeasuring : joinerMs,
 				HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
+
+			// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every server in servers.cfg goes through the same page): the
+			// column names the server whose line listed the game, by the line's own name in servers.cfg, made safe, never by anything a server
+			// sent. The region above only chose the relay to time.
+			RelayListLineShown shown;
+
+			if (LineOfTheGame(session.serverLine, &shown))
+			{
+				OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, row.region, sizeof(row.region));
+			}
 		}
 		else
 		{
@@ -855,14 +929,12 @@ void OnlinePage_DrawTop(void)
 
 	DrawHeadings();
 
-	// Which server the games come from: the one servers.cfg names for this run (#175 2b, PO's ruling A; added 2026-11-10 by Melanikus for
-	// the AvP port). Its name comes from a file from outside the game, so it's made safe first, and it's only ever a %s's argument.
-	if (Relay_ServerName()[0])
+	// Which servers the games come from (#175 2b, PO's ruling A; added 2026-11-10 by Melanikus for the AvP port; modified 2026-11-11: every
+	// line whose server answered, ServersTheGamesComeFrom)
+	char from[192];
+
+	if (ServersTheGamesComeFrom(from, sizeof(from)))
 	{
-		char server[kServersCfgNameLetters + 1];
-		OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));
-		char from[96];
-		snprintf(from, sizeof(from), "%s %s", GetTextString(TEXTSTRING_FINDGAMES_FROM), server);
 		Words(from, MENU_CENTREX, kHeadingsTop - 17, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 

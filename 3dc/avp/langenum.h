@@ -1568,6 +1568,7 @@ enum TEXTSTRING_ID
 	TEXTSTRING_SERVERS_PICKED,               // the pick's two answers
 	TEXTSTRING_SERVERS_NOT_PICKED,
 	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
+	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,
