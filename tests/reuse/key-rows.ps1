@@ -52,6 +52,10 @@ Write-File 'tests/zz_key_test_stubs/stand_in.h' "inline int StandIn() { return 1
 Write-File '3dc/a.h' "#include `"b.h`"`ninline int Twice(int n) { return Add(n, n); }`n"
 Write-File '3dc/b.h' "inline int Add(int a, int b) { return a + b; }`n"
 Write-File '3dc/twice.cpp' "int Unused() { return 0; }`n"
+# A second test, which zz_key_test never compiles: it's there for the rows on the tests a key ran with
+Write-File 'tests/zz_other_test.cpp' "int main() { return 0; }`n"
+Write-File 'tests/zz_other_test.args' "/MD /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h tests/zz_other_test.cpp`n"
+Write-File 'tests/zz_other_test_stubs/other.h' "inline int Other() { return 2; }`n"
 Write-File 'docs/elsewhere.md' "Nothing a test compiles.`n"
 Write-File '.github/workflows/tests.yml' "name: Tests`n"
 Write-File 'tests/build.ps1' "# build`n"
@@ -69,9 +73,11 @@ $includes = @('3dc/a.h', '3dc/b.h')
 $floor = @('API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!exit', 'KERNEL32.DLL!QueryPerformanceCounter', 'VCRUNTIME140.DLL!memcpy')
 $env:ImageOS = 'win25'
 $env:ImageVersion = '1.0'
-function Key([string]$test = 'zz_key_test', [string[]]$read = $includes, [string[]]$imports = $floor)
+# A key, as record.ps1 and lookup.ps1 work it out. The tests it ran with are the test alone unless they're named.
+function Key([string]$test = 'zz_key_test', [string[]]$read = $includes, [string[]]$imports = $floor, [string[]]$together = $null)
 {
-    Get-ReuseKey $work $test 'unit' $read $imports (Get-SharedParts $work) (Get-ImportRules $work)
+    if ($null -eq $together) { $together = @($test) }
+    Get-ReuseKey $work $test 'unit' $read $imports (Get-SharedParts $work) (Get-ImportRules $work) $together
 }
 $first = Key
 
@@ -127,19 +133,86 @@ Write-File 'docs/elsewhere.md' "Changed, and still nothing a test compiles.`n"
 Commit 'a file no test compiles'
 Check ((Key).key -ceq $first.key) 'a class A key ignores a change to a file the test never compiled'
 
+# --- every test that ran in the job is part of every key from it: a test runs with every right on its machine, so it could have made
+# any result in its job say "passed" (PO, after Secondary's T2)
+$both = @('zz_key_test', 'zz_other_test')
+$withOther = Key 'zz_key_test' $includes $floor $both
+Check ($withOther.key -cne $first.key -and (Get-FirstDifference $withOther $first.parts) -ceq 'ran-with changed') "a key holds the tests it ran with: with another test there, it's another key (it says: $(Get-FirstDifference $withOther $first.parts))"
+Check ((Key 'zz_key_test' $includes $floor @('zz_other_test', 'zz_key_test', 'zz_other_test')).key -ceq $withOther.key) '  in any order, and with a name twice, the same key'
+foreach ($row in @(
+    @{ what = "the other test's .cpp"; file = 'tests/zz_other_test.cpp' },
+    @{ what = "the other test's .args"; file = 'tests/zz_other_test.args' },
+    @{ what = "the other test's stand-in"; file = 'tests/zz_other_test_stubs/other.h' }))
+{
+    $path = Join-Path $work $row.file
+    $was = [System.IO.File]::ReadAllText($path)
+    [System.IO.File]::WriteAllText($path, $was + "// one more line`n")
+    Commit "change $($row.file)"
+    $changed = Key 'zz_key_test' $includes $floor $both
+    Check ($changed.key -cne $withOther.key -and (Get-FirstDifference $changed $withOther.parts) -ceq 'ran-with changed') "an edit to $($row.what), which zz_key_test never compiles, changes zz_key_test's key, by the tests it ran with (it says: $(Get-FirstDifference $changed $withOther.parts))"
+    [System.IO.File]::WriteAllText($path, $was)
+    Commit "back $($row.file)"
+    Check ((Key 'zz_key_test' $includes $floor $both).key -ceq $withOther.key) '  and with it put back, the key is the same again'
+}
+Check ((Key 'zz_key_test' $includes $floor @('zz_key_test', 'zz_gone_test')).key -cne $first.key) 'a test that ran with it and is gone now makes another key'
+foreach ($bad in @(@{ list = @(); what = 'an empty list' }, @{ list = @('zz_other_test'); what = "a list that hasn't got the test itself" }))
+{
+    $threw = $false
+    try { [void](Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work) (Get-ImportRules $work) ([string[]]$bad.list)) } catch { $threw = $true }
+    Check $threw "a key from $($bad.what) of the tests it ran with is refused"
+}
+Check ((Get-AllTests $work) -join ' ' -ceq 'zz_key_test zz_other_test') "the commit's tests are each tests/<name>.args, and only those ($((Get-AllTests $work) -join ' '))"
+Write-File 'tests/zz_other_test_stubs/inner.args' "not a test`n"
+Commit 'an .args in a stand-in folder'
+Check ((Get-AllTests $work) -join ' ' -ceq 'zz_key_test zz_other_test') "  an .args deeper down, in a stand-in folder, isn't a test"
+Remove-Item -LiteralPath (Join-Path $work 'tests/zz_other_test_stubs/inner.args')
+Write-File 'tests/zz_shout_test.ARGS' "/MD`n"
+Commit 'an .ARGS'
+$threw = $false
+try { [void](Get-AllTests $work) } catch { $threw = $true }
+Check $threw "  a tests/name.ARGS, which Windows would build as a test, is refused, as its name isn't in a test's shape"
+Remove-Item -LiteralPath (Join-Path $work 'tests/zz_shout_test.ARGS')
+Commit 'no .ARGS'
+Check ((Key).key -ceq $first.key) '  and with both gone, the key is the first one again'
+
 $changed = Key 'zz_key_test' @('3dc/a.h')
 Check ($changed.key -cne $first.key) 'a key made from a shorter list of what the compiler read is a different key'
 $changed = Key 'zz_key_test' $includes ($floor + 'API-MS-WIN-CRT-MATH-L1-1-0.DLL!sqrt')
 Check ($changed.key -cne $first.key -and $changed.class -ceq 'A' -and (Get-FirstDifference $changed $first.parts) -ceq 'imports changed') "another allowed import changes the key, by the imports (it says: $(Get-FirstDifference $changed $first.parts))"
 
 # --- the machine's words given by the Unit tests job, and how git puts the files on the disk
-$given = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
-$givenAgain = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
-$givenOther = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 2.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work)
+$given = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work) @('zz_key_test')
+$givenAgain = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work) @('zz_key_test')
+$givenOther = Get-ReuseKey $work 'zz_key_test' 'unit' $includes $floor (Get-SharedParts $work 'image=given 2.0;vs=;tools=;sdks=;git=;autocrlf=') (Get-ImportRules $work) @('zz_key_test')
 Check ($given.key -ceq $givenAgain.key -and $given.key -cne $givenOther.key -and (Get-FirstDifference $givenOther $given.parts) -ceq 'machine changed') "the machine's words given from the test job make the machine part, and other words change it (it says: $(Get-FirstDifference $givenOther $given.parts))"
 $threw = $false
 try { [void](Get-SharedParts $work "not the machine's words") } catch { $threw = $true }
 Check $threw "words that aren't in the machine's shape are refused"
+
+# The PATH says which programs run as cl, link and dumpbin, so it's in the machine's words; this run's own folders are written as names,
+# so the same machine says the same words from one run to the next (PO, after Secondary's T1)
+$pathWas = $env:PATH
+$tempWas = $env:RUNNER_TEMP
+$wordsBefore = Get-MachineWords $work
+$env:PATH = "$pathWas;C:\elsewhere"
+Check ((Get-MachineWords $work) -cne $wordsBefore) "a folder added to the PATH changes the machine's words"
+$env:RUNNER_TEMP = 'C:\run-one'; $env:PATH = "$pathWas;C:\run-one\tools"; $one = Get-MachineWords $work
+$env:RUNNER_TEMP = 'C:\run-two'; $env:PATH = "$pathWas;C:\run-two\tools"; $two = Get-MachineWords $work
+Check ($one -ceq $two -and $one.Contains('<temp>\tools')) "  and the run's own temp folder in it is written as a name, so two runs say the same"
+$env:PATH = $pathWas
+$env:RUNNER_TEMP = $tempWas
+
+# CL, _CL_, LINK and _LINK_ add to every compile or link, so a step refuses the build when one is set (PO, after Secondary's T1)
+foreach ($name in @('CL', '_CL_', 'LINK', '_LINK_'))
+{
+    $was = [Environment]::GetEnvironmentVariable($name)
+    [Environment]::SetEnvironmentVariable($name, '/nologo')
+    $named = @(Get-CompilerEnvironment) -ccontains $name
+    [Environment]::SetEnvironmentVariable($name, $null)
+    $gone = -not (@(Get-CompilerEnvironment) -ccontains $name)
+    [Environment]::SetEnvironmentVariable($name, $was)
+    Check ($named -and $gone) "$name set is named as something that adds to every compile or link, and not named once it's gone"
+}
 
 Write-File '.gitattributes' "*.h text eol=crlf`n"
 Commit 'line endings'
@@ -170,6 +243,24 @@ Invoke-Git -C $work rm -q --cached 3dc/link.h
 Invoke-Git -C $work -c user.name=key-rows -c user.email=key-rows@localhost commit -q -m 'no link'
 Clear-HashCache
 Check ((Key).key -ceq $first.key) '  and with the link gone, the key is the first one again'
+
+# --- two names that differ only by case are two files to git and one to Windows, where the compiler runs: such a commit isn't believed
+# (Secondary's T6). Windows can't hold both on its disk, so the second is put straight into the commit, as the link was.
+$was = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$blob = "$('// another B.h' | & git -C $work hash-object -w --stdin 2>$null)".Trim()
+& git -C $work -c core.ignorecase=false update-index --add --cacheinfo "100644,$blob,3dc/B.h" 2>&1 | Out-Null
+$ErrorActionPreference = $was
+Invoke-Git -C $work -c user.name=key-rows -c user.email=key-rows@localhost commit -q -m 'a case twin'
+Clear-HashCache
+$twins = @(& git -C $work ls-tree --name-only HEAD 3dc/) -join ' '
+Check ($twins.Contains('3dc/B.h') -and $twins.Contains('3dc/b.h')) "the made-up commit has 3dc/b.h and 3dc/B.h ($twins)"
+$threw = $false
+try { [void](Key) } catch { $threw = "$_".Contains('differ only by case') }
+Check $threw '  and no key is worked out for it: two names that differ only by case are refused'
+Invoke-Git -C $work -c core.ignorecase=false rm -q --cached 3dc/B.h
+Invoke-Git -C $work -c user.name=key-rows -c user.email=key-rows@localhost commit -q -m 'no case twin'
+Clear-HashCache
+Check ((Key).key -ceq $first.key) '  and with the twin gone, the key is the first one again'
 
 # --- what's on the disk and not in the commit is never believed
 Clear-HashCache
@@ -222,6 +313,29 @@ Commit 'any file at all'
 $changed = Key 'zz_file_test' @()
 Check ($changed.key -cne $fileKey.key -and (Get-FirstDifference $changed $fileKey.parts) -ceq 'tree changed') "a class B key changes with any file at all, by the tree (it says: $(Get-FirstDifference $changed $fileKey.parts))"
 
+# --- a word of a test's .args that names a file must be that file's exact name in the commit, or nothing is keyed (Secondary's T5)
+$argsRows = @(
+    @{ name = 'zz_args_case_test'; words = '3DC/twice.cpp'; throws = $true; what = 'a source named in another case' },
+    @{ name = 'zz_args_dot_test'; words = './3dc/twice.cpp'; throws = $true; what = 'a source named from ./' },
+    @{ name = 'zz_args_quoted_test'; words = '"3dc/twice.cpp"'; throws = $true; what = 'a source named in quotes' },
+    @{ name = 'zz_args_up_test'; words = 'tests/../3dc/twice.cpp'; throws = $true; what = 'a source named through ..' },
+    @{ name = 'zz_args_missing_test'; words = '3dc/not-there.cpp'; throws = $true; what = "a source the commit hasn't got" },
+    @{ name = 'zz_args_bare_test'; words = 'twice.cpp'; throws = $true; what = 'a source named without its folder' },
+    @{ name = 'zz_args_response_test'; words = '@tests/more.rsp'; throws = $true; what = 'another file of settings' },
+    @{ name = 'zz_args_back_test'; words = '3dc\twice.cpp'; throws = $false; what = "a source named with Windows' \" },
+    @{ name = 'zz_args_lib_test'; words = '/link vcpkg_installed/x86-windows/lib/enet.lib bcrypt.lib'; throws = $false; what = 'libraries, which make it C' }
+)
+foreach ($t in $argsRows) { Write-File "tests/$($t.name).cpp" "int main() { return 0; }`n"; Write-File "tests/$($t.name).args" "/MD tests/$($t.name).cpp $($t.words)`n" }
+Commit 'the .args rows'
+foreach ($t in $argsRows)
+{
+    $threw = $false
+    $k = $null
+    try { $k = Key $t.name @() } catch { $threw = $true }
+    if ($t.throws) { Check $threw "an .args with $($t.what) ($($t.words)) is refused: what it compiles can't be keyed" }
+    else { Check (-not $threw -and $null -ne $k -and ($t.name -cne 'zz_args_back_test' -or @($k.parts | Where-Object { $_[0] -ceq 'file:3dc/twice.cpp' }).Count -eq 1) -and ($t.name -cne 'zz_args_lib_test' -or $k.class -ceq 'C')) "an .args with $($t.what) ($($t.words)) is keyed$(if ($t.name -ceq 'zz_args_lib_test') { ', as class C' } else { ', with that file in the key' })" }
+}
+
 $threw = $false
 try { [void](Key 'zz_key_test' @('../outside.h')) } catch { $threw = $true }
 Check $threw 'a list of what the compiler read that names a file outside the repository is refused'
@@ -257,8 +371,19 @@ foreach ($bad in @(
     Check ($why -cne '') "a source run is refused for $($bad.what) ($why)"
 }
 
-function Good-Records { [pscustomobject]@{ schema = 3; run = [pscustomobject]@{ id = '11'; sha = ('a' * 40); event = 'push'; ref = 'refs/heads/avpx_main' }; records = @(
-    [pscustomobject]@{ test = 'zz_key_test'; key = ('b' * 64); kind = 'unit'; status = 'ran'; class = 'A'; importClass = 'A'; result = 'passed'; parts = @(, @('schema', ('c' * 64))); includes = @('3dc/a.h'); imports = @('KERNEL32.DLL!QueryPerformanceCounter') }) } }
+# --- minutes read from a results file: only a plain number from 0 to 600 (Secondary's T4)
+foreach ($m in @(
+    @{ json = '{"m": 3}'; ok = $true }, @{ json = '{"m": 2.5}'; ok = $true }, @{ json = '{"m": 0}'; ok = $true }, @{ json = '{"m": 600}'; ok = $true },
+    @{ json = '{"m": 601}'; ok = $false }, @{ json = '{"m": -1}'; ok = $false }, @{ json = '{"m": "3"}'; ok = $false }, @{ json = '{"m": true}'; ok = $false },
+    @{ json = '{"m": null}'; ok = $false }, @{ json = '{"m": [3]}'; ok = $false }, @{ json = '{"m": "2026-11-11T05:41:00Z"}'; ok = $false }))
+{
+    $value = ($m.json | ConvertFrom-Json).m
+    Check ((Test-IsMinutes $value) -eq $m.ok) "minutes read from $($m.json) are $(if ($m.ok) { 'believed' } else { 'not believed' })"
+}
+
+function Good-Records { [pscustomobject]@{ schema = 4; none = ''; run = [pscustomobject]@{ id = '11'; sha = ('a' * 40); event = 'push'; ref = 'refs/heads/avpx_main' }; records = @(
+    [pscustomobject]@{ test = 'zz_key_test'; key = ('b' * 64); kind = 'unit'; status = 'ran'; class = 'A'; textClass = 'A'; importClass = 'A'; result = 'passed'; minutes = 0.5
+        parts = @(, @('schema', ('c' * 64))); includes = @('3dc/a.h'); imports = @('KERNEL32.DLL!QueryPerformanceCounter'); ranWith = @('zz_key_test', 'zz_other_test') }) } }
 Check ((Get-RecordsRefusal (Good-Records) '11' ('a' * 40)) -ceq '') 'a records file in the shape record.ps1 writes is believed'
 foreach ($bad in @(
     @{ what = 'another schema'; set = { param($d) $d.schema = 1 } },
@@ -274,13 +399,58 @@ foreach ($bad in @(
     @{ what = 'an import class that is not one'; set = { param($d) $d.records[0].importClass = '' } },
     @{ what = 'a part that is not a name and a hash'; set = { param($d) $d.records[0].parts = @(, @('schema')) } },
     @{ what = 'an include that is not a file name'; set = { param($d) $d.records[0].includes = @('C:\x.h') } },
-    @{ what = "an import that isn't a DLL's name and a function's"; set = { param($d) $d.records[0].imports = @('just words') } }))
+    @{ what = "an import that isn't a DLL's name and a function's"; set = { param($d) $d.records[0].imports = @('just words') } },
+    @{ what = 'minutes written as a word'; set = { param($d) $d.records[0].minutes = '0.5' } },
+    @{ what = 'minutes written as a true'; set = { param($d) $d.records[0].minutes = $true } },
+    @{ what = 'more than 600 minutes'; set = { param($d) $d.records[0].minutes = 601 } },
+    @{ what = 'an empty list of the tests it ran with'; set = { param($d) $d.records[0].ranWith = @() } },
+    @{ what = "a list of the tests it ran with that hasn't got it"; set = { param($d) $d.records[0].ranWith = @('zz_other_test') } },
+    @{ what = 'a path among the tests it ran with'; set = { param($d) $d.records[0].ranWith = @('zz_key_test', '../x') } }))
 {
     $data = Good-Records
     & $bad.set $data
     $why = Get-RecordsRefusal $data '11' ('a' * 40)
     Check ($why -cne '') "a records file is refused for $($bad.what) ($why)"
 }
+
+# --- record.ps1 itself, on made-up lists and results kept beside the made-up repository: only a true or false that agrees with the exit
+# code, with minutes, is recorded (T4); every record holds every test the commit has (T2); results that name what isn't one of the
+# commit's tests, or a test that left something running, give no records
+$side = Join-Path $base 'reuse-key-rows-side'
+if (Test-Path -LiteralPath $side) { Remove-Item -Recurse -Force -LiteralPath $side }
+New-Item -ItemType Directory -Force $side | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $side 'machine.txt'), 'image=given 1.0;vs=;tools=;sdks=;git=;autocrlf=')
+foreach ($t in @('zz_key_test', 'zz_other_test'))
+{
+    [System.IO.File]::WriteAllLines((Join-Path $side "$t.includes.txt"), [string[]]@(if ($t -ceq 'zz_key_test') { $includes }))
+    [System.IO.File]::WriteAllLines((Join-Path $side "$t.imports.txt"), [string[]]$floor)
+}
+$shaWas = $env:GITHUB_SHA
+$env:GITHUB_SHA = "$(& git -C $work rev-parse HEAD)".Trim()
+function Record-With([string]$json)
+{
+    [System.IO.File]::WriteAllText((Join-Path $side 'results.json'), $json)
+    $out = Join-Path $side 'out'
+    if (Test-Path -LiteralPath $out) { Remove-Item -Recurse -Force -LiteralPath $out }
+    # record.ps1 imports the module again, which would leave this copy's git reader running (and the made-up repository in use), so it's
+    # closed first; and record.ps1's own reader is closed after it
+    Clear-HashCache
+    $said = & (Join-Path $PSScriptRoot 'record.ps1') -Root $work -Lists $side -Results (Join-Path $side 'results.json') -Work $out | Out-String
+    Clear-HashCache
+    return @{ said = $said; data = (Get-Content -LiteralPath (Join-Path $out 'records.json') -Raw | ConvertFrom-Json) }
+}
+$got = Record-With '{"tests": {"zz_key_test": {"passed": "true", "exit": 0, "minutes": 0.1}, "zz_other_test": {"passed": true, "exit": 0, "minutes": 0.1}}, "leftBehind": []}'
+$recorded = @($got.data.records | Where-Object { $_ })
+Check ($recorded.Count -eq 1 -and $recorded[0].test -ceq 'zz_other_test' -and $got.said.Contains('Not recorded: zz_key_test')) "record.ps1 records no test whose ""passed"" is the word ""true"", and records the one that passed"
+Check ($recorded.Count -eq 1 -and (@($recorded[0].ranWith) -join ' ') -ceq ((Get-AllTests $work) -join ' ')) "  and that record holds every test the commit has, not only the ones in the results"
+$got = Record-With '{"tests": {"zz_key_test": {"passed": true, "exit": 1, "minutes": 0.1}, "zz_other_test": {"passed": true, "exit": 0, "minutes": "0.1"}}, "leftBehind": []}'
+Check (@($got.data.records | Where-Object { $_ }).Count -eq 0) "record.ps1 records no test whose ""passed"" disagrees with its exit code, nor one whose minutes are a word"
+$got = Record-With '{"tests": {"zz_key_test": {"passed": true, "exit": 0, "minutes": 0.1}, "zz_nobody_test": {"passed": true, "exit": 0, "minutes": 0.1}}, "leftBehind": []}'
+Check (@($got.data.records | Where-Object { $_ }).Count -eq 0 -and "$($got.data.none)" -ne '') "record.ps1 writes no records when the results name what isn't one of the commit's tests ($($got.data.none))"
+$got = Record-With '{"tests": {"zz_key_test": {"passed": true, "exit": 0, "minutes": 0.1}}, "leftBehind": ["123 C:\\x.exe"]}'
+Check (@($got.data.records | Where-Object { $_ }).Count -eq 0 -and "$($got.data.none)" -ne '') "record.ps1 writes no records when a test left something running ($($got.data.none))"
+$env:GITHUB_SHA = $shaWas
+Remove-Item -Recurse -Force -LiteralPath $side
 
 # --- one byte changed in a real attested file, and the attestation must refuse it
 if ($Verified -and (Test-Path -LiteralPath $Verified))

@@ -18,8 +18,9 @@
 #      (gh attestation verify --cert-identity --source-ref --source-digest --deny-self-hosted-runners)
 #   5. the file says it was made by that run, at that commit, on avpx_main, and is in the shape record.ps1 writes (Get-RecordsRefusal)
 # AND A RECORD IS REUSED ONLY IF: it says the test ran there and passed; and its key, worked out again HERE from this commit's files, the
-# record's list of what the compiler read and the record's list of the program's imports, is the same, with a class of A or B (the
-# stricter of what the text and the imports say). The newest such record for each test wins. If anything at all goes wrong, nothing is
+# record's list of what the compiler read, the record's list of the program's imports, and every test program that ran in that job (so
+# an edit to any test that could have forged it drops it, Secondary's T2), is the same, with a class of A or B (the stricter of what the
+# text and the imports say). The newest such record for each test wins. If anything at all goes wrong, nothing is
 # reused, and the log says why.
 
 param(
@@ -104,7 +105,7 @@ try
             if ($decided.ContainsKey($test)) { continue }
             if ($null -eq (Get-HeadBytes $Root "tests/$test.args")) { $decided[$test] = 'gone'; continue }
             if ($record.result -cne 'passed') { $decided[$test] = "it failed in run $id"; continue }
-            try { $mine = Get-ReuseKey $Root $test 'unit' ([string[]]@($record.includes | Where-Object { $null -ne $_ })) ([string[]]@($record.imports | Where-Object { $null -ne $_ })) $shared $rules }
+            try { $mine = Get-ReuseKey $Root $test 'unit' ([string[]]@($record.includes | Where-Object { $null -ne $_ })) ([string[]]@($record.imports | Where-Object { $null -ne $_ })) $shared $rules ([string[]]@($record.ranWith | Where-Object { $null -ne $_ })) }
             catch { $decided[$test] = "its key couldn't be worked out here: $_"; continue }
             if ($mine.class -ceq 'C') { $decided[$test] = "class C (text $($mine.textClass), imports $($mine.importClass)): always runs"; continue }
             if ($mine.key -cne "$($record.key)") { $decided[$test] = "run $id's record differs: $(Get-FirstDifference $mine @($record.parts))"; continue }

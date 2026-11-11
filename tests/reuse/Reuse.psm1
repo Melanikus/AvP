@@ -30,7 +30,7 @@
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-$script:kSchema = 3
+$script:kSchema = 4
 # The files that make and read the records. A source run must have these byte for byte as this commit has them (lookup.ps1), and they
 # are a part of every key.
 $script:kMachinery = @('.github/workflows/tests.yml', 'tests/build.ps1', 'tests/every_test', 'tests/reuse')
@@ -51,9 +51,11 @@ $script:kOtherWays = '\b(getenv|_wgetenv|_dupenv_s|_wdupenv_s|getenv_s|GetEnviro
 # key rows, which change the commit).
 $script:reader = $null
 $script:readerRoot = ''
-$script:bytes = @{}
+# Kept by their exact names: Windows' own way would take 3dc/Foo.h and 3dc/foo.h for one file (Secondary's T6)
+$script:bytes = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
 $script:names = $null
 $script:modes = $null
+$script:ranWithHashes = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $kMostBytes = 64MB   # no file of ours is near this; an answer bigger than it isn't believed (Secondary's R2, PO)
 
 # Replacement objects are never followed: a .git/refs/replace entry could make a name give other bytes (Secondary's R1). The records are
@@ -65,9 +67,10 @@ function Clear-HashCache
     if ($script:reader) { try { $script:reader.StandardInput.Close(); $script:reader.WaitForExit(5000) | Out-Null } catch { } }
     $script:reader = $null
     $script:readerRoot = ''
-    $script:bytes = @{}
+    $script:bytes = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
     $script:names = $null
     $script:modes = $null
+    $script:ranWithHashes = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 }
 
 function Get-HeadBytes([string]$root, [string]$path)
@@ -140,10 +143,13 @@ function Get-HeadNames([string]$root)
         # repository (160000)
         $found = @(& git -C $root ls-tree -r HEAD 2>$null)
         if ($LASTEXITCODE -ne 0) { throw "git couldn't list this commit's files" }
-        $modes = @{}
+        $modes = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
         foreach ($line in $found) { if ($line -cmatch '^([0-7]{6}) \S+ \S+\t(.+)$') { $modes[$Matches[2]] = $Matches[1] } }
         $sorted = [string[]]@($modes.Keys)
         [Array]::Sort($sorted, [StringComparer]::Ordinal)
+        # Two names that differ only by case are two files to git and one to Windows, where the compiler runs: such a tree isn't believed (T6)
+        $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($name in $sorted) { if (-not $seen.Add($name)) { throw "This commit has two names that differ only by case ($name), which Windows would take for one file" } }
         $script:names = $sorted
         $script:modes = $modes
     }
@@ -201,7 +207,18 @@ function Get-MachineWords([string]$root)
     $sdks = if (Test-Path -LiteralPath $kits) { (@(Get-ChildItem -LiteralPath $kits -Directory | ForEach-Object { $_.Name }) | Sort-Object) -join ',' } else { '' }
     $gitVersion = "$(& git --version 2>$null)".Trim()
     $autocrlf = "$(& git -C $root config --get core.autocrlf 2>$null)".Trim()
-    return "image=$($env:ImageOS) $($env:ImageVersion);vs=$vsVersion;tools=$tools;sdks=$sdks;git=$gitVersion;autocrlf=$autocrlf"
+    # The PATH says which programs run as cl, link, dumpbin and git (PO, after Secondary's T1). The folders of this run alone (its temp
+    # folder and its checkout) are written as names, so the same machine gives the same words from one run to the next.
+    $path = "$env:PATH"
+    foreach ($own in @(@("$env:RUNNER_TEMP", '<temp>'), @("$env:GITHUB_WORKSPACE", '<checkout>'))) { if ($own[0]) { $path = $path.Replace($own[0], $own[1]) } }
+    return "image=$($env:ImageOS) $($env:ImageVersion);vs=$vsVersion;tools=$tools;sdks=$sdks;git=$gitVersion;autocrlf=$autocrlf;path=$path"
+}
+
+# Whether anything has been set that adds to every compile or link without being in a test's .args (CL, _CL_, LINK, _LINK_): the
+# compiler and linker read these from the environment. Gives back the names set, so a step can refuse (PO, after Secondary's T1).
+function Get-CompilerEnvironment
+{
+    return [string[]]@('CL', '_CL_', 'LINK', '_LINK_' | Where-Object { [Environment]::GetEnvironmentVariable($_) })
 }
 
 # The parts every key shares. $machine is the line Get-MachineWords gave on the machine the tests ran on; left out, it's this machine's.
@@ -227,8 +244,8 @@ function Get-SharedParts([string]$root, [string]$machine = '')
     }
 }
 
-# A test's own files: its .cpp and .args, its stand-ins, and every file of the commit its .args names
-function Get-OwnFiles([string]$root, [string]$test)
+# A test program's own files: its .cpp and .args and its stand-ins, as a test's author writes them
+function Get-TestOwnFiles([string]$root, [string]$test)
 {
     if ($test -cnotmatch '^[A-Za-z0-9_]+$') { throw "A test's name is letters, digits and underscores only, and this isn't: $test" }
     $names = Get-HeadNames $root
@@ -236,13 +253,50 @@ function Get-OwnFiles([string]$root, [string]$test)
     $files = [System.Collections.Generic.List[string]]::new()
     foreach ($file in @("tests/$test.cpp", "tests/$test.args")) { if ($known.Contains($file)) { $files.Add($file) } }
     foreach ($file in (Get-HeadFiles $root @("tests/$($test)_stubs"))) { $files.Add($file) }
+    return $files
+}
+
+# Every test the commit has, by its name: each tests/<name>.args, as tests/build.ps1 builds one test for each. That's every test that
+# could have run in a job at this commit, and the test programs can't change it, as results.json could be (for the key's "ran-with").
+# Windows would also build a name.ARGS, so a name like that, or one that isn't letters, digits and underscores, throws.
+function Get-AllTests([string]$root)
+{
+    $all = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in (Get-HeadNames $root))
+    {
+        if ($name -cnotmatch '^tests/[^/]+$' -or $name -notmatch '(?i)\.args$') { continue }
+        if ($name -cnotmatch '^tests/([A-Za-z0-9_]+)\.args$') { throw "$name would be built as a test, but its name isn't in the shape a test's is" }
+        $all.Add($Matches[1])
+    }
+    if ($all.Count -eq 0) { throw 'This commit has no tests' }
+    return [string[]]$all
+}
+
+# What a test compiles of its own and of the game's: its own files, and every file of the commit its .args names. A word of the .args
+# that names a file must be that file's exact name in the commit, so nothing is compiled that isn't in the key (Secondary's T5): one in
+# another case, with a / or \ the commit doesn't have, or a file the commit hasn't got, and this throws, and the test isn't reused.
+# Words that aren't files (a switch, a library the linker finds by name) are left to the class: a library makes a test class C.
+function Get-OwnFiles([string]$root, [string]$test)
+{
+    $names = Get-HeadNames $root
+    $known = [System.Collections.Generic.HashSet[string]]::new([string[]]$names, [StringComparer]::Ordinal)
+    # (PowerShell hands a returned list back as a fixed array, so it's made a list again here, to add to)
+    $files = [System.Collections.Generic.List[string]]::new([string[]]@(Get-TestOwnFiles $root $test))
     $settings = Get-HeadText $root "tests/$test.args"
     if ($null -ne $settings)
     {
-        foreach ($word in @($settings -split '\s+' | Where-Object { $_ -and -not $_.StartsWith('/') -and -not $_.StartsWith('-') -and -not $_.StartsWith('@') }))
+        foreach ($word in @($settings -split '\s+' | Where-Object { $_ }))
         {
+            if ($word.StartsWith('@')) { throw "tests/$test.args names another file of settings ($word), which isn't in the key" }
+            if ($word.StartsWith('/') -or $word.StartsWith('-')) { continue }
             $file = $word -replace '\\', '/'
-            if ($known.Contains($file)) { $files.Add($file) }
+            if ($known.Contains($file)) { $files.Add($file); continue }
+            # A word that looks like a file of the repository, but isn't one by its exact name
+            if ($file.Contains('/') -or $file -match '(?i)\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inl|ipp|obj|def|rc|res|asm)$')
+            {
+                if ($file -match '(?i)^vcpkg_installed/' -or $file -match '(?i)^[A-Za-z0-9_.-]+\.lib$') { continue }   # a library: class C
+                throw "tests/$test.args names $word, which isn't the exact name of a file in this commit, so what it compiles can't be keyed"
+            }
         }
     }
     return $files
@@ -282,13 +336,15 @@ function Get-ImportRules([string]$root)
 {
     $text = Get-HeadText $root 'tests/reuse/imports-allowed.txt'
     if ($null -eq $text) { throw "tests/reuse/imports-allowed.txt isn't in this commit" }
-    $rules = @{ allowed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase); files = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase) }
+    # A DLL's name is the same in any case to Windows, and a function's isn't, so each is kept as "DLL!Function" with the DLL in capitals
+    # and compared exactly (Secondary's T6)
+    $rules = @{ allowed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal); files = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal) }
     foreach ($line in ($text -split "`n"))
     {
         $line = $line.Trim()
         if (-not $line -or $line.StartsWith('#')) { continue }
         if ($line -cnotmatch '^(allowed|files) ([A-Za-z0-9_.-]+\.[dD][lL][lL])!(\S+)$') { throw "tests/reuse/imports-allowed.txt has a line that isn't a rule: $line" }
-        [void]$rules[$Matches[1]].Add("$($Matches[2])!$($Matches[3])")
+        [void]$rules[$Matches[1]].Add("$($Matches[2].ToUpperInvariant())!$($Matches[3])")
     }
     return $rules
 }
@@ -300,6 +356,9 @@ function Get-ImportClass([string[]]$imports, $rules)
     $class = 'A'
     foreach ($import in $imports)
     {
+        $at = $import.IndexOf('!')
+        if ($at -lt 1) { return 'C' }
+        $import = $import.Substring(0, $at).ToUpperInvariant() + $import.Substring($at)
         if ($rules.allowed.Contains($import)) { continue }
         if ($rules.files.Contains($import)) { $class = 'B'; continue }
         return 'C'
@@ -310,9 +369,14 @@ function Get-ImportClass([string[]]$imports, $rules)
 # ---- The key
 
 # A test's key, and every part of it with its own hash. $includes are the repository files the compiler said it read for this test, and
-# $imports the program's imports, both from the run that made the result. A part that can't be worked out throws, and then nothing is reused.
-function Get-ReuseKey([string]$root, [string]$test, [string]$kind, [string[]]$includes, [string[]]$imports, $shared, $rules)
+# $imports the program's imports, both from the run that made the result. $ranWith names every test that ran in that run's job, this one
+# too: a test runs with every right on its machine, so one test of a job could have made ANY test's result in it say "passed", and with
+# reuse that would last. So every test program that ran in the job (its .cpp, .args and stand-ins) is part of every key from it: an edit
+# to any of them, or one gone, and none of that job's results is reused (PO, after Secondary's T2). Reuse then adds nothing a test could
+# do without it. A part that can't be worked out throws, and then nothing is reused.
+function Get-ReuseKey([string]$root, [string]$test, [string]$kind, [string[]]$includes, [string[]]$imports, $shared, $rules, [string[]]$ranWith)
 {
+    if ($ranWith.Count -eq 0 -or $ranWith -cnotcontains $test) { throw "The list of the tests that ran with $test is empty, or hasn't got it" }
     if ($kind -cnotmatch '^(unit)$') { throw "There's no kind of result called $kind" }
     $names = [System.Collections.Generic.HashSet[string]]::new([string[]](Get-HeadNames $root), [StringComparer]::Ordinal)
     $compiled = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
@@ -350,11 +414,20 @@ function Get-ReuseKey([string]$root, [string]$test, [string]$kind, [string[]]$in
     $parts.Add(@('names', $shared.names))
     foreach ($file in $files) { $parts.Add(@("file:$file", (Get-HeadHash $root $file))) }
     $parts.Add(@('imports', (Get-TextHash (($sortedImports -join "`n") + "`n"))))
+    $together = [string[]]@($ranWith | Sort-Object -Unique)
+    [Array]::Sort($together, [StringComparer]::Ordinal)
+    $ranKey = $together -join ' '
+    if (-not $script:ranWithHashes.ContainsKey($ranKey))
+    {
+        $ranLines = foreach ($other in $together) { "$other`t$(Get-FilesHash $root ([string[]](Get-TestOwnFiles $root $other)))" }
+        $script:ranWithHashes[$ranKey] = Get-TextHash (($ranLines -join "`n") + "`n")
+    }
+    $parts.Add(@('ran-with', $script:ranWithHashes[$ranKey]))
     if ($class -ceq 'B') { $parts.Add(@('tree', (Get-TextHash $shared.tree))) }
 
     $text = (@($parts | ForEach-Object { "$($_[0])`t$($_[1])" }) -join "`n") + "`n"
     return [pscustomobject]@{ test = $test; kind = $kind; class = $class; textClass = $textClass; importClass = $importClass; key = (Get-TextHash $text); parts = $parts
-        includes = [string[]]@($includes); imports = $sortedImports }
+        includes = [string[]]@($includes); imports = $sortedImports; ranWith = $together }
 }
 
 # The first part two keys differ in, for the log's "why it ran"
@@ -389,6 +462,14 @@ function Get-SourceRunRefusal($run, [string]$repo, [string]$thisRun)
     return ''
 }
 
+# Whether a test's minutes, as read from JSON, are a plain number from 0 to 600 (Secondary's T4). Only the four kinds of number JSON is
+# read as are believed: a true or false, a string, a date (pwsh reads some strings as dates) or a list is not a number of minutes.
+function Test-IsMinutes($minutes)
+{
+    if (-not ($minutes -is [int] -or $minutes -is [long] -or $minutes -is [double] -or $minutes -is [decimal])) { return $false }
+    return ([double]$minutes -ge 0 -and [double]$minutes -le 600)
+}
+
 # Why a downloaded records file can't be believed, or nothing if it can: everything in the shape record.ps1 writes, said to come from that
 # run and commit, on avpx_main; one record out of shape and none of them is believed.
 function Get-RecordsRefusal($data, [string]$id, [string]$sha)
@@ -407,11 +488,14 @@ function Get-RecordsRefusal($data, [string]$id, [string]$sha)
         {
             if (@($part).Count -ne 2 -or "$($part[0])" -cnotmatch '^[A-Za-z0-9_:./+-]+$' -or "$($part[1])" -cnotmatch '^[0-9a-f]{40,64}$') { return "a part of $($record.test)'s key isn't a name and a hash" }
         }
+        $ran = @($record.ranWith | Where-Object { $null -ne $_ })
+        if ($ran.Count -eq 0 -or @($ran | Where-Object { "$_" -cnotmatch '^[A-Za-z0-9_]+$' }).Count -gt 0 -or $ran -cnotcontains "$($record.test)") { return "$($record.test)'s list of the tests that ran with it isn't a list of tests' names that has it" }
+        if (-not (Test-IsMinutes $record.minutes)) { return "$($record.test)'s minutes aren't a number from 0 to 600" }
         foreach ($include in @($record.includes | Where-Object { $null -ne $_ })) { if ("$include" -cnotmatch '^[A-Za-z0-9_./+-]+$') { return "$($record.test) names something it read that isn't a file's name" } }
         foreach ($import in @($record.imports | Where-Object { $null -ne $_ })) { if ("$import" -cnotmatch '^[A-Za-z0-9_.-]+\.[dD][lL][lL]![A-Za-z0-9_?@$.#<>-]+$') { return "$($record.test) names an import that isn't a DLL's name and a function's" } }
     }
     return ''
 }
 
-Export-ModuleMember -Function Clear-HashCache, Get-HeadBytes, Get-HeadText, Get-HeadMode, Get-MachineWords, Get-TextHash, Get-BytesHash, Get-HeadHash, Get-HeadNames, Get-HeadFiles, Get-DirtyFiles, Get-SharedParts, Get-OwnFiles, Get-Stricter, Get-TextClass, Get-ImportRules, Get-ImportClass, Get-ReuseKey, Get-FirstDifference, Get-SourceRunRefusal, Get-RecordsRefusal
+Export-ModuleMember -Function Clear-HashCache, Get-HeadBytes, Get-HeadText, Get-HeadMode, Get-MachineWords, Get-CompilerEnvironment, Get-TestOwnFiles, Get-AllTests, Get-TextHash, Get-BytesHash, Get-HeadHash, Get-HeadNames, Get-HeadFiles, Get-DirtyFiles, Get-SharedParts, Get-OwnFiles, Get-Stricter, Get-TextClass, Get-ImportRules, Get-ImportClass, Get-ReuseKey, Get-FirstDifference, Get-SourceRunRefusal, Test-IsMinutes, Get-RecordsRefusal
 Export-ModuleMember -Variable kMachinery, kSourceBranch

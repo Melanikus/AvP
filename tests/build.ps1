@@ -185,6 +185,18 @@ foreach ($test in $tests)
         exit 1
     }
 
+    # Two kinds of setting are refused (Secondary's T5, 2026-11-11). /Tp and /Tc name a source file in a way the reuse key can't follow:
+    # a test names its sources as plain words, which tests/reuse/Reuse.psm1 checks against the commit. /B1, /B2, /Bx, /analyze:plugin,
+    # /d1 and /d2 swap a part of the compiler for another program, or load one into it, so code no one reviewed would run as the test is
+    # built. No test needs any of them. The compiler reads its settings in this case only, but /analyze:plugin is matched in any case, to
+    # be sure; a setting can start with / or -, and be in quotes.
+    $loaders = @([regex]::Matches($settings, '(^|\s)"?([/-](Tp|Tc|B1|B2|Bx|d1|d2|(?i:analyze:plugin))[^\s"]*)'))
+    if ($loaders.Count -gt 0)
+    {
+        Write-Host "$($test.Name) asks for $($loaders[0].Groups[2].Value), which compiles a file the reuse key can't follow or runs another program inside the compiler. No test may ask for /Tp, /Tc, /B1, /B2, /Bx, /analyze:plugin, /d1 or /d2"
+        exit 1
+    }
+
     $objectDir = Join-Path $outputDir ($test.BaseName + '_objects')
     New-Item -ItemType Directory -Force $objectDir | Out-Null
 

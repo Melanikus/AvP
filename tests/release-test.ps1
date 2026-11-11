@@ -1817,7 +1817,8 @@ $onlyMain = "(github.event_name == 'push' || github.event_name == 'schedule') &&
 $recordJob = "$($testsJobs['record-results'])"
 Check ($recordJob.Length -gt 0) 'tests.yml has the job that records the tests'' results'
 Check ($recordJob -match '(?m)^    permissions:\n      contents: read\n      id-token: write( +#[^\n]*)?\n      attestations: write( +#[^\n]*)?\n    steps:') 'which can read, prove which workflow it is, and record, and nothing else'
-Check ($recordJob -match '(?m)^    needs: reuse-write-records$' -and $recordJob.Contains("`n    if: $onlyMain`n")) 'only after the records are worked out, and only for a run on avpx_main started by a push or the nightly schedule'
+Check ($recordJob -match '(?m)^    needs: \[unit-tests, reuse-write-records\]$' -and $recordJob.Contains("`n    if: $onlyMain`n")) 'only after the tests passed and the records are worked out, and only for a run on avpx_main started by a push or the nightly schedule'
+Check ($recordJob.Contains('.schema == 4') -and $recordJob.Contains('(.minutes | type == "number" and . >= 0 and . <= 600)') -and $recordJob.Contains('.ranWith == $all')) 'every field of the records is checked for its type, the minutes from 0 to 600, and every record names the same tests it ran with (Secondary''s T4)'
 Check (-not $recordJob.Contains('actions/checkout') -and -not $recordJob.Contains('./tests/') -and -not $recordJob.Contains('./tools/') -and -not $recordJob.Contains('pwsh')) 'and it has no copy of the code, and runs none of it'
 $recordAttest = [regex]::Match($recordJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ').Groups[1].Value
 Check ($recordAttest.Length -eq 40 -and $recordAttest -ceq $releaseAttest) 'it records with the action release.yml uses, pinned to the same commit'
@@ -1826,7 +1827,9 @@ Check ($recordJob.Contains('name: reuse-lists') -and $recordJob.Contains("aren't
 
 $writeJob = "$($testsJobs['reuse-write-records'])"
 Check ($writeJob.Length -gt 0) 'the records are worked out in a job of their own'
-Check ($writeJob -match '(?m)^    needs: unit-tests$' -and $writeJob.Contains("`n    if: $onlyMain`n")) 'after the tests, for a run on avpx_main started by a push or the nightly schedule'
+Check ($writeJob -match '(?m)^    needs: unit-tests$' -and $writeJob.Contains("`n    if: `${{ !cancelled() && $onlyMain }}`n")) 'after the tests, for a run on avpx_main started by a push or the nightly schedule, even when a test failed'
+Check (([regex]::Matches($writeJob, "(?m)^        if: needs\.unit-tests\.result == 'success'$")).Count -eq 2) '  but it writes and keeps records only when every test passed'
+Check-Order $writeJob './tests/reuse/compare.ps1 -Plan "$env:RUNNER_TEMP/lists/plan.json"' './tests/reuse/record.ps1 -Root' 'the nightly''s check runs there, off the tests'' machine, before the records are written (Secondary''s T3)'
 Check ($writeJob -match '(?m)^    permissions:\n      contents: read\n    steps:') 'which can only read'
 Check ($writeJob.Contains('actions/checkout') -and $writeJob.Contains('./tests/reuse/record.ps1 -Root $env:GITHUB_WORKSPACE -Lists')) 'from a fresh checkout of the commit, with its own record.ps1'
 Check ($writeJob.Contains('name: reuse-lists') -and $writeJob.Contains('name: reuse-results') -and -not $writeJob.Contains('build.ps1') -and -not $writeJob.Contains('run-tests.ps1')) 'given only the lists and the results as data, building and running nothing'
@@ -1842,7 +1845,19 @@ Check-Order $unitJob "reuse-scripts\key-rows.ps1" './tests/build.ps1 -ShowInclud
 Check-Order $unitJob './tests/build.ps1 -ShowIncludes -Skip' 'name: reuse-lists' 'the lists of what each test read and imports are kept straight after the build'
 Check-Order $unitJob 'name: reuse-lists' "reuse-scripts\run-tests.ps1" 'before any test runs'
 Check-Order $unitJob "reuse-scripts\run-tests.ps1" 'name: reuse-results' 'and only the results are kept after the tests'
-Check (([regex]::Matches($unitJob, [regex]::Escape("if: $onlyMain"))).Count -eq 2) 'and only a run on avpx_main started by a push or the nightly schedule keeps them'
+Check (([regex]::Matches($unitJob, [regex]::Escape("if: $onlyMain`n"))).Count -eq 1 -and ([regex]::Matches($unitJob, [regex]::Escape("if: `${{ !cancelled() && $onlyMain }}`n"))).Count -eq 1) 'and only a run on avpx_main started by a push or the nightly schedule keeps them, the results even when a test failed'
+Check (-not $unitJob.Contains('compare.ps1')) 'the nightly''s check runs in the job that works the records out, not on the tests'' machine'
+Check-Order $unitJob 'name: reuse-lists' './tests/release-test.ps1' 'the release checks are tested after the lists are kept'
+Check-Order $unitJob './tests/release-test.ps1' "reuse-scripts\run-tests.ps1" '  and before any test runs, so no test can make them pass (Secondary''s T3)'
+Check-Order $unitJob "tests/zz_refusal_probe_test.args" "reuse-scripts\run-tests.ps1" '  and so are build.ps1''s refusals'
+Check-Order $unitJob 'name: Refuse anything that could steer the build' './tests/build.ps1 -ShowIncludes -Skip' 'the build is refused if CL, _CL_, LINK or _LINK_ is set, or a program runs from the run''s own folders (Secondary''s T1)'
+Check ($unitJob.Contains('Get-CompilerEnvironment') -and $unitJob.Contains('Get-CimInstance Win32_Process')) '  by both checks'
+
+# The libraries are built in a job of their own, and only handed to the Unit tests job as a file (PO, after Secondary's T1)
+$librariesJob = "$($testsJobs['test-libraries'])"
+Check ($librariesJob.Contains('uses: ./.github/actions/fetch-test-libraries') -and $librariesJob.Contains('name: test-libraries') -and $librariesJob -match '(?m)^    permissions:\n      contents: read\n    steps:') 'the libraries the tests use are built in a job of their own, which can only read, and handed on'
+Check ($unitJob -match '(?m)^    needs: test-libraries$' -and -not $unitJob.Contains('fetch-test-libraries') -and $unitJob.Contains('name: test-libraries')) '  and the Unit tests job builds none of them: it only gets them'
+Check-Order $unitJob 'name: test-libraries' './tests/build.ps1 -ShowIncludes -Skip' '  before it builds the tests'
 
 # --- Every PowerShell step of every workflow and action runs with -NoProfile, so no profile on a machine changes what a step does (PO,
 # after Secondary's R1). Added 2026-11-11 by Melanikus for the AvP port.
