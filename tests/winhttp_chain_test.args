@@ -1,0 +1,5 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0A00
+/Itests
+tests/winhttp_chain_test.cpp
+winhttp.lib

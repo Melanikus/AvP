@@ -699,8 +699,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
-					"to": "return why == kCantReach || why == kTooLong || why == kCantStart;"
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCantStart || why == kNoChainOff;"
 				}
 			]
 		},
@@ -709,8 +709,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
-					"to": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kTooBig;"
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff || why == kTooBig;"
 				}
 			]
 		},
