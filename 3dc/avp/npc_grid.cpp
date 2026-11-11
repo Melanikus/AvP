@@ -1092,12 +1092,17 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 	}
 
 	// 7. LINKS ALONG THE JOINS between sheets: along the stretch two polygons share, every half a cell, the nearest cell of each sheet whose
-	// middle is on it, within kNpcGridStep of the point
+	// middle is on it, within kNpcGridStep of the point. Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel;
+	// Secondary's review of caf17a38, F1): the nearest whose middle is on the joined polygon itself, when there's one that near, and only
+	// then the sheet's nearest. Where a sheet carries on past the join (a floor running on under a wall, two ramps in one plane over a
+	// gable), its nearest cell could be on the far side, and the join then sorted as the wrong kind (THE KIND OF A JOIN, npc_grid.h): on
+	// Genshd1, in Secondary's copy, 35 inside corners read THROUGH along their whole length. With the joined polygon's own cell first, 1 did,
+	// and no join and no link was lost.
 	std::vector<Pair> links;
 
 	struct Near
 	{
-		static uint32_t Cell(const NpcGrid &grid, const std::vector<uint8_t> &flags, int sheet, const double p[3])
+		static uint32_t Cell(const NpcGrid &grid, const std::vector<uint8_t> &flags, int sheet, int polygon, const double p[3])
 		{
 			uint32_t const over = grid.CellOver(sheet, p[0], p[1], p[2]);
 
@@ -1106,8 +1111,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 				return kNpcGridNoCell;
 			}
 
-			uint32_t best = kNpcGridNoCell;
-			double bestFar = kNpcGridStep;
+			uint32_t best = kNpcGridNoCell, own = kNpcGridNoCell;
+			double bestFar = kNpcGridStep, ownFar = kNpcGridStep;
 			int const sheetW = grid.sheets[sheet].w, sheetH = grid.sheets[sheet].h;
 			uint32_t const first = grid.sheets[sheet].first;
 			int const i = static_cast<int>((over - first) % sheetW), j = static_cast<int>((over - first) / sheetW);
@@ -1138,10 +1143,17 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 						bestFar = far;
 						best = c;
 					}
+
+					// The nearest on the joined polygon itself (polygonOf, by the alien ways map's numbers)
+					if (grid.polygonOf[c] == polygon && far < ownFar)
+					{
+						ownFar = far;
+						own = c;
+					}
 				}
 			}
 
-			return best;
+			return own != kNpcGridNoCell ? own : best;
 		}
 	};
 
@@ -1199,7 +1211,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 			{
 				double const f = static_cast<double>(step) / count;
 				double const p[3] = { from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f, from.z + (to.z - from.z) * f };
-				uint32_t const ca = Near::Cell(*this, flags, sa, p), cb = Near::Cell(*this, flags, sb, p);
+				uint32_t const ca = Near::Cell(*this, flags, sa, static_cast<int>(a), p), cb = Near::Cell(*this, flags, sb, b, p);
 
 				if (ca != kNpcGridNoCell && cb != kNpcGridNoCell)
 				{

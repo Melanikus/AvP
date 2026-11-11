@@ -643,6 +643,16 @@
 					"to": "\t\tif (linkFrom[k] != linkTo[k])\n"
 				}
 			]
+		},
+		{
+			"name": "a join's links take the sheet's nearest cell, not the joined polygon's own",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\treturn own != kNpcGridNoCell ? own : best;\n",
+					"to": "\t\t\treturn best;\n"
+				}
+			]
 		}
 	]
 }
