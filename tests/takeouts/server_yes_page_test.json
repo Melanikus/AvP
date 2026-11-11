@@ -365,66 +365,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the Host on row starts on a server, chosen for the player",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "int MP_HostOnChoice = 0;",
-					"to": "int MP_HostOnChoice = 1;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: Start game opens with no server chosen",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER && !HostsOnline() &&",
-					"to": "if (false && !HostsOnline() &&"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the line hosted on isn't the one the row shows",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "(void)RelayList_HostOn(want);",
-					"to": "(void)RelayList_HostOn(hostOnCount > 0 ? hostOnPlaces[0] : -1);"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a Hudson run's Host on choice takes the row's first line again",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "(choice = HostOnChoiceNamed(name)) == 0",
-					"to": "(choice = 1) == 0"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a Hudson run's Host on choice takes any line, whatever its name",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "RelayList_LineNow(hostOnPlaces[i], &now) && strcmp(now.line.name, name) == 0",
-					"to": "RelayList_LineNow(hostOnPlaces[i], &now)"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a Hudson run's choice is set somewhere else too",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\tMP_HostOnChoice = choice;\n\tHostOnFollowsTheRow();\n",
-					"to": "\tMP_HostOnChoice = choice;\n\tMP_HostOnChoice = choice;\n\tHostOnFollowsTheRow();\n"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a yes isn't kept",
 			"changes": [
 				{

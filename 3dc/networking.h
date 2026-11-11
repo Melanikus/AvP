@@ -89,7 +89,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 // SEALED OR NOTHING (#188). Added 2026-11-10 by Melanikus for the AvP port, for the owner's boundary (2026-11-09 night): beyond the home
 // network a game is sealed, through the relay, or it doesn't happen. For every game (#175 PR 3a).
 //   Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): there's no plain game, at home or anywhere.
-//   - Net_HostGame hosts online, through the relay of the server servers.cfg names (Relay_ServerName, relay_list.h), sealed, or not at
+//   - Net_HostGame hosts online, through the relay of the servers.cfg line the player chose on the host page (RelayList_HostLine, relay_list.h), sealed, or not at
 //     all. It never opens on this network instead, and never opens the search port. With no server named, nothing is hosted. A skirmish
 //     opens no network at all.
 //   - Net_HostFailedWhy: why the last Net_HostGame gave NET_FAIL for one of online play's reasons, in the game's own fixed words. NULL if it
@@ -107,7 +107,7 @@ int const kNetServerReady = 2;     // the server answered, and it's the one its 
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
                                    // match its line), in the game's own fixed words
 int const kNetServerNeedsYes = 4;  // the player hasn't said yes to the server in servers.cfg yet (#175's last part, added 2026-11-10): it's
-                                   // never asked, so show the line (RelayList_LineToAgree) and host after the yes (RelayList_AgreeToTheLine)
+                                   // never asked: the yes is said on the line's own row of the Online page (RelayList_AgreeToTheLineAt)
 int Net_ServerState(const char **why);
 
 // Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game not through a server's relay, which is plain (modified

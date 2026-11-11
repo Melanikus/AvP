@@ -1043,7 +1043,7 @@ static void TestTheMenus()
 		kSliceEndAfterTheStart, FailedSlice);
 	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): and the Multiplayer page asks every line with a yes as it
-	// opens, so its Host on row has each line's approval and round trip; nowhere else, never on each answer, never on a timer
+	// opens, so the pages after it start from each line's approval and round trip (the host page asks again as it opens); nowhere else, never on each answer, never on a timer
 	std::string const multiplayerOpens = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && Has(multiplayerOpens, "RelayList_FindGames();") &&
 		CountOf(menus, "RelayList_FindGames();") == 3,

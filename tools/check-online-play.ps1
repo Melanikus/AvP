@@ -46,8 +46,14 @@ S. Sealed or nothing: a host goes through the relay, sealing what it sends, or i
    which hears nothing after; and a joiner through a relay makes handshake B before it connects, or doesn't join.
 P. No plain game (added 2026-11-10, in L's place, "plain only at home"): a host is refused first when no server is named, and a join
    that isn't through the relay; those two are the only places an ENet host is made; nothing on this network is asked or answered
-   about games, so no socket sends to the whole network, and the only sockets are a Hudson run's look at its own address and the
-   games page's timing of the relay; the plain game's own names don't come back; and nothing clears a host's intercept.
+   about games, so no socket sends to the whole network, and the only socket is a Hudson run's look at its own address; the plain
+   game's own names don't come back; and nothing clears a host's intercept.
+J. A join goes through its game's own line (2026-11-11, the owner's "They don't PICK a server, all authorized ones show up"): a game
+   comes from the line whose visit listed it, and its relay, its keys and its handshake are that line's; nothing reaches a relay by its
+   region alone, and the network's file never reads servers.cfg itself.
+H. A host goes through the line the player chose, and only that (2026-11-11, the owner's "No auto choice, they choose"): the host's
+   relay is the chosen line's, a host without a choice or without its line's yes is refused, and a line is chosen only by the host
+   page's Enter on that line's row (or a -dev test run's own choice), never anywhere else.
 WHAT IT CAN'T PROVE: how the code behaves, as opposed to how it's written. That's net_start_test's and relay_list_test's, with their
 take-out rows; the fingerprint's sum is proved by net_relay_keys_test.
 Anything this check can't place is refused with the file and the line, so a new way out is read by a person before it's let through.
@@ -1517,6 +1523,46 @@ $yesForm = 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) 
 if (-not (Test-Refusal $hosting $yesForm 'return NET_FAIL;') -or -not (Test-Before $hosting $noServer $yesForm) -or -not (Test-Before $hosting $yesForm 'Net_MakeENetHost('))
 {
     Stop-Check "H: Net_HostGame ($netFile line $($hostGame.Line)) must refuse a chosen line without the player's yes after the refusal of none, and before anything is made: $yesForm ... return NET_FAIL; }"
+}
+
+# THE PLAYER'S CHOICE (added 2026-11-11 by Melanikus for the AvP port, hash 2, the owner's "No auto choice, they choose"): a line is chosen
+# to host on only by the host page's Enter on that line's row (HostPage_PressedRow, in host_page.cpp, in its kHostPageChooseIt case, which
+# the page's rules decide from what relay_list says of the line), or by a -dev test run's own choice (RelayAuto_WaitForRelays, in
+# relay_auto.cpp, for -dev -relayhost only). Clearing the choice, RelayList_HostOn(-1), is let through anywhere. With neither function
+# there, nothing may choose a line at all.
+$hostPageFile = '3dc/avp/win95/frontend/host_page.cpp'
+$choosers = @(@(Get-Definitions 'HostPage_PressedRow') | Where-Object { $_.File -eq $hostPageFile }) +
+    @(@(Get-Definitions 'RelayAuto_WaitForRelays') | Where-Object { $_.File -eq '3dc/relay_auto.cpp' })
+
+foreach ($choosing in (Get-Calls 'RelayList_HostOn'))
+{
+    if ($code[$choosing.File].Substring($choosing.At) -match '^RelayList_HostOn\s*\(\s*-\s*1\s*\)')
+    {
+        continue
+    }
+
+    if (-not ($choosers | Where-Object { Test-Inside $choosing $_ }))
+    {
+        Stop-Check "H: $($choosing.File) line $($choosing.Line) chooses the line to host on: only the host page's Enter on a line's row may (HostPage_PressedRow, $hostPageFile), or a -dev test run's own choice (RelayAuto_WaitForRelays, 3dc/relay_auto.cpp)"
+    }
+}
+
+foreach ($pressed in @($choosers | Where-Object { $_.File -eq $hostPageFile }))
+{
+    $chooseIt = 'case kHostPageChooseIt:'
+    $choice = 'if (RelayList_HostOn(place)) {'
+    $inTheCase = (Test-Before $pressed.Flat 'switch (HostPage_Pressed(false, says)) {' $chooseIt) -and (Test-Before $pressed.Flat $chooseIt $choice)
+
+    if ($inTheCase)
+    {
+        $from = $pressed.Flat.IndexOf($chooseIt, [System.StringComparison]::Ordinal) + $chooseIt.Length
+        $inTheCase = -not ($pressed.Flat.Substring($from, $pressed.Flat.IndexOf($choice, [System.StringComparison]::Ordinal) - $from) -match '\bcase\b|\bdefault\s*:|\bbreak\b|\breturn\b')
+    }
+
+    if ((Get-Count $pressed.Flat 'RelayList_HostOn(') -ne 1 -or -not $inTheCase)
+    {
+        Stop-Check "H: HostPage_PressedRow ($hostPageFile line $($pressed.Line)) must choose a line once, only in its kHostPageChooseIt case, as the page's rules decide from what relay_list says of it: switch (HostPage_Pressed(false, says)) { ... case kHostPageChooseIt: ... $choice"
+    }
 }
 
 Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose."

@@ -105,6 +105,7 @@ enum AVPMENU_ID
 	AVPMENU_MULTIPLAYER_DELETECONFIG,
 
 	AVPMENU_MULTIPLAYER_JOINING,
+	AVPMENU_HOST_ON,           // the server a game is hosted on, chosen by the player, before Start game's and Co-op's pages: see host_page.h
 
 	AVPMENU_CONTROLS,
 	AVPMENU_JOYSTICKCONTROLS,
@@ -231,6 +232,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
+	AVPMENU_ELEMENT_HOSTLINE, // a row of the host page (host_page.h): its question, or a servers.cfg line's row. Its MaxValue says which
 	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online page, its new identity's question or the yes page (online_page.h, server_yes_page.h). Its MaxValue is which
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };

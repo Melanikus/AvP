@@ -361,57 +361,6 @@ inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, 
 	return true;
 }
 
-// A typed address is whatever someone typed. Only four numbers of up to three digits, each up to 255, with dots between them, go anywhere near the network. No names, so nothing is ever looked up.
-// It reads from anything that answers to [], not only plain letters, so that a test can hand it text that counts every look past the end of its room. A look too far gives the same answer as no look, so the answer alone can't show one.
-template <typename Text>
-inline bool NetTypedAddressIsGoodWithin(const Text &text, size_t most)
-{
-	int parts = 0;
-	size_t at = 0;
-
-	while (parts < 4)
-	{
-		int digits = 0;
-		int value = 0;
-
-		while (at < most && text[at] >= '0' && text[at] <= '9')
-		{
-			value = value * 10 + (text[at] - '0');
-			digits++;
-			at++;
-
-			if (digits > 3 || value > 255)
-			{
-				return false;
-			}
-		}
-
-		if (digits == 0)
-		{
-			return false;
-		}
-
-		parts++;
-
-		if (parts < 4)
-		{
-			if (at >= most || text[at] != '.')
-			{
-				return false;
-			}
-
-			at++;
-		}
-	}
-
-	return at < most && text[at] == '\0';
-}
-
-inline bool NetTypedAddressIsGood(const char *text, size_t most)
-{
-	return NetTypedAddressIsGoodWithin(text, most);
-}
-
 // How many times over one hit may count, in the game's fixed point. The damage sums go round a loop this many times, and a negative number would go round about four billion. A real hit is well under this: 65536 is once.
 static const int kNetMostDamageMultiple = 65536 * 1000;
 

@@ -26,6 +26,7 @@
 #include "logString.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
+#include "host_page_rules.h"   // a line's ping in words, the same as the host page's (2026-11-11)
 #include "level_lists.h"
 #include "coop_menu.h"
 
@@ -290,8 +291,9 @@ static bool ServersTheGamesComeFrom(char *out, size_t size)
 static const int kLinesBottom = 460;
 
 // Where a line stands, in words, when its games aren't simply on the list: "<its name>: <why>", its name made safe and the words the
-// game's own (the why of a line that didn't answer is the list code's fixed words, made safe too, as anything drawn here is). False for a
-// line whose server answered and approved this PC, whose games are the list's rows. Added 2026-11-11 by Melanikus for the AvP port.
+// game's own (the why of a line that didn't answer is the list code's fixed words, made safe too, as anything drawn here is), then its ping
+// when one was measured. False for a line whose server answered, approved this PC and listed games, which are the list's rows. Added
+// 2026-11-11 by Melanikus for the AvP port; modified the same day: an approved line with no games up says so, with its ping.
 static_assert(kRelayListMostVisits == 8, "the not-asked words say the first 8 servers");
 
 bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
@@ -316,7 +318,11 @@ bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
 		case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;
 		case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;
 		case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;
-		default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED; break;
+		// An approved line whose server has no games up says so, with its ping (modified 2026-11-11 by Melanikus for the AvP port, the
+		// owner's "We should show the server ping to the user if no games are up"); one with games is the list's rows, with their own pings
+		default:
+			words = now.access != kRelayAccessIsApproved ? TEXTSTRING_NOTAPPROVED_BEFORE : now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;
+			break;
 	}
 
 	if (words < 0)
@@ -324,13 +330,29 @@ bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
 		return false;
 	}
 
-	if (now.state == kRelayLineNoAnswer && why[0])
+	// The line's own ping after its words, whenever its last visit measured one (the same words as the host page's, host_page_rules.h)
+	char ping[48] = "";
+
+	if (now.pingMs >= 0)
+	{
+		char measured[40];
+		HostPage_PingWords(now.pingMs, now.state, GetTextString(TEXTSTRING_HOSTPAGE_MS), GetTextString(TEXTSTRING_PING_ASKING), measured, sizeof(measured));
+		snprintf(ping, sizeof(ping), " - %s", measured);
+	}
+
+	// A line not approved yet is said in PO's ruling's own words (R-SRV-P3): "Not approved on <name> yet: ask on the Online page" (modified
+	// 2026-11-11 by Melanikus for the AvP port; the name goes between the two parts, so a % in the text file is only a letter)
+	if (words == TEXTSTRING_NOTAPPROVED_BEFORE)
+	{
+		_snprintf(out, size - 1, "%s%s%s%s", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);
+	}
+	else if (now.state == kRelayLineNoAnswer && why[0])
 	{
 		_snprintf(out, size - 1, "%s: %s %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);
 	}
 	else
 	{
-		_snprintf(out, size - 1, "%s: %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)));
+		_snprintf(out, size - 1, "%s: %s%s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), ping);
 	}
 
 	out[size - 1] = '\0';

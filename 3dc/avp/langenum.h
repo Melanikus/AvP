@@ -1537,16 +1537,39 @@ enum TEXTSTRING_ID
 	TEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)
 	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
 	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
-	TEXTSTRING_MULTIPLAYER_HOSTON,           // "Host on", the Multiplayer page's row for the server a game is hosted on (2026-11-11)
-	TEXTSTRING_MULTIPLAYER_HOSTON_HELP,
-	TEXTSTRING_HOSTON_CHOOSE,                // "choose a server": the row's first choice, and where it starts
-	TEXTSTRING_HOSTON_NONE,                  // its first choice when no line has approved this PC
-	TEXTSTRING_HOSTON_CHOOSE_FIRST,          // Start game or Co-op campaign pressed with no server chosen
 	TEXTSTRING_FINDGAMES_LINE_NOYES,         // the games page's words for a line, after its name: no yes yet (2026-11-11)
 	TEXTSTRING_FINDGAMES_LINE_ASKING,        // being asked
 	TEXTSTRING_FINDGAMES_LINE_NOANSWER,      // no answer, before the list code's own why
 	TEXTSTRING_FINDGAMES_LINE_NOTASKED,      // past the first 8 lines
-	TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED,   // answered, but this PC isn't approved there yet
+	// A line this PC isn't approved on yet, on the games page and the host page, in PO's ruling's words (R-SRV-P3): "Not approved on <name>
+	// yet: ask on the Online page", the line's name between the two parts (2026-11-11)
+	TEXTSTRING_NOTAPPROVED_BEFORE,
+	TEXTSTRING_NOTAPPROVED_AFTER,
+	// The host page (host_page.h; added 2026-11-11 by Melanikus for the AvP port, in place of the Multiplayer page's Host on row)
+	TEXTSTRING_HOSTPAGE_TITLE,               // "Host on"
+	TEXTSTRING_HOSTPAGE_CHOOSE,              // the page's question, its first row, which chooses nothing
+	TEXTSTRING_HOSTPAGE_CHOOSE_HELP,
+	TEXTSTRING_HOSTPAGE_CHOOSE_BELOW,        // Enter on the question
+	TEXTSTRING_HOSTPAGE_LINE_HELP,           // a line's row's help
+	TEXTSTRING_HOSTPAGE_NONE,                // every line has answered, and none can be hosted on
+	TEXTSTRING_HOSTPAGE_SERVER,              // the five column headings
+	TEXTSTRING_HOSTPAGE_PING,
+	TEXTSTRING_HOSTPAGE_GAMES,
+	TEXTSTRING_HOSTPAGE_PLAYERS,
+	TEXTSTRING_HOSTPAGE_REGION,
+	TEXTSTRING_HOSTPAGE_MS,                  // after a round trip's number
+	TEXTSTRING_HOSTPAGE_NOYES,               // why a line can't be chosen: no yes yet
+	TEXTSTRING_HOSTPAGE_REFUSED,             // its owner refused this PC
+	TEXTSTRING_HOSTPAGE_ASKING,              // its server is being asked
+	TEXTSTRING_HOSTPAGE_NOANSWER,            // before the list code's own why
+	TEXTSTRING_HOSTPAGE_NOTASKED_BEFORE,     // past the lines a find asks, the number between
+	TEXTSTRING_HOSTPAGE_NOTASKED_AFTER,
+	TEXTSTRING_HOSTPAGE_ASKED_AGAIN,         // Enter on a line that didn't answer
+	TEXTSTRING_HOSTPAGE_CANT,                // a line that lost its yes or approval as it was chosen
+	// A line's ping before its first answer, and an approved line with no games, on the host page and the games page (the owner, 2026-11-11:
+	// "We should show the server ping to the user if no games are up")
+	TEXTSTRING_PING_ASKING,                  // "Asking...", PO's word
+	TEXTSTRING_FINDGAMES_LINE_NOGAMES,       // an approved line whose server has no games up, before its ping
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,
