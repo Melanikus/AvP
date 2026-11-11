@@ -980,8 +980,9 @@ static void TestTheMenus()
 	// out. An answer that came and was too big, a no, or one the hostile reader refused, is a failure to fetch.
 	std::string const list = ReadSource("3dc/relay_list.cpp");
 	std::string const noConnection = SourceSlice(list, "bool RelayList_WhyIsNoConnection(const char *why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(noConnection, "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;"),
-		"no connection to the list's server is: it couldn't be reached, took too long, its secure connection failed, or the call couldn't start");
+	// (Modified 2026-11-10 by Melanikus for the AvP port, F1: and a Windows that can't be told to fetch nothing for the certificate)
+	Check(Has(noConnection, "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;"),
+		"no connection to the list's server is: it couldn't be reached, took too long, its secure connection failed, the call couldn't start, or this Windows can't be told to fetch nothing for the certificate");
 	Check(!Has(noConnection, "kTooBig") && !Has(noConnection, "kSaidNo") && !Has(noConnection, "strcmp") && !Has(noConnection, "strstr"),
 		"an answer that came isn't one of them, and nothing is compared by its letters");
 	Check(Has(page, "listCantConnect = why != NULL && RelayList_WhyIsNoConnection(why);") &&
