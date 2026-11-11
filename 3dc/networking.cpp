@@ -2201,6 +2201,25 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		return NET_FAIL;
 	}
 
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the chosen line's server has to have answered, or the
+	// screen waits for it (Net_ServerState says so), and one that can't be used says why. Nothing is made before either.
+	const char *lineWhy = NULL;
+	int const lineState = online ? Net_ServerState(&lineWhy) : kNetServerReady;
+
+	if (online && lineState == kNetServerAsking)
+	{
+		hostFailedWhy = kServerNotYet;
+		Con_PrintError(std::string("net: this game can't be hosted online yet: ") + kServerNotYet);
+		return NET_FAIL;
+	}
+
+	if (online && lineState == kNetServerCantUse)
+	{
+		hostFailedWhy = lineWhy ? lineWhy : kRelayCantBeUsed;
+		Con_PrintError(std::string("net: this game can't be hosted online: ") + hostFailedWhy);
+		return NET_FAIL;
+	}
+
 	if (!net_IsInitialised)
 	{
 		Con_PrintError("Networking is not initialisedr");
