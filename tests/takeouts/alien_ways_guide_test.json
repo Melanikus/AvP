@@ -1276,6 +1276,16 @@
 			]
 		},
 		{
+			"name": "SOURCE: a flanker searches the grid with the usual step and most",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "ShutForTheGrid(*map),\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
+					"to": "ShutForTheGrid(*map),\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the game never says which target an alien is coming for",
 			"changes": [
 				{

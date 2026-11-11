@@ -1180,8 +1180,12 @@ static void SourceOfTheGame()
 	Check(Has(Between(guideSource, "static bool OnTheKindNeeded(", "bool AlienWays_StepMade("), "\treturn AlienWays_StepMade(points[heading - 1], points[heading], down);"),
 		"SOURCE: the guide counts a step as made by AlienWays_StepMade");
 
-	// A flanker's search goes with a flanker's step and most (the map test tries what those do), and the game says which target each is for
-	Check(Has(guideSource, "flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
+	// A flanker's search goes with a flanker's step and most (the map test tries what those do), and the game says which target each is for.
+	// The search starts in two places, the grid's and the old map's, each checked by the words before its step, so neither can lose the
+	// flanker's step unseen (modified 2026-11-11 by Melanikus (Third) for the AvP port: one check matched either, so the old map's could go)
+	Check(Has(guideSource, "ShutForTheGrid(*map),\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
+		"SOURCE: a flanker searches the grid with a flanker's step and most");
+	Check(Has(guideSource, "claimsOn ? &claims : nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
 		"SOURCE: a flanker searches with a flanker's step and most");
 	Check(Has(ways, "\task.hasTarget = target != 0;\n\task.target = target ? WhoIs(target) : AlienWaysWho{ 0, 0 };"),
 		"SOURCE: the game tells the guide which target an alien is coming for");
