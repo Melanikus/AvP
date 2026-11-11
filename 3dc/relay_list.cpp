@@ -69,51 +69,88 @@ static_assert(NGT_Individual == 0 && NGT_CoopDeathmatch == 1 && NGT_LastManStand
 // A level's name on the list is at most what the game's own session holds
 static_assert(kRelayListLevelLetters == kLevelNameSize - 1, "the list's level names are the game's own, kLevelNameSize - 1 long");
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175): the game's one server, the first good line of servers.cfg (servers_cfg_file.h)
+// Added 2026-11-10 by Melanikus for the AvP port (#175): the game's one server, a good line of servers.cfg (servers_cfg_file.h). Modified
+// the same day (#175 2b): the player's pick of a line, if it's one of the good lines, or else the first good line, as before there was a
+// pick (servers_trust.h, THE PICK).
 namespace
 {
+	// What a yes to a line is, and a pick of it: SHA-256 over servers_trust.h's 68 bytes. False if it couldn't be worked out, which counts
+	// as no yes, and as never the pick's line.
+	bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])
+	{
+		uint8_t input[kServersTrustInputBytes];
+		NetCryptoPiece const piece = { input, sizeof(input) };
+		return ServersTrust_HashInput(line.address, line.listPort, line.relayPort, line.fingerprint, input) && NetCrypto_Sha256(&piece, 1, hash);
+	}
+
 	// servers.cfg, read the first time the server is asked about and kept for the run, so a line changed while the game runs can't change
 	// the server halfway through a game. Every refusal goes to the log, with the line's number and the reader's own words, never the
-	// line's text.
+	// line's text. The pick is read at the same moment, once a run, so a pick made while the game runs is for the next start, never this
+	// one (#175 2b). Only the main thread reads or changes these.
 	struct TheServer
 	{
 		bool read;
 		bool there;
 		ServersCfgServer line;
+		ServersCfgOpening opening;                                     // whether servers.cfg could be read at all (#175 2b)
+		int inUse;                                                     // which good line is this run's, from 0, or -1 for none
+		uint8_t hashes[kServersCfgMostLines][kServersTrustHashBytes];  // each good line's hash, in the file's order
+		bool hashed[kServersCfgMostLines];                             // and whether it could be worked out
+		ServersTrustPick pickNow;                                      // the pick as kept now: the one read, or one made since
 	};
 
 	TheServer theServer = {};
+	ServersCfgFileRead theFile;   // what servers.cfg said, for the server lists (RelayList_LineAt and the rest)
 
 	const ServersCfgServer *Server(void)
 	{
 		if (!theServer.read)
 		{
 			theServer.read = true;
-			static ServersCfgFileRead file;
-			ServersCfgOpening const opening = ServersCfg_ReadTheGames(&file);
+			theServer.inUse = -1;
+			theServer.opening = ServersCfg_ReadTheGames(&theFile);
 
-			if (opening != kServersCfgOpened)
+			if (theServer.opening != kServersCfgOpened)
 			{
-				LogString(std::string("Relay list: ") + ServersCfg_OpeningWords(opening));
+				LogString(std::string("Relay list: ") + ServersCfg_OpeningWords(theServer.opening));
 			}
-			else if (file.fileRefusal != kServersCfgFileRead)
+			else if (theFile.fileRefusal != kServersCfgFileRead)
 			{
-				LogString(std::string("Relay list: " SERVERS_CFG_FILE_NAME " isn't used: ") + ServersCfg_FileWords(file.fileRefusal));
-			}
-
-			for (int i = 0; i < file.refusedCount; i++)
-			{
-				LogString("Relay list: " SERVERS_CFG_FILE_NAME " line " + std::to_string(file.refused[i].lineNumber) + " isn't used: " +
-					ServersCfg_LineWords(file.refused[i].why));
+				LogString(std::string("Relay list: " SERVERS_CFG_FILE_NAME " isn't used: ") + ServersCfg_FileWords(theFile.fileRefusal));
 			}
 
-			if (file.serverCount > 0)
+			for (int i = 0; i < theFile.refusedCount; i++)
 			{
-				theServer.line = file.servers[0];
+				LogString("Relay list: " SERVERS_CFG_FILE_NAME " line " + std::to_string(theFile.refused[i].lineNumber) + " isn't used: " +
+					ServersCfg_LineWords(theFile.refused[i].why));
+			}
+
+			for (int i = 0; i < theFile.serverCount; i++)
+			{
+				theServer.hashed[i] = LineHash(theFile.servers[i], theServer.hashes[i]);
+			}
+
+			// The player's pick, read as hostile: a file that can't be used counts as none, and so the first good line is used
+			const char *why = NULL;
+			NetTrustStoreResult const picked = NetIdentityStore_LoadPick(&theServer.pickNow, &why);
+
+			if (picked != kNetTrustStoreRead && picked != kNetTrustStoreNoFile)
+			{
+				LogString(std::string("Relay list: " SERVERS_PICK_FILE_NAME " isn't used, so the first good line is: ") + (why ? why : "it couldn't be read"));
+			}
+
+			theServer.inUse = ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);
+
+			if (theServer.inUse >= 0)
+			{
+				theServer.line = theFile.servers[theServer.inUse];
 				theServer.there = true;
+				bool const isThePick = theServer.pickNow.there && theServer.hashed[theServer.inUse] &&
+					memcmp(theServer.hashes[theServer.inUse], theServer.pickNow.hash, kServersTrustHashBytes) == 0;
 				char const *const where = theServer.line.place == kServersCfgOnTheInternet ? "" :
 					theServer.line.place == kServersCfgOnThisPC ? ", on this PC" : ", on this network";
-				LogString("Relay list: the server is " SERVERS_CFG_FILE_NAME " line " + std::to_string(theServer.line.lineNumber) + where);
+				LogString("Relay list: the server is " SERVERS_CFG_FILE_NAME " line " + std::to_string(theServer.line.lineNumber) + where +
+					(isThePick ? ", the player's pick" : ""));
 			}
 		}
 
@@ -1025,13 +1062,7 @@ namespace
 	ServersTrustYeses yeses;
 	bool yesesRead = false;
 
-	// What a yes to a line is: SHA-256 over servers_trust.h's 68 bytes. False if it couldn't be worked out, which counts as no yes.
-	bool LineHash(const ServersCfgServer &line, uint8_t hash[kServersTrustHashBytes])
-	{
-		uint8_t input[kServersTrustInputBytes];
-		NetCryptoPiece const piece = { input, sizeof(input) };
-		return ServersTrust_HashInput(line.address, line.listPort, line.relayPort, line.fingerprint, input) && NetCrypto_Sha256(&piece, 1, hash);
-	}
+	// (What a yes to a line is, LineHash, is with the server's own code at the top of this file, as the pick is worked out from it too.)
 
 	// Whether a line may be used: a Hudson run's always (nobody is there to answer), anyone else's only once the player has said yes to it.
 	// The kept yeses are read the first time this is asked; a file that can't be used counts as none, so every line is asked about again.
@@ -1105,19 +1136,35 @@ namespace
 		// networking.h)
 		made->version = kMultiplayerVersion;
 
-		if (!made->wake || !made->endDone)
-		{
-			LogString("Relay list: couldn't start, so hosts aren't listed and the list can't be read");
-			return false;
-		}
+		// The thread starts only once its two events are made. Modified 2026-11-10 by Melanikus for the AvP port (#175 2b): when either
+		// step fails, everything made for the list is given back in this one place, whichever step it was. It used to be left behind, with
+		// its lock and any event made, and the menus ask again with every Find games, so a PC short of handles lost more each time.
+		HANDLE thread = NULL;
 
-		shared = made;
-		HANDLE const thread = CreateThread(NULL, 0, ListThread, NULL, 0, NULL);
+		if (made->wake && made->endDone)
+		{
+			shared = made;
+			thread = CreateThread(NULL, 0, ListThread, NULL, 0, NULL);
+		}
 
 		if (!thread)
 		{
 			LogString("Relay list: couldn't start, so hosts aren't listed and the list can't be read");
 			shared = NULL;
+
+			// No thread was made, so nothing else holds any of this
+			if (made->wake)
+			{
+				CloseHandle(made->wake);
+			}
+
+			if (made->endDone)
+			{
+				CloseHandle(made->endDone);
+			}
+
+			DeleteCriticalSection(&made->lock);
+			delete made;
 			return false;
 		}
 
@@ -1456,28 +1503,23 @@ int RelayList_ServerState(const char **why)
 	return state;
 }
 
-// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
-bool RelayList_LineToAgree(RelayListLineToAgree *out)
+// A line as the yes page and the server lists show it: its name, its whole address, where it is, and its key's two ends. False, with out
+// wiped, if the address couldn't be shown whole. Added 2026-11-10 by Melanikus for the AvP port (#175 2b): it was RelayList_LineToAgree's
+// own, and the server lists show their lines the same way.
+static bool ShowTheLine(const ServersCfgServer *line, RelayListLineToAgree *out)
 {
-	const ServersCfgServer *const line = Server();
-
-	if (!out || !line || TheLineIsAgreed(*line))
-	{
-		return false;
-	}
-
 	memset(out, 0, sizeof(*out));
-	snprintf(out->name, sizeof(out->name), "%s", line->name);
 
 	// The address as the line says it, with its two ports only when they aren't the usual ones, whole or not at all (relay_list_text.h;
 	// modified 2026-11-10 by Melanikus for the AvP port: it was written here, into 24 bytes, which could cut an address with both ports).
 	// It always fits. If it ever didn't, there'd be no page to show, and still nothing would go to the server: the list starts only after
-	// the yes (Start).
+	// the yes (Start). It's written first, so out is still all 0 if it's refused.
 	if (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))
 	{
 		return false;
 	}
 
+	snprintf(out->name, sizeof(out->name), "%s", line->name);
 	out->place = line->place;
 
 	// The fingerprint's first 8 digits and its last 8, as a person can read them against what the server's owner gave out
@@ -1494,6 +1536,19 @@ bool RelayList_LineToAgree(RelayListLineToAgree *out)
 	snprintf(out->keyStart, sizeof(out->keyStart), "%.8s", hex);
 	snprintf(out->keyEnd, sizeof(out->keyEnd), "%.8s", hex + 2 * kServersCfgFingerprintBytes - 8);
 	return true;
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
+bool RelayList_LineToAgree(RelayListLineToAgree *out)
+{
+	const ServersCfgServer *const line = Server();
+
+	if (!out || !line || TheLineIsAgreed(*line))
+	{
+		return false;
+	}
+
+	return ShowTheLine(line, out);
 }
 
 // Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see relay_list.h
@@ -1528,6 +1583,114 @@ bool RelayList_AgreeToTheLine(void)
 		LogString("Relay list: the player said yes to the server in " SERVERS_CFG_FILE_NAME ", but it couldn't be kept, so it holds for this run only");
 	}
 
+	return true;
+}
+
+// ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: see relay_list.h.
+// These only read what servers.cfg said when it was read (Server, at the top of this file), and the pick; nothing here contacts anything,
+// and nothing here changes the line this run uses.
+
+int RelayList_LineCount(void)
+{
+	Server();
+	return theFile.serverCount;
+}
+
+bool RelayList_LineAt(int place, RelayListLineShown *out)
+{
+	if (!out)
+	{
+		return false;
+	}
+
+	memset(out, 0, sizeof(*out));
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	ServersCfgServer const &line = theFile.servers[place];
+
+	if (!ShowTheLine(&line, &out->line))
+	{
+		memset(out, 0, sizeof(*out));
+		return false;
+	}
+
+	out->lineNumber = line.lineNumber;
+	out->inUse = place == theServer.inUse;
+	out->nextStart = place == ServersTrust_LineToUse(theServer.hashes, theServer.hashed, theFile.serverCount, theServer.pickNow);
+	out->agreed = TheLineIsAgreed(line);
+	return true;
+}
+
+int RelayList_RefusedLineCount(void)
+{
+	Server();
+	return theFile.refusedCount;
+}
+
+bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words)
+{
+	if (lineNumber)
+	{
+		*lineNumber = 0;
+	}
+
+	if (words)
+	{
+		*words = NULL;
+	}
+
+	Server();
+
+	if (!lineNumber || !words || place < 0 || place >= theFile.refusedCount)
+	{
+		return false;
+	}
+
+	// The line's number and the game's own words for why, never anything from the line, which could say anything at all
+	*lineNumber = theFile.refused[place].lineNumber;
+	*words = ServersCfg_LineWords(theFile.refused[place].why);
+	return true;
+}
+
+const char *RelayList_FileWords(void)
+{
+	Server();
+
+	if (theServer.opening != kServersCfgOpened)
+	{
+		return ServersCfg_OpeningWords(theServer.opening);
+	}
+
+	return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);
+}
+
+// The pick is kept for the next start. The line in use, theServer.line, is never changed here: it was set once, when servers.cfg was read,
+// and what the list's thread holds of it (its checked key, the relay's region and keys) stays with it until the game starts again.
+bool RelayList_PickLine(int place)
+{
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount || !theServer.hashed[place])
+	{
+		return false;
+	}
+
+	std::string const which = SERVERS_CFG_FILE_NAME " line " + std::to_string(theFile.servers[place].lineNumber);
+
+	if (!NetIdentityStore_KeepPick(theServer.hashes[place]))
+	{
+		LogString("Relay list: the player picked " + which + ", but the pick couldn't be kept, so the next start uses the line it would have");
+		return false;
+	}
+
+	theServer.pickNow.there = true;
+	memcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);
+	LogString("Relay list: the player picked " + which + ", for the next start");
 	return true;
 }
 

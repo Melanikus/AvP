@@ -199,10 +199,91 @@ static void TestHostileFiles()
 	Check(ReadText(std::string(kServersTrustMostBytes - 1, '#') + "\n", &read) == kServersTrustRead, "and a file of exactly 16 KB is read");
 }
 
+// ---- The pick (#175 2b). Added 2026-11-10 by Melanikus for the AvP port: servers-picked.cfg, and which line a run uses.
+
+static ServersTrustRefusal ReadPickText(const std::string &text, ServersTrustPick *out, int *badLine = NULL)
+{
+	std::vector<char> exact(text.begin(), text.end());
+	return ServersTrust_ReadPick(exact.empty() ? NULL : exact.data(), exact.size(), out, badLine);
+}
+
+static std::string PickLine(uint8_t value)
+{
+	return "pick " + YesLine(value).substr(4);
+}
+
+static void PickRefused(const std::string &text, ServersTrustRefusal why, int line, const char *what)
+{
+	ServersTrustPick read;
+	read.there = true;
+	memset(read.hash, 0xAB, sizeof(read.hash));
+	int badLine = -1;
+	ServersTrustRefusal const got = ReadPickText(text, &read, &badLine);
+	uint8_t zeros[kServersTrustHashBytes] = {};
+	Check(got == why && !read.there && memcmp(read.hash, zeros, sizeof(zeros)) == 0 && badLine == line, what);
+}
+
+static void TestThePick()
+{
+	printf("5. the pick: servers-picked.cfg, and which line a run uses\n");
+	uint8_t hash[kServersTrustHashBytes];
+	MadeUpHash(hash, 9);
+	char text[256];
+
+	size_t const size = ServersTrust_WritePick(hash, text, sizeof(text));
+	ServersTrustPick read;
+	Check(size > 0 && text[0] == '#' && text[size - 1] == '\n' && std::string(text, size).find("\n" + PickLine(9)) != std::string::npos,
+		"the game writes its note and one pick line");
+	Check(ReadPickText(std::string(text, size), &read) == kServersTrustRead && read.there && memcmp(read.hash, hash, sizeof(hash)) == 0,
+		"and it reads back as that pick");
+	Check(ServersTrust_WritePick(hash, text, size) == size && ServersTrust_WritePick(hash, text, size - 1) == 0 &&
+		ServersTrust_WritePick(NULL, text, sizeof(text)) == 0 && ServersTrust_WritePick(hash, NULL, 100) == 0,
+		"it needs room for every byte, and a hash to write");
+
+	Check(ReadPickText("", &read) == kServersTrustRead && !read.there, "an empty file is no pick");
+	Check(ReadPickText("# only a note\n", &read) == kServersTrustRead && !read.there, "and so is a note alone");
+	Check(ReadPickText("", NULL) == kServersTrustBadLine, "nowhere to put the pick is refused");
+
+	// Read as hostile, with the yeses' own rules, and a pick and a yes are never taken for each other
+	PickRefused(PickLine(1) + PickLine(2), kServersTrustTwoPicks, 2, "two picks refuse the file, and neither is taken");
+	PickRefused(PickLine(1) + PickLine(1), kServersTrustTwoPicks, 2, "and so does the same pick twice");
+	PickRefused(YesLine(1), kServersTrustBadLine, 1, "a yes isn't a pick");
+	PickRefused("Pick " + YesLine(1).substr(4), kServersTrustBadLine, 1, "Pick with a capital");
+	PickRefused("pick " + std::string(63, 'a') + "A\n", kServersTrustBadLine, 1, "a capital hex digit");
+	PickRefused("pick 203.0.113.7\n", kServersTrustBadLine, 1, "an address");
+	PickRefused(PickLine(1).substr(0, PickLine(1).size() - 1), kServersTrustBadLine, 1, "a last line with no newline (a file cut short)");
+	PickRefused(std::string(kServersTrustMostBytes + 1, '#'), kServersTrustTooBig, 0, "more than 16 KB, before any of it is read");
+	ServersTrustYeses yeses;
+	yeses.count = 5;
+	Check(ReadText(PickLine(1), &yeses) == kServersTrustBadLine && yeses.count == 0, "and in the yeses' file, a pick is a bad line");
+
+	// Which line a run uses: the picked one, or else the first; never one whose hash couldn't be worked out
+	uint8_t hashes[3][kServersTrustHashBytes];
+	bool hashed[3] = { true, true, true };
+	MadeUpHash(hashes[0], 1);
+	MadeUpHash(hashes[1], 2);
+	MadeUpHash(hashes[2], 3);
+	ServersTrustPick pick;
+	pick.there = true;
+	MadeUpHash(pick.hash, 3);
+	Check(ServersTrust_LineToUse(hashes, hashed, 3, pick) == 2, "the picked line is the one used");
+	MadeUpHash(pick.hash, 7);
+	Check(ServersTrust_LineToUse(hashes, hashed, 3, pick) == 0, "a pick no line has now is the first good line");
+	pick.there = false;
+	MadeUpHash(pick.hash, 3);
+	Check(ServersTrust_LineToUse(hashes, hashed, 3, pick) == 0, "and so is no pick, even with a hash left in it");
+	pick.there = true;
+	hashed[2] = false;
+	Check(ServersTrust_LineToUse(hashes, hashed, 3, pick) == 0, "a line whose hash couldn't be worked out is never the pick's");
+	Check(ServersTrust_LineToUse(hashes, hashed, 0, pick) == -1 && ServersTrust_LineToUse(NULL, hashed, 3, pick) == -1 &&
+		ServersTrust_LineToUse(hashes, NULL, 3, pick) == -1, "and with no lines, none");
+}
+
 static void TestWords()
 {
 	printf("4. words for each refusal\n");
-	ServersTrustRefusal const all[] = { kServersTrustRead, kServersTrustTooBig, kServersTrustBadLine, kServersTrustTooMany, kServersTrustTwice };
+	ServersTrustRefusal const all[] = { kServersTrustRead, kServersTrustTooBig, kServersTrustBadLine, kServersTrustTooMany, kServersTrustTwice,
+		kServersTrustTwoPicks };
 	bool allHaveWords = true;
 	bool allDiffer = true;
 
@@ -227,6 +308,7 @@ int main()
 	TestWrittenAndReadBack();
 	TestHostileFiles();
 	TestWords();
+	TestThePick();
 
 	if (checksFailed)
 	{
