@@ -60,7 +60,6 @@ int MP_Species=0;
 int MP_Sidearm=0; // kSidearmPistol or kSidearmRevolver: what this player chose, kept on this machine only
 int MP_GameStyle=0;
 int MP_LevelNumber=0;
-int MP_HostWhere = kHostWhereOnline;   // menu_data.h: where a host's game is hosted, never saved (added 2026-11-10)
 
 int AlienEpisodeToPlay;
 int MarineEpisodeToPlay;
@@ -463,7 +462,6 @@ static AVPMENU_ELEMENT AvPMenu_PredatorLevels[] =
 // below). Until then it has its four rows of 1999, and room for the two. With no server named, nothing leads to the Online access pages.
 static AVPMENU_ELEMENT const PlayerNameRow = {AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_MULTIPLAYER_PLAYERNAME},	{NET_PLAYERNAMELENGTH-1},	{(int*)MP_PlayerName},	{0},	TEXTSTRING_MULTIPLAYER_PLAYERNAME_HELP};
 static AVPMENU_ELEMENT const ServersRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_SERVERS_ROW},	{AVPMENU_SERVERS},	{0},	{0},	TEXTSTRING_SERVERS_ROW_HELP};
-static AVPMENU_ELEMENT const HostWhereRow = {AVPMENU_ELEMENT_TEXTSLIDER_POINTER,	{TEXTSTRING_MULTIPLAYER_HOSTWHERE},	{kHostWhereAtHome},	{&MP_HostWhere},	{0},	TEXTSTRING_MULTIPLAYER_HOSTWHERE_HELP};
 static AVPMENU_ELEMENT const StartGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_STARTGAME},	{AVPMENU_MULTIPLAYER_CONFIG},	{0},	{0},	TEXTSTRING_MULTIPLAYER_STARTGAME_HELP};
 static AVPMENU_ELEMENT const CoopRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP};
 static AVPMENU_ELEMENT const JoinGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP};
@@ -478,28 +476,19 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	JoinGameRow,
 	EndOfTheRows,
 
-	// Room for the Host row, the Servers row and the Online access row
-	EndOfTheRows,
+	// Room for the Servers row and the Online access row
 	EndOfTheRows,
 	EndOfTheRows
 };
 
 static int const kMultiplayerRowRoom = sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]);
-static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 8,
-	"the page's four rows of 1999, the two a named server brings, the Servers row, and its end");
+static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 7,
+	"the page's four rows of 1999, the Servers row, the Online access row a named server brings, and its end");
 
-void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostWhereNames)
+void MenuData_SetMultiplayerRows(bool aServerIsNamed)
 {
 	int row = 0;
 	AvPMenu_Multiplayer[row++] = PlayerNameRow;
-
-	// Where a host's game is hosted, just above the rows that host, with the choices' names, which name the server
-	if (aServerIsNamed)
-	{
-		AvPMenu_Multiplayer[row] = HostWhereRow;
-		AvPMenu_Multiplayer[row].TextSliderStringPointer = hostWhereNames;
-		row++;
-	}
 
 	// Every server servers.cfg names, and picking one for the next start (#175 2b). Always there, so that even with no servers.cfg at
 	// all its page can say why.
@@ -590,7 +579,7 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerStartGame[]=
 static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=
 {
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDGAMES},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_OPENADDRESS},	{AVPMENU_MULTIPLAYEROPENADDRESS},	{0},	{0},	TEXTSTRING_MULTIPLAYER_OPENADDRESS_HELP},
+	// (Removed 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": Open address, as a game at a typed address is plain.)
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 

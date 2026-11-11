@@ -138,8 +138,6 @@ extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
 static void StartTheCoopCampaign(void);
 void SetBriefingTextToBlank(void);
-extern bool Net_UpdateSessionList(int &SelectedItem);
-extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
 extern void DrawMainMenusBackdrop(void);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -520,8 +518,7 @@ static void StartNetworkGameForHudsonRun(void)
 	{
 		// hostrow= (hudson_plan.h): the player's way in, the Multiplayer page's Host row, Start game and the game's Start row, with the
 		// server's wait if there is one, in place of hosting from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port.
-		Hudson_NetSay(Hudson_HostRow() == kHudsonHostRowAtHome ? "the host hosts at home, through the Multiplayer page's Host row, as a player does"
-			: "the host hosts online, through the Multiplayer page's Host row, as a player does");
+		Hudson_NetSay("the host hosts online, through the Multiplayer page's Start game, as a player does");
 
 		if (!HostThroughTheRowsForARun(level))
 		{
@@ -551,8 +548,6 @@ static void StartNetworkGameForHudsonRun(void)
 	}
 	else
 	{
-		// The other game may still be loading, and it only answers once it's playing. Each try waits for 3 seconds.
-		int const mostTries = 20;
 		bool connected = false;
 
 		// -dev -relayjoin (server #14, relay_auto.h): the list's first game of this version, joined through its relay, the way a player
@@ -589,42 +584,9 @@ static void StartNetworkGameForHudsonRun(void)
 			}
 		}
 
-		// typed=yes: the way a player does who has typed an address. The address is this machine's own, and that's the only place it can go: the first independent read of this code found this page did nothing.
-		if (Hudson_NetIsTyped() && !connected)
-		{
-			DWORD const startedLooking = GetTickCount();
-			bool found = false;
-
-			strcpy(IPAddressString, "127.0.0.1");
-			Hudson_NetSay("the joiner is searching for a game at the address it was given");
-
-			while (!found && GetTickCount() - startedLooking < 60000)
-			{
-				int selection = 0;
-
-				CheckForWindowsMessages();
-				Net_FindAvPSessions();
-				Net_UpdateSessionList(selection);
-				found = NumberOfSessionsFound > 0;
-				Sleep(50);
-			}
-
-			if (!found)
-			{
-				Hudson_NetStopBecause("a search for a typed address found no game");
-				return;
-			}
-
-			Hudson_NetSay("the search found the game");
-			connected = Net_ConnectToSession(0, MP_PlayerName) != NET_FAIL;
-		}
-
-		for (int tryNumber = 0; tryNumber < mostTries && !connected; tryNumber++)
-		{
-			CheckForWindowsMessages();
-			connected = Net_ConnectToThisMachine(level, MP_PlayerName) != NET_FAIL;
-		}
-
+		// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): a run joins through the
+		// relay, as a player does, or not at all. Its plain ways, a search by a typed address (typed=yes) and a join straight to the game on
+		// this machine, went with the plain game.
 		if (!connected)
 		{
 			Hudson_NetStopBecause("the client got no answer from the host");
@@ -1722,6 +1684,8 @@ enum HostWaitFor
 static HostWaitFor hostWaiting = kHostWaitingForNothing;
 static enum AVPMENU_ID hostWaitPage = AVPMENU_MULTIPLAYER;   // the page it waits on: leaving it ends the wait
 static uint32_t hostWaitSince = 0;                           // GetTickCount when it began
+static uint32_t hostWaitRetrySince = 0;                      // while a wait's host is tried: when that wait began, so a wait that
+                                                             // follows keeps counting from the first press, never past 30 s in all
 static char hostLine[200];                                   // "Asking the server...", or why a host failed, under the page's rows
 static enum AVPMENU_ID hostLinePage = AVPMENU_MULTIPLAYER;   // the page it's for, the only one it's drawn on
 
@@ -1768,7 +1732,7 @@ static bool AHostWaits(HostWaitFor what)
 	RelayList_FindRelays();
 	hostWaiting = what;
 	hostWaitPage = AvPMenus.CurrentMenu;
-	hostWaitSince = GetTickCount();
+	hostWaitSince = hostWaitRetrySince != 0 ? hostWaitRetrySince : GetTickCount();
 	ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_ASKING));
 	return true;
 }
@@ -1806,6 +1770,10 @@ static void HostWaitFrame(void)
 			hostWaiting = kHostWaitingForNothing;
 			hostLine[0] = 0;
 
+			// The host is tried with the wait's own start kept, so if it's refused for the server being asked again, the wait that follows
+			// goes on counting from the first press
+			hostWaitRetrySince = hostWaitSince;
+
 			if (what == kHostWaitingToStart)
 			{
 				PressTheStartRowAgain();
@@ -1814,6 +1782,8 @@ static void HostWaitFrame(void)
 			{
 				SetupNewMenu(AVPMENU_COOP_HOST);
 			}
+
+			hostWaitRetrySince = 0;
 			return;
 
 		case kHostWaitCantUse:
@@ -1840,7 +1810,7 @@ static void DrawTheHostLine(void)
 	RenderSmallFontString_Wrapped(hostLine, &area, ONE_FIXED, 0, 0);
 }
 
-// hostrow=online or hostrow=athome (hudson_plan.h): a Hudson host hosts the way a player does, for the owner's rehearsal of beta.2's
+// hostrow=online (hudson_plan.h; athome went with the Host row, 2026-11-10): a Hudson host hosts the way a player does, for the owner's rehearsal of beta.2's
 // screens (PO, 2026-11-10). Added 2026-11-10 by Melanikus (Third) for the AvP port. Each press is a row selected and Enter, as a player
 // does, and one fixed line in the log (PressTheRowForARun):
 // 1. the Multiplayer page, its Host row moved to the run's choice (it starts on Online at every start), and pictured (multiplayer.png);
@@ -1853,47 +1823,13 @@ static void DrawTheHostLine(void)
 // True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
 static bool HostThroughTheRowsForARun(int level)
 {
-	bool const atHome = Hudson_HostRow() == kHudsonHostRowAtHome;
-
 	LoadAllAvPMenuGfx();
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
 
-	// The Host row is the page's one text slider with a pointer to its names, there only when servers.cfg names a server (menu_data.cpp,
-	// MenuData_SetMultiplayerRows). Increase moves it from Online to At home.
-	int hostRow = -1;
-
-	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
-	{
-		if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_TEXTSLIDER_POINTER)
-		{
-			hostRow = row;
-		}
-	}
-
-	if (hostRow < 0)
-	{
-		LogErrorString("hudson: the Multiplayer page has no Host row, so servers.cfg names no server, and hostrow= has nothing to press");
-		ReleaseAllAvPMenuGfx();
-		return false;
-	}
-
-	AvPMenus.CurrentlySelectedElement = hostRow;
-
-	if (atHome && MP_HostWhere != kHostWhereAtHome)
-	{
-		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);
-	}
-
-	if ((MP_HostWhere == kHostWhereAtHome) != atHome)
-	{
-		LogErrorString("hudson: the Host row didn't move to the choice hostrow= asked for");
-		ReleaseAllAvPMenuGfx();
-		return false;
-	}
-
-	LogString(atHome ? "hudson: the Host row says At home" : "hudson: the Host row says Online");
+	// (Modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": there's no Host row to set any more; every game is hosted
+	// online.)
 	MenuSecondsForARun(1);
 	MenuFrameForARun("multiplayer.png");
 
@@ -2139,17 +2075,17 @@ extern void AvP_UpdateMenus(void)
 		int selection = AvPMenus.CurrentlySelectedElement;
 		bool listChanged = false;
 
-		// The LAN's answers, or the relay server's
-		if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())
+		// The server's online list. Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over
+		// nyc3"): it's the only one, as there's no search on this network any more.
+		if (TheRelayGamesHaveCome())
 		{
 			listChanged = true;
 		}
 
-		// Every 5 s while the page is open, it asks again (online_screens.h's search, 12 times at most while it finds nothing): a new search
-		// of the LAN, which empties the list of games found, and the list of games
+		// Every 5 s while the page is open, it asks again (online_screens.h's search, 12 times at most while it finds nothing): the list of
+		// games found starts again empty, and the server's list is asked again
 		if (OnlinePage_TimeToAskAgain())
 		{
-			Net_StopSearchingForSessions();
 			Net_FindAvPSessions();
 			RelayList_FindGames();
 			listChanged = true;
@@ -2351,31 +2287,14 @@ static void CountTheRowsOnThisPage(void)
 	}
 }
 
-// The Multiplayer page's Host row's two choices: "Online (New York)", with the server's name as servers.cfg gives it, made safe first, and
-// "At home". A name over 20 letters is cut short here, so the row fits the page in the big font; the yes page shows it whole. Added
-// 2026-11-10 by Melanikus for the AvP port (PO's ruling).
-static char **HostWhereNames(void)
-{
-	static char online[64];
-	static char atHome[64];
-	static char *names[2] = { online, atHome };
-	char server[kServersCfgNameLetters + 1];
-	OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));
-	snprintf(online, sizeof(online), "%s (%.20s)", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ONLINE), server);
-	snprintf(atHome, sizeof(atHome), "%s", GetTextString(TEXTSTRING_MULTIPLAYER_HOSTWHERE_ATHOME));
-	return names;
-}
-
 static void SetupNewMenu(enum AVPMENU_ID menuID)
 {
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
 	AvPMenus.CurrentMenu = menuID;
 
-	// Leaving the page of games found. Nothing else would close what the search has open on the network until the next search.
+	// Leaving the page of games found. Nothing else would close what the page has open on the network.
 	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
 	{
-		Net_StopSearchingForSessions();
-
 		// And the page's own timing of the server's relay, for its ping column, with its socket (added 2026-11-10 by Melanikus for the AvP
 		// port; networking.h)
 		Net_StopTimingTheRelay();
@@ -2462,7 +2381,12 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			{
 				const char *const why = Net_HostFailedWhy();
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
-				ShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);
+
+				// A server being asked again (the host asked it afresh) is waited for there, as before a first answer (Third's finding)
+				if (!AHostWaits(kHostWaitingToOpenCoop))
+				{
+					ShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);
+				}
 				return;
 			}
 			break;
@@ -2556,7 +2480,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 		}
 		case AVPMENU_MULTIPLAYERSELECTSESSION:
 		{
-			// send broadcast message to find servers
+			// The list of games found starts again empty, for the online list (nothing is sent on this network)
 			Net_FindAvPSessions();
 
 			if (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)
@@ -2681,10 +2605,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
-			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Host row and the Online access row are there when servers.cfg
-			// names a server (modified 2026-11-10 by Melanikus for the AvP port, beta.2: the access row was -dev only for beta.1, and the Host
-			// row is new, PO's ruling). They're set before the page's rows are counted.
-			MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0, HostWhereNames());
+			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Online access row is there when servers.cfg names a server
+			// (modified 2026-11-10 by Melanikus for the AvP port, beta.2: it was -dev only for beta.1). They're set before the page's rows
+			// are counted.
+			MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0);
 
 			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
 			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
@@ -4318,12 +4242,12 @@ static void ActUponUsersInput(void)
 	}
 }
 
-// Whether a game hosted now would be hosted online: when servers.cfg names a server (as Net_HostGame decides it, networking.cpp) and the
-// Host row says Online (menu_data.h, MP_HostWhere). Added 2026-11-10 by Melanikus for the AvP port, for the ways online
-// (ServerYesPage_WayIn): a host asks for the yes only when it would host online.
+// Whether a game hosted now would be hosted online: when servers.cfg names a server, as every game is (networking.cpp, Net_HostGame).
+// Added 2026-11-10 by Melanikus for the AvP port, for the ways online (ServerYesPage_WayIn); modified the same day (the owner's ruling for beta.2: "Everything over nyc3"):
+// there's no Host row and no game at home, so with no server named nothing is hosted, and the host says why.
 static bool HostsOnline(void)
 {
-	return Relay_ServerName()[0] != 0 && MP_HostWhere != kHostWhereAtHome;
+	return Relay_ServerName()[0] != 0;
 }
 
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
@@ -4925,11 +4849,8 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					netGameData.coopCampaignLevel = 0;
 				}
 
-				// Where the Host row says (menu_data.h, MP_HostWhere; added 2026-11-10 by Melanikus for the AvP port, PO's ruling): online
-				// through the server servers.cfg names, or a plain game at home
-				NetResult const hosted = MP_HostWhere == kHostWhereAtHome ?
-					Net_HostAtHome(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) :
-					Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);
+				// Online, through the server servers.cfg names, or not at all (modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3")
+				NetResult const hosted = Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);
 
 				if (hosted != NET_FAIL)
 				{
@@ -4937,9 +4858,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					SetLevelToLoadForThisNetworkGame();
 					SetBriefingTextForMultiplayer();
 				}
-				else
+				else if (!AHostWaits(kHostWaitingToStart))
 				{
-					// It wasn't hosted: the page says why, rather than nothing at all (added 2026-11-10, PO's ruling Q4)
+					// It wasn't hosted: the page says why, rather than nothing at all (added 2026-11-10, PO's ruling Q4). Unless the server is
+					// being asked again: the host asks it afresh (Net_HostGame), so a server whose last asking failed reads as not answered yet,
+					// and then the page waits for its answer, as before a first answer (Third's finding on rc1, 2026-11-10)
 					ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());
 				}
 			}

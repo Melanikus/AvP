@@ -1,5 +1,6 @@
 // Modified 2026-11-10 by Melanikus for the AvP port:
-//   whether an address is on the player's home network, where a plain game is still allowed under version 2 (NetAddress_IsThisNetwork, #188)
+//   whether an address is on the player's home network (NetAddress_IsThisNetwork, #188), and who has asked about games lately
+//   (NetAddressHasRoom): both went the same day with the plain game (the owner's ruling for beta.2, "Everything over nyc3")
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   how long ago a joiner heard about a lift car is counted by the machine's own clock (NetLiftMsSince, #90)
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -319,48 +320,6 @@ inline bool NetCountPartsOnTheList(const unsigned char *parts, size_t size, cons
 inline bool NetPoolIsShort(int inUse, int total, int keptBack)
 {
 	return inUse >= total - keptBack;
-}
-
-// WHO HAS ASKED LATELY. For the question anyone can send: one address gets only so many answers a second, under the limit for everyone. The table is small, and the oldest place is taken for an address it hasn't heard of, so flooding from many addresses only pushes each other out.
-struct NetAddressCount
-{
-	unsigned int address;
-	unsigned int secondStarted;
-	int used;
-};
-
-inline bool NetAddressHasRoom(NetAddressCount *table, int tableSize, unsigned int address, unsigned int now, int most)
-{
-	NetAddressCount *place = &table[0];
-
-	for (int i = 0; i < tableSize; i++)
-	{
-		if (table[i].used != 0 && table[i].address == address)
-		{
-			place = &table[i];
-			break;
-		}
-
-		if (table[i].used == 0 || now - table[i].secondStarted > now - place->secondStarted)
-		{
-			place = &table[i];
-		}
-	}
-
-	if (place->used == 0 || place->address != address || now - place->secondStarted >= 1000)
-	{
-		place->address = address;
-		place->secondStarted = now;
-		place->used = 0;
-	}
-
-	if (place->used >= most)
-	{
-		return false;
-	}
-
-	place->used++;
-	return true;
 }
 
 // The same as NetThisSecondHasRoom below, for something counted in amounts, like bytes. What's refused isn't counted.
@@ -691,46 +650,6 @@ inline bool NetCampaignDifficultyIsGood(int difficulty)
 inline bool NetCampaignPlaceIsGood(int campaign, int place, int levelsInCampaign)
 {
 	return campaign == 0 ? place == 0 : (place >= 0 && place < levelsInCampaign);
-}
-
-// Whether an IPv4 address is on the player's own home network, where a plain, unsealed game is still allowed when version 2 is on (#188,
-// the owner's ruling "Keep plain LAN at home", 2026-11-09). Beyond it, a game is sealed through the relay or doesn't happen.
-//
-// Home is:
-// - 10.0.0.0 to 10.255.255.255, 172.16.0.0 to 172.31.255.255, and 192.168.0.0 to 192.168.255.255: the ranges set aside for private
-//   networks (RFC 1918), which no router passes onto the internet;
-// - 127.0.0.0 to 127.255.255.255: this machine itself;
-// - 169.254.0.0 to 169.254.255.255: link-local, the address a PC gives itself when nothing hands it one, which can't be routed beyond the
-//   cable (PO's ruling, 2026-11-09).
-// Everything else isn't: every public address; 100.64.0.0 to 100.127.255.255, which an internet provider shares among many customers
-// (carrier-grade NAT), so strangers on the same provider would look like home (the owner's ruling); 0.0.0.0/8; multicast, 224 and up to
-// 239; and 240 and up, broadcast included.
-//
-// What it can't tell: a VPN that hands out private addresses (WireGuard's 10.x) puts players across the internet inside 10/8, so to this
-// they're home. Their game is plain inside the tunnel, which the tunnel itself encrypts.
-//
-// The address is as ENet keeps it: its four numbers in the order they're written (10.0.0.1 is 10, 0, 0, 1), first in the lowest byte.
-inline bool NetAddress_IsThisNetwork(unsigned int enetHost)
-{
-	unsigned int const first = enetHost & 0xFFu;
-	unsigned int const second = (enetHost >> 8) & 0xFFu;
-
-	if (first == 10 || first == 127)
-	{
-		return true;
-	}
-
-	if (first == 172 && second >= 16 && second <= 31)
-	{
-		return true;
-	}
-
-	if (first == 192 && second == 168)
-	{
-		return true;
-	}
-
-	return first == 169 && second == 254;
 }
 
 #endif

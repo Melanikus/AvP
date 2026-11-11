@@ -41,7 +41,7 @@ enum
 
 static_assert(kCoopMapNameBytes == kCustomMapNameMost + 1, "the message has to hold exactly the longest name a custom map can have");
 
-// Where this machine stands with the lobby. The same three numbers go in the description of a game that others find: see Net_AddSession.
+// Where this machine stands with the lobby. The same three numbers go in the description of a game that others find, on the server's list.
 enum CoopLobbyState
 {
 	kCoopLobbyNone = 0,       // no lobby: every kind of message goes where it always has

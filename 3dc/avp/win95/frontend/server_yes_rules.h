@@ -40,8 +40,8 @@ inline ServerYesChoice ServerYes_Choice(int row)
 // - the Online access page: it would send the player's request to the server, so it always asks; after a No, back to the Multiplayer page;
 // - a host (Start game, Co-op campaign): it asks only when it hosts online. A game hosted at home uses no server, so it never asks.
 //   After a No, back to the Multiplayer page, where the player can choose to host at home;
-// - Find games: it would read the server's list, so it always asks. After a No it goes on to the games page anyway, with the games on
-//   this network only: without the yes the list is never started (relay_list.cpp, Start), so nothing goes to the server.
+// - Find games: it would read the server's list, so it always asks. After a No, back to the Multiplayer page too (modified 2026-11-10,
+//   the owner's ruling for beta.2: "Everything over nyc3": there are no games on this network to show without it).
 enum ServerYesWay
 {
 	kServerYesNotAWay,       // any other row: it goes where it always went
@@ -54,12 +54,6 @@ enum ServerYesWay
 inline bool ServerYes_WayAsks(ServerYesWay way, bool hostsOnline)
 {
 	return way == kServerYesWayAccess || way == kServerYesWayFindGames || (way == kServerYesWayHost && hostsOnline);
-}
-
-// Whether a No still goes on to the page the way was going to (Find games alone); every other way goes back to the Multiplayer page
-inline bool ServerYes_NoGoesOn(ServerYesWay way)
-{
-	return way == kServerYesWayFindGames;
 }
 
 // The line saying where the server is: its address as servers.cfg has it, then where that is, as "104.131.35.41, on the internet". Both

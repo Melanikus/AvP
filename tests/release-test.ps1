@@ -596,15 +596,16 @@ $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
 Check ($result.Code -eq 0 -and $result.Text.Contains($letThrough)) "the real repository's Hudson stays asleep in a player's game. It said: $($result.Text)"
 
 # --- check-online-play.ps1: the owner's rulings (2026-11-09 and 2026-11-10) that a player's game plays online only the safe way: only with
-# the servers its servers.cfg names, only by protocol version 2, only sealed, and plain only at home. Each way it can be broken is refused,
+# the servers its servers.cfg names, only by protocol version 2, only sealed, and never plain. Each way it can be broken is refused,
 # for its own rule's reason, and each safe way of writing it is let through. The model is the smallest such game, in the real code's
 # forms. Written 2026-11-10 by Melanikus for the AvP port (#175 PR 3b), in place of check-servers-dev-only.ps1's cases.
 $onlineGood = @{ '3dc/networking.h' = (@'
 const int kMultiplayerVersion = 116;
-'@ + "`n"); '3dc/net_checks.h' = (@'
-inline bool NetAddress_IsThisNetwork(unsigned int enetHost)
+'@ + "`n"); '3dc/net_host.cpp' = (@'
+ENetHost *Net_MakeENetHost(const ENetAddress *address, size_t connections, size_t mostMessageBytes, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth)
 {
-	return (enetHost & 0xFFu) == 10u;
+	ENetHost *const host = enet_host_create(address, connections, kNetChannels, incomingBandwidth, outgoingBandwidth);
+	return host;
 }
 '@ + "`n"); '3dc/networking.cpp' = (@'
 static bool RelayControlDatagram(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
@@ -617,18 +618,11 @@ static void RelayV2TakeOpened(uint32_t now)
 	RelayControlDatagram(opened[0].fromPort, opened[0].message, kBytes, now);
 }
 
-// A home game hears the home network alone
-static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
+static void LoopbackOnlyAddress(ENetAddress *address)
 {
-	(void)event;
-
-	if (!NetAddress_IsThisNetwork(on->receivedAddress.host))
-	{
-		homeStrangersDropped++;
-		return 1;
-	}
-
-	return 0;
+	ENetSocket const probe = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+	enet_socket_connect(probe, &to);
+	enet_socket_destroy(probe);
 }
 
 static int ENET_CALLBACK NothingIntercept(ENetHost *on, ENetEvent *event)
@@ -664,31 +658,25 @@ static void RelayHostGiveUp(const char *reason)
 	RelayHostNews(kNetRelayHostEnded, reason);
 }
 
-static bool OpenDiscoverySocket()
+void Net_TimeTheRelayForThePage(void)
 {
-	return true;
+	pageTimingSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+
+	if (enet_socket_bind(pageTimingSocket, &any) < 0)
+	{
+		return;
+	}
 }
 
-bool Net_UpdateSessionList(int &SelectedItem)
+NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
 {
-	while (Heard(&address, &newSession))
-	{
-		if (!NetAddress_IsThisNetwork(address.host))
-		{
-			searchAnswersFromOutside++;
-			continue;
-		}
+	bool const online = !netGameData.skirmishMode;
 
-		newSession.host = address.host;
-		Net_AddSession(newSession);
+	if (online && !Relay_ServerName()[0])
+	{
+		return NET_FAIL;
 	}
 
-	return true;
-}
-
-static NetResult HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level, bool atHome)
-{
-	bool const online = !atHome && Relay_ServerName()[0] != 0;
 	const char *notAgreedWhy = NULL;
 
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
@@ -701,33 +689,30 @@ static NetResult HostGame(char *playerName, char *sessionName, int species, uint
 		RelayList_FindRelays();
 	}
 
-	host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
-
-	if (OnTheRemoteRoute(ServerAddress))
+	if (!netGameData.skirmishMode)
 	{
-		host->intercept = RelayIntercept;
-	}
-	else if (!online)
-	{
-		host->intercept = HomeIntercept;
-	}
+		host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
 
-	const char *notOnline = NULL;
+		if (NULL == host)
+		{
+			return NET_FAIL;
+		}
 
-	if (online && !RelayHostStart(&notOnline))
-	{
-		enet_host_destroy(host);
-		host = NULL;
-		return NET_FAIL;
-	}
+		if (OnTheRemoteRoute(ServerAddress))
+		{
+			host->intercept = RelayIntercept;
+		}
 
-	if (online)
-	{
+		const char *notOnline = NULL;
+
+		if (!RelayHostStart(&notOnline))
+		{
+			enet_host_destroy(host);
+			host = NULL;
+			return NET_FAIL;
+		}
+
 		Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay {");
-	}
-	else if (OpenDiscoverySocket())
-	{
-		LogString("net: searches are answered");
 	}
 
 	return NET_OK;
@@ -737,7 +722,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 {
 	ServerAddress.host = SessionData[sessionNumber].host;
 
-	if (!SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))
+	if (!SessionData[sessionNumber].throughRelay)
 	{
 		return NET_FAIL;
 	}
@@ -747,10 +732,6 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))
 	{
 		host->intercept = RelayIntercept;
-	}
-	else if (!SessionData[sessionNumber].throughRelay)
-	{
-		host->intercept = HomeIntercept;
 	}
 
 	if (SessionData[sessionNumber].throughRelay)
@@ -776,33 +757,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	return NET_OK;
 }
 
-static bool AskEveryoneAboutGames()
-{
-	if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))
-	{
-		return false;
-	}
-
-	ENetAddress typed;
-
-	if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))
-	{
-		typedRefusedWhy = kTypedNotAtHome;
-	}
-	else if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !AskAboutGames(typed.host))
-	{
-		Con_PrintError("Couldn't ask the address that was typed");
-	}
-
-	return true;
-}
-
 void Net_FindAvPSessions()
 {
-	if (!OpenDiscoverySocket())
-	{
-		return;
-	}
+	NumberOfSessionsFound = 0;
 }
 '@ + "`n"); '3dc/relay_list.cpp' = (@'
 namespace
@@ -1013,7 +970,7 @@ void Weaker()
 		LetEveryoneIn();
 	}
 }
-'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 201 names DevMode' },
+'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 157 names DevMode' },
     @{ What = 'D: and in any relay_ file'; None = $false; Files = @{ '3dc/relay_auto.cpp' = (@'
 bool Auto()
 {
@@ -1284,7 +1241,7 @@ void Sneak(void)
 	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
 '@); To = (@'
 	if (false)
-'@) } }; Reason = 'Y: HostGame (3dc/networking.cpp line 80) must host nothing online before the player''s yes' },
+'@) } }; Reason = 'Y: Net_HostGame (3dc/networking.cpp line 61) must host nothing online before the player''s yes' },
     @{ What = 'V: a v2 draft switch named anywhere is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 bool Which()
 {
@@ -1315,7 +1272,7 @@ static bool RelayHostStart
 }
 
 static bool RelayHostStart
-'@) } }; Reason = 'V: 3dc/networking.cpp line 37 reads a relay message: only RelayV2TakeOpened may' },
+'@) } }; Reason = 'V: 3dc/networking.cpp line 30 reads a relay message: only RelayV2TakeOpened may' },
     @{ What = 'V: the relay''s intercept letting the rest through is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	relayStrangersDropped++;
 	return 1;
@@ -1327,44 +1284,50 @@ static bool RelayHostStart
 }
 
 static bool RelayHostStart
-'@) } }; Reason = 'V: RelayIntercept (3dc/networking.cpp line 30) must end by dropping whatever comes without the channel' },
+'@) } }; Reason = 'V: RelayIntercept (3dc/networking.cpp line 23) must end by dropping whatever comes without the channel' },
     @{ What = 'S: a host through the relay that doesn''t seal is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	host->sendHook = RelaySealedSend;
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'S: RelayHostStart (3dc/networking.cpp line 41) must hear the relay alone and seal what the host sends' },
-    @{ What = 'S: an online host that goes on without the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-		host = NULL;
-		return NET_FAIL;
-	}
+'@) } }; Reason = 'S: RelayHostStart (3dc/networking.cpp line 34) must hear the relay alone and seal what the host sends' },
+    @{ What = 'S: a host that goes on without the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+			host = NULL;
+			return NET_FAIL;
+		}
 
-	if (online)
+		Con_PrintMessage
 '@); To = (@'
-		host = NULL;
-	}
+			host = NULL;
+		}
 
-	if (online)
-'@) } }; Reason = 'S: HostGame (3dc/networking.cpp line 80) must host an online game through the relay or not at all' },
-    @{ What = 'S: a lost relay that leaves the host hearing the home network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		Con_PrintMessage
+'@) } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+    @{ What = 'S: a host handed over before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		const char *notOnline = NULL;
+'@ + "`n"); To = (@'
+		const char *notOnline = NULL;
+		if (Plain()) { return NET_OK; }
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+    @{ What = 'S: the relay asked only sometimes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		if (!RelayHostStart(&notOnline))
+'@ + "`n"); To = (@'
+		if (Sometimes())
+		if (!RelayHostStart(&notOnline))
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+    @{ What = 'S: a host made in a block of its own before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
+'@ + "`n"); To = (@'
+		if (Plain())
+		{
+			host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
+			return NET_OK;
+		}
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 61) must make one host and give it to the relay' },
+    @{ What = 'S: a lost relay that leaves the host hearing anyone is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		host->intercept = NothingIntercept;
 '@ + "`n"); To = (@'
-		host->intercept = HomeIntercept;
-'@ + "`n") } }; Reason = 'S: RelayHostGiveUp (3dc/networking.cpp line 48) must end the online game, which then hears nothing' },
-    @{ What = 'S: the search port opened after a lost relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	RelayHostNews(kNetRelayHostEnded, reason);
-'@ + "`n"); To = (@'
-	RelayHostNews(kNetRelayHostEnded, reason);
-	OpenDiscoverySocket();
-'@ + "`n") } }; Reason = 'S: 3dc/networking.cpp line 56 opens the search port' },
-    @{ What = 'S: and opened for an online host'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	if (online)
-	{
-		Con_PrintMessage
-'@); To = (@'
-	if (!online)
-	{
-		Con_PrintMessage
-'@) } }; Reason = 'S: 3dc/networking.cpp line 119 opens the search port' },
+		host->intercept = AnyoneIntercept;
+'@ + "`n") } }; Reason = 'S: RelayHostGiveUp (3dc/networking.cpp line 41) must end the online game, which then hears nothing' },
     @{ What = 'S: a joiner that connects when handshake B fails is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (relayEndToEndJoinFailed)
 		{
@@ -1373,59 +1336,96 @@ static bool RelayHostStart
 		}
 '@ + "`n"); To = (@'
 
-'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 127) must make handshake B (RelayEndToEndJoin) before it connects' },
-    @{ What = 'L: a home game that hears the internet is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-		homeStrangersDropped++;
-		return 1;
+'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 111) must make handshake B (RelayEndToEndJoin) before it connects' },
+    @{ What = 'P: a host with no server named is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && !Relay_ServerName()[0])
 '@ + "`n"); To = (@'
-		homeStrangersDropped++;
-		return 0;
-'@ + "`n") } }; Reason = 'L: HomeIntercept (3dc/networking.cpp line 12) must first drop anything from outside this network' },
-    @{ What = 'L: a home host that doesn''t start with HomeIntercept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	else if (!online)
-	{
-		host->intercept = HomeIntercept;
-	}
-'@ + "`n"); To = (@'
-
-'@) } }; Reason = 'L: HostGame (3dc/networking.cpp line 80) must start every home host hearing this network alone' },
-    @{ What = 'L: a direct join beyond this network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	if (!SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))
+	if (false)
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+    @{ What = 'P: and one refused only inside another block'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && !Relay_ServerName()[0])
 	{
 		return NET_FAIL;
 	}
-
 '@ + "`n"); To = (@'
+	if (Later())
+	{
+		if (online && !Relay_ServerName()[0])
+		{
+			return NET_FAIL;
+		}
+	}
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+    @{ What = 'P: and a skirmish made online is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	bool const online = !netGameData.skirmishMode;
+'@ + "`n"); To = (@'
+	bool online = !netGameData.skirmishMode;
+	online = false;
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 61) must refuse an online game with no server first' },
+    @{ What = 'P: a join that isn''t through the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n"); To = (@'
+	if (false)
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 111) must refuse a game that isn''t through the relay first' },
+    @{ What = 'P: and one refused only sometimes'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n"); To = (@'
+	if (Sometimes())
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 111) must refuse a game that isn''t through the relay first' },
+    @{ What = 'P: an ENet host made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
-'@) } }; Reason = 'L: Net_ConnectToSession (3dc/networking.cpp line 127) must join a plain game on this network only' },
-    @{ What = 'L: a host''s intercept cleared is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+void Elsewhere()
+{
+	host = Net_MakeENetHost(NULL, 1, 0, 0, 0);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes an ENet host: only Net_HostGame and Net_ConnectToSession may' },
+    @{ What = 'P: and one made without Net_MakeENetHost'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ByItself()
+{
+	host = enet_host_create(NULL, 1, 1, 0, 0);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes an ENet host by itself: only Net_MakeENetHost' },
+    @{ What = 'P: a socket that sends to the whole network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Everyone()
+{
+	enet_socket_set_option(s, ENET_SOCKOPT_BROADCAST, 1);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes a socket that sends to the whole network' },
+    @{ What = 'P: a socket made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Listen()
+{
+	s = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 makes a socket: only LoopbackOnlyAddress and Net_TimeTheRelayForThePage may' },
+    @{ What = 'P: a port given to any other socket is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	enet_socket_connect(probe, &to);
+'@ + "`n"); To = (@'
+	enet_socket_bind(probe, &any);
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 14 gives a socket a port: only Net_TimeTheRelayForThePage may' },
+    @{ What = 'P: a search that asks this network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	NumberOfSessionsFound = 0;
+'@ + "`n"); To = (@'
+	NumberOfSessionsFound = 0;
+	Ask(ENET_HOST_BROADCAST);
+'@ + "`n") } }; Reason = 'P: Net_FindAvPSessions (3dc/networking.cpp line 150) must only start the list of games found again' },
+    @{ What = 'P: the plain game''s own names coming back are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
+{
+	return 0;
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 155 names HomeIntercept' },
+    @{ What = 'P: a host''s intercept cleared is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
 void Forget()
 {
 	host->intercept = NULL;
 }
-'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 201 clears a host''s intercept' },
-    @{ What = 'L: a typed address asked without the home check is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))
-'@); To = (@'
-	if (enet_address_set_host_ip(&typed, IPAddressString) != 0)
-'@) } }; Reason = 'L: 3dc/networking.cpp line 183 asks a typed address about its games outside the else of' },
-    @{ What = 'L: another address asked is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-	ENetAddress typed;
-'@ + "`n"); To = (@'
-	AskAboutGames(otherHost);
-	ENetAddress typed;
-'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 177 asks otherHost about its games' },
-    @{ What = 'L: a search''s answer from outside this network kept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
-		if (!NetAddress_IsThisNetwork(address.host))
-		{
-			searchAnswersFromOutside++;
-			continue;
-		}
-
-'@ + "`n"); To = (@'
-
-'@) } }; Reason = 'L: 3dc/networking.cpp line 68 adds a game a search found without if (!NetAddress_IsThisNetwork(address.host))' }
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 157 clears a host''s intercept' }
 )
 
 foreach ($case in $onlineCases)

@@ -207,7 +207,6 @@ bool Hudson_NetIsCampaign();
 bool Hudson_NetIsHostile();
 
 // typed=yes: the joiner finds the game the way a player does who has typed its address
-bool Hudson_NetIsTyped();
 
 // The campaign has ended, so the run does too.
 void Hudson_NetCampaignIsOver();

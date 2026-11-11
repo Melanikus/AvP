@@ -52,20 +52,19 @@
 //   the log says when our ENet has told an older version of the game no
 //   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
-//   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
 //   the settings file's port and speeds are checked, and one the game can't use is put back to the game's own, with a log line
 //   the screen says which connection a joining player is, never their address or port
 //   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 //   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
 //   (net_stats.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   a host's log says when it starts answering searches, or that it can't, when the first search question comes, and every minute how
-//   many came and were answered, never from which address (net_search_log.h)
 //   the 10-second report also says how this machine's frames went, and how often other players' and NPCs' figures waited for news
 //   (net_watch.h)
 // Modified 2026-11-08 by Melanikus for the AvP port (Hudson's branch, never pushed):
-//   a Hudson run with net= only uses this machine's own address, opens no socket for finding games unless it's trying the search, never
-//   asks the whole network or an address that isn't this machine's, and logs who joins, what arrives and who leaves
+//   a Hudson run with net= only uses this machine's own address, and logs who joins, what arrives and who leaves
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"):
+//   there's no search for games on this network any more, neither asking nor answering, and no socket for it: every game is found on
+//   the server's online list, and played through its relay, sealed (REMOVED-CODE.md says what went)
 // Modified 2026-11-09 by Melanikus for the AvP port (Hudson's branch, never pushed):
 //   a net= run's "this machine only" also holds through the relay: it uses only a relay on this machine, hosting or joining
 // Modified 2026-11-10 by Melanikus for the AvP port (#175):
@@ -85,7 +84,6 @@
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
-#include "net_search_log.h"
 #include "net_relay.h"
 #include "net_identity.h"
 #include "net_identity_run.h"
@@ -108,15 +106,10 @@ static ENetAddress  ClientAddress;
 static ENetPeer     *ServerPeer = NULL;
 static bool net_IsInitialised = false;
 
-static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
-
 // A Hudson run with net= is two games on this machine, and it must open nothing on any network the machine is on: the host and the client use 127.0.0.1 only,
 // and there's no socket for finding games, because the client knows where to go. Only hudson.cpp sets this, before the game's networking starts. See
 // tools/hudson/run-net-pair.ps1, which checks what really happened, and ends both games if either has anything open on another address.
 bool NetLoopbackOnly = false;
-
-// A test run can search for a game the way a player does, by a typed address, as long as that stays on this machine's own address
-bool NetLoopbackSearch = false;
 
 // Whether an address is this machine's own, 127.x.x.x, the only kind a Hudson run with net= may ask. ENet keeps an address's four numbers in the
 // order they're sent on the network, and the game only runs on x86, which keeps the first byte lowest, so the 127 is the lowest byte.
@@ -144,26 +137,11 @@ static const size_t kMostClients = 7;
 // As many letters as the address page takes, with room for its end
 static const size_t kMostTypedAddressLetters = 16;
 
-// When this search last asked. A broadcast can get lost on a real network, so it asks again each second.
-static unsigned int sessionLastAskedAt = 0;
-static bool AskEveryoneAboutGames();
 
 // How many messages one client may send in a second. A game sends one a frame, and this is far above any frame rate that matters. Past it they're dropped, so a flood can't use the host to reach everyone else.
 static const int kMostMessagesEachSecond = 1000;
 static unsigned int messagesSecond[kMostClients + 1];
 static int messagesUsed[kMostClients + 1];
-
-// How many times a second this game answers people looking for games. Far more than a real LAN needs.
-static const int kMostSessionAnswersEachSecond = 30;
-
-// Anyone can send the question from an address that isn't theirs. This keeps one address from using up the answers meant for everyone.
-static const int kMostSessionAnswersToOneAddressEachSecond = 2;
-static NetAddressCount sessionAskers[32];
-
-// A search's question is as big as the answer it asks for, so an answer is never bigger than its question. Someone sending questions from an
-// address that isn't theirs could otherwise use our hosts to send more at that address than they sent themselves. The question is a header,
-// then nothing, to the answer's size, and a host answers no other size.
-static const size_t kSearchQuestionBytes = sizeof(MessageHeader) + sizeof(SessionDescription);
 
 // How long a connection has to say who it is. ENet's own handshake has finished by then, so a real client only takes a moment. Without this, seven silent connections would fill the game for good.
 static const unsigned int kMostMillisecondsToBeLetIn = 15000;
@@ -214,11 +192,6 @@ static unsigned int bytesSecond[kMostClients + 1];
 static int bytesUsed[kMostClients + 1];
 
 static uint32_t netPortNumber = 23513;
-static const uint32_t broadcastPort = 23514; // checkme
-
-const int kBroadcastID = 255;
-static uint32_t sessionCheckTimer = 0;
-const uint32_t  sessionCheckTimeout = 5000; // 5 second timeout
 
 static uint32_t incomingBandwidth = 0;
 static uint32_t outgoingBandwidth = 0;
@@ -1218,32 +1191,16 @@ static bool PeerIsThroughRelay(const ENetPeer *peer)
 
 // SEALED OR NOTHING (#188; networking.h says the rule). Added 2026-11-10 by Melanikus for the AvP port. The game's own fixed words for each
 // way a game is refused or ended, and what's counted for the log. For every game since #175 PR 3a.
-static const char *const kNotAtHome = "that game's host isn't on your home network, and a game beyond it is played only through the online list, sealed";
-static const char *const kTypedNotAtHome = "that address isn't on your home network: a game beyond it is played only through the online list, sealed";
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): there's no plain game, at home or anywhere, so a game
+// not through a server's relay is refused, and so is a host with no server to go through.
+static const char *const kNotThroughTheList = "that game isn't on the online list, and a game is played only through a server's relay, sealed";
+static const char *const kNoServerSet = "no server is set in servers.cfg, and a game is hosted only through a server's relay, sealed";
 static const char *const kServerNotYet = "the server hasn't answered yet";
 static const char *const kServerNotAgreed = "you haven't said yes to the server in servers.cfg yet";   // #175's last part (2026-11-10)
 static const char *const kRelayCantBeUsed = "the server's relay can't be used";
 static const char *const kNoIdentity = "this game's identity couldn't be made";
-static const char *hostFailedWhy = NULL;       // why the last Net_HostGame or Net_HostAtHome failed (Net_HostFailedWhy)
+static const char *hostFailedWhy = NULL;       // why the last Net_HostGame failed (Net_HostFailedWhy)
 static const char *joinRefusedWhy = NULL;      // why the last Net_ConnectToSession refused a game before opening anything (Net_JoinRefusedWhy)
-static const char *typedRefusedWhy = NULL;     // why the last search didn't ask the typed address (Net_TypedAddressRefusedWhy)
-static unsigned int homeStrangersDropped = 0;  // a home game's packets from outside the home network, dropped before ENet read them
-static unsigned int searchAnswersFromOutside = 0;   // a search's answers from outside the home network, ignored
-
-// A home game's ENet host, or a joiner's of one: it hears the home network alone. Anything from an address that isn't on it is dropped here,
-// before ENet reads a byte of it, so a forwarded router port can't bring an internet joiner into a plain game (#188).
-static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
-{
-	(void)event;
-
-	if (!NetAddress_IsThisNetwork(on->receivedAddress.host))
-	{
-		homeStrangersDropped++;
-		return 1;
-	}
-
-	return 0;
-}
 
 // An online host whose relay is lost: the game can't go on sealed, so it has ended, and nothing at all reaches ENet any more, until the host
 // is destroyed (#188). Never a way back to a plain game.
@@ -1840,7 +1797,7 @@ void Net_RelayPlayStateNow(NetRelayPlayState *state)
 // host's channel times it (net_relay_v2.h's NetRelayV2Picker): kNetRelayEchoes COOKIE_ASKs, each 1,200 bytes and answered with 64, which
 // keeps nothing on the relay, opens nothing, and needs no approval. The list names the relay only once the player has said yes to its line
 // and the server's keys have matched it (relay_list.h), so nothing is sent before that. The asks go from a socket of the page's own, open
-// only while they're timed, and closed with the page (Net_StopSearchingForSessions); only an answer from the relay's own address is heard,
+// only while they're timed, and closed with the page (Net_StopTimingTheRelay); only an answer from the relay's own address is heard,
 // and the picker takes only a cookie, from its control port, for an ask it sent. Until it's done the page shows "...".
 int const kPageTimingNotYet = 0;     // the list hasn't named the relay yet: before the yes, or before the server's check
 int const kPageTimingMeasuring = 1;
@@ -2040,7 +1997,7 @@ static uint16_t RelayJoin(const char *region, const char *code)
 
 // Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list (relay_list.h, PROTOCOL.md 7014de1) goes on the same list
 // of sessions a search of this network fills, and is joined the same way (Net_ConnectToSession). What the list says is the host's word, sent
-// to the list and on to us, so each part is checked here as Net_AddSession checks a search's answer: the lobby state, a code, a region, the
+// to the list and on to us, so each part is checked here, as a search's answer was before the search went: the lobby state, a code, a region, the
 // names' lengths, a slot left, and the level, which has to be one this machine has, picked by its number, its name and its game style, as a
 // game found on this network is (GetLocalMultiplayerLevelIndex). Gives back whether it went on the list.
 static bool AddRelaySession(const char *code, const char *region, const char *name, int players, int maxPlayers, int version, uint16_t gameStyle,
@@ -2109,7 +2066,7 @@ static bool AddRelaySession(const char *code, const char *region, const char *na
 	entry.Name[sizeof(entry.Name) - 1] = 0;
 	entry.AllowedToJoin = shownPlayers < shownMost;
 
-	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns, as for a LAN game (Net_AddSession): the level's name cut to
+	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns, as a LAN game's were: the level's name cut to
 	// fit and ended, the style, and the counts as the name shows them
 	strncpy(entry.levelName, levelName, sizeof(entry.levelName) - 1);
 	entry.levelName[sizeof(entry.levelName) - 1] = 0;
@@ -2269,331 +2226,11 @@ const char* Net_MessageTypeToString(uint32_t messageType)
 	}
 }
 
-static void LogDroppedMessage(const char *why);
-static const int kMostGamesFromOneAddress = 2;
-
-static void Net_AddSession(SessionDescription &session)
-{
-	uint16_t gameStyle = session.gameStyle;
-	uint16_t level     = session.level;
-
-	// This comes from anyone who answers a search, like everything else here
-	if (!CoopLobby_StateIsReal(session.coopLobby))
-	{
-		LogDroppedMessage("a game described itself with a lobby state there isn't");
-		return;
-	}
-
-	// the session description comes from any machine on the LAN: SessionData (and the session menu,
-	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
-	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
-	{
-		static unsigned long long ignoredSessions = 0;
-		if (LogThisDrop(ignoredSessions))
-		{
-			std::stringstream sstream;
-			sstream << "Net_AddSession - session list is full, ignoring session info (" << ignoredSessions << " so far)";
-			Con_PrintError(sstream.str());
-		}
-		return;
-	}
-
-	// the host sends both names NUL-terminated (Net_CreateSession); make sure of it
-	session.levelName[kLevelNameSize - 1]     = '\0';
-	session.sessionName[kSessionNameSize - 1] = '\0';
-
-	// Anyone can answer a search. One address can't fill the list and push real games off it.
-	int gamesFromThisAddress = 0;
-
-	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
-	{
-		gamesFromThisAddress += SessionData[i].host == session.host ? 1 : 0;
-	}
-
-	if (gamesFromThisAddress >= kMostGamesFromOneAddress)
-	{
-		LogDroppedMessage("one address answered a search with more games than a machine runs");
-		return;
-	}
-
-	// A game that answers twice is one game
-	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
-	{
-		if (memcmp(&SessionData[i].Guid, &session.guidInstance, sizeof(session.guidInstance)) == 0)
-		{
-			return;
-		}
-	}
-
-	char *name = SessionData[NumberOfSessionsFound].Name;
-	const size_t nameSize = sizeof(SessionData[NumberOfSessionsFound].Name);
-
-	SessionData[NumberOfSessionsFound].host = session.host;
-	SessionData[NumberOfSessionsFound].port = session.port;
-	SessionData[NumberOfSessionsFound].throughRelay = false;   // a slot is used again from search to search, so a relay game's mark goes
-	memset(SessionData[NumberOfSessionsFound].relayCode, 0, sizeof(SessionData[NumberOfSessionsFound].relayCode));
-	memset(SessionData[NumberOfSessionsFound].relayRegion, 0, sizeof(SessionData[NumberOfSessionsFound].relayRegion));
-	SessionData[NumberOfSessionsFound].coopLobby = (char)session.coopLobby;
-
-	// bounded: a long session name used to overflow Name (40 bytes) into host/port
-	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
-	name[nameSize - 1] = '\0';
-
-	// Modified 2026-11-09 by Melanikus for the AvP port: the games page's columns (Fourth's online screens): the level's name, the game's
-	// style and its players, as the host said them. The name ends already (above); the page makes it safe and checks the numbers before it
-	// uses them (menus.h).
-	static_assert(sizeof(SessionData[0].levelName) == kLevelNameSize, "a LAN game's level name fits the games page's column exactly");
-	memcpy(SessionData[NumberOfSessionsFound].levelName, session.levelName, kLevelNameSize);
-	SessionData[NumberOfSessionsFound].gameStyle = session.gameStyle;
-	SessionData[NumberOfSessionsFound].players = session.nPlayers;
-	SessionData[NumberOfSessionsFound].maxPlayers = session.maxPlayers;
-
-	SessionData[NumberOfSessionsFound].Guid	= session.guidInstance;
-
-	if (session.nPlayers < session.maxPlayers) {
-		SessionData[NumberOfSessionsFound].AllowedToJoin = true;
-	}
-	else {
-		SessionData[NumberOfSessionsFound].AllowedToJoin = false;
-	}
-
-	// multiplayer version number (possibly)
-	if (session.version != kMultiplayerVersion)
-	{
-		float version = 1.0f + session.version / 100.0f;
-		SessionData[NumberOfSessionsFound].AllowedToJoin = false;
- 		_snprintf(name, nameSize - 1, "%s (V %.2f)", session.sessionName, version);
-		name[nameSize - 1] = '\0';
-	}
-	else
-	{
-		// get the level number in our list of levels (assuming we have the level)
-
-		int local_index = GetLocalMultiplayerLevelIndex(level, session.levelName, gameStyle);
-		// A lobby game stays on the list without its map, because its page is where this player is told so. It has no use for the place on the list.
-		if (local_index < 0 && session.coopLobby == kCoopLobbyNone)
-		{
-			// we don't have the level, so ignore this session
-			return;
-		}
-
-		SessionData[NumberOfSessionsFound].levelIndex = local_index < 0 ? 0 : local_index;
-	}
-
-	NumberOfSessionsFound++;
-}
-
-// THE SOCKET FOR FINDING GAMES. Other machines on the network can send to it, so it's only open while it has a job: for the few seconds after a player asks for the list of games, and while hosting, so that
-// others can find this game. A game doing neither has nothing open on any network. Gives back whether it's open.
-static bool OpenDiscoverySocket()
-{
-	// A Hudson run with net= opens nothing beyond this machine, and this socket would listen on every address it has. The client goes straight
-	// to the host, so nothing needs it, unless the run is trying the search by a typed address (NetLoopbackSearch), when it's kept to 127.0.0.1 below.
-	if (NetLoopbackOnly && !NetLoopbackSearch)
-	{
-		return false;
-	}
-
-	if (ENET_SOCKET_NULL != broadcastSocket)
-	{
-		return true;
-	}
-
-	broadcastSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
-
-	if (ENET_SOCKET_NULL == broadcastSocket)
-	{
-		Con_PrintError("OpenDiscoverySocket - Couldn't create broadcast socket");
-		return false;
-	}
-
-	enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_NONBLOCK,  1);
-	enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_BROADCAST, 1);
-
-	ENetAddress thisHost;
-	thisHost.host = ENET_HOST_ANY;
-	thisHost.port = broadcastPort;
-
-	// A Hudson run's search stays on this machine's own address. Two copies on one machine can't share a port: the host opens this first and gets
-	// the known one, and the joiner, finding it taken, asks from any free one, which is all a search needs.
-	if (NetLoopbackOnly)
-	{
-		enet_address_set_host_ip(&thisHost, "127.0.0.1");
-
-		if (enet_socket_bind(broadcastSocket, &thisHost) == 0)
-		{
-			return true;
-		}
-
-		thisHost.port = 0;
-	}
-
-	if (enet_socket_bind(broadcastSocket, &thisHost) < 0)
-	{
-		Con_PrintError("OpenDiscoverySocket - Couldn't bind broadcast socket");
-		enet_socket_destroy(broadcastSocket);
-		broadcastSocket = ENET_SOCKET_NULL;
-		return false;
-	}
-
-	return true;
-}
-
-// The host's count of the search questions it hears, for the log: see net_search_log.h. Only a host opens it.
-static NetSearchLog searchLog = {};
-static_assert(kNetSearchPort == broadcastPort, "net_search_log.h's lines name the port a search asks on");
-
-// (Removed 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: OpenTheSearchPortForAHost, which opened the search port for a host whose
-// relay fell through. That was version 1's way; since #188 a lost relay ends the online game, so only a home game opens the port, in
-// HostTheGame.)
-
-static void CloseDiscoverySocket()
-{
-	if (ENET_SOCKET_NULL != broadcastSocket)
-	{
-		enet_socket_destroy(broadcastSocket);
-		broadcastSocket = ENET_SOCKET_NULL;
-	}
-}
-
-// The search's time is up, or the player has left the page. A host keeps the socket, because that's how others find its game.
-void Net_StopSearchingForSessions()
-{
-	sessionCheckTimer = 0;
-
-	// Added 2026-11-10 by Melanikus for the AvP port (#188): how many answers came from outside the home network, and were ignored
-	if (searchAnswersFromOutside > 0)
-	{
-		LogString("net: " + std::to_string(searchAnswersFromOutside) + " search answer(s) from outside the home network were ignored");
-		searchAnswersFromOutside = 0;
-	}
-
-	if (AvP.Network != I_Host)
-	{
-		CloseDiscoverySocket();
-	}
-}
-
-bool Net_UpdateSessionList(int &SelectedItem)
-{
-	if (sessionCheckTimer == 0 || timeGetTime() - sessionCheckTimer >= sessionCheckTimeout)
-	{
-		Net_StopSearchingForSessions();
-		return false;
-	}
-
-	if (timeGetTime() - sessionLastAskedAt >= 1000)
-	{
-		sessionLastAskedAt = timeGetTime();
-		AskEveryoneAboutGames();
-	}
-
-	GUID OldSessionGuids[MAX_NO_OF_SESSIONS];
-	uint32_t OldNumberOfSessions = NumberOfSessionsFound;
-	bool changed = false;
-
-	// take a list of the old session guids
-	for (uint32_t i = 0; i < NumberOfSessionsFound; i++) {
-		OldSessionGuids[i] = SessionData[i].Guid;
-	}
-
-	// poll network for session data
-	{
-		MessageHeader header;
-		ENetBuffer buf;
-		buf.data = &packetBuffer;
-		buf.dataLength = kPacketBufferSize;
-
-		enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
-
-		while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
-		{
-			ENetAddress address;
-			int len = enet_socket_receive(broadcastSocket, &address, &buf, 1);
-
-			if (len <= 0) {
-				break;
-			}
-
-			// An answer. Our own question, if it comes back to us, is this size too (see kSearchQuestionBytes): its header says it's a
-			// question, so it's skipped below.
-			if (len == sizeof(header) + sizeof(SessionDescription))
-			{
-				OutputDebugString("Got some session info\n");
-
-				// Every game that answers starts again at the start of the buffer
-				MemoryReadStream rs(packetBuffer, kPacketBufferSize);
-
-				rs.GetBytes(&header, sizeof(header));
-
-				if (header.marker == kMarker && header.messageType == NETSYS_SESSION_INFO)
-				{
-					OutputDebugString("Net_AddSession called\n");
-					SessionDescription newSession;
-					rs.GetBytes(&newSession, sizeof(newSession));
-
-					// Anyone can send this, so it has to at least say it's this game
-					if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)
-					{
-						continue;
-					}
-
-					// Added 2026-11-10 by Melanikus for the AvP port (#188): a game found by a search is plain, so one whose
-					// host isn't on the home network is ignored (it can only come from a network set up wrongly), and counted for the log
-					if (!NetAddress_IsThisNetwork(address.host))
-					{
-						searchAnswersFromOutside++;
-						continue;
-					}
-
-					// FIXME? - server should set this from their side correctly?
-					newSession.host = address.host;
-
-					Net_AddSession(newSession);
-				}
-			}
-			else {
-				char tprint[100];
-				sprintf(tprint, "Got data of size %d\n", len);
-				OutputDebugString(tprint);
-			}
-		}
-	}
-
-	// Have the available sessions changed? first check number of sessions
-	if (NumberOfSessionsFound != OldNumberOfSessions) {
-		changed = true;
-	}
-	else
-	{
-		// now check the guids of the new sessions against our previous list
-		for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
-		{
-			if (!IsEqualGUID(OldSessionGuids[i], SessionData[i].Guid)) {
-				changed = true;
-			}
-		}
-	}
-
-	if (changed && OldNumberOfSessions > 0)
-	{
-		// See if our previously selected session is in the new session list
-		int OldSelection = SelectedItem;
-		SelectedItem = 0;
-
-		for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
-		{
-			if (IsEqualGUID(OldSessionGuids[OldSelection], SessionData[i].Guid))
-			{
-				// found the session
-				SelectedItem = i;
-				break;
-			}
-		}
-	}
-
-	return changed;
-}
+// (Removed 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2, "Everything over nyc3": the search for games on this
+// network. That was the socket for finding games (OpenDiscoverySocket, CloseDiscoverySocket), the question sent to the whole network or a
+// typed address (AskAboutGames), the answers read and kept (Net_UpdateSessionList, Net_AddSession, Net_StopSearchingForSessions), and the
+// host's side, which answered anyone who asked, from anywhere (Net_CheckForSessionRequest, and its log, net_search_log.h). Every game is
+// now found on the server's online list, and played through its relay, sealed. REMOVED-CODE.md says where it was.)
 
 // A number from the settings file, if the game can use it; if not, the game's own number, and the log says so. Only the number is written
 // in the log, never the file's text, so nothing in the file can make a line that isn't ours.
@@ -2619,17 +2256,17 @@ NetResult Net_Initialise()
 	}
 
 	// The player's own settings. The settings file can hold any number, so each one is checked, and one the game can't use is put back to
-	// the game's own, with a line in the log saying so. The port is the one the host plays on: it has to be a port there is, and not the one
-	// a search uses (broadcastPort), which the host opens as well. A speed of 0 means "as much as there is", and one below 0 means nothing.
+	// the game's own, with a line in the log saying so. The port is the one the host plays on: it has to be a port there is. A speed of 0
+	// means "as much as there is", and one below 0 means nothing.
 	int const port = Config_GetInt("[Networking]", "PortNumber", (int)netPortNumber);
 	int const incoming = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
 	int const outgoing = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
 
-	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535 && port != (int)broadcastPort, (int)netPortNumber);
+	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535, (int)netPortNumber);
 	incomingBandwidth = (uint32_t)NetSettingOrOwn("IncomingBandwidth", incoming, incoming >= 0, 0);
 	outgoingBandwidth = (uint32_t)NetSettingOrOwn("OutgoingBandwidth", outgoing, outgoing >= 0, 0);
 
-	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network. See OpenDiscoverySocket.
+	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network.
 
 	// register console commands
 	Con_AddCommand("connect", Net_ConnectToAddress);
@@ -2689,16 +2326,22 @@ int Net_ConnectingToLobbiedGame(char *playerName)
 	return NET_FAIL;
 }
 
-// Modified 2026-11-10 by Melanikus for the AvP port (#188): Net_HostGame and Net_HostAtHome (networking.h) are this, with atHome saying
-// which.
-static NetResult HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level, bool atHome)
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): a game is hosted online, through the relay of the server
+// servers.cfg names, sealed, or not at all. With no server named, nothing is hosted, and the screen says why (Net_HostFailedWhy). A skirmish,
+// the game's multiplayer for one against the computer, opens no network at all, so it needs no server.
+NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
 {
 	printf("Net_HostGame\n");
 	hostFailedWhy = NULL;
-	homeStrangersDropped = 0;
 
-	// Online when servers.cfg names a server and the player didn't ask for a home game; a home game otherwise
-	bool const online = !atHome && Relay_ServerName()[0] != 0;
+	bool const online = !netGameData.skirmishMode;
+
+	if (online && !Relay_ServerName()[0])
+	{
+		hostFailedWhy = kNoServerSet;
+		Con_PrintError(std::string("net: this game can't be hosted: ") + kNoServerSet);
+		return NET_FAIL;
+	}
 
 	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): an online game only once the player has said yes to the server,
 	// before anything is made. Its screen shows the line and asks (RelayList_LineToAgree), then hosts again.
@@ -2759,26 +2402,18 @@ static NetResult HostGame(char *playerName, char *sessionName, int species, uint
 				return NET_FAIL;
 			}
 
-			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept).
-			// A home game hears the home network alone, from the start (HomeIntercept, #188).
+			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
 			if (OnTheRemoteRoute(ServerAddress))
 			{
 				host->intercept = RelayIntercept;
 			}
-			else if (!online)
-			{
-				host->intercept = HomeIntercept;
-			}
 
-			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
-			// The log says which, and from then on what the search port hears (net_search_log.h).
-			// Modified 2026-11-08 by Melanikus for the AvP port: through the relay instead, when one is set (RelayHostStart, above). Then
-			// nothing on this network can find it by searching, and the search port stays shut.
-			// Modified 2026-11-10 by Melanikus for the AvP port (#188): an online game goes through the relay, sealed, or it isn't hosted at
-			// all, and a home game never tries the relay. A lost relay ends the online game (RelayHostGiveUp): the port never opens then.
+			// The game goes through the server's relay, sealed, or it isn't hosted at all, and a lost relay ends it (RelayHostGiveUp).
+			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): there's no game at
+			// home any more, and no search port to find one by.
 			const char *notOnline = NULL;
 
-			if (online && !RelayHostStart(&notOnline))
+			if (!RelayHostStart(&notOnline))
 			{
 				hostFailedWhy = notOnline ? notOnline : kRelayCantBeUsed;
 				Con_PrintError(std::string("net: this game can't be hosted online: ") + hostFailedWhy + ", so it isn't hosted at all (sealed or nothing)");
@@ -2787,20 +2422,8 @@ static NetResult HostGame(char *playerName, char *sessionName, int species, uint
 				return NET_FAIL;
 			}
 
-			if (online)
-			{
-				Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay");
-			}
-			else if (OpenDiscoverySocket())
-			{
-				char line[160];
-				NetSearchLog_Opened(&searchLog, enet_time_get(), line, sizeof(line));
-				LogString(line);
-			}
-			else
-			{
-				LogString("net: this game can't answer searches: UDP port " + std::to_string(broadcastPort) + " couldn't be opened, so a search won't find it");
-			}
+			// No search on this network ever finds it: it goes through the relay alone
+			Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay");
 
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
@@ -2852,16 +2475,6 @@ static NetResult HostGame(char *playerName, char *sessionName, int species, uint
 	return NET_OK;
 }
 
-NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
-{
-	return HostGame(playerName, sessionName, species, gameStyle, level, false);
-}
-
-NetResult Net_HostAtHome(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
-{
-	return HostGame(playerName, sessionName, species, gameStyle, level, true);
-}
-
 const char *Net_HostFailedWhy(void)
 {
 	return hostFailedWhy;
@@ -2892,11 +2505,6 @@ const char *Net_JoinRefusedWhy(void)
 	return joinRefusedWhy;
 }
 
-const char *Net_TypedAddressRefusedWhy(void)
-{
-	return typedRefusedWhy;
-}
-
 // How long leaving waits for the other ends to hear that this machine is closing. On a network that works, that takes a few
 // thousandths of a second. A machine that has gone already never answers, so this is the most that's ever spent on one.
 static unsigned int const kMostMillisecondsToClose = 1000;
@@ -2908,13 +2516,6 @@ void Net_Disconnect()
 	// A host's held request to join goes with its game. A joiner's answer stays, for its screen to say why it's back (Net_JoinAnswerNow):
 	// the next join starts it again.
 	ForgetTheJoinRequest();
-
-	// Added 2026-11-10 by Melanikus for the AvP port (#188): what a home game, host or joiner, dropped from outside the home network
-	if (homeStrangersDropped > 0)
-	{
-		LogString("net: while playing at home, " + std::to_string(homeStrangersDropped) + " packet(s) from outside the home network were dropped");
-		homeStrangersDropped = 0;
-	}
 
 	// What a joiner through a relay dropped from elsewhere (a host says its own as it leaves its room, in RelayHostLeave)
 	if (relayJoinedThrough && relayStrangersDropped > 0)
@@ -2945,20 +2546,6 @@ void Net_Disconnect()
 
 	// The ENet host owned this, and has just freed it
 	ServerPeer = NULL;
-
-	sessionCheckTimer = 0;
-
-	// A host's search counts for the whole game, before the port closes (net_search_log.h)
-	{
-		char line[320];
-
-		if (NetSearchLog_Closed(&searchLog, enet_time_get(), line, sizeof(line)))
-		{
-			LogString(line);
-		}
-	}
-
-	CloseDiscoverySocket();
 
 	// The game has closed, and the list was only for this game
 	CoopRemoved_Forget(removedPlayers);
@@ -3045,108 +2632,6 @@ int Net_InitLobbiedGame()
 	OutputDebugString("Net_InitwhoLobbiedGame\n");
 	extern char MP_PlayerName[];
 	return 0;
-}
-
-static void Net_CheckForSessionRequest()
-{
-	// It couldn't be opened, so others can't find this game, and anyone with its address can still join
-	if (ENET_SOCKET_NULL == broadcastSocket)
-	{
-		return;
-	}
-
-	// Every minute, how many questions came and how many were answered (net_search_log.h)
-	{
-		char line[320];
-
-		if (NetSearchLog_Minute(&searchLog, enet_time_get(), line, sizeof(line)))
-		{
-			LogString(line);
-		}
-	}
-
-	enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
-
-	while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
-	{
-		Con_PrintDebugMessage("Net_CheckForSessionRequest got something");
-		ENetAddress addr;
-		ENetBuffer buf;
-		buf.data = packetBuffer;
-		buf.dataLength = kPacketBufferSize;
-
-		int len = enet_socket_receive(broadcastSocket, &addr, &buf, 1);
-		if (0 == len) {
-			return; // blocking - check later
-		}
-		if (len > 0) {
-			Con_PrintDebugMessage("Got a packet of some sort..");
-			NetSearchLog_Packet(&searchLog);
-		}
-		// Only a question as big as its answer: see kSearchQuestionBytes. An older game's question, a header alone, gets nothing.
-		if (len == (int)kSearchQuestionBytes)
-		{
-			MessageHeader header;
-			memcpy(&header, packetBuffer, sizeof(MessageHeader));
-
-			// Anyone can send this, from an address that isn't theirs. So it has to look like ours, and this game only answers so many.
-			static unsigned int secondStarted = 0;
-			static int answersThisSecond = 0;
-
-			if (header.marker != kMarker)
-			{
-				continue;
-			}
-
-			if (NETSYS_REQUEST_SESSION_INFO != header.messageType)
-			{
-				continue;
-			}
-
-			// A question for this game's description. What happens to it is counted for the log, never with its address: the first one
-			// gets a line of its own (net_search_log.h).
-			char line[200];
-
-			if (!(NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond)))
-			{
-				if (NetSearchLog_Question(&searchLog, kNetSearchTooMany, enet_time_get(), line, sizeof(line)))
-				{
-					LogString(line);
-				}
-
-				continue;
-			}
-
-			MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
-
-			header.marker = kMarker;
-			header.isSystemMessage = true;
-			header.messageType = NETSYS_SESSION_INFO;
-			ws.PutBytes(&header, sizeof(header));
-			ws.PutBytes(&netSession, sizeof(SessionDescription));
-
-			buf.dataLength = ws.GetBytesWritten();
-			buf.data = packetBuffer;
-
-			// 0 means the network can't take it now, and below 0 that it failed: either way the asker gets no answer this time, and the
-			// rest wait for the next frame, as before
-			int const ret = enet_socket_send(broadcastSocket, &addr, &buf, 1);
-
-			if (NetSearchLog_Question(&searchLog, ret > 0 ? kNetSearchAnswered : kNetSearchNotSent, enet_time_get(), line, sizeof(line)))
-			{
-				LogString(line);
-			}
-
-			if (0 > ret) {
-				Con_PrintError("Couldn't send session details");
-			}
-			else if (ret > 0) {
-				Con_PrintDebugMessage("Sent session details");
-			}
-
-			return;
-		}
-	}
 }
 
 // call once per frame
@@ -3416,9 +2901,9 @@ void Net_ServiceNetwork()
 		RelayEndToEndFrame();
 		RelayV2JoinerFrame();   // and a joiner's channel to the relay (step 7, added 2026-11-09 by Melanikus for the AvP port)
 
-		// also check for session data requests
+		// A host's own upkeep: connections that never said who they are, and the older versions told no. (The answers to a search on this
+		// network went on 2026-11-10, with the search: see Net_FindAvPSessions.)
 		if (AvP.Network == I_Host) {
-			Net_CheckForSessionRequest();
 			ForgetConnectionsNotLetIn();
 			LogOlderVersionsToldNo();
 		}
@@ -4209,21 +3694,8 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 	return NET_OK;
 }
 
-// For a Hudson run with net=: join the game on this machine, without looking for one (menus.cpp, a joiner's run). See NetLoopbackOnly.
-NetResult Net_ConnectToThisMachine(int level, char *playerName)
-{
-	ENetAddress address;
-
-	enet_address_set_host_ip(&address, "127.0.0.1");
-
-	SessionData[0].host = address.host;
-	SessionData[0].port = (uint16_t)netPortNumber;
-	SessionData[0].levelIndex = level;
-	SessionData[0].AllowedToJoin = true;
-	NumberOfSessionsFound = 1;
-
-	return Net_ConnectToSession(0, playerName);
-}
+// (Removed 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2, "Everything over nyc3": Net_ConnectToThisMachine, a
+// Hudson run's plain join to the game on this machine. A run joins through the relay, as a player does.)
 
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 {
@@ -4259,21 +3731,14 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	LoopbackOnlyAddress(&ourAddress);
 	ourAddress.port = 0;
 
-	// Added 2026-11-10 by Melanikus for the AvP port (#188): a game not through the relay is plain, so it's joined only if its
-	// host is on the home network. Refused before anything is opened, with the reason (Net_JoinRefusedWhy).
+	// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): a game is joined only through the relay, sealed. One
+	// that isn't, from wherever it came, is plain, and refused before anything is opened, with the reason (Net_JoinRefusedWhy).
 	joinRefusedWhy = NULL;
 
-	if (!SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))
+	if (!SessionData[sessionNumber].throughRelay)
 	{
-		joinRefusedWhy = kNotAtHome;
-		Con_PrintError(std::string("Net_ConnectToSession - ") + kNotAtHome);
-		return NET_FAIL;
-	}
-
-	// A Hudson run joins only a game on this machine. A session from anywhere else, which a search kept to this machine's own address can't find, is refused.
-	if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))
-	{
-		Con_PrintError("Net_ConnectToSession - a Hudson run with net= joins only a game on this machine");
+		joinRefusedWhy = kNotThroughTheList;
+		Con_PrintError(std::string("Net_ConnectToSession - ") + kNotThroughTheList);
 		return NET_FAIL;
 	}
 
@@ -4286,15 +3751,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
-	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept).
-	// A joiner of a home game hears the home network alone, from the start (HomeIntercept, #188).
+	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
 	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))
 	{
 		host->intercept = RelayIntercept;
-	}
-	else if (!SessionData[sessionNumber].throughRelay)
-	{
-		host->intercept = HomeIntercept;
 	}
 
 	// Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list. The relay's handshake goes first, from this new
@@ -4469,96 +3929,13 @@ NetID Net_GetNextPlayerID()
 	return lastPlayerID;
 }
 
-// Asks whoever is at this address about their game.
-static bool AskAboutGames(enet_uint32 host)
-{
-	ENetAddress destAddress;
-	destAddress.host = host;
-	destAddress.port = broadcastPort;
-
-	// create broadcast header
-	MessageHeader newHeader;
-
-	// It has gaps between its parts, and the whole of it goes out, so nothing left on the stack goes with it
-	memset(&newHeader, 0, sizeof(newHeader));
-	newHeader.marker = kMarker;
-	newHeader.isSystemMessage = true;
-	newHeader.messageType = NETSYS_REQUEST_SESSION_INFO;
-	newHeader.fromID      = kBroadcastID;
-	newHeader.toID        = kBroadcastID;
-
-	// The header, then nothing, to as many bytes as the answer it asks for: see kSearchQuestionBytes
-	uint8_t question[kSearchQuestionBytes];
-
-	memset(question, 0, sizeof(question));
-	memcpy(question, &newHeader, sizeof(newHeader));
-
-	ENetBuffer buf;
-	buf.data = question;
-	buf.dataLength = sizeof(question);
-
-	return enet_socket_send(broadcastSocket, &destAddress, &buf, 1) >= 0;
-}
-
-// Everyone on this network, and the address the player typed, if it's one. False if the network can't be asked at all.
-static bool AskEveryoneAboutGames()
-{
-	extern char IPAddressString[];
-
-	typedRefusedWhy = NULL;
-
-	// Nothing goes out to the whole network in a Hudson run on this machine's own address
-	if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))
-	{
-		Con_PrintError("Couldn't send broadcast packet");
-		return false;
-	}
-
-	if (NetTypedAddressIsGood(IPAddressString, kMostTypedAddressLetters))
-	{
-		ENetAddress typed;
-
-		// And a Hudson run asks a typed address only if it's this machine's own. Modified 2026-11-10 by Melanikus for the AvP port (#188):
-		// only if it's on the home network, as a game found that way is plain; otherwise the games page says why.
-		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))
-		{
-			typedRefusedWhy = kTypedNotAtHome;
-			LogString(std::string("net: the typed address wasn't asked: ") + kTypedNotAtHome);
-		}
-		else if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && (!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host))
-		{
-			Con_PrintError("Couldn't ask the address that was typed");
-		}
-	}
-
-	return true;
-}
-
 void Net_FindAvPSessions()
 {
-	// stop this function being called if we're already searching.
-	// this is a bit hacky but needs to be here for the moment due to
-	// the horrible menu system
-	if (sessionCheckTimer != 0) {
-		return;
-	}
-
-	if (!OpenDiscoverySocket())
-	{
-		return;
-	}
-
-	// A new search starts with an empty list, or games long gone would stay on it, and it only holds so many
+	// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): nothing on this network
+	// is asked about games, neither the whole network nor a typed address, nothing answers, and no socket is opened for it (see the note
+	// above NetSettingOrOwn): every game is played through a server's relay, and found on its online list. A search only starts the
+	// list of games found again, empty, for the games page to fill from the online list.
 	NumberOfSessionsFound = 0;
-	sessionLastAskedAt = timeGetTime();
-
-	if (!AskEveryoneAboutGames())
-	{
-		Net_StopSearchingForSessions();
-		return;
-	}
-
-	sessionCheckTimer = timeGetTime();
 }
 
 static NetResult Net_CreateSession(const char *sessionName, const char *levelName, int maxPlayers, int version, uint16_t gameStyle, uint16_t level)

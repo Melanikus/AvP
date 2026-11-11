@@ -865,15 +865,7 @@ void OnlinePage_DrawTop(void)
 		Words(from, MENU_CENTREX, kHeadingsTop - 17, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
-	// Added 2026-11-10 by Melanikus for the AvP port (#188, PO's ruling Q4): a typed address the search left unasked, as it isn't on the
-	// home network, says so in place of "no games", in the networking code's own fixed words (networking.h, Net_TypedAddressRefusedWhy)
-	const char *const typedRefused = Net_TypedAddressRefusedWhy();
-
-	if (visibleCount == 0 && shownCount == 0 && typedRefused)
-	{
-		WrappedWords(typedRefused, kFirstRowTop, 2, ONE_FIXED / 2);
-	}
-	else if (visibleCount == 0)
+	if (visibleCount == 0)
 	{
 		Words(OnlineScreens_Words(shownCount == 0 ? kOnlineWordsNoSessions : kOnlineWordsNoneMatch), MENU_CENTREX, kFirstRowTop, ONE_FIXED / 2,
 			AVPMENUFORMAT_CENTREJUSTIFIED);

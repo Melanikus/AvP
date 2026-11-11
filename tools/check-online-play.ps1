@@ -1,6 +1,6 @@
 <#
 Says whether a player's game plays online only the safe way: only with the servers its servers.cfg names, only by protocol version 2,
-only sealed, and plain only at home. Written 2026-11-09 by Melanikus for the AvP port, as check-servers-dev-only.ps1 (beta.1's rule, that
+only sealed, and never plain. Written 2026-11-09 by Melanikus for the AvP port, as check-servers-dev-only.ps1 (beta.1's rule, that
 a player's game reached no server at all), rewritten the same night for beta.2 as this, moved to the one short servers.cfg line on
 2026-11-10, and made the release's rule the same day (#175 PR 3b), in check-servers-dev-only.ps1's place.
 
@@ -11,7 +11,8 @@ years from now someone may deploy it and say 'Ok replace the original v1.x confi
 something simple we can easily instruct ppl to switch/replace as there is no server discovery"). So the game reaches only the servers
 written in servers.cfg, beside bin\, each one line: its IPv4 address (with its two ports, or the usual ones), its fingerprint (one
 SHA-256 over the list's key and the relay's id: the server's CRYPTO.md 12.2), and its name (#175). It reaches them only by protocol
-version 2, only sealed, and -dev weakens none of it. A plain game stays, between addresses on the home network only. This check proves
+version 2, only sealed, and -dev weakens none of it. There's no plain game, at home or anywhere (the owner, 2026-11-10: "LAN is dead",
+"Remove At home from beta.2", "Everything over nyc3"). This check proves
 that on every pull request and before every release, and refuses either if it isn't so. Only the owner changes these rules. Until he
 does, nothing here is loosened to let a change through.
 
@@ -41,15 +42,14 @@ Y. The player's yes (#175's last part, added 2026-11-10): the list starts only f
 V. Version 2 only: every switch the v2 draft had is gone, and beta.1's version 1 relay path with it (the plain relay messages, the echo
    picker, the commit word), so nothing can choose version 1 or a plain game after a relay. The network version is 116 or later, and the
    relay's messages are read only once the channel has opened them.
-S. Sealed or nothing: an online host goes through the relay, sealing what it sends, or it isn't hosted at all; a lost relay ends the
-   game, which hears nothing after; a joiner through a relay makes handshake B before it connects, or doesn't join; and the search port,
-   which makes a game plain on the network, opens only for a home game or a search.
-L. Plain only at home: a typed address is asked only if it's on this network (NetAddress_IsThisNetwork); a direct join goes only to an
-   address on this network; every home host, and every joiner not through a relay, starts with HomeIntercept, which drops anything
-   from outside the network before ENet reads it; nothing clears a host's intercept; and a search's answer from outside the network is
-   ignored.
+S. Sealed or nothing: a host goes through the relay, sealing what it sends, or it isn't hosted at all; a lost relay ends the game,
+   which hears nothing after; and a joiner through a relay makes handshake B before it connects, or doesn't join.
+P. No plain game (added 2026-11-10, in L's place, "plain only at home"): a host is refused first when no server is named, and a join
+   that isn't through the relay; those two are the only places an ENet host is made; nothing on this network is asked or answered
+   about games, so no socket sends to the whole network, and the only sockets are a Hudson run's look at its own address and the
+   games page's timing of the relay; the plain game's own names don't come back; and nothing clears a host's intercept.
 WHAT IT CAN'T PROVE: how the code behaves, as opposed to how it's written. That's net_start_test's and relay_list_test's, with their
-take-out rows; NetAddress_IsThisNetwork's ranges are proved by net_checks_test, and the fingerprint's sum by net_relay_keys_test.
+take-out rows; the fingerprint's sum is proved by net_relay_keys_test.
 Anything this check can't place is refused with the file and the line, so a new way out is read by a person before it's let through.
 #>
 param(
@@ -72,7 +72,7 @@ function Stop-Check([string]$why)
     exit 1
 }
 
-# The relay list's own file: the one place a web call may be, and where rules R and K live. The network's own file: where V, S and L live.
+# The relay list's own file: the one place a web call may be, and where rules R and K live. The network's own file: where V, S and P live.
 $listFile = '3dc/relay_list.cpp'
 $netFile = '3dc/networking.cpp'
 
@@ -716,12 +716,12 @@ if (-not (Test-Before $listState.Flat 'if (line && !TheLineIsAgreed(*line)) { re
     Stop-Check "Y: RelayList_ServerState ($listFile line $($listState.Line)) must say a line without the player's yes needs it, before anything else: if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }"
 }
 
-$hostBeforeTheYes = Get-OneDefinition 'HostGame' 'Y' $netFile 'every host'
+$hostBeforeTheYes = Get-OneDefinition 'Net_HostGame' 'Y' $netFile 'every host'
 
 if (-not (Test-FormBlock $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' @('return NET_FAIL;')) -or
     -not (Test-Before $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' 'RelayList_FindRelays();'))
 {
-    Stop-Check "Y: HostGame ($netFile line $($hostBeforeTheYes.Line)) must host nothing online before the player's yes, before it asks the server: if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) { ... return NET_FAIL; }"
+    Stop-Check "Y: Net_HostGame ($netFile line $($hostBeforeTheYes.Line)) must host nothing online before the player's yes, before it asks the server: if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) { ... return NET_FAIL; }"
 }
 
 # ---- V: version 2 only
@@ -772,12 +772,54 @@ if (-not $hostStart.Flat.Contains('host->intercept = RelayIntercept;') -or -not 
     Stop-Check "S: RelayHostStart ($netFile line $($hostStart.Line)) must hear the relay alone and seal what the host sends through it: host->intercept = RelayIntercept; and host->sendHook = RelaySealedSend;"
 }
 
-$hostGame = Get-OneDefinition 'HostGame' 'S' $netFile 'every host, online or at home'
-
-if (-not $hostGame.Flat.Contains('bool const online = !atHome && Relay_ServerName()[0] != 0;') -or
-    -not (Test-FormBlock $hostGame.Flat 'if (online && !RelayHostStart(&notOnline)) {' @('enet_host_destroy(host);', 'return NET_FAIL;')))
+# Whether a stretch of code stays in the block it starts in: every { in it is closed in it, and no } in it closes a block from before it
+function Test-Level([string]$text)
 {
-    Stop-Check "S: HostGame ($netFile line $($hostGame.Line)) must host an online game through the relay or not at all: if (online && !RelayHostStart(&notOnline)) { ... enet_host_destroy(host); ... return NET_FAIL; }"
+    $depth = 0
+
+    foreach ($letter in $text.ToCharArray())
+    {
+        if ($letter -eq '{') { $depth++ }
+        elseif ($letter -eq '}')
+        {
+            $depth--
+            if ($depth -lt 0) { return $false }
+        }
+    }
+
+    return ($depth -eq 0)
+}
+
+# Whether a refusal is whole: the block after its form is there once, holds no block of its own, and ends with $ending, so nothing in it
+# happens only sometimes
+function Test-Refusal([string]$flat, [string]$form, [string]$ending)
+{
+    $block = Get-FormBlock $flat $form
+    return ($null -ne $block -and -not $block.Contains('{') -and $block.Trim().EndsWith($ending, [System.StringComparison]::Ordinal))
+}
+
+# Whether what comes before a place ends a statement or a block, so an if there is a statement of its own, and not the body of an
+# "if (x)" or an "else" just before it, which would make it only sometimes
+function Test-StatementStart([string]$before)
+{
+    $end = $before.TrimEnd()
+    return ($end -eq '' -or $end -match '[;{}]$')
+}
+
+# The one host it makes goes to the relay, sealed, or is destroyed: between making it and RelayHostStart's refusal nothing leaves the block
+# it's made in, and nothing returns but a refusal (of a host that couldn't be made)
+$hostGame = Get-OneDefinition 'Net_HostGame' 'S' $netFile 'every host'
+$hosting = $hostGame.Flat
+$relayForm = 'if (!RelayHostStart(&notOnline)) {'
+$madeAt = $hosting.IndexOf('host = Net_MakeENetHost(', [System.StringComparison]::Ordinal)
+$relayAt = $hosting.IndexOf($relayForm, [System.StringComparison]::Ordinal)
+$madeToRelay = if ($madeAt -ge 0 -and $relayAt -gt $madeAt) { $hosting.Substring($madeAt, $relayAt - $madeAt) } else { $null }
+
+if ((Get-Count $hosting 'Net_MakeENetHost(') -ne 1 -or $null -eq $madeToRelay -or -not (Test-Level $madeToRelay) -or $madeToRelay -match '\bgoto\b' -or
+    ([regex]::Matches($madeToRelay, '\breturn\b')).Count -ne (Get-Count $madeToRelay 'return NET_FAIL;') -or -not (Test-StatementStart $madeToRelay) -or
+    -not (Test-Refusal $hosting $relayForm 'enet_host_destroy(host); host = NULL; return NET_FAIL;'))
+{
+    Stop-Check "S: Net_HostGame ($netFile line $($hostGame.Line)) must make one host and give it to the relay, sealed, or destroy it, in the same block, with nothing but a refusal returned between: host = Net_MakeENetHost(...); ... if (!RelayHostStart(&notOnline)) { ... enet_host_destroy(host); host = NULL; return NET_FAIL; }"
 }
 
 $giveUp = Get-OneDefinition 'RelayHostGiveUp' 'S' $netFile 'a host whose relay is lost'
@@ -785,40 +827,6 @@ $giveUp = Get-OneDefinition 'RelayHostGiveUp' 'S' $netFile 'a host whose relay i
 if (-not $giveUp.Flat.Contains('host->intercept = NothingIntercept;') -or -not $giveUp.Flat.Contains('RelayHostNews(kNetRelayHostEnded, reason);'))
 {
     Stop-Check "S: RelayHostGiveUp ($netFile line $($giveUp.Line)) must end the online game, which then hears nothing: host->intercept = NothingIntercept; and RelayHostNews(kNetRelayHostEnded, reason);"
-}
-
-# The search port opens for a search, or for a home game's host alone: in HostGame, in the else of if (online)
-$searching = Get-OneDefinition 'Net_FindAvPSessions' 'S' $netFile 'a search on this network'
-
-foreach ($opening in (Get-Calls 'OpenDiscoverySocket'))
-{
-    if (Test-Inside $opening $searching) { continue }
-
-    if (Test-Inside $opening $hostGame)
-    {
-        $before = Get-Flat $code[$netFile].Substring($hostGame.Open, $opening.At - $hostGame.Open)
-
-        if ($before.EndsWith('} else if (', [System.StringComparison]::Ordinal))
-        {
-            $close = $before.Length - '} else if ('.Length
-            $depth = 0
-            $open = -1
-
-            for ($i = $close; $i -ge 0; $i--)
-            {
-                if ($before[$i] -eq '}') { $depth++ }
-                elseif ($before[$i] -eq '{')
-                {
-                    $depth--
-                    if ($depth -eq 0) { $open = $i; break }
-                }
-            }
-
-            if ($open -ge 0 -and (Get-Header $before $open) -ceq 'if (online)') { continue }
-        }
-    }
-
-    Stop-Check "S: $($opening.File) line $($opening.Line) opens the search port: only a search (Net_FindAvPSessions) and a home game's host (HostGame, in the else of if (online)) may, so a game that's online, or lost its relay, never plays plain"
 }
 
 $connect = Get-OneDefinition 'Net_ConnectToSession' 'S' $netFile 'a joiner''s connection'
@@ -831,29 +839,97 @@ if (-not (Test-Before $joining 'RelayEndToEndJoin(' 'enet_host_connect(') -or
     Stop-Check "S: Net_ConnectToSession ($netFile line $($connect.Line)) must make handshake B (RelayEndToEndJoin) before it connects (enet_host_connect), and not join at all if the relay or B fails: if (relayPort == 0) { ... return NET_FAIL; } and if (relayEndToEndJoinFailed) { ... return NET_FAIL; }"
 }
 
-# ---- L: plain only at home
+# ---- P: no plain game. Added 2026-11-10 by Melanikus for the AvP port, for the owner's ruling for beta.2 ("LAN is dead", "Everything over
+# nyc3"), in place of L (plain only at home), so the plain game can't come back by accident.
 
-$local = Get-OneDefinition 'NetAddress_IsThisNetwork' 'L' '3dc/net_checks.h' 'what counts as this network: its ranges are proved by net_checks_test'
-$homeIntercept = Get-OneDefinition 'HomeIntercept' 'L' $netFile 'what a game on this network hears: nothing from outside it'
-$homeBody = $homeIntercept.Flat -replace '\A\(void\)event; ', ''
+# A host only through a server servers.cfg names: with none, an online game is refused in the function's own block, before anything is made
+$noServer = 'if (online && !Relay_ServerName()[0]) {'
+$noServerAt = $hosting.IndexOf($noServer, [System.StringComparison]::Ordinal)
 
-if (-not $homeBody.StartsWith('if (!NetAddress_IsThisNetwork(on->receivedAddress.host)) {', [System.StringComparison]::Ordinal) -or
-    -not (Get-Block $homeBody $homeBody.IndexOf('{')).Contains('return 1;'))
+if ((Get-Count $hosting 'bool const online = !netGameData.skirmishMode;') -ne 1 -or ([regex]::Matches($hosting, '\bonline\s*=(?!=)')).Count -ne 1 -or
+    -not (Test-Refusal $hosting $noServer 'return NET_FAIL;') -or -not (Test-Level $hosting.Substring(0, $noServerAt)) -or
+    -not (Test-StatementStart $hosting.Substring(0, $noServerAt)) -or $noServerAt -gt $madeAt)
 {
-    Stop-Check "L: HomeIntercept ($netFile line $($homeIntercept.Line)) must first drop anything from outside this network before ENet reads it: if (!NetAddress_IsThisNetwork(on->receivedAddress.host)) { ... return 1; }"
+    Stop-Check "P: Net_HostGame ($netFile line $($hostGame.Line)) must refuse an online game with no server first, in its own block, before it makes anything: bool const online = !netGameData.skirmishMode; ... $noServer ... return NET_FAIL; }"
 }
 
-if (-not $hostGame.Flat.Contains('if (OnTheRemoteRoute(ServerAddress)) { host->intercept = RelayIntercept; } else if (!online) { host->intercept = HomeIntercept; }'))
+# A join only through the relay: one that isn't is refused in the function's own block, before anything is made
+$notThrough = 'if (!SessionData[sessionNumber].throughRelay) {'
+$notThroughAt = $joining.IndexOf($notThrough, [System.StringComparison]::Ordinal)
+
+if ((Get-Count $joining 'Net_MakeENetHost(') -ne 1 -or -not (Test-Refusal $joining $notThrough 'return NET_FAIL;') -or
+    -not (Test-Level $joining.Substring(0, $notThroughAt)) -or -not (Test-StatementStart $joining.Substring(0, $notThroughAt)) -or
+    -not (Test-Before $joining $notThrough 'Net_MakeENetHost('))
 {
-    Stop-Check "L: HostGame ($netFile line $($hostGame.Line)) must start every home host hearing this network alone: if (OnTheRemoteRoute(ServerAddress)) { host->intercept = RelayIntercept; } else if (!online) { host->intercept = HomeIntercept; }"
+    Stop-Check "P: Net_ConnectToSession ($netFile line $($connect.Line)) must refuse a game that isn't through the relay first, in its own block, before it makes anything: $notThrough ... return NET_FAIL; }"
 }
 
-$atHomeOnly = 'if (!SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host)) {'
+# Those two are the only places an ENet host is made, and Net_MakeENetHost the only way
+$maker = Get-OneDefinition 'Net_MakeENetHost' 'P' '3dc/net_host.cpp' 'the one way an ENet host is made'
 
-if (-not (Test-FormBlock $joining $atHomeOnly @('return NET_FAIL;')) -or -not (Test-Before $joining $atHomeOnly 'Net_MakeENetHost(') -or
-    -not $joining.Contains('if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress)) { host->intercept = RelayIntercept; } else if (!SessionData[sessionNumber].throughRelay) { host->intercept = HomeIntercept; }'))
+foreach ($making in (Get-Calls 'Net_MakeENetHost'))
 {
-    Stop-Check "L: Net_ConnectToSession ($netFile line $($connect.Line)) must join a plain game on this network only, before anything is made ($atHomeOnly ... return NET_FAIL; }), and start a joiner not through a relay with host->intercept = HomeIntercept;"
+    if (-not (Test-Inside $making $hostGame) -and -not (Test-Inside $making $connect))
+    {
+        Stop-Check "P: $($making.File) line $($making.Line) makes an ENet host: only Net_HostGame and Net_ConnectToSession may, each after its refusal of a plain game"
+    }
+}
+
+foreach ($making in (Get-Calls 'enet_host_create'))
+{
+    if (-not (Test-Inside $making $maker))
+    {
+        Stop-Check "P: $($making.File) line $($making.Line) makes an ENet host by itself: only Net_MakeENetHost (3dc/net_host.cpp) may"
+    }
+}
+
+# Nothing on this network is asked about games, and nothing answers: no socket sends to the whole network, the only sockets made are a
+# Hudson run's look at its own address and the games page's timing of the server's relay, and only the second is given a port
+foreach ($relative in ($code.Keys | Sort-Object))
+{
+    $m = [regex]::Match($code[$relative], '\bENET_SOCKOPT_BROADCAST\b')
+
+    if ($m.Success)
+    {
+        Stop-Check "P: $relative line $(Get-LineNumber $code[$relative] $m.Index) makes a socket that sends to the whole network: nothing on this network is asked about games any more"
+    }
+}
+
+$ownAddress = Get-OneDefinition 'LoopbackOnlyAddress' 'P' $netFile 'a Hudson run''s look at its own address, by a socket it connects and never sends on'
+$pageTimer = Get-OneDefinition 'Net_TimeTheRelayForThePage' 'P' $netFile 'the games page''s timing of the server''s relay'
+
+foreach ($making in (Get-Calls 'enet_socket_create'))
+{
+    if (-not (Test-Inside $making $ownAddress) -and -not (Test-Inside $making $pageTimer))
+    {
+        Stop-Check "P: $($making.File) line $($making.Line) makes a socket: only LoopbackOnlyAddress and Net_TimeTheRelayForThePage may, so nothing listens for a search or answers one"
+    }
+}
+
+foreach ($binding in (Get-Calls 'enet_socket_bind'))
+{
+    if (-not (Test-Inside $binding $pageTimer))
+    {
+        Stop-Check "P: $($binding.File) line $($binding.Line) gives a socket a port: only Net_TimeTheRelayForThePage may, so nothing listens for a search or answers one"
+    }
+}
+
+$searching = Get-OneDefinition 'Net_FindAvPSessions' 'P' $netFile 'the games page''s search'
+
+if ($searching.Flat -cne 'NumberOfSessionsFound = 0;')
+{
+    Stop-Check "P: Net_FindAvPSessions ($netFile line $($searching.Line)) must only start the list of games found again, empty (NumberOfSessionsFound = 0;): nothing on this network is asked about games"
+}
+
+# The plain game's own names, which a change bringing it back would most likely use again
+foreach ($gone in @('HomeIntercept', 'Net_HostAtHome', 'AskAboutGames', 'OpenDiscoverySocket', 'Net_CheckForSessionRequest', 'Net_ConnectToThisMachine', 'NetAddress_IsThisNetwork'))
+{
+    $found = Find-Name $gone
+
+    if ($null -ne $found)
+    {
+        Stop-Check "P: $($found.File) line $($found.Line) names $gone, part of the plain game that went for beta.2: a game is hosted and joined only through a server's relay, sealed"
+    }
 }
 
 foreach ($relative in ($code.Keys | Sort-Object))
@@ -862,57 +938,11 @@ foreach ($relative in ($code.Keys | Sort-Object))
 
     if ($m.Success)
     {
-        Stop-Check "L: $relative line $(Get-LineNumber $code[$relative] $m.Index) clears a host's intercept: give it HomeIntercept or NothingIntercept instead, so a game never hears from outside this network unchecked"
+        Stop-Check "P: $relative line $(Get-LineNumber $code[$relative] $m.Index) clears a host's intercept: give it RelayIntercept or NothingIntercept instead, so a game never hears anything unchecked"
     }
 }
 
-# A search asks the network's broadcast, and a typed address only if it's on this network: in the else of the if that refuses one that isn't
-$typedHome = 'if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host)) {'
-
-foreach ($asking in (Get-Calls 'AskAboutGames'))
-{
-    $argument = [regex]::Match($code[$asking.File].Substring($asking.At), '^AskAboutGames\s*\(([^()]*)\)')
-    $asked = if ($argument.Success) { Get-Flat $argument.Groups[1].Value } else { '' }
-
-    if ($asked -ceq 'ENET_HOST_BROADCAST') { continue }
-
-    if ($asked -ceq 'typed.host')
-    {
-        $opens = Get-Enclosing $code[$asking.File] $asking.At
-        $function = if ($opens.Count -gt 0) { $opens[-1] } else { -1 }
-        $before = if ($function -ge 0) { Get-Flat $code[$asking.File].Substring($function, $asking.At - $function) } else { '' }
-        $homeAt = $before.LastIndexOf($typedHome, [System.StringComparison]::Ordinal)
-
-        if ($homeAt -ge 0)
-        {
-            $homeClose = Get-Close $before ($homeAt + $typedHome.Length - 1)
-            $between = if ($homeClose -ge 0) { $before.Substring($homeClose + 1) } else { ';' }
-
-            if ($between.StartsWith(' else if (', [System.StringComparison]::Ordinal) -and $between -notmatch '[;{}]') { continue }
-        }
-
-        Stop-Check "L: $($asking.File) line $($asking.Line) asks a typed address about its games outside the else of $typedHome ... }: a typed address is asked only if it's on this network"
-    }
-
-    Stop-Check "L: $($asking.File) line $($asking.Line) asks $asked about its games: only the network's broadcast, and a typed address on this network, may be asked"
-}
-
-# A game a search found is kept only if its host is on this network
-foreach ($adding in (Get-Calls 'Net_AddSession'))
-{
-    $opens = Get-Enclosing $code[$adding.File] $adding.At
-    $function = if ($opens.Count -gt 0) { $opens[-1] } else { -1 }
-    $before = if ($function -ge 0) { Get-Flat $code[$adding.File].Substring($function, $adding.At - $function) } else { '' }
-    $outsideAt = $before.LastIndexOf('if (!NetAddress_IsThisNetwork(address.host)) {', [System.StringComparison]::Ordinal)
-    $outside = if ($outsideAt -ge 0) { Get-Block $before ($outsideAt + 'if (!NetAddress_IsThisNetwork(address.host)) {'.Length - 1) } else { $null }
-
-    if ($null -eq $outside -or -not $outside.Contains('continue;') -or -not $before.Substring($outsideAt).Contains('newSession.host = address.host;'))
-    {
-        Stop-Check "L: $($adding.File) line $($adding.Line) adds a game a search found without if (!NetAddress_IsThisNetwork(address.host)) { ... continue; } first, then newSession.host = address.host;: a search's answer from outside this network is ignored"
-    }
-}
-
-Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and a plain game is for this network only ($($local.File) line $($local.Line))."
+Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games."
 Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
 
 foreach ($server in $expected)

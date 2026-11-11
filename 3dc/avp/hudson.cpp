@@ -149,7 +149,6 @@ extern NetID AvPNetID;
 extern MODULE *playerPherModule;
 extern char LevelName[];
 extern void RemovePickedUpObject(STRATEGYBLOCK *objectPtr);
-extern bool NetLoopbackSearch;                                      // networking.cpp
 extern bool NetLoopbackOnly;                                        // networking.cpp
 extern bool Net_AllowOneRemoteRelay(const char *address);           // networking.cpp: the one relay beyond this machine a run with net= may use
 extern uint32_t Net_RemoteRelayAddress();                           // networking.cpp: the one address that let through, 0 if none
@@ -966,7 +965,6 @@ int Hudson_CheckBeforeStarting()
 	if (plan.netMode != kHudsonNetNone)
 	{
 		NetLoopbackOnly = true;
-		NetLoopbackSearch = plan.typed;
 
 		if (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)
 		{
@@ -7932,11 +7930,6 @@ bool Hudson_NetIsCampaign()
 bool Hudson_NetIsHostile()
 {
 	return HudsonRunIsOn && plan.hostile;
-}
-
-bool Hudson_NetIsTyped()
-{
-	return HudsonRunIsOn && plan.typed;
 }
 
 void Hudson_NetCampaignIsOver()

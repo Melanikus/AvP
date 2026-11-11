@@ -94,7 +94,7 @@ const char *const kHudsonRefusedFindGamesWithoutJoin = "findgames= is a joiner's
 // Added 2026-11-10 by Melanikus (Third) for the AvP port: yespage= and hostrow= (hudson_plan.h)
 const char *const kHudsonRefusedYesPageWord = "yespage= can only be yes or no";
 const char *const kHudsonRefusedYesPageWithoutAccess = "yespage= is the yes page an access run's first press opens, so it needs access=request or access=check";
-const char *const kHudsonRefusedHostRowWord = "hostrow= can only be online or athome";
+const char *const kHudsonRefusedHostRowWord = "hostrow= can only be online: beta.2 hosts online only, through a server's relay";
 const char *const kHudsonRefusedHostRowWithoutHost = "hostrow= is a host's way in, through the Multiplayer page's Host row, so it needs net=host";
 const char *const kHudsonRefusedHostRowWithRelayAuto = "hostrow= hosts through the Multiplayer page's rows, and -relayhost or -askjoiners host by themselves as the menus start, so the rows would never be pressed";
 const char *const kHudsonRefusedHostRowWithCoop = "hostrow= presses Start game, a deathmatch's way in, so it can't be a coop=yes run";
@@ -1301,20 +1301,6 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->coop = true;
 		}
-		else if (WordIs(place, nameLength, "typed"))
-		{
-			if (plan->typed)
-			{
-				return kHudsonRefusedAskedTwice;
-			}
-
-			if (!WordIs(value, valueLength, "yes"))
-			{
-				return kHudsonRefusedCoopNotYes;
-			}
-
-			plan->typed = true;
-		}
 		else if (WordIs(place, nameLength, "hostile"))
 		{
 			if (plan->hostile)
@@ -1541,10 +1527,6 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			if (WordIs(value, valueLength, "online"))
 			{
 				plan->hostRow = kHudsonHostRowOnline;
-			}
-			else if (WordIs(value, valueLength, "athome"))
-			{
-				plan->hostRow = kHudsonHostRowAtHome;
 			}
 			else
 			{

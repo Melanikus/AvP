@@ -67,7 +67,6 @@ void      Net_Disconnect();
 NetID     Net_HostPlayerID();     // who the host is, as far as this machine has been told; 0 before that, and on the host itself
 void      Net_ConnectToAddress();
 void      Net_FindAvPSessions();
-void      Net_StopSearchingForSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
@@ -85,26 +84,23 @@ void      Net_SayLongestGapWhileLoading();
 
 uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
-NetResult Net_ConnectToThisMachine(int level, char *playerName);   // a Hudson run with net= only
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 
 // SEALED OR NOTHING (#188). Added 2026-11-10 by Melanikus for the AvP port, for the owner's boundary (2026-11-09 night): beyond the home
-// network a game is sealed, through the relay, or it doesn't happen; a plain game, as LAN always was, is only ever between addresses on the
-// home network (net_checks.h's NetAddress_IsThisNetwork: 10/8, 172.16/12, 192.168/16, 127/8 and 169.254/16). For every game (#175 PR 3a).
-//   - Net_HostGame, with a server in servers.cfg (Relay_ServerName, relay_list.h), hosts online: through that server's relay, sealed, or
-//     not at all. It never opens on this network instead, and never opens the search port. With no server, it's a home game, as below.
-//   - Net_HostAtHome hosts a home game, whatever servers.cfg says: plain, found by a search on this network, and deaf to every address
-//     that isn't on the home network, so a forwarded router port can't bring in a joiner from the internet.
-//   - Net_HostFailedWhy: why the last of the two gave NET_FAIL for one of online play's reasons, in the game's own fixed words. NULL if it
+// network a game is sealed, through the relay, or it doesn't happen. For every game (#175 PR 3a).
+//   Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): there's no plain game, at home or anywhere.
+//   - Net_HostGame hosts online, through the relay of the server servers.cfg names (Relay_ServerName, relay_list.h), sealed, or not at
+//     all. It never opens on this network instead, and never opens the search port. With no server named, nothing is hosted. A skirmish
+//     opens no network at all.
+//   - Net_HostFailedWhy: why the last Net_HostGame gave NET_FAIL for one of online play's reasons, in the game's own fixed words. NULL if it
 //     didn't fail, or failed for one of the game's older reasons (networking not started, the session or player not made), which the
 //     screen says in its own words. When it's only that the server hasn't answered yet, Net_ServerState says kNetServerAsking: the screen
 //     waits for it, then hosts again.
-NetResult Net_HostAtHome(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 const char *Net_HostFailedWhy(void);
 
 // Where the online server stands, for a host's screen before it hosts, and while it waits. It only reads, so a screen can ask every
 // frame. Net_HostGame asks the server when it hasn't been asked; so does the games page (RelayList_FindRelays).
-int const kNetServerNone = 0;      // no server in servers.cfg: a host's game is a home game
+int const kNetServerNone = 0;      // no server in servers.cfg: nothing can be hosted or joined
 int const kNetServerAsking = 1;    // the server is being asked, or hasn't been yet, and hasn't answered: wait, then host
 int const kNetServerReady = 2;     // the server answered, and it's the one its line names: a host goes online through it
 int const kNetServerCantUse = 3;   // the server can't be used just now: why says why (it couldn't be reached, said no, or its keys don't
@@ -113,13 +109,10 @@ int const kNetServerNeedsYes = 4;  // the player hasn't said yes to the server i
                                    // never asked, so show the line (RelayList_LineToAgree) and host after the yes (RelayList_AgreeToTheLine)
 int Net_ServerState(const char **why);
 
-// Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game on this network whose host isn't on the home network
-// (from a typed address, or a search's answer). The game's own fixed words, or NULL if it wasn't refused that way.
+// Why the last Net_ConnectToSession gave NET_FAIL before it opened anything: a game not through a server's relay, which is plain (modified
+// 2026-11-10: every game goes through one). The game's own fixed words, or NULL if it wasn't refused that way.
 const char *Net_JoinRefusedWhy(void);
 
-// Whether the last search left the typed address unasked, as it isn't on the home network: the words for the games page, or NULL if it
-// was asked or there was none
-const char *Net_TypedAddressRefusedWhy(void);
 
 // What a search for games is told about this one, for a game from the co-op campaign page, whose level changes as the host changes its rows.
 void Net_SayWhatTheGameIs(uint16_t level, const char *levelName, const char *sessionName, uint8_t coopLobby);

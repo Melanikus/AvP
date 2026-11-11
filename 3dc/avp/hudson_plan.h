@@ -188,7 +188,8 @@ enum
 	kHudsonYesPageNo
 };
 
-// hostrow=: a net=host run hosts as a player does: the Multiplayer page's Host row set to Online (online) or At home (athome) and
+// hostrow=: a net=host run hosts as a player does, online (hostrow=online; athome went with the Host row, 2026-11-10, the owner's ruling):
+// the Multiplayer page
 // pictured (multiplayer.png), then Start game, the game's page (host-config.png), the species page (host-species.png) and its Start row. Online, a server that hasn't answered
 // yet is waited for on that page as a player's is: "Asking the server..." (host-asking.png), then hosted, or after 30 s the words for no
 // answer (host-gaveup.png), and the run stops there. Without hostrow=, a host hosts from the code, as before. Added 2026-11-10 by Melanikus
@@ -196,8 +197,7 @@ enum
 enum
 {
 	kHudsonHostRowNone = 0,
-	kHudsonHostRowOnline,
-	kHudsonHostRowAtHome
+	kHudsonHostRowOnline
 };
 
 int const kHudsonDefaultAccessWaitSeconds = 70;   // past the list's one call a minute from one address
@@ -313,7 +313,6 @@ struct HudsonPlan
 	bool machineShared;   // machine=shared: someone may use the machine during the run, so touching it doesn't end the run, and its timings mean nothing
 	bool hostile;         // hostile=yes: a net= run sends each bad message in turn, to see it refused
 	int hostileKind;      // hostile= can also be drain, watch, hold or flood: see HudsonHostileKind
-	bool typed;           // typed=yes: a net= run's joiner finds the game by searching for a typed address, 127.0.0.1
 	bool coopWalk;        // coopwalk=yes: each level's chain file is walked on both machines
 	bool coop;            // coop=yes: a net= run plays the campaign its level is on
 	int coopEndSeconds;   // coopend=: on the host, each level's end is reached this long after it starts
