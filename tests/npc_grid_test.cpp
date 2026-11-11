@@ -319,6 +319,14 @@ static void Cells()
 	uint32_t const onWall = grid.NearestCell(0, -1650, 1650, kNpcGridAlien, 10);
 	Check(onWall != kNpcGridNoCell && grid.Room(onWall) == 6000, "a cell on the room's wall has 6000 of room, to the far wall (" + Number(grid.Room(onWall)) + ")");
 
+	// The same at z 2550, 150 short of the pillar's side. Added 2026-11-11 by Melanikus (Third) for the AvP port: a ray tries only the
+	// polygons in the metre boxes it passes through (kNpcGridBox), and the one at z 1650, above, never shares a box with the pillar, so it
+	// can't show this. This one passes through the box the pillar's face at x = 2700 is in (x, y and z from 2000, -2000 and 2000), so the
+	// face is tried, and the ray crosses its plane at z 2550, off the face. Only a hit inside the polygon counts, so the room goes on past it
+	uint32_t const besidePillar = grid.NearestCell(0, -1650, 2550, kNpcGridAlien, 10);
+	Check(besidePillar != kNpcGridNoCell && grid.Room(besidePillar) == 6000,
+		"a cell on the room's wall beside the pillar's row has 6000 of room: crossing the pillar face's plane off the face is no hit (" + Number(grid.Room(besidePillar)) + ")");
+
 	// Asking about cells that aren't there
 	Check(grid.SheetOf(static_cast<uint32_t>(grid.Cells())) == -1 && grid.Flags(static_cast<uint32_t>(grid.Cells())) == 0 &&
 		grid.Room(static_cast<uint32_t>(grid.Cells())) == 0 && !grid.Middle(static_cast<uint32_t>(grid.Cells()), m),
@@ -525,6 +533,22 @@ static void Steps()
 
 	Check(everyTread[0] && everyTread[1] && everyTread[2] && everyTread[3], "on every tread");
 	Check(grid.Search(top, bottom, kNpcGridMarine, 1, 100000, &way, &looks) == kNpcGridFound, "and comes down them");
+
+	// A door's floor 500 above the floor beside it, with no riser. Added 2026-11-11 by Melanikus (Third) for the AvP port. No part of a
+	// door is in anyone's way, so a marine stands on both edges, 300 apart, and only the step's own height keeps them apart: 500 is more
+	// than kNpcGridStep, all the game lifts him. (On the ledge, below, the riser's own square keeps the edges 900 apart, whatever the step.)
+	{
+		std::vector<AlienWaysPolygon> world;
+		world.push_back(Floor(0, 3000, 0, 3000, 0));
+		world.push_back(Facing({ { 0, -500, 3000 }, { 3000, -500, 3000 }, { 3000, -500, 6000 }, { 0, -500, 6000 } }, 0, -1, 0, 1));
+		AlienWaysMap doorMap;
+		NpcGrid doorGrid;
+		bool const built = Build(world, &doorMap, &doorGrid, &why);
+		uint32_t const edge = built ? doorGrid.NearestCell(1650, 0, 2850, kNpcGridMarine, 10) : kNpcGridNoCell;
+		uint32_t const doorEdge = built ? doorGrid.NearestCell(1650, -500, 3150, kNpcGridMarine, 10) : kNpcGridNoCell;
+		Check(edge != kNpcGridNoCell && doorEdge != kNpcGridNoCell, "a marine stands on a floor's edge, and on a door's floor 500 above it, 300 beyond");
+		Check(built && doorGrid.Steps() == 0, "and they're no step: 500 is more than kNpcGridStep (" + Number(doorGrid.Steps()) + " steps)");
+	}
 }
 
 // A ledge: the floor at y = 0 up to z = 3000, and a platform 500 higher beyond it, with the wall between. 500 is more than a step.

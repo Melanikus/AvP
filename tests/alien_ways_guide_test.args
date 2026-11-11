@@ -4,3 +4,4 @@
 tests/alien_ways_guide_test.cpp
 3dc/avp/alien_ways_guide.cpp
 3dc/avp/alien_ways_map.cpp
+3dc/avp/npc_grid.cpp
