@@ -65,12 +65,12 @@
 			]
 		},
 		{
-			"name": "a line longer than its room isn't ended",
+			"name": "ours and not ours are swapped",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_page_rules.h",
-					"from": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n\t}\n\n\tout[room - 1] = 0;\n",
-					"to": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n\t}\n\n"
+					"from": "ours ? (oursWords ? oursWords : \"\") : (notOursWords ? notOursWords : \"\")",
+					"to": "!ours ? (oursWords ? oursWords : \"\") : (notOursWords ? notOursWords : \"\")"
 				}
 			]
 		},
