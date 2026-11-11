@@ -983,6 +983,18 @@ bool RelayList_Relays(RelayListRelay *relays, int *count)
 # The servers this game plays online through
 203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
 '@ + "`n") }
+
+# The same list with a Hudson run's yes page (yespage=, rule Y's second form; added 2026-11-10 by Melanikus (Third) for the AvP port): the
+# run's two flags, its Yes held for the run alone before any yes is read, added or kept, and the switch Hudson's files call
+$yesPageList = ($onlineGood['3dc/relay_list.cpp'] -replace "`r", '')
+$yesPageList = $yesPageList.Replace("namespace`n{`n`tbool TheLineIsAgreed", "bool hudsonRunShowsTheYesPage = false;`nbool hudsonRunSaidYes = false;`n`nnamespace`n{`n`tbool TheLineIsAgreed")
+$yesPageList = $yesPageList.Replace("`t`tif (HudsonRunIsOn)`n`t`t{`n`t`t`treturn true;`n`t`t}", "`t`tif (HudsonRunIsOn)`n`t`t{`n`t`t`treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;`n`t`t}")
+$yesPageHudsonsYes = "`tif (HudsonRunIsOn)`n`t{`n`t`thudsonRunSaidYes = true;`n`t`treturn true;`n`t}`n`n"
+$yesPageKept = "`tTheLineIsAgreed(*line);`n`tServersTrust_Add(&yeses, hash);`n`tNetIdentityStore_KeepTrust(yeses);`n"
+$yesPageList = $yesPageList.Replace("bool RelayList_AgreeToTheLine(void)`n{`n`tServersTrust_Add(&yeses, theHash);`n`treturn true;`n}",
+    "bool RelayList_AgreeToTheLine(void)`n{`n$yesPageHudsonsYes$yesPageKept`treturn true;`n}`n`nvoid HudsonTest_RelayListShowsTheYesPage(void)`n{`n`thudsonRunShowsTheYesPage = true;`n}")
+$yesPageElsewhere = "`nvoid Elsewhere(void)`n{`n`tFLAG = true;`n}`n"
+
 $onlineCases = @(
     @{ What = 'no network code at all is let through'; None = $true; Files = @{ '3dc/game.cpp' = (@'
 void Frame()
@@ -1248,6 +1260,21 @@ void Sneak(void)
 	ServersTrust_Add(&yeses, anyHash);
 }
 '@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 178 adds a yes: only the player''s own' },
+    @{ What = 'Y: a Hudson run''s yes page, with its guards, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList }; Passes = 'The servers this release ships (servers.cfg): 1' },
+    @{ What = 'Y: the yes page''s first line without its flags is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			return true;
+		}
+
+		uint8_t hash
+'@); To = (@'
+			return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;
+		}
+
+		uint8_t hash
+'@) } }; Reason = 'Y: 3dc/relay_list.cpp must start hudsonRunShowsTheYesPage false, once' },
+    @{ What = 'Y: a Hudson run''s Yes kept as a player''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList.Replace("$yesPageHudsonsYes$yesPageKept", "$yesPageKept`n$($yesPageHudsonsYes.TrimEnd("`n"))`n") }; Reason = 'Y: RelayList_AgreeToTheLine (3dc/relay_list.cpp) must hold a Hudson run''s Yes for the run alone' },
+    @{ What = 'Y: the yes page asked for anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList + $yesPageElsewhere.Replace('FLAG', 'hudsonRunShowsTheYesPage') }; Reason = 'Y: 3dc/relay_list.cpp changes hudsonRunShowsTheYesPage in 3 places' },
+    @{ What = 'Y: a Hudson run''s Yes set anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList + $yesPageElsewhere.Replace('FLAG', 'hudsonRunSaidYes') }; Reason = 'Y: 3dc/relay_list.cpp changes hudsonRunSaidYes in 3 places' },
     @{ What = 'Y: a line without the yes waited for as if it had one is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 	if (line && !TheLineIsAgreed(*line))
 '@); To = (@'

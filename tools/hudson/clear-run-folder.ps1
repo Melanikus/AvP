@@ -9,6 +9,12 @@
 #   HudsonRun\My Games\Aliens versus Predator\MPConfig
 #   HudsonRun\My Games\Aliens versus Predator\pictures
 #
+# And the same four in the second copy's folder, "HudsonRun\My Games\Aliens versus Predator (second copy)". A run with -SecondCopy is the
+# game's second copy on this machine, and the game keeps that copy's files in a folder of that name (save_folder.h,
+# kSaveFolderSecondCopyName). Without it here, a second copy could run once in a folder and was refused every time after. The online
+# identity isn't in either folder: the game keeps it in %LOCALAPPDATA%\AVPx (net_identity_store.cpp), so clearing never touches it.
+# (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+#
 # WHAT CAN'T GO: anything else. Nothing is deleted by going down through folders, so there's no way to wander out of these four. The copies a run keeps, in <game folder>\runs, are outside them.
 #
 # A FILM NEVER GOES, because the user wants all of them kept. run-hudson.ps1 moves a film out after every run, so one is only still here if a run was cut short before it could. It's moved to <game folder>\runs\films-left-behind instead of being deleted, and
@@ -53,16 +59,24 @@ function Clear-HudsonRunFolder([string]$GameFolder)
         return $null
     }
 
-    # What each folder may hold. Only the last four may hold plain files, and those are what goes.
-    $saves = 'HudsonRun\My Games\Aliens versus Predator'
+    # What each folder may hold. Only the four folders under each copy's own folder may hold plain files, and those are what goes. The
+    # game's folder and the second copy's have the same four (see the top of this file).
+    $savesNames = @('Aliens versus Predator', 'Aliens versus Predator (second copy)')
     $rules = @(
         @{ Folder = 'HudsonRun';                  Folders = @('My Games');                  Files = $false },
-        @{ Folder = 'HudsonRun\My Games';         Folders = @('Aliens versus Predator');    Files = $false },
-        @{ Folder = $saves;                       Folders = @('User_Profiles', 'MPConfig', 'pictures'); Files = $true },
-        @{ Folder = "$saves\User_Profiles";       Folders = @();                            Files = $true },
-        @{ Folder = "$saves\MPConfig";            Folders = @();                            Files = $true },
-        @{ Folder = "$saves\pictures";            Folders = @();                            Files = $true }
+        @{ Folder = 'HudsonRun\My Games';         Folders = $savesNames;                    Files = $false }
     )
+
+    foreach ($name in $savesNames)
+    {
+        $saves = "HudsonRun\My Games\$name"
+        $rules += @(
+            @{ Folder = $saves;                   Folders = @('User_Profiles', 'MPConfig', 'pictures'); Files = $true },
+            @{ Folder = "$saves\User_Profiles";   Folders = @();                            Files = $true },
+            @{ Folder = "$saves\MPConfig";        Folders = @();                            Files = $true },
+            @{ Folder = "$saves\pictures";        Folders = @();                            Files = $true }
+        )
+    }
 
     if (Test-HudsonIsLink (Get-Item -LiteralPath $runFolder -Force))
     {

@@ -18,7 +18,7 @@ It won't start without a claude process, so that nothing is left starting games 
 
 THE SMOKE TEST: every game starts by turning to the other player and checking it can see them, before anything else it does. pair.txt says how each one went in its smoke_host=, smoke_join= and smoke_third= lines, and so does what this prints, first. A run whose smoke test failed doesn't count as a pass, whatever else it did.
 
-Exit code: 0 if both runs ended with 0, or the first that didn't. 100 means it didn't start, 110 means a game had something open on another address, and 111 means every run ended with 0 but a smoke test failed.
+Exit code: 0 if both runs ended with 0, or the first that didn't. 100 means it didn't start, 110 means a game had something open on another address, and 111 means every run ended with 0 but a smoke test failed. 112 means every run ended with 0 and the smoke tests passed, but a game's log has a "DirectX Error!" line: pair.txt's d3d_errors_ and d3d_first_ lines say which game, how many and the first (#203).
 
 CHECKING THE WATCH ITSELF: -CheckTheWatch starts no game. It puts the watch's rule (Test-SocketIsOffThisMachine, below) through every kind of socket it has to tell apart, and says which, if any, it got wrong. Exit code 0 if none, 1 if any.
 
@@ -85,7 +85,20 @@ param(
     [int]$JoinGun = 0,
     [int]$StepSeconds = 0,  # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600: for a film that should move on. 0 is 180
     [int]$HostFilmSkip = 0,
-    [int]$JoinFilmSkip = 0
+    [int]$JoinFilmSkip = 0,
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host answers a player asking to join on the page's own rows, and the joiner
+    # finds the host through Find Games, as players do (run-hudson.ps1's -Answer, -AnswerAfter and -FindGames, Hudson's answer=,
+    # answerafter= and findgames=). Without them the host lets every joiner in, and the joiner joins by its own way, as before
+    [string]$HostAnswer = '',     # letin or no
+    [int]$HostAnswerAfter = 0,    # with -HostAnswer: seconds before the host answers, 1 to 15. Left out, Hudson's own 3
+    [switch]$JoinFindGames,
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase: both games' films start at the menus, cut into a
+    # clip for each page they picture (run-hudson.ps1's -FilmMenus and -PageHold, Hudson's film=menus and pagehold=)
+    [switch]$FilmMenus,
+    [int]$PageHold = 0,           # with -FilmMenus: seconds each pictured page is held first, 1 to 10
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the host hosts through the Multiplayer page's Host row, online or athome
+    # (run-hudson.ps1's -HostRow, Hudson's hostrow=)
+    [string]$HostRow = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -375,6 +388,20 @@ if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Rela
 $serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
 if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
 if ($Relay -and $ThirdFolder) { Stop-Here "a pair through the relay is two players, the host and the second copy, and -ThirdFolder would be a third copy with no identity of its own" }
+# The host's answer and the joiner's Find Games (added 2026-11-10 by Melanikus (Third)): to Hudson's own words and ranges, and run-hudson.ps1
+# checks them again for each game. -cmatch, because Hudson's words are small letters and PowerShell's -match ignores case
+if ($HostAnswer -and $HostAnswer -cnotmatch '\A(letin|no)\z') { Stop-Here "-HostAnswer is letin or no" }
+if ($HostAnswerAfter -ne 0 -and -not $HostAnswer) { Stop-Here "-HostAnswerAfter says when the host answers, so it needs -HostAnswer" }
+if ($HostAnswerAfter -ne 0 -and ($HostAnswerAfter -lt 1 -or $HostAnswerAfter -gt 15)) { Stop-Here "-HostAnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
+if ($FilmMenus -and $NoFilm) { Stop-Here "-FilmMenus asks for films, and -NoFilm says there are none" }
+if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
+if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
+# The host through the Host row (added 2026-11-10 by Melanikus (Third)). At home, the joiner comes by its typed address on this machine:
+# Find games' home search would ask the whole network, by broadcast, and a pair here keeps to this machine
+if ($HostRow -and $HostRow -cnotmatch '\A(online|athome)\z') { Stop-Here "-HostRow is online or athome" }
+if ($HostRow -and -not $Relay) { Stop-Here "-HostRow presses the Host row, which is on the page only when servers.cfg names a server, so it needs -Relay and -ServersLine" }
+if ($HostRow -ceq 'athome' -and (-not $Typed -or $JoinFindGames)) { Stop-Here "-HostRow athome is a game at home, which the joiner reaches by its typed address on this machine, so it needs -Typed and no -JoinFindGames: Find games' home search would broadcast to the whole network" }
+if ($HostRow -ceq 'online' -and $Typed) { Stop-Here "-HostRow online is a game through the server, which a typed address on this machine doesn't reach, so it can't have -Typed" }
 
 # A hostile run sends the other game bad messages on purpose. Beyond this machine the other end could be anybody's game, so no hostile kind
 # ever goes through -RemoteRelay (Primary's read of this line, 2026-11-09). The game's own plan reader refuses the same.
@@ -474,6 +501,13 @@ function Start-OneRun([string]$folder, [string]$word, [string]$partner, [string]
     if ($ServersLine) { $words += @('-ServersLine', "`"$ServersLine`"") }
     # Through the relay, the joiner is the second copy (added 2026-11-09 by Melanikus (Fifth) for the AvP port)
     if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }
+    # The host's answer and the joiner's way in through Find Games (added 2026-11-10 by Melanikus (Third) for the AvP port)
+    if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }
+    if ($word -eq 'host' -and $HostAnswerAfter -ne 0) { $words += @('-AnswerAfter', "$HostAnswerAfter") }
+    if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }
+    if ($word -eq 'host' -and $HostRow) { $words += @('-HostRow', $HostRow) }
+    if ($FilmMenus) { $words += '-FilmMenus' }
+    if ($PageHold -ne 0) { $words += @('-PageHold', "$PageHold") }
     if ($NoFilm) { $words += '-NoFilm' }
     if ($CoopEnd -gt 0) { $words += @('-CoopEnd', "$CoopEnd") }
 
@@ -624,6 +658,39 @@ foreach ($game in @('host', 'join', 'third'))
     }
 }
 
+# #203, with Primary (#202): a DirectX call that fails is said once in that game's own log ("DirectX Error! : ..."), and nothing else
+# shows it: a join once lost a frame that way on every run, unseen. So each game's log is read for those lines, wherever its run was
+# kept (its output's "Kept in" line), and pair.txt says how many there were and the first, word for word. Any at all fails the pair
+# (exit 112), even when everything else passed. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+$directXErrors = 0
+
+foreach ($game in @('host', 'join', 'third'))
+{
+    $file = Join-Path $kept "$game-output.txt"
+
+    if (-not (Test-Path -LiteralPath $file)) { continue }
+
+    $keptLine = @(Get-Content -LiteralPath $file | Where-Object { $_ -match '^run-hudson: exit code .*Kept in (.+)$' }) | Select-Object -First 1
+    $runFolder = if ($keptLine -and $keptLine -match 'Kept in (.+)$') { $Matches[1].Trim() } else { '' }
+    $gameLog = if ($runFolder) { Join-Path $runFolder 'avp_log.txt' } else { '' }
+
+    if (-not $gameLog -or -not (Test-Path -LiteralPath $gameLog -PathType Leaf))
+    {
+        $lines += "d3d_errors_$game=unknown: its log wasn't found"
+        continue
+    }
+
+    $errors = @(Get-Content -LiteralPath $gameLog | Where-Object { $_ -like '*DirectX Error!*' })
+    $lines += "d3d_errors_$game=$($errors.Count)"
+
+    if ($errors.Count -gt 0)
+    {
+        $lines += "d3d_first_$game=$($errors[0].Trim())"
+        Write-Host "run-net-pair: FINDING: the $game game's log has $($errors.Count) DirectX error line(s), the first: $($errors[0].Trim())"
+        $directXErrors += $errors.Count
+    }
+}
+
 if ($rulesAfter.Count -ne $rulesBefore.Count)
 {
     Write-Host "run-net-pair: FINDING: the firewall has new rules for these programs, so Windows asked and someone answered: $($rulesAfter.Count - $rulesBefore.Count)"
@@ -643,4 +710,5 @@ if ($hostExit -ne 0) { exit $hostExit }
 if ($joinExit -is [int] -and $joinExit -ne 0) { exit $joinExit }
 if ($null -eq $joinRun) { exit 100 }
 if ($smokeFailed) { exit 111 }
+if ($directXErrors -gt 0) { exit 112 }
 exit 0

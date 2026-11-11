@@ -76,7 +76,8 @@ enum HudsonExitCode
 	kHudsonExitNetworkGame = 35,       // strategies are only looked at or asked in a game with nobody else in it
 	kHudsonExitNoEnemy = 36,           // combat= couldn't make its alien, or there was nowhere in sight of him to put it
 	kHudsonExitNetStopped = 50,        // net=: the two games couldn't get as far as playing together, and the result's net_stage says where it stopped
-	kHudsonExitStoppedEarly = 37       // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedEarly = 37,      // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedByHand = 38      // someone asked the run to end, with a hudson-stop file (#198): it ended as at its time limit, so its film is finished
 };
 
 // With gun= on the command line, presses the player's keys for this frame. The game calls this straight after reading the real ones. playerStatus is the PLAYER_STATUS. See hudson.cpp.
@@ -142,8 +143,17 @@ int Hudson_AccessWaitSeconds();
 // answer=: kHudsonAnswer..., 0 for none, and answerafter='s seconds
 int Hudson_AnswerPress();
 int Hudson_AnswerAfterSeconds();
+// pagehold= (with film=menus): the seconds each page the menus picture is held first, so the film shows it; 0 for none. Added 2026-11-10
+// by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds();
 // findgames=yes: a joiner through the relay joins by Find Games and the list's game's row, as a player does
 bool Hudson_JoinsThroughFindGames();
+// yespage= (hudson_plan.h, kHudsonYesPage...): the yes page's row an access run presses; none outside a run. Added 2026-11-10 by
+// Melanikus (Third) for the AvP port
+int Hudson_YesPagePress();
+// hostrow= (hudson_plan.h, kHudsonHostRow...): where a host through the Multiplayer page's Host row hosts; none outside a run, or for a
+// host from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_HostRow();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);

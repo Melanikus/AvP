@@ -16,8 +16,10 @@
 // with two rows under it, "No, not now" first, then "Yes, use this server".
 //
 // THE WAYS IN are the three that would use the line: Find games, Host online and the Online access page. Each asks ServerYesPage_Needed
-// before it goes on (Primary hooks them into his screens; PO, 2026-11-10). A Hudson run never sees the page: relay_list.cpp needs no yes
-// in one, as nobody is there to answer.
+// before it goes on (Primary hooks them into his screens; PO, 2026-11-10). A Hudson run doesn't see the page: relay_list.cpp needs no yes
+// in one, as nobody is there to answer. The one exception is a run asked for it with yespage= (hudson_plan.h), which sees it as a player
+// does and presses one of its rows; that yes holds for the run alone and is never kept (relay_list.h, RelayList_AgreeToTheLine).
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port.
 
 #ifndef SERVER_YES_PAGE_H
 #define SERVER_YES_PAGE_H

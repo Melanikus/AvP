@@ -856,7 +856,9 @@ static void TestTheCalls()
 	Check(gate != std::string::npos && gate < starting.find("new (std::nothrow) Shared") && gate < starting.find("swprintf(made->server"),
 		"the list starts only for a line the player has said yes to: before it makes anything, or writes the server it would call");
 	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}");
+	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
+	// held for that run alone (hudson_plan_test reads where that Yes goes, and that it's never kept)
+	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}");
 	Check(hudsonFirst != std::string::npos && hudsonFirst < agreed.find("if (!yesesRead)") && Has(agreed, "return LineHash(line, hash) && ServersTrust_Has(yeses, hash);") &&
 		Has(source, "extern bool HudsonRunIsOn;") && !Has(source, "HudsonRunIsOn =") && !Has(source, "HudsonRunIsOn=") ,
 		"the one way past it is a Hudson run, which this file only reads; anyone else's line needs its own hash among the kept yeses");
