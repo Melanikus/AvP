@@ -931,7 +931,10 @@ static void Limits()
 	}
 
 	size_t const sheets = grid.Sheets(), cells = grid.Cells(), kept = grid.BytesKept(), rays = grid.RayTests(), squares = grid.SquareTests();
-	size_t const building = grid.BytesWhileBuilding(), forLinks = (grid.Links() + grid.Falls()) * 2 * sizeof(uint32_t),
+	// The links' bytes: two cell numbers for each link and fall, and each link's kind (ONLY A JOIN'S LINKS, npc_grid.h; modified 2026-11-11
+	// by Melanikus (Third), #109)
+	size_t const building = grid.BytesWhileBuilding(),
+		forLinks = (grid.Links() + grid.Falls()) * 2 * sizeof(uint32_t) + grid.Links() * sizeof(uint8_t),
 		forPieces = grid.PieceBytes();
 	Check(kept > 0 && rays > 0 && squares > 0 && building > 0, "it counts what it keeps, its rays, its squares and what it held while building");
 	std::vector<AlienWaysPolygon> const world = PillarRoom();
@@ -1156,6 +1159,53 @@ static std::vector<AlienWaysPolygon> WallOnAFloor(bool front)
 	return world;
 }
 
+// ONLY A JOIN'S LINKS (npc_grid.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's ruling, from Secondary's count of
+// the ready line): a floor, and 50 mm past its edge a ramp of 40 degrees going down from the same height. The two don't touch, so the map
+// doesn't join them, but a marine steps from one onto the other (step 9), by links whose two cells sort OUTSIDE, each behind the other's
+// face, as at the top of a ramp. A step carries no kind, so it isn't counted, and an alien's way over it isn't priced.
+static std::vector<AlienWaysPolygon> RampOverAGap()
+{
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Floor(0, 3000, 0, 3000, 0));
+	world.push_back(Facing({ { 0, 0, 3050 }, { 3000, 0, 3050 }, { 3000, 2517, 6050 }, { 0, 2517, 6050 } }, 0, -1, 1));
+	return world;
+}
+
+static void StepsCarryNoKind()
+{
+	printf("Only a join's links carry its kind\n");
+	AlienWaysMap map;
+	NpcGrid grid;
+	const char *why;
+
+	if (!Build(RampOverAGap(), &map, &grid, &why))
+	{
+		Check(false, "the floor and the ramp past its edge build");
+		return;
+	}
+
+	// Each link once, from its lower cell: the steps between the floor and the ramp, and the ones of them whose cells sort OUTSIDE
+	size_t steps = 0, outsideByCells = 0;
+
+	for (uint32_t c = 0; c < grid.Cells(); c++)
+	{
+		size_t count = 0;
+		const uint32_t *list = grid.LinksOf(c, &count);
+
+		for (size_t k = 0; k < count; k++)
+		{
+			steps += c < list[k] && grid.SheetOf(c) != grid.SheetOf(list[k]) ? 1 : 0;
+			outsideByCells += c < list[k] && grid.JoinOf(c, list[k]) == kNpcGridJoinOutside ? 1 : 0;
+		}
+	}
+
+	Check(map.Joins() == 0, "the map doesn't join the floor and the ramp: they don't touch");
+	Check(steps > 0 && outsideByCells > 0, "a marine steps from the floor onto the ramp, by links whose cells sort OUTSIDE (" + Number(outsideByCells) +
+		" of " + Number(steps) + ")");
+	Check(grid.OutsideJoins() == 0 && grid.ThroughJoins() == 0, "but a step carries no kind, so the grid counts none (" +
+		Number(grid.OutsideJoins()) + " OUTSIDE), and an alien's way over it isn't priced, as the search reads the same kind");
+}
+
 static void Joins()
 {
 	printf("The kinds of join an alien's way crosses\n");
@@ -1205,6 +1255,43 @@ static void Joins()
 	Check(outside > 0 && grid.OutsideJoins() == outside, "the grid counts its OUTSIDE joins, each link once: the pillar's four corners (" +
 		Number(grid.OutsideJoins()) + ")");
 	Check(through == 0 && grid.ThroughJoins() == 0, "and no THROUGH join: no face here is hidden behind another");
+
+	// A POINT JOIN (step 7 of Build; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): a wall standing on a floor, away from
+	// its edges but for its end, which touches the floor's edge. The map joins the two only at that point, and the link there is kept, so
+	// an alien still climbs the wall from the floor (on Genshd1, 15 parts of the level are joined only so). Its floor cell is the one in
+	// front of the wall, as the room with the pillar's count above needs, so the link is INSIDE: the wall stands on the floor.
+	{
+		std::vector<AlienWaysPolygon> fin;
+		fin.push_back(Floor(0, 3000, 0, 3000, 0));
+		fin.push_back(WallAtX(1500, 0, 1500, -2000, 0, -1));
+		AlienWaysMap finMap;
+		NpcGrid finGrid;
+		std::vector<uint32_t> way;
+		size_t looks = 0;
+		bool const built = Build(fin, &finMap, &finGrid, &why);
+		uint32_t const onFloor = built ? finGrid.NearestCell(750, 0, 750, kNpcGridAlien, 10) : kNpcGridNoCell;
+		uint32_t const onWall = built ? finGrid.NearestCell(1500, -1650, 750, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(built && finMap.Joins() == 1 && onFloor != kNpcGridNoCell && onWall != kNpcGridNoCell,
+			"a wall whose end touches its floor's edge is joined to it there, and only there");
+		Check(finGrid.Search(onFloor, onWall, kNpcGridAlien, 10, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(finGrid, way),
+			"and an alien on the floor still climbs it, by the link at that point");
+		size_t inside = 0, other = 0;
+
+		for (uint32_t c = 0; c < finGrid.Cells(); c++)
+		{
+			size_t count = 0;
+			const uint32_t *list = finGrid.LinksOf(c, &count);
+
+			for (size_t k = 0; k < count; k++)
+			{
+				inside += finGrid.SheetOf(c) != finGrid.SheetOf(list[k]) && finGrid.JoinOf(c, list[k]) == kNpcGridJoinInside ? 1 : 0;
+				other += finGrid.SheetOf(c) != finGrid.SheetOf(list[k]) && finGrid.JoinOf(c, list[k]) != kNpcGridJoinInside ? 1 : 0;
+			}
+		}
+
+		Check(inside > 0 && other == 0 && finGrid.OutsideJoins() == 0 && finGrid.ThroughJoins() == 0,
+			"its links there are INSIDE: from the floor in front of the wall, not behind it (" + Number(inside) + " ways)");
+	}
 
 	// The ledge: an alien going up it crosses its foot, an INSIDE join, then its lip, an OUTSIDE one. It has no other way, so it's still
 	// found: the lip is a price, not a wall.
@@ -1339,6 +1426,7 @@ int main()
 	Steps();
 	Falls();
 	Joins();
+	StepsCarryNoKind();
 	Slopes();
 	Doors();
 	Room();

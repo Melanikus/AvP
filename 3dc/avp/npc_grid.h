@@ -117,6 +117,12 @@ int const kNpcGridSideSlack = 300;           // how far behind a sheet's plane a
 // A middle within the slack has no say. A cell's middle can be anywhere from 0 to 300 mm from the join, so the one nearest it can't
 // tell front from behind (Secondary's catch). The other middle then decides INSIDE or OUTSIDE alone, and THROUGH needs both to be clear.
 // The two prices are starting values, for Primary's films to tune. A marine's search is never priced so: Hudson's ways are as they were.
+// ONLY A JOIN'S LINKS (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109; PO's ruling from Secondary's count): a link is
+// sorted only when it's made along a join between two polygons (step 7 of Build), and it keeps its kind from the build. A marine's step
+// from one sheet onto another (step 9: floor onto a ramp, a stair's tread onto the next) is PLAIN, whatever its two cells would sort as:
+// "corners repel" is about where the game's climbing can't turn an alien, not about walking onto a ramp. On Genshd1 the steps were about
+// 10,800 of the 78,322 OUTSIDE links and 11,600 of the 13,439 THROUGH ones, so an alien paid 3 m or 10 m more just to step onto a ramp.
+// Where two polygons only touch at a point, step 7 still links them, by cells that face each other (it says how).
 enum NpcGridJoin
 {
 	kNpcGridJoinPlain,
@@ -208,6 +214,7 @@ public:
 	// THE KIND OF A JOIN (above), between two cells of different sheets: PLAIN for two cells of one sheet, or a number that isn't a cell.
 	// The same both ways round. And how many of the grid's links are OUTSIDE and THROUGH, each link counted once, though it's kept both
 	// ways: for the log's line when the grid is ready. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel).
+	// Only a join's links are counted: a step carries no kind (ONLY A JOIN'S LINKS, above). Modified 2026-11-11 by Melanikus (Third), #109.
 	NpcGridJoin JoinOf(uint32_t a, uint32_t b) const;
 	size_t OutsideJoins() const { return outsideJoins; }
 	size_t ThroughJoins() const { return throughJoins; }
@@ -319,6 +326,8 @@ private:
 	std::vector<int32_t> polygonOf;      // a cell's map polygon, or -1
 	std::vector<uint32_t> linkFrom;      // each link, sorted by the cell it's from
 	std::vector<uint32_t> linkTo;
+	std::vector<uint8_t> linkJoin;       // each link's kind (an NpcGridJoin), by the same place as linkTo (ONLY A JOIN'S LINKS; added
+	                                     // 2026-11-11 by Melanikus (Third), #109)
 	std::vector<uint32_t> fallFrom;      // each fall, the same
 	std::vector<uint32_t> fallTo;
 	NpcGridPieces pieces;                // which pieces an alien's cells make, worked out once after the build

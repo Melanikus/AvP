@@ -549,8 +549,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/npc_grid.cpp",
-					"from": "\t\t\tif (searchBody == kNpcGridAlien)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = JoinOf(c, n);",
-					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = JoinOf(c, n);"
+					"from": "\t\t\tif (searchBody == kNpcGridAlien)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);"
 				}
 			]
 		},
@@ -559,8 +559,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/npc_grid.cpp",
-					"from": "\t\t\t\tNpcGridJoin const join = JoinOf(c, n);\n",
-					"to": "\t\t\t\tNpcGridJoin const join = JoinOf(c, n);\n\n\t\t\t\tif (join == kNpcGridJoinThrough)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n"
+					"from": "\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);\n",
+					"to": "\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);\n\n\t\t\t\tif (join == kNpcGridJoinThrough)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n"
 				}
 			]
 		},
@@ -649,8 +649,73 @@
 			"changes": [
 				{
 					"file": "3dc/avp/npc_grid.cpp",
-					"from": "\t\t\treturn own != kNpcGridNoCell ? own : best;\n",
-					"to": "\t\t\treturn best;\n"
+					"from": "(behind ? 2 : 0) + (grid.polygonOf[c] == polygon ? 0 : 1);",
+					"to": "(behind ? 2 : 0);"
+				}
+			]
+		},
+		{
+			"name": "at a point join, a cell behind the other polygon's face is taken as readily as one in front",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tconst Sheet *const facingA = atAPoint ? &sheets[static_cast<size_t>(sb)] : nullptr;\n",
+					"to": "\t\t\tconst Sheet *const facingA = nullptr;\n"
+				},
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tconst Sheet *const facingB = atAPoint ? &sheets[static_cast<size_t>(sa)] : nullptr;\n",
+					"to": "\t\t\tconst Sheet *const facingB = nullptr;\n"
+				}
+			]
+		},
+		{
+			"name": "a step carries its two cells' kind",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "!Add::Both(&links, limits.mostLinks, c, o, kNpcGridJoinPlain))",
+					"to": "!Add::Both(&links, limits.mostLinks, c, o, JoinOf(c, o)))"
+				}
+			]
+		},
+		{
+			"name": "a join's links carry no kind",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "!Add::Both(&links, limits.mostLinks, ca, cb, JoinOf(ca, cb)))",
+					"to": "!Add::Both(&links, limits.mostLinks, ca, cb, kNpcGridJoinPlain))"
+				}
+			]
+		},
+		{
+			"name": "the grid counts every link by its cells, steps too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[k]);\n",
+					"to": "\t\t\tNpcGridJoin const join = JoinOf(linkFrom[k], linkTo[k]);\n"
+				}
+			]
+		},
+		{
+			"name": "step 7 makes no links where two polygons only touch at a point",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tbool const atAPoint = length < static_cast<double>(kAlienWaysTouch);\n",
+					"to": "\t\t\tbool const atAPoint = length < static_cast<double>(kAlienWaysTouch);\n\n\t\t\tif (atAPoint)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a cell behind the other face ranks with one in front",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\t\t\tint const rank = (behind ? 2 : 0) + (grid.polygonOf[c] == polygon ? 0 : 1);\n",
+					"to": "\t\t\t\t\tint const rank = (grid.polygonOf[c] == polygon ? 0 : 1);\n"
 				}
 			]
 		}

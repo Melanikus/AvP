@@ -165,10 +165,18 @@ struct BoxEntry
 	bool operator<(const BoxEntry &other) const { return key < other.key || (key == other.key && polygon < other.polygon); }
 };
 
+// A link or a fall: from one cell to another, and for a link the kind it carries (ONLY A JOIN'S LINKS, npc_grid.h): a link made along a
+// join keeps its two cells' kind, a step's is PLAIN (0, as left unset). Sorted by from and to, and the same pair's copies by kind, the
+// highest first, so where a join and a step both made one link, the one that's kept (unique keeps the first) carries the join's kind.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 struct Pair
 {
 	uint32_t from, to;
-	bool operator<(const Pair &other) const { return from < other.from || (from == other.from && to < other.to); }
+	uint8_t join;
+	bool operator<(const Pair &other) const
+	{
+		return from < other.from || (from == other.from && (to < other.to || (to == other.to && join > other.join)));
+	}
 	bool operator==(const Pair &other) const { return from == other.from && to == other.to; }
 };
 
@@ -213,6 +221,7 @@ void NpcGrid::LetGo()
 	cutShort = false;
 	GiveBack(&linkFrom);
 	GiveBack(&linkTo);
+	GiveBack(&linkJoin);
 	GiveBack(&fallFrom);
 	GiveBack(&fallTo);
 	surfaceCells = steps = rayTests = squareTests = boxEntries = 0;
@@ -1098,11 +1107,23 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 	// gable), its nearest cell could be on the far side, and the join then sorted as the wrong kind (THE KIND OF A JOIN, npc_grid.h): on
 	// Genshd1, in Secondary's copy, 35 inside corners read THROUGH along their whole length. With the joined polygon's own cell first, 1 did,
 	// and no join and no link was lost.
+	// Modified again 2026-11-11 by Melanikus (Third), #109 (from Secondary's copy of the room with the pillar, and his count on Genshd1):
+	// A POINT JOIN. The map joins polygons that touch anywhere, a corner of one within kAlienWaysTouch of an edge of the other, corners
+	// included, so two that meet only at one corner are joined with a stretch shorter than that. There the joined polygon's own cell can be
+	// round a corner from the other: the floor beside a pillar touches the pillar's next face only at its foot's corner, and its nearest
+	// cell there is 150 mm behind that face, so the link sorted THROUGH (npc_grid_test's room with the pillar: 12 of them, all floor or
+	// ceiling pieces against the pillar's faces), and it went round the pillar's corner, through it. So at a point, each side's cell is one
+	// whose middle isn't behind the other polygon's face, the joined polygon's own first, when there's one that near; only with none, one
+	// behind. The link then sorts as the two faces really meet there, and an alien's way can't cut round a convex edge by it. Point joins
+	// keep their links: a wall standing on a floor, away from its edges, can be joined to it only where its end touches the floor's edge,
+	// and on Genshd1 7,952 of the 18,061 pairs of sheets the map joins are joined only at points; without them 15 parts would be cut off.
+	// Each link made here keeps its kind (ONLY A JOIN'S LINKS, npc_grid.h), as only these are priced.
 	std::vector<Pair> links;
 
 	struct Near
 	{
-		static uint32_t Cell(const NpcGrid &grid, const std::vector<uint8_t> &flags, int sheet, int polygon, const double p[3])
+		// facing: at a point join, the other polygon's sheet; along a stretch, nothing
+		static uint32_t Cell(const NpcGrid &grid, const std::vector<uint8_t> &flags, int sheet, int polygon, const double p[3], const Sheet *facing)
 		{
 			uint32_t const over = grid.CellOver(sheet, p[0], p[1], p[2]);
 
@@ -1111,8 +1132,9 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 				return kNpcGridNoCell;
 			}
 
-			uint32_t best = kNpcGridNoCell, own = kNpcGridNoCell;
-			double bestFar = kNpcGridStep, ownFar = kNpcGridStep;
+			uint32_t best = kNpcGridNoCell;
+			int bestRank = 4;
+			double bestFar = kNpcGridStep;
 			int const sheetW = grid.sheets[sheet].w, sheetH = grid.sheets[sheet].h;
 			uint32_t const first = grid.sheets[sheet].first;
 			int const i = static_cast<int>((over - first) % sheetW), j = static_cast<int>((over - first) / sheetW);
@@ -1138,29 +1160,29 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 
 					double const far = sqrt((m[0] - p[0]) * (m[0] - p[0]) + (m[1] - p[1]) * (m[1] - p[1]) + (m[2] - p[2]) * (m[2] - p[2]));
 
-					if (far < bestFar)
+					// Its rank, the lowest taken first, and of one rank the nearest: one on the joined polygon itself (polygonOf, by the alien
+					// ways map's numbers) before any other of the sheet; and at a point join, before either, one whose middle isn't behind the
+					// other polygon's face by more than kNpcGridJoinSlack
+					bool const behind = facing && Dot(facing->n, m) - facing->d < -static_cast<double>(kNpcGridJoinSlack);
+					int const rank = (behind ? 2 : 0) + (grid.polygonOf[c] == polygon ? 0 : 1);
+
+					if (far < kNpcGridStep && (rank < bestRank || (rank == bestRank && far < bestFar)))
 					{
+						bestRank = rank;
 						bestFar = far;
 						best = c;
-					}
-
-					// The nearest on the joined polygon itself (polygonOf, by the alien ways map's numbers)
-					if (grid.polygonOf[c] == polygon && far < ownFar)
-					{
-						ownFar = far;
-						own = c;
 					}
 				}
 			}
 
-			return own != kNpcGridNoCell ? own : best;
+			return best;
 		}
 	};
 
 	// Adds a link both ways, unless it's the one just added: the points along one stretch often land on the same two cells
 	struct Add
 	{
-		static bool Both(std::vector<Pair> *links, size_t most, uint32_t a, uint32_t b)
+		static bool Both(std::vector<Pair> *links, size_t most, uint32_t a, uint32_t b, NpcGridJoin join)
 		{
 			if (!links->empty() && ((links->back().from == b && links->back().to == a) || (links->back().from == a && links->back().to == b)))
 			{
@@ -1172,7 +1194,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 				return false;
 			}
 
-			Pair const ab = { a, b }, ba = { b, a };
+			Pair const ab = { a, b, static_cast<uint8_t>(join) }, ba = { b, a, static_cast<uint8_t>(join) };
 			links->push_back(ab);
 			links->push_back(ba);
 			return true;
@@ -1205,17 +1227,22 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 
 			double const length = sqrt(static_cast<double>(to.x - from.x) * (to.x - from.x) + static_cast<double>(to.y - from.y) * (to.y - from.y) +
 				static_cast<double>(to.z - from.z) * (to.z - from.z));
+			// Touching only at a point (A POINT JOIN, above): each side's cell faces the other polygon
+			bool const atAPoint = length < static_cast<double>(kAlienWaysTouch);
+			const Sheet *const facingA = atAPoint ? &sheets[static_cast<size_t>(sb)] : nullptr;
+			const Sheet *const facingB = atAPoint ? &sheets[static_cast<size_t>(sa)] : nullptr;
+
 			int const count = std::max(1, static_cast<int>(ceil(length / (kNpcGridCell / 2))));
 
 			for (int step = 0; step <= count; step++)
 			{
 				double const f = static_cast<double>(step) / count;
 				double const p[3] = { from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f, from.z + (to.z - from.z) * f };
-				uint32_t const ca = Near::Cell(*this, flags, sa, static_cast<int>(a), p), cb = Near::Cell(*this, flags, sb, b, p);
+				uint32_t const ca = Near::Cell(*this, flags, sa, static_cast<int>(a), p, facingA), cb = Near::Cell(*this, flags, sb, b, p, facingB);
 
 				if (ca != kNpcGridNoCell && cb != kNpcGridNoCell)
 				{
-					if (!CountBuilding(2 * sizeof(Pair)) || !Add::Both(&links, limits.mostLinks, ca, cb))
+					if (!CountBuilding(2 * sizeof(Pair)) || !Add::Both(&links, limits.mostLinks, ca, cb, JoinOf(ca, cb)))
 					{
 						return Fail("too many links");
 					}
@@ -1455,7 +1482,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 						continue;
 					}
 
-					if (!CountBuilding(2 * sizeof(Pair)) || !Add::Both(&links, limits.mostLinks, c, o))
+					// A step carries no kind (ONLY A JOIN'S LINKS, npc_grid.h)
+					if (!CountBuilding(2 * sizeof(Pair)) || !Add::Both(&links, limits.mostLinks, c, o, kNpcGridJoinPlain))
 					{
 						return Fail("too many links");
 					}
@@ -1565,7 +1593,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 	links.erase(std::unique(links.begin(), links.end()), links.end());
 	std::sort(falls.begin(), falls.end());
 	falls.erase(std::unique(falls.begin(), falls.end()), falls.end());
-	size_t const more = (links.size() + falls.size()) * 2 * sizeof(uint32_t);
+	size_t const more = (links.size() + falls.size()) * 2 * sizeof(uint32_t) + links.size() * sizeof(uint8_t);
 
 	if (more > limits.mostBytesKept - std::min(limits.mostBytesKept, bytesKept) || bytesKept > limits.mostBytesKept)
 	{
@@ -1575,15 +1603,18 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 	bytesKept += more;
 	linkFrom.resize(links.size());
 	linkTo.resize(links.size());
+	linkJoin.resize(links.size());
 
 	for (size_t k = 0; k < links.size(); k++)
 	{
 		linkFrom[k] = links[k].from;
 		linkTo[k] = links[k].to;
+		linkJoin[k] = links[k].join;
 	}
 
 	// How many joins are OUTSIDE, and how many THROUGH (THE KIND OF A JOIN, npc_grid.h), for the log. Each link is kept both ways, so each
-	// is counted once, from its lower cell. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel).
+	// is counted once, from its lower cell. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel). Only a join's
+	// links carry a kind, so a step isn't counted (ONLY A JOIN'S LINKS; modified 2026-11-11 by Melanikus (Third)).
 	for (size_t k = 0; k < linkFrom.size(); k++)
 	{
 		if ((k & 0xFFFF) == 0 && StopNow())
@@ -1593,7 +1624,7 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 
 		if (linkFrom[k] < linkTo[k])
 		{
-			NpcGridJoin const join = JoinOf(linkFrom[k], linkTo[k]);
+			NpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[k]);
 			outsideJoins += join == kNpcGridJoinOutside ? 1 : 0;
 			throughJoins += join == kNpcGridJoinThrough ? 1 : 0;
 		}
@@ -1866,6 +1897,7 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 
 		size_t count = 0;
 		const uint32_t *list = LinksOf(c, &count);
+		size_t const firstLink = count ? static_cast<size_t>(list - linkTo.data()) : 0;   // where this cell's links start, for their kinds
 
 		for (size_t k = 0; k < count; k++)
 		{
@@ -1896,12 +1928,12 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 
 			// An alien's way pays more to cross an OUTSIDE edge, or onto a face hidden behind another (THE KIND OF A JOIN, npc_grid.h). A
 			// price only, so every way there was is still there; and never a marine's. Modified 2026-11-11 by Melanikus (Third) for the AvP
-			// port (#109, corners repel).
+			// port (#109, corners repel). By the kind the link carries, so a step onto a ramp pays nothing more (ONLY A JOIN'S LINKS).
 			double extra = 0.0;
 
 			if (searchBody == kNpcGridAlien)
 			{
-				NpcGridJoin const join = JoinOf(c, n);
+				NpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);
 				extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice : (join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0);
 			}
 
