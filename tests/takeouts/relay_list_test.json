@@ -1759,8 +1759,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn true;\n\t\t}",
-					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn true;\n\t\t}"
+					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}"
 				}
 			]
 		},
@@ -1971,6 +1971,16 @@
 					"file": "3dc/relay_list.cpp",
 					"from": "if (made->wake && made->endDone)\n\t\t{\n\t\t\tshared = made;",
 					"to": "if (true)\n\t\t{\n\t\t\tshared = made;"
+				}
+			]
+		},
+		{
+			"name": "a yespage= run's line is agreed without its Yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;",
+					"to": "return true;"
 				}
 			]
 		}

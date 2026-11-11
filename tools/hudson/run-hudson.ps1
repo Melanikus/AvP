@@ -226,7 +226,11 @@ param(
     [int]$AnswerAfter = 0,        # with -Answer: seconds before the host answers, 1 to 15, well inside the joiner's 20 s wait. Left out, Hudson's own 3
     [switch]$FindGames,           # with -Net join: the joiner finds the host through Find Games, as a player does
     [switch]$FilmMenus,           # film=menus: the film starts at the menus, cut into a clip for each page they picture (added 2026-11-10 by Melanikus (Third))
-    [int]$PageHold = 0            # with -FilmMenus: seconds each pictured page is held first, 1 to 10, so the film shows it
+    [int]$PageHold = 0,           # with -FilmMenus: seconds each pictured page is held first, 1 to 10, so the film shows it
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens (hudson_plan.h's yespage= and
+    # hostrow=)
+    [string]$YesPage = '',        # yes or no: with -Access request or check, the run sees the yes page the Online access row opens, as a player's first time does, and presses that row. The yes holds for the run alone
+    [string]$HostRow = ''         # online or athome: with -Net host, the host hosts as a player does, through the Multiplayer page's Host row, Start game and Start, with the server's wait if it hasn't answered
 )
 $ErrorActionPreference = 'Stop'
 
@@ -287,6 +291,13 @@ if ($FilmMenus -and -not $WhileInUse) { Stop-Here "-FilmMenus starts the film at
 if ($FilmMenus -and ($NoFilm -or $Record -eq 'numbers')) { Stop-Here "-FilmMenus asks for a film, and -NoFilm or -Record numbers says there's none" }
 if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
 if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
+# The yes page and the Host row (added 2026-11-10 by Melanikus (Third) for the AvP port): Hudson's own rules for yespage= and hostrow=
+# (hudson_plan.cpp), and the Host row is on the page only when servers.cfg names a server
+if ($YesPage -and $YesPage -cnotmatch '\A(yes|no)\z') { Stop-Here "-YesPage is yes or no" }
+if ($YesPage -and $Access -cne 'request' -and $Access -cne 'check') { Stop-Here "-YesPage is the yes page the Online access row opens, so it needs -Access request or -Access check" }
+if ($HostRow -and $HostRow -cnotmatch '\A(online|athome)\z') { Stop-Here "-HostRow is online or athome" }
+if ($HostRow -and $Net -ne 'host') { Stop-Here "-HostRow is a host's way in, through the Multiplayer page's Host row, so it needs -Net host" }
+if ($HostRow -and -not $Relay) { Stop-Here "-HostRow presses the Host row, which is on the page only when servers.cfg names a server, so it needs -Relay and -ServersLine" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -370,7 +381,10 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 # A host with -Answer gets -askjoiners, which hosts as -relayhost does but asks about each joiner (relay_auto.h). -relayhost lets every
 # joiner in without asking (relay_auto.cpp), and the game would never show the page -Answer presses, nor its check code: the nyc3 pair of
 # 2026-11-10 had answer=letin and no host-asked.png for that reason (modified 2026-11-10 by Melanikus (Third) for the AvP port)
-$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+# A host with -HostRow gets neither, as it hosts through the page's rows, not by itself as the menus start; and a joiner with -Typed joins a
+# game at home by its typed address on this machine, so it gets no -relayjoin either, though servers.cfg names a server (added 2026-11-10
+# by Melanikus (Third) for the AvP port)
+$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $HostRow) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } elseif ($Typed) { '' } else { ' -relayjoin' }
 # -secondcopy is the game's own switch too, so it goes before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
@@ -441,6 +455,8 @@ if ($AccessWait -ne 0) { $arguments += " accesswait=$AccessWait" }
 if ($Answer) { $arguments += " answer=$Answer" }
 if ($AnswerAfter -ne 0) { $arguments += " answerafter=$AnswerAfter" }
 if ($FindGames) { $arguments += " findgames=yes" }
+if ($YesPage) { $arguments += " yespage=$YesPage" }
+if ($HostRow) { $arguments += " hostrow=$HostRow" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
 # remoterelay= keeps a network run's game traffic to that one relay, and Hudson takes it only with net=. An -Access run through a server

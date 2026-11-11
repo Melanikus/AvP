@@ -10486,6 +10486,206 @@
 					"to": ";"
 				}
 			]
+		},
+		{
+			"name": "yespage= isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(place, nameLength, \"yespage\"))",
+					"to": "else if (WordIs(place, nameLength, \"yespagex\"))"
+				}
+			]
+		},
+		{
+			"name": "yespage=no reads as yes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->yesPage = kHudsonYesPageNo;",
+					"to": "plan->yesPage = kHudsonYesPageYes;"
+				}
+			]
+		},
+		{
+			"name": "yespage= without access=request or check is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenYesPage && plan->accessPress != kHudsonAccessRequest && plan->accessPress != kHudsonAccessCheck)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "hostrow= isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(place, nameLength, \"hostrow\"))",
+					"to": "else if (WordIs(place, nameLength, \"hostrowx\"))"
+				}
+			]
+		},
+		{
+			"name": "hostrow=athome reads as online",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->hostRow = kHudsonHostRowAtHome;",
+					"to": "plan->hostRow = kHudsonHostRowOnline;"
+				}
+			]
+		},
+		{
+			"name": "hostrow= without net=host is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostRow && plan->netMode != kHudsonNetHost)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "hostrow= with -askjoiners is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostRow && (CommandLineHasWord(commandLine, \"-relayhost\") || CommandLineHasWord(commandLine, \"-askjoiners\")))",
+					"to": "if (seenHostRow && CommandLineHasWord(commandLine, \"-relayhost\"))"
+				}
+			]
+		},
+		{
+			"name": "hostrow= with coop=yes is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHostRow && plan->coop)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run's Yes is kept as a player's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (HudsonRunIsOn)\n\t{\n\t\thudsonRunSaidYes = true;",
+					"to": "\tif (false)\n\t{\n\t\thudsonRunSaidYes = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yespage= run's line is agreed without its Yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page's switch does nothing",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\thudsonRunShowsTheYesPage = true;\n}",
+					"to": "\t;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yespage= run never asks for the page",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tHudsonTest_RelayListShowsTheYesPage();\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page isn't pictured",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "MenuFrameForARun(asAsked ? \"server-yes.png\" : NULL);",
+					"to": "MenuFrameForARun(NULL);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row isn't moved for athome",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (atHome && MP_HostWhere != kHostWhereAtHome)\n\t{\n\t\tInteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);",
+					"to": "if (atHome && MP_HostWhere != kHostWhereAtHome)\n\t{\n\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the species page is skipped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_SPECIES_HOST, \"Start, to the species page\")",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the server's wait isn't pictured",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "picture = \"host-asking.png\";",
+					"to": "picture = NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host with hostrow= hosts from the code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (Hudson_NetIsHost() && Hudson_HostRow() != kHudsonHostRowNone)",
+					"to": "if (false && Hudson_HostRow() != kHudsonHostRowNone)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: run-hudson.ps1 never asks for hostrow=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($HostRow) { $arguments += \" hostrow=$HostRow\" }",
+					"to": "if ($false) { }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a typed joiner gets -relayjoin",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "elseif ($Typed) { '' } else { ' -relayjoin' }",
+					"to": "else { ' -relayjoin' }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pair at home may join by Find games' broadcast",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($HostRow -ceq 'athome' -and (-not $Typed -or $JoinFindGames)) { Stop-Here",
+					"to": "if ($false) { Stop-Here"
+				}
+			]
 		}
 	]
 }

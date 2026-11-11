@@ -17,6 +17,8 @@
 //   custommap= plays a custom map made for single player, by the name the Custom maps page lists it under
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   access= and accesswait= press the Online access page's rows, and answer= and answerafter= the host's answer to a player asking to join
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   yespage= shows an access run the yes page and presses one of its rows, and hostrow= hosts through the Multiplayer page's Host row
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -175,6 +177,29 @@ enum
 	kHudsonAnswerSayNo
 };
 
+// yespage=: an access run sees the yes page, as a player does the first time a way online would use servers.cfg's line. Hudson pictures it
+// (server-yes.png) and presses "Yes, use this server" (yes) or "No, not now" (no). The yes holds for that run alone and is never kept
+// anywhere (relay_list.h, HudsonTest_RelayListShowsTheYesPage). Without yespage=, a Hudson run's line needs no yes, as nobody is there to
+// give it. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens.
+enum
+{
+	kHudsonYesPageNone = 0,
+	kHudsonYesPageYes,
+	kHudsonYesPageNo
+};
+
+// hostrow=: a net=host run hosts as a player does: the Multiplayer page's Host row set to Online (online) or At home (athome) and
+// pictured (multiplayer.png), then Start game, the game's page (host-config.png), the species page (host-species.png) and its Start row. Online, a server that hasn't answered
+// yet is waited for on that page as a player's is: "Asking the server..." (host-asking.png), then hosted, or after 30 s the words for no
+// answer (host-gaveup.png), and the run stops there. Without hostrow=, a host hosts from the code, as before. Added 2026-11-10 by Melanikus
+// (Third) for the AvP port.
+enum
+{
+	kHudsonHostRowNone = 0,
+	kHudsonHostRowOnline,
+	kHudsonHostRowAtHome
+};
+
 int const kHudsonDefaultAccessWaitSeconds = 70;   // past the list's one call a minute from one address
 int const kHudsonLeastAccessWaitSeconds = 61;
 int const kHudsonMostAccessWaitSeconds = 3600;
@@ -319,6 +344,8 @@ struct HudsonPlan
 	int answerAfterSeconds; // answerafter=: the seconds the host's answer rows are up before the press, 1 to 15. Unless asked, 3
 	bool findGames;       // findgames=yes: a net=join run through the relay joins as a player does: Find Games, then the list's game's row, with pictures of the joining page asking (its check code) and let in. Otherwise the list's game is joined from the code, as before
 	bool menuPictures;    // menus=pictures: a run that stays at the menus, pictures four pages (main, Multiplayer, Online access, Options) and the intro's copyright screen and logo, and ends, pressing nothing that sends. For seeing how the menus are drawn at a screen size (menu_shape.h). Added 2026-11-10 by Melanikus for the AvP port
+	int yesPage;          // yespage=: from kHudsonYesPage...: an access run sees the yes page and presses that row. 0 for none: the line needs no yes, as before (added 2026-11-10)
+	int hostRow;          // hostrow=: from kHudsonHostRow...: a net=host run hosts through the Multiplayer page's Host row, as a player does. 0 for none: it hosts from the code, as before (added 2026-11-10)
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -404,6 +431,12 @@ extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
 extern const char *const kHudsonRefusedAnswerWithRelayHost;
 extern const char *const kHudsonRefusedFindGamesWord;
 extern const char *const kHudsonRefusedFindGamesWithoutJoin;
+extern const char *const kHudsonRefusedYesPageWord;
+extern const char *const kHudsonRefusedYesPageWithoutAccess;
+extern const char *const kHudsonRefusedHostRowWord;
+extern const char *const kHudsonRefusedHostRowWithoutHost;
+extern const char *const kHudsonRefusedHostRowWithRelayAuto;
+extern const char *const kHudsonRefusedHostRowWithCoop;
 extern const char *const kHudsonRefusedBotWeapon;
 extern const char *const kHudsonRefusedDeathWay;
 extern const char *const kHudsonRefusedVsync;

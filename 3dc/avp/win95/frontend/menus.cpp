@@ -449,6 +449,7 @@ static void StartTheCoopCampaign(void)
 }
 
 static bool JoinThroughFindGamesForARun(void);   // findgames=yes, below with the other presses a player makes
+static bool HostThroughTheRowsForARun(int level);   // hostrow=, below the host's wait it uses (added 2026-11-10 by Melanikus (Third))
 
 // A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
 // A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
@@ -514,7 +515,22 @@ static void StartNetworkGameForHudsonRun(void)
 	strcpy(MP_PlayerName, Hudson_NetIsHost() ? "HOST" : "JOIN");
 	strcpy(MP_SessionName, "HUDSON");
 
-	if (Hudson_NetIsHost())
+	if (Hudson_NetIsHost() && Hudson_HostRow() != kHudsonHostRowNone)
+	{
+		// hostrow= (hudson_plan.h): the player's way in, the Multiplayer page's Host row, Start game and the game's Start row, with the
+		// server's wait if there is one, in place of hosting from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+		Hudson_NetSay(Hudson_HostRow() == kHudsonHostRowAtHome ? "the host hosts at home, through the Multiplayer page's Host row, as a player does"
+			: "the host hosts online, through the Multiplayer page's Host row, as a player does");
+
+		if (!HostThroughTheRowsForARun(level))
+		{
+			Hudson_NetStopBecause(HostFailedForARun("the host's Start row hosted nothing").c_str());
+			return;
+		}
+
+		Hudson_NetSay("the host has its game hosted through the page's rows, and it's loading its level");
+	}
+	else if (Hudson_NetIsHost())
 	{
 		// -dev -relayhost (server #14, relay_auto.h): the list's relays first, so the game opens through the relay. If none come in time,
 		// it hosts on this machine only, as a run always did, and the log says so.
@@ -902,6 +918,41 @@ static void RunTheAccessPagesForHudson(void)
 
 	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
 	MenuSecondsForARun(2);
+
+	// yespage= (hudson_plan.h): the Online access row opened the yes page in its place, as a player's first time does
+	// (ServerYesPage_WayIn). It's pictured, and the run's row pressed: Yes goes on to the Online access page, as the row would have; No
+	// goes back to the Multiplayer page, having sent nothing, and the run ends there. The yes holds for this run alone (relay_list.h).
+	// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+	if (asAsked && Hudson_YesPagePress() != kHudsonYesPageNone)
+	{
+		bool const yes = Hudson_YesPagePress() == kHudsonYesPageYes;
+		asAsked = AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;
+
+		if (!asAsked)
+		{
+			LogErrorString("hudson: yespage= asked for the yes page, and the Online access row didn't open it");
+		}
+
+		MenuFrameForARun(asAsked ? "server-yes.png" : NULL);
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo, yes ? "Yes, use this server" : "No, not now");
+		MenuSecondsForARun(2);
+
+		if (asAsked && !yes)
+		{
+			bool const back = AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER;
+			MenuFrameForARun("server-yes-no.png");
+			ReleaseAllAvPMenuGfx();
+			Hudson_AccessRunEnds(back ? "the yes page's No was pressed, and the run is back on the Multiplayer page, having asked the server nothing"
+				: "the yes page's No was pressed, and the run isn't back on the Multiplayer page", back);
+			return;
+		}
+
+		if (asAsked && AvPMenus.CurrentMenu != AVPMENU_ONLINE_ACCESS)
+		{
+			LogErrorString("hudson: the yes page's Yes was pressed, and the run isn't on the Online access page");
+			asAsked = false;
+		}
+	}
 
 	if (asAsked && press == kHudsonAccessNewId)
 	{
@@ -1786,6 +1837,141 @@ static void DrawTheHostLine(void)
 
 	RECT area = { MENU_LEFTXEDGE, MENU_BOTTOMYEDGE, MENU_RIGHTXEDGE, 420 };
 	RenderSmallFontString_Wrapped(hostLine, &area, ONE_FIXED, 0, 0);
+}
+
+// hostrow=online or hostrow=athome (hudson_plan.h): a Hudson host hosts the way a player does, for the owner's rehearsal of beta.2's
+// screens (PO, 2026-11-10). Added 2026-11-10 by Melanikus (Third) for the AvP port. Each press is a row selected and Enter, as a player
+// does, and one fixed line in the log (PressTheRowForARun):
+// 1. the Multiplayer page, its Host row moved to the run's choice (it starts on Online at every start), and pictured (multiplayer.png);
+// 2. Start game, which opens the game's page (through the yes page's way in, as every way online does), with the run's game on it,
+//    pictured (host-config.png), and its Start row, which opens the species page (host-species.png);
+// 3. that page's Start row. At home, or online with a server that has answered, that hosts at once. Online with a server that hasn't
+//    answered yet, the page waits for it as a player's does (AHostWaits, HostWaitFrame): "Asking the server..." is pictured
+//    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
+//    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.
+// True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
+static bool HostThroughTheRowsForARun(int level)
+{
+	bool const atHome = Hudson_HostRow() == kHudsonHostRowAtHome;
+
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+
+	// The Host row is the page's one text slider with a pointer to its names, there only when servers.cfg names a server (menu_data.cpp,
+	// MenuData_SetMultiplayerRows). Increase moves it from Online to At home.
+	int hostRow = -1;
+
+	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
+	{
+		if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_TEXTSLIDER_POINTER)
+		{
+			hostRow = row;
+		}
+	}
+
+	if (hostRow < 0)
+	{
+		LogErrorString("hudson: the Multiplayer page has no Host row, so servers.cfg names no server, and hostrow= has nothing to press");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	AvPMenus.CurrentlySelectedElement = hostRow;
+
+	if (atHome && MP_HostWhere != kHostWhereAtHome)
+	{
+		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);
+	}
+
+	if ((MP_HostWhere == kHostWhereAtHome) != atHome)
+	{
+		LogErrorString("hudson: the Host row didn't move to the choice hostrow= asked for");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	LogString(atHome ? "hudson: the Host row says At home" : "hudson: the Host row says Online");
+	MenuSecondsForARun(1);
+	MenuFrameForARun("multiplayer.png");
+
+	// A game over the network, never the game's "skirmish" against the computer, whose Start game opens another page (as
+	// HostByItselfThroughTheRelay has it)
+	netGameData.skirmishMode = FALSE;
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_CONFIG, "Start game") || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG)
+	{
+		LogErrorString("hudson: Start game didn't open the game's page");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	// The run's game, on the page whose rows show it, in case opening the page brought back another
+	netGameData.levelNumber = level;
+	MenuSecondsForARun(1);
+	MenuFrameForARun("host-config.png");
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_SPECIES_HOST, "Start, to the species page") || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_SPECIES_HOST)
+	{
+		LogErrorString("hudson: the game's page's Start didn't open the species page");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	MenuSecondsForARun(1);
+	MenuFrameForARun("host-species.png");
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, "Start"))
+	{
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	// The server's answer: hosted at once, or a wait on this page until it's hosted or the page gives up at 30 s (host_wait_rules.h). 40 s
+	// is past both. The wait's own state says which: a line on the page with no wait going on is a host that wasn't hosted.
+	DWORD const pressed = GetTickCount();
+	bool askingPictured = false;
+	bool notHosted = false;
+
+	while (bRunning && AvPMenus.MenusState == MENUSSTATE_MAINMENUS && (DWORD)(GetTickCount() - pressed) < 40000u)
+	{
+		const char *picture = NULL;
+
+		if (hostWaiting == kHostWaitingForNothing && hostLine[0])
+		{
+			notHosted = true;
+			break;
+		}
+
+		if (!askingPictured && hostWaiting != kHostWaitingForNothing && (DWORD)(GetTickCount() - pressed) > 1000u)
+		{
+			LogString("hudson: the page says it's asking the server");
+			picture = "host-asking.png";
+			askingPictured = true;
+		}
+
+		// The page's picture isn't held while it waits (pagehold=): the wait is the page's own, and its 30 s are what's shown
+		MenuFrameForARun(picture, false);
+	}
+
+	if (notHosted)
+	{
+		bool const noAnswer = strcmp(hostLine, GetTextString(TEXTSTRING_HOST_NO_ANSWER)) == 0;
+		MenuSecondsForARun(2);
+		MenuFrameForARun(noAnswer ? "host-gaveup.png" : "host-failed.png");
+		LogErrorString(std::string("hudson: nothing was hosted, and the page says: ") + hostLine);
+	}
+
+	bool const hosted = AvPMenus.MenusState == MENUSSTATE_STARTGAME;
+
+	if (!hosted && !notHosted)
+	{
+		LogErrorString("hudson: the host's Start row was pressed, and in 40 s neither hosted nor said why");
+	}
+
+	ReleaseAllAvPMenuGfx();
+	return hosted;
 }
 
 extern void AvP_UpdateMenus(void)

@@ -641,10 +641,55 @@ if ($gateAt -lt 0 -or $gateAt -gt $start.IndexOf($serverWrite, [System.StringCom
 
 $agreed = Get-OneDefinition 'TheLineIsAgreed' 'Y' $listFile 'whether the player has said yes to a line'
 
-if (-not $agreed.Flat.StartsWith('if (HudsonRunIsOn) { return true; }', [System.StringComparison]::Ordinal) -or (Get-Count $agreed.Flat 'return true;') -ne 1 -or
+# A Hudson run's first line is one of two: past at once, or (yespage=, added 2026-11-10 by Melanikus (Third) for the AvP port) past at
+# once unless the run asked to see the yes page, and then only after its own Yes, which is held for the run alone (below)
+$hudsonPast = 'if (HudsonRunIsOn) { return true; }'
+$hudsonPastAfterItsYes = 'if (HudsonRunIsOn) { return !hudsonRunShowsTheYesPage || hudsonRunSaidYes; }'
+$withTheYesPage = $agreed.Flat.StartsWith($hudsonPastAfterItsYes, [System.StringComparison]::Ordinal)
+$returnsTrue = if ($withTheYesPage) { 0 } else { 1 }
+
+if (-not ($agreed.Flat.StartsWith($hudsonPast, [System.StringComparison]::Ordinal) -or $withTheYesPage) -or (Get-Count $agreed.Flat 'return true;') -ne $returnsTrue -or
     -not $agreed.Flat.EndsWith('return LineHash(line, hash) && ServersTrust_Has(yeses, hash);', [System.StringComparison]::Ordinal))
 {
-    Stop-Check "Y: TheLineIsAgreed ($listFile line $($agreed.Line)) must let a Hudson run past alone, and anyone else only with the line's own hash among the kept yeses: if (HudsonRunIsOn) { return true; } first, and return LineHash(line, hash) && ServersTrust_Has(yeses, hash); last"
+    Stop-Check "Y: TheLineIsAgreed ($listFile line $($agreed.Line)) must let a Hudson run past alone, and anyone else only with the line's own hash among the kept yeses: $hudsonPast (or $hudsonPastAfterItsYes) first, and return LineHash(line, hash) && ServersTrust_Has(yeses, hash); last"
+}
+
+# yespage=: the two flags start false, and each is set in one place only. A Hudson run's Yes, in RelayList_AgreeToTheLine, returns before
+# anything is read, added to the kept yeses or written, so a test run can't leave a yes for this PC's player; the run's ask is set only by
+# the HudsonTest_ switch, which only Hudson's files call (tools/check-hudson-asleep.ps1, rule 5), in a run
+if ($withTheYesPage)
+{
+    foreach ($flag in @('hudsonRunShowsTheYesPage', 'hudsonRunSaidYes'))
+    {
+        if ((Get-Count $listCode "bool $flag = false;") -ne 1)
+        {
+            Stop-Check "Y: $listFile must start $flag false, once: bool $flag = false;"
+        }
+
+        $flagWrites = @([regex]::Matches($code[$listFile], '\b' + $flag + '\s*(=(?!=)|\+\+|--)|&\s*' + $flag + '\b'))
+
+        if ($flagWrites.Count -ne 2)
+        {
+            Stop-Check "Y: $listFile changes $flag in $($flagWrites.Count) places: only its start and its one place may"
+        }
+    }
+
+    $yesPageSwitch = Get-OneDefinition 'HudsonTest_RelayListShowsTheYesPage' 'Y' $listFile 'a Hudson run asking for the yes page'
+
+    if ($yesPageSwitch.Flat -cne 'hudsonRunShowsTheYesPage = true;')
+    {
+        Stop-Check "Y: HudsonTest_RelayListShowsTheYesPage ($listFile line $($yesPageSwitch.Line)) must do nothing but hudsonRunShowsTheYesPage = true;"
+    }
+
+    $hudsonsYesFlat = (Get-OneDefinition 'RelayList_AgreeToTheLine' 'Y' $listFile 'the player''s yes').Flat
+    $hudsonsYes = 'if (HudsonRunIsOn) {'
+
+    if (-not (Test-FormBlock $hudsonsYesFlat $hudsonsYes @('hudsonRunSaidYes = true;', 'return true;')) -or
+        -not (Test-Before $hudsonsYesFlat $hudsonsYes 'ServersTrust_Add(&yeses, hash);') -or -not (Test-Before $hudsonsYesFlat $hudsonsYes 'NetIdentityStore_KeepTrust(') -or
+        -not (Test-Before $hudsonsYesFlat $hudsonsYes 'TheLineIsAgreed(*line);'))
+    {
+        Stop-Check "Y: RelayList_AgreeToTheLine ($listFile) must hold a Hudson run's Yes for the run alone, before it reads, adds or keeps any yes: if (HudsonRunIsOn) { hudsonRunSaidYes = true; ... return true; } first"
+    }
 }
 
 $hudsonWrite = [regex]::Match($code[$listFile], '\bHudsonRunIsOn\s*(=(?!=)|\+\+|--)|&\s*HudsonRunIsOn\b')

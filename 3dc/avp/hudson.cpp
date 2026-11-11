@@ -134,6 +134,7 @@
 #include "psndplat.h"
 #include "detaillevels.h"
 #include "networking.h"
+#include "relay_list.h"   // yespage=: HudsonTest_RelayListShowsTheYesPage (added 2026-11-10 by Melanikus (Third))
 #include "enet\enet.h"
 #include <psapi.h>
 #include "d3_func.h"
@@ -901,6 +902,13 @@ int Hudson_CheckBeforeStarting()
 	{
 		WriteResult(refusalFromReading, kHudsonExitBadArguments);
 		return kHudsonExitBadArguments;
+	}
+
+	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone
+	// (relay_list.h). Here, before the menus, so the list can't have started yet. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+	if (plan.yesPage != kHudsonYesPageNone)
+	{
+		HudsonTest_RelayListShowsTheYesPage();
 	}
 
 	// It only has to fit the main screen if that's where it goes. On the second screen it's made smaller to fit its part, and the game goes on drawing the size that was asked for.
@@ -5286,6 +5294,17 @@ bool Hudson_JoinsThroughFindGames()
 bool Hudson_MenuPictures()
 {
 	return HudsonRunIsOn ? plan.menuPictures : false;
+}
+
+// yespage= and hostrow= (hudson_plan.h). Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_YesPagePress()
+{
+	return HudsonRunIsOn ? plan.yesPage : kHudsonYesPageNone;
+}
+
+int Hudson_HostRow()
+{
+	return HudsonRunIsOn ? plan.hostRow : kHudsonHostRowNone;
 }
 
 void Hudson_PictureThisFrame(const char *name)

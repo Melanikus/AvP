@@ -1064,13 +1064,22 @@ namespace
 
 	// (What a yes to a line is, LineHash, is with the server's own code at the top of this file, as the pick is worked out from it too.)
 
-	// Whether a line may be used: a Hudson run's always (nobody is there to answer), anyone else's only once the player has said yes to it.
-	// The kept yeses are read the first time this is asked; a file that can't be used counts as none, so every line is asked about again.
+	// A Hudson run's yes page (yespage=, hudson_plan.h; added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of
+	// beta.2's screens). A Hudson run's line is agreed without a yes, as nobody is there to answer, unless the run asks to see the yes page
+	// as a player would (HudsonTest_RelayListShowsTheYesPage, below). Then it's agreed only after the run's own press of Yes, which is held
+	// here, for this run alone: never added to the kept yeses, and never written to servers-trusted.cfg, so a test run can't leave a yes
+	// for the player of this PC. Both start false, and only a Hudson run ever sets them.
+	bool hudsonRunShowsTheYesPage = false;
+	bool hudsonRunSaidYes = false;
+
+	// Whether a line may be used: a Hudson run's always (nobody is there to answer), or with yespage= only after its own Yes this run;
+	// anyone else's only once the player has said yes to it. The kept yeses are read the first time this is asked; a file that can't be
+	// used counts as none, so every line is asked about again.
 	bool TheLineIsAgreed(const ServersCfgServer &line)
 	{
 		if (HudsonRunIsOn)
 		{
-			return true;
+			return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;
 		}
 
 		if (!yesesRead)
@@ -1562,6 +1571,15 @@ bool RelayList_AgreeToTheLine(void)
 		return false;
 	}
 
+	// A Hudson run's Yes (yespage=, above) holds for that run alone. It goes nowhere near the kept yeses or their file, so this PC's
+	// player is still asked. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+	if (HudsonRunIsOn)
+	{
+		hudsonRunSaidYes = true;
+		LogString("Relay list: the Hudson run said yes to the server in " SERVERS_CFG_FILE_NAME ", for this run only: nothing is kept");
+		return true;
+	}
+
 	// The kept yeses are read first, so that writing the file again keeps them. With every place taken, the oldest yes goes, and its line
 	// is asked about again the next time it's used.
 	TheLineIsAgreed(*line);
@@ -1692,6 +1710,14 @@ bool RelayList_PickLine(int place)
 	memcpy(theServer.pickNow.hash, theServer.hashes[place], kServersTrustHashBytes);
 	LogString("Relay list: the player picked " + which + ", for the next start");
 	return true;
+}
+
+// yespage= (relay_list.h): Hudson's own switch, which only Hudson's files call (tools/check-hudson-asleep.ps1, rule 5), and only in a
+// run. Outside one it changes nothing, as TheLineIsAgreed reads it only for a Hudson run. Added 2026-11-10 by Melanikus (Third) for the
+// AvP port.
+void HudsonTest_RelayListShowsTheYesPage(void)
+{
+	hudsonRunShowsTheYesPage = true;
 }
 
 void RelayList_FindGames(void)

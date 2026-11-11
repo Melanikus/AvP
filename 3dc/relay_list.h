@@ -98,12 +98,12 @@ struct RelayListLineToAgree
 };
 
 // True, with out filled, when there's a line and it hasn't had the yes. False when there's no line, or it has had it (a Hudson run's
-// always has).
+// always has, unless it asked for the yes page: below).
 bool RelayList_LineToAgree(RelayListLineToAgree *out);
 
 // The player's yes to the line RelayList_LineToAgree showed: kept in servers-trusted.cfg (net_identity_store.h), and from now on the
-// list may start. A yes that couldn't be kept still holds for this run, and the log says so. False, with nothing changed, if there's no
-// line.
+// list may start. A yes that couldn't be kept still holds for this run, and the log says so. In a Hudson run the yes holds for that run
+// only and is never kept anywhere. False, with nothing changed, if there's no line.
 bool RelayList_AgreeToTheLine(void);
 
 // ---- Every servers.cfg line, and the player's pick of one (#175 2b). Added 2026-11-10 by Melanikus for the AvP port. For the Online page
@@ -141,6 +141,11 @@ const char *RelayList_FileWords(void);
 // The player picks a good line, for the next start. True when the pick is kept. False, with nothing changed, for a place out of range, in
 // a Hudson run, or when servers-picked.cfg couldn't be written (the log says which).
 bool RelayList_PickLine(int place);
+
+// Hudson's yespage= (hudson_plan.h), called only from Hudson's own files: from now on, this Hudson run's line needs its own Yes on the yes
+// page, as a player's does, before the list starts. That yes is held for the run alone (RelayList_AgreeToTheLine). Added 2026-11-10 by
+// Melanikus (Third) for the AvP port.
+void HudsonTest_RelayListShowsTheYesPage(void);
 
 // ---- Finding games. The menus call these.
 

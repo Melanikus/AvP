@@ -91,6 +91,13 @@ const char *const kHudsonRefusedAnswerAfterWithoutAnswer = "answerafter= says wh
 const char *const kHudsonRefusedAnswerWithRelayHost = "answer= presses the host's rows when a player asks to join, and -relayhost lets every joiner in without asking, so they'd never come: start the host with -askjoiners";
 const char *const kHudsonRefusedFindGamesWord = "findgames= can only be yes";
 const char *const kHudsonRefusedFindGamesWithoutJoin = "findgames= is a joiner's way in, through Find Games, so it needs net=join";
+// Added 2026-11-10 by Melanikus (Third) for the AvP port: yespage= and hostrow= (hudson_plan.h)
+const char *const kHudsonRefusedYesPageWord = "yespage= can only be yes or no";
+const char *const kHudsonRefusedYesPageWithoutAccess = "yespage= is the yes page an access run's first press opens, so it needs access=request or access=check";
+const char *const kHudsonRefusedHostRowWord = "hostrow= can only be online or athome";
+const char *const kHudsonRefusedHostRowWithoutHost = "hostrow= is a host's way in, through the Multiplayer page's Host row, so it needs net=host";
+const char *const kHudsonRefusedHostRowWithRelayAuto = "hostrow= hosts through the Multiplayer page's rows, and -relayhost or -askjoiners host by themselves as the menus start, so the rows would never be pressed";
+const char *const kHudsonRefusedHostRowWithCoop = "hostrow= presses Start game, a deathmatch's way in, so it can't be a coop=yes run";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
 const char *const kHudsonRefusedKillWords = "killkind= (marine, predator, xenoborg or queen), killat=x,y,z and killer= (host or join) go together, on a net= run with coop=yes";
 const char *const kHudsonRefusedFramesPerSecond = "fps= is a number from 10 to 1000, or uncapped";
@@ -424,6 +431,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
 	bool seenMenus = false;
+	bool seenYesPage = false, seenHostRow = false;   // added 2026-11-10 by Melanikus (Third) for the AvP port
 	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
@@ -1496,6 +1504,52 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->findGames = true;
+		}
+		else if (WordIs(place, nameLength, "yespage"))
+		{
+			// Added 2026-11-10 by Melanikus (Third) for the AvP port: see kHudsonYesPage... in hudson_plan.h
+			if (seenYesPage)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenYesPage = true;
+
+			if (WordIs(value, valueLength, "yes"))
+			{
+				plan->yesPage = kHudsonYesPageYes;
+			}
+			else if (WordIs(value, valueLength, "no"))
+			{
+				plan->yesPage = kHudsonYesPageNo;
+			}
+			else
+			{
+				return kHudsonRefusedYesPageWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "hostrow"))
+		{
+			// Added 2026-11-10 by Melanikus (Third) for the AvP port: see kHudsonHostRow... in hudson_plan.h
+			if (seenHostRow)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenHostRow = true;
+
+			if (WordIs(value, valueLength, "online"))
+			{
+				plan->hostRow = kHudsonHostRowOnline;
+			}
+			else if (WordIs(value, valueLength, "athome"))
+			{
+				plan->hostRow = kHudsonHostRowAtHome;
+			}
+			else
+			{
+				return kHudsonRefusedHostRowWord;
+			}
 		}
 		else if (WordIs(place, nameLength, "answerafter"))
 		{
@@ -2929,6 +2983,29 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenFindGames && plan->netMode != kHudsonNetJoin)
 	{
 		return kHudsonRefusedFindGamesWithoutJoin;
+	}
+
+	// yespage= and hostrow= (added 2026-11-10 by Melanikus (Third) for the AvP port): the yes page opens at an access run's first press,
+	// Online access (a new identity sends nothing, so it has no yes to ask); and a host through the rows is a deathmatch host's, which
+	// neither hosts by itself as the menus start (relay_auto.h) nor plays a campaign
+	if (seenYesPage && plan->accessPress != kHudsonAccessRequest && plan->accessPress != kHudsonAccessCheck)
+	{
+		return kHudsonRefusedYesPageWithoutAccess;
+	}
+
+	if (seenHostRow && plan->netMode != kHudsonNetHost)
+	{
+		return kHudsonRefusedHostRowWithoutHost;
+	}
+
+	if (seenHostRow && (CommandLineHasWord(commandLine, "-relayhost") || CommandLineHasWord(commandLine, "-askjoiners")))
+	{
+		return kHudsonRefusedHostRowWithRelayAuto;
+	}
+
+	if (seenHostRow && plan->coop)
+	{
+		return kHudsonRefusedHostRowWithCoop;
 	}
 
 	if (seenSiegeFrom && !seenSiege)

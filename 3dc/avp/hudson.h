@@ -148,6 +148,12 @@ int Hudson_AnswerAfterSeconds();
 int Hudson_PageHoldSeconds();
 // findgames=yes: a joiner through the relay joins by Find Games and the list's game's row, as a player does
 bool Hudson_JoinsThroughFindGames();
+// yespage= (hudson_plan.h, kHudsonYesPage...): the yes page's row an access run presses; none outside a run. Added 2026-11-10 by
+// Melanikus (Third) for the AvP port
+int Hudson_YesPagePress();
+// hostrow= (hudson_plan.h, kHudsonHostRow...): where a host through the Multiplayer page's Host row hosts; none outside a run, or for a
+// host from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_HostRow();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);
