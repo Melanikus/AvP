@@ -1,0 +1,208 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a shot is 31 pellets",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "kShotgunPelletsWide = 10,",
+					"to": "kShotgunPelletsWide = 9,"
+				}
+			]
+		},
+		{
+			"name": "the gun holds 11 shells",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "kShotgunShells = 12",
+					"to": "kShotgunShells = 11"
+				}
+			]
+		},
+		{
+			"name": "a pellet does impact 5",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "kShotgunPelletImpact = 4,",
+					"to": "kShotgunPelletImpact = 5,"
+				}
+			]
+		},
+		{
+			"name": "firing leaves him half his speed",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "kShotgunFiringSlowdown = 65536 / 4",
+					"to": "kShotgunFiringSlowdown = 65536 / 2"
+				}
+			]
+		},
+		{
+			"name": "the widest ring is no wider than the middle one",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "static const int kSpread[3] = { 32, 70, 100 };",
+					"to": "static const int kSpread[3] = { 32, 70, 70 };"
+				}
+			]
+		},
+		{
+			"name": "opening the stock leaves the rings as wide",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "return stockOpen ? kSpreadStockOpen[ring] : kSpread[ring];",
+					"to": "return kSpread[ring];"
+				}
+			]
+		},
+		{
+			"name": "a pellet past the last has a spread",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "if (pellet < 0 || pellet >= kShotgunPellets)",
+					"to": "if (pellet < 0)"
+				}
+			]
+		},
+		{
+			"name": "the zoom going in goes past where it is going",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "return now - step > wanted ? now - step : wanted;",
+					"to": "return now - step;"
+				}
+			]
+		},
+		{
+			"name": "every pellet turns the same way",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "return (along - spread / 2) & (kAngleStepsInACircle - 1);",
+					"to": "return along & (kAngleStepsInACircle - 1);"
+				}
+			]
+		},
+		{
+			"name": "a long frame puts in one shell however long it was",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "int shells = timerLeft < 0 ? 1 + (-(timerLeft / 65536)) : 1;",
+					"to": "int shells = 1;"
+				}
+			]
+		},
+		{
+			"name": "a gun fuller than full takes shells out",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "return shells < 0 ? 0 : shells;",
+					"to": "return shells;"
+				}
+			]
+		},
+		{
+			"name": "pressing fire never stops loading",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": " || (heWantsToFire && shellsInGun > 0);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a saved stock that is neither open nor shut is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "\n\t\t&& (state.StockOpen == 0 || state.StockOpen == 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a saved loading flag of 2 is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/shotgun.h",
+					"from": "\t\t&& (state.StopLoading == 0 || state.StopLoading == 1)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one shot uses two shells",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_shotgun.cpp",
+					"from": "weaponPtr->PrimaryRoundsRemaining -= 65536;",
+					"to": "weaponPtr->PrimaryRoundsRemaining -= 2 * 65536;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every pellet counts as a hit in the statistics",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_shotgun.cpp",
+					"from": "CurrentGameStats_WeaponHit(playerStatusPtr->SelectedWeaponSlot, 1);",
+					"to": "CurrentGameStats_WeaponHit(playerStatusPtr->SelectedWeaponSlot, kShotgunPellets);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shell going in doesn't come off his spares",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_shotgun.cpp",
+					"from": "weaponPtr->PrimaryRoundsRemaining += shellsIn << ONE_FIXED_SHIFT;\n\t\t\tweaponPtr->PrimaryMagazinesRemaining -= shellsIn;",
+					"to": "weaponPtr->PrimaryRoundsRemaining += shellsIn << ONE_FIXED_SHIFT;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pump follows every load, empty or not",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_shotgun.cpp",
+					"from": "if (Own.EmptyWhenLoadingBegan)\n\t\t\t{\n\t\t\t\tWeapon_EnterState(weaponPtr, kShotgunState_Pump);",
+					"to": "if (true)\n\t\t\t{\n\t\t\t\tWeapon_EnterState(weaponPtr, kShotgunState_Pump);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the reload key starts the reload itself",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "ReloadKeyIsWaiting = true;",
+					"to": "ReloadKeyIsWaiting = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: filling up a gun takes one spare for all it gives",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "wdPtr->PrimaryMagazinesRemaining -= taken;",
+					"to": "wdPtr->PrimaryMagazinesRemaining -= 1;"
+				}
+			]
+		}
+	]
+}

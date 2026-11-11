@@ -1,0 +1,19 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the shaders' folder is read from the settings",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "static const std::string shaderPath = \"shaders/\";",
+					"to": "static const std::string shaderPath = Config_GetString(\"[Misc]\", \"ShaderPath\", \"shaders/\");"
+				}
+			]
+		}
+	]
+}

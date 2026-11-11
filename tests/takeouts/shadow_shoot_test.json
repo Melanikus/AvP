@@ -1,0 +1,168 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a triangle turned round adds one too",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "*addsOne = area > 0.0;",
+					"to": "*addsOne = true;"
+				}
+			]
+		},
+		{
+			"name": "a ray exactly on an edge counts for both triangles that share it",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return weight > 0.0 || (weight == 0.0 && (edgeUp > 0.0 || (edgeUp == 0.0 && edgeAcross > 0.0)));",
+					"to": "return weight >= 0.0;"
+				}
+			]
+		},
+		{
+			"name": "a corner nearer than the near plane is put on the screen anyway",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "if ((double)corners[i][2] < nearestDepth)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an edge's distance is measured past its ends",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "\t\talong = (along < 0.0) ? 0.0 : (along > 1.0) ? 1.0 : along;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the depth levels are 16 times too few",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return (projection33 + projection43 / depth) * 16777216.0;",
+					"to": "return (projection33 + projection43 / depth) * 1048576.0;"
+				}
+			]
+		},
+		{
+			"name": "a level turns back into the wrong depth",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return projection43 / (level / 16777216.0 - projection33);",
+					"to": "return projection43 / (level / 1048576.0 - projection33);"
+				}
+			]
+		},
+		{
+			"name": "a half float's sign is lost",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return (half & 0x8000) ? -value : value;",
+					"to": "return value;"
+				}
+			]
+		},
+		{
+			"name": "the smallest half floats are read as ordinary ones",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "(exponent == 0) ? fraction * 0.00006103515625f",
+					"to": "(exponent == 0) ? (1.0f + fraction) * 0.00006103515625f"
+				}
+			]
+		},
+		{
+			"name": "a prism has only one cap",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return ((polygonCorners - 2) * 2 + polygonCorners * 2) * 3;",
+					"to": "return ((polygonCorners - 2) + polygonCorners * 2) * 3;"
+				}
+			]
+		},
+		{
+			"name": "every cap triangle is taken for the near cap",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "return (triangle % 2 == 0) ? kShootNearCap : kShootFarCap;",
+					"to": "return kShootNearCap;"
+				}
+			]
+		},
+		{
+			"name": "y isn't turned over on the list",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "onList[1] = -(world[0] * view[4]",
+					"to": "onList[1] =  (world[0] * view[4]"
+				}
+			]
+		},
+		{
+			"name": "exact far ends still go through the cut corner",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "if (farExact)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a triangle right on the wall counts for sure",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "if (stepsBehind > kShootUnsureSteps)",
+					"to": "if (stepsBehind > -kShootUnsureSteps)"
+				}
+			]
+		},
+		{
+			"name": "the stencil doesn't go round, so 255 isn't minus one",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "int const count = (stencil > 127) ? stencil - 256 : stencil;",
+					"to": "int const count = stencil;"
+				}
+			]
+		},
+		{
+			"name": "stopping a polygon twice counts it twice",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "if (count == kShootMostStops || Has(shape, polygon))",
+					"to": "if (count == kShootMostStops)"
+				}
+			]
+		},
+		{
+			"name": "a stop on one polygon stops every polygon of its shape",
+			"changes": [
+				{
+					"file": "3dc/shadow_shoot_sums.h",
+					"from": "if (shapes[i] == shape && polygons[i] == polygon)",
+					"to": "if (shapes[i] == shape)"
+				}
+			]
+		}
+	]
+}

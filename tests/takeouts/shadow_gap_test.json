@@ -1,0 +1,48 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a corner gap rounds down to a quarter, not up",
+			"changes": [
+				{
+					"file": "3dc/shadow_gap.h",
+					"from": "float const gap = ceilf(startGap * length / planeDistance * 4.0f) * 0.25f;",
+					"to": "float const gap = floorf(startGap * length / planeDistance * 4.0f) * 0.25f;"
+				}
+			]
+		},
+		{
+			"name": "a corner at a slant gets no more than the gap",
+			"changes": [
+				{
+					"file": "3dc/shadow_gap.h",
+					"from": "float const gap = ceilf(startGap * length / planeDistance * 4.0f) * 0.25f;",
+					"to": "float const gap = ceilf(startGap * 4.0f) * 0.25f;"
+				}
+			]
+		},
+		{
+			"name": "a corner almost edge on is not held to the limit",
+			"changes": [
+				{
+					"file": "3dc/shadow_gap.h",
+					"from": "return (gap < widestGap) ? gap : widestGap;",
+					"to": "return gap;"
+				}
+			]
+		},
+		{
+			"name": "the limit is the old 200",
+			"changes": [
+				{
+					"file": "3dc/shadow_gap.h",
+					"from": "static const float kShadowGapWidest = 20000.0f;",
+					"to": "static const float kShadowGapWidest = 200.0f;"
+				}
+			]
+		}
+	]
+}

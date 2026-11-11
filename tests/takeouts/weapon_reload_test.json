@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "part of a round counts as nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "long long rounds = (((long long)*roundsInGun) + 65535) >> 16;",
+					"to": "long long rounds = ((long long)*roundsInGun) >> 16;"
+				}
+			]
+		},
+		{
+			"name": "a gun fuller than full is filled anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "if (full <= 0 || rounds >= full)",
+					"to": "if (full <= 0)"
+				}
+			]
+		},
+		{
+			"name": "a pile too small never opens a magazine",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "if (heap < needed && spare > 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a whole magazine in the pile never becomes one",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "while (heap >= full && spare < kReloadMostMagazines)",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "a pile makes more magazines than he can carry",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "while (heap >= full && spare < kReloadMostMagazines)",
+					"to": "while (heap >= full)"
+				}
+			]
+		},
+		{
+			"name": "the gun takes all of the pile, not what it needs",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "long long const taken = needed < heap ? needed : heap;",
+					"to": "long long const taken = heap;"
+				}
+			]
+		},
+		{
+			"name": "any pile from a save is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "return (saved < full || (magazines >= kReloadMostMagazines && saved < full * 2)) ? saved : 0;",
+					"to": "return saved;"
+				}
+			]
+		},
+		{
+			"name": "a pile over a magazine is kept with room for it to have become one",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "(magazines >= kReloadMostMagazines && saved < full * 2)",
+					"to": "(saved < full * 2)"
+				}
+			]
+		},
+		{
+			"name": "a huge pile from a save is kept at the most magazines",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_reload.h",
+					"from": "(magazines >= kReloadMostMagazines && saved < full * 2)",
+					"to": "(magazines >= kReloadMostMagazines)"
+				}
+			]
+		}
+	]
+}

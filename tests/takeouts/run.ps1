@@ -6,6 +6,7 @@
 # Run it from anywhere, in PowerShell:
 #   tests/takeouts/run.ps1 <test>                  for example: tests/takeouts/run.ps1 rim_test
 #   tests/takeouts/run.ps1 <test> -From 3 -To 5    only those rows
+#   tests/takeouts/run.ps1 -CheckRefusals          checks that this refuses the names in a list it should, each for its own reason (added 2026-11-08)
 #
 # The copy and the programs land in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks. Not the temp folder: antivirus programs distrust
 # new programs that appear there. It gives back a non-zero result if any row wasn't noticed, or couldn't be run.
@@ -13,16 +14,200 @@
 # A row that can't run says why and what to do. When its text has moved, node tests/takeouts/find-moved-row.js <test> <row> finds where it went (added 2026-11-07).
 
 param(
-    [Parameter(Mandatory = $true)][string]$Test,
+    [string]$Test,
     [int]$From = 0,
     [int]$To = -1,
-    [int]$SecondsForEachRun = 120
+    [int]$SecondsForEachRun = 120,
+    [switch]$CheckRefusals
 )
 
 $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not run the take-outs: $_"; exit 2 }
 
+# ---- What a list may name, checked before anything is copied (added 2026-11-08)
+#
+# A list can come from anyone's pull request, and so can a test's settings. Before a name in either is used to copy anything, these say
+# whether it's refused and why, or give back nothing when it's fine. -CheckRefusals, at the end of this part, shows each refusal happens,
+# for its own reason.
+
+# A name shown in a refusal is kept to one line, so a name with a line end in it can't start a line of its own in the log.
+function Show-Name([object]$named) { return ("$named" -replace "[`r`n]+", ' / ') }
+
+# Whether every part of a path is one Windows reads the way it looks. Windows drops dots and spaces from the end of a part, and a part made
+# of dots alone means "this folder" or a folder above it. So those are refused, and so is an empty part, or any character but letters,
+# digits and - _ . +
+function Test-PlainParts([string]$path)
+{
+    foreach ($part in ($path -split '[\\/]')) {
+        if ($part -cnotmatch '^[A-Za-z0-9_.+-]+$' -or $part -match '^\.+$' -or $part.EndsWith('.')) { return $false }
+    }
+    return $true
+}
+
+# A library a test's settings or its list names, to copy from this repository's vcpkg_installed. It has to be inside vcpkg_installed, not
+# climb out of it with .., have no : (which names a drive, or a hidden second part of a file), be made of plain parts, and be there. A list's
+# libraries have to be files. A test's settings can also name a folder, of headers for instance.
+function Get-LibraryRefusal([object]$named, [string]$root, [string]$namedBy, [bool]$filesOnly)
+{
+    $shown = Show-Name $named
+    if ($named -isnot [string] -or $named -eq '') { return "$namedBy has a library that isn't a name: '$shown'" }
+    if ($named -cnotmatch '^vcpkg_installed[\\/]') { return "$namedBy names $shown, which isn't inside vcpkg_installed" }
+    if (($named -split '[\\/]') -contains '..') { return "$namedBy names $shown, which climbs out of vcpkg_installed with .." }
+    if ($named.Contains(':')) { return "$namedBy names $shown, which has a : in it, so it could name a drive, or a hidden part of a file" }
+    if (-not (Test-PlainParts $named)) { return "$namedBy names $shown, which has a part Windows wouldn't read the way it looks" }
+
+    $full = Join-Path $root $named
+    if (-not (Test-Path -LiteralPath $full)) { return "$namedBy names $shown, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed." }
+    if ($filesOnly -and -not (Test-Path -LiteralPath $full -PathType Leaf)) { return "$namedBy names $shown, which is a folder, and a list's libraries are files" }
+    return ''
+}
+
+# A folder a list copies: a path inside the repository, such as 3dc or dependencies/libbinkdec/src, with no .. and no :, not starting from a
+# root, made of plain parts, and there.
+function Get-CopyRefusal([object]$folder, [string]$root)
+{
+    $shown = Show-Name $folder
+    if ($folder -isnot [string] -or $folder -eq '') { return "The list copies something that isn't a folder's name: '$shown'" }
+    if (($folder -split '[\\/]') -contains '..') { return "The list copies $shown, which climbs out of the repository with .." }
+    if ($folder.Contains(':')) { return "The list copies $shown, which has a : in it, so it could name a drive" }
+    if ($folder -match '^[\\/]') { return "The list copies $shown, which starts from a root, instead of being a folder inside the repository" }
+    if (-not (Test-PlainParts $folder)) { return "The list copies $shown, which has a part Windows wouldn't read the way it looks" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $folder) -PathType Container)) { return "The list copies $shown, and the repository has no such folder" }
+    return ''
+}
+
+# Copies the folders a list names into the copy of the code, each one checked first. Only the sources, not what earlier builds left behind.
+function Copy-ListFolders([object]$list, [string]$root, [string]$copyRoot)
+{
+    if ($null -eq $list.copy) { throw 'The list has no "copy": the folders its test needs' }
+    foreach ($folder in @($list.copy)) {
+        $why = Get-CopyRefusal $folder $root
+        if ($why) { throw $why }
+        & robocopy (Join-Path $root $folder) (Join-Path $copyRoot $folder) /E /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $folder" }
+    }
+    $global:LASTEXITCODE = 0
+}
+
+# Copies the libraries a list names into the copy of the code, each one checked first. A test that loads a library while it runs, instead
+# of linking it, can't name it in its settings, because those go to the compiler: shader_test loads Microsoft's D3DX that way. So its list
+# names the files, under "libraries". The copy of the folders leaves every .dll out on purpose, so these are the only ones in it.
+function Copy-ListLibraries([object]$list, [string]$root, [string]$copyRoot, [string]$namedBy)
+{
+    if ($null -eq $list.libraries) { return }
+    foreach ($named in @($list.libraries)) {
+        $why = Get-LibraryRefusal $named $root $namedBy $true
+        if ($why) { throw $why }
+        $libraryTo = Join-Path $copyRoot $named
+        New-Item -ItemType Directory -Force (Split-Path -Parent $libraryTo) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $root $named) -Destination $libraryTo
+    }
+}
+
+# -CheckRefusals: shows that the checks above refuse each thing they should, for its own reason, and still take a good name. It makes a
+# made-up repository in a folder of its own, with one made-up library in it (a text file, since nothing here is run), and asks about names
+# made to go wrong. takeouts.yml runs this before it chooses the lists. Gives back 1 if any answer is wrong, and 0 if all are right.
+function Test-Refusals
+{
+    $outside = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $root = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-takeouts-refusals' } else { Join-Path $outside 'AvP-test-out\takeouts-refusals' }
+
+    # The folder is emptied each time, so only one this made is: it leaves a note in it saying so
+    $note = 'made by the take-outs refusal check.txt'
+    if (Test-Path -LiteralPath $root) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $note) -PathType Leaf)) { throw "$root is there already, and this didn't make it, so it's left alone" }
+        Remove-Item -LiteralPath $root -Recurse -Force
+    }
+    $made = Join-Path $root 'repository'
+    $copyRoot = Join-Path $root 'copy'
+    foreach ($folder in @('vcpkg_installed\x86-windows\bin', 'tests', 'dependencies\made-up\src', '.github')) {
+        New-Item -ItemType Directory -Force (Join-Path $made $folder) | Out-Null
+    }
+    New-Item -ItemType Directory -Force $copyRoot | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $root $note), 'tests/takeouts/run.ps1 -CheckRefusals makes this folder, and empties it the next time it runs.')
+    $library = 'vcpkg_installed/x86-windows/bin/made-up.txt'
+    [System.IO.File]::WriteAllText((Join-Path $made $library), 'A made-up library: only its name is checked.')
+
+    $script:wrongAnswers = 0
+    function Answer([bool]$right, [string]$what, [string]$said)
+    {
+        if ($right) { Write-Host "ok      $what" }
+        else { Write-Host "FAILED  $what. It said: '$said'"; $script:wrongAnswers++ }
+    }
+
+    Write-Host 'Library names, in a list or in a test''s settings:'
+    $libraryNames = @(
+        @{ Name = $library; Files = $true; Reason = ''; What = 'a library inside vcpkg_installed is taken' },
+        @{ Name = 'vcpkg_installed\x86-windows\bin\made-up.txt'; Files = $true; Reason = ''; What = 'and the same written with \' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin'; Files = $false; Reason = ''; What = 'a test''s settings can name a folder in it' },
+        @{ Name = 'tests/made-up.txt'; Files = $true; Reason = "which isn't inside vcpkg_installed"; What = 'a file outside vcpkg_installed is refused' },
+        @{ Name = 'vcpkg_installed/../tests/made-up.txt'; Files = $true; Reason = 'which climbs out of vcpkg_installed with ..'; What = 'a name that climbs out with .. is refused' },
+        @{ Name = 'vcpkg_installed\x86-windows\..\..\..\Windows\notepad.exe'; Files = $true; Reason = 'which climbs out of vcpkg_installed with ..'; What = 'and the same with \' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made-up.txt:hidden'; Files = $true; Reason = 'which has a : in it'; What = 'a name with a : is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/.../made-up.txt'; Files = $true; Reason = "which has a part Windows wouldn't read the way it looks"; What = 'a part made of dots alone is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made-up.txt.'; Files = $true; Reason = "which has a part Windows wouldn't read the way it looks"; What = 'a part ending in a dot, which Windows drops, is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made up.txt'; Files = $true; Reason = "which has a part Windows wouldn't read the way it looks"; What = 'a part with a space is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/missing.txt'; Files = $true; Reason = "and it isn't there"; What = 'a library that isn''t there is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin'; Files = $true; Reason = 'which is a folder'; What = 'a library in a list that is a folder is refused' },
+        @{ Name = ''; Files = $true; Reason = "a library that isn't a name"; What = 'an empty name is refused' },
+        @{ Name = 5; Files = $true; Reason = "a library that isn't a name"; What = 'a number is refused' },
+        @{ Name = $null; Files = $true; Reason = "a library that isn't a name"; What = 'nothing at all is refused' }
+    )
+    foreach ($case in $libraryNames) {
+        $said = Get-LibraryRefusal $case.Name $made 'The list' $case.Files
+        Answer $(if ($case.Reason) { $said.Contains($case.Reason) } else { $said -eq '' }) $case.What $said
+    }
+
+    Write-Host 'Folders a list copies:'
+    $folders = @(
+        @{ Name = 'tests'; Reason = ''; What = 'a top folder of the repository is taken' },
+        @{ Name = 'dependencies/made-up/src'; Reason = ''; What = 'and a folder inside one' },
+        @{ Name = '.github'; Reason = ''; What = 'and one whose name starts with a dot' },
+        @{ Name = '..'; Reason = 'which climbs out of the repository with ..'; What = 'copying .. is refused' },
+        @{ Name = 'tests\..\..'; Reason = 'which climbs out of the repository with ..'; What = 'and climbing out from inside a folder' },
+        @{ Name = 'C:\Windows'; Reason = 'which has a : in it'; What = 'copying a folder on a drive is refused' },
+        @{ Name = '\Windows'; Reason = 'which starts from a root'; What = 'copying from the root of a drive is refused' },
+        @{ Name = '\\server\share'; Reason = 'which starts from a root'; What = 'and from another machine' },
+        @{ Name = 'tests/...'; Reason = "which has a part Windows wouldn't read the way it looks"; What = 'a part made of dots alone is refused' },
+        @{ Name = 'missing'; Reason = 'and the repository has no such folder'; What = 'a folder that isn''t there is refused' },
+        @{ Name = 7; Reason = "something that isn't a folder's name"; What = 'a number is refused' }
+    )
+    foreach ($case in $folders) {
+        $said = Get-CopyRefusal $case.Name $made
+        Answer $(if ($case.Reason) { $said.Contains($case.Reason) } else { $said -eq '' }) $case.What $said
+    }
+
+    Write-Host 'What a list asks for goes through those checks:'
+    $lists = @(
+        @{ Json = '{"copy": [".."]}'; Copy = $true; Reason = 'which climbs out of the repository with ..'; What = 'a list copying .. stops the run before anything is copied' },
+        @{ Json = '{"rows": []}'; Copy = $true; Reason = 'The list has no "copy"'; What = 'and so does a list that copies nothing' },
+        @{ Json = '{"libraries": ["vcpkg_installed/../tests/made-up.txt"]}'; Copy = $false; Reason = 'which climbs out of vcpkg_installed with ..'; What = 'a list naming a library outside vcpkg_installed stops the run' },
+        @{ Json = '{"libraries": "vcpkg_installed/x86-windows/bin/made-up.txt:x"}'; Copy = $false; Reason = 'which has a : in it'; What = 'and so does one name on its own, not in a list' },
+        @{ Json = '{"libraries": [{"name": "vcpkg_installed/x86-windows/bin/made-up.txt"}]}'; Copy = $false; Reason = "a library that isn't a name"; What = 'and a library written as something other than a name' },
+        @{ Json = '{"copy": ["tests"]}'; Copy = $false; Reason = ''; What = 'a list with no libraries copies none, and that is fine' }
+    )
+    foreach ($case in $lists) {
+        $list = $case.Json | ConvertFrom-Json
+        try {
+            if ($case.Copy) { Copy-ListFolders $list $made $copyRoot } else { Copy-ListLibraries $list $made $copyRoot 'The list' }
+            $said = ''
+        }
+        catch { $said = "$_" }
+        Answer $(if ($case.Reason) { $said.Contains($case.Reason) } else { $said -eq '' }) $case.What $said
+    }
+    Copy-ListLibraries ('{"libraries": ["vcpkg_installed/x86-windows/bin/made-up.txt"]}' | ConvertFrom-Json) $made $copyRoot 'The list'
+    Answer (Test-Path -LiteralPath (Join-Path $copyRoot $library) -PathType Leaf) 'a good library is copied, to the same place in the copy' ''
+
+    Write-Host "$(if ($script:wrongAnswers) { "$($script:wrongAnswers) answers were WRONG" } else { 'Every answer was right' })"
+    return $(if ($script:wrongAnswers) { 1 } else { 0 })
+}
+
+if ($CheckRefusals) { exit (Test-Refusals) }
+
+# ---- The run
+
 # A list's name is a test's name, which is only letters, digits and underscores, so it can't name a file anywhere else
+if (-not $Test) { throw 'Name a test, such as rim_test, or ask for -CheckRefusals' }
 if ($Test -cnotmatch '^[A-Za-z0-9_]+$') { throw "A list's name is letters, digits and underscores only, and this isn't: $Test" }
 
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -39,23 +224,19 @@ New-Item -ItemType Directory -Force $tree | Out-Null
 $bytes = [System.Text.Encoding]::GetEncoding(28591)
 $list = [System.IO.File]::ReadAllText($rowsFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
 
-# Only the sources, not what earlier builds left behind
-foreach ($folder in $list.copy) {
-    & robocopy (Join-Path $repository $folder) (Join-Path $tree $folder) /E /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $folder" }
-}
-$global:LASTEXITCODE = 0
+Copy-ListFolders $list $repository $tree
 
 # A test that links a library vcpkg built names it in its settings, under vcpkg_installed (net_close_test names ENet's
 # headers and enet.lib). The copy above leaves .lib files out on purpose, so exactly the ones the settings name are
-# copied here, from this repository's own vcpkg_installed, which a build of the game fills. A name has to stay inside
-# vcpkg_installed. (Added 2026-11-07, for net_close_test.)
+# copied here, from this repository's own vcpkg_installed, which a build of the game fills. Each name gets the checks in
+# Get-LibraryRefusal above. (Added 2026-11-07, for net_close_test.)
 $settings = Join-Path $repository "tests\$Test.args"
 if (Test-Path -LiteralPath $settings) {
     foreach ($word in @(Get-Content -LiteralPath $settings | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ })) {
         $named = $word -replace '^/I', ''
         if ($named -cnotmatch '^vcpkg_installed[\\/]') { continue }
-        if (($named -split '[\\/]') -contains '..' -or $named.Contains(':')) { throw "tests\$Test.args names $named, which isn't inside vcpkg_installed" }
+        $why = Get-LibraryRefusal $named $repository "tests\$Test.args" $false
+        if ($why) { throw $why }
 
         # Not $from and $to: PowerShell reads a name the same in capitals or small letters, so those would be -From and -To above,
         # which hold whole numbers, and a path can't go in one.
@@ -65,16 +246,16 @@ if (Test-Path -LiteralPath $settings) {
             & robocopy $libraryFrom $libraryTo /E /NFL /NDL /NJH /NJS /NP | Out-Null
             if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $named" }
         }
-        elseif (Test-Path -LiteralPath $libraryFrom -PathType Leaf) {
+        else {
             New-Item -ItemType Directory -Force (Split-Path -Parent $libraryTo) | Out-Null
             Copy-Item -LiteralPath $libraryFrom -Destination $libraryTo
-        }
-        else {
-            throw "tests\$Test.args names $named, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed."
         }
     }
     $global:LASTEXITCODE = 0
 }
+
+# A test that loads a library while it runs names it in its list instead (Copy-ListLibraries above says why)
+Copy-ListLibraries $list $repository $tree "tests/takeouts/$Test.json"
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath

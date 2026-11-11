@@ -6,7 +6,8 @@
 # where a test's settings (tests/<test>.args) look for them.
 #
 # tests.yml uses this before it builds every test. takeouts.yml uses it before a list whose test names vcpkg_installed in its settings,
-# because the take-out runner copies those files into its copy of the code.
+# or whose list names libraries the test loads while it runs (under "libraries"), because the take-out runner copies those files into its
+# copy of the code.
 #
 # Modified 2026-11-08 by Melanikus for the AvP port:
 #   the sanitizer's run of the tests can ask for some built with the address sanitizer as well, with the triplet x86-windows-asan, into
@@ -14,6 +15,7 @@
 #   for a day the libraries were built with a static triplet, with the C runtime inside them (STATIC-1). That's undone: Bitdefender
 #   flagged the game built that way (#111), and the user ruled static linking out (STATIC-UNDO-1, #125). They're built with the game's
 #   x86-windows again
+#   takeouts.yml also uses it for a list that names the libraries its test loads while it runs (shader_test, #154)
 
 name: Fetch the libraries the tests use
 description: Builds the named vcpkg ports for x86-windows into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports

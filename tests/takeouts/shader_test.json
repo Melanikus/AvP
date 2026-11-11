@@ -1,0 +1,74 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32",
+		"shaders"
+	],
+	"libraries": [
+		"vcpkg_installed/x86-windows/bin/D3DX9_43.dll",
+		"vcpkg_installed/x86-windows/bin/D3DCompiler_43.dll"
+	],
+	"rows": [
+		{
+			"name": "shadow shaders are compiled for shader model 2",
+			"changes": [
+				{
+					"file": "win32/shader_model.h",
+					"from": "fileName.compare(0, 6, \"shadow\") == 0 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "surface shaders are compiled for shader model 2",
+			"changes": [
+				{
+					"file": "win32/shader_model.h",
+					"from": " || fileName.compare(0, 7, \"surface\") == 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "light shaders are compiled for shader model 2",
+			"changes": [
+				{
+					"file": "win32/shader_model.h",
+					"from": " || fileName.compare(0, 5, \"light\") == 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "relief shaders are compiled for shader model 2",
+			"changes": [
+				{
+					"file": "win32/shader_model.h",
+					"from": " || fileName.compare(0, 6, \"relief\") == 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a screen pixel shader puts four numbers into three without saying so, which is only a warning",
+			"changes": [
+				{
+					"file": "shaders/orthoPixel.psh",
+					"from": "\tOut.Color = tex2D(Tex0, In.Texture) * In.Diffuse;",
+					"to": "\tOut.Color.rgb = tex2D(Tex0, In.Texture) * In.Diffuse;\n\tOut.Color.a = In.Diffuse.a;"
+				}
+			]
+		},
+		{
+			"name": "a decal pixel shader returns nothing",
+			"changes": [
+				{
+					"file": "shaders/decal.psh",
+					"from": "    return Out;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

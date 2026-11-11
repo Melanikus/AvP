@@ -6,6 +6,136 @@
 	],
 	"rows": [
 		{
+			"name": "a failed read is not remembered",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "LogErrorString(\"ov_read encountered an error\", __LINE__, kThisFile);\n\t\t\t_readFailed = true;",
+					"to": "LogErrorString(\"ov_read encountered an error\", __LINE__, kThisFile);"
+				}
+			]
+		},
+		{
+			"name": "a gap in the file counts as a failure",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\tLogErrorString(\"OV_HOLE\", __LINE__, kThisFile);\n",
+					"to": "\t\t\tLogErrorString(\"OV_HOLE\", __LINE__, kThisFile);\n\t\t\t_readFailed = true;\n\t\t\tbreak;\n"
+				}
+			]
+		},
+		{
+			"name": "a file whose first read fails is played anyway",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "if (_readFailed) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "the playback loop writes a buffer whose read failed",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\tif (!vorbis->_readFailed)\n\t\t\t{\n\t\t\t\tvorbis->_audioStream->WriteData(vorbis->_audioData, kBufferSize);",
+					"to": "\t\t\tif (true)\n\t\t\t{\n\t\t\t\tvorbis->_audioStream->WriteData(vorbis->_audioData, kBufferSize);"
+				}
+			]
+		},
+		{
+			"name": "a decoder error keeps on reading",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\t_readFailed = true;\n\t\t\tbreak;\n\t\t}\n\t\t// The end of the file",
+					"to": "\t\t\t_readFailed = true;\n\t\t}\n\t\t// The end of the file"
+				}
+			]
+		},
+		{
+			"name": "the bytes read never go into the total",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\tbytesReadTotal += bytesReadPerLoop;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the end of the file counts as a decoder error",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "else if (bytesReadPerLoop < 0)",
+					"to": "else if (bytesReadPerLoop <= 0)"
+				}
+			]
+		},
+		{
+			"name": "a read can ask for more than is left in the buffer",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t\tsizeToRead - bytesReadTotal,",
+					"to": "\t\t\tsizeToRead,"
+				}
+			]
+		},
+		{
+			"name": "the music thread goes on reading a file whose read failed",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "if (vorbis->_reachedEnd || vorbis->_readFailed)",
+					"to": "if (vorbis->_reachedEnd)"
+				}
+			]
+		},
+		{
+			"name": "a refused file says nothing on the console",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\tCon_PrintError(\"File \" + fileName + \" could not be played\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a good file's first buffer never goes to the sound output",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t// fill the first buffer\n\t_audioStream->WriteData(_audioData, kBufferSize);\n",
+					"to": "\t// fill the first buffer\n"
+				}
+			]
+		},
+		{
+			"name": "a good file that starts is not marked as playing",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\t_isPlaying = true;\n\t\t_audioStream->SetVolume(musicVolume);",
+					"to": "\t\t_audioStream->SetVolume(musicVolume);"
+				}
+			]
+		},
+		{
+			"name": "the player never closes its file",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\tov_clear(&_oggFile);\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a track goes back to the start at the end of its file, as it did before #94, so it never ends",
 			"changes": [
 				{
