@@ -53,6 +53,23 @@ namespace
 		return sqrt(std::max(0.0, dx * dx + dy * dy + dz * dz - upFromIt * upFromIt));
 	}
 
+	// Where an alien's box touches what it's on, from its place, which is the box's foot: on the floor, the place itself; on a wall, 450 mm
+	// on along its down, the box's half-width; on a ceiling, 900 mm, its height crouched (CE_ALIEN, extents.cpp). For THE SLIDE's gap
+	// (Secondary's review, S1). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+	AlienWaysXYZ TouchPoint(AlienWaysXYZ at, AlienWaysXYZ down, int kindUnder)
+	{
+		double const length = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+		double const by = kindUnder == kAlienWaysCeiling ? 900.0 : (kindUnder == kAlienWaysWall ? 450.0 : 0.0);
+
+		if (!(length > 0.0))
+		{
+			return at;
+		}
+
+		return AlienWaysXYZ{ static_cast<int>(lround(at.x + down.x / length * by)), static_cast<int>(lround(at.y + down.y / length * by)),
+			static_cast<int>(lround(at.z + down.z / length * by)) };
+	}
+
 	// Whether an alien at at, with down its down, has reached point. Across the surface it's on, it has to be within kAlienWaysReached. Up and
 	// down from the surface, it may be as far as kAlienWaysBodyHeight, because the game keeps an alien's position at its middle, not its feet,
 	// and the way's points are on the surfaces themselves.
@@ -1151,10 +1168,12 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 		if (cells)
 		{
 			follower.pointPolygons[p] = p < cells->size() ? grid->PolygonOf((*cells)[p]) : -1;
+			follower.pointCells[p] = p < cells->size() ? (*cells)[p] : kNpcGridNoCell;
 		}
 		else
 		{
 			follower.pointPolygons[p] = p < onPolygons->size() ? (*onPolygons)[p] : -1;
+			follower.pointCells[p] = kNpcGridNoCell;
 		}
 	}
 
@@ -1414,7 +1433,10 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			follower.headwayFrom = ask.at;
 		}
 		else if (slidesOn && now - follower.headwayAt >= kAlienWaysSlideAfterStuck && follower.slideTriedFor != follower.headwayAt &&
-			toNext < kAlienWaysMostSlide && AcrossToStretch(ask.at, ask.down, follower.points[follower.heading - 1], follower.points[follower.heading]) <= kAlienWaysMostOffTheWayToSlide)
+			Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide &&
+			AcrossToStretch(ask.at, ask.down, follower.points[follower.heading - 1], follower.points[follower.heading]) <= kAlienWaysMostOffTheWayToSlide &&
+			!(grid && follower.pointCells[follower.heading] != kNpcGridNoCell &&
+				grid->JoinOf(grid->NearestCell(ask.at.x, ask.at.y, ask.at.z, kNpcGridAlien, kNpcGridReach), follower.pointCells[follower.heading]) == kNpcGridJoinThrough))
 		{
 			// THE SLIDE (alien_ways_guide.h): to the point it's heading for, and no other, at once. The log hears of it. Added 2026-11-11 by
 			// Melanikus (Third) for the AvP port (#109; the owner's rulings R-LAVA-4b and R-LAVA-7).

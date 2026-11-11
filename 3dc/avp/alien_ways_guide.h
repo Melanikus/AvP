@@ -148,9 +148,12 @@ int const kAlienWaysRestMovedOn = 300;            // mm: a cell of the grid
 // - An alien on its way that makes no headway (kAlienWaysHeadway nearer the point it's heading for) for kAlienWaysSlideAfterStuck slides to
 //   that point: the one its stuck line would name, never a later one, as a way round a thin wall can have points on both sides of it close
 //   together.
-// - Only a small gap: that point less than kAlienWaysMostSlide from it, and the alien no more than kAlienWaysMostOffTheWayToSlide across
-//   its surface from the stretch it's on, as a straight line from further off is what could cross a thin wall. Otherwise the watchdog
-//   takes it, as before. The game refuses one whose end is in a module the alien's module can't see into (alien_ways.cpp).
+// - Only a small gap: that point less than kAlienWaysMostSlide from where the alien's box touches what it's on (its place is the box's
+//   foot, half a metre out from a wall and nearly a metre under a ceiling: Secondary's review, S1), and the alien no more than
+//   kAlienWaysMostOffTheWayToSlide across its surface from the stretch it's on, as a straight line from further off is what could cross a
+//   thin wall. Never across a THROUGH join (npc_grid.h) on the grid: onto a face hidden behind the one it's on (S6). Otherwise the
+//   watchdog takes it, as before. The game refuses one whose end box isn't clear, or whose line goes into a module that isn't a way on
+//   from the one before (alien_ways.cpp; S5 and S3).
 // - The game moves it at its own speed, so its walk or crawl plays as ever, straight to that point, with the level's walls not in its way
 //   and no gravity, as 1999's queen climbs out of her pit (bh_queen.cpp): it's still a body, so it can be hit, and can hit. Its body turns
 //   on the way onto the point's face. Collisions and gravity are back as it arrives, or if it takes longer than kAlienWaysMostSlideMs.
@@ -418,6 +421,7 @@ private:
 		// Added 2026-11-11 by Melanikus (Third) for the AvP port (THE CLOCK and THE WATCHDOG, above; #109)
 		AlienWaysXYZ headwayFrom;           // where it was when it last made headway
 		bool passedAPoint;                  // it has reached a point of this way since it took the way up
+		uint32_t pointCells[kAlienWaysMostWayPoints]; // the grid's cell at each point of the way, or kNpcGridNoCell (THE SLIDE, S6)
 		int pointPolygons[kAlienWaysMostWayPoints];   // the map polygon at each point of the way, or -1: on the grid, the one under the
 		                                    // point's cell
 		int shutPolygon[kAlienWaysMostShut];          // the polygons shut for it alone...

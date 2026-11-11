@@ -1846,9 +1846,32 @@ static void SourceOfTheGame()
 	std::string const slide = Between(ways, "void AlienWays_Slide(STRATEGYBLOCK *alien)\n{", "bool AlienWays_HoldsBackAvoiding(STRATEGYBLOCK *alien)");
 	Check(Has(slide, "\tdynamics->OnlyCollideWithObjects = 1;\n\tdynamics->GravityOn = 0;") && Has(slide, "status->MaxSpeed"),
 		"SOURCE: it slides through the level's walls with no gravity, at its own speed, still a body that can be hit");
-	Check(Has(slide, "MODULE *const there = ModuleFromPosition(&where, alien->containingModule);") && Has(slide, "theGuide.SlideEnded(who, false);")
-		&& Has(slide, "if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))"),
-		"SOURCE: a slide that ends in a module its own can't see into is refused");
+	// Secondary's review of the slide (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109): S3, its line goes only where an
+	// alien gets to, module by module by the game's own routes, not merely into a module seen (through glass, say); S5, its box at the end is
+	// clear of the level; either failing, it's refused
+	Check(Has(slide, "const char *const why = !LineGoesOnlyWhereItCan(alien, end) ?") && Has(slide, "(!EndBoxClear(alien, end) ?")
+		&& Has(slide, "\t\t\ttheGuide.SlideEnded(who, false);"),
+		"SOURCE: a slide whose line goes where an alien can't get to, or whose box at the end isn't clear of the level, is refused");
+	std::string const slideLine = Between(ways, "static bool LineGoesOnlyWhereItCan(STRATEGYBLOCK *alien, const double end[3])", "// THE SLIDE's turn of the body:");
+	Check(Has(slideLine, "int const steps = std::max(1, static_cast<int>(ceil(length / 250.0)));") && Has(slideLine, "MODULE *const here = ModuleFromPosition(&where, before);")
+		&& Has(slideLine, "for (AIMODULE **link = was ? was->m_link_ptrs : 0; link && *link && !linked; link++)"),
+		"SOURCE: its line is looked at every 250 mm, and each module it goes into is one the game's routes link to the one before");
+	std::string const endBox = Between(ways, "static bool EndBoxClear(STRATEGYBLOCK *alien, const double end[3])", "static bool LineGoesOnlyWhereItCan(");
+	Check(Has(endBox, "VECTORCH middle = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1] - 450.0)), static_cast<int>(lround(end[2])) };")
+		&& Has(endBox, "FindPolygonInLineOfSight(&direction, &middle, 0, alien->SBdptr);") && Has(endBox, "if (LOS_Lambda < reach)"),
+		"SOURCE: the end box's clear by rays from its middle to its faces and corners, the alien itself left out");
+	// S2: a slide is Approach's alone; whenever the guide isn't sliding an alien, or it's in any other state, its walls and gravity are back
+	Check(Has(ways, "\t\tif (sliding && StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\ttheGuide.SlideEnded(ask.who, false);")
+		&& Has(ways, "\t\tif (!sliding || StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\tEndSlide(alien);"),
+		"SOURCE: a slide that goes on into Hunt or Wander is over, and its walls and gravity are back, on any frame its way steers it");
+	// S1 and S6, the guide's half: the gap from where the box touches, and never across a THROUGH join on the grid
+	std::string const guideCode = ReadSourceFile("3dc/avp/alien_ways_guide.cpp");
+	Check(Has(guideCode, "Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide")
+		&& Has(guideCode, "grid->JoinOf(grid->NearestCell(ask.at.x, ask.at.y, ask.at.z, kNpcGridAlien, kNpcGridReach), follower.pointCells[follower.heading]) == kNpcGridJoinThrough"),
+		"SOURCE: a slide's gap is from where its box touches, and it never slides across a join onto a hidden face");
+	// S4: in Wander too, a climbing alien the guide has keeps clinging when no way steers it
+	Check(Has(near, "\tif (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tdynPtr->UseStandardGravity=0;"),
+		"SOURCE: in Wander, a climbing alien the guide has keeps clinging when no way steers it");
 	Check(Has(slide, "\t\tEndSlide(alien);\n\t\ttheGuide.SlideEnded(who, true);"), "SOURCE: arrived, its walls and gravity are back");
 	Check(Has(ways, "static void EndSlide(STRATEGYBLOCK *alien)\n{\n\tif (alien && alien->DynPtr && alien->I_SBtype == I_BehaviourAlien)\n\t{\n\t\talien->DynPtr->OnlyCollideWithObjects = 0;\n\t\talien->DynPtr->GravityOn = 1;"),
 		"SOURCE: walls and gravity back are 1999's alien's own");

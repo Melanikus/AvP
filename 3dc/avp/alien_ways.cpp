@@ -1244,6 +1244,23 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 
 	if (theGuide.Steer(map, ask, &towards))
 	{
+		// A slide is Approach's alone, which moves it (AlienWays_Slide). In any other state its slide is over, and whenever the guide isn't
+		// sliding it, its walls and gravity are back, so none is left without them (Secondary's review, S2; added 2026-11-11 by Melanikus
+		// (Third) for the AvP port, #109)
+		AlienWaysPoint slideTo;
+		AlienWaysXYZ slideFrom, slideNext;
+		bool const sliding = theGuide.Sliding(ask.who, &slideTo, &slideFrom, &slideNext);
+
+		if (sliding && StateOf(alien) != ABS_Approach)
+		{
+			theGuide.SlideEnded(ask.who, false);
+		}
+
+		if (!sliding || StateOf(alien) != ABS_Approach)
+		{
+			EndSlide(alien);
+		}
+
 		return DirectionTo(ask.at, towards, direction);
 	}
 
@@ -1314,6 +1331,79 @@ bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
 bool AlienWays_KeepsClinging(STRATEGYBLOCK *alien)
 {
 	return alien && AlienWays_On() && ReadyMap() && theGuide.KeepsClinging(WhoIs(alien));
+}
+
+// THE SLIDE's checks of its end (Secondary's review, S5): whether the alien's box, with its foot at end, is clear of the level and of
+// anything else. The box is CE_ALIEN's crouched (extents.cpp): 450 mm round, 900 tall from its foot, up. Rays go from its middle to each of
+// its faces and corners, and each must reach that far with nothing in the way. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static bool EndBoxClear(STRATEGYBLOCK *alien, const double end[3])
+{
+	static const int kWays[][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }, { 0, 1, 0 },
+		{ 1, -1, 1 }, { 1, -1, -1 }, { -1, -1, 1 }, { -1, -1, -1 }, { 1, 1, 1 }, { 1, 1, -1 }, { -1, 1, 1 }, { -1, 1, -1 } };
+	VECTORCH middle = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1] - 450.0)), static_cast<int>(lround(end[2])) };
+
+	for (const int *way : kWays)
+	{
+		// Out to the box's face that way: 450 across and 450 up or down, so a corner is 450 times the square root of how many axes it's on
+		double const axes = static_cast<double>((way[0] != 0 ? 1 : 0) + (way[1] != 0 ? 1 : 0) + (way[2] != 0 ? 1 : 0));
+		double const reach = 450.0 * sqrt(axes);
+		VECTORCH direction = { way[0] * 65536, way[1] * 65536, way[2] * 65536 };
+		Normalise(&direction);
+		FindPolygonInLineOfSight(&direction, &middle, 0, alien->SBdptr);
+
+		if (LOS_Lambda < reach)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// THE SLIDE's check of its line (Secondary's review, S3): from where the alien is to its end, every 250 mm, the module it's in is its own,
+// or the same AI module as the one before, or one linked to it in the game's own routes (an AI module's m_link_ptrs): one an alien gets
+// to from there. Seeing into a module isn't enough, as a module is seen through glass. Added 2026-11-11 by Melanikus (Third), #109.
+static bool LineGoesOnlyWhereItCan(STRATEGYBLOCK *alien, const double end[3])
+{
+	DYNAMICSBLOCK const *const dynamics = alien->DynPtr;
+	double const from[3] = { static_cast<double>(dynamics->Position.vx), static_cast<double>(dynamics->Position.vy), static_cast<double>(dynamics->Position.vz) };
+	double const length = sqrt((end[0] - from[0]) * (end[0] - from[0]) + (end[1] - from[1]) * (end[1] - from[1]) + (end[2] - from[2]) * (end[2] - from[2]));
+	int const steps = std::max(1, static_cast<int>(ceil(length / 250.0)));
+	MODULE *before = alien->containingModule;
+
+	for (int s = 1; s <= steps; s++)
+	{
+		double const f = static_cast<double>(s) / steps;
+		VECTORCH where = { static_cast<int>(lround(from[0] + (end[0] - from[0]) * f)), static_cast<int>(lround(from[1] + (end[1] - from[1]) * f)),
+			static_cast<int>(lround(from[2] + (end[2] - from[2]) * f)) };
+		MODULE *const here = ModuleFromPosition(&where, before);
+
+		if (!here)
+		{
+			return false;
+		}
+
+		if (here != before)
+		{
+			AIMODULE *const was = before ? before->m_aimodule : 0;
+			AIMODULE *const is = here->m_aimodule;
+			bool linked = was && is && was == is;
+
+			for (AIMODULE **link = was ? was->m_link_ptrs : 0; link && *link && !linked; link++)
+			{
+				linked = *link == is;
+			}
+
+			if (!linked)
+			{
+				return false;
+			}
+		}
+
+		before = here;
+	}
+
+	return true;
 }
 
 // THE SLIDE's turn of the body: its down, and its heading squared to it, as the rows of its orientation, in 65536ths. A heading that
@@ -1417,17 +1507,20 @@ void AlienWays_Slide(STRATEGYBLOCK *alien)
 	double const end[3] = { to.x - faceDown[0] * outBy, to.y - faceDown[1] * outBy, to.z - faceDown[2] * outBy };
 	double const at[3] = { static_cast<double>(dynamics->Position.vx), static_cast<double>(dynamics->Position.vy), static_cast<double>(dynamics->Position.vz) };
 
-	// On its first frame (the walls still on): one whose end is in a module its own can't see into is refused, so it can't cross into a
-	// room its way doesn't go through (PO, 2026-11-11). The watchdog has it then.
+	// On its first frame (the walls still on), two checks, and the watchdog has it if either fails (Secondary's review, S3 and S5; PO,
+	// 2026-11-11, from the owner's "keep the collisioning system on otherwise": it must never come back on inside a wall):
+	// - its line goes only where an alien can get to, module by module, so it can't cross into a room its way doesn't go through;
+	// - its box at the end is clear of the level.
 	if (!dynamics->OnlyCollideWithObjects)
 	{
-		VECTORCH where = { static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1])), static_cast<int>(lround(end[2])) };
-		MODULE *const there = ModuleFromPosition(&where, alien->containingModule);
+		const char *const why = !LineGoesOnlyWhereItCan(alien, end) ? "its line goes into a module it can't get to from the one before" :
+			(!EndBoxClear(alien, end) ? "its box there wouldn't be clear of the level" : 0);
 
-		if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))
+		if (why)
 		{
 			theGuide.SlideEnded(who, false);
-			LogString("alien ways: an alien's slide to " + Metres(AlienWaysXYZ{ to.x, to.y, to.z }) + " is refused, as it ends in a module its own can't see into");
+			LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + "'s slide to " + Metres(AlienWaysXYZ{ to.x, to.y, to.z }) +
+				" is refused, as " + why);
 			return;
 		}
 	}

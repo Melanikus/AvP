@@ -1820,8 +1820,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "toNext < kAlienWaysMostSlide &&",
-					"to": "toNext <= kAlienWaysMostSlide &&"
+					"from": ") < kAlienWaysMostSlide &&",
+					"to": ") <= kAlienWaysMostSlide &&"
 				}
 			]
 		},
@@ -1830,8 +1830,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "<= kAlienWaysMostOffTheWayToSlide)",
-					"to": "<= 1e9)"
+					"from": "<= kAlienWaysMostOffTheWayToSlide &&",
+					"to": "<= 1e9 &&"
 				}
 			]
 		},
@@ -1936,12 +1936,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a slide into a module its own can't see into isn't refused",
+			"name": "SOURCE: a slide whose line goes where an alien can't get to isn't refused",
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "if (!there || (there != alien->containingModule && !InView(alien->containingModule, there)))",
-					"to": "if (!there)"
+					"from": "const char *const why = !LineGoesOnlyWhereItCan(alien, end) ?",
+					"to": "const char *const why = false ?"
 				}
 			]
 		},
@@ -2002,6 +2002,86 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "if (now < memory.until && SameWho(memory.who, follower->who))",
 					"to": "if (now < memory.until)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide going on into Hunt or Wander keeps its walls and gravity off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (!sliding || StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\tEndSlide(alien);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide going on into Hunt or Wander isn't over",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (sliding && StateOf(alien) != ABS_Approach)\n\t\t{\n\t\t\ttheGuide.SlideEnded(ask.who, false);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide's end box isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "(!EndBoxClear(alien, end) ?",
+					"to": "(false ?"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end box's rays go only a hair's breadth",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (LOS_Lambda < reach)\n",
+					"to": "\t\tif (LOS_Lambda < 1)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide's line takes any module it goes into",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "for (AIMODULE **link = was ? was->m_link_ptrs : 0; link && *link && !linked; link++)",
+					"to": "for (AIMODULE **link = 0; link && *link && !linked; link++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide's gap is from the box's foot",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide",
+					"to": "Distance(ask.at, follower.points[follower.heading]) < kAlienWaysMostSlide"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide goes across a join onto a hidden face",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t!(grid && follower.pointCells[follower.heading] != kNpcGridNoCell &&\n",
+					"to": "\t\t\t!(false &&\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, a resting alien the guide has falls",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))\n",
+					"to": "\tif (false)\n"
 				}
 			]
 		}

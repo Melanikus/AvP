@@ -1557,6 +1557,14 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
 	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
+
+	// As in Approach: a climbing alien the alien ways have keeps clinging when no way steers it, so Wander's "don't climb on walls" above
+	// can't drop it off a wall or a ceiling in its rest (KeepsClinging; Secondary's review, S4; added 2026-11-11 by Melanikus (Third), #109)
+	if (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))
+	{
+		dynPtr->UseStandardGravity=0;
+	}
+
 	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander; modified 2026-11-11 by Melanikus (Third), #109): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
