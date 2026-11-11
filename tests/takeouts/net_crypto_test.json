@@ -148,6 +148,16 @@
 					"to": "return NetCrypto_HkdfExpandSha384(secret, kNetCryptoAesKeyBytes, info"
 				}
 			]
+		},
+		{
+			"name": "SHA-256 is asked of SHA-384 (CNG then refuses the size)",
+			"changes": [
+				{
+					"file": "3dc/net_crypto_cng.cpp",
+					"from": "return Hash(BCRYPT_SHA256_ALGORITHM, kNetCryptoSha256Bytes",
+					"to": "return Hash(BCRYPT_SHA384_ALGORITHM, kNetCryptoSha256Bytes"
+				}
+			]
 		}
 	]
 }

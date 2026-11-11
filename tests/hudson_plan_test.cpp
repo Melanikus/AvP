@@ -331,19 +331,24 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 	Refused("-hudson level=invasion frames=5 findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 
-	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): a server's name in small letters, once, with net=
+	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): its address, once, with net=. Modified 2026-11-10 by
+	// Melanikus for the AvP port (#175): an address's digits and dots, as a servers.cfg line has only an address; a name is refused. Each
+	// of these is 15 letters at most, so it's the letter that's refused and not the length, which is looked at first (above)
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
-	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayName + 1, 'a')).c_str(), kHudsonRefusedRemoteRelayTooLong);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=Virginia.relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a_b.test", kHudsonRefusedRemoteRelayCharacter);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test remoterelay=a.test", kHudsonRefusedAskedTwice);
-	Refused("-hudson level=invasion frames=5 remoterelay=a.test", kHudsonRefusedRemoteRelayWithoutNet);
+	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayAddress + 1, '1')).c_str(), kHudsonRefusedRemoteRelayTooLong);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", kHudsonRefusedRemoteRelayTooLong);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5a", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5:443", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=-203.0.113.5", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 remoterelay=203.0.113.50", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayWithoutNet);
 	// No hostile kind of run ever goes through a relay beyond this machine
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=yes", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=drain", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=watch", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=hold", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=flood", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 hostile=yes", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=drain", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 hostile=watch", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=hold", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=flood", kHudsonRefusedRemoteRelayHostile);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host hostile=yes remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayHostile);
 	{
 		HudsonPlan plan;
@@ -497,10 +502,10 @@ static void TestBadPlans()
 		Check(HudsonPlan_Read("-hudson level=kens-co-op frames=5 machine=shared net=join coop=yes siege=base siegefrom=canyon_01", &plan) == 0 && strcmp(plan.siegeFrom, "canyon_01") == 0, "siegefrom= is read");
 		Check(HudsonPlan_Read("-hudson level=kens-co-op frames=5 machine=shared net=join coop=yes siege=base siegefar=canyon_02", &plan) == 0 && strcmp(plan.siegeFar, "canyon_02") == 0, "siegefar= is read");
 		Check(plan.remoteRelay[0] == 0, "a plan with no remoterelay= has no relay beyond this machine");
-		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", &plan) == 0 && strcmp(plan.remoteRelay, "virginia.relay.avpx.test") == 0,
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=host remoterelay=203.0.113.50", &plan) == 0 && strcmp(plan.remoteRelay, "203.0.113.50") == 0,
 			"remoterelay= is read");
-		Check(HudsonPlan_Read(("-hudson level=derelict frames=5 machine=shared net=join remoterelay=" + std::string(kHudsonLongestRelayName, 'a')).c_str(), &plan) == 0
-			&& strlen(plan.remoteRelay) == static_cast<size_t>(kHudsonLongestRelayName), "and a name as long as a server's can be fits");
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=join remoterelay=255.255.255.255", &plan) == 0
+			&& strlen(plan.remoteRelay) == static_cast<size_t>(kHudsonLongestRelayAddress), "and an address as long as one can be fits (networking.cpp refuses that one: it's everyone's)");
 		Check(!plan.lookAllTheTime, "and it aims for itself, so nothing else looks");
 		{
 			static const int kWide = 200, kTall = 40;
@@ -2000,7 +2005,7 @@ static void TestTourAndSharedMachine()
 		Check(Has(networking, "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))\n\t{\n\t\tCon_PrintError(\"Net_ConnectToSession - a Hudson run with net= joins only a game on this machine\");\n\t\treturn NET_FAIL;"),
 			"and it joins no game but one on this machine");
 		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
-			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by name, checked before anything is sent to one");
+			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by its address, checked before anything is sent to one");
 		Check(Has(networking, "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL != broadcastSocket)"), "and there's no socket for finding games");
 		Check(Has(networking, "\tif (NetLoopbackOnly)\n\t{\n\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n\n\t\tif (enet_socket_bind(broadcastSocket, &thisHost) == 0)"),
 			"unless it's trying the search, and then that socket is on this machine's own address too");
@@ -2023,26 +2028,41 @@ static void TestTourAndSharedMachine()
 		// Server #14 beyond this machine (-RemoteRelay): exactly the games' UDP on this machine's address towards the one relay, and HTTPS to that relay's own address
 		Check(Has(pairScript, "if ($protocol -eq 'udp' -and $localAddress -eq $allowedRoute)") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen' -and $remoteAddress -eq $allowedRelay -and $remotePort -eq '443')"),
 			"with -RemoteRelay, the watch lets through only the games' UDP on the way to that relay, and HTTPS to the relay itself");
-		Check(Has(pairScript, "$found = @([System.Net.Dns]::GetHostAddresses($RemoteRelay))") && Has(pairScript, "if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork)")
+		// Modified 2026-11-10 by Melanikus for the AvP port (#175): the relay is given by its address, its servers.cfg line's, never a name
+		Check(Has(pairScript, "    $remoteRelayAddress = $RemoteRelay\n") && !Has(pairScript, "GetHostAddresses") && !Has(pairScript, "Resolve-DnsName")
 			&& Has(pairScript, "if ($RemoteRelay) { $lines += @(\"remote_relay=$RemoteRelay\", \"remote_relay_address=$remoteRelayAddress\", \"remote_relay_route=$remoteRelayRoute\") }"),
-			"whose name is looked up once, before anything starts, has to give exactly one IPv4 address, and goes in the record with this machine's address towards it");
+			"whose address is given, as its servers.cfg line has it, so nothing is looked up, and goes in the record with this machine's address towards it");
 		Check(Has(pairScript, "@('udp', '', $exampleRoute, '', '', $false)") && Has(pairScript, "@('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true)")
 			&& Has(pairScript, "@('tcp', 'Established', $exampleRoute, '203.0.113.51', '443', $true)") && Has(pairScript, "@('tcp', 'Listen', $exampleRoute, '0.0.0.0', '0', $true)"),
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
-		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
-			"and each game is told the relay's name (remoterelay=), and has it as its relays' list, at HTTPS's own port");
+		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine\nif ($serversRefusal) { Stop-Here $serversRefusal }")
+			&& ComesBefore(oneRun, "$serversRefusal = Set-HudsonServersFile $folder $ServersLine", "$process = Start-Process -FilePath $exePath"),
+			"and each game is told the relay's address (remoterelay=), and has the server's one line in its servers.cfg before it starts");
 		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
 		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
 		// with the list on this machine pinned, it's reached by its address
 		Check(Has(oneRun, "if ($NetV2) { $relaySwitch += ' -netv2' }") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
 			&& ComesBefore(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }", "$arguments = \"-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson"),
 			"SOURCE: -NetV2 and -SecondCopy are the game's own switches, -netv2 and -secondcopy, before -hudson");
-		Check(Has(oneRun, "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }") && Has(oneRun, "@('RelayServer = 127.0.0.1', \"RelayListPort = $RelayListPort\", \"RelayListPin = $LocalRelayPin\")")
+		// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is the run's one servers.cfg line, so no relay setting is written
+		Check(!Has(oneRun, "RelayKey = ") && !Has(oneRun, "RelayServer = ") && !Has(oneRun, "RelayListPin = ") && !Has(oneRun, "[Network]")
 			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
-			"SOURCE: the relay's key line goes in the run's settings, the pinned list on this machine by its address, and the second copy's files are read from its own folder");
-		Check(Has(oneRun, "if ($NetV2 -and -not $RelayKey) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
-			&& Has(pairScript, "$said = Get-HudsonV2WordsRefusal $case[0] $case[1]"),
-			"SOURCE: -NetV2 needs the key line, the pair's joiner is always the second copy, and -CheckTheWatch tries the v2 words' every refusal");
+			"SOURCE: no relay setting goes in the run's settings, and the second copy's files are read from its own folder");
+		Check(Has(oneRun, "if ($Relay -and -not $ServersLine) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
+			&& Has(pairScript, "$said = Get-HudsonServersLineRefusal $case[0] $case[1]") && Has(pairScript, "$said = Get-HudsonRemoteRelayRefusal $case[0]"),
+			"SOURCE: -Relay needs the server's line, the pair's joiner is always the second copy, and -CheckTheWatch tries every refusal of -RemoteRelay and -ServersLine");
+		// Added 2026-11-10 by Melanikus for the AvP port (#175): a run writes servers.cfg only into a copy made for Hudson's runs (PO's
+		// condition), never through a link or over a file it didn't write, and the tests workflow runs -CheckTheWatch, which tries it all
+		{
+			std::string const relayWords = ReadSourceFile("tools/hudson/relay-words.ps1");
+			std::string const testsWorkflow = ReadSourceFile(".github/workflows/tests.yml");
+			Check(Has(relayWords, "if (-not (Test-Path -LiteralPath $mark -PathType Leaf)) { return") && Has(relayWords, "$copyRefusal = Get-HudsonRunCopyRefusal $folder\n        if ($copyRefusal) { return $copyRefusal }")
+				&& Has(relayWords, "if ($place.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return")
+				&& Has(relayWords, "if (Test-HudsonServersTextNamesAServer $text) { return"),
+				"SOURCE: a run writes servers.cfg only into a copy with the mark beside bin, with no link on the way, and never over a file naming a server that it didn't write");
+			Check(Has(testsWorkflow, "        shell: powershell\n        run: ./tools/hudson/run-net-pair.ps1 -CheckTheWatch"),
+				"SOURCE: the tests workflow runs -CheckTheWatch, which tries the words and the servers.cfg a run writes");
+		}
 		Check(Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen')\n    {\n        return $remoteAddress -notmatch $thisMachine\n    }\n\n    return $localAddress -notmatch $thisMachine"),
 			"a TCP connection the game made is judged by its far end, and UDP and a TCP listener by their own address (server #14: the relays' list's HTTPS shows :: while it's connecting)");
 		Check(Has(pairScript, "$noAddress = '^(0\\.0\\.0\\.0|::)$'") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)\n    {\n        return $false\n    }"),

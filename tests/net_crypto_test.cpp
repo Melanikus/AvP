@@ -5,7 +5,8 @@
 // WHAT IT TESTS
 //
 // Every primitive against the published known answers in tests/vectors/crypto-kat/ (copied byte for byte from the relay's repository;
-// COPIED.md says what and why): NIST's CAVP and ACVP cases and Wycheproof's edge cases, for SHA-384 (two FIPS 180-4 examples), HMAC-SHA-384,
+// COPIED.md says what and why): NIST's CAVP and ACVP cases and Wycheproof's edge cases, for SHA-384 (two FIPS 180-4 examples; SHA-256's
+// two, added 2026-11-10 by Melanikus for the AvP port, #175), HMAC-SHA-384,
 // HKDF-SHA-384, AES-256-GCM and ECDH on P-384. Each file's "valid" cases have to give exactly its answer; its "invalid" ones have to be
 // refused (a tag or a point that's wrong) or give something else (a NIST answer that's wrong on purpose). Then the post-quantum stand-in
 // refuses every call, and the Noise state does what CRYPTO.md section 5 says on both sides. (ECDSA's signature check, and its test over
@@ -132,6 +133,25 @@ static void TheHashes()
 	// The same bytes in pieces give the same hash as in one
 	NetCryptoPiece const pieces[3] = { { reinterpret_cast<const uint8_t *>("a"), 1 }, { NULL, 0 }, { reinterpret_cast<const uint8_t *>("bc"), 2 } };
 	Check(NetCrypto_Sha384(pieces, 3, out) && memcmp(out, abc.data(), sizeof(out)) == 0, "and of \"a\", nothing, then \"bc\", one after another");
+
+	// SHA-256, for a server's servers.cfg fingerprint (#175): FIPS 180-4's examples for it, of "abc" and of nothing, and in pieces
+	std::vector<uint8_t> abc256, empty256;
+	FromHex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", &abc256);
+	FromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", &empty256);
+	uint8_t out256[kNetCryptoSha256Bytes];
+	Check(NetCrypto_Sha256(&abcPiece, 1, out256) && memcmp(out256, abc256.data(), sizeof(out256)) == 0, "SHA-256 of \"abc\" is FIPS 180-4's");
+	Check(NetCrypto_Sha256(NULL, 0, out256) && memcmp(out256, empty256.data(), sizeof(out256)) == 0, "and of nothing");
+	Check(NetCrypto_Sha256(pieces, 3, out256) && memcmp(out256, abc256.data(), sizeof(out256)) == 0, "and of \"a\", nothing, then \"bc\"");
+	memset(out256, 0xA5, sizeof(out256));
+	bool const refused = !NetCrypto_Sha256(NULL, 1, out256);
+	bool wiped = true;
+
+	for (size_t i = 0; i < sizeof(out256); i++)
+	{
+		wiped = wiped && out256[i] == 0;
+	}
+
+	Check(refused && wiped, "a count with no pieces is refused, with nothing left in the answer");
 
 	JsonValue file;
 	const JsonValue *cases = NULL;

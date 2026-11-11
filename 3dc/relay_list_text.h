@@ -2,7 +2,7 @@
 // Melanikus for the AvP port.
 //
 // The list is a page on the relay server, over HTTPS (relay_shared.h says what the relay is). A host puts its game on it, and a player
-// reads it to pick a game. It also says where each region's relay is. PROTOCOL.md in the server's repository, section 4, is the whole of
+// reads it to pick a game. It also gives its own relay's keys. PROTOCOL.md in the server's repository, section 4, is the whole of
 // what goes back and forth, and this is written to it (at 7014de1). relay_list.cpp makes the calls. This part only turns things into text
 // and back, so that a test can try all of it.
 //
@@ -15,6 +15,10 @@
 // Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's fingerprint, the short name of the identity
 // that host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A
 // host sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
+//
+// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is a servers.cfg line, with one relay at its own address, so the
+// relays' list (GET /v1/relays) isn't read any more, and a relay's keys come with their region from the list's own relay. The readers only
+// the -dev settings used are gone too: the pin and the shown name.
 
 #ifndef RELAY_LIST_TEXT_H
 #define RELAY_LIST_TEXT_H
@@ -39,7 +43,6 @@ enum
 	kRelayListMostHostMs = 9999,         // the host's round trip to its relay, in ms; 0 if it wasn't measured
 	kRelayListMostLevelNumber = 100,     // 0 to 99 for a stock level, 100 for a custom one, found by its name
 	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 46,011 bytes)
-	kRelayListMostRelaysBytes = 4096,    // an answer to GET /v1/relays: 4 KB at most (its worst case is 1,868 bytes)
 	kRelayListMostOwnerBytes = 1024,     // an answer to POST: {"owner"}, far less than this
 	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
 };
@@ -90,8 +93,9 @@ struct RelayListRelay
 	uint32_t address;   // the host's IPv4 address, as ENetAddress.host keeps it (network byte order), looked up by the list's thread
 };
 
-// Why the address a relay's name looked up to isn't used. A relay is somewhere out on the internet, so an address that can't be one isn't
-// sent anything: a wrong or hostile name could otherwise aim the game's messages at this network's own devices, or at many at once.
+// What kind of address an address is, for the servers.cfg reader's rule of which can be a server's (servers_cfg.h). Some never are: a
+// wrong or hostile line could otherwise aim the game's messages at many machines at once. Modified 2026-11-10 by Melanikus for the AvP
+// port (#175): this was the rule for the address a relay's name looked up to, until the server became a servers.cfg line with no names.
 enum RelayAddressRefusal
 {
 	kRelayAddressUsable,
@@ -103,12 +107,9 @@ enum RelayAddressRefusal
 	kRelayAddressLoopback       // 127/8: this machine itself
 };
 
-// The rule for an address, given with its first number in the highest byte (192.168.0.1 is 0xC0A80001). Private and loopback addresses
-// are refused unless developer is true (-dev), so that a relay on this machine or this network can be tested.
-RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer);
-
-// The words for a refusal of an address, for the log: never the address itself
-const char *RelayList_AddressWords(RelayAddressRefusal why);
+// The kind of an address, given with its first number in the highest byte (192.168.0.1 is 0xC0A80001). (Modified 2026-11-10 by Melanikus
+// for the AvP port, #175: -dev's way, which took private and loopback addresses as usable, is gone with the -dev settings it was for.)
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address);
 
 // What a host puts on the list. The texts are the game's own, already fitted (RelayList_FitText).
 struct RelayListListing
@@ -148,7 +149,6 @@ enum RelayListRefusal
 	kRelayListBadText,         // a name, level or mode that isn't printable ASCII of its length
 	kRelayListBadCode,         // a code that isn't 8 code letters
 	kRelayListBadRegion,       // a region that isn't 1 to 16 small letters, digits and -
-	kRelayListBadHost,         // a relay's host that isn't a DNS name, or is an address instead of one
 	kRelayListBadSecret,       // an owner that isn't 32 hex digits, small letters
 	kRelayListBadNumber,       // a number that isn't a whole number in its range
 	kRelayListMorePlayersThanRoom, // players over maxPlayers
@@ -173,22 +173,21 @@ const char *RelayList_RefusalWords(RelayListRefusal why);
 // fingerprint field, and each game's fingerprint is left all 0.
 RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count);
 
-// Reads a GET /v1/relays answer. relays has room for kRelayListMostRelays.
-RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count);
-
 // Reads a POST's answer, {"owner"}: the 16 bytes a host proves its listing with afterwards
 RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes]);
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, the answer to
-// GET /v1/relay-keys?region=<region> (CRYPTO.md 12.1): {"region", "p384", "mlkem"}, the P-384 key's 97 bytes and the ML-KEM-1024 key's
-// 1,568, each as exactly twice as many hex digits in small letters. Read as hostile, as every answer is.
-// - Only the relay asked about is taken: an answer about another region is refused.
-// - On a refusal, p384 and kem are left all 0, and nothing of the answer is kept.
-// - Only the keys' form is checked here. Whether they're the relay's real keys is checked after, against the fingerprint the -dev settings
-//   give (net_relay_keys.h); until then, nothing is sent to that relay.
+// GET /v1/relay-keys (CRYPTO.md 12.1): {"region", "p384", "mlkem"}, the P-384 key's 97 bytes and the ML-KEM-1024 key's 1,568, each as
+// exactly twice as many hex digits in small letters. Read as hostile, as every answer is.
+// Modified 2026-11-10 by Melanikus for the AvP port (#175): the game asks with no region (the keys of the relay on the list's own machine,
+// the one the servers.cfg line names), so the answer's region is given back in region, held to a region's own rule, instead of being
+// compared with one asked about.
+// - On a refusal, region is empty, p384 and kem are left all 0, and nothing of the answer is kept.
+// - Only the keys' form is checked here. Whether they're the server's real keys is checked after, with the list's own key, against the
+//   servers.cfg line's fingerprint (net_server_fingerprint.h); until then, nothing more is sent to that server.
 size_t const kRelayKeysMostAnswerBytes = 8192;   // the answer is about 3,370 bytes
-RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
-	uint8_t kem[kNetPqKemPublicBytes]);
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char region[kRelayListRegionLetters + 1],
+	uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes]);
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
@@ -208,15 +207,8 @@ void RelayList_FitText(const char *from, const char *fallback, char *to, size_t 
 // checks they still match). In English, whatever language the host plays in, so everyone reading the list reads the same words.
 const char *RelayList_ModeWords(int gameStyle, bool coopCampaign);
 
-// Whether a name is one to ask Windows to find: 1 to 253 characters, in parts between dots of 1 to 63 letters, digits and -, none
-// starting or ending with -. For the settings' server name, which isn't trusted to be a name just because it's in the file (Tao 3).
-bool Relay_IsServerName(const char *name);
-
 // A region: 1 to 16 small letters, digits and -
 bool RelayList_IsRegion(const char *region);
-
-// A relay's host from the list: a DNS name of 1 to 63 characters, and never an address: a name whose every part is digits is one
-bool RelayList_IsRelayHost(const char *host);
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
 //
@@ -275,9 +267,10 @@ const char *RelayAccess_AnswerWords(RelayAccessAnswer answer);
 // answer is set only when the whole answer is good.
 RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes, const uint8_t ours[kNetIdentityFingerprintBytes],
 	RelayAccessAnswer *answer);
-// ---- Reaching a test server with no name and no certificate Windows trusts (-dev only; relay_list.cpp). Added 2026-11-09 by Melanikus for
-// the AvP port, so a test can reach the relay on another machine with nothing changed on the tester's computer: no hosts line, nothing
-// added to Windows' trusted certificates.
+// ---- An address written plainly. Added 2026-11-09 by Melanikus for the AvP port, for -dev's test server; modified 2026-11-10 (#175): the
+// game's one reader of an address, for a servers.cfg line (servers_cfg.cpp) and a Hudson run's relay beyond this machine (networking.cpp).
+// The -dev settings it was first written for (RelayServer, RelayListPin, RelayServerName) are gone, with the pin's and the shown name's
+// readers.
 
 // Whether text is exactly one IPv4 address written plainly: four whole numbers from 0 to 255 with a dot between each, no leading zeros
 // (a leading zero means octal to some readers), and nothing else, not even a space. The address goes into hostOrder with its first
@@ -294,32 +287,7 @@ enum RelayIPv4Refusal
 RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder);
 bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder);   // RelayList_IPv4Refusal(...) == kRelayIPv4Read
 
-// The SHA-256 of the list's own certificate, as the settings give it (RelayListPin): exactly 64 hex digits, small letters or capitals,
-// and nothing else. Anything else is refused, with nothing written, and the refusal says why.
-int const kRelayListPinBytes = 32;
-enum RelayPinRefusal
-{
-	kRelayPinRead,
-	kRelayPinNoText,         // no text, or nowhere to put the pin
-	kRelayPinWrongLength,    // not 64 characters: a pin written with colons or spaces between its pairs is longer
-	kRelayPinNotHex          // a character that isn't 0-9, a-f or A-F
-};
-RelayPinRefusal RelayList_PinRefusal(const char *text, uint8_t pin[kRelayListPinBytes]);
-bool RelayList_ReadPin(const char *text, uint8_t pin[kRelayListPinBytes]);   // RelayList_PinRefusal(...) == kRelayPinRead
-
-// Whether a certificate's SHA-256 is the pin's, comparing every byte whatever the first difference (it takes the same time either way)
-bool RelayList_PinMatches(const uint8_t digest[kRelayListPinBytes], const uint8_t pin[kRelayListPinBytes]);
-
-// The name people see for a test server (RelayServerName): 1 to 32 characters, each a letter, a digit, a space or one of ' ( ) - . ,
+// The most letters of a server's name the online screens make room for: a servers.cfg line's name is at most 31 (servers_cfg.h)
 int const kRelayListShownNameLetters = 32;
-enum RelayShownNameRefusal
-{
-	kRelayShownNameGood,
-	kRelayShownNameNoText,       // no text, or an empty one
-	kRelayShownNameTooLong,      // more than 32 characters
-	kRelayShownNameBadCharacter  // a character outside the set: a quote, a newline, a tab, a %, a slash, a letter beyond ASCII
-};
-RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name);
-bool RelayList_IsShownName(const char *name);   // RelayList_ShownNameRefusal(...) == kRelayShownNameGood
 
 #endif

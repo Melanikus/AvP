@@ -45,62 +45,92 @@
 			]
 		},
 		{
-			"name": "the check compares the first 16 bytes only",
+			"name": "the servers.cfg fingerprint's 0 byte is left out",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "for (size_t i = 0; i < kNetRelayKeysFingerprintBytes; i++)\n\t{\n\t\tdiffer |=",
-					"to": "for (size_t i = 0; i < 16; i++)\n\t{\n\t\tdiffer |="
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "{ &zero, 1 },",
+					"to": "{ &zero, 0 },"
 				}
 			]
 		},
 		{
-			"name": "a setting's region isn't checked",
+			"name": "the servers.cfg fingerprint's words are another version's",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "if (!RelayList_IsRegion(named) || !NetRelayKeys_FingerprintFromHex(colon + 1, read))",
-					"to": "if (!NetRelayKeys_FingerprintFromHex(colon + 1, read))"
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "char const kNetServerFingerprintWords[] = \"AVPx servers.cfg line 1\";",
+					"to": "char const kNetServerFingerprintWords[] = \"AVPx servers.cfg line 2\";"
 				}
 			]
 		},
 		{
-			"name": "a refused setting leaves what was there",
+			"name": "the relay id is left out of the servers.cfg fingerprint",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "\tregion[0] = '\\0';\n\tmemset(fingerprint, 0, kNetRelayKeysFingerprintBytes);\n\n\tif (!setting)",
-					"to": "\tif (!setting)"
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "{ relayId, kNetRelayKeysFingerprintBytes },",
+					"to": "{ relayId, 0 },"
 				}
 			]
 		},
 		{
-			"name": "a fingerprint in capitals is taken",
+			"name": "an empty list key is hashed",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "\t\tif (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tif (text[kNetRelayKeysFingerprintHexLetters]",
-					"to": "\t\tif (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tif (text[kNetRelayKeysFingerprintHexLetters]"
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "if (!spki || spkiSize == 0 || spkiSize > kNetServerFingerprintMostKeyBytes || !relayId)",
+					"to": "if (!spki || spkiSize > kNetServerFingerprintMostKeyBytes || !relayId)"
 				}
 			]
 		},
 		{
-			"name": "a fingerprint with a digit too many is taken",
+			"name": "a list key over 4 KB is hashed",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "\tif (text[kNetRelayKeysFingerprintHexLetters] != '\\0')\n\t{\n\t\treturn false;\n\t}\n",
-					"to": ""
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "if (!spki || spkiSize == 0 || spkiSize > kNetServerFingerprintMostKeyBytes || !relayId)",
+					"to": "if (!spki || spkiSize == 0 || !relayId)"
 				}
 			]
 		},
 		{
-			"name": "a fingerprint is read from its first 32 digits, as before the ruling",
+			"name": "only the fingerprint's first byte is compared",
 			"changes": [
 				{
-					"file": "3dc/net_relay_keys.h",
-					"from": "for (size_t i = 0; i < kNetRelayKeysFingerprintHexLetters; i++)\n\t{\n\t\tchar const c = text[i];",
-					"to": "for (size_t i = 0; i < 32; i++)\n\t{\n\t\tchar const c = text[i];"
+					"file": "3dc/net_server_fingerprint.h",
+					"from": "differences |= static_cast<uint8_t>(made[i] ^ lines[i]);",
+					"to": "differences |= static_cast<uint8_t>(i == 0 ? made[i] ^ lines[i] : 0);"
+				}
+			]
+		},
+		{
+			"name": "the list's key is written even when it has no room",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "needed > 0 && needed <= room;",
+					"to": "needed > 0;"
+				}
+			]
+		},
+		{
+			"name": "a refusal leaves what was in the key's room",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "NetCrypto_Wipe(key, room);\n\n\tif (!certificate || certificateSize == 0",
+					"to": "\n\tif (!certificate || certificateSize == 0"
+				}
+			]
+		},
+		{
+			"name": "a refusal leaves the key's size as it was",
+			"changes": [
+				{
+					"file": "3dc/net_server_key.cpp",
+					"from": "*keySize = 0;",
+					"to": ";"
 				}
 			]
 		}

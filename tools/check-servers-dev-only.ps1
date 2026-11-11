@@ -12,10 +12,15 @@ HOW IT KNOWS. The game's own code is 3dc and win32. It checks:
 1. DevMode, which -dev turns on, starts off, and only one line makes it true: the one that reads -dev from the command line.
 2. Every call that reaches beyond this PC by name or by web address (WinHTTP's, WinINet's, a name lookup) is in 3dc/relay_list.cpp,
    the relay list's own file, and nowhere else.
-3. The relay list's server built into the game, kRelayBuiltInServer, is empty: there's no server a player's game knows of.
-4. Without -dev, Relay_ServerName gives back that built-in name, whatever the settings file says.
-5. The list starts only with a name: with none, it makes nothing and calls nothing. Its web calls go to that name alone, and the
-   relays it's told of are the only relays the game learns of. So with no name, no relay is ever reached either.
+3. The game knows of no server of its own. Its server is a line of servers.cfg, beside bin\ (modified 2026-11-10 by Melanikus for the
+   AvP port, #175), and the servers.cfg the repository ships, which a release puts there, names none: each of its lines is empty or a
+   note. Only the relay list's file reads the game's servers.cfg, besides the reader's own files.
+4. Without -dev, Relay_ServerName gives back no name at all, whatever servers.cfg says: the first thing it does is if (!DevMode)
+   { return ""; }.
+5. The list starts only with a name: with none, it makes nothing and calls nothing. Its web calls go to the line's address alone,
+   written in one place from the line's four numbers, so never a name; and the one relay it's told of is at that same address, the only
+   relay the game learns of. So with no name, no relay is ever reached either.
+Until protocol version 2 is on for players: then tools/check-online-play.ps1 (#175's last part) takes this rule's place.
 6. Every setting read from the [Network] section, and every setting anywhere whose name speaks of a relay, a server, a pin, a key or
    a fingerprint, is ignored without -dev, or only read with it.
 Anything it can't place is refused with the file and the line, so a new way out is read by a person before it's let through. Playing
@@ -154,9 +159,13 @@ foreach ($relative in $withWords.Keys)
 }
 
 $serverReads = @($reads | Where-Object { $_.Section -eq '[Network]' -or $_.Key -match '(?i)relay|server|pin|key|fingerprint' })
-$builtIn = @($code.Keys | Where-Object { $code[$_] -match '\bkRelayBuiltInServer\b' })
+# Every file that reads the game's servers.cfg, or its text, with the reader's own (servers_cfg.h, servers_cfg_file.h). Added 2026-11-10 by
+# Melanikus for the AvP port (#175).
+$serversCfgReader = [regex]'\bServersCfg_Read(TheGames|Folder)?\s*\('
+$serversCfgOwnFiles = @('3dc/servers_cfg.h', '3dc/servers_cfg.cpp', '3dc/servers_cfg_file.h', '3dc/servers_cfg_file.cpp')
+$serversCfgUsers = @($code.Keys | Where-Object { $serversCfgReader.IsMatch($code[$_]) })
 
-if ($outward.Count -eq 0 -and $serverReads.Count -eq 0 -and $builtIn.Count -eq 0)
+if ($outward.Count -eq 0 -and $serverReads.Count -eq 0 -and $serversCfgUsers.Count -eq 0)
 {
     Write-Host "None of the game's server code is in this commit, so a player's game can't reach a server."
     exit 0
@@ -213,29 +222,42 @@ foreach ($call in $outward)
     }
 }
 
-# ---- Rules 3 to 5: no server built in, none without -dev, and the list and its relays need one
+# ---- Rules 3 to 5: no server of the game's own, none without -dev, and the list and its relay need one. Modified 2026-11-10 by Melanikus
+# for the AvP port (#175): the server is a servers.cfg line, in place of kRelayBuiltInServer and the -dev setting RelayServer.
 
-if ($outward.Count -gt 0 -or $builtIn.Count -gt 0)
+foreach ($relative in @($serversCfgUsers | Where-Object { $_ -ne $listFile -and $serversCfgOwnFiles -notcontains $_ }))
+{
+    Stop-Check "$relative reads servers.cfg: only $listFile may, where the list's rules hold its server"
+}
+
+if ($outward.Count -gt 0 -or $serversCfgUsers.Count -gt 0)
 {
     if (-not $withWords.ContainsKey($listFile))
     {
-        Stop-Check "the game calls beyond this PC, but $listFile isn't there, so this check can't say where the calls go"
+        Stop-Check "the game calls beyond this PC or reads servers.cfg, but $listFile isn't there, so this check can't say where the calls go"
     }
 
-    $list = $withWords[$listFile]
-    $builtInDefinitions = @([regex]::Matches($list, '(?m)^.*\bkRelayBuiltInServer\s*\[\s*\]\s*=.*$'))
+    # Rule 3: the servers.cfg the repository ships, the one a release puts beside bin\, names no server. A line is a note if it starts
+    # with #, after any spaces or tabs, and nothing else counts as one.
+    $shipped = Join-Path $Repository 'servers.cfg'
 
-    if ($builtInDefinitions.Count -ne 1 -or (Get-Flat $builtInDefinitions[0].Value) -cne 'static const char kRelayBuiltInServer[] = "";')
+    if (Test-Path -LiteralPath $shipped -PathType Leaf)
     {
-        Stop-Check "$listFile must define kRelayBuiltInServer once, as static const char kRelayBuiltInServer[] = `"`"; (no server built into the game)"
+        $lineNumber = 0
+
+        foreach ($fileLine in ([System.IO.File]::ReadAllText($shipped) -split "`n"))
+        {
+            $lineNumber++
+            $bare = $fileLine.Trim([char[]]@(' ', "`t", "`r"))
+
+            if ($bare -and -not $bare.StartsWith('#', [System.StringComparison]::Ordinal))
+            {
+                Stop-Check "servers.cfg line $lineNumber names a server: until protocol version 2 is on for players, the servers.cfg a release ships names none"
+            }
+        }
     }
 
-    foreach ($relative in @($builtIn | Where-Object { $_ -ne $listFile }))
-    {
-        Stop-Check "$relative names kRelayBuiltInServer: only $listFile may"
-    }
-
-    # Rule 4: without -dev, the name is the built-in one
+    # Rule 4: without -dev, no name at all, before anything else is done
     $naming = @(Get-Definitions 'Relay_ServerName')
 
     if ($naming.Count -ne 1 -or $naming[0].File -ne $listFile)
@@ -243,57 +265,65 @@ if ($outward.Count -gt 0 -or $builtIn.Count -gt 0)
         Stop-Check "Relay_ServerName must be defined once, in $listFile"
     }
 
-    $namingBody = Get-Flat $naming[0].WithWords
-
-    if (-not $namingBody.Contains('if (!DevMode) { memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));'))
+    if (-not (Get-Flat $naming[0].WithWords).StartsWith('if (!DevMode) { return ""; }', [System.StringComparison]::Ordinal))
     {
-        Stop-Check "Relay_ServerName ($listFile line $($naming[0].Line)) must give back the built-in name without -dev: if (!DevMode) { memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer)); ..."
+        Stop-Check "Relay_ServerName ($listFile line $($naming[0].Line)) must give back no name without -dev, before anything else: if (!DevMode) { return `"`"; }"
     }
 
-    # Rule 5: the list's web calls go to the name alone, and it starts only with one
+    # Rule 5: the list's web calls go to the line's address alone, and it starts only with a name
     $listCode = $code[$listFile]
+    $listFlat = Get-Flat $withWords[$listFile]
 
     foreach ($m in ([regex]'\bWinHttpConnect\s*\(\s*(\w+)\s*,\s*([^,]+?)\s*,').Matches($listCode))
     {
         if ((Get-Flat $m.Groups[2].Value) -cne 'shared->server')
         {
-            Stop-Check "$listFile line $(Get-LineNumber $listCode $m.Index) calls WinHttpConnect to $(Get-Flat $m.Groups[2].Value): the list's calls may only go to shared->server, the name it started with"
+            Stop-Check "$listFile line $(Get-LineNumber $listCode $m.Index) calls WinHttpConnect to $(Get-Flat $m.Groups[2].Value): the list's calls may only go to shared->server, the line's address"
         }
     }
 
-    $serverWrites = @([regex]::Matches($listCode, '->server\s*\[[^\]]*\]\s*=(?!=)'))
-    $serverWritesFlat = @($serverWrites | ForEach-Object {
-        $lineStart = $listCode.LastIndexOf("`n", [Math]::Max(0, $_.Index - 1)) + 1
-        $lineEnd = $listCode.IndexOf("`n", $_.Index)
-        Get-Flat $listCode.Substring($lineStart, $lineEnd - $lineStart)
-    })
+    # The server is written in one place only, from the line's four numbers, so it's an address and never a name; and it's used in no other
+    # way than these: called (above), written there, and handed to networking.cpp as the relay's address in words
+    $serverWrite = 'swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line->address >> 24) & 0xFFu, (line->address >> 16) & 0xFFu, (line->address >> 8) & 0xFFu, line->address & 0xFFu);'
+    $serverUses = @('WinHttpConnect(session, shared->server,', $serverWrite, 'snprintf(relays[0].host, sizeof(relays[0].host), "%ls", shared->server);')
 
-    if ($serverWrites.Count -ne 1 -or $serverWritesFlat[0] -cne 'made->server[i] = static_cast<wchar_t>(name[i]);')
+    if (([regex]::Matches($listFlat, [regex]::Escape($serverWrite))).Count -ne 1)
     {
-        Stop-Check "$listFile must write the list's server in one place only, from the name it started with: made->server[i] = static_cast<wchar_t>(name[i]);"
+        Stop-Check "$listFile must write the list's server in one place only, from the line's four numbers: $serverWrite"
     }
 
-    $starts = @(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile -and $_.Body.Contains('made->server[i]') })
+    $leftOver = $listFlat
+    foreach ($use in $serverUses) { $leftOver = $leftOver.Replace($use, '') }
+
+    if ($leftOver -match '(->|\.)server\b')
+    {
+        Stop-Check "$listFile uses the list's server in a way this check doesn't know: only $($serverUses -join ' or ')"
+    }
+
+    # The relay is at the line's address too, written in one place
+    $relayWrites = @([regex]::Matches($listFlat, '->relayAddress\s*=(?!=)[^;]*;'))
+
+    if ($relayWrites.Count -ne 1 -or $relayWrites[0].Value -cne '->relayAddress = htonl(line->address);')
+    {
+        Stop-Check "$listFile must write the relay's address in one place only, from the line's address: made->relayAddress = htonl(line->address);"
+    }
+
+    $starts = @(Get-Definitions 'Start' | Where-Object { $_.File -eq $listFile -and $_.Body.Contains('made->server') })
 
     if ($starts.Count -ne 1)
     {
         Stop-Check "$listFile must start the list in one function, the one that writes its server"
     }
 
-    $start = Get-Flat $starts[0].Body
-    $nameAt = $start.IndexOf('const char *const name = Relay_ServerName();')
-    $refuseAt = $start.IndexOf('if (!name[0]')
-    $makeAt = $start.IndexOf('made->server[i]')
-    $returnAt = if ($refuseAt -ge 0) { $start.IndexOf('return false;', $refuseAt) } else { -1 }
+    $start = Get-Flat $starts[0].WithWords
+    $refuseAt = $start.IndexOf('if (!Relay_ServerName()[0]) { return false; }')
+    $lineAt = $start.IndexOf('const ServersCfgServer *const line = Server();')
+    $writeAt = $start.IndexOf($serverWrite)
+    $relayAt = $start.IndexOf('made->relayAddress = htonl(line->address);')
 
-    if ($nameAt -lt 0 -or $refuseAt -lt $nameAt -or $returnAt -lt $refuseAt -or $makeAt -lt $returnAt)
+    if ($refuseAt -lt 0 -or $lineAt -lt $refuseAt -or $writeAt -lt $lineAt -or $relayAt -lt $lineAt)
     {
-        Stop-Check "the list's start ($listFile line $($starts[0].Line)) must take its name from Relay_ServerName, and make nothing when there's none: const char *const name = Relay_ServerName(); then if (!name[0] ...) { return false; }, before it writes its server"
-    }
-
-    if ($start.Contains('serverAddress') -and -not $start.Contains('RelayList_ReadIPv4(name,'))
-    {
-        Stop-Check "the list's start ($listFile line $($starts[0].Line)) may only take the server's address from its own name (RelayList_ReadIPv4(name, ...))"
+        Stop-Check "the list's start ($listFile line $($starts[0].Line)) must make nothing when Relay_ServerName gives no name: if (!Relay_ServerName()[0]) { return false; }, then const ServersCfgServer *const line = Server();, before it writes its server and its relay"
     }
 }
 
@@ -343,7 +373,7 @@ foreach ($read in $serverReads)
     Stop-Check "$($read.File) line $($read.Line) reads the setting $($read.Key) from $($read.Section), and a player's game would use it: a server's setting must be ignored without -dev, or read only with it"
 }
 
-Write-Host "A player's game can't reach a server: no server is built in, every call beyond this PC is in $listFile and needs one, and $($serverReads.Count) server settings are read only with -dev."
+Write-Host "A player's game can't reach a server: servers.cfg names none, Relay_ServerName gives none without -dev, every call beyond this PC is in $listFile and needs one, and $($serverReads.Count) server settings are read only with -dev."
 
 # Said outright, because GitHub ends a step by exiting with whatever the last program to run left behind, whatever this script thought.
 exit 0

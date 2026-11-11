@@ -40,6 +40,14 @@ jobs:
         shell: pwsh
         run: ./tools/check-servers-dev-only.ps1
 
+      # Hudson's words for a run through a relay server, and the servers.cfg a run writes beside bin\ (tools/hudson/relay-words.ps1): each
+      # word's every refusal, the pair's watch on every kind of socket, and the file written only into a copy made for Hudson's runs, never
+      # over someone else's. It starts no game: -CheckTheWatch only tries the rules, in a folder of its own under the runner's temporary
+      # folder. In Windows PowerShell, as Hudson's runs are. Added 2026-11-10 by Melanikus for the AvP port (#175).
+      - name: Check Hudson's relay words, the pair's watch and a run's servers.cfg
+        shell: powershell
+        run: ./tools/hudson/run-net-pair.ps1 -CheckTheWatch
+
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
         shell: pwsh

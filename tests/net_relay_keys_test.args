@@ -3,5 +3,6 @@
 /I3dc /Itests /Ivcpkg_installed/x86-windows/include
 tests/net_relay_keys_test.cpp
 3dc/net_crypto_cng.cpp
-3dc/relay_list_text.cpp
+3dc/net_server_key.cpp
 bcrypt.lib
+crypt32.lib

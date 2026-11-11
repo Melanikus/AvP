@@ -203,15 +203,12 @@ param(
     [string]$HostileKind = '',
     [switch]$Typed,
     [int]$CoopEnd = 0,
-    [switch]$Relay,             # server #14: host or join through the relay on this machine (-relayhost or -relayjoin, by -Net)
-    [int]$RelayListPort = 8443, # and the relays' list's HTTPS port on this machine
-    [string]$RemoteRelay = '',  # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name or one IPv4 address. Needs -Relay
-    [string]$RelayListPin = '', # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name (relay-words.ps1)
-    [string]$RelayServerName = '', # -RemoteRelay's server as the game shows it, such as "New York (Mel's server)"
+    [switch]$Relay,             # server #14: host or join through the relay server -ServersLine names (-relayhost or -relayjoin, by -Net)
+    # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
+    [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
+    [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
     # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a run on protocol version 2's draft, through the relay (relay-words.ps1)
-    [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay and -RelayKey
-    [string]$RelayKey = '',       # the settings' RelayKey for that relay, "<region>:<the relay's id, 96 small hex digits>"
-    [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
+    [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay
     [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
     # Added 2026-11-10 by Melanikus for the AvP port, to see how the menus are drawn at a screen size (menu_shape.h):
     [switch]$MenuPictures         # menus=pictures: a run with no -Net that stays at the menus, pictures main, Multiplayer, Online access and Options, and the intro's copyright screen and logo, and ends
@@ -219,7 +216,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'clear-run-folder.ps1')
-# -RemoteRelay, -RelayListPin and -RelayServerName's own rule, the same in run-net-pair.ps1
+# -RemoteRelay's and -ServersLine's own rules, and the servers.cfg a run writes, the same in run-net-pair.ps1
 . (Join-Path $PSScriptRoot 'relay-words.ps1')
 
 function Stop-Here([string]$why)
@@ -241,21 +238,21 @@ if (-not (Test-Path -LiteralPath $exePath)) { Stop-Here "there's no $Exe in $fol
 
 if ($Net -and -not $WhileInUse) { Stop-Here "-Net is two games at once on one machine, so it needs -TimingsDontMatter and -WhileInUse" }
 if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for a network run's host or joiner, so it needs -Net host or -Net join" }
-if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
-# A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
 if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
-$relayWordsRefusal = Get-HudsonRelayWordsRefusal $RemoteRelay $RelayListPin $RelayServerName
+$relayWordsRefusal = Get-HudsonRemoteRelayRefusal $RemoteRelay
 if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
+# The relay server (modified 2026-11-10 by Melanikus for the AvP port, #175): one servers.cfg line, to its shape, on this machine unless
+# -RemoteRelay gives its address. The game reads it again by its own rules.
+if ($Relay -and -not $ServersLine) { Stop-Here "-Relay needs -ServersLine: the game finds its server only in servers.cfg, and the run writes that one line there" }
+if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }
+$serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
+if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
 # No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
-# Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port): each word to its shape first
-$v2WordsRefusal = Get-HudsonV2WordsRefusal $RelayKey $LocalRelayPin
-if ($v2WordsRefusal) { Stop-Here $v2WordsRefusal }
+# Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port; its key line went with #175, as the
+# servers.cfg line proves the relay's keys)
 if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay" }
-if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the relay's key line, the game sends the relay nothing" }
-if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
-if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
 if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
 if ($MenuPictures -and $Net) { Stop-Here "-MenuPictures stays at the menus and pictures them, so it's a run with no -Net" }
 
@@ -452,26 +449,13 @@ $saves = Join-Path $folder $(if ($SecondCopy) { 'HudsonRun\My Games\Aliens versu
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
 
-# With -NetV2, the relay's key line goes in with the rest (added 2026-11-09 by Melanikus (Fifth) for the AvP port). All were checked to
-# their shapes above.
-$v2Words = @()
-if ($RelayKey) { $v2Words += "RelayKey = $RelayKey" }
-
-# -Relay: the relays' list on this machine, as the game reads it only with -dev, which a run always has. Added to this run's own copy, so
-# no other run has it. With -LocalRelayPin (modified 2026-11-09 by Melanikus (Fifth)): the list by its address, 127.0.0.1, and checked by
-# that pin before a byte is sent, as a list with a certificate Windows doesn't know needs; a name could also give ::1, where a list on
-# 127.0.0.1 alone isn't.
-$localWords = if ($LocalRelayPin) { @('RelayServer = 127.0.0.1', "RelayListPort = $RelayListPort", "RelayListPin = $LocalRelayPin") } else { @('RelayServer = localhost', "RelayListPort = $RelayListPort") }
-if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]') + $localWords + $v2Words) }
-
-# -RemoteRelay: the one relay beyond this machine, whose list has the same name, at HTTPS's own port. The game is told the name with
-# remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay). With an address
-# instead of a name, -RelayListPin goes in too, and the game checks the list's certificate against it before it sends a byte; with
-# -RelayServerName, the name the game shows for that server. Both were checked to their shapes above (relay-words.ps1).
-$relayListWords = @()
-if ($RelayListPin) { $relayListWords += "RelayListPin = $RelayListPin" }
-if ($RelayServerName) { $relayListWords += "RelayServerName = $RelayServerName" }
-if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') + $relayListWords + $v2Words) }
+# -Relay's server (modified 2026-11-10 by Melanikus for the AvP port, #175, in place of the -dev settings RelayServer, RelayListPort,
+# RelayListPin, RelayServerName and RelayKey): the one servers.cfg line the game reads, beside bin\, written only into a copy made for
+# Hudson's runs (relay-words.ps1). A run without -Relay takes away the one a run left, so it reaches no server. The line was checked to its
+# shape above. With -RemoteRelay, the game is told the line's address with remoterelay= too, and uses that relay alone (networking.cpp,
+# TheRemoteRelay).
+$serversRefusal = Set-HudsonServersFile $folder $ServersLine
+if ($serversRefusal) { Stop-Here $serversRefusal }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru
@@ -528,7 +512,7 @@ $rateLines = @()
 $resultHere = Join-Path $saves 'hudson-result.txt'
 if (Test-Path -LiteralPath $resultHere) { $rateLines = @(Get-Content -LiteralPath $resultHere | Where-Object { $_ -like 'frames_each_second_asked=*' }) }
 
-Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "exit=$exitCode", "log_errors=$logErrors") + $rateLines + $pictureLines)
+Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "servers_line=$ServersLine", "exit=$exitCode", "log_errors=$logErrors") + $rateLines + $pictureLines)
 
 # What a walk keeps of its map and paths. Only a walk has them, so it isn't news if they're not there.
 foreach ($name in @('hudson-map.txt', 'hudson-ways.txt', 'hudson-trail.txt'))

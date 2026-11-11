@@ -1,5 +1,7 @@
 // The classical half of protocol version 2's cryptography (net_crypto.h), done by Windows' own CNG (bcrypt.dll). Written 2026-11-09 by
 // Melanikus for the AvP port.
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   SHA-256 too, for a server's servers.cfg fingerprint (#175): the one hash helper below is told which hash and how many bytes it gives
 //
 // Every call opens what it needs from CNG, uses it and closes it again, so nothing is shared between calls or threads. That's slower than
 // keeping things open, which doesn't matter for a handshake or the relay's few control messages. Sealing every game packet (CRYPTO.md
@@ -97,8 +99,10 @@ namespace
 		return any == 0;
 	}
 
-	// A hash, or an HMAC with key, of the pieces one after another
-	bool Hash(bool hmac, const uint8_t *key, size_t keySize, const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoHashBytes])
+	// A hash, or an HMAC with key, of the pieces one after another. which is CNG's name for the hash (BCRYPT_SHA384_ALGORITHM or
+	// BCRYPT_SHA256_ALGORITHM), and outSize the number of bytes it gives, which out has room for. CNG refuses a size that isn't the
+	// hash's own, so a mismatch fails rather than giving half a hash.
+	bool Hash(LPCWSTR which, size_t outSize, bool hmac, const uint8_t *key, size_t keySize, const NetCryptoPiece *pieces, size_t count, uint8_t *out)
 	{
 		BCRYPT_ALG_HANDLE algorithm = NULL;
 		BCRYPT_HASH_HANDLE hash = NULL;
@@ -107,7 +111,7 @@ namespace
 		// CNG wants a key's bytes even when there are none; one byte that's never read stands in for them
 		uint8_t const none = 0;
 
-		ok = ok && NT_SUCCESS(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA384_ALGORITHM, NULL, hmac ? BCRYPT_ALG_HANDLE_HMAC_FLAG : 0));
+		ok = ok && NT_SUCCESS(BCryptOpenAlgorithmProvider(&algorithm, which, NULL, hmac ? BCRYPT_ALG_HANDLE_HMAC_FLAG : 0));
 		ok = ok && NT_SUCCESS(BCryptCreateHash(algorithm, &hash, NULL, 0, hmac ? const_cast<PUCHAR>(keySize > 0 ? key : &none) : NULL,
 			hmac ? static_cast<ULONG>(keySize) : 0, 0));
 
@@ -122,7 +126,7 @@ namespace
 				&& NT_SUCCESS(BCryptHashData(hash, const_cast<PUCHAR>(pieces[i].bytes), static_cast<ULONG>(pieces[i].size), 0));
 		}
 
-		ok = ok && NT_SUCCESS(BCryptFinishHash(hash, out, static_cast<ULONG>(kNetCryptoHashBytes), 0));
+		ok = ok && NT_SUCCESS(BCryptFinishHash(hash, out, static_cast<ULONG>(outSize), 0));
 
 		if (hash)
 		{
@@ -136,7 +140,7 @@ namespace
 
 		if (!ok && out)
 		{
-			NetCrypto_Wipe(out, kNetCryptoHashBytes);
+			NetCrypto_Wipe(out, outSize);
 		}
 
 		return ok;
@@ -246,12 +250,17 @@ bool NetCrypto_Random(uint8_t *out, size_t size)
 
 bool NetCrypto_Sha384(const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoHashBytes])
 {
-	return Hash(false, NULL, 0, pieces, count, out);
+	return Hash(BCRYPT_SHA384_ALGORITHM, kNetCryptoHashBytes, false, NULL, 0, pieces, count, out);
+}
+
+bool NetCrypto_Sha256(const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoSha256Bytes])
+{
+	return Hash(BCRYPT_SHA256_ALGORITHM, kNetCryptoSha256Bytes, false, NULL, 0, pieces, count, out);
 }
 
 bool NetCrypto_HmacSha384(const uint8_t *key, size_t keySize, const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoHashBytes])
 {
-	return Hash(true, key, keySize, pieces, count, out);
+	return Hash(BCRYPT_SHA384_ALGORITHM, kNetCryptoHashBytes, true, key, keySize, pieces, count, out);
 }
 
 NetEcdhKey *NetCrypto_EcdhNew(uint8_t publicOut[kNetCryptoP384PublicBytes])

@@ -96,7 +96,7 @@ enum
 	kHudsonLongestRouteName = 32,
 	kHudsonViewDistance = 3000,        // how far away the point he faces is: three metres
 	kHudsonLongestWallName = 31,
-	kHudsonLongestRelayName = 253,     // remoterelay=: a server's name is at most 253 letters (Relay_IsServerName)
+	kHudsonLongestRelayAddress = 15,   // remoterelay=: an IPv4 address is at most 15 letters, 255.255.255.255 (modified 2026-11-10, #175: never a name)
 	kHudsonLongestStrategyName = 59,
 	kHudsonMostTogether = 8,       // together=: the most aliens a watched fight has at once. Each is followed once a second
 	kHudsonDefaultStrategySeconds = 12,
@@ -241,7 +241,7 @@ struct HudsonPlan
 	char siegeFar[kHudsonLongestWallName + 1];  // siegefar=: the room a siege's xenoborgs are made in, further off, so that they have time to wake. Nothing means where the others come from
 	char customMap[kCustomMapNameMost + 1]; // custommap=: a custom map made for single player, played instead of level=, which still says who plays. Nothing means none
 	char siegeFrom[kHudsonLongestWallName + 1]; // siegefrom=: the room a siege's enemies are made in, with _ for a space in its name. Nothing means the far side of siegeRoom
-	char remoteRelay[kHudsonLongestRelayName + 1]; // remoterelay=: the one relay beyond this machine a run with net= may use, by its server's name (server #14's run through a relay on another machine, 2026-11-09). Nothing means none: this machine only
+	char remoteRelay[kHudsonLongestRelayAddress + 1]; // remoterelay=: the one relay beyond this machine a run with net= may use, by its address, as its server's servers.cfg line gives it (server #14's run through a relay on another machine, 2026-11-09; an address since 2026-11-10, #175). Nothing means none: this machine only
 	bool lookAllTheTime;  // look=yes or look=no: after the smoke test, a player the fight isn't aiming goes on looking at the nearest of what's being fought, or else at the other player. Unless a run asks, a fight or a kill on the campaign does
 	bool listPlaceAsked;  // listplace= was given
 	int listPlace;        // listplace=: a skirmish on this place of the co-op level list, started the way the level row does it

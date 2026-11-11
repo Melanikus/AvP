@@ -3,7 +3,8 @@
 		"3dc",
 		"tests",
 		"tools",
-		"win32"
+		"win32",
+		".github"
 	],
 	"rows": [
 		{
@@ -8807,12 +8808,12 @@
 			]
 		},
 		{
-			"name": "remoterelay= takes capitals",
+			"name": "remoterelay= takes a name's letters",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))",
-					"to": "if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))"
+					"from": "if (!((c >= '0' && c <= '9') || c == '.'))",
+					"to": "if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.'))"
 				}
 			]
 		},
@@ -8831,7 +8832,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "\t\t\tif (valueLength > kHudsonLongestRelayName)\n",
+					"from": "\t\t\tif (valueLength > kHudsonLongestRelayAddress)\n",
 					"to": "\t\t\tif (false)\n"
 				}
 			]
@@ -8907,16 +8908,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: -RemoteRelay's name may give many addresses",
-			"changes": [
-				{
-					"file": "tools/hudson/run-net-pair.ps1",
-					"from": "if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork)",
-					"to": "if ($false)"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the record leaves out which relay was let through",
 			"changes": [
 				{
@@ -8947,12 +8938,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the games' list is still the one on this machine with -RemoteRelay",
+			"name": "SOURCE: the run doesn't write its servers.cfg",
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'",
-					"to": "'RelayServer = localhost', 'RelayListPort = 8443'"
+					"from": "$serversRefusal = Set-HudsonServersFile $folder $ServersLine\nif ($serversRefusal) { Stop-Here $serversRefusal }",
+					"to": "$serversRefusal = ''\nif ($serversRefusal) { Stop-Here $serversRefusal }"
 				}
 			]
 		},
@@ -9737,12 +9728,12 @@
 			]
 		},
 		{
-			"name": "a -NetV2 run's settings have no RelayKey",
+			"name": "SOURCE: a -Relay run starts without the server's line",
 			"changes": [
 				{
 					"file": "tools/hudson/run-hudson.ps1",
-					"from": "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }\n",
-					"to": ""
+					"from": "if ($Relay -and -not $ServersLine) { Stop-Here \"-Relay needs -ServersLine: the game finds",
+					"to": "if ($false) { Stop-Here \"-Relay needs -ServersLine: the game finds"
 				}
 			]
 		},
@@ -9863,6 +9854,56 @@
 					"file": "3dc/avp/hudson_plan.cpp",
 					"from": "if (seenFindGames && plan->netMode != kHudsonNetJoin)",
 					"to": "if (seenFindGames && plan->netMode == kHudsonNetNone)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run writes servers.cfg into a folder without the mark",
+			"changes": [
+				{
+					"file": "tools/hudson/relay-words.ps1",
+					"from": "if (-not (Test-Path -LiteralPath $mark -PathType Leaf)) { return",
+					"to": "if ($false) { return"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line is written without asking whether the folder is a run copy",
+			"changes": [
+				{
+					"file": "tools/hudson/relay-words.ps1",
+					"from": "$copyRefusal = Get-HudsonRunCopyRefusal $folder\n        if ($copyRefusal) { return $copyRefusal }",
+					"to": "$copyRefusal = ''\n        if ($copyRefusal) { return $copyRefusal }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run copy reached through a link is written into",
+			"changes": [
+				{
+					"file": "tools/hudson/relay-words.ps1",
+					"from": "if ($place.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return",
+					"to": "if ($false) { return"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone else's servers.cfg naming a server doesn't stop a run",
+			"changes": [
+				{
+					"file": "tools/hudson/relay-words.ps1",
+					"from": "if (Test-HudsonServersTextNamesAServer $text) { return",
+					"to": "if ($false) { return"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tests workflow doesn't run -CheckTheWatch",
+			"changes": [
+				{
+					"file": ".github/workflows/tests.yml",
+					"from": "        run: ./tools/hudson/run-net-pair.ps1 -CheckTheWatch",
+					"to": "        run: echo skipped"
 				}
 			]
 		},

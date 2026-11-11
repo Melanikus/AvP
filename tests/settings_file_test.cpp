@@ -50,13 +50,16 @@ int main()
 	// Every file that reads text from the settings. A number or a yes or no can't name a place, but text can.
 	// view_settings.cpp is on the list because it takes only four exact words, three keys' numbers and the HUD size's number (1 to 3 digits, hud_scale.cpp),
 	// and no file or folder is named by them.
-	// relay_list.cpp is on the list because the one text it reads, RelayServer, the relay server's list to ask for games, is read only with -dev, for a test
-	// with the list on this machine; without -dev it's ignored, and the game uses the name built into it. With -dev, the name has to be a host name
-	// (Relay_IsServerName: letters, digits, - and ., in parts), it's only ever used for HTTPS with Windows' certificate check, and nothing the list
-	// sends back is run, saved as a file, or used as a path: it all goes through the list's hostile reader. RelayListPort, beside it, is a number, and
-	// is read only with -dev too. Checked 2026-11-09 by Fourth, and relay_list_test checks that both are read only with -dev.
-	std::set<std::string> const allowed = { "ConfigFile.cpp", "ConfigFile.h", "view_settings.cpp", "relay_list.cpp" };
+	// relay_list.cpp was on the list for -dev's RelayServer, until the server became a line of servers.cfg (modified 2026-11-10 by Melanikus for
+	// the AvP port, #175): it reads no settings at all now, so it's off the list, and the check below holds it to that. servers.cfg is its own
+	// file beside bin\, read by its own hostile reader (3dc/servers_cfg.cpp), and nothing in it is ever a path.
+	std::set<std::string> const allowed = { "ConfigFile.cpp", "ConfigFile.h", "view_settings.cpp" };
 	int filesLookedAt = 0;
+	std::string const relayList = ReadFile(Top() / "3dc" / "relay_list.cpp");
+
+	Check(relayList.find("Relay_ServerName") != std::string::npos, "this test is reading the file that finds the relay server");
+	Check(relayList.find("Config_Get") == std::string::npos && relayList.find("ConfigFile.h") == std::string::npos,
+		"and the relay server doesn't come from the settings file in any way: no setting of any kind is read there");
 
 	for (char const *folder : { "3dc", "win32" })
 	{

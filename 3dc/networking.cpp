@@ -68,6 +68,9 @@
 //   asks the whole network or an address that isn't this machine's, and logs who joins, what arrives and who leaves
 // Modified 2026-11-09 by Melanikus for the AvP port (Hudson's branch, never pushed):
 //   a net= run's "this machine only" also holds through the relay: it uses only a relay on this machine, hosting or joining
+// Modified 2026-11-10 by Melanikus for the AvP port (#175):
+//   the relay is the one its server's servers.cfg line names, and its keys come proved by that line (relay_list.h), so the -dev setting
+//   RelayKey and its checks here are gone
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -733,33 +736,47 @@ static void RelayEndToEndFrame()
 }
 
 // Hudson's branch, for server #14's run through a relay on another machine (2026-11-09). A run with net= opens nothing beyond this machine,
-// with one exception the run asks for by name: the one relay it was given (Net_AllowOneRemoteRelay, from Hudson's remoterelay= word).
-//  - That relay is used at the one address its name gave the first time the list named it, and at no other (TheRemoteRelay).
+// with one exception the run asks for by its address: the one relay it was given (Net_AllowOneRemoteRelay, from Hudson's remoterelay= word).
+// Modified 2026-11-10 by Melanikus for the AvP port (#175): the relay is always at its server's servers.cfg line's address (relay_list.h),
+// which is never a name, so the run is given that address, and a name is refused.
+//  - That relay is used at that one address, and at no other (TheRemoteRelay).
 //  - The run's sockets then go on this machine's address that Windows sends to that relay from, never on 0.0.0.0 (LoopbackOnlyAddress).
 //  - Every socket there drops whatever comes from anywhere but that relay, before ENet reads a byte of it (RelayIntercept).
 // tools/hudson/run-net-pair.ps1 -RemoteRelay checks from outside the game that nothing else is open.
-static char remoteRelayName[254];          // the relay's name; empty: no relay beyond this machine
-static uint32_t remoteRelayAddress = 0;    // the one address it may have, as ENetAddress.host keeps it; 0 until the list has named it
+static uint32_t remoteRelayGiven = 0;      // the relay's address the run was given, as ENetAddress.host keeps it; 0: no relay beyond this machine
+static uint32_t remoteRelayAddress = 0;    // the same address, once the list has named a relay there (for the run's result); 0 until then
 static uint32_t remoteRelayRoute = 0;      // this machine's address towards it, where the run's sockets go; 0 until it's been found
 
-bool Net_AllowOneRemoteRelay(const char *name)
+bool Net_AllowOneRemoteRelay(const char *address)
 {
-	remoteRelayName[0] = 0;
+	remoteRelayGiven = 0;
 	remoteRelayAddress = 0;
 	remoteRelayRoute = 0;
 
-	// An empty name takes back any given before: this machine only, as a run with net= always was (a test's way to start again)
-	if (name && !name[0])
+	// An empty address takes back any given before: this machine only, as a run with net= always was (a test's way to start again)
+	if (address && !address[0])
 	{
 		return true;
 	}
 
-	if (!name || strlen(name) >= sizeof(remoteRelayName) || !Relay_IsServerName(name))
+	// One plain IPv4 address and nothing else, read by the same rule as a servers.cfg line's (relay_list_text.h)
+	uint32_t given = 0;
+
+	if (!address || !RelayList_ReadIPv4(address, &given))
 	{
 		return false;
 	}
 
-	strcpy(remoteRelayName, name);
+	// As ENet keeps an address: the first number in the lowest byte, as x86 lays out network order (see IsThisMachinesOwnAddress)
+	uint32_t const asENetKeepsIt = ((given >> 24) & 0xFFu) | ((given >> 8) & 0xFF00u) | ((given << 8) & 0xFF0000u) | ((given << 24) & 0xFF000000u);
+
+	// "Any address" (0.0.0.0) and "everyone on this network" (255.255.255.255) are never one relay
+	if (asENetKeepsIt == ENET_HOST_ANY || asENetKeepsIt == ENET_HOST_BROADCAST)
+	{
+		return false;
+	}
+
+	remoteRelayGiven = asENetKeepsIt;
 	return true;
 }
 
@@ -769,26 +786,10 @@ uint32_t Net_RemoteRelayAddress()
 	return remoteRelayAddress;
 }
 
-// Whether a relay from the list is the one the run was given: its name, at the address that name gave the first time. The first time pins
-// the address, and a different one later is left out.
+// Whether a relay from the list is the one the run was given: at the address it was given, and no other
 static bool TheRemoteRelay(const RelayListRelay &relay)
 {
-	if (!remoteRelayName[0] || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
-	{
-		return false;
-	}
-
-	// Modified 2026-11-09 by Melanikus for the AvP port: a run given the relay by one plain address (-dev's test server reached by its
-	// address and pin, relay_list.h) knows it by that address, as the list names its relay by a name no name service may know. A run given a
-	// name knows it by its name.
-	uint32_t givenAddress = 0;
-	bool const givenAnAddress = RelayList_ReadIPv4(remoteRelayName, &givenAddress);
-
-	// As ENet keeps an address: the first number in the lowest byte, as x86 lays out network order (see IsThisMachinesOwnAddress)
-	uint32_t const givenAsENetKeepsIt = ((givenAddress >> 24) & 0xFFu) | ((givenAddress >> 8) & 0xFF00u) | ((givenAddress << 8) & 0xFF0000u) |
-		((givenAddress << 24) & 0xFF000000u);
-
-	if (givenAnAddress ? relay.address != givenAsENetKeepsIt : _stricmp(relay.host, remoteRelayName) != 0)
+	if (remoteRelayGiven == 0 || relay.address != remoteRelayGiven)
 	{
 		return false;
 	}
@@ -796,14 +797,7 @@ static bool TheRemoteRelay(const RelayListRelay &relay)
 	if (remoteRelayAddress == 0)
 	{
 		remoteRelayAddress = relay.address;
-		LogString("net: a Hudson run with net= uses the one relay it was given, at the one address its name gave (the run's result says which)");
-		return true;
-	}
-
-	if (relay.address != remoteRelayAddress)
-	{
-		LogString("net: the relay this run was given now looks up to another address, so it's left out");
-		return false;
+		LogString("net: a Hudson run with net= uses the one relay it was given, at the address it was given (the run's result says which)");
 	}
 
 	return true;
@@ -816,7 +810,7 @@ static void LoopbackOnlyAddress(ENetAddress *address)
 {
 	enet_address_set_host_ip(address, "127.0.0.1");
 
-	if (!remoteRelayName[0])
+	if (remoteRelayGiven == 0)
 	{
 		return;
 	}
@@ -874,10 +868,10 @@ static bool OnTheRemoteRoute(const ENetAddress &address)
 	return remoteRelayRoute != 0 && address.host == remoteRelayRoute;
 }
 
-// One relay from the list, as an address for ENet: its control port, and the address its name gave. The list looked the name up on its
-// own thread and left out any address that can't be a relay's (RelayList_AddressRefusal), so nothing here waits for the network's name
-// service. This checks the two that must never be sent to again, in case the list's rule ever changes: "any address" (0.0.0.0) and
-// "everyone on this network" (255.255.255.255). False for those, or for a port that isn't one.
+// One relay from the list, as an address for ENet: its control port, and its address. Modified 2026-11-10 by Melanikus for the AvP port
+// (#175): the relay is at its server's servers.cfg line's address, which the line's reader held to the address rule (servers_cfg.h), so
+// nothing here waits for a name service. This checks the two that must never be sent to again, in case that rule ever changes: "any
+// address" (0.0.0.0) and "everyone on this network" (255.255.255.255). False for those, or for a port that isn't one.
 static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 {
 	if (relay.port < 1 || relay.port > 65535 || relay.address == ENET_HOST_ANY || relay.address == ENET_HOST_BROADCAST)
@@ -886,7 +880,7 @@ static bool RelayLookUp(const RelayListRelay &relay, ENetAddress *out)
 	}
 
 	// Hudson's branch: a run with net= opens nothing beyond this machine, so it uses only a relay on this machine (127.x), hosting or
-	// joining, or the one relay beyond it that the run was given by name, at its one address (TheRemoteRelay, above). A relay anywhere
+	// joining, or the one relay beyond it that the run was given by its address (TheRemoteRelay, above). A relay anywhere
 	// else is left out here, before anything is sent to it.
 	if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))
 	{
@@ -942,8 +936,9 @@ static void RelaySendAll(ENetHost *from, End &end, const ENetAddress *addresses,
 // ---- PROTOCOL VERSION 2'S CHANNEL TO THE RELAY: handshake A, then the sealed control channel (step 7; CRYPTO.md sections 6, 7 and 12.1,
 // net_relay_v2.h). Added 2026-11-09 by Melanikus for the AvP port. Only with the v2 draft (Net_V2DraftOn); without it, nothing here runs.
 // The rules (AvP-docs/engine/v2-step7-design.md, agreed with Primary):
-//   - Keys before anything. A relay is used only once its keys have come from the list and match the -dev RelayKey in all 48 bytes. A
-//     relay whose region has no RelayKey isn't used at all: nothing, not even the cookie round, is sent to it.
+//   - Keys before anything. A relay is used only once its keys have come from the list, proved by its server's servers.cfg line together
+//     with the list's own key (relay_list.h; modified 2026-11-10 by Melanikus for the AvP port, #175, in place of -dev's RelayKey). Until
+//     then nothing, not even the cookie round, is sent to it.
 //   - Every version 1 message to the relay goes sealed, through the session (Seal), and only messages the session opened reach net_relay.h's
 //     machines. A plain version 1 datagram from the relay is dropped, never read.
 //   - A datagram from the relay is sorted by its first four bytes, never its size: 'AVPR' is the session's, 'AVPE' and 'AVPG' the end to
@@ -961,7 +956,7 @@ static bool relayV2Started = false;          // whether handshake A's session ha
 static bool relayV2Times = false;            // the host times the relay, for the list; a joiner doesn't need to
 static NetRelayV2Session relayV2Session;
 static NetRelayV2Picker relayV2Picker;
-static NetRelayStaticKeys relayV2Keys;       // the relay's keys, once they've matched RelayKey
+static NetRelayStaticKeys relayV2Keys;       // the relay's keys, once they've come proved by the server's line
 static ENetAddress relayV2Address;           // the relay, at its control port
 static char relayV2Region[kRelayListRegionLetters + 1];
 static uint32_t relayV2Ms = 0;               // the cookie round's round trip
@@ -997,20 +992,14 @@ static const char *RelayV2WhyText(int why)
 	}
 }
 
-// Starts using a relay: only if the settings' RelayKey names its region, and then by asking the list for its keys. Nothing is sent to the
-// relay yet. False, with why in fixed words, if it can't be used.
+// Starts using a relay, by asking the list for its keys. Nothing is sent to the relay yet. False, with why in fixed words, if it can't be
+// used. Modified 2026-11-10 by Melanikus for the AvP port (#175): the keys come proved by the server's servers.cfg line (relay_list.h), so
+// there's no setting to hold them to.
 static bool RelayV2Begin(const ENetAddress &relay, const char *region, bool times, const char **why)
 {
 	RelayV2Forget();
-	uint8_t fingerprint[kNetCryptoHashBytes];
 
-	if (!region || !RelayList_RelayKeyFingerprint(region, fingerprint))
-	{
-		*why = "the relay's keys aren't given in the settings (RelayKey), so nothing is sent to it";
-		return false;
-	}
-
-	if (!RelayList_AskForRelayKeys(region))
+	if (!region || !RelayList_AskForRelayKeys(region))
 	{
 		*why = "the relay's keys couldn't be asked for";
 		return false;
@@ -1082,19 +1071,10 @@ static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
 			return relayV2Step;
 		}
 
-		uint8_t fingerprint[kNetCryptoHashBytes];
-
+		// The keys come only proved by the server's line (relay_list.h): anything else, and nothing is sent to the relay
 		if (came != kRelayKeysCame)
 		{
 			*why = listWhy ? listWhy : "the relay's keys couldn't be had";
-			RelayV2Forget();
-			return kRelayV2None;
-		}
-
-		// All 48 bytes, or nothing is sent to it
-		if (!RelayList_RelayKeyFingerprint(relayV2Region, fingerprint) || !NetRelayKeys_AreThese(&relayV2Keys, fingerprint))
-		{
-			*why = "the relay's keys aren't the ones the settings' RelayKey names, so nothing is sent to it";
 			RelayV2Forget();
 			return kRelayV2None;
 		}
@@ -1438,7 +1418,9 @@ static bool RelayHostStart()
 
 	if (relayCandidateCount == 0)
 	{
-		Con_PrintError("net: no relay the list named could be looked up, so this game is open on this network only");
+		// Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing is looked up now, as the relay is at its server's servers.cfg
+		// line's address, so the words say only that it can't be used
+		Con_PrintError("net: the relay the list named can't be used, so this game is open on this network only");
 		RelayHostNews(kNetRelayHostNoRelay, NULL);
 		return false;
 	}
@@ -1461,23 +1443,16 @@ static bool RelayHostStart()
 		RelayList_HostIdentity(runIdentity.fingerprint);
 	}
 
-	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): the draft's relay is the one whose region the
-	// settings' RelayKey names, and nothing is sent to it until its keys have come and matched (RelayV2Begin, RelayV2Turn). Version 1 times
-	// every relay the list named with its echoes, as before.
+	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): nothing is sent to the draft's relay until its
+	// keys have come (RelayV2Begin, RelayV2Turn). Modified 2026-11-10 (#175): it's the server's one relay, whose keys its servers.cfg line
+	// proves (relay_list.h). Version 1 times every relay the list named with its echoes, as before.
 	if (draft)
 	{
 		const char *why = NULL;
-		size_t keyed = relayCandidateCount;
-		uint8_t fingerprint[kNetCryptoHashBytes];
 
-		for (size_t i = 0; i < relayCandidateCount && keyed == relayCandidateCount; i++)
+		if (!RelayV2Begin(relayCandidates[0], relayCandidateRegions[0], true, &why))
 		{
-			keyed = RelayList_RelayKeyFingerprint(relayCandidateRegions[i], fingerprint) ? i : keyed;
-		}
-
-		if (keyed == relayCandidateCount || !RelayV2Begin(relayCandidates[keyed], relayCandidateRegions[keyed], true, &why))
-		{
-			Con_PrintError(std::string("net: ") + (why ? why : "no relay the list named has its keys given in the settings (RelayKey)")
+			Con_PrintError(std::string("net: ") + (why ? why : "the server's relay can't be used")
 				+ ", so this game is open on this network only");
 			RelayHostNews(kNetRelayHostNoRelay, NULL);
 			return false;
@@ -1806,7 +1781,8 @@ static uint16_t RelayHandshake(const char *region, const char *code)
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): with the draft, the channel to the relay comes
 	// first, its keys and then handshake A, and the join's own messages go through it once it's open. Nothing is sent to the relay before
-	// its keys have matched the settings' RelayKey, and a channel that can't open ends the join: there's no going back to version 1.
+	// its keys have come proved by its server's servers.cfg line (modified 2026-11-10, #175), and a channel that can't open ends the join:
+	// there's no going back to version 1.
 	bool const draft = Net_V2DraftOn();
 	bool joinerStarted = false;
 	const char *channelWhy = NULL;

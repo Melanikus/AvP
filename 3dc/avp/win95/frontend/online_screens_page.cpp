@@ -1208,11 +1208,11 @@ static void RelayLineInPlay(void)
 		return;
 	}
 
-	// The server by the name people see for it (-dev's RelayServerName, the owner's "NY Mel's Server") when it has one, otherwise by the
-	// relay's region, made safe either way, as anything drawn here is
+	// The server by the name people see for it (its servers.cfg line's name: modified 2026-11-10 by Melanikus for the AvP port, #175) when it
+	// has one, otherwise by the relay's region, made safe either way, as anything drawn here is
 	char place[kRelayListShownNameLetters + 1];
 	char line[160];
-	const char *const shownName = Relay_ServerShownName();
+	const char *const shownName = Relay_ServerName();
 
 	if (shownName[0] != '\0')
 	{

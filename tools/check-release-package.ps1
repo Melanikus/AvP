@@ -33,8 +33,9 @@ function Stop-Release([string]$why)
 }
 
 # The package is laid out as the game folder is: the game in bin as AvP_Classic.exe, the name Steam starts, with the libraries it needs
-# there too, and the notes at the top
-foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
+# there too, and the notes and servers.cfg at the top (servers.cfg added 2026-11-10 by Melanikus for the AvP port, #175: the game looks
+# for it beside bin)
+foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'servers.cfg', 'BUILD.txt', 'SHA256SUMS.txt')
 {
     if (-not (Test-Path -LiteralPath (Join-Path $Package $needed)))
     {

@@ -8,6 +8,8 @@
 // relays directory, CRYPTO.md section 12, and it comes back with that and its caller. Removed 2026-11-09 by Melanikus for the AvP port,
 // by Tao 2's "dead code goes"; git keeps it, with its test):
 //   - SHA-384 and HMAC-SHA-384, for the transcript and the keys;
+//   - SHA-256, for one thing only: a server's servers.cfg fingerprint (net_server_fingerprint.h; added 2026-11-10 by Melanikus for the
+//     AvP port, #175);
 //   - HKDF-SHA-384 (RFC 5869), written below over HMAC;
 //   - ECDH on the P-384 curve, the classical key agreement;
 //   - AES-256-GCM, which seals a message and proves it wasn't changed;
@@ -32,6 +34,7 @@
 
 // The sizes, in bytes (CRYPTO.md section 2)
 size_t const kNetCryptoHashBytes = 48;          // SHA-384, and HMAC-SHA-384
+size_t const kNetCryptoSha256Bytes = 32;        // SHA-256
 size_t const kNetCryptoAesKeyBytes = 32;        // AES-256
 size_t const kNetCryptoNonceBytes = 12;         // AES-GCM's nonce
 size_t const kNetCryptoTagBytes = 16;           // AES-GCM's tag, the proof a sealed message wasn't changed
@@ -54,6 +57,9 @@ struct NetCryptoPiece
 
 // SHA-384 of the pieces, one after another
 bool NetCrypto_Sha384(const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoHashBytes]);
+
+// SHA-256 of the pieces, one after another
+bool NetCrypto_Sha256(const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoSha256Bytes]);
 
 // HMAC-SHA-384 with key (of any length, 0 included), of the pieces one after another
 bool NetCrypto_HmacSha384(const uint8_t *key, size_t keySize, const NetCryptoPiece *pieces, size_t count, uint8_t out[kNetCryptoHashBytes]);
