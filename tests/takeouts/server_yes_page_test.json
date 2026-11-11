@@ -409,8 +409,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\t\tenum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);\n",
-					"to": "\t\t\t\tenum AVPMENU_ID const page = ServerYesPage_OpenFor(0) ? AVPMENU_SERVER_YES : static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);\n"
+					"from": "\t\t\t\tconst AVPMENU_ID page = static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);\n",
+					"to": "\t\t\t\tconst AVPMENU_ID page = ServerYesPage_OpenFor(0) ? AVPMENU_SERVER_YES : static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);\n"
 				}
 			]
 		},

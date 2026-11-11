@@ -4888,7 +4888,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					break;
 				}
 
-				enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);
+				const AVPMENU_ID page = static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);
 
 				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)
 				if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))

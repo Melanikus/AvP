@@ -187,7 +187,7 @@ static void TestTheOneWayIn()
 	// other page a press opens is AVPMENU_HOST_ON, host_page_test's.)
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const goes = pressing.find("enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);");
+	size_t const goes = pressing.find("const AVPMENU_ID page = static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);");
 	Check(goes != std::string::npos && goes < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 2 &&
 		CountOf(pressing, "SetupNewMenu(AVPMENU_HOST_ON);") == 1 && !Has(SourceSlice(ReadSource("3dc/avp/win95/frontend/host_page.cpp"),
 		"bool HostPage_PressedRow(int row)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "ServerYesPage_") &&
