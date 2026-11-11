@@ -2,9 +2,11 @@
 // Written 2026-11-08 by Melanikus for the AvP port.
 //
 // WHY. The user, 2026-11-08: "I want Hudson AI's grid unified and available for all NPCs to pathfind into, not a special alien pathfinding."
-// Hudson's grid (hudson_grid.h, kept local) knows only floors, and alien ways (alien_ways_map.h) knows only whole polygons, which can be
-// metres across: that gives the long straight lines and corner-to-corner turns the user saw. This puts small cells on every floor, wall and
-// ceiling, so a marine, an alien on a wall and every other kind can search the same grid, each with its own body.
+// Hudson's grid (hudson_grid.h) knows only floors, and alien ways (alien_ways_map.h) knows only whole polygons, which can be metres across:
+// that gives the long straight lines and corner-to-corner turns the user saw. This puts small cells on every floor, wall and ceiling, so a
+// marine, an alien on a wall and every other kind can search the same grid, each with its own body.
+// (Modified 2026-11-11 by Melanikus (Third) for the AvP port: Hudson's grid isn't "kept local" any more; it's in the game, and Hudson still
+// walks it. Moving him onto this grid, in its place, is #145's step 2, which isn't done yet.)
 //
 // WHAT THE GRID IS.
 //   A SHEET is a flat piece of the level: polygons the alien ways map joins edge to edge, that face the same way (within kNpcGridSameFacing)
