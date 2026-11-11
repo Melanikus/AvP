@@ -239,6 +239,7 @@ void AlienWaysGuide::Clear()
 		followers[f].handedOver = false;
 		followers[f].sliding = false;
 		followers[f].slideTriedFor = -1;
+		followers[f].refusedValid = false;
 		followers[f].clings = true;
 		ForgetTheWatchdog(&followers[f]);
 	}
@@ -446,6 +447,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.handedOver = false;
 			follower.sliding = false;
 			follower.slideTriedFor = -1;
+			follower.refusedValid = false;
 			follower.clings = true;
 			follower.count = 0;
 			follower.keptCount = 0;
@@ -550,13 +552,12 @@ bool AlienWaysGuide::Sliding(const AlienWaysWho &who, AlienWaysPoint *to, AlienW
 	}
 
 	Follower const &follower = followers[f];
-	*to = follower.points[follower.slidePoint];
+	*to = follower.slideTo;   // THE SLIDE'S OWN POINT (modified 2026-11-11 by Melanikus (Third), #109)
 	to->x += follower.slidePush.x;   // PUSH CLEAR: where its end was pushed to, if it was (added 2026-11-11 by Melanikus (Third), #109)
 	to->y += follower.slidePush.y;
 	to->z += follower.slidePush.z;
 	*from = follower.slideFrom;
-	AlienWaysPoint const &after = follower.points[follower.slidePoint + 1 < follower.count ? follower.slidePoint + 1 : follower.slidePoint];
-	*next = AlienWaysXYZ{ after.x, after.y, after.z };
+	*next = AlienWaysXYZ{ follower.slideNext.x, follower.slideNext.y, follower.slideNext.z };
 	return true;
 }
 
@@ -576,6 +577,10 @@ void AlienWaysGuide::SlideEnded(const AlienWaysWho &who, bool arrived)
 	if (!arrived)
 	{
 		follower.slideTriedFor = follower.headwayAt;
+
+		// A REFUSED POINT (THE SLIDE, ONCE IT GOES): not slid to again till a re-plan's way comes (added 2026-11-11 by Melanikus (Third))
+		follower.refusedTo = AlienWaysXYZ{ follower.slideTo.x, follower.slideTo.y, follower.slideTo.z };
+		follower.refusedValid = true;
 		return;
 	}
 
@@ -607,7 +612,7 @@ bool AlienWaysGuide::PushSlide(const AlienWaysWho &who, AlienWaysXYZ push, const
 	else
 	{
 		Follower &follower = followers[f];
-		AlienWaysPoint const &point = follower.points[follower.slidePoint];
+		AlienWaysPoint const &point = follower.slideTo;
 		AlienWaysXYZ const pushed = { point.x + push.x, point.y + push.y, point.z + push.z };
 		double const by = sqrt(static_cast<double>(push.x) * push.x + static_cast<double>(push.y) * push.y + static_cast<double>(push.z) * push.z);
 		AlienWaysXYZ const touched = TouchPoint(follower.slideFrom, follower.slideDown, KindUnder(follower.slideDown));
@@ -1242,6 +1247,18 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 		}
 	}
 
+	// HELD FROM A NEW WAY (THE SLIDE, ONCE IT GOES, alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): one that
+	// comes while the alien slides isn't taken, so the slide goes where its checks said. It asks again the moment the slide is over. A
+	// re-plan's way is never held: being found stuck drops the slide, and none starts while a re-plan waits.
+	if (follower.sliding)
+	{
+		line.outcome = kAlienWaysOutcomeFound;
+		line.heldForSlide = true;
+		AddReport(line);
+		follower.wayAt = now - kAlienWaysAskAgainAfter;
+		return;
+	}
+
 	// A way that never leaves the floor is no better than the game's own steering, which curves at its target and climbs any wall it touches.
 	// That's where the alien and its target are on one big floor polygon, which the map can't leave and come back to (one way onto each polygon).
 	// The alien is on the floor then, so dropping the way it had lets nothing fall.
@@ -1295,6 +1312,14 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	follower.wayGoal = searchGoal;
 	follower.nearest = DBL_MAX;
 	follower.passedAPoint = false;
+
+	// A re-plan's way clears the refused point: it goes round the polygon that was shut there (A REFUSED POINT; added 2026-11-11 by
+	// Melanikus (Third) for the AvP port, #109)
+	if (follower.replanning)
+	{
+		follower.refusedValid = false;
+	}
+
 	follower.replanning = false;
 
 	if (!keepTheClock)
@@ -1358,6 +1383,26 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	follower.steeredAt = now;
 	follower.guided = false;
 	follower.last = ask;
+
+	// THE SLIDE (alien_ways_guide.h): while it slides, it heads for the point it slides to, and nothing else is looked at, the hand-over
+	// below included, which waits for it to get there (THE SLIDE, ONCE IT GOES; modified 2026-11-11 by Melanikus (Third), #109). One that
+	// takes too long is over, its point counts as refused, and the watchdog has it from here, its clock started again.
+	if (follower.sliding)
+	{
+		if (now - follower.slideAt <= kAlienWaysMostSlideMs)
+		{
+			*towards = AlienWaysXYZ{ follower.slideTo.x, follower.slideTo.y, follower.slideTo.z };
+			follower.guided = true;
+			return true;
+		}
+
+		follower.sliding = false;
+		follower.slideTriedFor = now;
+		follower.refusedTo = AlienWaysXYZ{ follower.slideTo.x, follower.slideTo.y, follower.slideTo.z };
+		follower.refusedValid = true;
+		follower.headwayAt = now;
+		follower.nearest = DBL_MAX;
+	}
 
 	// THE HAND-OVER (alien_ways_guide.h): its target in clear sight and near, the last stretch is the game's own, as in 1999, a rest or
 	// not. Taken back only further off. The log hears of each hand-over once. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
@@ -1458,24 +1503,6 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 		return false;
 	}
 
-	// THE SLIDE (alien_ways_guide.h): while it slides, it heads for the point it slides to, and nothing else is looked at. One that takes
-	// too long is over, and the watchdog has it from here, its clock started again. Added 2026-11-11 by Melanikus (Third) for the AvP port.
-	if (follower.sliding)
-	{
-		if (now - follower.slideAt <= kAlienWaysMostSlideMs && follower.slidePoint < follower.count)
-		{
-			AlienWaysPoint const &to = follower.points[follower.slidePoint];
-			*towards = AlienWaysXYZ{ to.x, to.y, to.z };
-			follower.guided = true;
-			return true;
-		}
-
-		follower.sliding = false;
-		follower.slideTriedFor = now;
-		follower.headwayAt = now;
-		follower.nearest = DBL_MAX;
-	}
-
 	// A new way starts where the alien was when its search began. It may have gone on since, so it takes the way up at the stretch nearest to
 	// where it is now, not at the first one, which could be behind it by now and make it look off the way.
 	if (follower.count > 0 && follower.fresh)
@@ -1543,6 +1570,7 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			follower.headwayFrom = ask.at;
 		}
 		else if (slidesOn && now - follower.headwayAt >= kAlienWaysSlideAfterStuck && follower.slideTriedFor != follower.headwayAt &&
+			!follower.replanning && !(follower.refusedValid && Distance(follower.refusedTo, follower.points[follower.heading]) < kAlienWaysHeadway) &&
 			Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide &&
 			AcrossToStretch(ask.at, ask.down, follower.points[follower.heading - 1], follower.points[follower.heading]) <= kAlienWaysMostOffTheWayToSlide &&
 			!(grid && follower.pointCells[follower.heading] != kNpcGridNoCell &&
@@ -1571,6 +1599,8 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 
 			follower.sliding = true;
 			follower.slidePoint = follower.heading;
+			follower.slideTo = to;
+			follower.slideNext = follower.points[follower.heading + 1 < follower.count ? follower.heading + 1 : follower.heading];
 			follower.slideAt = now;
 			follower.slideFrom = ask.at;
 			follower.slideDown = ask.down;
@@ -1676,10 +1706,9 @@ bool AlienWaysGuide::Drive(const AlienWaysMap *map, const AlienWaysWho &who, Ali
 	Follower &follower = followers[f];
 
 	// A slide goes on through a frame nothing asked, to the same point (THE SLIDE; added 2026-11-11 by Melanikus (Third), #109)
-	if (follower.sliding && !follower.steered && follower.slidePoint < follower.count)
+	if (follower.sliding && !follower.steered)
 	{
-		AlienWaysPoint const &to = follower.points[follower.slidePoint];
-		*towards = AlienWaysXYZ{ to.x, to.y, to.z };
+		*towards = AlienWaysXYZ{ follower.slideTo.x, follower.slideTo.y, follower.slideTo.z };
 		return true;
 	}
 

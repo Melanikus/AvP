@@ -588,6 +588,12 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 				details += ", coming in from " + std::to_string(line.arrivalDegrees) + " degrees";
 			}
 
+			// THE SLIDE, ONCE IT GOES (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+			if (line.heldForSlide)
+			{
+				details += ". Not taken, as it slides now: it asks again once it's there";
+			}
+
 			break;
 
 		case kAlienWaysOutcomeNoWay:
@@ -616,7 +622,7 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 
 		// THE SLIDE (alien_ways_guide.h), each one. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 		case kAlienWaysOutcomeSlide:
-			snprintf(text, sizeof(text), "alien ways: %s slides %.1f m past a stuck at %s to %s, with no headway for %.1f s: the level's walls and its gravity are off till it gets there",
+			snprintf(text, sizeof(text), "alien ways: %s slides %.1f m past a stuck at %s to %s, with no headway for %.1f s, if the game finds its end clear (its next line says)",
 				alien.c_str(), sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
 				Metres(line.from).c_str(), Metres(line.to).c_str(), kAlienWaysSlideAfterStuck / 1000.0);
 			break;
@@ -1371,8 +1377,9 @@ static int EndBoxHits(STRATEGYBLOCK *alien, const double end[3], AlienWaysBoxHit
 }
 
 // PUSH CLEAR (alien_ways_guide.h): whether the box at end is clear of the level, as it is or pushed, and the push, in whole millimetres,
-// so the end the rays last said is clear is the end it slides to. Up to kAlienWaysPushRounds pushes, each from the rays sent again, and
-// never more than kAlienWaysMostPush in all. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+// so the end the rays last said is clear is the end it slides to. Up to kAlienWaysPushRounds pushes, each from the rays sent again. The
+// cap, kAlienWaysMostPush, is its caller's, so the log can say how far a push a refused slide needed (modified 2026-11-11 by Melanikus
+// (Third), for the owner's call on the cap). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
 static bool PushEndClear(STRATEGYBLOCK *alien, const double end[3], AlienWaysXYZ *push)
 {
 	*push = AlienWaysXYZ{ 0, 0, 0 };
@@ -1398,11 +1405,6 @@ static bool PushEndClear(STRATEGYBLOCK *alien, const double end[3], AlienWaysXYZ
 		push->x += static_cast<int>(lround(more[0]));
 		push->y += static_cast<int>(lround(more[1]));
 		push->z += static_cast<int>(lround(more[2]));
-
-		if (sqrt(static_cast<double>(push->x) * push->x + static_cast<double>(push->y) * push->y + static_cast<double>(push->z) * push->z) > kAlienWaysMostPush)
-		{
-			return false;
-		}
 	}
 
 	return false;
@@ -1565,7 +1567,25 @@ void AlienWays_Slide(STRATEGYBLOCK *alien)
 	if (!dynamics->OnlyCollideWithObjects)
 	{
 		AlienWaysXYZ push = { 0, 0, 0 };
-		const char *why = !PushEndClear(alien, end, &push) ? "its box there wouldn't be clear of the level, even pushed up to 0.3 m" : 0;
+		bool const clear = PushEndClear(alien, end, &push);
+		double const pushMm = sqrt(static_cast<double>(push.x) * push.x + static_cast<double>(push.y) * push.y + static_cast<double>(push.z) * push.z);
+		char refused[160];
+		const char *why = 0;
+
+		// Which limit refused it, and the push it reached, for the owner's call on kAlienWaysMostPush (modified 2026-11-11 by Melanikus
+		// (Third), #109)
+		if (!clear)
+		{
+			snprintf(refused, sizeof(refused), "its box there still wouldn't be clear of the level after %d pushes, %.2f m in all", kAlienWaysPushRounds, pushMm / 1000.0);
+			why = refused;
+		}
+		else if (pushMm > kAlienWaysMostPush)
+		{
+			snprintf(refused, sizeof(refused), "its box there would need a push of %.2f m to be clear of the level, more than the %.2f m it may have", pushMm / 1000.0,
+				kAlienWaysMostPush / 1000.0);
+			why = refused;
+		}
+
 		bool const pushed = !why && (push.x != 0 || push.y != 0 || push.z != 0);
 
 		if (pushed && theGuide.PushSlide(who, push, &why))
@@ -1596,6 +1616,9 @@ void AlienWays_Slide(STRATEGYBLOCK *alien)
 			LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + "'s slide end is pushed " + howFar + " clear of the level, to " +
 				Metres(AlienWaysXYZ{ static_cast<int>(lround(end[0])), static_cast<int>(lround(end[1])), static_cast<int>(lround(end[2])) }));
 		}
+
+		// Only now does it really go (modified 2026-11-11 by Melanikus (Third), #109: Primary's read of the owner's play)
+		LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + "'s slide goes: the level's walls and its gravity are off till it gets there");
 	}
 
 	dynamics->OnlyCollideWithObjects = 1;

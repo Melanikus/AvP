@@ -162,6 +162,24 @@ int const kAlienWaysMostSlide = 1000;             // mm
 int const kAlienWaysMostOffTheWayToSlide = 500;   // mm
 int const kAlienWaysMostSlideMs = 1500;           // ms
 
+// THE SLIDE, ONCE IT GOES. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109), from the owner's play on 26457ece (rehearsal\
+// 2026-11-11-owner-play-slide\THIRD-READ.md) and PO's list. There, twice, a way the alien had asked for just before its slide came in
+// while it slid. The new way's points took the old way's place under the slide, so the slide no longer went where its checks had said,
+// and the alien stuck at its own point. And once a slide was started three times in a second, at shft14, which the owner saw as a flicker.
+// - THE SLIDE'S OWN POINT: a slide keeps its point and the one after it as they were when it began. Nothing that changes its way can
+//   move them.
+// - HELD FROM A NEW WAY: a way that comes while the alien slides isn't taken (its log line says so). The alien asks again the moment
+//   the slide is over, so it's only late, never lost.
+// - Nothing else ends a slide part way. Steer's slide comes first, before the hand-over, which waits the moment it takes to get there.
+//   The slide ends only by getting there, by kAlienWaysMostSlideMs, by Hunt or Wander (Secondary's S2), or by a let-go.
+// - A REFUSED POINT: a point a slide was refused to, or gave up on after kAlienWaysMostSlideMs, isn't slid to again (within
+//   kAlienWaysHeadway) till a re-plan's way comes. A re-plan goes round a shut polygon, so that's where a slide to it is worth trying again.
+// R-LAVA-9, the owner's ruling (2026-11-11): "choose a better path and it was awesome" mustn't be "hacked out". What he saw, at shft14 and
+// BEND-01, was a refused slide, then a stuck, a re-plan at once with the polygon shut, and a way that worked. None of the above can stop
+// that. Being found stuck drops the way and any slide, and until the re-plan's way comes the alien has no way, so no slide can start
+// and nothing can hold the re-plan's way back. On top of that, no slide starts while a re-plan's search is waiting, and a re-plan's way
+// clears the refused point.
+
 // THE SLIDE'S END, CLEAR. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; Secondary's re-review of 94421180, S5b, and PO's
 // ruling). On the slide's first film (94421180 at SHED06, 3 runs) 10 of its 13 slides were refused, each as its box at the end "wouldn't be
 // clear of the level". The end was exactly as far out from its face as the box reaches (450 mm from a wall, 900 under a ceiling, 0 over
@@ -312,6 +330,9 @@ struct AlienWaysReport
 	int shutPolygon;
 	// For a search's outcome: the search was asked for by a re-plan
 	bool afterReplan;
+	// For a way found: it came while the alien slid, so it wasn't taken, and the alien asks again once it's there (THE SLIDE, ONCE IT
+	// GOES; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	bool heldForSlide;
 };
 
 class AlienWaysGuide
@@ -479,6 +500,10 @@ private:
 		AlienWaysXYZ slideFrom;             // ...from here...
 		AlienWaysXYZ slideDown;             // ...with this down...
 		AlienWaysXYZ slidePush;             // ...and its point pushed by this (PUSH CLEAR; added 2026-11-11 by Melanikus (Third))
+		AlienWaysPoint slideTo;             // THE SLIDE'S OWN POINT: the point it slides to and the one after it, as they were when it
+		AlienWaysPoint slideNext;           // began (THE SLIDE, ONCE IT GOES; added 2026-11-11 by Melanikus (Third))
+		AlienWaysXYZ refusedTo;             // A REFUSED POINT: where a slide was last refused to, or gave up on...
+		bool refusedValid;                  // ...not slid to again till a re-plan's way comes (added 2026-11-11 by Melanikus (Third))
 		long long slideTriedFor;            // the headway clock (headwayAt) a slide was last tried for, so one refused isn't tried every frame
 		bool clings;                        // KeepsClinging (added 2026-11-11 by Melanikus (Third))
 

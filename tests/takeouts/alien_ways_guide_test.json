@@ -1850,8 +1850,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t\tif (now - follower.slideAt <= kAlienWaysMostSlideMs && follower.slidePoint < follower.count)\n",
-					"to": "\t\tif (follower.slidePoint < follower.count)\n"
+					"from": "\t\tif (now - follower.slideAt <= kAlienWaysMostSlideMs)\n",
+					"to": "\t\tif (true)\n"
 				}
 			]
 		},
@@ -1860,7 +1860,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t*next = AlienWaysXYZ{ after.x, after.y, after.z };\n",
+					"from": "\t*next = AlienWaysXYZ{ follower.slideNext.x, follower.slideNext.y, follower.slideNext.z };\n",
 					"to": "\t*next = *from;\n"
 				}
 			]
@@ -2030,8 +2030,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "const char *why = !PushEndClear(alien, end, &push) ?",
-					"to": "const char *why = false ?"
+					"from": "bool const clear = PushEndClear(alien, end, &push);",
+					"to": "bool const clear = true;"
 				}
 			]
 		},
@@ -2110,8 +2110,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": ") > kAlienWaysMostPush)\n",
-					"to": ") > 1e9)\n"
+					"from": "\t\telse if (pushMm > kAlienWaysMostPush)\n",
+					"to": "\t\telse if (false)\n"
 				}
 			]
 		},
@@ -2217,6 +2217,96 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "grid->CellOver(grid->SheetOf(pointCell), pushed.x, pushed.y, pushed.z) : kNpcGridNoCell;",
 					"to": "kNpcGridNoCell : kNpcGridNoCell;"
+				}
+			]
+		},
+		{
+			"name": "a way that comes while the alien slides is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (follower.sliding)\n\t{\n\t\tline.outcome = kAlienWaysOutcomeFound;\n",
+					"to": "\tif (false)\n\t{\n\t\tline.outcome = kAlienWaysOutcomeFound;\n"
+				}
+			]
+		},
+		{
+			"name": "a way held for a slide isn't asked for again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tfollower.wayAt = now - kAlienWaysAskAgainAfter;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused point is slid to again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "!(follower.refusedValid && Distance(follower.refusedTo, follower.points[follower.heading]) < kAlienWaysHeadway) &&",
+					"to": "true &&"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide starts while a re-plan waits",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t!follower.replanning && !(follower.refusedValid",
+					"to": "\t\t\t!(follower.refusedValid"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a re-plan's way leaves the refused point",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (follower.replanning)\n\t{\n\t\tfollower.refusedValid = false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slide goes to its way's point by number",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t*to = follower.slideTo;",
+					"to": "\t*to = follower.points[follower.slidePoint];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refusal doesn't say the push it needed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "its box there would need a push of %.2f m to be clear of the level, more than the %.2f m it may have",
+					"to": "its box there wouldn't be clear of the level, %.2f m, %.2f m"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say when a slide goes",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "'s slide goes: the level's walls and its gravity are off till it gets there\");",
+					"to": "'s slide goes\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a way held for a slide looks taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\t\tdetails += \". Not taken, as it slides now: it asks again once it's there\";\n",
+					"to": ""
 				}
 			]
 		}
