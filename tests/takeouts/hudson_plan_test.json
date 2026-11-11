@@ -10596,6 +10596,16 @@
 					"to": "if ($false) { }"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the host says it's ready at its first frame, the menus' too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (said || plan.netMode != kHudsonNetHost || framesDone < 1)",
+					"to": "if (said || plan.netMode != kHudsonNetHost)"
+				}
+			]
 		}
 	]
 }

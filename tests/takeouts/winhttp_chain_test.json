@@ -1,0 +1,48 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the certificate's chain is built as Windows likes, fetching what it names",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "bool const noChain = WinHttpSetOption(session, WINHTTP_OPTION_DISABLE_CERT_CHAIN_BUILDING, &noFetch, sizeof(noFetch)) != FALSE ||\n\t\t\tWinHttpSetOption(session, WINHTTP_OPTION_SERVER_CERT_CHAIN_BUILD_CACHE_ONLY, &noFetch, sizeof(noFetch)) != FALSE;",
+					"to": "bool const noChain = noFetch != FALSE;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call goes on when neither can be set",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (!noChain)\n\t\t{\n\t\t\tCloseAll(NULL, NULL, session);\n\t\t\ta.why = kNoChainOff;\n\t\t\treturn a;\n\t\t}",
+					"to": "if (!noChain)\n\t\t{\n\t\t\ta.why = kNoChainOff;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games page doesn't call it no connection",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "|| why == kCantStart || why == kNoChainOff;",
+					"to": "|| why == kCantStart;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both are asked for with FALSE",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "BOOL noFetch = TRUE;",
+					"to": "BOOL noFetch = FALSE;"
+				}
+			]
+		}
+	]
+}

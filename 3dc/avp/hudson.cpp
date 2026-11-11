@@ -5154,11 +5154,15 @@ static void TakeVideoFrame()
 }
 
 // The other game of the pair starts once this file is there, because the host only answers once it's playing: tools/hudson/run-net-pair.ps1 waits for it. It says nothing that matters, and the next run clears it.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port: only once the host has drawn a frame of its level (framesDone counts those
+// alone), as this is called at the end of every frame, the menus' too. Before, "ready" meant "has drawn a frame": a host through the
+// Multiplayer page's rows (hostrow=) was still on its pages, not yet on the relays' list, when its joiner looked, and the joiner found no
+// game (the full-stack pair's step 3, 2026-11-10 23:13).
 static void SayTheHostIsReady()
 {
 	static bool said = false;
 
-	if (said || plan.netMode != kHudsonNetHost)
+	if (said || plan.netMode != kHudsonNetHost || framesDone < 1)
 	{
 		return;
 	}

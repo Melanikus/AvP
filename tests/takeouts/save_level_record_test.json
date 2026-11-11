@@ -1,0 +1,203 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "another level is the same level (the name not compared)",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "if (strncmp(saved.name, loaded.name, kSaveLevelNameBytes) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "another copy by its size is the same copy",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "memcmp(saved.fileBytes, loaded.fileBytes, sizeof(saved.fileBytes)) != 0 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "another copy by its sum is the same copy",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": " || memcmp(saved.sum, loaded.sum, kSaveLevelSumBytes) != 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a letter no level name has is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "if (!SaveLevel_NameLetterIsGood(name[length]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an empty name is a record",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "return length > 0 && length < room && length < kSaveLevelNameBytes;",
+					"to": "return length < room && length < kSaveLevelNameBytes;"
+				}
+			]
+		},
+		{
+			"name": "anything after the name's end is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "\t\tif (read.name[i] != 0)\n\t\t{\n\t\t\treturn kSaveLevelBadName;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn kSaveLevelBadName;"
+				}
+			]
+		},
+		{
+			"name": "a file size no level file may be is read",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "\tif (fileBytes < kSaveLevelLeastFileBytes || fileBytes > kSaveLevelMostFileBytes)\n\t{\n\t\treturn kSaveLevelBadFileSize;",
+					"to": "\tif (false)\n\t{\n\t\treturn kSaveLevelBadFileSize;"
+				}
+			]
+		},
+		{
+			"name": "a record's size isn't checked as it's read",
+			"changes": [
+				{
+					"file": "3dc/avp/save_level_record.h",
+					"from": "if (!bytes || !out || size != sizeof(SaveLevelRecord))",
+					"to": "if (!bytes || !out)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a save for another level or another copy is loaded anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif (match != kSaveLevelSameLevel)\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a record written first is used up without its check",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tSaveLevelRecord saved;\n\tSaveLevelRefusal const read",
+					"to": "\tLoadInfo.BufferPos += header->size;\n\tLoadInfo.BufferSpaceLeft -= header->size;\n\treturn true;\n\tSaveLevelRecord saved;\n\tSaveLevelRefusal const read"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a load is never held to the record",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "if (!terminal_error && !TheSaveIsForThisLevel())",
+					"to": "if (false && !TheSaveIsForThisLevel())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused record is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "LogString(std::string(\"save: not loaded: \") + SaveLevel_RefusalWords(read));\n\t\treturn false;",
+					"to": "LogString(std::string(\"save: not loaded: \") + SaveLevel_RefusalWords(read));\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a record on a level with none of its own is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\", and this level has no record to hold it to\");\n\t\treturn false;",
+					"to": "\", and this level has no record to hold it to\");\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a save with no record is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "it's loaded as it always was\");\n\t\treturn true;",
+					"to": "it's loaded as it always was\");\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a record anywhere but first is loaded past",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\t\t\t\tLogString(\"save: not loaded: its level record isn't first, where the game writes it\");\n\t\t\t\tterminal_error = TRUE;",
+					"to": "\t\t\t\tLogString(\"save: not loaded: its level record isn't first, where the game writes it\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new save writes no record",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\t// The level record first, so a load is held to it before anything changes the level (added 2026-11-10, SAVE-HOSTILE-1 part c)\n\tSaveLevelIdentity();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the record is written after other blocks",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tSaveLevelIdentity();\n\n\tSaveDeadStrategies();",
+					"to": "\tSaveDeadStrategies();\n\n\tSaveLevelIdentity();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the record's block takes a number an older save's block has",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.h",
+					"from": "\tSaveBlock_LevelIdentity,\n}SAVE_BLOCK_TYPE;",
+					"to": "}SAVE_BLOCK_TYPE;"
+				},
+				{
+					"file": "3dc/avp/savegame.h",
+					"from": "\tSaveBlock_MainHeader,\n",
+					"to": "\tSaveBlock_LevelIdentity,\n\tSaveBlock_MainHeader,\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level loads without being noted for the saves",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\t\tSaveGame_NoteTheLevel(Env_List[AvP.CurrentEnv]->main, levelSum.bytes, levelSum.md5);\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

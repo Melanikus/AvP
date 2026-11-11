@@ -393,6 +393,86 @@
 					"to": "so nothing was hosted. Try again, or host at home.\","
 				}
 			]
+		},
+		{
+			"name": "the name is drawn on the title's line again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.nameTop = kServerYesTitleTop + kServerYesBigLine + kServerYesUnderBig;",
+					"to": "at.nameTop = kServerYesTitleTop;"
+				}
+			]
+		},
+		{
+			"name": "where the server is shares the name's line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.whereTop = at.nameTop + kServerYesSmallLine + kServerYesUnderSmall;",
+					"to": "at.whereTop = at.nameTop;"
+				}
+			]
+		},
+		{
+			"name": "the owner's words aren't cut to the room above the rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.ownerLines = ownerLines > room ? room : ownerLines;",
+					"to": "at.ownerLines = ownerLines;"
+				}
+			]
+		},
+		{
+			"name": "words narrower than the edges aren't centred",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "return width <= 0 || width >= widest ? kServerYesLeft : kServerYesLeft + (widest - width) / 2;",
+					"to": "return kServerYesLeft;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name isn't cut to the menus' edges",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\tOnlineScreens_FitToWidth(name, widest, OnlinePage_SmallWidth);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the owner's words are wrapped to the widest box, a last word alone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "int const ownerWidth = OnlinePage_BalancedWidth(owner, widest);",
+					"to": "int const ownerWidth = widest;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name is drawn in the title's font",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "RenderSmallMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);",
+					"to": "RenderMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page isn't told where its rows start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "ServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);",
+					"to": "ServerYesPage_Draw(480);"
+				}
+			]
 		}
 	]
 }

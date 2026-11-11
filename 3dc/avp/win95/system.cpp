@@ -42,6 +42,7 @@ New sound system
 #include "game_statistics.h"
 #include "MusicPlayer.h"
 #include "logString.h"
+#include "savegame.h"   // SaveGame_NoteTheLevel: the level a save records (added 2026-11-10)
 
 
 // EXTERNS
@@ -473,6 +474,13 @@ void LoadRifFile()
 	// Which level file this machine loaded, with its size and MD5 sum, as the loader worked them out from its own reads of it. Every
 	// machine in a network game should load the same file, and this line lets testers' logs be compared (level_file_sum.h).
 	LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));
+
+	// The same name, size and sum are what each new save made on this level records, and what a load is held to (savegame.h; added
+	// 2026-11-10 by Melanikus for the AvP port, SAVE-HOSTILE-1 part c)
+	{
+		LevelFileSum const levelSum = avp_rif_file_sum(env_rif);
+		SaveGame_NoteTheLevel(Env_List[AvP.CurrentEnv]->main, levelSum.bytes, levelSum.md5);
+	}
 
 	copy_rif_data(env_rif, CCF_ENVIRONMENT, PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4, PBAR_LEVEL_INTERVAL*.6);
 

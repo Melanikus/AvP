@@ -2299,6 +2299,17 @@ static void TestTourAndSharedMachine()
 			&& Has(pairRun, "if ($HostRow -and $HostRow -cnotmatch '\\A(online)\\z') { Stop-Here") && !Has(pairRun, "$Typed") && !Has(pairRun, "athome"),
 			"SOURCE: run-net-pair.ps1 passes it to the host, online only, with no joiner by a typed address");
 	}
+	{
+		// SOURCE: the host's "ready" for run-net-pair.ps1, which starts the joiner on it (added 2026-11-10 by Melanikus (Third) for the AvP
+		// port). It's asked at the end of every frame (Hudson_TakePictureIfDue, from d3d_render.cpp), the menus' too, so it waits for a frame
+		// of the level: before, a host through the Multiplayer page's rows wasn't listed yet when its joiner looked, and the joiner found
+		// no game (the full-stack pair's step 3, 2026-11-10 23:13)
+		std::string const ready = Between(hudson, "static void SayTheHostIsReady()", "Hudson_NetSay(\"the host is in its level, and answering\");");
+		Check(Has(ready, "if (said || plan.netMode != kHudsonNetHost || framesDone < 1)\n\t{\n\t\treturn;\n\t}"),
+			"SOURCE: the host says it's ready for its joiner only once it has drawn a frame of its level, never at the menus");
+		Check(ComesBefore(hudson, "static void SayTheHostIsReady()", "void Hudson_TakePictureIfDue()") && Has(Between(hudson, "void Hudson_TakePictureIfDue()", "if (plan.recordVideo)"), "SayTheHostIsReady();"),
+			"SOURCE: and it's asked every frame, where the frames of the menus come too");
+	}
 	// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): which hudson-stop files end a run
 	Check(HudsonPlan_StopFileCounts(true, false, false, 100, 100), "#198: a plain hudson-stop written as the run started ends it");
 	Check(HudsonPlan_StopFileCounts(true, false, false, 101, 100), "and so does one written after");

@@ -62,6 +62,13 @@ void OnlinePage_JoinGivenUp(void);
 // menus.cpp. Added 2026-11-10 by Melanikus for the AvP port, after the two lines were drawn on top of each other.
 void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit);
 
+// Two of the online pages' own measures, shared with the yes page (server_yes_page.cpp) since 2026-11-10, so neither is copied:
+// - the small font's width for a letter, as OnlineScreens_FitToWidth takes it;
+// - the narrowest width, at most widest, that keeps text to as many lines of the small font as widest gives it, so a text of two lines
+//   comes out as two of about the same length, never a full line and a last word on its own.
+int OnlinePage_SmallWidth(int letter);
+int OnlinePage_BalancedWidth(const char *text, int widest);
+
 // The page's drawing, each frame: J1's tail and words, or on the list the column headings, "No open sessions" for an empty table, and a
 // failed join's line. Then each game's row of the menu, as bright as the menu has it (BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT for the
 // selected one). The Search box and the Refresh row are drawn by the menus themselves, each at OnlinePage_ControlTop of its row.

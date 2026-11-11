@@ -228,6 +228,8 @@ namespace
 	const char *const kTooBig = "the relay server's answer was too big";
 	const char *const kSaidNo = "the relay server said no";
 	const char *const kCantStart = "the game couldn't start a call to the relay server";
+	// Added 2026-11-10 by Melanikus for the AvP port (F1): a Windows that can't be told to fetch nothing for the server's certificate
+	const char *const kNoChainOff = "this Windows can't be told to fetch nothing for the relay server's certificate, so nothing was sent to it";
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): the words for the server's key (TRUSTED BY ITS KEY ALONE, above)
 	const char *const kKeyChanged = "the relay server showed another key than the one that matched its line, so nothing was sent to it";
 	const char *const kKeyUnread = "the relay server's key couldn't be read, so nothing was sent to it";
@@ -494,6 +496,23 @@ namespace
 				CloseAll(NULL, NULL, session);
 				return a;
 			}
+		}
+
+		// No chain for the server's certificate (F1, PO's hostile read, 2026-11-10; added by Melanikus for the AvP port). Before the key's
+		// check (CheckTheKey), Windows builds the certificate's chain, and to build it, it may fetch addresses the certificate itself names
+		// (its AIA), even ones on the player's own network: something sent where the servers.cfg line didn't say, chosen by the server or
+		// by anyone in between. The key alone is the trust, so no chain is needed. It's turned off; on a Windows without that, it's built
+		// only from what Windows already holds, with nothing fetched; and with neither, the call isn't made. Windows takes them only on a
+		// session not yet connected, so they're set here, before WinHttpConnect (tests/winhttp_chain_test tries each kind of handle).
+		BOOL noFetch = TRUE;
+		bool const noChain = WinHttpSetOption(session, WINHTTP_OPTION_DISABLE_CERT_CHAIN_BUILDING, &noFetch, sizeof(noFetch)) != FALSE ||
+			WinHttpSetOption(session, WINHTTP_OPTION_SERVER_CERT_CHAIN_BUILD_CACHE_ONLY, &noFetch, sizeof(noFetch)) != FALSE;
+
+		if (!noChain)
+		{
+			CloseAll(NULL, NULL, session);
+			a.why = kNoChainOff;
+			return a;
 		}
 
 		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
@@ -1829,7 +1848,7 @@ bool RelayList_WhyIsNoConnection(const char *why)
 {
 	// The very words this file hands out, compared as the same words (each is one of the constants above), so no rewording elsewhere
 	// can make it say something else
-	return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;
+	return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;
 }
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
