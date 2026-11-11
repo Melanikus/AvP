@@ -9,7 +9,7 @@
 //   2. the file's 23 steps, walked one by one with net_noise.h here in the test: every h and ck, every secret and key mixed, every
 //      sealed piece. That checks the test's own reading of CRYPTO.md before it judges the game's code by it;
 //   3. the game's NetHandshakeBJoiner and NetHandshakeBHost, given the file's keys and randomness, make B1 to B5 byte for byte, the same
-//      keys both ways, the same transcript, and the check code 623782;
+//      keys both ways, the same transcript, and the check code 078265;
 //   4. the file's 11 datagrams: each message cut by net_v2_fragments.h under 'AVPE' is exactly the file's, and reads back whole;
 //   5. hostile messages, each refused for its own reason (CRYPTO.md section 16's number where there is one):
 //      - a wrong size, a call out of turn, a bad start;
@@ -609,7 +609,10 @@ static void TestTheGamesHandshake(Run *run)
 	char code[kNetHandshakeBCheckCodeBytes] = {};
 	const JsonValue *const fileCode = TextMember(*b, "checkCode");
 	bool const made = NetHandshakeB_CheckCode(run->joinerKeys.transcript, code);
-	BCheck(made && fileCode && fileCode->text == code && std::string(code) == "623782", std::string("the check code is the file's, 623782: ") + code);
+	// Modified 2026-11-10 by Melanikus for the AvP port: 078265, since B's prologue mixes the host's whole id (SERVER-BLOCKERS item 6,
+	// 14fc5ddb), which changed the transcript and so the code. The file (the server's 2694c87 copy) has had it since then; this line was
+	// left saying the code before it.
+	BCheck(made && fileCode && fileCode->text == code && std::string(code) == "078265", std::string("the check code is the file's, 078265: ") + code);
 
 	// Every call after the end is out of turn, and gives nothing
 	uint8_t b5[kNetHandshakeBB5Bytes];
