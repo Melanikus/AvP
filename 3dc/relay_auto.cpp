@@ -112,7 +112,6 @@ bool RelayAuto_WaitForRelays(void)
 }
 
 int RelayAuto_FindAGame(void)
-int RelayAuto_FindAGame(void)
 {
 	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): every line's games, and the game is joined through its
 	// own line (its relay comes from that line, so there's nothing more to wait for once the game has come)
@@ -180,9 +179,6 @@ int RelayAuto_FindAGame(void)
 	}
 
 	LogString("relay auto: no game of this version came from any line in time");
-	return -1;
-}
-	LogString(haveChosen ? "relay auto: the list's game came, but its region's relay didn't, in time" : "relay auto: no game of this version came from the list in time");
 	return -1;
 }
 

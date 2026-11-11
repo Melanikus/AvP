@@ -216,6 +216,75 @@ int RelayList_RelayKeysCame(uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem
 	return relayKeysGive;
 }
 
+// Added 2026-11-11 by Melanikus for the AvP port (one model for every line): the per-line calls networking.cpp makes. Here there's one
+// good line, place 0, whenever the stand-ins above say servers.cfg names a server (Relay_ServerName). Its relay is the one the list hands
+// over above (relayAddressNamed, at 27500) while relayNamed says the list names it; its keys are the test's own, as above; and it's the
+// line hosted on, unless a test says otherwise (hostLineGiven). A line's state is what RelayList_ServerState's stand-in says, and this PC
+// is approved on it.
+static int hostLineGiven = -2;       // -2: the one line while relayNamed says so, else none; otherwise the line RelayList_HostLine gives
+static int keysAskedOnLine = -1;     // the line the newest asking for a relay's keys was for
+static std::string keysAskedRegion;  // and the region it named ("" for a host's, which gets its relay's own region back)
+
+int RelayList_LineCount(void)
+{
+	return Relay_ServerName()[0] ? 1 : 0;
+}
+
+bool RelayList_RelayOf(int place, uint32_t *address, int *port)
+{
+	if (place != 0 || !relayNamed || !address || !port)
+	{
+		return false;
+	}
+
+	*address = relayAddressNamed;
+	*port = 27500;
+	return true;
+}
+
+bool RelayList_AskForRelayKeysOn(int place, const char *region)
+{
+	relayKeysAsked++;
+	keysAskedOnLine = place;
+	keysAskedRegion = region ? region : "";
+	return place == 0 && relayNamed;
+}
+
+int RelayList_RelayKeysCameOn(int *place, char region[kRelayListRegionLetters + 1], uint8_t p384[kNetCryptoP384PublicBytes],
+	uint8_t kem[kNetPqKemPublicBytes], const char **why)
+{
+	*place = keysAskedOnLine;
+	strcpy(region, "virginia");
+	return RelayList_RelayKeysCame(p384, kem, why);
+}
+
+int RelayList_HostLine(void)
+{
+	return hostLineGiven == -2 ? (relayNamed ? 0 : -1) : hostLineGiven;
+}
+
+bool RelayList_LineNow(int place, RelayListLineNow *out)
+{
+	memset(out, 0, sizeof(*out));
+
+	if (place != 0 || RelayList_LineCount() == 0)
+	{
+		return false;
+	}
+
+	strcpy(out->line.name, "Test server");
+	out->lineNumber = 1;
+	out->pingMs = -1;
+	out->access = kRelayAccessIsApproved;
+
+	const char *why = NULL;
+	int const state = RelayList_ServerState(&why);
+	out->state = state == kRelayServerGood ? kRelayLineAnswered : state == kRelayServerNeedsYes ? kRelayLineNoYes
+		: state == kRelayServerCantUse ? kRelayLineNoAnswer : kRelayLineAsking;
+	out->why = state == kRelayServerCantUse ? why : NULL;
+	return true;
+}
+
 bool NetHandshakeA_Draw(const NetRelayStaticKeys *, NetHandshakeADraws *out)
 {
 	drawsMade++;
