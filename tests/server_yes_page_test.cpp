@@ -182,11 +182,15 @@ static void TestTheOneWayIn()
 		CountOf(online, "ServerYesPage_OpenFor(") == 1 && CountOf(menus, "ServerYesPage_OpenFor(") == 0,
 		"a line's row opens the yes page for that line, and that's the one place it's opened");
 
-	// No row anywhere else asks: a row that goes to a page goes there
+	// No row anywhere else asks: a row that goes to a page goes there. (Modified 2026-11-11 by Melanikus for the AvP port, hash 2: Start
+	// game and Co-op campaign go to the host page first, which asks no yes, as only a line's own row on the Online page does; so the one
+	// other page a press opens is AVPMENU_HOST_ON, host_page_test's.)
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const goes = pressing.find("enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);");
-	Check(goes != std::string::npos && goes < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1 &&
+	Check(goes != std::string::npos && goes < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 2 &&
+		CountOf(pressing, "SetupNewMenu(AVPMENU_HOST_ON);") == 1 && !Has(SourceSlice(ReadSource("3dc/avp/win95/frontend/host_page.cpp"),
+		"bool HostPage_PressedRow(int row)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice), "ServerYesPage_") &&
 		!Has(menus, "ServerYesPage_WayIn") && !Has(page, "ServerYesPage_WayIn") && !Has(page, "ServerYesPage_Needed") && !Has(rules, "ServerYes_WayAsks"),
 		"a pressed row goes to its page, and no row asks for a yes on the way: the ways online are gone");
 	std::string const hostsOnline = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
