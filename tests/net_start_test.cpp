@@ -129,6 +129,16 @@ void RelayList_FindRelays(void)
 	serverAsked++;
 }
 
+// networking.cpp asks whether the line a game was listed on is the one this run uses (OnTheLineInUse; added 2026-11-11 by Melanikus for
+// the AvP port, every server in servers.cfg going through the same page). Here the first good line is the one in use, and there's no
+// other. A game put on the list with no line (-1) is on the line in use, as every game here is, and never asks.
+bool RelayList_LineAt(int place, RelayListLineShown *out)
+{
+	memset(out, 0, sizeof(*out));
+	out->inUse = place == 0;
+	return place == 0;
+}
+
 void RelayList_HostRoomOpened(const char *region, const char *, const uint8_t *, uint64_t passTime, int hostMs, const SessionDescription &)
 {
 	roomsListed++;

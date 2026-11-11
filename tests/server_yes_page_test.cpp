@@ -351,9 +351,10 @@ static void TestTheHostsWait()
 	Check(Has(failedLine, "HostWait_FailedLine(GetTextString(why ? TEXTSTRING_HOST_FAILED : TEXTSTRING_HOST_FAILED_PLAIN), why, line, sizeof(line));") &&
 		CountOf(menus, "ShowWhyTheHostFailed(") == 4, "the line is the game's words, then a why that's only ever Net_HostFailedWhy's or Net_ServerState's");
 
-	// The four hosts only a run makes put the why in their log lines
-	Check(CountOf(menus, "HostFailedForARun(\"") == 4 && Has(menus, "return why ? std::string(what) + \", because \" + why : std::string(what);"),
-		"the four hosts only a run makes say why in their log lines");
+	// The five hosts only a run makes put the why in their log lines (modified 2026-11-11 by Melanikus for the AvP port: the fifth is
+	// hostrow='s, a Hudson host through the Multiplayer page's Start row, 4d09d91c, which this count was never moved for)
+	Check(CountOf(menus, "HostFailedForARun(\"") == 5 && Has(menus, "return why ? std::string(what) + \", because \" + why : std::string(what);"),
+		"the five hosts only a run makes say why in their log lines");
 
 	Check(Has(words, "\t\"Asking the server...\",\n\t\"Couldn't host online:\",\n\t\"This game couldn't be hosted.\",\n\t\"The server didn't answer in 30 seconds, so nothing was hosted. Try again, or host at home.\",\n"),
 		"the wait's and the failed host's words, in langenum.h's order");

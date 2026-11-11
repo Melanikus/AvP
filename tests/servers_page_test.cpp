@@ -248,12 +248,19 @@ static void TestTheWiring()
 	std::string const wayOf = SourceSlice(yes, "static ServerYesWay WayOf(enum AVPMENU_ID from, enum AVPMENU_ID goTo)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(!wayOf.empty() && !Has(wayOf, "AVPMENU_SERVERS"), "and it isn't a way online: the page contacts nothing, so it asks no yes");
 
-	// Find games: one line, which server the games come from
+	// Find games: one line, which servers the games come from. Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every
+	// server in servers.cfg goes through the same page): every line whose server answered, each by its own name in servers.cfg, or before
+	// any has answered the line in use's. Each name is made safe before it's written, and is only ever an argument, never the format.
 	std::string const gamesTop = SourceSlice(games, "void OnlinePage_DrawTop(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const fromSafe = gamesTop.find("OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));");
-	size_t const fromLine = gamesTop.find("snprintf(from, sizeof(from), \"%s %s\", GetTextString(TEXTSTRING_FINDGAMES_FROM), server);");
-	Check(fromSafe != std::string::npos && fromLine != std::string::npos && fromSafe < fromLine,
-		"the games page says which server its games come from, its name made safe, only ever as an argument");
+	std::string const comeFrom = SourceSlice(games, "static bool ServersTheGamesComeFrom(char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const eachSafe = comeFrom.find("OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));");
+	size_t const inUseSafe = comeFrom.find("OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, names[0], sizeof(names[0]));");
+	size_t const fromLine = comeFrom.find("int used = snprintf(out, size, \"%s %s\", GetTextString(TEXTSTRING_FINDGAMES_FROM), names[0]);");
+	Check(eachSafe != std::string::npos && inUseSafe != std::string::npos && fromLine != std::string::npos && eachSafe < fromLine && inUseSafe < fromLine &&
+		Has(comeFrom, "if (RelayList_LineGamesState(place, &why) == kRelayLineAnswered && RelayList_LineAt(place, &shown))") &&
+		Has(comeFrom, "snprintf(out + used, size - used, \" %s %s\", GetTextString(TEXTSTRING_FINDGAMES_AND), names[i])") &&
+		Has(comeFrom, "snprintf(out + used, size - used, \", %s\", names[i]);") && Has(gamesTop, "if (ServersTheGamesComeFrom(from, sizeof(from)))"),
+		"the games page says which servers its games come from, each one that answered by its line's name, made safe, only ever as an argument");
 
 	Check(Has(check, "avp/win95/frontend/(access_page|server_yes|online_screens|servers_page)[\\w]*\\.(cpp|h))$'"),
 		"release check rule D covers the Servers page: -dev decides nothing on it");
