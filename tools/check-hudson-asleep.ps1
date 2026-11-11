@@ -27,6 +27,11 @@ before it's let through.
 
 It reads the code as text, with the comments taken out, and so it doesn't follow every way C++ can be written. That's why it's
 strict about the forms it lets through: code written another way is refused, never guessed at.
+
+A LINE THAT LOOKS LIKE A DECLARATION. Rules 5 and 6 let a declaration through, and a definition of one of Hudson's variables. Such a line
+has to have a declaration's form AND be outside every function's body. Modified 2026-11-10 by Melanikus for the AvP port (#212): until
+then the form alone was enough, so "return", "else" or "do" in front of a call or a write gave it that form, and it was let through, the
+check failing open. And a comment after a declaration kept its first "/", so the line no longer ended in ";" and was refused as a call.
 #>
 param(
     [string]$Repository = ''
@@ -80,9 +85,12 @@ foreach ($folder in $gameFolders)
 
 # One pass finds every comment, string and character in the order they come, so that a // inside a string isn't taken for a comment, and
 # a quote inside a comment isn't taken for a string. Each is kept as spaces the same size, with its line ends, so line numbers stay true.
+# In what the rules read, a string or a character keeps its first quote, so that something is still there where it was; a comment goes
+# altogether. (Modified 2026-11-10 by Melanikus for the AvP port, #212: a comment used to keep its first /, so a declaration with a comment
+# after it no longer ended in ";", and rule 5 refused it as a call.)
 $commentOrString = [regex]'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\\n])*"|''(?:\\.|[^''\\\n])*'''
 $blankComments = [System.Text.RegularExpressions.MatchEvaluator]{ param($m) if ($m.Value.StartsWith('/')) { $m.Value -replace '[^\n]', ' ' } else { $m.Value } }
-$blankAll = [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $m.Value.Substring(0, 1) + ($m.Value.Substring(1) -replace '[^\n]', ' ') }
+$blankAll = [System.Text.RegularExpressions.MatchEvaluator]{ param($m) if ($m.Value.StartsWith('/')) { $m.Value -replace '[^\n]', ' ' } else { $m.Value.Substring(0, 1) + ($m.Value.Substring(1) -replace '[^\n]', ' ') } }
 
 $code = @{}         # each file's code with comments and strings blanked: what the rules read
 $withWords = @{}    # the same with the strings kept, for the one rule that reads words (rule 3)
@@ -119,6 +127,57 @@ function Get-Block([string]$text, [int]$open)
     }
 
     return $null
+}
+
+# What's left of a file once every function's body is taken out (every { that comes after a ")", with "const" or "noexcept" between, or
+# after a constructor's list of members): declarations, types, and the values kept by the file, which are what's built before WinMain.
+# Line ends are kept, so line numbers stay true. Rule 7 reads it, and rules 5 and 6 ask Test-OutsideFunctions, below. (Modified
+# 2026-11-10 by Melanikus for the AvP port, #212: moved up from rule 7's part, unchanged, because rules 5 and 6 come before it.)
+function Get-OutsideFunctions([string]$text)
+{
+    $out = New-Object System.Text.StringBuilder $text
+    $body = [regex]'\)\s*(?:const\s*|noexcept\s*|override\s*)*\{'
+
+    $at = 0
+
+    while ($true)
+    {
+        $m = $body.Match($out.ToString(), $at)
+        if (-not $m.Success) { break }
+
+        $open = $m.Index + $m.Length - 1
+        $inside = Get-Block $out.ToString() $open
+
+        if ($null -eq $inside) { break }
+
+        for ($i = $open + 1; $i -le $open + $inside.Length; $i++)
+        {
+            if ($out[$i] -ne "`n") { $out[$i] = ' ' }
+        }
+
+        $at = $open + 1
+    }
+
+    return (($out.ToString().Split("`n") | ForEach-Object { if ($_ -match '^\s*#') { '' } else { $_ } }) -join "`n")
+}
+
+# Each game file's lines with every function's body taken out, worked out the first time rule 5 or 6 asks about that file
+$outsideLines = @{}
+
+# Whether a line of a file names this outside every function's body, where a declaration or a definition can be and a call or a write
+# can't. Rules 5 and 6 ask it as well as the declaration's form, because the form alone can be fooled: "return", "else" or "do" in front of
+# a call or a write gives it a declaration's shape (Modified 2026-11-10 by Melanikus for the AvP port, #212: until then those were let
+# through).
+function Test-OutsideFunctions([string]$relative, [int]$line, [string]$name)
+{
+    if (-not $outsideLines.ContainsKey($relative))
+    {
+        $outsideLines[$relative] = (Get-OutsideFunctions $code[$relative]).Split("`n")
+    }
+
+    $lines = $outsideLines[$relative]
+
+    return $line -ge 1 -and $line -le $lines.Count -and $lines[$line - 1] -match ('\b' + [regex]::Escape($name) + '\b')
 }
 
 # Every definition of a function by this name, in any file: a type before the name, the arguments, then its body
@@ -310,7 +369,8 @@ foreach ($name in @($named.Keys | Sort-Object))
             foreach ($use in $where)
             {
                 $isItsDefinition = $use.File -eq $definition.File -and $use.Line -eq $definition.Line
-                $isADeclaration = $use.Text -match ('^(?:extern\s+)?[A-Za-z_][\w:<>,\*&\s]*?[\s\*&]' + [regex]::Escape($name) + '\s*\([^)]*\)\s*;$')
+                # A declaration has its form and is outside every function's body (#212: "return" or "else" in front of a call gave it the form)
+                $isADeclaration = $use.Text -match ('^(?:extern\s+)?[A-Za-z_][\w:<>,\*&\s]*?[\s\*&]' + [regex]::Escape($name) + '\s*\([^)]*\)\s*;$') -and (Test-OutsideFunctions $use.File $use.Line $name)
 
                 if (-not $isItsDefinition -and -not $isADeclaration)
                 {
@@ -347,7 +407,9 @@ foreach ($name in @($named.Keys | Sort-Object))
         {
             $text = $use.Text
 
-            if ($text -match ('^(?:static\s+)?(?:const\s+)?\w[\w\s]*\s' + [regex]::Escape($name) + '\s*(?:=[^;]*)?;$') -or $text -match ('^extern\s')) { continue }   # its definition or a declaration
+            # Its definition or a declaration: in that form, and outside every function's body (#212: "else" or "return" in front of a write
+            # gave it the form, and a local of the same name inside a function is a write)
+            if (($text -match ('^(?:static\s+)?(?:const\s+)?\w[\w\s]*\s' + [regex]::Escape($name) + '\s*(?:=[^;]*)?;$') -or $text -match ('^extern\s')) -and (Test-OutsideFunctions $use.File $use.Line $name)) { continue }
 
             $writes = [regex]::Matches($text, ('\b' + [regex]::Escape($name) + '\s*(=(?!=)\s*([^;,)]+)|\+\+|--|[-+*/|&^]=)|(?:\+\+|--)\s*' + [regex]::Escape($name) + '\b|(?<!&)&\s*' + [regex]::Escape($name) + '\b'))
 
@@ -397,38 +459,7 @@ if ($code.ContainsKey($visionFile))
     }
 }
 
-# ---- Rule 7: nothing of Hudson's runs before the game starts
-
-# What's left of a file once every function's body is taken out (every { that comes after a ")", with "const" or "noexcept" between, or
-# after a constructor's list of members): declarations, types, and the values kept by the file, which are what's built before WinMain.
-# Line ends are kept, so line numbers stay true.
-function Get-OutsideFunctions([string]$text)
-{
-    $out = New-Object System.Text.StringBuilder $text
-    $body = [regex]'\)\s*(?:const\s*|noexcept\s*|override\s*)*\{'
-
-    $at = 0
-
-    while ($true)
-    {
-        $m = $body.Match($out.ToString(), $at)
-        if (-not $m.Success) { break }
-
-        $open = $m.Index + $m.Length - 1
-        $inside = Get-Block $out.ToString() $open
-
-        if ($null -eq $inside) { break }
-
-        for ($i = $open + 1; $i -le $open + $inside.Length; $i++)
-        {
-            if ($out[$i] -ne "`n") { $out[$i] = ' ' }
-        }
-
-        $at = $open + 1
-    }
-
-    return (($out.ToString().Split("`n") | ForEach-Object { if ($_ -match '^\s*#') { '' } else { $_ } }) -join "`n")
-}
+# ---- Rule 7: nothing of Hudson's runs before the game starts (it reads Get-OutsideFunctions, above)
 
 # Each of Hudson's types, and whether it's only values: an enum, or a struct or class with no function, no constructor and no value of
 # its own given in it (any of those is code that runs when one is made)
