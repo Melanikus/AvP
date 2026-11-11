@@ -1,3 +1,5 @@
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   whether an address is on the player's home network, where a plain game is still allowed under version 2 (NetAddress_IsThisNetwork, #188)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   how long ago a joiner heard about a lift car is counted by the machine's own clock (NetLiftMsSince, #90)
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -689,6 +691,46 @@ inline bool NetCampaignDifficultyIsGood(int difficulty)
 inline bool NetCampaignPlaceIsGood(int campaign, int place, int levelsInCampaign)
 {
 	return campaign == 0 ? place == 0 : (place >= 0 && place < levelsInCampaign);
+}
+
+// Whether an IPv4 address is on the player's own home network, where a plain, unsealed game is still allowed when version 2 is on (#188,
+// the owner's ruling "Keep plain LAN at home", 2026-11-09). Beyond it, a game is sealed through the relay or doesn't happen.
+//
+// Home is:
+// - 10.0.0.0 to 10.255.255.255, 172.16.0.0 to 172.31.255.255, and 192.168.0.0 to 192.168.255.255: the ranges set aside for private
+//   networks (RFC 1918), which no router passes onto the internet;
+// - 127.0.0.0 to 127.255.255.255: this machine itself;
+// - 169.254.0.0 to 169.254.255.255: link-local, the address a PC gives itself when nothing hands it one, which can't be routed beyond the
+//   cable (PO's ruling, 2026-11-09).
+// Everything else isn't: every public address; 100.64.0.0 to 100.127.255.255, which an internet provider shares among many customers
+// (carrier-grade NAT), so strangers on the same provider would look like home (the owner's ruling); 0.0.0.0/8; multicast, 224 and up to
+// 239; and 240 and up, broadcast included.
+//
+// What it can't tell: a VPN that hands out private addresses (WireGuard's 10.x) puts players across the internet inside 10/8, so to this
+// they're home. Their game is plain inside the tunnel, which the tunnel itself encrypts.
+//
+// The address is as ENet keeps it: its four numbers in the order they're written (10.0.0.1 is 10, 0, 0, 1), first in the lowest byte.
+inline bool NetAddress_IsThisNetwork(unsigned int enetHost)
+{
+	unsigned int const first = enetHost & 0xFFu;
+	unsigned int const second = (enetHost >> 8) & 0xFFu;
+
+	if (first == 10 || first == 127)
+	{
+		return true;
+	}
+
+	if (first == 172 && second >= 16 && second <= 31)
+	{
+		return true;
+	}
+
+	if (first == 192 && second == 168)
+	{
+		return true;
+	}
+
+	return first == 169 && second == 254;
 }
 
 #endif

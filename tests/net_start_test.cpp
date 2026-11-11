@@ -111,6 +111,37 @@ bool RelayList_Relays(RelayListRelay *relays, int *count)
 	return true;
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (#188): the server servers.cfg names, and where it stands. There's a server when the list
+// names relays (relayNamed), and it's good then, and still to answer when it doesn't, unless a test says otherwise.
+static int serverInTheFile = -1;          // -1: as relayNamed says; 0: no server in the file; 1: a server
+static int serverStateGiven = -1;         // -1: as relayNamed says; otherwise the kRelayServer... the stand-in gives
+static const char *serverStateWhy = NULL; // with serverStateGiven
+static int serverAsked = 0;               // RelayList_FindRelays's calls
+
+const char *Relay_ServerName(void)
+{
+	bool const set = serverInTheFile < 0 ? relayNamed : serverInTheFile == 1;
+	return set ? "Test server" : "";
+}
+
+int RelayList_ServerState(const char **why)
+{
+	*why = NULL;
+
+	if (serverStateGiven >= 0)
+	{
+		*why = serverStateWhy;
+		return serverStateGiven;
+	}
+
+	return relayNamed ? kRelayServerGood : kRelayServerAsking;
+}
+
+void RelayList_FindRelays(void)
+{
+	serverAsked++;
+}
+
 void RelayList_HostRoomOpened(const char *region, const char *, const uint8_t *, uint64_t passTime, int hostMs, const SessionDescription &)
 {
 	roomsListed++;
@@ -4037,9 +4068,12 @@ static void TestTheRelayChannel()
 	Net_ServiceNetwork();
 	Check(SentToTheRelayFrom(sentFirst) == 0 && channelSends == channelFirst && netRelayV2StandIn.pickerStarts == 0, "while the keys haven't come, nothing is sent to the relay");
 	relayKeysGive = kRelayKeysRefused;
+	int const socketsBeforeTheKeys = socketsOpen;
 	Net_ServiceNetwork();
 	Net_RelayHostStateNow(&news);
-	Check(news.what == kNetRelayHostNoRelay && SentToTheRelayFrom(sentFirst) == 0, "and keys the list won't give: nothing is sent, and the game is open on this network only");
+	// Modified 2026-11-10 by Melanikus for the AvP port (#188): sealed or nothing, so the online game ends, and never opens on this network
+	Check(news.what == kNetRelayHostEnded && news.why != NULL && SentToTheRelayFrom(sentFirst) == 0 && socketsOpen == socketsBeforeTheKeys,
+		"and keys the list won't give: nothing is sent, and the online game ends, saying why, with no search port opened on this network instead");
 	EndTheGame();
 
 	// The right keys: the cookie round, then handshake A with this run's identity, then the room through the sealed channel
@@ -4136,15 +4170,24 @@ static void TestTheRelayChannel()
 
 	// The channel ending ends the room, with its words
 	int const wipesBefore = netRelayV2StandIn.wipes;
+	int const socketsWhileOpen = socketsOpen;
 	size_t const giveUpLogFrom = logLines.size();
 	netRelayV2StandIn.failWith = kNetRelayV2NoAnswer;
 	enetClock += 10;
 	Net_ServiceNetwork();
 	Net_RelayHostStateNow(&news);
 	Net_RelayPlayStateNow(&play);
-	Check(news.what == kNetRelayHostRoomGone && news.why != NULL && strstr(news.why, "ask for access on the online page") != NULL && !play.throughRelay
+	Check(news.what == kNetRelayHostEnded && news.why != NULL && strstr(news.why, "ask for access on the online page") != NULL && !play.throughRelay
 		&& roomsUnlisted == unlistedFirst + 1 && netRelayV2StandIn.wipes > wipesBefore,
-		"the channel ending ends the room: it comes off the list, the news says why in the game's own words (pointing at the access request), and the session's keys are wiped");
+		"the channel ending ends the online game: it comes off the list, the news says why in the game's own words (pointing at the access request), and the session's keys are wiped");
+	// Added 2026-11-10 by Melanikus for the AvP port (#188): the game has ended, so nothing reaches ENet any more, the relay included, and no
+	// search port opens on this network instead
+	TellTheHostPlain(kRelayHost, 27501, plainGame, sizeof(plainGame));
+	int const takenAfter = theHost.intercept != NULL ? theHost.intercept(&theHost, NULL) : 0;
+	TellTheHostPlain(0x0200007F, 27502, plainGame, sizeof(plainGame));
+	int const takenAtHome = theHost.intercept != NULL ? theHost.intercept(&theHost, NULL) : 0;
+	Check(takenAfter == 1 && takenAtHome == 1 && socketsOpen == socketsWhileOpen,
+		"and the game has ended: nothing reaches ENet any more, from the relay or from this network, and no search port opens (sealed or nothing)");
 	Check(throughTheRelay.state == ENET_PEER_STATE_DISCONNECTED && throughTheRelay.data == NULL && peersReset == resetThen + 1,
 		"and every connection through the relay ends with it, at once: nothing from the relay's address reaches ENet unsealed after it");
 	Check(playersGone.size() == goneThen + 1 && playersGone.back() == 4242 && netSession.nPlayers == playersThen - 1,
@@ -4492,7 +4535,9 @@ static void TestTheKeptIdentity()
 			"and the log says what was found, and what it means" + which);
 		relayNamed = true;
 		size_t const sentBefore = datagramsSentTo.size();
-		Check(HostAGame() == NET_OK && SentToTheRelaySince(sentBefore) == 0, "a game hosted then sends nothing to the relay: it's open on this network only" + which);
+		// Modified 2026-11-10 by Melanikus for the AvP port (#188): sealed or nothing, so an online game with no identity isn't hosted at all
+		Check(HostAGame() == NET_FAIL && SentToTheRelaySince(sentBefore) == 0 && Net_HostFailedWhy() != NULL && strstr(Net_HostFailedWhy(), "identity") != NULL,
+			"an online game then isn't hosted at all, sends nothing to the relay, and says it's the identity" + which);
 		EndTheGame();
 		relayNamed = false;
 	}
@@ -4717,6 +4762,139 @@ static void StartAgainWith(int port, int incoming, int outgoing)
 	Net_Initialise();
 }
 
+// Added 2026-11-10 by Melanikus for the AvP port (#188, sealed or nothing; networking.h says the rule): with the v2 draft, a game beyond the
+// home network is sealed, through the relay, or it doesn't happen, and a plain game is only ever between addresses on the home network.
+// Without the draft, each is as it was. The online host's own way through the relay is TestTheRelayChannel's.
+static void TestSealedOrNothing()
+{
+	printf("Sealed or nothing (#188), with the v2 draft\n");
+	enet_uint32 const kOutside = 0x0E0E0E0E;   // 14.14.14.14: out on the internet, as ENet keeps an address
+	enet_uint32 const kAtHome = 0x1400A8C0;    // 192.168.0.20: on the home network
+	const char *why = "not asked";
+	uint8_t packet[40];
+	memset(packet, 0x33, sizeof(packet));
+	Check(Net_V2DraftOn(), "(the draft is on, as the tests before this leave it)");
+
+	// An online host whose server hasn't answered yet: not hosted, the server asked, and the screen told to wait for it
+	relayNamed = false;
+	serverInTheFile = 1;
+	int const asked = serverAsked;
+	int const socketsBefore = socketsOpen;
+	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the server hasn't answered yet") == 0,
+		"an online host whose server hasn't answered yet isn't hosted, and says so");
+	Check(Net_ServerState(&why) == kNetServerAsking && why == NULL && serverAsked == asked + 1 && socketsOpen == socketsBefore,
+		"the server is asked, the screen is told to wait for it, and nothing opens on this network instead");
+
+	// One whose server can't be used: not hosted, with the server's own words
+	serverStateGiven = kRelayServerCantUse;
+	serverStateWhy = "the relay server couldn't be reached";
+	Check(HostAGame() == NET_FAIL && Net_HostFailedWhy() != NULL && strcmp(Net_HostFailedWhy(), "the relay server couldn't be reached") == 0
+		&& Net_ServerState(&why) == kNetServerCantUse && why != NULL && strcmp(why, "the relay server couldn't be reached") == 0 && socketsOpen == socketsBefore,
+		"and one whose server can't be reached isn't hosted either, saying the server's words, with nothing opened on this network instead");
+	serverStateGiven = -1;
+	serverStateWhy = NULL;
+	EndTheGame();
+
+	// A home game, chosen with a server in the file and its relay named: plain, found by a search, and deaf to the internet
+	relayNamed = true;
+	size_t const sentBefore = datagramsSentTo.size();
+	AvP.Network = I_No_Network;
+	Check(Net_HostAtHome(playerName, sessionName, 0, 0, 0) == NET_OK && Net_HostFailedWhy() == NULL && SentToTheRelayFrom(sentBefore) == 0
+		&& socketsOpen == socketsBefore + 1,
+		"a home game is hosted with a server in the file: the relay is sent nothing, and the search port opens");
+	TellTheHostPlain(kOutside, 23513, packet, sizeof(packet));
+	Check(theHost.intercept != NULL && theHost.intercept(&theHost, NULL) == 1, "a packet from outside the home network is dropped before ENet reads it");
+	TellTheHostPlain(kAtHome, 23513, packet, sizeof(packet));
+	Check(theHost.intercept(&theHost, NULL) == 0, "and one from the home network is ENet's to read");
+	size_t const homeLogFrom = logLines.size();
+	EndTheGame();
+	Check(LoggedSince(homeLogFrom, "net: while playing at home, 1 packet(s) from outside the home network were dropped"),
+		"and the log says how many were dropped, as the game ends");
+
+	// With no server in the file, Net_HostGame's game is a home game too
+	relayNamed = false;
+	serverInTheFile = 0;
+	Check(HostAGame() == NET_OK && Net_ServerState(&why) == kNetServerNone && theHost.intercept != NULL,
+		"with no server in the file, a host's game is a home game, deaf to the internet, and the server's state says there's none");
+	TellTheHostPlain(kOutside, 23513, packet, sizeof(packet));
+	Check(theHost.intercept(&theHost, NULL) == 1, "(it drops a packet from outside too)");
+	EndTheGame();
+
+	// A joiner: a plain game whose host isn't on the home network is refused before anything opens; one at home hears home alone
+	int const hostsBefore = hostsCreated;
+	AvP.Network = I_Peer;
+	SessionData[0].throughRelay = false;
+	SessionData[0].host = kOutside;
+	SessionData[0].port = 23513;
+	Check(Net_ConnectToSession(0, playerName) == NET_FAIL && Net_JoinRefusedWhy() != NULL && strstr(Net_JoinRefusedWhy(), "home network") != NULL
+		&& hostsCreated == hostsBefore,
+		"a joiner refuses a plain game whose host is out on the internet, before it opens anything, and says why");
+	Check(JoinAGame() == NET_OK && Net_JoinRefusedWhy() == NULL && theHost.intercept != NULL, "and joins one at home, its socket deaf to the internet");
+	TellTheHostPlain(kOutside, 23513, packet, sizeof(packet));
+	Check(theHost.intercept(&theHost, NULL) == 1, "(a packet from outside is dropped)");
+	TellTheHostPlain(0x0100007F, 23513, packet, sizeof(packet));
+	Check(theHost.intercept(&theHost, NULL) == 0, "(and its host's is read)");
+	EndTheGame();
+
+	// A search: an answer from outside the home network is ignored, and counted; one from home is a game
+	int selection = 0;
+	Net_FindAvPSessions();
+	std::vector<uint8_t> const question = lastDatagramSent;
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
+	Check(HostAGame() == NET_OK, "(a home host, for a real answer)");
+	Arrives(question, 0x0200007F);
+	Net_ServiceNetwork();
+	std::vector<uint8_t> const answer = lastDatagramSent;
+	EndTheGame();
+	Net_FindAvPSessions();
+	Arrives(answer, kOutside);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "a search's answer from outside the home network is ignored");
+	Arrives(answer, kAtHome);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 1 && SessionData[0].host == kAtHome, "and one from the home network is a game");
+	size_t const searchLogFrom = logLines.size();
+	Net_StopSearchingForSessions();
+	Check(LoggedSince(searchLogFrom, "net: 1 search answer(s) from outside the home network were ignored"), "and the log says how many were ignored");
+
+	// A typed address out on the internet isn't asked, and the games page is told why; one at home is asked
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
+	strcpy(IPAddressString, "14.14.14.14");
+	int const sentTyped = datagramsSent;
+	Net_FindAvPSessions();
+	Check(Net_TypedAddressRefusedWhy() != NULL && strstr(Net_TypedAddressRefusedWhy(), "home network") != NULL && datagramsSent == sentTyped + 1,
+		"a typed address out on the internet isn't asked (only the search of this network goes), and the games page is told why");
+	Net_StopSearchingForSessions();
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
+	strcpy(IPAddressString, "192.168.0.20");
+	int const sentHome = datagramsSent;
+	Net_FindAvPSessions();
+	Check(Net_TypedAddressRefusedWhy() == NULL && datagramsSent == sentHome + 2 && datagramsSentTo.back().host == kAtHome, "and one on the home network is asked");
+	Net_StopSearchingForSessions();
+	IPAddressString[0] = 0;
+
+	// Without the draft, each is as it was: a plain game with a host anywhere is joined, and a host hears everyone
+	NetV2DraftAsked = false;
+	int const hostsV1 = hostsCreated;
+	AvP.Network = I_Peer;
+	SessionData[0].throughRelay = false;
+	SessionData[0].host = kOutside;
+	SessionData[0].port = 23513;
+	Net_ConnectToSession(0, playerName);
+	Check(hostsCreated == hostsV1 + 1 && Net_JoinRefusedWhy() == NULL && theHost.intercept == NULL,
+		"without the draft, a plain game with its host out on the internet is joined as it always was");
+	EndTheGame();
+	Check(HostAGame() == NET_OK && theHost.intercept == NULL, "and a host's game hears everyone, as it always did");
+	EndTheGame();
+	NetV2DraftAsked = true;   // as the tests after this expect
+	serverInTheFile = -1;
+	relayNamed = false;
+	NumberOfSessionsFound = 0;
+}
+
 static void TestTheSettingsFile()
 {
 	StartAgainWith(0, -5, -1);
@@ -4821,6 +4999,7 @@ int main()
 	TestTheKeptIdentity();
 	TestTheRelayChannel();
 	TestTheV2Draft();
+	TestSealedOrNothing();
 	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();

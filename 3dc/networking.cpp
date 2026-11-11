@@ -1249,6 +1249,43 @@ static bool PeerIsThroughRelay(const ENetPeer *peer)
 	return relayHosting && !relayPicking && peer->address.host == relayAddress.host;
 }
 
+// SEALED OR NOTHING (#188; networking.h says the rule). Added 2026-11-10 by Melanikus for the AvP port. The game's own fixed words for each
+// way a game is refused or ended, and what's counted for the log. Only with the v2 draft for now.
+static const char *const kNotAtHome = "that game's host isn't on your home network, and a game beyond it is played only through the online list, sealed";
+static const char *const kTypedNotAtHome = "that address isn't on your home network: a game beyond it is played only through the online list, sealed";
+static const char *const kServerNotYet = "the server hasn't answered yet";
+static const char *const kRelayCantBeUsed = "the server's relay can't be used";
+static const char *const kNoIdentity = "this game's identity couldn't be made";
+static const char *hostFailedWhy = NULL;       // why the last Net_HostGame or Net_HostAtHome failed (Net_HostFailedWhy)
+static const char *joinRefusedWhy = NULL;      // why the last Net_ConnectToSession refused a game before opening anything (Net_JoinRefusedWhy)
+static const char *typedRefusedWhy = NULL;     // why the last search didn't ask the typed address (Net_TypedAddressRefusedWhy)
+static unsigned int homeStrangersDropped = 0;  // a home game's packets from outside the home network, dropped before ENet read them
+static unsigned int searchAnswersFromOutside = 0;   // a search's answers from outside the home network, ignored
+
+// A home game's ENet host, or a joiner's of one: it hears the home network alone. Anything from an address that isn't on it is dropped here,
+// before ENet reads a byte of it, so a forwarded router port can't bring an internet joiner into a plain game (#188).
+static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
+{
+	(void)event;
+
+	if (!NetAddress_IsThisNetwork(on->receivedAddress.host))
+	{
+		homeStrangersDropped++;
+		return 1;
+	}
+
+	return 0;
+}
+
+// An online host whose relay is lost: the game can't go on sealed, so it has ended, and nothing at all reaches ENet any more, until the host
+// is destroyed (#188). Never a way back to a plain game.
+static int ENET_CALLBACK NothingIntercept(ENetHost *on, ENetEvent *event)
+{
+	(void)on;
+	(void)event;
+	return 1;
+}
+
 // ENet shows us every packet that arrives, before it reads it (ENetHost::intercept). Giving back 1 means "taken": ENet never sees it.
 static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 {
@@ -1368,14 +1405,14 @@ static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
 }
 
 // Modified 2026-11-09 by Melanikus for the AvP port: the host's news about its relay has changed, for its screen to say once
-// (Net_RelayHostStateNow). Only Listed has a region and a round trip, and only RoomGone a why: the game's own fixed words.
+// (Net_RelayHostStateNow). Only Listed has a region and a round trip, and only RoomGone and Ended a why: the game's own fixed words.
 static void RelayHostNews(int what, const char *why)
 {
 	relayHostNews.changes++;
 	relayHostNews.what = what;
 	relayHostNews.region[0] = 0;
 	relayHostNews.ms = 0;
-	relayHostNews.why = what == kNetRelayHostRoomGone ? why : NULL;
+	relayHostNews.why = (what == kNetRelayHostRoomGone || what == kNetRelayHostEnded) ? why : NULL;
 
 	if (what == kNetRelayHostListed)
 	{
@@ -1385,9 +1422,13 @@ static void RelayHostNews(int what, const char *why)
 }
 
 // A host starts going through a relay, when the list has named some: it times each, and asks the nearest for a room (RelayHostFrame). False
-// with none named, or none that looks up, and then the game is found on this network as it always was.
-static bool RelayHostStart()
+// with none named, or none that looks up, and then the game is found on this network as it always was. Modified 2026-11-10 by Melanikus
+// for the AvP port (#188): with the v2 draft, false means the game isn't hosted at all (sealed or nothing), and why says why, in the game's
+// own fixed words; the caller says it. Without the draft, it's as it was, lines and news included.
+static bool RelayHostStart(const char **why)
 {
+	bool const draft = Net_V2DraftOn();
+	*why = NULL;
 	relayHosting = false;
 	relayPicking = false;
 	relayRoomListed = false;
@@ -1403,6 +1444,9 @@ static bool RelayHostStart()
 
 	if (!host || !RelayList_Relays(relays, &named) || named <= 0)
 	{
+		// The server hasn't answered yet, or can't be used: Net_ServerState tells the two apart, so a host waits for the first (#188)
+		const char *serverWhy = NULL;
+		*why = RelayList_ServerState(&serverWhy) == kRelayServerCantUse && serverWhy ? serverWhy : kServerNotYet;
 		return false;
 	}
 
@@ -1420,20 +1464,23 @@ static bool RelayHostStart()
 	{
 		// Modified 2026-11-10 by Melanikus for the AvP port (#175): nothing is looked up now, as the relay is at its server's servers.cfg
 		// line's address, so the words say only that it can't be used
-		Con_PrintError("net: the relay the list named can't be used, so this game is open on this network only");
-		RelayHostNews(kNetRelayHostNoRelay, NULL);
+		*why = kRelayCantBeUsed;
+
+		if (!draft)
+		{
+			Con_PrintError("net: the relay the list named can't be used, so this game is open on this network only");
+			RelayHostNews(kNetRelayHostNoRelay, NULL);
+		}
+
 		return false;
 	}
 
 	// Modified 2026-11-09 by Melanikus for the AvP port (protocol version 2): this run's identity, whose fingerprint the listing carries and
 	// handshake B proves to each joiner. Without one, nothing could be sealed, so the game is open on this network only. Only with the v2
 	// draft (networking.h): without it, the host is version 1's, with no identity, no handshake and nothing sealed.
-	bool const draft = Net_V2DraftOn();
-
 	if (draft && !RelayIdentityReady())
 	{
-		Con_PrintError("net: this game's identity couldn't be made, so it's open on this network only");
-		RelayHostNews(kNetRelayHostNoRelay, NULL);
+		*why = kNoIdentity;
 		return false;
 	}
 
@@ -1448,13 +1495,9 @@ static bool RelayHostStart()
 	// proves (relay_list.h). Version 1 times every relay the list named with its echoes, as before.
 	if (draft)
 	{
-		const char *why = NULL;
-
-		if (!RelayV2Begin(relayCandidates[0], relayCandidateRegions[0], true, &why))
+		if (!RelayV2Begin(relayCandidates[0], relayCandidateRegions[0], true, why))
 		{
-			Con_PrintError(std::string("net: ") + (why ? why : "the server's relay can't be used")
-				+ ", so this game is open on this network only");
-			RelayHostNews(kNetRelayHostNoRelay, NULL);
+			*why = *why ? *why : kRelayCantBeUsed;
 			return false;
 		}
 	}
@@ -1472,6 +1515,7 @@ static bool RelayHostStart()
 
 		if (!relayPicker.Start(relayCandidateCount, ports, random, enet_time_get()))
 		{
+			*why = kRelayCantBeUsed;
 			return false;
 		}
 	}
@@ -1508,8 +1552,12 @@ static void RelayLogSealedCounts()
 	relayEndToEndOpened = 0;
 }
 
-static void RelayHostGiveUp(const char *why)
+// Modified 2026-11-10 by Melanikus for the AvP port (#188): lineWithoutTheDraft is version 1's line, as it always was; reason is why, in the
+// game's own fixed words. With the v2 draft, the game can't go on sealed, so it has ended (kNetRelayHostEnded, with reason): nothing reaches
+// ENet any more (NothingIntercept), and the search port never opens. The callers give version 1's news themselves.
+static void RelayHostGiveUp(const char *lineWithoutTheDraft, const char *reason)
 {
+	bool const draft = Net_V2DraftOn();
 	bool const wasOpen = relayHosting && !relayPicking;   // while still timing the relays, nobody has come through one
 
 	// A host that loses its relay (a revoke ends the room this way: the relay just stops answering) says what went sealed until then
@@ -1522,8 +1570,9 @@ static void RelayHostGiveUp(const char *why)
 
 	if (host)
 	{
-		// Hudson's branch: a host on the way to the one relay beyond this machine still hears that relay alone (RelayIntercept)
-		host->intercept = OnTheRemoteRoute(host->address) ? RelayIntercept : NULL;
+		// Hudson's branch: a host on the way to the one relay beyond this machine still hears that relay alone (RelayIntercept). With the
+		// draft, nothing at all (#188).
+		host->intercept = draft ? NothingIntercept : (OnTheRemoteRoute(host->address) ? RelayIntercept : NULL);
 		host->duplicatePeers = kMostConnectionsFromOneAddress;
 	}
 
@@ -1569,7 +1618,14 @@ static void RelayHostGiveUp(const char *why)
 	// dropped, never sent unsealed.
 	RelayEndToEndForget();
 
-	Con_PrintError(why);
+	if (draft)
+	{
+		Con_PrintError(std::string("net: ") + reason + ", so this online game has ended: it can't go on sealed, and it never opens on this network instead");
+		RelayHostNews(kNetRelayHostEnded, reason);
+		return;
+	}
+
+	Con_PrintError(lineWithoutTheDraft);
 	OpenTheSearchPortForAHost();
 }
 
@@ -1593,16 +1649,14 @@ static void RelayHostFrame()
 
 		if (step == kRelayV2None)
 		{
-			bool const wasOpen = !relayPicking;
-
 			if (relayRoomListed)
 			{
 				RelayList_HostRoomClosed();
 				relayRoomListed = false;
 			}
 
-			RelayHostGiveUp((std::string("net: ") + (why ? why : "the channel to the relay ended") + ", so this game is open on this network only").c_str());
-			RelayHostNews(wasOpen ? kNetRelayHostRoomGone : kNetRelayHostNoRelay, wasOpen ? why : NULL);
+			// The channel is the v2 draft's, so this is always the draft: the online game ends (#188). Version 1's line is there all the same.
+			RelayHostGiveUp("net: the channel to the relay ended, so this game is open on this network only", why ? why : "the channel to the relay ended");
 			return;
 		}
 
@@ -1638,8 +1692,13 @@ static void RelayHostFrame()
 
 		if (best < 0)
 		{
-			RelayHostGiveUp("net: no relay answered, so this game is open on this network only");
-			RelayHostNews(kNetRelayHostNoRelay, NULL);
+			RelayHostGiveUp("net: no relay answered, so this game is open on this network only", "no relay answered");
+
+			if (!Net_V2DraftOn())
+			{
+				RelayHostNews(kNetRelayHostNoRelay, NULL);
+			}
+
 			return;
 		}
 
@@ -1696,8 +1755,12 @@ static void RelayHostFrame()
 			relayRoomListed = false;
 		}
 
-		RelayHostGiveUp("net: this game is open on this network instead");
-		RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));
+		RelayHostGiveUp("net: this game is open on this network instead", NetRelay_WhyText(lostWhy));
+
+		if (!Net_V2DraftOn())
+		{
+			RelayHostNews(kNetRelayHostRoomGone, NetRelay_WhyText(lostWhy));
+		}
 	}
 }
 
@@ -2612,6 +2675,13 @@ void Net_StopSearchingForSessions()
 {
 	sessionCheckTimer = 0;
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#188): how many answers came from outside the home network, and were ignored
+	if (searchAnswersFromOutside > 0)
+	{
+		LogString("net: " + std::to_string(searchAnswersFromOutside) + " search answer(s) from outside the home network were ignored");
+		searchAnswersFromOutside = 0;
+	}
+
 	if (AvP.Network != I_Host)
 	{
 		CloseDiscoverySocket();
@@ -2679,6 +2749,14 @@ bool Net_UpdateSessionList(int &SelectedItem)
 					// Anyone can send this, so it has to at least say it's this game
 					if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)
 					{
+						continue;
+					}
+
+					// Added 2026-11-10 by Melanikus for the AvP port (#188): with the draft, a game found by a search is plain, so one whose
+					// host isn't on the home network is ignored (it can only come from a network set up wrongly), and counted for the log
+					if (Net_V2DraftOn() && !NetAddress_IsThisNetwork(address.host))
+					{
+						searchAnswersFromOutside++;
 						continue;
 					}
 
@@ -2864,9 +2942,23 @@ int Net_ConnectingToLobbiedGame(char *playerName)
 	return NET_FAIL;
 }
 
-NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
+// Modified 2026-11-10 by Melanikus for the AvP port (#188): Net_HostGame and Net_HostAtHome (networking.h) are this, with atHome saying
+// which. Without the v2 draft, atHome changes nothing, and a host is as it was.
+static NetResult HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level, bool atHome)
 {
 	printf("Net_HostGame\n");
+	hostFailedWhy = NULL;
+	homeStrangersDropped = 0;
+
+	// With the draft: online when servers.cfg names a server and the player didn't ask for a home game; a home game otherwise
+	bool const draft = Net_V2DraftOn();
+	bool const online = draft && !atHome && Relay_ServerName()[0] != 0;
+
+	// The server hasn't answered yet: asked now, if it wasn't (relay_list.cpp asks once at a time), and the host waits for it (Net_ServerState)
+	if (online)
+	{
+		RelayList_FindRelays();
+	}
 
 	if (!net_IsInitialised)
 	{
@@ -2910,10 +3002,15 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
-			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
+			// Hudson's branch: a host on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept).
+			// With the draft, a home game hears the home network alone, from the start (HomeIntercept, #188).
 			if (OnTheRemoteRoute(ServerAddress))
 			{
 				host->intercept = RelayIntercept;
+			}
+			else if (draft && !online)
+			{
+				host->intercept = HomeIntercept;
 			}
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
@@ -2921,7 +3018,20 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			// Modified 2026-11-08 by Melanikus for the AvP port: through the relay instead, when one is set (RelayHostStart, above). Then
 			// nothing on this network can find it by searching, and the search port stays shut. If the relay falls through, RelayHostGiveUp
 			// opens it after all, with the same lines (OpenTheSearchPortForAHost).
-			if (RelayHostStart())
+			// Modified 2026-11-10 by Melanikus for the AvP port (#188): with the draft, an online game goes through the relay, sealed, or it
+			// isn't hosted at all, and a home game never tries the relay. Without the draft, as it was.
+			const char *notOnline = NULL;
+
+			if (online && !RelayHostStart(&notOnline))
+			{
+				hostFailedWhy = notOnline ? notOnline : kRelayCantBeUsed;
+				Con_PrintError(std::string("net: this game can't be hosted online: ") + hostFailedWhy + ", so it isn't hosted at all (sealed or nothing)");
+				enet_host_destroy(host);
+				host = NULL;
+				return NET_FAIL;
+			}
+
+			if (online || (!draft && RelayHostStart(&notOnline)))
 			{
 				Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay");
 			}
@@ -2986,6 +3096,44 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	return NET_OK;
 }
 
+NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
+{
+	return HostGame(playerName, sessionName, species, gameStyle, level, false);
+}
+
+NetResult Net_HostAtHome(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
+{
+	return HostGame(playerName, sessionName, species, gameStyle, level, true);
+}
+
+const char *Net_HostFailedWhy(void)
+{
+	return hostFailedWhy;
+}
+
+int Net_ServerState(const char **why)
+{
+	*why = NULL;
+
+	if (!Net_V2DraftOn() || !Relay_ServerName()[0])
+	{
+		return kNetServerNone;
+	}
+
+	int const state = RelayList_ServerState(why);
+	return state == kRelayServerGood ? kNetServerReady : state == kRelayServerCantUse ? kNetServerCantUse : kNetServerAsking;
+}
+
+const char *Net_JoinRefusedWhy(void)
+{
+	return joinRefusedWhy;
+}
+
+const char *Net_TypedAddressRefusedWhy(void)
+{
+	return typedRefusedWhy;
+}
+
 // How long leaving waits for the other ends to hear that this machine is closing. On a network that works, that takes a few
 // thousandths of a second. A machine that has gone already never answers, so this is the most that's ever spent on one.
 static unsigned int const kMostMillisecondsToClose = 1000;
@@ -2997,6 +3145,13 @@ void Net_Disconnect()
 	// A host's held request to join goes with its game. A joiner's answer stays, for its screen to say why it's back (Net_JoinAnswerNow):
 	// the next join starts it again.
 	ForgetTheJoinRequest();
+
+	// Added 2026-11-10 by Melanikus for the AvP port (#188): what a home game, host or joiner, dropped from outside the home network
+	if (homeStrangersDropped > 0)
+	{
+		LogString("net: while playing at home, " + std::to_string(homeStrangersDropped) + " packet(s) from outside the home network were dropped");
+		homeStrangersDropped = 0;
+	}
 
 	// What a joiner through a relay dropped from elsewhere (a host says its own as it leaves its room, in RelayHostLeave)
 	if (relayJoinedThrough && relayStrangersDropped > 0)
@@ -4360,6 +4515,17 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	LoopbackOnlyAddress(&ourAddress);
 	ourAddress.port = 0;
 
+	// Added 2026-11-10 by Melanikus for the AvP port (#188): with the draft, a game not through the relay is plain, so it's joined only if its
+	// host is on the home network. Refused before anything is opened, with the reason (Net_JoinRefusedWhy).
+	joinRefusedWhy = NULL;
+
+	if (Net_V2DraftOn() && !SessionData[sessionNumber].throughRelay && !NetAddress_IsThisNetwork(SessionData[sessionNumber].host))
+	{
+		joinRefusedWhy = kNotAtHome;
+		Con_PrintError(std::string("Net_ConnectToSession - ") + kNotAtHome);
+		return NET_FAIL;
+	}
+
 	// A Hudson run joins only a game on this machine. A session from anywhere else, which a search kept to this machine's own address can't find, is refused.
 	if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))
 	{
@@ -4376,10 +4542,15 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
-	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept)
+	// Hudson's branch: a joiner on the way to the one relay beyond this machine hears that relay alone, from the start (RelayIntercept).
+	// With the draft, a joiner of a home game hears the home network alone, from the start (HomeIntercept, #188).
 	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))
 	{
 		host->intercept = RelayIntercept;
+	}
+	else if (Net_V2DraftOn() && !SessionData[sessionNumber].throughRelay)
+	{
+		host->intercept = HomeIntercept;
 	}
 
 	// Modified 2026-11-08 by Melanikus for the AvP port: a game from the relays' list. The relay's handshake goes first, from this new
@@ -4591,6 +4762,8 @@ static bool AskEveryoneAboutGames()
 {
 	extern char IPAddressString[];
 
+	typedRefusedWhy = NULL;
+
 	// Nothing goes out to the whole network in a Hudson run on this machine's own address
 	if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))
 	{
@@ -4602,8 +4775,14 @@ static bool AskEveryoneAboutGames()
 	{
 		ENetAddress typed;
 
-		// And a Hudson run asks a typed address only if it's this machine's own
-		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && (!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host))
+		// And a Hudson run asks a typed address only if it's this machine's own. Modified 2026-11-10 by Melanikus for the AvP port (#188):
+		// with the draft, only if it's on the home network, as a game found that way is plain; otherwise the games page says why.
+		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && Net_V2DraftOn() && !NetAddress_IsThisNetwork(typed.host))
+		{
+			typedRefusedWhy = kTypedNotAtHome;
+			LogString(std::string("net: the typed address wasn't asked: ") + kTypedNotAtHome);
+		}
+		else if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && (!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host))
 		{
 			Con_PrintError("Couldn't ask the address that was typed");
 		}
