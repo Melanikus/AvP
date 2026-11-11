@@ -1229,6 +1229,7 @@ static const char *joinRefusedWhy = NULL;      // why the last Net_ConnectToSess
 static const char *typedRefusedWhy = NULL;     // why the last search didn't ask the typed address (Net_TypedAddressRefusedWhy)
 static unsigned int homeStrangersDropped = 0;  // a home game's packets from outside the home network, dropped before ENet read them
 static unsigned int searchAnswersFromOutside = 0;   // a search's answers from outside the home network, ignored
+static unsigned int searchQuestionsFromOutside = 0;   // search questions from outside the home network, left unanswered (F2, 2026-11-11)
 
 // A home game's ENet host, or a joiner's of one: it hears the home network alone. Anything from an address that isn't on it is dropped here,
 // before ENet reads a byte of it, so a forwarded router port can't bring an internet joiner into a plain game (#188).
@@ -2948,7 +2949,14 @@ void Net_Disconnect()
 
 	sessionCheckTimer = 0;
 
-	// A host's search counts for the whole game, before the port closes (net_search_log.h)
+	// A host's search counts for the whole game, before the port closes (net_search_log.h), and the questions it left unanswered because
+	// they came from outside the home network (F2, added 2026-11-11 by Melanikus for the AvP port)
+	if (searchQuestionsFromOutside > 0)
+	{
+		LogString("net: " + std::to_string(searchQuestionsFromOutside) + " search question(s) from outside the home network were left unanswered");
+		searchQuestionsFromOutside = 0;
+	}
+
 	{
 		char line[320];
 
@@ -3100,6 +3108,15 @@ static void Net_CheckForSessionRequest()
 
 			if (NETSYS_REQUEST_SESSION_INFO != header.messageType)
 			{
+				continue;
+			}
+
+			// Added 2026-11-11 by Melanikus for the AvP port (PO's hostile read of the client, F2): a game at home answers only an asker on the
+			// home network, as a search keeps only answers from it. One from anywhere else, the internet included, is told nothing about the
+			// game, not its name, its level nor its players, and is counted for the log, never with its address.
+			if (!NetAddress_IsThisNetwork(addr.host))
+			{
+				searchQuestionsFromOutside++;
 				continue;
 			}
 

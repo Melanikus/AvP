@@ -912,6 +912,16 @@ foreach ($adding in (Get-Calls 'Net_AddSession'))
     }
 }
 
+# A game at home answers a search only from this network (F2, PO's hostile read of the client; added 2026-11-11 by Melanikus for the AvP
+# port): the host refuses an asker from outside it before it sends anything, so the internet is told nothing about a game at home
+$answering = Get-OneDefinition 'Net_CheckForSessionRequest' 'L' $netFile 'a home host''s answer to a search'
+$askerAtHome = 'if (!NetAddress_IsThisNetwork(addr.host)) {'
+
+if (-not (Test-FormBlock $answering.Flat $askerAtHome @('continue;')) -or -not (Test-Before $answering.Flat $askerAtHome 'enet_socket_send('))
+{
+    Stop-Check "L: Net_CheckForSessionRequest ($netFile line $($answering.Line)) must answer only an asker on this network, before it sends anything: $askerAtHome ... continue; }"
+}
+
 Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and a plain game is for this network only ($($local.File) line $($local.Line))."
 Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
 

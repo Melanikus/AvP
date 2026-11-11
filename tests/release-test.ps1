@@ -814,6 +814,20 @@ void Net_FindAvPSessions()
 		return;
 	}
 }
+
+static void Net_CheckForSessionRequest()
+{
+	while (Heard(&addr, &question))
+	{
+		if (!NetAddress_IsThisNetwork(addr.host))
+		{
+			searchQuestionsFromOutside++;
+			continue;
+		}
+
+		enet_socket_send(broadcastSocket, &addr, &buf, 1);
+	}
+}
 '@ + "`n"); '3dc/relay_list.cpp' = (@'
 namespace
 {
@@ -1023,7 +1037,7 @@ void Weaker()
 		LetEveryoneIn();
 	}
 }
-'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 201 names DevMode' },
+'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 214 names DevMode' },
     @{ What = 'D: and in any relay_ file'; None = $false; Files = @{ '3dc/relay_auto.cpp' = (@'
 bool Auto()
 {
@@ -1414,7 +1428,7 @@ void Forget()
 {
 	host->intercept = NULL;
 }
-'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 201 clears a host''s intercept' },
+'@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 214 clears a host''s intercept' },
     @{ What = 'L: a typed address asked without the home check is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 	if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !NetAddress_IsThisNetwork(typed.host))
 '@); To = (@'
@@ -1426,6 +1440,15 @@ void Forget()
 	AskAboutGames(otherHost);
 	ENetAddress typed;
 '@ + "`n") } }; Reason = 'L: 3dc/networking.cpp line 177 asks otherHost about its games' },
+    @{ What = 'L: a home host answering a search from anywhere is refused (F2)'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		if (!NetAddress_IsThisNetwork(addr.host))
+		{
+			searchQuestionsFromOutside++;
+			continue;
+		}
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'L: Net_CheckForSessionRequest (3dc/networking.cpp line 199) must answer only an asker on this network' },
     @{ What = 'L: a search''s answer from outside this network kept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
 		if (!NetAddress_IsThisNetwork(address.host))
 		{

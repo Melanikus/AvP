@@ -2012,6 +2012,18 @@ static void TestASearchAndItsAnswers()
 		Net_ServiceNetwork();
 		Check(datagramsSent == sentBefore, "nor one a byte short of the answer");
 	}
+
+	// Added 2026-11-11 by Melanikus for the AvP port (PO's hostile read of the client, F2): a whole question from outside the home network,
+	// the internet included, gets nothing at all
+	{
+		int const sentBefore = datagramsSent;
+		Arrives(question, 0x07070707);   // 7.7.7.7, a public address
+		Net_ServiceNetwork();
+		Check(datagramsSent == sentBefore, "a question from outside the home network gets no answer: a game at home tells the internet nothing");
+		Arrives(question, 0x0101A8C0);   // 192.168.1.1, on the home network
+		Net_ServiceNetwork();
+		Check(datagramsSent == sentBefore + 1, "while one from the home network is still answered");
+	}
 	EndTheGame();
 
 	Net_FindAvPSessions();

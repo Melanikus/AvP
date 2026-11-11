@@ -3534,6 +3534,26 @@
 					"to": "bool const online = Relay_ServerName()[0] != 0;"
 				}
 			]
+		},
+		{
+			"name": "a game at home answers a search from the internet (F2)",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (!NetAddress_IsThisNetwork(addr.host))\n\t\t\t{\n\t\t\t\tsearchQuestionsFromOutside++;\n\t\t\t\tcontinue;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game at home answers no search at all (F2)",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (!NetAddress_IsThisNetwork(addr.host))\n\t\t\t{\n\t\t\t\tsearchQuestionsFromOutside++;",
+					"to": "\t\t\tif (true)\n\t\t\t{\n\t\t\t\tsearchQuestionsFromOutside++;"
+				}
+			]
 		}
 	]
 }
