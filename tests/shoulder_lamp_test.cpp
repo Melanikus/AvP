@@ -754,7 +754,8 @@ static void TestJoiningTheGame()
 	// The part after the size and strength is read from the game's file, up to where drawing ends, because drawing itself stops just before
 	// that end, so a piece of drawing ending there would always be empty.
 	Check(Has(drawing, "// A network game keeps these as built.") && !Has(Between(drawing, "static void DrawShoulderLamp()", "// A network game keeps these as built."), "Network") && !Has(Between(render, "// How big and how strong the spot is.", "ChangeZWriteEnable(ZWRITE_ENABLED);"), "Network"), "the user's ruling: it isn't turned off in a network game");
-	Check(Has(drawing, "onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture"), "walls are only lit from surface pictures of this frame");
+	// Over the real light the walls are lit only at LAMPLOOK 3, the painted lamp at full (modified 2026-11-11 by Melanikus (Third) for the AvP port)
+	Check(Has(drawing, "onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture"), "walls are only lit from surface pictures of this frame");
 	Check(Has(render, "void ThisFramesRenderingHasBegun()\n{\n\tsurfacePicturesAreFromThisFrame = false;"), "which is forgotten at the start of each frame");
 	Check(Has(render, "surfacePicturesAreFromThisFrame = true;\n\t\t\tFrameTiming_Mark(kStageSurfacePictures);"), "and only set when they've been drawn");
 	Check(Has(drawing, "device->SetTexture(3 + i, pictures[i]);") && Has(drawing, "if (onWalls)\n\t{\n\t\tdevice->SetTexture(3, NULL);\n\t\tdevice->SetTexture(4, NULL);\n"), "and it gives back the textures it borrows");
@@ -775,7 +776,10 @@ static void TestJoiningTheGame()
 	// The user's ruling: only the spot lights anything, or looking through the cone is night vision
 	Check(Has(painted, "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)"), "only the spot brightens or shows a wall's colour, and the cone only adds its haze");
 	Check(Has(painted, "float3 haze = kHaze * cone;"), "and the haze is a colour of its own, with nothing of the wall in it");
-	Check(Has(render, "if (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t\treturn;"), "and nothing painted goes over the real light");
+	// The owner's ruling of 2026-11-11 ("Restore it, show me", "With shadows") turns the old one round: the painted lamp goes over the real light,
+	// but only as LAMPLOOK says (modified 2026-11-11 by Melanikus (Third) for the AvP port)
+	Check(Has(render, "if (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\n\t\tif (!paintedToo)\n\t\t{\n\t\t\treturn;"),
+		"and nothing painted goes over the real light unless LAMPLOOK asks for it");
 
 	// The pictures it reads, in Gouraud
 	std::string const forTheLamp = Between(render, "static void DrawSurfacePicturesForTheLamp()\n{", "// The stencil now marks the pixels");
