@@ -202,6 +202,21 @@ static void TestTheOneWayIn()
 	Check(noLine != std::string::npos && thread != std::string::npos && noLine < thread && CountOf(list, "CreateThread(") == 1 &&
 		Has(list, "if (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}"),
 		"after a No the list's own state has no server, from before its thread starts, and every call refuses it, so nothing goes to the server");
+
+	// The Multiplayer page asks each line WITH its yes where this PC stands, as nothing of it is kept between runs (PO's ruling,
+	// 2026-11-11), by the row's own request and rule, and never a line without its yes. Added 2026-11-11 by Melanikus for the AvP port.
+	std::string const askAll = SourceSlice(online, "void OnlineLines_AskTheAgreedLines(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(CountOf(menus, "OnlineLines_AskTheAgreedLines();") == 1 &&
+		Has(menus, "\t\t\tRelayList_FindGames();\n\n\t\t\t// And where this PC stands on each line with the player's yes, asked again") &&
+		Has(askAll, "if (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(says, askedThisRun[place], now, lastAskedAt[place]) == kOnlinePageAsk)\n\t\t{\n\t\t\tAsk(place);") &&
+		CountOf(online, "RelayList_AskForAccessOn(") == 1,
+		"the Multiplayer page opening asks each line with its yes, at most once a minute, by the row's own request, and never a line without its yes");
+
+	// A game on a line that hasn't approved this PC is on the list, greyed, never joined (PO's ruling, 2026-11-11)
+	std::string const putting = SourceSlice(menus, "static void PutTheRelayGamesOnThePage(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(putting, "bool const approved = RelayList_LineNow(found.line, &now) && now.access == kRelayAccessIsApproved;") &&
+		Has(putting, "if (!approved && session >= 0)\n\t\t{\n\t\t\tSessionData[session].AllowedToJoin = false;"),
+		"a game on a line that hasn't approved this PC is shown, greyed, and can't be joined");
 }
 
 // NO HOST ROW: EVERY GAME IS HOSTED ONLINE (the owner's ruling for beta.2, 2026-11-10: "Remove At home from beta.2", "Everything over

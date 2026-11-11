@@ -45,6 +45,10 @@ extern char OnlinePageName[kRelayAccessNameMostBytes + 1];
 // menus.cpp goes back to the Multiplayer page.
 bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room);
 
+// The Multiplayer page has opened: every line with the player's yes is asked for this PC's access, as its row's Enter would ask it, at
+// most once a minute for each line (approval is known from this run's answers alone). Never a line without its yes. Added 2026-11-11.
+void OnlineLines_AskTheAgreedLines(void);
+
 // The question before a new identity has opened
 bool OnlineLines_QuestionOpened(void);
 

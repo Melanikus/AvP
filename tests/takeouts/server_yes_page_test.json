@@ -483,6 +483,36 @@
 					"to": "\t\t\t\tif (false)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page doesn't ask the agreed lines",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tOnlineLines_AskTheAgreedLines();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page asks a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(",
+					"to": "\t\tif (OnlineLines_Pressed("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game on a line not approved can be joined",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (!approved && session >= 0)\n",
+					"to": "\t\tif (false && session >= 0)\n"
+				}
+			]
 		}
 	]
 }

@@ -212,6 +212,31 @@ namespace
 		RenderSmallMenuText(line, MENU_CENTREX, y, alpha, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
+	// The name to send starts as the profile's, once a run; a letter the rule won't take is left out of it, and the page says so, rather
+	// than drop it without a word
+	void StartTheName(void)
+	{
+		if (nameStarted)
+		{
+			return;
+		}
+
+		RelayAccess_NameFromProfile(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name), OnlinePageName);
+		nameStarted = true;
+
+		if (RelayAccess_NameLeftLettersOut(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name)))
+		{
+			answer = TEXTSTRING_ACCESS_NAME_LEFT_OUT;
+		}
+	}
+
+	// How many good lines there are, for the rows (they're fixed for the run)
+	void CountTheLines(void)
+	{
+		int const count = RelayList_LineCount();
+		lineCount = count < 0 ? 0 : (count > kOnlinePageMostLines ? kOnlinePageMostLines : count);
+	}
+
 	// The game's own words for each state of a line's row (online_page_rules.h, OnlineLines_StateLine)
 	OnlinePageWords TheWords(void)
 	{
@@ -248,21 +273,8 @@ bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room)
 		return false;
 	}
 
-	int const count = RelayList_LineCount();
-	lineCount = count < 0 ? 0 : (count > kOnlinePageMostLines ? kOnlinePageMostLines : count);
-
-	if (!nameStarted)
-	{
-		RelayAccess_NameFromProfile(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name), OnlinePageName);
-		nameStarted = true;
-
-		// A letter the rule won't take is left out of the name to send, and the page says so, rather than drop it without a word
-		if (RelayAccess_NameLeftLettersOut(UserProfilePtr ? UserProfilePtr->Name : NULL, sizeof(UserProfilePtr->Name)))
-		{
-			answer = TEXTSTRING_ACCESS_NAME_LEFT_OUT;
-		}
-	}
-
+	CountTheLines();
+	StartTheName();
 	TakeTheIdentity();
 
 	// A row for each line, the same for every line, then the page's own: the name to send, Copy access code, Make a new identity, Back
@@ -301,6 +313,34 @@ bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room)
 	}
 
 	return true;
+}
+
+// PO's ruling, 2026-11-11 (after the owner's picture run): approval is known from this run's answers alone, nothing is kept, so a player
+// approved yesterday is asked again as the Multiplayer page opens, on every line with its yes, by the same request and the same rule as
+// a row's Enter: never a line without its yes (its row's Enter opens its yes page instead), never a line refused or being asked, and
+// never a line asked less than a minute ago. Only the profile's name and this PC's public halves go, as with every request.
+void OnlineLines_AskTheAgreedLines(void)
+{
+	CountTheLines();
+	StartTheName();
+
+	if (!haveIdentity)
+	{
+		TakeTheIdentity();
+	}
+
+	uint32_t const now = Now();
+
+	for (int place = 0; haveIdentity && place < lineCount; place++)
+	{
+		RelayListLineNow line;
+		OnlinePageSays const says = SaysOf(place, &line);
+
+		if (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(says, askedThisRun[place], now, lastAskedAt[place]) == kOnlinePageAsk)
+		{
+			Ask(place);
+		}
+	}
 }
 
 bool OnlineLines_QuestionOpened(void)

@@ -184,11 +184,23 @@ static int relayGamesKept = 0;
 
 // Puts the kept relay games on the page's list, after whatever the LAN found. Net_AddRelaySession leaves out a game that's there already,
 // one this machine can't play, and any once the list is full, so this can be called each time the page is set up.
+// Modified 2026-11-11 by Melanikus for the AvP port (PO's ruling): a game on a line that hasn't approved this PC is shown, greyed, never
+// joined: its line's words under the list say "not approved yet: ask on the Online page" (online_screens_page.cpp).
 static void PutTheRelayGamesOnThePage(void)
 {
 	for (int i = 0; i < relayGamesKept; i++)
 	{
-		(void)Net_AddRelaySession(relayGamesFound[i].game, relayGamesFound[i].line);
+		RelayListServerGame const &found = relayGamesFound[i];
+		(void)Net_AddRelaySession(found.game, found.line);
+
+		RelayListLineNow now;
+		bool const approved = RelayList_LineNow(found.line, &now) && now.access == kRelayAccessIsApproved;
+		int const session = Net_FindRelaySession(found.line, found.game.region, found.game.code);
+
+		if (!approved && session >= 0)
+		{
+			SessionData[session].AllowedToJoin = false;
+		}
 	}
 }
 
@@ -2848,6 +2860,10 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			char **const hostOnChoices = HostOnChoices();
 			MenuData_SetMultiplayerRows(RelayList_LineCount() > 0, hostOnChoices, hostOnCount);
 			RelayList_FindGames();
+
+			// And where this PC stands on each line with the player's yes, asked again, as nothing of it is kept between runs (PO's ruling,
+			// 2026-11-11: the host page and Find games show every server that has approved this PC, without the Online page first)
+			OnlineLines_AskTheAgreedLines();
 
 			//skirmishMode must be false
 			netGameData.skirmishMode = FALSE;
