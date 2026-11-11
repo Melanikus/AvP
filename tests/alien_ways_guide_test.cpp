@@ -685,10 +685,15 @@ static void ReplansAtOnce()
 	Check(last.stuck && after[2] == kAlienWaysRestsCapped && replans[2] == 0 && last.resting && !last.hasNext,
 		"the 4th time in that minute its re-plans are used up: it rests, as before the watchdog, and asks for nothing");
 
-	// A minute on, its re-plans count no more. It's held at the same spot meanwhile, asked about every frame of 400 ms, so it's kept.
+	// A minute on, its re-plans count no more. Meanwhile it's asked about every frame of 400 ms, so it's kept, but for a goal no polygon is
+	// near, so it gets no way: it's never stuck, and nothing more is shut for it. Then, from the start again, it steps onto the wall and is
+	// held there, as at first. (Modified 2026-11-11 by Melanikus (Third): this held it where its last re-plan had left it, which by then was
+	// near its goal, where its way was too short to reach a point of and be stuck after one. GitHub's run 43089013028 failed it.)
+	AlienWaysXYZ const nowhere = { 1000, 0, 50000 };
+
 	for (int ms = 0; ms < 61000; ms += 400)
 	{
-		guide.Steer(&map, last.ask, &towards);
+		guide.Steer(&map, Ask(Alien(1), kStart, nowhere, 13), &towards);
 		Frame(guide, map, 400);
 	}
 
@@ -696,13 +701,16 @@ static void ReplansAtOnce()
 
 	for (int ms = 0; ms < 6000 && !guided; ms += 100)
 	{
-		guided = guide.Steer(&map, last.ask, &towards);
+		guided = guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 		Frame(guide, map, 100);
 	}
 
-	Held const later = HeldAtItsSecondPoint(guide, map, Alien(1));
-	Check(guided && later.stuck && later.line.afterStuck == kAlienWaysReplans && later.line.replan == 1,
-		"a minute later, stuck along its way, it re-plans again: the first of a new minute");
+	bool const upTheWallAgain = guided && guide.Steer(&map, onTheWall, &towards) && Same(towards, kUpTheWall);
+	Held const later = HeldTillStuck(guide, map, onTheWall, 3000);
+	Check(upTheWallAgain && later.stuck && later.line.afterStuck == kAlienWaysReplans && later.line.replan == 1,
+		"a minute later, stuck along its way, it re-plans again: the first of a new minute (guided " + std::to_string(guided ? 1 : 0) + ", on the wall " +
+		std::to_string(upTheWallAgain ? 1 : 0) + ", stuck " + std::to_string(later.stuck ? 1 : 0) + ", after " + std::to_string(static_cast<int>(later.line.afterStuck)) +
+		", re-plan " + std::to_string(later.line.replan) + ")");
 }
 
 // A polygon is shut for 20 s. An alien held at the start is stuck there, heading for the wall's foot, so that wall is shut for it; then

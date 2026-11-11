@@ -201,7 +201,7 @@ static void TestTheWaysOnline()
 	// The menus: every row that goes to a page goes through it, as it's pressed, with whether a host would host online
 	std::string const pressing = SourceSlice(menus, "case AVPMENU_ELEMENT_GOTOMENU:\n\t\tcase AVPMENU_ELEMENT_GOTOMENU_GFX:\n\t\t{\n\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
 		"\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const pressedWayIn = pressing.find("enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());");
+	size_t const pressedWayIn = pressing.find("const enum AVPMENU_ID page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());");
 	Check(pressedWayIn != std::string::npos && pressedWayIn < pressing.find("SetupNewMenu(page);") && CountOf(pressing, "SetupNewMenu(") == 1,
 		"a pressed row goes to its page only through the yes, and no other way");
 	std::string const online = SourceSlice(menus, "static bool HostsOnline(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);

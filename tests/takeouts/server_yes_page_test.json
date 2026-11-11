@@ -159,8 +159,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "enum AVPMENU_ID const page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());",
-					"to": "enum AVPMENU_ID const page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);"
+					"from": "const enum AVPMENU_ID page = ServerYesPage_WayIn(AvPMenus.CurrentMenu, static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo), HostsOnline());",
+					"to": "const enum AVPMENU_ID page = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);"
 				}
 			]
 		},
