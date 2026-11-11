@@ -1,0 +1,115 @@
+# What a test's program may call outside itself and still be class A, and what makes it class B at most (tests/reuse/Reuse.psm1, Get-ImportClass).
+# Written 2026-11-11 by Melanikus for the AvP port, after Secondary's attacker's reading of the CI plan's step 4 (C2: decide the class from the
+# built program's own import table, against a list taken from an empty test).
+#
+# A line is "allowed DLL!Function" or "files DLL!Function", as dumpbin /imports names them (the DLL in capitals). A program that imports
+# anything not here is class C, and always runs. Adding a line is a change to the gate itself (CODEOWNERS): add only a function whose answer
+# can't change from one run to the next, and say why in the commit.
+#
+# ---- What every test imports before main and after it: the empty test's own (tests/reuse_empty_probe_test.cpp, built 2026-11-11 with
+# Visual Studio 18, tools 14.51.36231). Some of these read a clock or the process's numbers (QueryPerformanceCounter, GetSystemTimeAsFileTime,
+# GetCurrentProcessId, GetCurrentThreadId): the C runtime's start-up code uses them for its stack guard. As every program has them, the
+# import table can't tell that use from a test's own, so a test's own use of them is caught by the text scan (kOtherWays) instead.
+# tests/reuse/record.ps1 checks in every run that the empty test still imports nothing more than these; if it does, no test is class A
+# until this list has been read again.
+allowed API-MS-WIN-CRT-HEAP-L1-1-0.DLL!_set_new_mode
+allowed API-MS-WIN-CRT-LOCALE-L1-1-0.DLL!_configthreadlocale
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!__setusermatherr
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!__p___argc
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!__p___argv
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_c_exit
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_cexit
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_configure_narrow_argv
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_controlfp_s
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_crt_atexit
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_exit
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_get_initial_narrow_environment
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_initialize_narrow_environment
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_initialize_onexit_table
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_initterm
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_initterm_e
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_register_onexit_function
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_register_thread_local_exe_atexit_callback
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_seh_filter_exe
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!_set_app_type
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!exit
+allowed API-MS-WIN-CRT-RUNTIME-L1-1-0.DLL!terminate
+allowed API-MS-WIN-CRT-STDIO-L1-1-0.DLL!__p__commode
+allowed API-MS-WIN-CRT-STDIO-L1-1-0.DLL!_set_fmode
+allowed KERNEL32.DLL!GetCurrentProcessId
+allowed KERNEL32.DLL!GetCurrentThreadId
+allowed KERNEL32.DLL!GetModuleHandleW
+allowed KERNEL32.DLL!GetSystemTimeAsFileTime
+allowed KERNEL32.DLL!InitializeSListHead
+allowed KERNEL32.DLL!IsProcessorFeaturePresent
+allowed KERNEL32.DLL!QueryPerformanceCounter
+allowed KERNEL32.DLL!SetUnhandledExceptionFilter
+allowed VCRUNTIME140.DLL!__current_exception
+allowed VCRUNTIME140.DLL!__current_exception_context
+allowed VCRUNTIME140.DLL!_except_handler4_common
+#
+# ---- Read one by one: memory, arithmetic, sorting and copying, writing to the screen, and C++'s exceptions. Each gives the same answer for the
+# same input every time. Seen in huffman_test, weapon_reload_test, shadow_gap_test, hudson_nav_graph_test and revolver_test on 2026-11-11.
+# VirtualAlloc and VirtualProtect are the memory guard's (tests/memory_wall.h): they ask for memory and protect it, and read nothing.
+# Left out on purpose: GetSystemInfo, which says how many processors the machine has (Secondary's C2), so a test that calls it is class C.
+allowed API-MS-WIN-CRT-HEAP-L1-1-0.DLL!_callnewh
+allowed API-MS-WIN-CRT-HEAP-L1-1-0.DLL!calloc
+allowed API-MS-WIN-CRT-HEAP-L1-1-0.DLL!free
+allowed API-MS-WIN-CRT-HEAP-L1-1-0.DLL!malloc
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!ceil
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!fabs
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!floor
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!pow
+allowed API-MS-WIN-CRT-MATH-L1-1-0.DLL!sqrt
+allowed API-MS-WIN-CRT-STDIO-L1-1-0.DLL!__acrt_iob_func
+allowed API-MS-WIN-CRT-STDIO-L1-1-0.DLL!__stdio_common_vfprintf
+allowed API-MS-WIN-CRT-STDIO-L1-1-0.DLL!puts
+allowed API-MS-WIN-CRT-STRING-L1-1-0.DLL!strncpy
+allowed API-MS-WIN-CRT-UTILITY-L1-1-0.DLL!abs
+allowed API-MS-WIN-CRT-UTILITY-L1-1-0.DLL!qsort
+allowed KERNEL32.DLL!VirtualAlloc
+allowed KERNEL32.DLL!VirtualProtect
+allowed MSVCP140.DLL!?_Xlength_error@std@@YAXPBD@Z
+allowed VCRUNTIME140.DLL!_CxxThrowException
+allowed VCRUNTIME140.DLL!__CxxFrameHandler3
+allowed VCRUNTIME140.DLL!__std_exception_copy
+allowed VCRUNTIME140.DLL!__std_exception_destroy
+allowed VCRUNTIME140.DLL!_purecall
+allowed VCRUNTIME140.DLL!memcmp
+allowed VCRUNTIME140.DLL!memcpy
+allowed VCRUNTIME140.DLL!memmove
+allowed VCRUNTIME140.DLL!memset
+#
+# ---- Ways to open or look at a file: a program whose other imports are all allowed is class B. Only file reading belongs here, never a
+# clock, the environment, chance, the network, a thread or a process: anything like that has to make a test class C.
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fopen
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fopen_s
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!_wfopen
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!_wfopen_s
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fread
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fclose
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fgets
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fgetc
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!fseek
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!ftell
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!_fseeki64
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!_ftelli64
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!feof
+files API-MS-WIN-CRT-STDIO-L1-1-0.DLL!ferror
+files KERNEL32.DLL!CreateFileW
+files KERNEL32.DLL!CreateFileA
+files KERNEL32.DLL!ReadFile
+files KERNEL32.DLL!GetFileSize
+files KERNEL32.DLL!GetFileSizeEx
+files KERNEL32.DLL!SetFilePointer
+files KERNEL32.DLL!SetFilePointerEx
+files KERNEL32.DLL!FindFirstFileW
+files KERNEL32.DLL!FindFirstFileA
+files KERNEL32.DLL!FindFirstFileExW
+files KERNEL32.DLL!FindNextFileW
+files KERNEL32.DLL!FindNextFileA
+files KERNEL32.DLL!FindClose
+files KERNEL32.DLL!GetFileAttributesW
+files KERNEL32.DLL!GetFileAttributesA
+files KERNEL32.DLL!GetFileAttributesExW
+files KERNEL32.DLL!CloseHandle

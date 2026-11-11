@@ -1813,17 +1813,25 @@ foreach ($block in @([regex]::Split($testsJobsPart, '(?m)^(?=  [A-Za-z0-9_-]+:[ 
 $recordJob = "$($testsJobs['record-results'])"
 Check ($recordJob.Length -gt 0) 'tests.yml has the job that records the tests'' results'
 Check ($recordJob -match '(?m)^    permissions:\n      contents: read\n      id-token: write( +#[^\n]*)?\n      attestations: write( +#[^\n]*)?\n    steps:') 'which can read, prove which workflow it is, and record, and nothing else'
-Check ($recordJob -match '(?m)^    needs: unit-tests$' -and $recordJob -match "(?m)^    if: github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'$") 'only after the tests, and only for a run started by a push or by hand'
+$onlyMain = "(github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/avpx_main'"
+Check ($recordJob -match '(?m)^    needs: unit-tests$' -and $recordJob.Contains("`n    if: $onlyMain`n")) 'only after the tests, and only for a run on avpx_main started by a push or the nightly schedule'
 Check (-not $recordJob.Contains('actions/checkout') -and -not $recordJob.Contains('./tests/') -and -not $recordJob.Contains('./tools/') -and -not $recordJob.Contains('pwsh')) 'and it has no copy of the code, and runs none of it'
 $recordAttest = [regex]::Match($recordJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ').Groups[1].Value
 Check ($recordAttest.Length -eq 40 -and $recordAttest -ceq $releaseAttest) 'it records with the action release.yml uses, pinned to the same commit'
-Check-Order $recordJob "name: Refuse records that aren't this run's, or aren't in their shape" 'subject-path: reuse/records.json' 'the records are checked before they are recorded'
+Check-Order $recordJob "name: Refuse records that aren't this run's, aren't in their shape, or don't match the lists" 'subject-path: reuse/records.json' 'the records are checked before they are recorded'
+Check ($recordJob.Contains('name: reuse-lists') -and $recordJob.Contains("aren't the ones kept before the tests ran")) 'against the lists of what each test read and imports, kept before any test ran'
 $otherRecorders = @($testsJobs.Keys | Where-Object { $_ -cne 'record-results' -and $testsJobs[$_] -match '(id-token|attestations):\s*write' })
 Check ($otherRecorders.Count -eq 0) "no other job in tests.yml can record anything ($($otherRecorders -join ', '))"
 $unitJob = "$($testsJobs['unit-tests'])"
 Check ($unitJob -match '(?m)^    permissions:\n      contents: read\n      actions: read\n    steps:') 'the job that builds and runs the tests can only read the code and the earlier runs'
-Check-Order $unitJob './tests/reuse/lookup.ps1' './tests/build.ps1 -ShowIncludes -Skip' 'it looks for results to reuse before it builds anything'
-Check ($unitJob.Contains('./tests/reuse/key-rows.ps1')) 'and it proves the key and the lookup in every run'
+Check-Order $unitJob "'lookup.ps1') -Root" './tests/build.ps1 -ShowIncludes -Skip' 'it looks for results to reuse before it builds anything'
+Check-Order $unitJob "git ls-tree --name-only HEAD -- tests/reuse/" "'lookup.ps1') -Root" 'with the scripts taken from the commit, not from the folder'
+Check-Order $unitJob './tests/build.ps1 -ShowIncludes -Skip' 'name: reuse-lists' 'the lists of what each test read and imports are kept straight after the build'
+Check-Order $unitJob 'name: reuse-lists' './tests/reuse/run-tests.ps1' 'before any test runs'
+Check-Order $unitJob './tests/reuse/run-tests.ps1' "name: Take the reuse scripts from the commit again, for the records" 'and after the tests the scripts are taken from the commit once more'
+Check-Order $unitJob "name: Take the reuse scripts from the commit again, for the records" "reuse-scripts-record\record.ps1" 'before the records are written from that copy'
+Check ($unitJob.Contains("reuse-scripts-record\key-rows.ps1")) 'and it proves the key and the lookup in every run'
+Check (([regex]::Matches($unitJob, [regex]::Escape("if: $onlyMain"))).Count -eq 2) 'and only a run on avpx_main started by a push or the nightly schedule keeps its lists and records'
 
 Clear-Work
 Remove-Item -Recurse -Force -LiteralPath $work

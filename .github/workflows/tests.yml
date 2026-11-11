@@ -121,36 +121,84 @@ jobs:
           "$($listed.Count) copied known-answer files are the relay's own (crypto-kat-java 0c4755cf)"
 
       # The CI plan's step 4 (added 2026-11-11 by Melanikus for the AvP port; tests/reuse/Reuse.psm1 says what a key is). A test whose
-      # earlier result is found, attested by this workflow and checked again here is not built or run, and the log says where it ran. Any
-      # doubt, and it runs. The nightly run (schedule) reuses nothing: it only writes down what it WOULD have reused, to check it below.
+      # earlier result is found, attested by this workflow on avpx_main and checked again here is not built or run, and the log says where
+      # it ran. Any doubt, and it runs. The nightly run (schedule) reuses nothing: it only writes down what it WOULD have reused, to check
+      # it below.
+      #
+      # The reuse scripts are run from a copy taken from the commit itself (git cat-file), into a folder of their own, each time just
+      # before they're needed: the tests run with every right on this machine, and nothing they could have written to is believed
+      # (Secondary's attacker's reading, C1). This copy's words are here in the workflow, which the tests can't change once the job runs.
+      - name: Take the reuse scripts from the commit, for the lookup
+        shell: pwsh
+        run: |
+          $copy = Join-Path $env:RUNNER_TEMP 'reuse-scripts-lookup'
+          if (Test-Path -LiteralPath $copy) { Remove-Item -Recurse -Force -LiteralPath $copy }
+          New-Item -ItemType Directory -Force $copy | Out-Null
+          foreach ($name in @(git ls-tree --name-only HEAD -- tests/reuse/)) {
+            if ($name -cnotmatch '^tests/reuse/[A-Za-z0-9_.-]+$') { throw "tests/reuse/ holds something that isn't a plain file's name: $name" }
+            $given = Start-Process -FilePath git -ArgumentList @('cat-file', 'blob', "HEAD:$name") -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $copy (Split-Path -Leaf $name))
+            if ($given.ExitCode -ne 0) { throw "git couldn't give $name from the commit" }
+          }
+          "Copied from the commit: $(@(Get-ChildItem -LiteralPath $copy -File).Name -join ', ')"
+
       - name: Find earlier results to reuse
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           DRY: ${{ github.event_name == 'schedule' }}
         run: |
-          if ($env:DRY -eq 'true') { ./tests/reuse/lookup.ps1 -Work "$env:RUNNER_TEMP\reuse" -Dry } else { ./tests/reuse/lookup.ps1 -Work "$env:RUNNER_TEMP\reuse" }
+          $scripts = Join-Path $env:RUNNER_TEMP 'reuse-scripts-lookup'
+          if ($env:DRY -eq 'true') { & (Join-Path $scripts 'lookup.ps1') -Root $env:GITHUB_WORKSPACE -Work "$env:RUNNER_TEMP\reuse" -Dry }
+          else { & (Join-Path $scripts 'lookup.ps1') -Root $env:GITHUB_WORKSPACE -Work "$env:RUNNER_TEMP\reuse" }
           exit $LASTEXITCODE
 
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1 -ShowIncludes -Skip "$env:RUNNER_TEMP\reuse\skip.txt"
 
+      # What each test was built from and what its program imports, kept straight after the build, before any test has run, so a test can't
+      # change them: the job "Record the tests' results" checks the records against these. Only a run that can be a source keeps them.
+      - name: Keep what each test was built from, before any test runs
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/avpx_main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reuse-lists
+          path: |
+            ${{ runner.temp }}/avp-tests/*.includes.txt
+            ${{ runner.temp }}/avp-tests/*.imports.txt
+          retention-days: 30
+          if-no-files-found: error
+
       # Every test runs, even after one fails, and the step fails at the end naming each. With no tests built and none reused it fails, so
-      # a broken build script can't pass as "every test passed".
+      # a broken build script can't pass as "every test passed". Whatever a test leaves running is stopped, and written down.
       - name: Run every test
         shell: pwsh
         run: ./tests/reuse/run-tests.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" -Plan "$env:RUNNER_TEMP\reuse\plan.json"
 
-      # One record a test that really ran, for a later run to reuse once it's attested. The nightly run checks here that every result it
-      # would have reused passed again.
+      # A fresh copy, now that the tests have run: the first copy is in a folder they could have written to
+      - name: Take the reuse scripts from the commit again, for the records
+        shell: pwsh
+        run: |
+          $copy = Join-Path $env:RUNNER_TEMP 'reuse-scripts-record'
+          if (Test-Path -LiteralPath $copy) { Remove-Item -Recurse -Force -LiteralPath $copy }
+          New-Item -ItemType Directory -Force $copy | Out-Null
+          foreach ($name in @(git ls-tree --name-only HEAD -- tests/reuse/)) {
+            if ($name -cnotmatch '^tests/reuse/[A-Za-z0-9_.-]+$') { throw "tests/reuse/ holds something that isn't a plain file's name: $name" }
+            $given = Start-Process -FilePath git -ArgumentList @('cat-file', 'blob', "HEAD:$name") -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $copy (Split-Path -Leaf $name))
+            if ($given.ExitCode -ne 0) { throw "git couldn't give $name from the commit" }
+          }
+          "Copied from the commit: $(@(Get-ChildItem -LiteralPath $copy -File).Name -join ', ')"
+
+      # One record a test that really ran, for a later run to reuse once it's attested. None at all if the run changed the tree or a test
+      # left something running. The nightly run checks here that every result it would have reused passed again.
       - name: Write down each test's result and key
         shell: pwsh
         env:
           COMPARE: ${{ github.event_name == 'schedule' }}
         run: |
-          if ($env:COMPARE -eq 'true') { ./tests/reuse/record.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" -Compare }
-          else { ./tests/reuse/record.ps1 -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" }
+          $record = Join-Path $env:RUNNER_TEMP 'reuse-scripts-record\record.ps1'
+          if ($env:COMPARE -eq 'true') { & $record -Root $env:GITHUB_WORKSPACE -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" -Compare }
+          else { & $record -Root $env:GITHUB_WORKSPACE -Programs "$env:RUNNER_TEMP\avp-tests" -Work "$env:RUNNER_TEMP\reuse" }
           exit $LASTEXITCODE
 
       # The key's own rows: one change at a time must change the key, and lookup.ps1's checks must refuse what they should. Never reused.
@@ -160,12 +208,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $verified = "$((Get-Content -LiteralPath "$env:RUNNER_TEMP\reuse\plan.json" -Raw | ConvertFrom-Json).verifiedFile)"
-          ./tests/reuse/key-rows.ps1 -Verified $verified
+          & (Join-Path $env:RUNNER_TEMP 'reuse-scripts-record\key-rows.ps1') -Verified $verified
           exit $LASTEXITCODE
 
-      # Only a run started by a push or by hand can be a source (lookup.ps1), so only those keep their records, for 30 days
+      # Only a run on avpx_main, started by a push or the nightly schedule, can be a source (lookup.ps1), so only those keep their records
       - name: Keep the records
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/avpx_main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reuse-records
@@ -505,14 +553,16 @@ jobs:
           if [ "$REFUSALS" != "success" ]; then echo "One of sanitize.ps1's own refusals didn't happen as it should, or a broken test wasn't failed. That job says which."; exit 1; fi
           echo "Every test passes under the address sanitizer"
 
-  # The records the Unit tests job kept, attested, so a later run can ask GitHub whether they came from this workflow, at that branch and
-  # commit, on GitHub's own runners (tests/reuse/lookup.ps1, gh attestation verify). This is the only job here that can record anything,
-  # and it runs none of our code: no checkout, only the file, a check of its shape, and the attestation, as build.yml's attest job does.
-  # The job that builds and runs the tests can record nothing. Added 2026-11-11 by Melanikus for the AvP port (the CI plan's step 4).
+  # The records the Unit tests job kept, attested, so a later run can ask GitHub whether they came from this workflow on avpx_main, at
+  # that commit, on GitHub's own runners (tests/reuse/lookup.ps1, gh attestation verify). This is the only job here that can record
+  # anything, and it runs none of our code: no checkout, only the files, a check of their shape and against the lists kept straight after
+  # the build, and the attestation, as build.yml's attest job does. The job that builds and runs the tests can record nothing. Only a run
+  # on avpx_main started by a push or the nightly schedule is recorded (Secondary's attacker's reading, C1). Added 2026-11-11 by Melanikus
+  # for the AvP port (the CI plan's step 4).
   record-results:
     name: Record the tests' results
     needs: unit-tests
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/avpx_main'
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes this
     timeout-minutes: 10
     permissions:
@@ -526,8 +576,15 @@ jobs:
           name: reuse-records
           path: reuse
 
-      # Only a file in the shape record.ps1 writes, said to be from this very run and commit, is attested
-      - name: Refuse records that aren't this run's, or aren't in their shape
+      - name: Get the lists kept straight after the build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: reuse-lists
+          path: lists
+
+      # Only a file in the shape record.ps1 writes, said to be from this very run and commit on avpx_main, whose every record names
+      # exactly what the lists kept before any test ran say that test read and imports, is attested
+      - name: Refuse records that aren't this run's, aren't in their shape, or don't match the lists
         env:
           RUN: ${{ github.run_id }}
           SHA: ${{ github.sha }}
@@ -535,13 +592,21 @@ jobs:
           set -euo pipefail
           test "$(ls -A reuse)" = "records.json" || { echo "The records folder holds more than records.json"; exit 1; }
           jq -e --arg run "$RUN" --arg sha "$SHA" '
-            .schema == 1 and .run.id == $run and .run.sha == $sha and (.run.event == "push" or .run.event == "workflow_dispatch") and
-            (.records | type == "array") and
+            .schema == 2 and .run.id == $run and .run.sha == $sha and (.run.event == "push" or .run.event == "schedule") and
+            .run.ref == "refs/heads/avpx_main" and (.records | type == "array") and
             all(.records[]; (.test | test("^[A-Za-z0-9_]+$")) and (.key | test("^[0-9a-f]{64}$")) and .kind == "unit" and .status == "ran" and
-              (.class == "A" or .class == "B" or .class == "C") and (.result == "passed" or .result == "failed") and
+              (.class == "A" or .class == "B" or .class == "C") and (.importClass == "A" or .importClass == "B" or .importClass == "C") and
+              (.result == "passed" or .result == "failed") and
               all(.parts[]; length == 2 and (.[0] | test("^[A-Za-z0-9_:./+-]+$")) and (.[1] | test("^[0-9a-f]{40,64}$"))) and
-              all(.includes[]; test("^[A-Za-z0-9_./+-]+$")))' reuse/records.json > /dev/null
-          echo "The records are this run's, in their shape: $(jq '.records | length' reuse/records.json) of them"
+              all(.includes[]; test("^[A-Za-z0-9_./+-]+$")) and all(.imports[]; test("^[A-Za-z0-9_.-]+[.][dD][lL][lL]![A-Za-z0-9_?@$.#<>-]+$")))' reuse/records.json > /dev/null
+          for test in $(jq -r '.records[].test' reuse/records.json); do
+            for kind in includes imports; do
+              test -f "lists/$test.$kind.txt" || { echo "No $kind list was kept for $test before the tests ran"; exit 1; }
+              diff <(jq -r --arg t "$test" --arg k "$kind" '.records[] | select(.test == $t) | .[$k][]' reuse/records.json | sort) \
+                   <(tr -d '\r' < "lists/$test.$kind.txt" | grep -v '^$' | sort) > /dev/null || { echo "$test's $kind in the records aren't the ones kept before the tests ran"; exit 1; }
+            done
+          done
+          echo "The records are this run's, in their shape, and match the lists kept before the tests ran: $(jq '.records | length' reuse/records.json) of them"
 
       - name: Record where the records came from
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

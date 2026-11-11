@@ -93,6 +93,24 @@ $kits = [System.IO.Path]::GetFullPath((Join-Path ${env:ProgramFiles(x86)} 'Windo
 $studioFull = [System.IO.Path]::GetFullPath($visualStudio).TrimEnd('\') + '\'
 if ($ShowIncludes) { $env:VSLANG = '1033' }
 
+# What the program calls outside itself, for -ShowIncludes: dumpbin's import table, a "DLL!Function" line each, the DLL in capitals,
+# delay-loaded ones too (tests/reuse/Reuse.psm1 decides a class from it). An import by number is written as "#" and its number.
+function Write-Imports([string]$program, [string]$to)
+{
+    $imports = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    $dll = ''
+    foreach ($line in @(& dumpbin.exe /nologo /imports $program))
+    {
+        $text = "$line".Trim()
+        if ($text -ceq 'Summary') { break }
+        if ($text -match '^[A-Za-z0-9_.-]+\.dll$') { $dll = $text.ToUpperInvariant(); continue }
+        if ($dll -and $text -match '^[0-9A-Fa-f]+\s+(\S+)$') { [void]$imports.Add("$dll!$($Matches[1])"); continue }
+        if ($dll -and $text -match '^Ordinal\s+([0-9]+)$') { [void]$imports.Add("$dll!#$($Matches[1])") }
+    }
+    if ($LASTEXITCODE -ne 0) { throw "dumpbin couldn't read $program's imports" }
+    [System.IO.File]::WriteAllLines($to, [string[]]@($imports))
+}
+
 function Write-Includes([string]$says, [string]$to)
 {
     $files = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
@@ -179,7 +197,11 @@ foreach ($test in $tests)
     # What the compiler said goes on the screen too, so that the automatic check's log has it: all but its list of what it read, which
     # goes in the test's own file instead
     Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue | Where-Object { $_ -cnotmatch '^Note: including file:' }
-    if ($ShowIncludes -and $exitCode -eq 0) { Write-Includes $saysTo (Join-Path $outputDir ($test.BaseName + '.includes.txt')) }
+    if ($ShowIncludes -and $exitCode -eq 0)
+    {
+        Write-Includes $saysTo (Join-Path $outputDir ($test.BaseName + '.includes.txt'))
+        Write-Imports "$outputDir\$($test.BaseName).exe" (Join-Path $outputDir ($test.BaseName + '.imports.txt'))
+    }
 
     if ($exitCode -ne 0)
     {

@@ -1,32 +1,35 @@
 # Finds the earlier results this run may reuse, and checks each one before it's believed. Written 2026-11-11 by Melanikus for the AvP
-# port, as step 4 of the CI plan, at PO's go: "any doubt, it runs"; sources only from push and dispatch, never a pull request; the
+# port, as step 4 of the CI plan, at PO's go: "any doubt, it runs"; sources only from runs on avpx_main (after Secondary's attacker's
+# reading, C1: a branch's own tests run with every right in the job that records, so nothing there can vouch for a branch's results); the
 # workflow and these scripts byte for byte the same; the attestation checked with --deny-self-hosted-runners.
 #
-#   tests/reuse/lookup.ps1 -Work <folder> [-Dry]
+#   lookup.ps1 -Root <the repository> -Work <folder> [-Dry]
 #
-# It writes <work>\plan.json, and <work>\skip.txt for tests/build.ps1 -Skip: the tests not to build, as their result is reused.
-# With -Dry (the nightly run), nothing is reused: plan.json then says what WOULD have been, for record.ps1 -Compare.
+# It's run from a copy of tests/reuse taken from HEAD, so it's told where the repository is. It writes <work>\plan.json, and
+# <work>\skip.txt for tests/build.ps1 -Skip: the tests not to build, as their result is reused. With -Dry (the nightly run), nothing is
+# reused: plan.json then says what WOULD have been, for record.ps1 -Compare.
 #
 # A RUN IS A SOURCE ONLY IF ALL OF THESE HOLD (a cached "pass" is input, AvP Tao 3):
-#   1. it's a run of this workflow, in this repository, started by a push or by hand (workflow_dispatch), never by a pull request
-#   2. it succeeded
-#   3. its commit is one this commit was made from (git merge-base --is-ancestor; the job checks out the whole history)
-#   4. at its commit, the workflow file and tests/build.ps1, tests/every_test/ and tests/reuse/ are byte for byte this commit's
-#   5. its records file is attested by this repository's own tests.yml, at that run's branch and commit, on GitHub's own runners
+#   1. it's a run of tests.yml in this repository, ON AVPX_MAIN, started by a push or by the nightly schedule, never by hand or by a
+#      pull request, and it succeeded (Reuse.psm1, Get-SourceRunRefusal)
+#   2. its commit is one this commit was made from (git merge-base --is-ancestor; the job checks out the whole history)
+#   3. at its commit, the workflow file and tests/build.ps1, tests/every_test/ and tests/reuse/ are byte for byte this commit's
+#   4. its records file is attested by this repository's own tests.yml on avpx_main, at that commit, on GitHub's own runners
 #      (gh attestation verify --cert-identity --source-ref --source-digest --deny-self-hosted-runners)
-#   6. the file says it was made by that run, at that commit, and is in the shape this script writes, with nothing else in it
-# AND A RECORD IS REUSED ONLY IF: it says the test ran there and passed; it isn't class C; and its key, worked out again HERE from this
-# commit's files and the record's list of what the compiler read, is the same. The newest such record for each test wins.
-# If anything at all goes wrong, nothing is reused, and the log says why.
+#   5. the file says it was made by that run, at that commit, on avpx_main, and is in the shape record.ps1 writes (Get-RecordsRefusal)
+# AND A RECORD IS REUSED ONLY IF: it says the test ran there and passed; and its key, worked out again HERE from this commit's files, the
+# record's list of what the compiler read and the record's list of the program's imports, is the same, with a class of A or B (the
+# stricter of what the text and the imports say). The newest such record for each test wins. If anything at all goes wrong, nothing is
+# reused, and the log says why.
 
 param(
+    [Parameter(Mandatory = $true)][string]$Root,
     [Parameter(Mandatory = $true)][string]$Work,
     [switch]$Dry
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Reuse.psm1') -Force
-$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 New-Item -ItemType Directory -Force $Work | Out-Null
 $kMostSources = 20
 $repo = "$env:GITHUB_REPOSITORY"
@@ -50,26 +53,28 @@ try
         if (-not $verifyHelp.Contains($flag)) { throw "This gh doesn't know $flag, so no attestation can be checked here" }
     }
 
-    $runs = @((gh api "repos/$repo/actions/workflows/tests.yml/runs?status=success&per_page=100" | ConvertFrom-Json).workflow_runs)
+    # Only runs on avpx_main are asked for, and each is checked again below, whatever GitHub's own filter did
+    $runs = @((gh api "repos/$repo/actions/workflows/tests.yml/runs?branch=$kSourceBranch&status=success&per_page=100" | ConvertFrom-Json).workflow_runs)
     if ($LASTEXITCODE -ne 0) { throw "GitHub didn't list the earlier runs" }
     $candidates = @($runs | Where-Object { (Get-SourceRunRefusal $_ $repo "$env:GITHUB_RUN_ID") -ceq '' })
-    "$($runs.Count) successful runs listed, $($candidates.Count) of them started by a push or by hand in this repository"
-    $verified = ''
+    "$($runs.Count) successful runs on $kSourceBranch listed, $($candidates.Count) of them started by a push or the nightly run in this repository"
 
+    $verified = ''
     $decided = @{}
     $reused = [System.Collections.Generic.List[object]]::new()
-    $shared = Get-SharedParts $root
+    $shared = Get-SharedParts $Root
+    $rules = Get-ImportRules $Root
     $sources = 0
     foreach ($run in $candidates)
     {
         if ($sources -ge $kMostSources) { break }
-        $id = "$($run.id)"; $sha = "$($run.head_sha)"; $branch = "$($run.head_branch)"
+        $id = "$($run.id)"; $sha = "$($run.head_sha)"
 
-        & git -C $root cat-file -e "$sha^{commit}" 2>$null
+        & git -C $Root cat-file -e "$sha^{commit}" 2>$null
         if ($LASTEXITCODE -ne 0) { $notes.Add("run $id ($sha): that commit isn't in this history"); continue }
-        & git -C $root merge-base --is-ancestor $sha HEAD
+        & git -C $Root merge-base --is-ancestor $sha HEAD
         if ($LASTEXITCODE -ne 0) { $notes.Add("run $id ($sha): not a commit this one was made from"); continue }
-        & git -C $root diff --quiet $sha HEAD -- @($kMachinery)
+        & git -C $Root diff --quiet $sha HEAD -- @($kMachinery)
         if ($LASTEXITCODE -ne 0) { $notes.Add("run $id ($sha): its workflow or reuse scripts aren't this commit's"); continue }
         $sources++
 
@@ -79,9 +84,8 @@ try
         $file = Join-Path $folder 'records.json'
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $file)) { $notes.Add("run $id ($sha): no records to download (none kept, or past 30 days)"); continue }
 
-        gh attestation verify $file --repo $repo --cert-identity "https://github.com/$repo/.github/workflows/tests.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $sha --deny-self-hosted-runners 2>&1 | Out-Null
+        gh attestation verify $file --repo $repo --cert-identity "https://github.com/$repo/.github/workflows/tests.yml@refs/heads/$kSourceBranch" --source-ref "refs/heads/$kSourceBranch" --source-digest $sha --deny-self-hosted-runners 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { $notes.Add("run $id ($sha): its records' attestation didn't check out, so none is believed"); continue }
-
         if (-not $verified) { $verified = $file }   # for the key rows' check that one byte changed fails the attestation
 
         # The file, read strictly: anything not in the shape record.ps1 writes, and none of it is believed
@@ -93,12 +97,11 @@ try
         {
             $test = "$($record.test)"
             if ($decided.ContainsKey($test)) { continue }
-            if (-not (Test-Path -LiteralPath (Join-Path $root "tests/$test.args"))) { $decided[$test] = "gone"; continue }
+            if ($null -eq (Get-HeadBytes $Root "tests/$test.args")) { $decided[$test] = 'gone'; continue }
             if ($record.result -cne 'passed') { $decided[$test] = "it failed in run $id"; continue }
-            if ($record.class -ceq 'C') { $decided[$test] = 'class C: always runs'; continue }
-            try { $mine = Get-ReuseKey $root $test 'unit' ([string[]]@($record.includes)) $shared }
+            try { $mine = Get-ReuseKey $Root $test 'unit' ([string[]]@($record.includes)) ([string[]]@($record.imports)) $shared $rules }
             catch { $decided[$test] = "its key couldn't be worked out here: $_"; continue }
-            if ($mine.class -ceq 'C') { $decided[$test] = 'class C here: always runs'; continue }
+            if ($mine.class -ceq 'C') { $decided[$test] = "class C (text $($mine.textClass), imports $($mine.importClass)): always runs"; continue }
             if ($mine.key -cne "$($record.key)") { $decided[$test] = "run $id's record differs: $(Get-FirstDifference $mine @($record.parts))"; continue }
             $decided[$test] = "reused from run $id"
             $reused.Add([ordered]@{ test = $test; run = $id; sha = $sha; key = $mine.key; class = $mine.class })
