@@ -79,8 +79,14 @@ int const kAlienWaysOffTheWay = 3000;             // mm: an alien this far from 
 int const kAlienWaysAskAgainAfter = 2000;         // ms: a way this old is searched for again, and followed till the new one comes
 int const kAlienWaysGoalMoved = 3000;             // mm: a goal that's moved this far since the search is searched for again
 int const kAlienWaysHeadway = 100;                // mm: getting this much nearer to the next point counts as headway...
-int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this many ms, the alien is stuck: its way is dropped...
-int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
+// THE SHORTER WAITS (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109): the owner, after his play on 26457ece, "maybe
+// reduce the time to re-path when stuck". No headway for 900 ms (was 1500) is stuck, and the rest after a stuck at a way's start is
+// 1000 ms (was 3000). 900 and not less: headway is 100 mm nearer the next point, and an alien slowing to turn at a corner can make
+// none for half a second, so the stuck test has to give it more than that; and it comes after the slide's 500 ms, so a slide is tried
+// first. Shorter waits only bring the watchdog's re-plan sooner. They can't stop it (R-LAVA-9). THE CAP stays 3 re-plans a minute: it's the
+// guard on the searches' time, and his play never used it up.
+int const kAlienWaysNoHeadwayFor = 900;           // ...and with none for this many ms, the alien is stuck: its way is dropped...
+int const kAlienWaysRestAfterStuck = 1000;        // ...and the game's own code steers it for this many ms before it asks again
 int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
 
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port: THE CLOCK and THE WATCHDOG (#109; PO's ruling R-LAVA-P3, in AvP-docs\RULINGS.md).
@@ -137,7 +143,7 @@ int const kAlienWaysTakeBackRange = 10000;        // mm
 // - So that it can't stand pushing a wall for the whole rest: if it hasn't moved kAlienWaysRestMovedOn in kAlienWaysRestStillFor, the rest
 //   ends and it re-plans at once, within THE CAP. The polygon it was stuck at is shut for it already, so the new way goes round it. With
 //   its re-plans used up, it rests on.
-int const kAlienWaysRestStillFor = 1000;          // ms
+int const kAlienWaysRestStillFor = 500;           // ms (was 1000: THE SHORTER WAITS, above; modified 2026-11-11 by Melanikus (Third))
 int const kAlienWaysRestMovedOn = 300;            // mm: a cell of the grid
 
 // THE SLIDE. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner's ruling R-LAVA-4b ("if there is nothing we can do
@@ -193,7 +199,9 @@ int const kAlienWaysMostSlideMs = 1500;           // ms
 //   guide's, PushSlide), and its line only where an alien gets to (the game's). It slides only with all of them passed, so the level's
 //   walls come back on with its box clear of every face: it never comes back on inside one ("keep the collisioning system on otherwise").
 int const kAlienWaysSlideClear = 25;              // mm
-int const kAlienWaysMostPush = 300;               // mm
+// 500 mm: the owner's ruling R-LAVA-6, now 0.5 m (2026-11-11, from Secondary's copy of his two inside-corner refusals, which needed 0.37
+// and 0.47 m). It was 300. The slide's own 1 m bound and every check made again after a push stay as they are.
+int const kAlienWaysMostPush = 500;               // mm
 int const kAlienWaysPushRounds = 3;
 
 // One of the rays the game sends from the box's middle at a slide's end that was stopped short: its way (of length 1), how far short of

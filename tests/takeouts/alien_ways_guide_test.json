@@ -2309,6 +2309,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "the stuck test fires on an alien slowing to turn",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.h",
+					"from": "int const kAlienWaysNoHeadwayFor = 900; ",
+					"to": "int const kAlienWaysNoHeadwayFor = 300; "
+				}
+			]
 		}
 	]
 }

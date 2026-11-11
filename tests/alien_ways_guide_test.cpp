@@ -494,18 +494,19 @@ static void Stuck()
 	bool steered = true;
 	int ms = 0;
 
-	for (; ms < 1400; ms += 100)
+	// The times are kAlienWaysNoHeadwayFor's and kAlienWaysRestAfterStuck's (THE SHORTER WAITS; modified 2026-11-11 by Melanikus (Third))
+	for (; ms < kAlienWaysNoHeadwayFor - 100; ms += 100)
 	{
 		steered = steered && guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 		Frame(guide, map, 100);
 	}
 
-	Check(steered, "an alien that makes no headway is still guided for 1.4 s");
-	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "and at 1.4 s");
+	Check(steered, "an alien that makes no headway is still guided till a frame before kAlienWaysNoHeadwayFor");
+	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "and at that frame");
 	Frame(guide, map, 100);
-	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "at 1.5 s with no headway it's stuck: the game's own code has it");
+	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "at kAlienWaysNoHeadwayFor with no headway it's stuck: the game's own code has it");
 
-	// For 3 s it isn't guided and asks for nothing. The one report in that time says it was found stuck, and where it was heading.
+	// For its rest it isn't guided and asks for nothing. The one report in that time says it was found stuck, and where it was heading.
 	bool asked = false, guided = false;
 	int stuckReports = 0;
 	bool stuckSaysWhere = false;
@@ -513,7 +514,7 @@ static void Stuck()
 
 	// It shuffles 400 mm back and forth meanwhile, so the rest isn't ended early (THE REST, HELD FROM AVOIDING: modified 2026-11-11 by
 	// Melanikus (Third) for the AvP port, #109)
-	for (ms = 0; ms < 2900; ms += 100)
+	for (ms = 0; ms < kAlienWaysRestAfterStuck - 100; ms += 100)
 	{
 		Frame(guide, map, 100);
 		const AlienWaysReport *reports = nullptr;
@@ -536,7 +537,7 @@ static void Stuck()
 		guided = guided || guide.Steer(&map, Ask(Alien(1), AlienWaysXYZ{ 1000, 0, 500 + 400 * ((ms / 400) % 2) }, kGoal, 13), &towards);
 	}
 
-	Check(!asked && !guided, "for the next 3 s it's left to the game's own code, and asks for no way");
+	Check(!asked && !guided, "for its rest after the stuck it's left to the game's own code, and asks for no way");
 
 	// Its way is kept for the view meanwhile, dimmed, so the line doesn't vanish when it's stuck (the owner, 2026-11-11; added the same day
 	// by Melanikus (Third) for the AvP port, #109)
@@ -574,14 +575,15 @@ static void TheClock()
 	AlienWaysXYZ towards;
 	AlienWaysXYZ const nearer = { 1000, 0, 5500 };   // 4 m from kGoal: a goal that moves between the two asks for a new way each time
 
-	// Held at the start while its goal moves 4 m every 400 ms: a new way every 400 ms, and still found stuck 1.5 s after the first
+	// Held at the start while its goal moves 4 m every 200 ms: a new way every 200 ms, and still found stuck kAlienWaysNoHeadwayFor after the
+	// first (modified 2026-11-11 by Melanikus (Third): every 400 ms, and 1.5 s, before THE SHORTER WAITS)
 	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
 	AlienWaysGuide &guide = *guideRoom;
 	int firstWayAt = -1, stuckAt = -1, ways = 0;
 
 	for (int ms = 0; ms < 4000 && stuckAt < 0; ms += 100)
 	{
-		guide.Steer(&map, Ask(Alien(1), kStart, (ms / 400) % 2 == 0 ? kGoal : nearer, 13), &towards);
+		guide.Steer(&map, Ask(Alien(1), kStart, (ms / 200) % 2 == 0 ? kGoal : nearer, 13), &towards);
 		Frame(guide, map, 100);
 		const AlienWaysReport *reports = nullptr;
 		size_t const count = ReportsOf(guide, &reports);
@@ -600,21 +602,23 @@ static void TheClock()
 		}
 	}
 
-	Check(ways >= 4, "its goal moving 4 m every 400 ms, an alien held at the start gets a new way each time");
-	Check(firstWayAt >= 0 && stuckAt >= firstWayAt + 1400 && stuckAt <= firstWayAt + 1700,
-		"and making no headway, it's found stuck 1.5 s after its first way all the same: a new way doesn't start the clock again");
+	Check(ways >= 4, "its goal moving 4 m every 200 ms, an alien held at the start gets a new way each time");
+	Check(firstWayAt >= 0 && stuckAt >= firstWayAt + kAlienWaysNoHeadwayFor - 100 && stuckAt <= firstWayAt + kAlienWaysNoHeadwayFor + 200,
+		"and making no headway, it's found stuck kAlienWaysNoHeadwayFor after its first way all the same: a new way doesn't start the clock again");
 
 	// One that has moved 1 m since it last made headway (here further from its next point, so it made none) starts the clock again with
-	// its new way: it's found stuck 1.5 s after that way, not after its first
+	// its new way: it's found stuck kAlienWaysNoHeadwayFor after that way, not after its first. It moves at movedAt, before its first way's
+	// stuck would come.
 	const std::unique_ptr<AlienWaysGuide> movedRoom(new AlienWaysGuide);
 	AlienWaysGuide &moved = *movedRoom;
 	AlienWaysXYZ const along = { 1000, 0, 1700 };   // 1.2 m on from the start, and further from the wall's foot it was heading for
 	int newWayAt = -1;
+	int const movedAt = (kAlienWaysNoHeadwayFor / 200) * 100;
 	firstWayAt = stuckAt = -1;
 
 	for (int ms = 0; ms < 4000 && stuckAt < 0; ms += 100)
 	{
-		bool const hasMoved = ms >= 1000;
+		bool const hasMoved = ms >= movedAt;
 		moved.Steer(&map, Ask(Alien(1), hasMoved ? along : kStart, hasMoved ? nearer : kGoal, 13), &towards);
 		Frame(moved, map, 100);
 		const AlienWaysReport *reports = nullptr;
@@ -637,8 +641,34 @@ static void TheClock()
 		}
 	}
 
-	Check(firstWayAt == 0 && newWayAt == 1000, "an alien that has moved on 1.2 m, its goal 4 m on too, gets a new way");
-	Check(stuckAt >= newWayAt + 1400 && stuckAt <= newWayAt + 1700, "and the clock starts again with it: it's found stuck 1.5 s after that way");
+	Check(firstWayAt == 0 && newWayAt == movedAt, "an alien that has moved on 1.2 m, its goal 4 m on too, gets a new way");
+	Check(stuckAt >= newWayAt + kAlienWaysNoHeadwayFor - 100 && stuckAt <= newWayAt + kAlienWaysNoHeadwayFor + 200,
+		"and the clock starts again with it: it's found stuck kAlienWaysNoHeadwayFor after that way");
+
+	// Slowing to turn at a corner (THE SHORTER WAITS, alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): an
+	// alien that gets only kAlienWaysHeadway nearer every 400 ms, for longer than kAlienWaysNoHeadwayFor, is never found stuck, nor made to slide
+	const std::unique_ptr<AlienWaysGuide> slowRoom(new AlienWaysGuide);
+	AlienWaysGuide &slow = *slowRoom;
+	slow.SetSlides(true);
+	GuidedAlien(slow, Alien(1));
+	bool slowStuck = false, slowSlid = false;
+
+	for (int ms = 0; ms < 1600; ms += 100)
+	{
+		AlienWaysXYZ const at = { 1000 - kAlienWaysHeadway * (ms / 400), 0, 500 };
+		slow.Steer(&map, Ask(Alien(1), at, kGoal, 13), &towards);
+		Frame(slow, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(slow, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			slowStuck = slowStuck || reports[r].outcome == kAlienWaysOutcomeStuck;
+			slowSlid = slowSlid || reports[r].outcome == kAlienWaysOutcomeSlide;
+		}
+	}
+
+	Check(!slowStuck && !slowSlid, "an alien that gets only 100 mm nearer every 400 ms, slowing to turn, is never found stuck, nor made to slide");
 }
 
 // THE WATCHDOG (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's ruling R-LAVA-P3).
@@ -660,7 +690,7 @@ static void ReplansAtOnce()
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Check(guide.Steer(&map, onTheWall, &towards) && Same(towards, kUpTheWall), "on the wall, it heads up it");
 	Held const held = HeldTillStuck(guide, map, onTheWall, 3000);
-	Check(held.stuck && held.took >= 1400 && held.took <= 1600, "held there, it's found stuck after 1.5 s");
+	Check(held.stuck && held.took >= kAlienWaysNoHeadwayFor - 100 && held.took <= kAlienWaysNoHeadwayFor + 100, "held there, it's found stuck after kAlienWaysNoHeadwayFor");
 	Check(held.line.afterStuck == kAlienWaysReplans && held.line.replan == 1 && held.line.shutPolygon == TheWall(),
 		"it re-plans at once, its first re-plan this minute, and the wall it was heading up is shut for it");
 	Check(held.resting, "until its new way comes, the mover leaves it to the game's own code, as in a rest");
@@ -890,7 +920,7 @@ static AlienWaysAsk AtItsTarget(AlienWaysXYZ at, AlienWaysXYZ target)
 // avoiding in its rest after a stuck, an alien that doesn't get on mustn't stand pushing a wall the whole rest (PO, 2026-11-11).
 static void RestEndsEarly()
 {
-	printf("The rest after a stuck: one that doesn't move on re-plans after 1 s\n");
+	printf("The rest after a stuck: one that doesn't move on re-plans after kAlienWaysRestStillFor\n");
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
 
@@ -926,18 +956,20 @@ static void RestEndsEarly()
 		}
 	}
 
-	Check(endedAt >= 800 && endedAt <= 1200 && replan == 1, "not having moved on, it ends its rest after 1 s, with its first re-plan of the minute (" +
+	Check(endedAt >= kAlienWaysRestStillFor - 200 && endedAt <= kAlienWaysRestStillFor + 200 && replan == 1,
+		"not having moved on, it ends its rest after kAlienWaysRestStillFor, with its first re-plan of the minute (" +
 		std::to_string(endedAt) + " ms)");
 	Check(wayAt >= endedAt && wayAt <= endedAt + 200 && afterReplan && byTheOther,
 		"and its new way comes at once, a re-plan's, by the other wall: the one it was stuck heading for is shut for it");
 
-	// One that moves on, 400 mm every 400 ms, rests its full 3 s, as the game's own code is getting it free
+	// One that moves on, 400 mm every 400 ms (oftener than kAlienWaysRestStillFor), rests its full rest, as the game's own code is getting
+	// it free
 	const std::unique_ptr<AlienWaysGuide> movingRoom(new AlienWaysGuide);
 	AlienWaysGuide &moving = *movingRoom;
 	Held const stuck = HeldTillStuck(moving, map, Ask(Alien(1), kStart, kGoal, 13), 3000);
 	bool ended = false, asked = false;
 
-	for (int ms = 0; ms < 2800; ms += 100)
+	for (int ms = 0; ms < kAlienWaysRestAfterStuck - 200; ms += 100)
 	{
 		AlienWaysXYZ const at = { 1000, 0, 500 + 400 * ((ms / 400) % 2) };
 		moving.Steer(&map, Ask(Alien(1), at, kGoal, 13), &towards);
@@ -952,7 +984,7 @@ static void RestEndsEarly()
 		}
 	}
 
-	Check(stuck.stuck && !ended && !asked, "one that keeps moving on rests its full 3 s, asking for nothing");
+	Check(stuck.stuck && !ended && !asked, "one that keeps moving on rests its full rest, asking for nothing");
 }
 
 // THE SLIDE (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109). The owner's rulings R-LAVA-4b and R-LAVA-7:
@@ -1020,14 +1052,15 @@ static void Slides()
 	Check(guide.Steer(&map, Ask(Alien(1), near, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "while it slides, it heads for that point");
 
 	// PUSH CLEAR (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the game pushes its end clear of the
-	// level, and the guide checks the slide again for where it ends then. More than 0.3 m is refused; so is a push that makes its gap 1 m
+	// level, and the guide checks the slide again for where it ends then. More than kAlienWaysMostPush (0.5 m) is refused; so is a push
+	// that makes its gap 1 m
 	// or more (150 mm further from it, into the wall: 1.05 m). Neither changes the point. A push of 0.2 m up is kept: it slides to the
 	// point 0.2 m higher, from where it was.
 	const char *why = 0;
-	bool const tooFar = !guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -310, 0 }, &why) && why != 0;
+	bool const tooFar = !guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -(kAlienWaysMostPush + 10), 0 }, &why) && why != 0;
 	bool const tooWide = !guide.PushSlide(Alien(1), AlienWaysXYZ{ -kAwayFromWall * 150, 0, 0 }, &why) && why != 0;
 	Check(tooFar && tooWide && guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall),
-		"a push of more than 0.3 m, or one that makes its gap 1 m or more, is refused, and the point is as it was");
+		"a push of more than kAlienWaysMostPush, or one that makes its gap 1 m or more, is refused, and the point is as it was");
 	Check(guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -200, 0 }, &why) && why == 0 && guide.Sliding(Alien(1), &to, &from, &next) &&
 		Same(AlienWaysXYZ{ to.x, to.y, to.z }, AlienWaysXYZ{ kOntoTheWall.x, kOntoTheWall.y - 200, kOntoTheWall.z }) && Same(from, near),
 		"a push of 0.2 m up is kept: it slides to the point 0.2 m higher, from where it was");
@@ -1657,13 +1690,13 @@ static void DrivenThroughAGap()
 	AlienWaysGuide &stuck = *stuckRoom;
 	GuidedAlien(stuck, Alien(3));
 
-	for (int ms = 0; ms < 1700; ms += 100)
+	for (int ms = 0; ms < kAlienWaysNoHeadwayFor + 200; ms += 100)
 	{
 		stuck.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards);
 		Frame(stuck, map, 100);
 	}
 
-	Check(!stuck.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards), "an alien that made no headway for 1.5 s is resting");
+	Check(!stuck.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards), "an alien that made no headway for kAlienWaysNoHeadwayFor is resting");
 	Frame(stuck, map, 16);
 	Check(!stuck.Drive(&map, Alien(3), kStart, kUpright65536, &driven), "and while it rests it isn't driven");
 }
