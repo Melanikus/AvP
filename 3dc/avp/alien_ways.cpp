@@ -107,6 +107,28 @@ namespace
 	// How many lines this level has had about aliens let go (kAlienWaysMostLetGoLines at most)
 	int letGoLines = 0;
 
+	// THE ALIENS SEEN THIS LEVEL, for the lines that follow one alien by its id (alien_ways_stuck.h): every alien that has asked for a way, by
+	// its name, with the guide's place it last had, when the guide found its first way, the target it last came for, and whether it has
+	// reached a target yet. The watched list above keeps only as many as the guide guides at once, and makes room by forgetting one, so this
+	// is kept apart from it. At most kAlienWaysMostSeen a level; an alien past that gets no reached line, and the log says so once.
+	// Log lines only: nothing here changes what an alien does. Added 2026-11-11 by Melanikus for the AvP port (#109).
+	struct Seen
+	{
+		uint64_t name = 0;
+		size_t slot = 0;               // the guide's place it last had
+		long long firstWayMs = -1;     // when its first way was found, in the level's time (clockMs); below 0 until then
+		bool hasTarget = false;
+		AlienWaysWho target = {};      // the target it last came for
+		bool reached = false;          // its reached line has been written
+	};
+
+	size_t const kAlienWaysMostSeen = 4096;
+	std::vector<Seen> seen;
+	bool toldSeenFull = false;
+
+	// How many reached lines this level has had (kAlienWaysMostReachedLines at most)
+	int reachedLines = 0;
+
 	// The game's time this level, in ms, from the frames' own lengths, and how many lines it has had about a test that would have sent an
 	// alien off (AlienWays_WouldHaveAvoided)
 	long long clockMs = 0;
@@ -287,6 +309,126 @@ static Watched *WatchedFor(const AlienWaysWho &who, bool make)
 	return room;
 }
 
+// This alien's entry in the seen list, by its name (THE ALIENS SEEN THIS LEVEL, above). With make, one not on it is put on it while there's
+// room. Nothing if it isn't on it and can't be. Looked for from the newest, as the aliens a frame asks about are mostly the latest ones.
+// Added 2026-11-11 by Melanikus for the AvP port (#109).
+static Seen *SeenFor(uint64_t name, bool make)
+{
+	for (size_t i = seen.size(); i > 0; i--)
+	{
+		if (seen[i - 1].name == name)
+		{
+			return &seen[i - 1];
+		}
+	}
+
+	if (!make)
+	{
+		return 0;
+	}
+
+	if (seen.size() >= kAlienWaysMostSeen)
+	{
+		if (!toldSeenFull)
+		{
+			toldSeenFull = true;
+			LogString("alien ways: more than " + std::to_string(kAlienWaysMostSeen) + " aliens asked for a way this level, so the rest get no reached line");
+		}
+
+		return 0;
+	}
+
+	Seen fresh;
+	fresh.name = name;
+	seen.push_back(fresh);
+	return &seen.back();
+}
+
+// The guide's place to name an alien by in a line: the one it has now, or else the last one it had (an alien let go has none any more).
+// Added 2026-11-11 by Melanikus for the AvP port (#109).
+static size_t SlotOf(const AlienWaysWho &who)
+{
+	int const now = theGuide.PlaceOf(who);
+
+	if (now >= 0)
+	{
+		return static_cast<size_t>(now);
+	}
+
+	Seen const *const s = SeenFor(who.name, false);
+	return s ? s->slot : 0;
+}
+
+// The game's block at who's place, if it's still that one (the same name), whatever it is now: an alien, or the corpse a dead one becomes.
+// Nothing if the block there is another one, or there's none. Added 2026-11-11 by Melanikus for the AvP port (#109).
+static STRATEGYBLOCK *BlockOf(const AlienWaysWho &who)
+{
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const object = ActiveStBlockList[i];
+
+		if (object && static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)) == who.place)
+		{
+			return WhoIs(object).name == who.name ? object : 0;
+		}
+	}
+
+	return 0;
+}
+
+// Why an alien the guide let go left it, when it wasn't for a state of its own: one of alien_ways_stuck.h's AlienWaysLeaving (LEAVES THE
+// GUIDE), asked in that order. -1 when it left for a state of its own, which the let-go line says. alien is LiveAlien(who): nothing for one
+// that's dead or gone. Added 2026-11-11 by Melanikus for the AvP port (#109).
+static int WhyItLeaves(const AlienWaysWho &who, const STRATEGYBLOCK *alien)
+{
+	if (!alien)
+	{
+		return BlockOf(who) ? kAlienWaysLeavesDead : kAlienWaysLeavesGone;
+	}
+
+	if (StateOf(alien) == ABS_Dying || alien->SBDamageBlock.Health <= 0)
+	{
+		return kAlienWaysLeavesDead;
+	}
+
+	// An alien out of view has no display block, and the game runs it by its far AI (AlienBehaviour, bh_alien.cpp)
+	if (!alien->SBdptr)
+	{
+		return kAlienWaysLeavesFar;
+	}
+
+	Seen const *const s = SeenFor(who.name, false);
+
+	if (s && s->hasTarget)
+	{
+		STRATEGYBLOCK const *const target = BlockOf(s->target);
+
+		if (!target || target->SBDamageBlock.Health <= 0)
+		{
+			return kAlienWaysLeavesTargetGone;
+		}
+	}
+
+	return -1;
+}
+
+// How far a live alien is from the target it last came for, in metres, or -1 if that isn't known (REACHED, alien_ways_stuck.h). Added
+// 2026-11-11 by Melanikus for the AvP port (#109).
+static double MetresToItsTarget(const STRATEGYBLOCK *alien, const Seen &s)
+{
+	STRATEGYBLOCK const *const target = s.hasTarget ? BlockOf(s.target) : 0;
+
+	if (!target || !target->DynPtr || !alien->DynPtr)
+	{
+		return -1.0;
+	}
+
+	double const dx = static_cast<double>(target->DynPtr->Position.vx) - alien->DynPtr->Position.vx;
+	double const dy = static_cast<double>(target->DynPtr->Position.vy) - alien->DynPtr->Position.vy;
+	double const dz = static_cast<double>(target->DynPtr->Position.vz) - alien->DynPtr->Position.vz;
+	return sqrt(dx * dx + dy * dy + dz * dz) / 1000.0;
+}
+
 // What the game says about an alien the guide found stuck, for the rest of its line (alien_ways_stuck.h)
 static std::string StuckDetails(const AlienWaysWho &who)
 {
@@ -391,13 +533,28 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 	// What the game says about an alien found stuck, after the line's first part (alien_ways_stuck.h)
 	std::string details;
 
+	// Modified 2026-11-11 by Melanikus for the AvP port (#109): each line names its alien as "alien N (id S)", its place in the guide and its
+	// lasting id (alien_ways_stuck.h, AN ALIEN'S ID IN THE LOG), where it said "alien N". And the first way found for an alien starts the clock
+	// its reached line gives (REACHED, there).
+	std::string const alien = AlienWaysStuck_Who(line.follower, line.who.name);
+
+	if (line.outcome == kAlienWaysOutcomeFound || line.outcome == kAlienWaysOutcomeAllFloor)
+	{
+		Seen *const s = SeenFor(line.who.name, false);
+
+		if (s && s->firstWayMs < 0)
+		{
+			s->firstWayMs = clockMs;
+		}
+	}
+
 	switch (line.outcome)
 	{
 		case kAlienWaysOutcomeFound:
 		case kAlienWaysOutcomeAllFloor:
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: %s%d points, %.1f m of floor, %.1f m of wall, %.1f m of ceiling%s. "
+			snprintf(text, sizeof(text), "alien ways: %s %s: %s%d points, %.1f m of floor, %.1f m of wall, %.1f m of ceiling%s. "
 				"Searched in %d frame%s, %.2f ms, %d %s looked at, %lld ms after it asked",
-				static_cast<unsigned>(line.follower), where.c_str(),
+				alien.c_str(), where.c_str(),
 				line.outcome == kAlienWaysOutcomeAllFloor ? "a way all on the floor, so the game steers it as always: " : "a way of ",
 				line.points, line.floorMm / 1000.0, line.wallMm / 1000.0, line.ceilingMm / 1000.0, line.cutShort ? ", cut short there" : "",
 				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, looked, line.waitedMs);
@@ -420,8 +577,8 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 
 		case kAlienWaysOutcomeNoWay:
 			// A grid search that looked at as many cells as it may and stopped says so, so a film can tell it from a way that isn't there
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: no way joins up%s. Searched in %d frame%s, %.2f ms, %d %s looked at",
-				static_cast<unsigned>(line.follower), where.c_str(), line.tooFar ? ": the search stopped without reaching the goal" : "",
+			snprintf(text, sizeof(text), "alien ways: %s %s: no way joins up%s. Searched in %d frame%s, %.2f ms, %d %s looked at",
+				alien.c_str(), where.c_str(), line.tooFar ? ": the search stopped without reaching the goal" : "",
 				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, looked);
 			break;
 
@@ -429,14 +586,14 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 		{
 			// Which end had no polygon near, so a film shows it by name
 			const char *const which = line.fromKind < 0 && line.toKind < 0 ? "both it and where it's going are" : (line.fromKind < 0 ? "it is" : "where it's going is");
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: not searched, as %s more than %.1f m from any polygon of the map",
-				static_cast<unsigned>(line.follower), where.c_str(), which, kAlienWaysNearEnough / 1000.0);
+			snprintf(text, sizeof(text), "alien ways: %s %s: not searched, as %s more than %.1f m from any polygon of the map",
+				alien.c_str(), where.c_str(), which, kAlienWaysNearEnough / 1000.0);
 			break;
 		}
 
 		case kAlienWaysOutcomeStuck:
-			snprintf(text, sizeof(text), "alien ways: alien %u stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s%s",
-				static_cast<unsigned>(line.follower), Metres(line.from).c_str(), Metres(line.to).c_str(),
+			snprintf(text, sizeof(text), "alien ways: %s stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s%s",
+				alien.c_str(), Metres(line.from).c_str(), Metres(line.to).c_str(),
 				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
 				kAlienWaysNoHeadwayFor / 1000.0, AfterStuckWords(line).c_str());
 			details = StuckDetails(line.who);
@@ -444,7 +601,7 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 
 		case kAlienWaysOutcomeRefused:
 		default:
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: the search was refused: %s", static_cast<unsigned>(line.follower), where.c_str(),
+			snprintf(text, sizeof(text), "alien ways: %s %s: the search was refused: %s", alien.c_str(), where.c_str(),
 				line.why ? line.why : "no reason given");
 			break;
 	}
@@ -623,6 +780,45 @@ void AlienWays_Frame()
 		AlienWaysStateHistory_Note(&w.history, StateOf(alien));
 	}
 
+	// The guide's place each alien has now, noted on the seen list before the guide's turn can let any go, so a line about one let go can
+	// still name it by the place it had (SlotOf). Added 2026-11-11 by Melanikus for the AvP port (#109).
+	for (size_t slot = 0; slot < kAlienWaysMostFollowers; slot++)
+	{
+		AlienWaysWho who;
+		Seen *const s = theGuide.WhoAt(slot, &who) ? SeenFor(who.name, false) : 0;
+
+		if (s)
+		{
+			s->slot = slot;
+		}
+	}
+
+	// REACHED (alien_ways_stuck.h): an alien that has asked for a way, in its own Attack for the first time this level, is a line, with how
+	// long it's been since its first way and how far it is from the target it last came for. Every live alien is looked at, not only the
+	// watched ones, since one let go earlier (to Hunt, say) can still come on and attack. It's done before the guide's turn, so this line
+	// comes before the one that lets it go for Attack. Log lines only. Added 2026-11-11 by Melanikus for the AvP port (#109).
+	for (int i = 0; i < NumActiveStBlocks && reachedLines < kAlienWaysMostReachedLines; i++)
+	{
+		STRATEGYBLOCK *const alien = ActiveStBlockList[i];
+
+		if (!alien || alien->I_SBtype != I_BehaviourAlien || !alien->DynPtr || StateOf(alien) != ABS_Attack)
+		{
+			continue;
+		}
+
+		AlienWaysWho const who = WhoIs(alien);
+		Seen *const s = SeenFor(who.name, false);
+
+		if (!s || s->reached)
+		{
+			continue;
+		}
+
+		s->reached = true;
+		reachedLines++;
+		LogString(AlienWaysStuck_ReachedLine(SlotOf(who), who.name, s->firstWayMs < 0 ? -1 : clockMs - s->firstWayMs, MetresToItsTarget(alien, *s)));
+	}
+
 	// The doors as they are now, before this frame's searches carry on: a search keeps off a door that won't let an alien through (#118)
 	AlienWaysLevel_ReadDoors(theDoors, ReadyMap());
 
@@ -667,10 +863,17 @@ void AlienWays_Frame()
 	{
 		STRATEGYBLOCK *const letGo = LiveAlien(lapsed[i]);
 
-		if (letGo && letGoLines < kAlienWaysMostLetGoLines)
+		// Modified 2026-11-11 by Melanikus for the AvP port (#109): every alien let go is one line, naming it by its id: why it left the guide
+		// (dead, gone, far, or its target gone: WhyItLeaves), or else the state it left for. One that was dead or gone had no line before.
+		if (letGoLines < kAlienWaysMostLetGoLines)
 		{
+			int const why = WhyItLeaves(lapsed[i], letGo);
+			size_t const slot = SlotOf(lapsed[i]);
 			letGoLines++;
-			LogString(AlienWaysStuck_LetGoLine(StateOf(letGo), letGo->DynPtr->Position.vx, letGo->DynPtr->Position.vy, letGo->DynPtr->Position.vz));
+
+			// WhyItLeaves gives -1 only for a live alien, so letGo is there whenever its state is asked for
+			LogString(why >= 0 || !letGo ? AlienWaysStuck_LeavesLine(slot, lapsed[i].name, why)
+				: AlienWaysStuck_LetGoLine(slot, lapsed[i].name, StateOf(letGo), letGo->DynPtr->Position.vx, letGo->DynPtr->Position.vy, letGo->DynPtr->Position.vz));
 
 			if (letGoLines == kAlienWaysMostLetGoLines)
 			{
@@ -705,7 +908,12 @@ void AlienWays_Frame()
 			for (size_t i = 0; i < guided; i++)
 			{
 				const char *const on = kinds[i] == kAlienWaysFloor ? "the floor" : (kinds[i] == kAlienWaysWall ? "a wall" : (kinds[i] == kAlienWaysCeiling ? "the ceiling" : "nothing known"));
-				places += std::string(i == 0 ? " " : "; ") + "alien " + std::to_string(slots[i]) + " at " + Metres(at[i]) + " on " + on;
+
+				// Each alien by its place and its id (alien_ways_stuck.h), modified 2026-11-11 by Melanikus for the AvP port (#109). A guided
+				// place always has an alien, so who is always filled; were it not, the id would read as sixteen 0s.
+				AlienWaysWho who = { 0, 0 };
+				theGuide.WhoAt(slots[i], &who);
+				places += std::string(i == 0 ? " " : "; ") + AlienWaysStuck_Who(slots[i], who.name) + " at " + Metres(at[i]) + " on " + on;
 			}
 
 			LogString(places);
@@ -944,6 +1152,16 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	w->goal = *goal;
 	w->lastAsked = frameNumber;
 
+	// And on the seen list, with the target it's coming for, for the lines that follow it by its id (THE ALIENS SEEN THIS LEVEL). An ask
+	// with no target leaves the last one known. Added 2026-11-11 by Melanikus for the AvP port (#109).
+	Seen *const seenNow = SeenFor(ask.who.name, true);
+
+	if (seenNow && ask.hasTarget)
+	{
+		seenNow->hasTarget = true;
+		seenNow->target = ask.target;
+	}
+
 	// The mover, with -alienwaysmover: where it heads is picked here, the same whatever its state (MoverGoal, above)
 	if (AlienWaysMoverSwitchedOn)
 	{
@@ -989,8 +1207,12 @@ void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)
 	AlienWaysXYZ const at = { alien->DynPtr->Position.vx, alien->DynPtr->Position.vy, alien->DynPtr->Position.vz };
 	const char *const module = alien->containingModule && alien->containingModule->name ? alien->containingModule->name : "no module";
 	char text[384];
-	snprintf(text, sizeof(text), "alien ways: an alien on its way at %s, in %s, would have been sent off to avoid something: %s. Its body's down is (%d, %d, %d)",
-		Metres(at).c_str(), module,
+
+	// The alien by its place and id (alien_ways_stuck.h), where the line said "an alien": modified 2026-11-11 by Melanikus for the AvP port
+	// (#109), so these lines go with the rest of that alien's
+	AlienWaysWho const who = WhoIs(alien);
+	snprintf(text, sizeof(text), "alien ways: %s on its way at %s, in %s, would have been sent off to avoid something: %s. Its body's down is (%d, %d, %d)",
+		AlienWaysStuck_Who(SlotOf(who), who.name).c_str(), Metres(at).c_str(), module,
 		turnedBack ? "it turned back twice towards the same point (NPC_CannotReachTarget)" : "it ran into something for more than 10 frames in a row (NPC_IsObstructed)",
 		alien->DynPtr->OrientMat.mat21, alien->DynPtr->OrientMat.mat22, alien->DynPtr->OrientMat.mat23);
 	LogString(text);
@@ -1176,6 +1398,11 @@ void AlienWays_LevelEnd()
 		w = Watched();
 	}
 
+	// Nor of the aliens seen, by their ids (added 2026-11-11 by Melanikus for the AvP port, #109)
+	std::vector<Seen>().swap(seen);
+	toldSeenFull = false;
+	reachedLines = 0;
+
 	frameNumber = 0;
 	letGoLines = 0;
 	clockMs = 0;
@@ -1195,4 +1422,9 @@ void AlienWays_LevelRestarts()
 	theGuide.Clear();
 	std::fill(std::begin(watched), std::end(watched), Watched());
 	toldTurnedAway = false;
+
+	// The seen list too, for the same reason: a remade alien's id can be an old one's, and its first way and its reach are new (added
+	// 2026-11-11 by Melanikus for the AvP port, #109). The reached lines' cap runs on, as the others do.
+	std::vector<Seen>().swap(seen);
+	toldSeenFull = false;
 }

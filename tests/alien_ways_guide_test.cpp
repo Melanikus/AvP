@@ -235,6 +235,13 @@ static void FirstWay()
 		"its place is given for the once-a-second line: the guide's first place, where it is, on the floor");
 	Check(guide.GuidedPlaces(slots, places, kinds, 0) == 0, "with no room, no place is given");
 
+	// Which alien has a place, for the log to name it by its id (added 2026-11-11 by Melanikus for the AvP port, #109)
+	AlienWaysWho atFirst = { 0, 0 };
+	AlienWaysWho untouched = { 7, 7 };
+	Check(guide.WhoAt(0, &atFirst) && atFirst.place == Alien(1).place && atFirst.name == Alien(1).name
+		&& !guide.WhoAt(1, &untouched) && !guide.WhoAt(kAlienWaysMostFollowers, &untouched) && untouched.place == 7 && untouched.name == 7,
+		"the guide says which alien has its first place, and nothing, touching nothing, for a place no alien has or that isn't one");
+
 	const AlienWaysPoint *points[4];
 	int counts[4], headings[4];
 	Check(guide.Shown(points, counts, headings, 4) == 1 && counts[0] == 6 && headings[0] == 1, "the view is shown its way: 6 points, heading for the second");
@@ -1563,7 +1570,8 @@ static void SourceOfTheGame()
 	Check(Has(ways, "(line.toTheTarget ? \" (its target)\" : \" (on the way to its target)\")"), "SOURCE: and the log says which goal a search took");
 	Check(Has(steer, "\t\task.goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));"),
 		"SOURCE: otherwise the goal's polygons are looked for in the module the goal is in, found from where it is");
-	Check(Has(ways, "case kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u stuck at %s, heading for %s"),
+	// Modified 2026-11-11 by Melanikus for the AvP port (#109): the line names the alien by its place and id (alien_ways_stuck.h)
+	Check(Has(ways, "case kAlienWaysOutcomeStuck:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s stuck at %s, heading for %s"),
 		"SOURCE: an alien found stuck is a line in the log");
 
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "told = true;");
