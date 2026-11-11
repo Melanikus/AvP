@@ -14,13 +14,15 @@ on:
 permissions:
   contents: read
 
-# One run at a time for each pull request, and for each branch a run is started on by hand: a newer one there stops an older one still
-# going, so runs can't pile up and hold every runner the account has (2026-11-11: runs for six heads at once took every slot, and new runs
-# couldn't start). A push to avpx_main is never stopped by another: each merge keeps its own result, so it gets a group of its own.
+# One run at a time for each pull request, and for each branch a run is started on by hand. A newer run there WAITS for the one going
+# to finish, and never stops it: on 2026-11-11 runs stopped half-way, with jobs still queued, left those jobs stuck where nothing could
+# cancel or delete them, holding every runner the account has, and new runs couldn't start at all. A run that's overtaken only costs
+# minutes; a stuck one costs the whole account (PO). GitHub keeps one waiting run for a group: a third replaces the one waiting, before
+# any of its jobs is queued. A push to avpx_main gets a group of its own: each merge keeps its own result, and never waits for another.
 # Added 2026-11-11 by Melanikus for the AvP port.
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && github.ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   unit-tests:
