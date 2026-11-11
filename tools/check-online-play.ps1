@@ -716,13 +716,11 @@ if (-not (Test-Before $listState.Flat 'if (line && !TheLineIsAgreed(*line)) { re
     Stop-Check "Y: RelayList_ServerState ($listFile line $($listState.Line)) must say a line without the player's yes needs it, before anything else: if (line && !TheLineIsAgreed(*line)) { return kRelayServerNeedsYes; }"
 }
 
-$hostBeforeTheYes = Get-OneDefinition 'Net_HostGame' 'Y' $netFile 'every host'
-
-if (-not (Test-FormBlock $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' @('return NET_FAIL;')) -or
-    -not (Test-Before $hostBeforeTheYes.Flat 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {' 'RelayList_FindRelays();'))
-{
-    Stop-Check "Y: Net_HostGame ($netFile line $($hostBeforeTheYes.Line)) must host nothing online before the player's yes, before it asks the server: if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) { ... return NET_FAIL; }"
-}
+# (Moved from Y to H by Primary, 2026-11-11, agreed with Fourth: "an online host isn't hosted before the player's yes". Net_HostGame no
+# longer asks a server anything itself; it hosts only on the line the player chose, and RelayList_HostLine gives a line only when it has the
+# yes, has been approved and its keys matched. So H checks that the refusal of no chosen line comes first, and that the yes's own refusal
+# is still before anything is made. The join's half of the same rule, no byte to a line before its yes, is relay_list.cpp's: its
+# RelayList_AskForRelayKeysOn refuses a line without the yes first, which Fourth's rules hold.)
 
 # ---- V: version 2 only
 
@@ -842,8 +840,9 @@ if (-not (Test-Before $joining 'RelayEndToEndJoin(' 'enet_host_connect(') -or
 # ---- P: no plain game. Added 2026-11-10 by Melanikus for the AvP port, for the owner's ruling for beta.2 ("LAN is dead", "Everything over
 # nyc3"), in place of L (plain only at home), so the plain game can't come back by accident.
 
-# A host only through a server servers.cfg names: with none, an online game is refused in the function's own block, before anything is made
-$noServer = 'if (online && !Relay_ServerName()[0]) {'
+# A host only on a line the player chose (the owner's ruling, 2026-11-11: "No auto choice, they choose"): with none, an online game is refused
+# in the function's own block, before anything is made
+$noServer = 'if (online && RelayList_HostLine() < 0) {'
 $noServerAt = $hosting.IndexOf($noServer, [System.StringComparison]::Ordinal)
 
 if ((Get-Count $hosting 'bool const online = !netGameData.skirmishMode;') -ne 1 -or ([regex]::Matches($hosting, '\bonline\s*=(?!=)')).Count -ne 1 -or
@@ -895,23 +894,22 @@ foreach ($relative in ($code.Keys | Sort-Object))
     }
 }
 
+# Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the games page's own relay timing, with its socket, went;
+# each line's round trip is the list's own visit's. So the one socket left is a Hudson run's look at its own address, and no socket is
+# given a port at all.
 $ownAddress = Get-OneDefinition 'LoopbackOnlyAddress' 'P' $netFile 'a Hudson run''s look at its own address, by a socket it connects and never sends on'
-$pageTimer = Get-OneDefinition 'Net_TimeTheRelayForThePage' 'P' $netFile 'the games page''s timing of the server''s relay'
 
 foreach ($making in (Get-Calls 'enet_socket_create'))
 {
-    if (-not (Test-Inside $making $ownAddress) -and -not (Test-Inside $making $pageTimer))
+    if (-not (Test-Inside $making $ownAddress))
     {
-        Stop-Check "P: $($making.File) line $($making.Line) makes a socket: only LoopbackOnlyAddress and Net_TimeTheRelayForThePage may, so nothing listens for a search or answers one"
+        Stop-Check "P: $($making.File) line $($making.Line) makes a socket: only LoopbackOnlyAddress may, so nothing listens for a search or answers one"
     }
 }
 
 foreach ($binding in (Get-Calls 'enet_socket_bind'))
 {
-    if (-not (Test-Inside $binding $pageTimer))
-    {
-        Stop-Check "P: $($binding.File) line $($binding.Line) gives a socket a port: only Net_TimeTheRelayForThePage may, so nothing listens for a search or answers one"
-    }
+    Stop-Check "P: $($binding.File) line $($binding.Line) gives a socket a port: nothing may, so nothing listens for a search or answers one"
 }
 
 $searching = Get-OneDefinition 'Net_FindAvPSessions' 'P' $netFile 'the games page''s search'
@@ -942,7 +940,101 @@ foreach ($relative in ($code.Keys | Sort-Object))
     }
 }
 
-Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, and there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games."
+# ---- J: a join goes through its game's own line (Fifth's condition, worded with Fourth, 2026-11-11). A game's servers.cfg line is the
+# place the list's code gave it from its own visit (RelayListServerGame.line); a server's region is only a word, so two lines can both
+# say "newyork" and must never get each other's relay or keys.
+
+$joinRelay = Get-OneDefinition 'RelayJoin' 'J' $netFile 'a join''s relay'
+
+if ($joinRelay.Flat -cne 'relayJoinFailedWhy = kNetRelayNoRelay; relayEndToEndJoinFailed = NULL; return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;')
+{
+    Stop-Check "J: RelayJoin ($netFile line $($joinRelay.Line)) must take the relay of the game's own line and nothing else: return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;"
+}
+
+$lookUp = Get-OneDefinition 'RelayLookUp' 'J' $netFile 'a line''s relay'
+
+if (-not $lookUp.Flat.StartsWith('uint32_t address = 0; int port = 0; if (!RelayList_RelayOf(line, &address, &port) ||', [System.StringComparison]::Ordinal) -or
+    -not (Test-Before $lookUp.Flat 'if (!RelayList_RelayOf(line, &address, &port) ||' 'out->host = address;'))
+{
+    Stop-Check "J: RelayLookUp ($netFile line $($lookUp.Line)) must read a line's relay from the list's code alone (RelayList_RelayOf(line, ...)), first, before it gives any address"
+}
+
+$keysAsked = Get-OneDefinition 'RelayV2Begin' 'J' $netFile 'the start of a channel to a relay'
+$keysCame = Get-OneDefinition 'RelayV2Turn' 'J' $netFile 'a channel''s turn'
+
+if (-not (Test-Refusal $keysAsked.Flat 'if (!RelayList_AskForRelayKeysOn(line, region)) {' 'return false;') -or -not $keysAsked.Flat.Contains('relayV2Line = line;') -or
+    -not $keysCame.Flat.Contains('int const came = RelayList_RelayKeysCameOn(&keysLine, relayV2Keys.p384, relayV2Keys.kem, &listWhy);') -or
+    -not (Test-FormBlock $keysCame.Flat 'if (came != kRelayKeysCame || keysLine != relayV2Line) {' @('return kRelayV2None;')))
+{
+    Stop-Check "J: a relay's keys must be asked of its own line (RelayV2Begin: RelayList_AskForRelayKeysOn(line, region), relayV2Line = line;) and taken only for that line (RelayV2Turn: if (came != kRelayKeysCame || keysLine != relayV2Line) { ... return kRelayV2None; })"
+}
+
+if ((Get-Count $joining 'RelayJoin(') -ne 1 -or -not $joining.Contains('RelayJoin(SessionData[sessionNumber].serverLine, SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);'))
+{
+    Stop-Check "J: Net_ConnectToSession ($netFile line $($connect.Line)) must join through the game's own line: RelayJoin(SessionData[sessionNumber].serverLine, ...);"
+}
+
+foreach ($calling in (@(Get-Calls 'RelayJoin') + @(Get-Calls 'RelayLookUp') + @(Get-Calls 'RelayV2Begin') + @(Get-Calls 'RelayHandshake')))
+{
+    if ($calling.File -ne $netFile)
+    {
+        Stop-Check "J: $($calling.File) line $($calling.Line) reaches a relay from outside the network's own file"
+    }
+}
+
+$addingGame = Get-OneDefinition 'Net_AddRelaySession' 'J' $netFile 'a listed game put on the list of sessions'
+
+if (-not $addingGame.Flat.Contains('if (line < 0 || line >= RelayList_LineCount()) {') -or
+    -not (Test-Before $addingGame.Flat 'if (line < 0 || line >= RelayList_LineCount()) {' 'AddRelaySession(line,'))
+{
+    Stop-Check "J: Net_AddRelaySession ($netFile line $($addingGame.Line)) must drop a game from no line first: if (line < 0 || line >= RelayList_LineCount()) { ... }"
+}
+
+# Nothing reaches a relay by its region alone: the one-server calls that did are gone, and nothing in the network's file reads servers.cfg
+foreach ($gone in @('RelayList_Relays', 'RelayList_AskForRelayKeys', 'RelayList_RelayKeysCame', 'RelayList_FindRelays', 'Relay_ServerName'))
+{
+    $found = Find-Name $gone
+
+    if ($null -ne $found)
+    {
+        Stop-Check "J: $($found.File) line $($found.Line) names $gone, a call for the one server: every relay is a line's, through RelayList_RelayOf and RelayList_AskForRelayKeysOn"
+    }
+}
+
+$readingTheFile = [regex]::Match($code[$netFile], '\bServersCfg_\w+\s*\(')
+
+if ($readingTheFile.Success)
+{
+    Stop-Check "J: $netFile line $(Get-LineNumber $code[$netFile] $readingTheFile.Index) calls the servers.cfg reader itself: a line comes to it only through the list's code (RelayList_...)"
+}
+
+# ---- H: a host goes through the line the player chose, and only that (Fifth's condition, worded with Fourth, 2026-11-11)
+
+$hostStartFlat = $hostStart.Flat
+
+if (-not $hostStartFlat.Contains('int const line = RelayList_HostLine();') -or -not (Test-Refusal $hostStartFlat 'if (line < 0) {' 'return false;') -or
+    -not (Test-Before $hostStartFlat 'if (line < 0) {' 'RelayLookUp(line, &relayCandidates[0])') -or
+    -not $hostStartFlat.Contains('RelayV2Begin(relayCandidates[0], line, NULL, true, why)') -or (Get-Count $hostStartFlat 'RelayLookUp(') -ne 1)
+{
+    Stop-Check "H: RelayHostStart ($netFile line $($hostStart.Line)) must take the relay of the chosen line alone, and refuse first with none: int const line = RelayList_HostLine(); if (line < 0) { ... return false; } ... RelayLookUp(line, &relayCandidates[0]) ... RelayV2Begin(relayCandidates[0], line, NULL, true, why)"
+}
+
+foreach ($starting in (Get-Calls 'RelayHostStart'))
+{
+    if (-not (Test-Inside $starting $hostGame))
+    {
+        Stop-Check "H: $($starting.File) line $($starting.Line) starts a host through a relay: only Net_HostGame may"
+    }
+}
+
+$yesForm = 'if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes) {'
+
+if (-not (Test-Refusal $hosting $yesForm 'return NET_FAIL;') -or -not (Test-Before $hosting $noServer $yesForm) -or -not (Test-Before $hosting $yesForm 'Net_MakeENetHost('))
+{
+    Stop-Check "H: Net_HostGame ($netFile line $($hostGame.Line)) must refuse a chosen line without the player's yes after the refusal of none, and before anything is made: $yesForm ... return NET_FAIL; }"
+}
+
+Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose."
 Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
 
 foreach ($server in $expected)
