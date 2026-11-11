@@ -105,6 +105,7 @@
 #include "online_screens_page.h"
 #include "access_page.h"
 #include "server_yes_page.h"
+#include "servers_page.h"      // every servers.cfg line, and the player's pick (#175 2b)
 #include "host_wait_rules.h"   // a host's wait for the server, and a failed host's line (PO's rulings, 2026-11-10)
 #include "access_page_rules.h"   // the Online access pages' rows: how far apart, and how bright when not chosen
 
@@ -2532,6 +2533,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
+		// Every servers.cfg line, and the player's pick (#175 2b, servers_page.h): its rows are written before they're counted. Added
+		// 2026-11-10 by Melanikus for the AvP port.
+		case AVPMENU_SERVERS:
+		{
+			if (!ServersPage_Opened(AvPMenus.MenuElements, kServersPageRowRoom))
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
 		case AVPMENU_MULTIPLAYER_LOADCONFIG:
 		{
 			if (!BuildLoadMPConfigMenu())
@@ -2744,6 +2757,14 @@ static void RenderMenu(void)
 		OnlinePage_DrawTop();
 	}
 
+	// The Servers page draws its own rows, a screenful at a time, and its words around them (servers_page.h; #175 2b, added 2026-11-10)
+	bool const serversPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVERS;
+
+	if (serversPage)
+	{
+		ServersPage_DrawTop(AvPMenus.CurrentlySelectedElement);
+	}
+
 	// The yes page's words, above its rows (#175's last part). The Online access pages draw their own parts as RenderMenu places their rows,
 	// above (access_page_rules.h)
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
@@ -2837,6 +2858,10 @@ static void RenderMenu(void)
 			{
 				RenderMenuElement(elementPtr, e, OnlinePage_ControlTop(e));
 			}
+		}
+		else if (serversPage)
+		{
+			ServersPage_DrawRow(elementPtr, e, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement);
 		}
 		else if (!askingPage)
 		{
@@ -4449,6 +4474,17 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		{
 			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
+
+			// The Servers page's rows are this kind too, one for each server (#175 2b, added 2026-11-10): pressing one picks it, for the next
+			// start. Nothing goes to any server.
+			if (AvPMenus.CurrentMenu == AVPMENU_SERVERS)
+			{
+				if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+				{
+					ServersPage_Pressed(elementPtr->MaxValue);
+				}
+				break;
+			}
 
 			// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's
 			if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)

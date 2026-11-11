@@ -77,9 +77,9 @@ $listFile = '3dc/relay_list.cpp'
 $netFile = '3dc/networking.cpp'
 
 # The network's own files, where -dev may decide nothing (rule D). Modified 2026-11-10 by Melanikus for the AvP port (beta.2): and the
-# online pages, the access page, the yes page and the online screens, now that they're there for every player whose servers.cfg names a
+# online pages, the access page, the yes page, the online screens and the Servers page (#175 2b), now that they're there for every player whose servers.cfg names a
 # server, so no word typed on the command line can open or close one
-$onlineFile = '^3dc/(networking\.(cpp|h)|relay_[\w]+\.(cpp|h)|net_[\w]+\.(cpp|h)|servers_cfg[\w]*\.(cpp|h)|avp/win95/frontend/(access_page|server_yes|online_screens)[\w]*\.(cpp|h))$'
+$onlineFile = '^3dc/(networking\.(cpp|h)|relay_[\w]+\.(cpp|h)|net_[\w]+\.(cpp|h)|servers_cfg[\w]*\.(cpp|h)|avp/win95/frontend/(access_page|server_yes|online_screens|servers_page)[\w]*\.(cpp|h))$'
 
 # ---- Reading the code
 

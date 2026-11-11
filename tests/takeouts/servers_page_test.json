@@ -1,0 +1,189 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"tools"
+	],
+	"rows": [
+		{
+			"name": "the screenful doesn't follow the chosen row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "int const place = chosen < 0 ? 0 : chosen >= count ? count - 1 : chosen;",
+					"to": "int const place = 0;"
+				}
+			]
+		},
+		{
+			"name": "a screenful runs past the last server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "view.shown = count - view.first < kServersPageMostShown ? count - view.first : kServersPageMostShown;",
+					"to": "view.shown = kServersPageMostShown;"
+				}
+			]
+		},
+		{
+			"name": "a server not in the screenful is drawn anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "if (place < view.first || place >= view.first + view.shown)",
+					"to": "if (place < view.first)"
+				}
+			]
+		},
+		{
+			"name": "every refused line is shown, however many",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "return refused <= kServersPageMostRefused ? refused : kServersPageMostRefused - 1;",
+					"to": "return refused;"
+				}
+			]
+		},
+		{
+			"name": "the line in use is said to be the next start too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "\tif (nextStart && !inUse)\n",
+					"to": "\tif (nextStart)\n"
+				}
+			]
+		},
+		{
+			"name": "a refused line shows no number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "snprintf(out, room, \"%s %d: %s\", lineWords ? lineWords : \"\", lineNumber, why ? why : \"\");",
+					"to": "snprintf(out, room, \"%s: %s\", lineWords ? lineWords : \"\", why ? why : \"\");"
+				}
+			]
+		},
+		{
+			"name": "which servers are shown is said even when all fit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page_rules.h",
+					"from": "if (count > kServersPageMostShown && view.shown > 0)",
+					"to": "if (view.shown > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page asks the server for its relays as it opens",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "\tanswer = TEXTSTRING_BLANK;\n\tReadTheServers();\n",
+					"to": "\tanswer = TEXTSTRING_BLANK;\n\tRelayList_FindRelays();\n\tReadTheServers();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server's name is drawn as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "OnlineScreens_SafeName(server.line.name, sizeof(server.line.name), name, sizeof(name));",
+					"to": "snprintf(name, sizeof(name), \"%s\", server.line.name);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: yes given is shown from the pick",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "ServersPage_NameLine(name, server.inUse, server.nextStart, server.agreed,",
+					"to": "ServersPage_NameLine(name, server.inUse, server.nextStart, server.nextStart,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused line's words are drawn as they come",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "OnlineScreens_SafeName(why, sizeof(safe), safe, sizeof(safe));",
+					"to": "snprintf(safe, sizeof(safe), \"%s\", why ? why : \"\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pressed server isn't picked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "answer = RelayList_PickLine(place) ? TEXTSTRING_SERVERS_PICKED : TEXTSTRING_SERVERS_NOT_PICKED;",
+					"to": "answer = TEXTSTRING_SERVERS_PICKED;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line wider than the edges is drawn whole",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/servers_page.cpp",
+					"from": "\t\tFitToTheEdges(line, sizeof(line));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Servers row is there only with a server named",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\tAvPMenu_Multiplayer[row++] = ServersRow;\n",
+					"to": "\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row++] = ServersRow;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Servers row asks for a yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "if (from == AVPMENU_MULTIPLAYER && goTo == AVPMENU_ONLINE_ACCESS)",
+					"to": "if (from == AVPMENU_MULTIPLAYER && (goTo == AVPMENU_ONLINE_ACCESS || goTo == AVPMENU_SERVERS))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page's rows are pressed as the access page's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tif (AvPMenus.CurrentMenu == AVPMENU_SERVERS)\n\t\t\t{\n\t\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games page draws its server's name as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tOnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));\n\t\tchar from[96];",
+					"to": "\t\tsnprintf(server, sizeof(server), \"%s\", Relay_ServerName());\n\t\tchar from[96];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: release check rule D leaves the Servers page out",
+			"changes": [
+				{
+					"file": "tools/check-online-play.ps1",
+					"from": "|online_screens|servers_page)[\\w]*",
+					"to": "|online_screens)[\\w]*"
+				}
+			]
+		}
+	]
+}

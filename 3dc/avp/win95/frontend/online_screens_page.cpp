@@ -854,6 +854,17 @@ void OnlinePage_DrawTop(void)
 
 	DrawHeadings();
 
+	// Which server the games come from: the one servers.cfg names for this run (#175 2b, PO's ruling A; added 2026-11-10 by Melanikus for
+	// the AvP port). Its name comes from a file from outside the game, so it's made safe first, and it's only ever a %s's argument.
+	if (Relay_ServerName()[0])
+	{
+		char server[kServersCfgNameLetters + 1];
+		OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));
+		char from[96];
+		snprintf(from, sizeof(from), "%s %s", GetTextString(TEXTSTRING_FINDGAMES_FROM), server);
+		Words(from, MENU_CENTREX, kHeadingsTop - 17, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
 	// Added 2026-11-10 by Melanikus for the AvP port (#188, PO's ruling Q4): a typed address the search left unasked, as it isn't on the
 	// home network, says so in place of "no games", in the networking code's own fixed words (networking.h, Net_TypedAddressRefusedWhy)
 	const char *const typedRefused = Net_TypedAddressRefusedWhy();
