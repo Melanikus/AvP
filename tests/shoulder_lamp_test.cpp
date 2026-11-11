@@ -602,6 +602,74 @@ static void TestTheSpot()
 	ShoulderLamp_PutSpotBack();
 }
 
+// LAMPLOOK (shoulder_lamp.h). Added 2026-11-11 by Melanikus (Third) for the AvP port: how the player's own lamp looks when it could be a real
+// light. As built it's the real light alone; 1 puts the painted spot over it; 2 keeps it painted.
+static void TestTheLook()
+{
+	Check(ShoulderLamp_Look() == kShoulderLampLookAsBuilt && kShoulderLampLookAsBuilt == kShoulderLampLookBoth,
+		"the lamp's look starts as built: the real light with the painted spot over it, as the owner asked");
+
+	// What can be typed: one of the three, and nothing else
+	int look = -1;
+	Check(ShoulderLamp_LookFromWords("0", 1, &look) && look == 0 && ShoulderLamp_LookFromWords("1", 1, &look) && look == 1 && ShoulderLamp_LookFromWords("2", 1, &look) && look == 2
+		&& ShoulderLamp_LookFromWords("3", 1, &look) && look == 3, "LAMPLOOK reads 0, 1, 2 and 3");
+	char const *const notLooks[] = { "", "4", "-1", "01", "1.0", "x", "12", " 1" };
+
+	for (char const *const words : notLooks)
+	{
+		look = 7;
+		Check(!ShoulderLamp_LookFromWords(words, (unsigned int)strlen(words), &look) && look == 7, std::string("[") + words + "] isn't a look, and what was there is left alone");
+	}
+
+	Check(!ShoulderLamp_LookFromWords(0, 1, &look) && look == 7, "and no words at all aren't either");
+	ShoulderLamp_SetLook(5);
+	Check(ShoulderLamp_Look() == kShoulderLampLookAsBuilt, "a number that isn't one of the four changes nothing");
+
+	// What it does to the real light: 2 keeps it painted, as "Lamps cast shadows" off does; 1 and 0 leave it a real light
+	ShoulderLamp_TurnOff();
+	ShoulderLamp_Toggle();
+	ShoulderLamp_AskForThisFrame(true);
+	ShoulderLamp_SetRealLightWanted(true);
+	bool const asBuilt = ShoulderLamp_CanBeALight();
+	ShoulderLamp_SetLook(kShoulderLampLookRealOnly);
+	bool const realOnly = ShoulderLamp_CanBeALight() && ShoulderLamp_Look() == 0;
+	ShoulderLamp_SetLook(kShoulderLampLookBoth);
+	bool const both = ShoulderLamp_CanBeALight();
+	ShoulderLamp_SetLook(kShoulderLampLookPainted);
+	bool const painted = ShoulderLamp_CanBeALight();
+	ShoulderLamp_SetLook(kShoulderLampLookBothFull);
+	bool const bothFull = ShoulderLamp_CanBeALight();
+	Check(asBuilt && realOnly && both && bothFull && !painted, "as built, and with the painted lamp over it either way, the lamp is a real light; painted only, it never is");
+
+	// A network game puts it back with the spot, and that counts as a change
+	Check(ShoulderLamp_PutSpotBack() && ShoulderLamp_Look() == kShoulderLampLookAsBuilt && ShoulderLamp_CanBeALight(), "putting the spot back puts the look back too, and says so");
+	Check(!ShoulderLamp_PutSpotBack(), "and as built, nothing has changed");
+	ShoulderLamp_SetRealLightWanted(false);
+	ShoulderLamp_TurnOff();
+
+	// The game, which only a run can really try
+	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const lookCommand = Between(render, "void LampLookCommand(char *words)", "\n}");
+	std::string const drawing = Between(render, "static void DrawShoulderLamp()\n{", "\n}\n");
+	Check(Has(commands, "\"LAMPLOOK\",") && Has(commands, "LampLookCommand\n\t);") && ComesBefore(commands, "\"LAMPLOOK\",", "bool IsACheat = true;"),
+		"the console knows LAMPLOOK, with the player's settings, not the cheats");
+	Check(ComesBefore(lookCommand, "LampStaysAsBuiltHere(", "ShoulderLamp_SetLook(look);") && Has(lookCommand, "LAMPLOOK IS OFF IN A NETWORK GAME"),
+		"a network game refuses a look before anything changes, and says why");
+	Check(Has(lookCommand, "if (length > 0 && !ShoulderLamp_LookFromWords(start, (unsigned int)length, &look))"), "the words go through the strict reader");
+	Check(Has(drawing, "bool const blendedOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBoth;")
+		&& Has(drawing, "bool const fullOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBothFull;")
+		&& Has(drawing, "bool const paintedToo = blendedOver || fullOver;")
+		&& Has(drawing, "\t\tif (!paintedToo)\n\t\t{\n\t\t\treturn;\n\t\t}"),
+		"as a real light the painted lamp is drawn only when LAMPLOOK asks for it over the light");
+	Check(Has(drawing, "float const brighten[4] = { blendedOver ? strength * kShoulderLampOverARealLight : strength, 0.0f, 0.0f, wide };")
+		&& Has(drawing, "\tif (!blendedOver)\n\t{\n\t\tdevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));\n\t}"),
+		"blended over the real light it brightens once, at kShoulderLampOverARealLight, so the light isn't doubled");
+	Check(Has(drawing, "bool const onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;"),
+		"at full over the real light it adds the walls' own colour too, as on its own; blended it doesn't");
+	Check(kShoulderLampOverARealLight > 0.0f && kShoulderLampOverARealLight <= 0.5f, "and at most half as strongly as alone");
+}
+
 static void TestNetworkKeepsTheSpot()
 {
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
@@ -739,6 +807,7 @@ int main()
 	TestTheRobotArm();
 	TestLampFollow();
 	TestTheSpot();
+	TestTheLook();
 	TestNetworkKeepsTheSpot();
 	TestJoiningTheGame();
 

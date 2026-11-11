@@ -41,6 +41,9 @@
 //   the LAMPFOLLOW command says how long the shoulder lamp takes to catch up with the view
 //   the keys for the lighting, the shadows and the developers' views can be changed on the rendering page. The first two now work for everyone, and a control with the same key wins
 //   the LAMPSPOTSIZE and LAMPINTENSITY commands say how big and how strong its spot is, playing alone. A network game keeps them as built
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the LAMPLOOK command says how the player's own lamp looks when it could be a real light: the real light, the real light with the
+//   painted spot over it, or painted only. A network game keeps it as built
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the shoulder lamp is drawn before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
@@ -5530,15 +5533,26 @@ static IDirect3DSurface9 *toyMaskSurface = 0;
 static IDirect3DSurface9 *toyDepthSurface = 0;
 static bool toyTargetsFailed = false;
 
-// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. When the lamp is a real light this frame, that's all drawn elsewhere, and there's nothing to do here. Everything about how this looks is in shaders/shoulderLamp.psh.
+// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. When the lamp is a real light this frame, that's all drawn elsewhere, and there's nothing to do here, unless
+// LAMPLOOK asks for the painted spot over it. Everything about how this looks is in shaders/shoulderLamp.psh.
 static void DrawShoulderLamp()
 {
 	bool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;
 
+	// LAMPLOOK 1 and 3 (shoulder_lamp.h; added 2026-11-11 by Melanikus (Third) for the AvP port): over the real light, the painted lamp too. 1 blends
+	// it below so the light isn't doubled; 3 draws it at full, walls and glint included, as it was drawn on its own on 2026-11-05.
+	bool const blendedOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBoth;
+	bool const fullOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBothFull;
+	bool const paintedToo = blendedOver || fullOver;
+
 	if (isARealLight)
 	{
 		ShoulderLamp_NoteARealLightFrame();
-		return;
+
+		if (!paintedToo)
+		{
+			return;
+		}
 	}
 
 	if (d3d.shoulderLampEffect == kNullEffectID)
@@ -5569,7 +5583,7 @@ static void DrawShoulderLamp()
 	ChangeZWriteEnable(ZWRITE_DISABLED);
 
 	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
-	bool const onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
+	bool const onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
 
 	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
 	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
@@ -5588,13 +5602,22 @@ static void DrawShoulderLamp()
 	ShoulderLamp_SpotNumbers(spot);
 	device->SetPixelShaderConstantF(2, spot, 1);
 
-	// Each drawing of this can at most double a pixel, and these rooms are dark enough that twice nothing much is still nothing much, so it brightens twice
-	float const brighten[4] = { strength, 0.0f, 0.0f, wide };
+	// Each drawing of this can at most double a pixel, and these rooms are dark enough that twice nothing much is still nothing much, so it brightens twice.
+	// Over the real light (LAMPLOOK 1) it brightens once, at kShoulderLampOverARealLight of that, so the spot's flicker and its hot middle show on what
+	// the real light lit, at most a quarter brighter there, where twice on their own they'd make it up to four times as bright (TRANSLUCENCY_BRIGHTEN
+	// keeps what's there and adds that times the spot). The adding below then puts in no wall's own colour, as the real light lights the walls already
+	// (onWalls is false for a real light), so it's only the spot's faint glow and the cone's haze, which light nothing. (Modified 2026-11-11 by
+	// Melanikus (Third) for the AvP port.)
+	float const brighten[4] = { blendedOver ? strength * kShoulderLampOverARealLight : strength, 0.0f, 0.0f, wide };
 
 	device->SetPixelShaderConstantF(0, brighten, 1);
 	ChangeTranslucencyMode(TRANSLUCENCY_BRIGHTEN);
 	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
-	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+
+	if (!blendedOver)
+	{
+		device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+	}
 
 	// This one adds, rather than multiplies, so it shows on black
 	float const add[4] = { strength, 1.0f, 0.0f, wide };
@@ -8441,6 +8464,37 @@ void LampSpotSizeCommand(char *words)
 
 	_snprintf(said, sizeof(said) - 1, "LAMP SPOT SIZE IS %.2f", size);
 	SaySwitch(said);
+}
+
+// LAMPLOOK (shoulder_lamp.h): how the player's own lamp looks when it could be a real light, for this run of the game, playing alone. On its own it
+// says what it is now. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+void LampLookCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	if (LampStaysAsBuiltHere("LAMPLOOK IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT", length))
+	{
+		return;
+	}
+
+	int look = ShoulderLamp_Look();
+
+	if (length > 0 && !ShoulderLamp_LookFromWords(start, (unsigned int)length, &look))
+	{
+		SaySwitch("LAMPLOOK TAKES 0 TO 3: 0 THE REAL LIGHT, 1 THE REAL LIGHT AND THE PAINTED SPOT, 2 PAINTED ONLY, 3 THE REAL LIGHT AND THE PAINTED LAMP AT FULL");
+		return;
+	}
+
+	ShoulderLamp_SetLook(look);
+	SaySwitch(look == kShoulderLampLookBoth ? "LAMP LOOK IS 1: THE REAL LIGHT AND THE PAINTED SPOT, AS BUILT" :
+		(look == kShoulderLampLookPainted ? "LAMP LOOK IS 2: PAINTED ONLY" :
+		(look == kShoulderLampLookBothFull ? "LAMP LOOK IS 3: THE REAL LIGHT AND THE PAINTED LAMP AT FULL" : "LAMP LOOK IS 0: THE REAL LIGHT ONLY")));
 }
 
 void LampIntensityCommand(char *words)

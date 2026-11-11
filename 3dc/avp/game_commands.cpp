@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the LAMPLOOK command
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the debug and cheat commands are there in a beta, for testers, and using them doesn't count as cheating (see beta_build.h)
 // Modified 2026-11-05 by Melanikus for the AvP port:
@@ -430,6 +432,13 @@ void CreateGameSpecificConsoleCommands(void)
 		"LAMPINTENSITY",
 		"HOW STRONG THE SHOULDER LAMP'S SPOT IS, FROM 0.25 TO 2. 1 IS AS BUILT. NOT IN A NETWORK GAME",
 		LampIntensityCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPLOOK",
+		"HOW THE SHOULDER LAMP LOOKS AS A REAL LIGHT: 0 THE REAL LIGHT, 1 THE REAL LIGHT AND THE PAINTED SPOT (AS BUILT), 2 PAINTED ONLY, 3 THE REAL LIGHT AND THE PAINTED LAMP AT FULL. NOT IN A NETWORK GAME",
+		LampLookCommand
 	);
 
 	ConsoleCommand::Make
