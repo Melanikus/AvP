@@ -7,6 +7,10 @@
 //   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
 //   a corpse with no display block stays far
 //   a ghost's new data block is checked before it's cleared, not after
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each frame, a ghost that waited more than 100 ms for news tells the 10-second report how long, and how far the news moved it
+//   (net_watch.h)
+//   a player's figure's guess between messages is worked out by ghost_guess.h, the same sums moved there so a test can run them
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -29,6 +33,8 @@ d  ----------------------------------------------------------------------*/
 #include "pvisible.h"
 #include "pldnet.h"
 #include "pldghost.h"
+#include "networking.h"
+#include "ghost_guess.h"
 #include "lighting.h"
 #include "psnd.h"
 #include "load_shape.h"
@@ -172,6 +178,7 @@ void UpdateGhost(STRATEGYBLOCK *sbPtr,VECTORCH *position,EULER *orientation,int 
 	/* update the dynamics block */
 	{
 		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+		Ghost_NewsCame(ghostData, &dynPtr->Position);
 //		dynPtr->Position = dynPtr->PrevPosition = *position;
 		dynPtr->PrevPosition = dynPtr->Position;
 		dynPtr->PrevOrientMat = dynPtr->OrientMat;
@@ -441,6 +448,7 @@ STRATEGYBLOCK *FindGhost(NetID Id, int obId)
 
 /* create a new ghost: doesn't do shape animation stuff: this is performed using a
 seperate set of functions */
+extern void Hudson_NetSayARefusedGhost(int kind, int subtype);
 
 STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype)
 {
@@ -839,6 +847,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 		if (sbPtr->shapeIndex == -1)
 		{
 			Net_NoteRefused("a ghost with a model or shape this level hasn't loaded");
+			Hudson_NetSayARefusedGhost((int)type, (int)subtype);
 			RemoveBehaviourStrategy(sbPtr);
 			return NULL;
 		}
@@ -872,27 +881,36 @@ void PlayerGhostExtrapolation()
 			   ghostData->type==I_BehaviourPredatorPlayer ||
 			   NpcGhosts_TypeIsAnNpc(ghostData->type))
 			{
-				int time;
 				DYNAMICSBLOCK* dynPtr= sbPtr->DynPtr;
 				if(ghostData->onlyValidFar) continue;
 
+				// For the 10-second report's line on figures that wait for news (net_watch.h). This runs after the frame's messages, so
+				// its news is all in: if it waited too long, the report hears how long, and how far the news moved it.
+				if (ghostData->newsThisFrame)
+				{
+					unsigned int waitedMs = 0;
+
+					if (NetFigureNews_Came(&ghostData->news, timeGetTime(), &waitedMs))
+					{
+						VECTORCH moved = dynPtr->Position;
+						SubVector(&ghostData->placeBeforeNews, &moved);
+
+						bool const aPlayer = ghostData->type == I_BehaviourMarinePlayer || ghostData->type == I_BehaviourAlienPlayer || ghostData->type == I_BehaviourPredatorPlayer;
+						Net_NoteFigureWait(waitedMs, (unsigned int)Approximate3dMagnitude(&moved), aPlayer);
+					}
+
+					ghostData->newsThisFrame = 0;
+				}
+
 				if(UseExtrapolation)
 				{
-
-					dynPtr->LinVelocity.vx=0;
-					dynPtr->LinVelocity.vy=0;
-					dynPtr->LinVelocity.vz=0;
-
 					dynPtr->IsNetGhost=0;
 
-					ghostData->extrapTimer+=NormalFrameTime;
-					if(ghostData->extrapTimer<0) ghostData->extrapTimer=0;
-					if(ghostData->extrapTimer>ONE_FIXED/2) ghostData->extrapTimer=ONE_FIXED/2;
+					// The guess for this frame: the speed to move it at, or none (ghost_guess.h does the sums, and its test runs them)
+					bool stopped = false;
+					dynPtr->LinVelocity = GhostGuess_FrameSpeed(&ghostData->extrapTimer, &ghostData->extrapTimerLast, ghostData->velocity, NormalFrameTime, &stopped);
 
-					time=ghostData->extrapTimer-ghostData->extrapTimerLast;
-					ghostData->extrapTimerLast=ghostData->extrapTimer;
-
-					if(ghostData->velocity.vx==0 && ghostData->velocity.vy==0 && ghostData->velocity.vz==0)
+					if(stopped)
 					{
 						/*
 						Not moving , so alter the dynamics block settings to match those of a non-extrapolated
@@ -902,22 +920,9 @@ void PlayerGhostExtrapolation()
 						dynPtr->LinImpulse.vy=0;
 						dynPtr->LinImpulse.vz=0;
 
-						ghostData->extrapTimerLast=ghostData->extrapTimer=0;
 						dynPtr->IsNetGhost=1;
 						dynPtr->UseStandardGravity=1;
 						sbPtr->DynPtr->ToppleForce=TOPPLE_FORCE_NONE;
-					}
-					else if(time>0)
-					{
-						dynPtr->LinVelocity=ghostData->velocity;
-						if(time!=NormalFrameTime)
-						{
-							//only doing interpolation for a fraction of a frame
-							//so we need to scale the velocity accordingly
-							dynPtr->LinVelocity.vx=WideMulNarrowDiv(dynPtr->LinVelocity.vx,time,NormalFrameTime);
-							dynPtr->LinVelocity.vy=WideMulNarrowDiv(dynPtr->LinVelocity.vy,time,NormalFrameTime);
-							dynPtr->LinVelocity.vz=WideMulNarrowDiv(dynPtr->LinVelocity.vz,time,NormalFrameTime);
-						}
 					}
 
 
@@ -5364,6 +5369,7 @@ void UpdateAlienAIGhost(STRATEGYBLOCK *sbPtr,VECTORCH *position,EULER *orientati
 	/* update the dynamics block */
 	{
 		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+		Ghost_NewsCame(ghostData, &dynPtr->Position);
 
 		dynPtr->PrevPosition = dynPtr->Position;
 		dynPtr->PrevOrientMat = dynPtr->OrientMat;

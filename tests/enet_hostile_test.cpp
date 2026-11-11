@@ -1024,6 +1024,61 @@ static void TestTheTokenForAConnect()
 	enet_host_destroy(host);
 }
 
+// Added 2026-11-09 by Melanikus for the AvP port: what a CONNECT says reaches the host as it was. The v2 draft (networking.h) puts its
+// commit in a CONNECT's data, and the host checks it on its CONNECT event (JBLD). Patch 006 sends the CONNECT twice, the second time with
+// the token: that's the same command, with only the token copied in (006's enet_protocol_put_cookie_in_connect), so its data is the first's
+// (host.c, enet_host_connect), and the host's event gets it from the CONNECT it took (protocol.c, enet_protocol_handle_connect, then the
+// event's data). This proves it on the real thing, for 0 (every game without the draft), a commit, and every bit set.
+static void TestAConnectsData()
+{
+	enet_uint32 const said[] = { 0, 0x5a1e7c03u, 0xFFFFFFFFu };
+
+	for (enet_uint32 const data : said)
+	{
+		ENetAddress here = ThisMachine();
+		ENetHost *const host = Net_MakeENetHost(&here, 7, kLargestMessage, 0, 0);
+		ENetHost *const client = enet_host_create(&here, 1, 0, 0, 0);
+		ENetAddress hostAddress;
+		bool const made = host != NULL && client != NULL && enet_socket_get_address(host->socket, &hostAddress) == 0;
+		bool heard = false;
+		enet_uint32 heardData = ~data;
+
+		if (made)
+		{
+			// The host throws away any packet without the right checksum, so the client puts one on
+			client->checksum = enet_crc32;
+			enet_address_set_host_ip(&hostAddress, "127.0.0.1");
+			ENetPeer *const joiner = enet_host_connect(client, &hostAddress, kNetChannels, data);
+			DWORD const startedAt = GetTickCount();
+
+			while (joiner != NULL && !heard && GetTickCount() - startedAt < 3000)
+			{
+				ENetEvent event;
+
+				if (enet_host_service(host, &event, 1) > 0 && event.type == ENET_EVENT_TYPE_CONNECT)
+				{
+					heard = true;
+					heardData = event.data;
+				}
+
+				enet_host_service(client, &event, 1);
+			}
+		}
+
+		HostileCheck(made && heard && heardData == data, "a CONNECT that says " + std::to_string(data) + " reaches the host's CONNECT event saying the same, after the token's round trip");
+
+		if (client)
+		{
+			enet_host_destroy(client);
+		}
+
+		if (host)
+		{
+			enet_host_destroy(host);
+		}
+	}
+}
+
 // A joiner with this ENet, and a host with an older one (without the token). Two ENets can't be linked into one program, so
 // this reads the first packet a joining ENet sends, the way an older ENet would. That ENet reads a CONNECT 8 bytes shorter
 // than this one, and then reads on: the next byte is a command's kind, and kind 0 means "nothing", where it stops. This
@@ -1112,6 +1167,7 @@ int main()
 	TestAPacketShorterThanItsHeader();
 	TestHonestMessages();
 	TestTheTokensHash();
+	TestAConnectsData();
 	TestANewJoinerOnAnOlderHost();
 	// Last, because it moves ENet's clock on and back
 	TestTheTokenForAConnect();

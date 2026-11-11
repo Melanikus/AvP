@@ -881,8 +881,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tif (isARealLight)\n\t{\n\t\treturn;\n\t}",
-					"to": "\tif (isARealLight)\n\t{\n\t}"
+					"from": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t\treturn;\n\t}",
+					"to": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t}"
 				}
 			]
 		},
@@ -1613,6 +1613,16 @@
 					"file": "3dc/kshape.cpp",
 					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)",
 					"to": "if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp is turned off in a network game after its size and strength are set",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.\n\tfloat spot[4];",
+					"to": "\t// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.\n\tif (AvP.Network != I_No_Network) return;\n\tfloat spot[4];"
 				}
 			]
 		}

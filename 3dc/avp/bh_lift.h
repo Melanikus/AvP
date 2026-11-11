@@ -1,6 +1,8 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the lift's change of environment is taken out (#135): every lift station is in the level being played, so it could never run.
+//   With it go CleanUpLiftControl, the two requests for a change, and a station's environment and facing.
 extern void LiftBehaveFun(STRATEGYBLOCK* sbptr);
 extern void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr);
-extern void CleanUpLiftControl();
 
 extern void TeleportContents(MODULE* new_pos, MODULE* old_pos,BOOL floor_switches_fixed);
 extern BOOL BadGuyInModule();
@@ -20,14 +22,12 @@ typedef struct lift_stations
 	STRATEGYBLOCK* lift_door;
 	char lift_floor_switch_name[SB_NAME_LENGTH];
 	STRATEGYBLOCK* lift_floor_switch; // the floor switches teleport
-	BOOL called; 
-	char my_sb_name[SB_NAME_LENGTH];	// only used when envs change
+	BOOL called;
+	char my_sb_name[SB_NAME_LENGTH];	// the name its module is found by (AssignAllSBNames, bh_types.cpp)
 	MODULE* lift_module;
-	I_AVP_ENVIRONMENTS env; 	// tells us if we need a cd load
 	int num_floor;						// not the floor num but the poition
-														// in the array	
-	int orient; 				//the facing of the lift (from 0 to 3)
-	BOOL starting_station;		
+														// in the array
+	BOOL starting_station;
 												
 	
 }LIFT_STATION;	
@@ -124,17 +124,11 @@ typedef struct lift_tools_template
 	char lift_door_name[SB_NAME_LENGTH];
 	char lift_floor_switch_name[SB_NAME_LENGTH];
 	char my_module_name[SB_NAME_LENGTH];
-	int environment;
 	int num_floor;
 	int lift_flags;
-	int orient;
 
-	// for strategy block	
+	// for strategy block
 	MREF my_module;
 	char nameID[SB_NAME_LENGTH];
 
 } LIFT_TOOLS_TEMPLATE;
-
-
-extern int RequestEnvChangeViaLift;
-extern int RequestEnvChangeViaAirlock;

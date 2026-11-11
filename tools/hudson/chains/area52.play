@@ -1,0 +1,7 @@
+# What Hudson does to play area52 on foot, as a Predator. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+press -11987 -490 26561 | lc-switc01
+press 15841 -422 34380 | LiftbtUP
+walk 21141 163 29615 | V lift1 doorsa idiots switcy
+walk 21141 -8865 29615 | V llift1 door idiots switch
+walk 106263 12020 40233 | End of Level

@@ -1,10 +1,19 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a game found can be one from the relay server's list: SESSION_DESC says so, with its region and code
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
+//   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
+//   (AVPMENU_ELEMENT_FINDAGAIN)
+//   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
+//   the Online access pages and their rows (server #24), only with -dev for now
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
 #include "TextureManager.h"
+#include "relay_list_text.h"
 
 extern bool mainMenu;
 
@@ -131,7 +140,9 @@ enum AVPMENU_ID
 	AVPMENU_COOP_OUT,          // one plain sentence, for a player the co-op game has ended for, and why
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
-	AVPMENU_COOP_HOSTQUITS     // a host is asked if they mean to end the game for everyone
+	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
+	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
+	AVPMENU_ONLINE_ACCESS_NEW  // the question before a new identity is made
 };
 
 enum AVPMENU_FONT_ID
@@ -218,6 +229,9 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_START, // a host starts the co-op campaign chosen on the page, for everyone with the map
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
+	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
+	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
+	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };
 
 
@@ -342,6 +356,16 @@ typedef struct
 	uint16_t port;
 	GUID Guid;
 	bool AllowedToJoin;
+	bool throughRelay;                               // a game from the relay server's list, joined through its region's relay (relay_list.h)
+	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
+	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
+	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // its host's fingerprint, from the list: who handshake B must find it's talking to
+	// What the games page shows (online_screens.h). The host sent these, so they're hostile: the page draws the name only after
+	// OnlineScreens_SafeName, and checks the numbers before it uses them.
+	char levelName[kRelayListLevelLetters + 1];      // the level's name, as the host said it
+	uint16_t gameStyle;                              // NGT_..., which says whether levelIndex is on the multiplayer or the co-op list
+	uint8_t players;                                 // how many are playing, as the host said
+	uint8_t maxPlayers;                              // and how many fit
 } SESSION_DESC;
 
 #define MAX_NO_OF_SESSIONS 10

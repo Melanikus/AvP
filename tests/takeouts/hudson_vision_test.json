@@ -1,0 +1,758 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a surface with colour is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "counts->surfaces++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "no normal is never found",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "AddToFinding(&counts->noNormal, (int)x, (int)y);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "no distance is never found",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "AddToFinding(&counts->noDistance, (int)x, (int)y);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "nothing drawn is never found",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "AddToFinding(&counts->nothingDrawn, (int)x, (int)y);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "nothing drawn is also looked at for a normal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "AddToFinding(&counts->nothingDrawn, (int)x, (int)y);\n\t\t\t\tcontinue;",
+					"to": "AddToFinding(&counts->nothingDrawn, (int)x, (int)y);"
+				}
+			]
+		},
+		{
+			"name": "any alpha is a surface",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pictures.colour[y * pictures.colourPitch + x * 4 + 3] != 255)\n\t\t\t{\n\t\t\t\tAddToFinding",
+					"to": "pictures.colour[y * pictures.colourPitch + x * 4 + 3] == 0)\n\t\t\t{\n\t\t\t\tAddToFinding"
+				}
+			]
+		},
+		{
+			"name": "red does not count in a normal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0",
+					"to": "pixel[0] == 0 && pixel[1] == 0"
+				}
+			]
+		},
+		{
+			"name": "green does not count in a normal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0",
+					"to": "pixel[0] == 0 && pixel[2] == 0"
+				}
+			]
+		},
+		{
+			"name": "blue does not count in a normal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0",
+					"to": "pixel[1] == 0 && pixel[2] == 0"
+				}
+			]
+		},
+		{
+			"name": "the unused byte counts in a normal",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0",
+					"to": "pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 0"
+				}
+			]
+		},
+		{
+			"name": "ten bits are read as eight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (normalIsTenBit)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the unused bits count in ten bits",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(bits & 0x3FFFFFFF) == 0",
+					"to": "bits == 0"
+				}
+			]
+		},
+		{
+			"name": "a bit of ten is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(bits & 0x3FFFFFFF) == 0",
+					"to": "(bits & 0x1FFFFFFF) == 0"
+				}
+			]
+		},
+		{
+			"name": "the box does not grow left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "finding->left = x < finding->left ? x : finding->left;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the box does not grow right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "finding->right = x > finding->right ? x : finding->right;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the box does not grow down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "finding->bottom = y > finding->bottom ? y : finding->bottom;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the first pixel moves on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (finding->pixels == 0)\n\t{",
+					"to": "if (true)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the cleared distance counts as a distance",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (distance == kHudsonVisionClearedDistance)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any small distance counts as cleared",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (distance == kHudsonVisionClearedDistance)",
+					"to": "if (distance <= 2.0f)"
+				}
+			]
+		},
+		{
+			"name": "the nearest is not kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(!anyDistance || distance < counts->nearest) ? distance : counts->nearest",
+					"to": "distance"
+				}
+			]
+		},
+		{
+			"name": "the furthest is not kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(!anyDistance || distance > counts->furthest) ? distance : counts->furthest",
+					"to": "distance"
+				}
+			]
+		},
+		{
+			"name": "samples are not spread out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (seen == NextToPick(counts->samples, counts->nothingDrawn.pixels, kHudsonVisionMostSamples))",
+					"to": "if (seen == counts->samples)"
+				}
+			]
+		},
+		{
+			"name": "a ray goes off the left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "x < 0 || y < 0 || x >= width || y >= height || projection11",
+					"to": "y < 0 || x >= width || y >= height || projection11"
+				}
+			]
+		},
+		{
+			"name": "a ray goes off the top",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "x < 0 || y < 0 || x >= width || y >= height || projection11",
+					"to": "x < 0 || x >= width || y >= height || projection11"
+				}
+			]
+		},
+		{
+			"name": "a ray goes off the right",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "x < 0 || y < 0 || x >= width || y >= height || projection11",
+					"to": "x < 0 || y < 0 || y >= height || projection11"
+				}
+			]
+		},
+		{
+			"name": "a ray goes off the bottom",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "y >= height || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no projection across is used",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "projection11 == 0.0f || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no projection up is used",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " || projection22 == 0.0f",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a ray is not across the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " + across * (double)view[0 + i]",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a ray is not up the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " - up * (double)view[4 + i]",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "up is the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " - up * (double)view[4 + i]",
+					"to": " + up * (double)view[4 + i]"
+				}
+			]
+		},
+		{
+			"name": "a ray is not along the view",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(double)view[8 + i] + across",
+					"to": "across"
+				}
+			]
+		},
+		{
+			"name": "a ray of no length is used",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (length == 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a ray is not made length 1",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "direction[i] = (float)(along[i] / length);",
+					"to": "direction[i] = (float)along[i];"
+				}
+			]
+		},
+		{
+			"name": "the check starts from nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "uint32_t check = 2166136261u;",
+					"to": "uint32_t check = 0;"
+				}
+			]
+		},
+		{
+			"name": "the check ignores the bytes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "check ^= bytes[i];",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the check is multiplied wrongly",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "check *= 16777619u;",
+					"to": "check *= 16777618u;"
+				}
+			]
+		},
+		{
+			"name": "the check adds, where order would not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "check ^= bytes[i];\n\t\tcheck *= 16777619u;",
+					"to": "check += bytes[i];"
+				}
+			]
+		},
+		{
+			"name": "shadows being off counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "shadows.volumesOn && shadows.lights > 0",
+					"to": "shadows.lights > 0"
+				}
+			]
+		},
+		{
+			"name": "no lights counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "shadows.volumesOn && shadows.lights > 0 && ",
+					"to": "shadows.volumesOn && "
+				}
+			]
+		},
+		{
+			"name": "nothing to cast counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " && shadows.casters > 0 && ",
+					"to": " && "
+				}
+			]
+		},
+		{
+			"name": "some corners count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "shadows.corners == 0",
+					"to": "shadows.corners <= 1"
+				}
+			]
+		},
+		{
+			"name": "a ray is not turned into straight ahead",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "return (double)rayDistance * ahead;",
+					"to": "return (double)rayDistance;"
+				}
+			]
+		},
+		{
+			"name": "ahead ignores x",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(double)direction[0] * view[8] + ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ahead ignores z",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": " + (double)direction[2] * view[10]",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "too little is allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "* 0.03 > 20.0 ? fabs((double)pictureDistance) * 0.03 : 20.0",
+					"to": "* 0.02 > 20.0 ? fabs((double)pictureDistance) * 0.02 : 20.0"
+				}
+			]
+		},
+		{
+			"name": "too much is allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "* 0.03 > 20.0 ? fabs((double)pictureDistance) * 0.03 : 20.0",
+					"to": "* 0.04 > 20.0 ? fabs((double)pictureDistance) * 0.04 : 20.0"
+				}
+			]
+		},
+		{
+			"name": "nothing is allowed close up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": ": 20.0;",
+					"to": ": 0.0;"
+				}
+			]
+		},
+		{
+			"name": "checks include no distance",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "== 255 && distance != kHudsonVisionClearedDistance)",
+					"to": "== 255)"
+				}
+			]
+		},
+		{
+			"name": "checks include no surface",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pictures.colour[y * pictures.colourPitch + x * 4 + 3] == 255 && distance != kHudsonVisionClearedDistance",
+					"to": "distance != kHudsonVisionClearedDistance"
+				}
+			]
+		},
+		{
+			"name": "checks are not spread out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "uint32_t const x = width * (2 * column + 1) / (2 * kHudsonVisionMostChecks);",
+					"to": "uint32_t const x = 0;"
+				}
+			]
+		},
+		{
+			"name": "checks have no distance",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "counts->checkDistance[counts->checks] = distance;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the screen off the left is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (x < 0 || y < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total",
+					"to": "if (y < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total"
+				}
+			]
+		},
+		{
+			"name": "the screen off the top is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (x < 0 || y < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total",
+					"to": "if (x < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total"
+				}
+			]
+		},
+		{
+			"name": "the screen off the right is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (x < 0 || y < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total",
+					"to": "if (x < 0 || y < 0 || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total"
+				}
+			]
+		},
+		{
+			"name": "the screen off the bottom is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (x < 0 || y < 0 || x >= width || y >= height)\n\t{\n\t\treturn false;\n\t}\n\n\tint total",
+					"to": "if (x < 0 || y < 0 || x >= width)\n\t{\n\t\treturn false;\n\t}\n\n\tint total"
+				}
+			]
+		},
+		{
+			"name": "the neighbours go off the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (aroundX < 0 || aroundY < 0 || aroundX >= width || aroundY >= height)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the average counts the pixel itself",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "\t\t\t\tpixel->colour[2] = here[0];\n\t\t\t\tcontinue;\n",
+					"to": "\t\t\t\tpixel->colour[2] = here[0];\n"
+				}
+			]
+		},
+		{
+			"name": "red and blue are swapped",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel->colour[0] = here[2];",
+					"to": "pixel->colour[0] = here[0];"
+				}
+			]
+		},
+		{
+			"name": "green is lost",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel->colour[1] = here[1];",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "blue is lost",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel->colour[2] = here[0];",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the difference has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "> kHudsonVisionScreenDiffers)",
+					"to": "> 0)"
+				}
+			]
+		},
+		{
+			"name": "the difference is never seen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (abs(pixel->colour[i] - pixel->around[i]) > kHudsonVisionScreenDiffers)\n\t\t{\n\t\t\tpixel->differs = true;",
+					"to": "if (false)\n\t\t{\n\t\t\tpixel->differs = true;"
+				}
+			]
+		},
+		{
+			"name": "a dark crack does not stand out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (!pixel->tooDark && brightestHere * 4 <= brightestAround)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "darkness is not asked about",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "if (!pixel->tooDark && brightestHere * 4 <= brightestAround)",
+					"to": "if (brightestHere * 4 <= brightestAround)"
+				}
+			]
+		},
+		{
+			"name": "it takes a third as bright",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "brightestHere * 4 <= brightestAround",
+					"to": "brightestHere * 3 <= brightestAround"
+				}
+			]
+		},
+		{
+			"name": "it takes a fifth as bright",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "brightestHere * 4 <= brightestAround",
+					"to": "brightestHere * 5 <= brightestAround"
+				}
+			]
+		},
+		{
+			"name": "the pixel being bright does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel->tooDark = brightestHere < kHudsonVisionScreenTooDark && brightestAround < kHudsonVisionScreenTooDark;",
+					"to": "pixel->tooDark = brightestAround < kHudsonVisionScreenTooDark;"
+				}
+			]
+		},
+		{
+			"name": "those round it being bright does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "pixel->tooDark = brightestHere < kHudsonVisionScreenTooDark && brightestAround < kHudsonVisionScreenTooDark;",
+					"to": "pixel->tooDark = brightestHere < kHudsonVisionScreenTooDark;"
+				}
+			]
+		},
+		{
+			"name": "checks are all on the top row",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "uint32_t const y = height * (2 * rowForColumn[column] + 1) / (2 * kHudsonVisionMostChecks);",
+					"to": "uint32_t const y = 0;"
+				}
+			]
+		},
+		{
+			"name": "checks fall along one line",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(2 * rowForColumn[column] + 1)",
+					"to": "(2 * column + 1)"
+				}
+			]
+		},
+		{
+			"name": "a picture of no size is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "column = 0; width > 0 && height > 0 && column <",
+					"to": "column = 0; column <"
+				}
+			]
+		},
+		{
+			"name": "which side a ray met is the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "direction[2] * plane[2] < 0.0;",
+					"to": "direction[2] * plane[2] > 0.0;"
+				}
+			]
+		},
+		{
+			"name": "side-on counts as behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "direction[2] * plane[2] < 0.0;",
+					"to": "direction[2] * plane[2] <= 0.0;"
+				}
+			]
+		},
+		{
+			"name": "ahead ignores y",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_vision.cpp",
+					"from": "(double)direction[1] * view[9] + ",
+					"to": ""
+				}
+			]
+		}
+	]
+}

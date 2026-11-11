@@ -1,5 +1,6 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
+//   a run doesn't wait for a key after loading
 //   in the mode that plays as single player does, a host waits for a key too, and a level starts for everyone together
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a level load answers other machines all the way through
@@ -11,6 +12,7 @@
 #include "kshape.h"
 #include "progress_bar.h"
 #include "networking.h"
+#include "hudson.h"
 #include "chunk_textures.h"
 #include "inline.h"
 #include "gamedef.h"
@@ -176,7 +178,7 @@ void Set_Progress_Bar_Position(int pos)
 // Has the time come to leave the loading screen? In the mode that plays as single player does, everyone waits for a key, the host too, and then for everyone else. Otherwise a key is enough, and a host never waited. A test run counts as having pressed a key.
 static bool LoadingScreenIsDone(bool startsTogether, bool *keyHasBeenPressed)
 {
-	if (DebouncedGotAnyKey)
+	if (DebouncedGotAnyKey || HudsonRunIsOn)
 	{
 		*keyHasBeenPressed = true;
 	}

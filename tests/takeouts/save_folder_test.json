@@ -189,7 +189,7 @@
 			"changes": [
 				{
 					"file": "3dc/utilities.cpp",
-					"from": "whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);",
+					"from": "whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where, saveFolderIsTheSecondCopy);",
 					"to": "whatWentWrong = 0;"
 				}
 			]
@@ -601,6 +601,36 @@
 					"file": "3dc/save_file_write.h",
 					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
 					"to": "GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL"
+				}
+			]
+		},
+		{
+			"name": "the second copy gets the game's own folder",
+			"changes": [
+				{
+					"file": "3dc/save_folder.h",
+					"from": "path += std::string(\"/\") + (secondCopy ? kSaveFolderSecondCopyName : kSaveFolderGameName);",
+					"to": "path += std::string(\"/\") + kSaveFolderGameName;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -secondcopy is taken without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "secondCopyAsked && CommandLineHasWord(lpCmdLine, \"-dev\") && SaveFolder_UseTheSecondCopy()",
+					"to": "secondCopyAsked && SaveFolder_UseTheSecondCopy()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the second copy asked for too late changes the folder",
+			"changes": [
+				{
+					"file": "3dc/utilities.cpp",
+					"from": "if (saveFolder[0] != 0 || noSaveFolder)",
+					"to": "if (false)"
 				}
 			]
 		}

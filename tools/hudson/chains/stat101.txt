@@ -1,0 +1,51 @@
+# level: stat101   end started by: walk
+# campaign: Alien 4
+# route: played forward here, as above, and a switch or object within 2 m of a room counted as reachable from it. The fewest steps found, worked out from the level file. No one has walked it.
+where lok02
+near lokdrM01 | liftstrt01
+destroy liftor32
+where liftup02
+near foyer02 | liftM05
+destroy liftor24
+where calok21
+near liftM03 | liftup08 | liftup13
+destroy liftor12
+where calok21
+near liftM04 | liftup07 | liftup09
+destroy liftor10
+where ventrm01
+near ventanex04 | ventdrM04 | ventrm02
+destroy liftor26
+where VENTEX04
+near ventanex01 | ventdrM01
+destroy liftor28
+where VENTEX05
+near ventanex02 | ventdrM08
+destroy liftor30
+where ventanex04
+destroy keybrd01
+where ventanex01
+destroy keybrd02
+where ventanex02
+destroy keybrd03
+where tolift02
+near liftM10 | liftup16 | liftup18
+destroy liftor02
+where liftup24
+near foy02 | liftM12 | liftup22
+destroy liftor06
+where obs07
+destroy fakekeys04
+where obs07
+destroy fakekeys05
+where obs07
+destroy fakekeys06
+where obs05
+destroy fakekeys25
+where obs05
+destroy fakekeys26
+where obs05
+destroy fakekeys27
+where alienpen | barM01
+walk endarea01
+end end

@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the Online access row is in the Multiplayer page's table, with or without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t// The Online access row's place: with -dev it's put here (MenuData_ShowOnlineAccessRow). Without -dev the page ends here.\n\t{AVPMENU_ELEMENT_ENDOFMENU},",
+					"to": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_ACCESS_ROW},\t{AVPMENU_ONLINE_ACCESS},\t{0},\t{0},\tTEXTSTRING_ACCESS_ROW_HELP},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the row is put there whatever developer says",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "= developer ? OnlineAccessRow : NoOnlineAccessRow;",
+					"to": "= OnlineAccessRow;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus put the row there without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "MenuData_ShowOnlineAccessRow(DevMode != 0);",
+					"to": "MenuData_ShowOnlineAccessRow(true);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Online access page opens without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\tif (!DevMode)\n\t{\n\t\treturn false;\n\t}\n\n\tif (!nameStarted)",
+					"to": "\tif (!nameStarted)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the question before a new identity opens without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\treturn DevMode != 0;\n}",
+					"to": "\treturn true;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a page that refuses to open is left open",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tif (!AccessPage_Opened(AvPMenus.MenuElements))\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\t\t\t\treturn;\n\t\t\t}\n",
+					"to": "\t\t\tAccessPage_Opened(AvPMenus.MenuElements);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: relay_list.cpp sends a request without -dev",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (!DevMode || !fingerprint)",
+					"to": "if (!fingerprint)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page reaches the network another way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\tTakeTheIdentity();\n\n\t// PO's ruling",
+					"to": "\tTakeTheIdentity();\n\tRelayList_FindGames();\n\n\t// PO's ruling"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page asks by itself as it opens, with no rule",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "AccessPage_MayAskByItself(sentThisRun, onItsWay, Now(), lastCallAt))",
+					"to": "true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the question's Yes comes first, so an Enter by chance makes a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_ACCESS_NEWID_NO},\t{kAccessRowNewNo},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_ACCESS_NEWID_YES},\t{kAccessRowNewYes},\t{0},\t{0},\tTEXTSTRING_BLANK},",
+					"to": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_ACCESS_NEWID_YES},\t{kAccessRowNewYes},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_ACCESS_NEWID_NO},\t{kAccessRowNewNo},\t{0},\t{0},\tTEXTSTRING_BLANK},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an identity the server refused keeps asking, and uses up calls",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page.cpp",
+					"from": "\t\t\tif (needsANewIdentity)\n\t\t\t{\n\t\t\t\tstateLine = AccessPage_AnswerText(lastAnswer);\n\t\t\t\treturn false;\n\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the page asks by itself before the player has sent a request",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "return sentThisRun && !onItsWay && AccessPage_MinuteHasGone(now, lastCallAt);",
+					"to": "return !onItsWay && AccessPage_MinuteHasGone(now, lastCallAt);"
+				}
+			]
+		},
+		{
+			"name": "the page asks again 6 seconds after its last call, not a minute",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "uint32_t const kAccessPageLeastMsBetweenCalls = 60000;",
+					"to": "uint32_t const kAccessPageLeastMsBetweenCalls = 6000;"
+				}
+			]
+		},
+		{
+			"name": "a minute is counted wrong when the clock goes round",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "return (uint32_t)(now - lastCallAt) >= kAccessPageLeastMsBetweenCalls;",
+					"to": "return now >= lastCallAt + kAccessPageLeastMsBetweenCalls;"
+				}
+			]
+		},
+		{
+			"name": "the first press of the run waits a minute",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "if (calledThisRun && !AccessPage_MinuteHasGone(now, lastCallAt))",
+					"to": "if (!AccessPage_MinuteHasGone(now, lastCallAt))"
+				}
+			]
+		},
+		{
+			"name": "a press sends again while a call is on its way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "\tif (onItsWay)\n\t{\n\t\treturn kAccessPageAskOnItsWay;",
+					"to": "\tif (false)\n\t{\n\t\treturn kAccessPageAskOnItsWay;"
+				}
+			]
+		},
+		{
+			"name": "approved is shown as waiting",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "case kRelayAccessApproved: return TEXTSTRING_ACCESS_APPROVED;",
+					"to": "case kRelayAccessApproved: return TEXTSTRING_ACCESS_WAITING;"
+				}
+			]
+		},
+		{
+			"name": "a name too long is told it's empty",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "case kRelayAccessNameTooLong: return TEXTSTRING_ACCESS_NAME_TOO_LONG;",
+					"to": "case kRelayAccessNameTooLong: return TEXTSTRING_ACCESS_NAME_EMPTY;"
+				}
+			]
+		},
+		{
+			"name": "busy is taken to need a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/access_page_rules.h",
+					"from": "return answer == kRelayAccessRefused || answer == kRelayAccessRevoked;",
+					"to": "return answer != kRelayAccessWaiting;"
+				}
+			]
+		}
+	]
+}

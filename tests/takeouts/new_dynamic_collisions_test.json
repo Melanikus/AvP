@@ -1,0 +1,238 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "off is not 1999's 16",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "if (!newWayOn || frameTime >= kSixtyFramesFrame)",
+					"to": "if (frameTime >= kSixtyFramesFrame)"
+				}
+			]
+		},
+		{
+			"name": "on and off are swapped",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "if (!newWayOn || frameTime >= kSixtyFramesFrame)",
+					"to": "if (newWayOn || frameTime >= kSixtyFramesFrame)"
+				}
+			]
+		},
+		{
+			"name": "a frame at 60 frames a second shrinks too",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "if (!newWayOn || frameTime >= kSixtyFramesFrame)",
+					"to": "if (!newWayOn || frameTime >= 2 * kSixtyFramesFrame)"
+				}
+			]
+		},
+		{
+			"name": "the share is of 16 mm, not of the 17 mm 1999 keeps",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "((kNothingIn1999 + 1) * frameTime)",
+					"to": "(kNothingIn1999 * frameTime)"
+				}
+			]
+		},
+		{
+			"name": "the smallest move kept is thrown away too",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "int const nothingUpTo = smallestKept - 1;",
+					"to": "int const nothingUpTo = smallestKept;"
+				}
+			]
+		},
+		{
+			"name": "no least size, so a very short frame keeps any move",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "return nothingUpTo < kNothingAtLeast ? kNothingAtLeast : nothingUpTo;",
+					"to": "return nothingUpTo;"
+				}
+			]
+		},
+		{
+			"name": "a frame of nothing or less gives no size",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "\t\treturn kNothingAtLeast;\n",
+					"to": "\t\treturn 0;\n"
+				}
+			]
+		},
+		{
+			"name": "nothing typed sets it on, instead of switching it",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "*newWayOn = *newWayOn ? 0 : 1;",
+					"to": "*newWayOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "OFF is not off",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "SwitchWords_Are(start, length, \"OFF\")",
+					"to": "SwitchWords_Are(start, length, \"OF\")"
+				}
+			]
+		},
+		{
+			"name": "ON is not on",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "SwitchWords_Are(start, length, \"ON\")",
+					"to": "SwitchWords_Are(start, length, \"O\")"
+				}
+			]
+		},
+		{
+			"name": "words it does not know turn it on",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "\t\treturn false;\n",
+					"to": "\t\t*newWayOn = 1;\n"
+				}
+			]
+		},
+		{
+			"name": "no words at all are read anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/new_dynamic_collisions.h",
+					"from": "\tif (words)\n\t{\n\t\tSwitchWords_Trim(words, &start, &length);\n\t}\n",
+					"to": "\tSwitchWords_Trim(words, &start, &length);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch starts off",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "int NewDynamicCollisionsOn = 1;",
+					"to": "int NewDynamicCollisionsOn = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game asks with a fixed frame, not this one",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "return NewDynamicCollisions_NothingUpTo(NormalFrameTime, NewDynamicCollisionsOn);",
+					"to": "return NewDynamicCollisions_NothingUpTo(kSixtyFramesFrame, NewDynamicCollisionsOn);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the search for the spot short of the wall keeps 1999's 16",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "DistanceLeftToMove)<=NothingUpTo())",
+					"to": "DistanceLeftToMove)<=16)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what is left after a hit keeps 1999's 16",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "if (dynPtr->DistanceLeftToMove<=NothingUpTo())\n\t\t{\n\t\t\tdynPtr->DistanceLeftToMove = 0;\n\t\t}\n\t\treturn 1;",
+					"to": "if (dynPtr->DistanceLeftToMove<=16)\n\t\t{\n\t\t\tdynPtr->DistanceLeftToMove = 0;\n\t\t}\n\t\treturn 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what is left with no hit keeps 1999's 16",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "if (dynPtr->DistanceLeftToMove<=NothingUpTo())\n\t\t{\n\t\t\tdynPtr->DistanceLeftToMove = 0;\n\t\t}\n\t\treturn 0;",
+					"to": "if (dynPtr->DistanceLeftToMove<=16)\n\t\t{\n\t\t\tdynPtr->DistanceLeftToMove = 0;\n\t\t}\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command says nothing on the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\t\tNewOnScreenMessage(message);",
+					"to": "\t\t(void)message;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command writes nothing in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\tLogString(message);",
+					"to": "\t(void)message;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console command is not made",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\"NEWDYNAMICCOLLISIONS\",",
+					"to": "\"NEWDYNAMICCOLLISION\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console command is a cheat",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\t\tNewDynamicCollisionsCommand\n\t);",
+					"to": "\t\tNewDynamicCollisionsCommand,\n\t\ttrue\n\t);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say it at the start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tLogString(NewDynamicCollisions_Words(NewDynamicCollisionsOn));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a command-line switch turns it off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tLogString(NewDynamicCollisions_Words(NewDynamicCollisionsOn));\n",
+					"to": "\tif (CommandLineHasWord(lpCmdLine, \"-newdynamiccollisionsoff\"))\n\t{\n\t\tNewDynamicCollisionsOn = 0;\n\t}\n\tLogString(NewDynamicCollisions_Words(NewDynamicCollisionsOn));\n"
+				}
+			]
+		}
+	]
+}

@@ -6,6 +6,8 @@
 // way takes a run: listplace= starts a skirmish from the level row, and its "meets:" lines are compared with
 // the same level in single player.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "avp/win95/frontend/level_lists.h"
 #include "avp/player_spots.h"
 #include "avp/win95/shared_roll.h"
@@ -17,6 +19,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "source_slice.h"
 
 static int checks = 0;
 static int failures = 0;
@@ -75,18 +78,10 @@ static int Times(const std::string &text, const char *what)
 	return times;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void TestTheNumbers()
@@ -245,7 +240,11 @@ static void TestTheWiring()
 	Check(Has(menus, "LoadGameRequest == SAVELOAD_REQUEST_NONE && SameAsSinglePlayer())"), "a deathmatch gets no film");
 	Check(Times(menus, "PlayFilmWithTheNetworkGoing(\"FMVs/") == 6, "and all six films keep the network going");
 	Check(Has(menus, "WhileAFilmPlays = KeepTheNetworkGoing;"), "by this");
-	Check(Has(menus, "static bool KeepTheNetworkGoing(void)\n{\n\tNet_ServiceNetwork();\n\treturn true;\n}"), "which only looks after the connection, because reading messages could act on a level that isn't loaded");
+	Check(Has(menus, "static bool KeepTheNetworkGoing(void)\n{\n\tNet_ServiceNetwork();\n\treturn Hudson_FilmGoesOn();\n}"), "which only looks after the connection, because reading messages could act on a level that isn't loaded");
+	// Its answer is Hudson's, which only says whether a run's film goes on (filmskip=): it touches no message, and outside a run it's always yes, so a player's film plays to its end or a key
+	std::string const filmGoesOn = Between(ReadSource("3dc/avp/hudson.cpp"), "bool Hudson_FilmGoesOn()\n{", "void Hudson_FilmEnded()");
+	Check(filmGoesOn.find("bool Hudson_FilmGoesOn()\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn true;\n\t}") == 0, "and outside a Hudson run that answer is yes before anything else");
+	Check(!Has(filmGoesOn, "Net_") && !Has(filmGoesOn, "Message"), "and it reads no message");
 	Check(Has(ReadSource("3dc/FmvCutscenes.cpp"), "if (WhileAFilmPlays && !WhileAFilmPlays()) {\n\t\t\ttoldToStop = true;"), "which is called while it plays, and can stop it");
 	Check(Has(ReadSource("3dc/FmvCutscenes.cpp"), "if ((GotAnyKey && DebouncedGotAnyKey) || toldToStop)"), "as a key would");
 
@@ -313,7 +312,11 @@ static void TestTheWiring()
 	Check(Has(objectSetup, "dieroll=SharedRoll(netGameData.coopRollNumber, bbd->alt_vector[0].vx, bbd->alt_vector[0].vy, bbd->alt_vector[0].vz);"), "and so does one by itself");
 	Check(Has(pldnet, "messagePtr->coopRollNumber = netGameData.coopRollNumber;"), "the number goes in the game description");
 	Check(Has(pldnet, "netGameData.coopRollNumber = messagePtr->coopRollNumber;"), "and arrives");
-	Check(Times(menus, "Campaign_ChooseRollNumber();") == 1, "the host chooses it as a game starts");
+	// A player's host chooses it once, as the game starts from the menu. A Hudson run's two ways of starting do what that host would, each once
+	Check(Times(Between(menus, "static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)\n{", "static void RenderMenuElement("), "Campaign_ChooseRollNumber();") == 1, "the host chooses it as a game starts");
+	Check(Times(Between(menus, "static void StartNetworkGameForHudsonRun(void)\n{", "static void ShowTheCustomMapsPageForHudsonRun(void)"), "Campaign_ChooseRollNumber();") == 1
+		&& Times(Between(menus, "static int StartLevelForHudsonRun(void)\n{", "static bool HostByItselfThroughTheRelay(void)"), "Campaign_ChooseRollNumber();") == 1, "and so does a Hudson run's start, as that host would");
+	Check(Times(menus, "Campaign_ChooseRollNumber();") == 3, "and nothing else chooses it");
 	Check(Has(pldnet, "case (NetMT_RespawnPickups):\n\t\t\t{\n\t\t\t\tif (!SameAsSinglePlayer() && (netGameData.myGameState == NGS_Playing ||"), "and a message can't bring back every pick-up");
 
 	// difficulty
@@ -424,7 +427,7 @@ static void TestTheWiring()
 	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
 	Check(Has(versionCheck, "61 * kLevelListCampaignLevels;"), "and so is the level list");
 	Check(Has(versionCheck, "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
-	Check(Has(networking, "const int kMultiplayerVersion = 113;"), "this build's version");
+	Check(Has(networking, "const int kMultiplayerVersion = 114;"), "this build's version");
 }
 
 int main()

@@ -127,6 +127,14 @@
     { "name": "SOURCE: a beta's version isn't written as the version",
       "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})-beta\\.(0|[1-9][0-9]{0,3})\\z'", "to": "" }] },
     { "name": "a program in bin doesn't make the folder above it the game folder",
-      "changes": [{ "file": "3dc/log_files.h", "from": "if (last > parent && _stricmp(last, \"bin\") == 0)", "to": "if (false)" }] }
+      "changes": [{ "file": "3dc/log_files.h", "from": "if (last > parent && _stricmp(last, \"bin\") == 0)", "to": "if (false)" }] },
+    { "name": "a commit's number is read from its first 7 digits",
+      "changes": [{ "file": "3dc/build_identity.h", "from": "\t\tif (i < 8)\n\t\t{\n\t\t\tword = (word << 4) | digit;", "to": "\t\tif (i < 7)\n\t\t{\n\t\t\tword = (word << 4) | digit;" }] },
+    { "name": "a commit of 41 digits is taken",
+      "changes": [{ "file": "3dc/build_identity.h", "from": "\tif (commit[40] != 0)\n\t{\n\t\treturn false;\n\t}\n", "to": "" }] },
+    { "name": "a commit in capitals is taken",
+      "changes": [{ "file": "3dc/build_identity.h", "from": "else if (c >= 'a' && c <= 'f')", "to": "else if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))" }] },
+    { "name": "a text that isn't a commit leaves the number as it was",
+      "changes": [{ "file": "3dc/build_identity.h", "from": "\t*out = 0;\n\n\tif (!commit)", "to": "\tif (!commit)" }] }
   ]
 }

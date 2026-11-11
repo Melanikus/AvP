@@ -324,13 +324,34 @@ static void TestBuildLines()
 
 	Check(lines.compare(0, 15, "build: version ") == 0 && Has(lines, ", commit "), "the first line says the version and the commit, or that they're not known");
 
-	char path[MAX_PATH];
-	::GetModuleFileNameA(NULL, path, MAX_PATH);
-	std::string const program = ReadWholeFile(path);
+	char path[MAX_PATH] = { 0 };
+	DWORD const pathLength = ::GetModuleFileNameA(NULL, path, MAX_PATH);
+	bool const pathIsWhole = pathLength > 0 && pathLength < MAX_PATH;
+	Check(pathIsWhole, "this program's own path can be read whole");
 
+	// The program read in pieces of a fixed size, as build_identity.cpp reads it, so no more than one piece is ever handed on at once
 	struct MD5Context md5;
 	MD5Init(&md5);
-	MD5Update(&md5, (md5byte const *)program.data(), (unsigned)program.size());
+	unsigned long long programSize = 0;
+	FILE *const program = pathIsWhole ? fopen(path, "rb") : NULL;
+	Check(program != NULL, "and the program can be opened");
+
+	if (program)
+	{
+		static unsigned char piece[65536];
+		size_t got = 0;
+
+		while ((got = fread(piece, 1, sizeof(piece), program)) > 0)
+		{
+			// fread never gives more than it was asked for, but the bound is said here too, so nothing reading this has to know that
+			size_t const take = got < sizeof(piece) ? got : sizeof(piece);
+			MD5Update(&md5, (md5byte const *)piece, (unsigned)take);
+			programSize += take;
+		}
+
+		fclose(program);
+	}
+
 	unsigned char digest[16];
 	MD5Final(digest, &md5);
 	char expected[100];
@@ -342,11 +363,38 @@ static void TestBuildLines()
 	}
 
 	hex[32] = '\0';
-	_snprintf(expected, sizeof(expected) - 1, "\nbuild: this program is %u bytes, MD5 %s (worked out in ", (unsigned)program.size(), hex);
+	_snprintf(expected, sizeof(expected) - 1, "\nbuild: this program is %u bytes, MD5 %s (worked out in ", (unsigned)programSize, hex);
 	expected[sizeof(expected) - 1] = '\0';
 	Check(Has(lines, expected), "the second line has this program's size and fingerprint, and they're right");
 	Check(!Has(lines, path), "and not the program's folder");
 	Check(Has(lines, "\nbuild: running on Windows ") && Has(BuildIdentity_Windows(), ", build "), "the third line says which Windows, written \"10.0, build 26200\"");
+
+	// Added 2026-11-09 by Melanikus for the AvP port: the commit as a number, for the v2 draft's rule that two copies play only if they're the
+	// same commit (build_identity.h, networking.h)
+	uint32_t word = 1;
+	Check(BuildIdentity_WordFromCommit("5a1e7c03aa2b9e1f0d4c6b8a7e3f2d1c0b9a8f7e", &word) && word == 0x5a1e7c03u, "a commit's number is its first 8 hex digits");
+	word = 1;
+	Check(!BuildIdentity_WordFromCommit("not known", &word) && word == 0, "a build that doesn't know its commit has no number, and gets 0");
+	const char *const notCommits[] = {
+		"5a1e7c03aa2b9e1f0d4c6b8a7e3f2d1c0b9a8f7",     // 39 digits
+		"5a1e7c03aa2b9e1f0d4c6b8a7e3f2d1c0b9a8f7e0",   // 41
+		"5A1E7C03AA2B9E1F0D4C6B8A7E3F2D1C0B9A8F7E",    // capitals, which git never writes
+		"5a1e7c03aa2b9e1f0d4c6b8a7e3f2d1c0b9a8f7g",    // a letter that isn't a hex digit, at the end
+		"",
+		NULL
+	};
+	bool noneTaken = true;
+
+	for (size_t i = 0; i < sizeof(notCommits) / sizeof(notCommits[0]); i++)
+	{
+		word = 1;
+		noneTaken = noneTaken && !BuildIdentity_WordFromCommit(notCommits[i], &word) && word == 0;
+	}
+
+	Check(noneTaken, "and nothing but 40 hex digits in small letters is taken for a commit: not 39, not 41, not capitals, not another letter, not nothing");
+	word = 1;
+	bool const knows = BuildIdentity_CommitWord(&word);
+	Check(knows == !Has(lines, ", commit not known") && (knows || word == 0), "this build has a number exactly when its log line says its commit");
 }
 
 // ---- Leaving out the player -----------------------------------------------------------------------------------------------------------

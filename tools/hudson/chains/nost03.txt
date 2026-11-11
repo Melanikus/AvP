@@ -1,0 +1,27 @@
+# level: nost03   end started by: walk
+# campaign: Alien 3
+# route: played forward here, the rooms as the file joins them. The fewest steps found, worked out from the level file. No one has walked it.
+# In a network game, door MD-secM-03 stays shut: only killing marine "mar02" opens it.
+# In a network game, door MD-secM-98 stays shut: only killing marine "bad02" opens it.
+missing mar02 | a network game leaves out this marine
+where MD-pass-28
+destroy cap05
+where MD-pass-28
+destroy cap06
+where MD-pass-28
+destroy cap08
+where MD-pass-28
+destroy cap09
+where MD-prxM-03 | Mewcent04 | Mewcent10 | mod05 | mod06
+walk imm01
+where Mewcent04 | Mewcent13 | newcent03
+walk imm
+where Md-drM-01 | Mewcent13 | Mewcent15 | mod03 | mod04
+walk imm03
+where AW-corr-40
+destroy switch07
+where new02 | new04 | newM01
+walk areatoddoor
+where hang01 | hango2 | Mbreachdr | Object05
+walk endarea
+end endlevel

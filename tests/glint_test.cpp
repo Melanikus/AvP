@@ -3,12 +3,15 @@
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It uses no graphics card. A shader can't be run without one, so this has the same sum written out in C++,
 // checks that the shader still says it, and tries it with numbers. The last rows read the game's source, to check the glint is used the way its comments say. What it looks like on a card, only a run can show.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -56,12 +59,10 @@ static bool Has(std::string const &text, char const *what)
 	return text.find(what) != std::string::npos;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = (start == std::string::npos) ? start : text.find(to, start);
-
-	return (end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool ComesBefore(std::string const &text, char const *first, char const *second)

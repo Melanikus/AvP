@@ -1,0 +1,4 @@
+# What Hudson does to play caverns_a on foot, as a Alien. Worked out from the level file: nobody has walked it.
+# How: played forward with doors shutting behind him
+walk -41134 48704 -147904 | Vswichdoor 1 open
+kill 134047 24995 -92455 | PREDATOR

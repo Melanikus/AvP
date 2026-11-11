@@ -1,4 +1,8 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   in a Hudson run with dieat=, a host left alone and out starts the level again by itself, as single player does (#126)
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   two test-only helpers a Hudson hostile network run uses. Nothing calls them until the network step: hudson.cpp refuses net= until then
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a player's class number from the network has to be one there is, or it's taken as the general one, as the character type beside
 //   it already was
@@ -51,12 +55,16 @@
 //   be in the list of far places as well as in the list of AI modules
 //   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
 //   messages don't all fit, so a tester's log shows both
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each frame of a network game tells the 10-second report how long it took (net_watch.h)
+//   a full message's change to a figure's guess is worked out by ghost_guess.h, the same sums moved there so a test can run them
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
 
 #include "3dc.h"
 #include "inline.h"
+#include "ghost_guess.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "gamedef.h"
@@ -123,6 +131,7 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "npc_ghosts.h"
 #include "coop_in_game.h"
 #include "coop_menu.h"
+#include "hudson.h"
 
 // coop_in_game.h keeps one bit for each place on the player list
 static_assert(kCoopMostPlayers == NET_MAXPLAYERS, "coop_in_game.h needs one bit for each player");
@@ -452,6 +461,11 @@ static STRATEGYBLOCK *FindObjectFromNetIndex(int obIndex);
 static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcSound(NETMESSAGE_NPCSOUND *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr);
+// Hudson's ghost log (ghostlog=yes, in hudson.cpp) writes down the NPC messages sent and arrived, to compare the two machines.
+// Outside a Hudson run that asked for it, each of these does nothing and returns at once.
+extern void Hudson_GhostLogThrownObject(char const (&name)[SB_NAME_LENGTH], int x, int y, int z);
+extern void Hudson_GhostLogMessage(NETMESSAGE_NPCSTATE const *message);
+extern void Hudson_GhostLogDeath(int guid, int deathCode, int deathTime, int gibbFactor);
 static void ProcessNetMsg_LiftState(NETMESSAGE_LIFTSTATE *messagePtr);
 static void ProcessNetMsg_NpcXenoDeltas(NETMESSAGE_NPCXENODELTAS *messagePtr, NetID senderId);
 static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID senderId);
@@ -1034,6 +1048,8 @@ void NetCollectMessages(void)
 #if EXTRAPOLATION_TEST
 		PlayerGhostExtrapolation();
 #endif
+		// For the 10-second report: how long the frame took (net_watch.h). This is the frame just played, so it counts frames of play only.
+		Net_NoteFrame(RealFrameTime);
 	}
 
 	LogNetInfo("Finished message collection post-processing \n");
@@ -6574,23 +6590,9 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 				diff = ghostData->velocity;
 				SubVector(&velocity, &diff);
 
-				if (Approximate3dMagnitude(&diff) > 1000)
-				{
-					// change in velocity , so reset extrapolation timer
-					ghostData->extrapTimer = -ONE_FIXED;
-				}
-
+				// A change of speed of more than 1000 starts the guess again (ghost_guess.h does the sums, and its test runs them)
+				GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, Approximate3dMagnitude(&diff) > 1000, playerTimer);
 				ghostData->velocity = velocity;
-				ghostData->extrapTimerLast = 0;
-
-				if (playerTimer >= (int)ghostData->lastTimeRead) {
-					ghostData->extrapTimer -= (playerTimer - ghostData->lastTimeRead);
-				}
-				else {
-					ghostData->extrapTimer = -ONE_FIXED;
-				}
-
-				ghostData->lastTimeRead = playerTimer;
 			}
 
 			if (ghostData->type == I_BehaviourAlienPlayer)
@@ -7393,6 +7395,8 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 		destroyed already, so just ignore it */
 		if (sbPtr)
 		{
+			Hudson_NetSayAHit(messageHeader->ammo_id, sbPtr);
+
 			// fill out damage profile
 			damage.Id = static_cast<enum AMMO_ID>(messageHeader->ammo_id);
 
@@ -8434,23 +8438,9 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 		velocity.vz = MUL_FIXED(sbPtr->DynPtr->OrientMat.mat33, messagePtr->speed);
 		diff = Approximate3dMagnitude(&ghostData->velocity) - Approximate3dMagnitude(&velocity);
 
-		if (diff > 1500 || -diff > 1500)
-		{
-			// change in velocity , so reset extrapolation timer
-			ghostData->extrapTimer = -ONE_FIXED;
-		}
-
+		// For an alien, a change of its speed's size of more than 1500 starts the guess again (ghost_guess.h)
+		GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, diff > 1500 || -diff > 1500, playerTimer);
 		ghostData->velocity = velocity;
-		ghostData->extrapTimerLast = 0;
-
-		if (playerTimer >= (int)ghostData->lastTimeRead) {
-			ghostData->extrapTimer -= (playerTimer - ghostData->lastTimeRead);
-		}
-		else {
-			ghostData->extrapTimer = -ONE_FIXED;
-		}
-
-		ghostData->lastTimeRead = playerTimer;
 		sbPtr->DynPtr->UseStandardGravity = messagePtr->standard_gravity;
 
 		if (!sbPtr->DynPtr->UseStandardGravity)
@@ -8628,6 +8618,7 @@ static void AddNpcStateMessages(void)
 			break;
 		}
 
+		Hudson_GhostLogMessage(&state);
 
 		NETMESSAGE_NPCXENODELTAS deltas;
 
@@ -8754,6 +8745,7 @@ void AddNetMsg_NpcThrownObject(STRATEGYBLOCK *object)
 	message.yOrient = (short)way.EulerY;
 	message.zOrient = (short)way.EulerZ;
 	AddPartToSendBuffer(NetMT_NpcThrownObject, &message, sizeof(message));
+	Hudson_GhostLogThrownObject(message.name, message.vx, message.vy, message.vz);
 }
 
 // The host says where a thing the queen threw has got to. Everything in this message came from another machine.
@@ -8810,6 +8802,8 @@ static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr
 	body->GravityOn = 0;
 	body->OnlyCollideWithEnvironment = 1;
 	object->containingModule = room;
+
+	Hudson_GhostLogThrownObject(messagePtr->name, place.vx, place.vy, place.vz);
 }
 
 // PlaySound checks the voice and the category against what it has loaded, so those can be any number.
@@ -8860,6 +8854,7 @@ void AddNetMsg_NpcKilled(STRATEGYBLOCK *sbPtr, int deathCode, int deathTime, int
 	killed.death_time = deathTime;
 	killed.GibbFactor = gibbFactor;
 	AddPartToSendBuffer(NetMT_NpcKilled, &killed, sizeof(killed));
+	Hudson_GhostLogDeath(killed.Guid, deathCode, deathTime, gibbFactor);
 }
 
 // Every number in these has come over the network, so nothing is used until it has been checked. The sender has already been checked to be the host: see kNetPartRules.
@@ -8929,6 +8924,7 @@ static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID sender
 		return;
 	}
 
+	Hudson_GhostLogMessage(messagePtr);
 	NpcGhosts_ApplyState(sbPtr, messagePtr, &position, &orientation);
 }
 
@@ -8999,6 +8995,8 @@ static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID send
 		return;
 	}
 
+	Hudson_NetSayAnNpcDied(messagePtr->death_code);
+	Hudson_GhostLogDeath(messagePtr->Guid, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 	NpcGhosts_Kill(sbPtr, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 }
 
@@ -13848,7 +13846,8 @@ void Coop_WhileOut(bool asksToChangeWhoHeWatches)
 
 	bool const timeIsUp = someoneElseIsHere && everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;
 
-	if (DebouncedGotAnyKey || timeIsUp)
+	// A Hudson run that asked to die (dieat=) presses its key here too, 3 seconds after he went out, as it does in single player
+	if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())
 	{
 		// The same thing the host's "restart" command does, and the one single player's death leads to in the end
 		int const seed = FastRandom();
@@ -13899,6 +13898,8 @@ static void Coop_GoToPlace(int place)
 	if (!coopLevelChangeIsDue)
 	{
 		coopCampaignIsOver = true;
+		// A Hudson pair run ends here, as finished. Outside one, this does nothing.
+		Hudson_NetCampaignIsOver();
 	}
 }
 
@@ -14699,3 +14700,37 @@ static void ProcessNetMsg_LevelEventAsk(NETMESSAGE_LEVELEVENT *messagePtr, NetID
 	AddNetMsg_LevelEvent(NetMT_LevelEvent, messagePtr->source);
 }
 
+/*----------------------------------------------------------------------
+  For the hostile test run only. Nothing else calls these.
+  ----------------------------------------------------------------------*/
+
+void HudsonTest_AddRawPart(int kind, const void *part, int size)
+{
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if ((int)sizeof(NETMESSAGEHEADER) + size > numBytesLeft)
+	{
+		return;
+	}
+
+	((NETMESSAGEHEADER *)endSendBuffer)->type = (unsigned char)kind;
+	endSendBuffer += sizeof(NETMESSAGEHEADER);
+	memcpy(endSendBuffer, part, size);
+	endSendBuffer += size;
+}
+
+void HudsonTest_AddDescriptionWithout(NetID left)
+{
+	int const place = PlayerIdInPlayerList(left);
+
+	if (place == NET_IDNOTINPLAYERLIST)
+	{
+		return;
+	}
+
+	NetID const id = netGameData.playerData[place].playerId;
+
+	netGameData.playerData[place].playerId = 0;
+	AddNetMsg_GameDescription();
+	netGameData.playerData[place].playerId = id;
+}

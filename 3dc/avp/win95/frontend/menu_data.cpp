@@ -15,6 +15,11 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   both sound pages have a Room echo row (REVERB-TOGGLE-1). Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
 //   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
+//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, which is there only with -dev
+//   the Join page's first row is "Find Games": its search looks on this network, and with -dev asks the online list of games too
+//   (language.cpp's words, which promise a player only this network)
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -36,6 +41,8 @@
 #include "mp_config.h"
 #include "detaillevels.h"
 #include "MusicPlayer.h"
+#include "online_screens_page.h"
+#include "access_page.h"
 
 #define MPLAYER_SUPPORT 0
 
@@ -453,6 +460,39 @@ static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP},
 
+	// The Online access row's place: with -dev it's put here (MenuData_ShowOnlineAccessRow). Without -dev the page ends here.
+	{AVPMENU_ELEMENT_ENDOFMENU},
+
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// Where the Online access row goes on the Multiplayer page, and the row itself
+static const int kMultiplayerAccessRow = 4;
+static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_ROW},	{AVPMENU_ONLINE_ACCESS},	{0},	{0},	TEXTSTRING_ACCESS_ROW_HELP};
+static AVPMENU_ELEMENT const NoOnlineAccessRow = {AVPMENU_ELEMENT_ENDOFMENU};
+
+// The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release". So the
+// row is there only with -dev: without it, the Multiplayer page has its four rows of 1999, and nothing leads to the Online access pages.
+void MenuData_ShowOnlineAccessRow(bool developer)
+{
+	AvPMenu_Multiplayer[kMultiplayerAccessRow] = developer ? OnlineAccessRow : NoOnlineAccessRow;
+}
+
+// The Online access page (access_page.h): the name to send, then the rows that send it, copy the code, and make a new identity
+static AVPMENU_ELEMENT AvPMenu_OnlineAccess[]=
+{
+	{AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_ACCESS_NAME},	{kRelayAccessNameMostBytes},	{(int*)AccessPageName},	{0},	TEXTSTRING_ACCESS_NAME_HELP},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_REQUEST},	{kAccessRowRequest},	{0},	{0},	TEXTSTRING_ACCESS_REQUEST_HELP},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_COPY},	{kAccessRowCopy},	{0},	{0},	TEXTSTRING_ACCESS_COPY_HELP},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_NEWID},	{AVPMENU_ONLINE_ACCESS_NEW},	{0},	{0},	TEXTSTRING_ACCESS_NEWID_HELP},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// The question before a new identity: No comes first, so an Enter pressed by chance keeps the identity
+static AVPMENU_ELEMENT AvPMenu_OnlineAccessNew[]=
+{
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_NO},	{kAccessRowNewNo},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_YES},	{kAccessRowNewYes},	{0},	{0},	TEXTSTRING_BLANK},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -491,7 +531,7 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerStartGame[]=
 
 static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=
 {
-	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDLOCAL},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDLOCAL_HELP},
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDGAMES},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_OPENADDRESS},	{AVPMENU_MULTIPLAYEROPENADDRESS},	{0},	{0},	TEXTSTRING_MULTIPLAYER_OPENADDRESS_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
@@ -507,8 +547,11 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame2[]=
 
 };
 
+// The page of games found: the Search box and the Refresh row, then a row for each of up to 10 games (MakeSelectSessionMenu)
 static AVPMENU_ELEMENT AvPMenu_MultiplayerSelectSession[]=
 {
+	{AVPMENU_ELEMENT_ENDOFMENU}, // Search
+	{AVPMENU_ELEMENT_ENDOFMENU}, // Refresh
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 1
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 2
 	{AVPMENU_ELEMENT_ENDOFMENU}, // 3
@@ -1137,32 +1180,53 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_COOP_HOSTQUITS
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_CoopHostQuits,					AVPMENU_INGAME, 0},
+
+	// AVPMENU_ONLINE_ACCESS
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_ROW,			AvPMenu_OnlineAccess,					AVPMENU_MULTIPLAYER, 0},
+
+	// AVPMENU_ONLINE_ACCESS_NEW
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_NEWID,			AvPMenu_OnlineAccessNew,					AVPMENU_ONLINE_ACCESS, 0},
 };
 
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
-static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_COOP_HOSTQUITS + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_ONLINE_ACCESS_NEW + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
+// The page of games found (online_screens_page.h). On the list: the Search box (the menus' own text field, typing into the page's own
+// buffer of 20 letters), the Refresh row, and a row for each game the search lets through, even none. While the open sessions are fetched
+// or a fetch has failed: one Refresh row, for Enter to try again, whose words the page draws itself.
 extern void MakeSelectSessionMenu(void)
 {
-	int i;
+	int i = 0;
+	int const room = (int)(sizeof(AvPMenu_MultiplayerSelectSession) / sizeof(AvPMenu_MultiplayerSelectSession[0])) - 1;
 
-	if (NumberOfSessionsFound)
+	if (OnlinePage_ShowsTheList())
 	{
-		for (i = 0; i < NumberOfSessionsFound; i++)
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_TEXTFIELD;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_MULTIPLAYER_SEARCH;
+		AvPMenu_MultiplayerSelectSession[i].MaxTextLength = OnlinePage_SearchLetters();
+		AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_SearchBox();
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_SEARCH_HELP;
+		i++;
+
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_FINDAGAIN;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_MULTIPLAYER_REFRESH;
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_REFRESH_HELP;
+		i++;
+
+		for (int row = 0; row < OnlinePage_RowCount() && i < room; row++, i++)
 		{
 			AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_LISTCHOICE;
-			AvPMenu_MultiplayerSelectSession[i].TextPtr = SessionData[i].Name;
+			AvPMenu_MultiplayerSelectSession[i].TextPtr = OnlinePage_RowName(row);
 			AvPMenu_MultiplayerSelectSession[i].MenuToGoTo = AVPMENU_MULTIPLAYER_JOINING;
 			AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_MULTIPLAYER_SELECTSESSION_HELP;
 		}
 	}
 	else
 	{
-		AvPMenu_MultiplayerSelectSession[0].ElementID = AVPMENU_ELEMENT_GOTOMENU;
-		AvPMenu_MultiplayerSelectSession[0].TextDescription = TEXTSTRING_MULTIPLAYER_NOSESSIONSFOUND;
-		AvPMenu_MultiplayerSelectSession[0].MenuToGoTo = AVPMENU_MULTIPLAYERJOINGAME;
-		AvPMenu_MultiplayerSelectSession[0].HelpString = TEXTSTRING_MULTIPLAYER_NOSESSIONSFOUND_HELP;
-		i = 1;
+		AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_FINDAGAIN;
+		AvPMenu_MultiplayerSelectSession[i].TextDescription = TEXTSTRING_BLANK;
+		AvPMenu_MultiplayerSelectSession[i].HelpString = TEXTSTRING_BLANK;
+		i++;
 	}
 
 	AvPMenu_MultiplayerSelectSession[i].ElementID = AVPMENU_ELEMENT_ENDOFMENU;

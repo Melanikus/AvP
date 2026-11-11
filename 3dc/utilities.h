@@ -63,6 +63,16 @@ char const *GetSaveFolderProblem();
 // anything asks for the folder, the log included. If it can't be made, the game has no folder, so its files go in the folder it started
 // from, which is still never the player's. Says whether the folder was made.
 bool UseSaveTestFolder(const char *gameFolder);
+
+// This copy of the game is a second one on the same machine (-dev -secondcopy): its files go in My Games/Aliens versus Predator (second
+// copy), a fixed name, so two copies don't share a log, settings or saved games. It has to come before anything asks for the folder, the
+// log first of all, and gives back false, changing nothing, if it comes too late. (Added 2026-11-08 by Melanikus for the AvP port.)
+bool SaveFolder_UseTheSecondCopy();
+
+// Whether this is that second copy, and whether this run is a Hudson run (-dev -hudson): for the kept online identity's file name, which
+// lives outside the save folder (net_identity_store.cpp). Added 2026-11-09 by Melanikus for the AvP port.
+bool SaveFolder_IsTheSecondCopy();
+bool SaveFolder_IsAHudsonRun();
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);
 

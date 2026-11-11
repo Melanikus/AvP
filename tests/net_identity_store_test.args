@@ -1,0 +1,16 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /we4834 /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602
+/I3dc /Itests /Ivcpkg_installed/x86-windows/include
+tests/net_identity_store_test.cpp
+3dc/net_identity_store.cpp
+3dc/net_crypto_cng.cpp
+3dc/net_pq_native.cpp
+3dc/pq_key_exchange.cpp
+3dc/pq_signature_check.cpp
+vcpkg_installed/x86-windows/lib/mlkem_native.lib
+vcpkg_installed/x86-windows/lib/mldsa_native.lib
+bcrypt.lib
+crypt32.lib
+advapi32.lib
+shell32.lib
+ole32.lib

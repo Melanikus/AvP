@@ -1,0 +1,88 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the half texel is left out, so a corner lands on the edge of its texel",
+			"changes": [
+				{
+					"file": "3dc/texel_centre.h",
+					"from": "return ((float)corner + 0.5f * cornerNumbersPerTexel) * recipOfTextureInCornerNumbers;",
+					"to": "return ((float)corner + 0.0f * cornerNumbersPerTexel) * recipOfTextureInCornerNumbers;"
+				}
+			]
+		},
+		{
+			"name": "the half texel is half of one corner number, not half a texel",
+			"changes": [
+				{
+					"file": "3dc/texel_centre.h",
+					"from": "return ((float)corner + 0.5f * cornerNumbersPerTexel) * recipOfTextureInCornerNumbers;",
+					"to": "return ((float)corner + 0.5f) * recipOfTextureInCornerNumbers;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: textured polygons go back to the old sum",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "(#148)\n\t\tmainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);\n\t\tmainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);\n\t\tvb++;\n\t}\n\n\tif (gunLayer) {",
+					"to": "(#148)\n\t\tmainVertex[vb].u = (float)(vertices->U) * RecipW;\n\t\tmainVertex[vb].v = (float)(vertices->V) * RecipH;\n\t\tvb++;\n\t}\n\n\tif (gunLayer) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: cloaked polygons go back to the old sum",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "as for every textured polygon: see texel_centre.h (#148)\n\t\tmainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);\n\t\tmainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);",
+					"to": "as for every textured polygon: see texel_centre.h (#148)\n\t\tmainVertex[vb].u = (float)(vertices->U) * RecipW;\n\t\tmainVertex[vb].v = (float)(vertices->V) * RecipH;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: decals go back to the old sum",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "decalVertex[decalVb].u = TexelCentre(vertices->U, 1.0f, RecipW);\n\t\tdecalVertex[decalVb].v = TexelCentre(vertices->V, 1.0f, RecipH);",
+					"to": "decalVertex[decalVb].u = (float)(vertices->U) * RecipW;\n\t\tdecalVertex[decalVb].v = (float)(vertices->V) * RecipH;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sky takes half of one of its 16.16 numbers, not half a texel",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "mainVertex[vb].u = TexelCentre(vertices->U, 65536.0f, RecipW);\n\t\tmainVertex[vb].v = TexelCentre(vertices->V, 65536.0f, RecipH);",
+					"to": "mainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);\n\t\tmainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the still level goes back to the old sum, and no longer matches the game",
+			"changes": [
+				{
+					"file": "3dc/static_level.cpp",
+					"from": "vertex.u = textured ? TexelCentre(coordinates[corner * 2 + 0], 1.0f, placed.recipWidth) : 0.0f;",
+					"to": "vertex.u = textured ? (float)coordinates[corner * 2 + 0] * placed.recipWidth : 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: particles go back to the old sum, and mix in the next picture of their sheet",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "particleVertex[pVb].u = TexelCentre((int)vertices->u, 1.0f, RecipW);\n\t\tparticleVertex[pVb].v = TexelCentre((int)vertices->v, 1.0f, RecipH);",
+					"to": "particleVertex[pVb].u = vertices->u * RecipW;\n\t\tparticleVertex[pVb].v = vertices->v * RecipH;"
+				}
+			]
+		}
+	]
+}

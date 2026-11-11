@@ -40,6 +40,18 @@ VirusTotal's report on the zip.
    ```
    Nothing printed means every file matches.
 
+**A test build instead of a release** (the owner's Build workflow, kept for 30 days as the artifact `avp-avpx_main`):
+`tools\install-build.ps1` downloads the newest one, or with `-Commit <all 40 digits>` only a build of that commit, and makes all
+these checks itself. When you've been told which commit to test, give it. To check one by hand, unzip it into a new,
+empty folder. There is no zip hash to compare, so step 1 is skipped. Step 2 is made on the list of hashes inside it instead, with
+the commit you expect (all 40 digits) in place of `<commit>`:
+```
+gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-ref refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners
+```
+Without `--source-digest`, any older build of avpx_main would pass too. Then step 3, in that folder. Also check that it holds no file
+the list doesn't name: a release's record covers its whole zip, but here only the list is recorded. Last, `BUILD.txt` (which is on
+the list) must say `avpx_main` and that same commit.
+
 ## 2. Where to unzip (Steam)
 Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, inside your Steam library. It holds `bin`,
 `avp_rifs`, `avp_huds` and the rest. The zip is laid out the same way.
@@ -73,7 +85,11 @@ Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, insid
 ## 3. Co-op in five lines
 1. **The host** chooses **Co-op campaign** on the Multiplayer page, picks the campaign, the level and the difficulty, and
    presses **Start** when everyone's in. Everyone plays the campaign's species. The host's page says who'll be left behind.
-2. **Each joiner** types the host's IP address to join. There's no list of games yet.
+2. **Each joiner** chooses **Join Existing Game**, then **Find Games**, which lists the games on the same network (two PCs at home,
+   say). Or **Open IP Address**, to type the host's address: the only way over the internet. **The host lets each joiner in:** the
+   host sees "*name* asks to join", and chooses **Let *name* in** or **Say no to *name*** at the top of the in-game menu (Esc), or of
+   the Co-op campaign page. A request nobody answers in 30 seconds counts as no. Everyone needs the same beta: one beta can't play
+   with another.
 3. **The host forwards UDP ports 23513 and 23514** on their router to their PC: 23513 is the game, and 23514 is how a joiner finds
    it. A joiner needs nothing. There's no automatic forwarding (UPnP). The game's port, 23513, can be changed with
    `PortNumber` under `[Networking]` in `AliensVsPredator.cfg`, in `Documents\My Games\Aliens versus Predator`, and it has to
@@ -102,7 +118,8 @@ pieces. If a game stalls only over a VPN, try without it.
   at most once a second, and keeps the newest 20 pictures. Tell us the mark's number when you describe what you saw.
   If you've given F2 to one of your controls, F2 does that instead and marks nothing.
 - **The M5 guns:**
-  - **As a marine:** open the console (the key under Esc, left of 1) and type `GIVEALLWEAPONS`, in capitals. It gives every marine
+  - **As a marine:** open the console and type `GIVEALLWEAPONS`, in capitals. (On a UK keyboard the console is the key under Esc;
+    on others it may be another key, or none, so tell us which key works for you.) It gives every marine
     gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest. In single player and the co-op campaign it's the only
     way to get the sniper rifle for now, since no level places one yet. Other multiplayer games leave the sniper rifle out.
   - **In other multiplayer games,** a marine can also pick the shotgun, revolver or M79 class.

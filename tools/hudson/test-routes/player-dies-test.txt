@@ -1,0 +1,2 @@
+# The player dies on purpose, by the game's own damage, as soon as the walk starts. This run has to end with the reason for that. See test-deaths.ps1.
+killtheplayer on purpose

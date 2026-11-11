@@ -2,7 +2,8 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1, tools/check-no-hudson.ps1, tools/check-release-package.ps1 and tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
+- tools/check-release.ps1, tools/check-hudson-asleep.ps1, tools/check-servers-dev-only.ps1, tools/check-release-package.ps1 and
+  tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
   and tools/check-virustotal.ps1 on made-up answers from VirusTotal. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
 - .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
@@ -444,43 +445,139 @@ Make-GoodRepository
 Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') '<Project></Project>'
 Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') "the game's project doesn't build it" 'code the project does not build is refused'
 
-# --- Hudson, the team's private test bot, never ships. Each way its code can show is refused, for its own reason, and the mentions of the word that
-# aren't its code are let through.
+# --- Hudson, the team's test bot, has been in the game since 2026-11-09 (the owner: "Hudson goes into avpx_main"), and a player's game must
+# never run any of it. check-hudson-asleep.ps1 proves that. Each way it can be broken is refused, for its own reason, and each way Hudson's
+# code is written to stay asleep is let through. The smallest Hudson that passes: a run turned on only by both words and the folder check,
+# and one way in that starts asleep. The same cases were tried by hand with AvP-docs' hudson_asleep_cases.js on 2026-11-09: 28 right.
+$hudsonGood = @{
+    '3dc/avp/hudson.cpp' = (@(
+        'bool HudsonRunIsOn = false;',
+        '',
+        'void Hudson_ReadCommandLine(const char *commandLine)',
+        '{',
+        "`tif (!HudsonPlan_IsAskedFor(commandLine))",
+        "`t{",
+        "`t`treturn;",
+        "`t}",
+        '',
+        "`tif (!HudsonPlan_FolderIsAllowed(commandLine))",
+        "`t{",
+        "`t`tTerminateProcess(0, 1);",
+        "`t}",
+        '',
+        "`tHudsonRunIsOn = true;",
+        '}',
+        '',
+        'void Hudson_EndOfFrame()',
+        '{',
+        "`tif (!HudsonRunIsOn)",
+        "`t{",
+        "`t`treturn;",
+        "`t}",
+        '',
+        "`tDoIt();",
+        '}',
+        '') -join "`n");
+    '3dc/avp/hudson_plan.cpp' = (@(
+        'bool HudsonPlan_IsAskedFor(const char *commandLine)',
+        '{',
+        "`treturn CommandLineHasWord(commandLine, `"-dev`") && CommandLineHasWord(commandLine, `"-hudson`");",
+        '}',
+        '') -join "`n");
+    '3dc/avp/game.cpp' = (@(
+        'void Start(const char *commandLine)',
+        '{',
+        "`tHudson_ReadCommandLine(commandLine);",
+        '}',
+        '',
+        'void Frame()',
+        '{',
+        "`tHudson_EndOfFrame();",
+        '}',
+        '') -join "`n")
+}
+
+# A good repository for the release's checks, with the smallest Hudson in it, and then the case's own files over it
+function Make-HudsonRepository([hashtable]$files)
+{
+    Make-GoodRepository
+    $all = @{}
+    foreach ($name in $hudsonGood.Keys) { $all[$name] = $hudsonGood[$name] }
+    foreach ($name in $files.Keys) { $all[$name] = $files[$name] }
+    foreach ($name in $all.Keys) { Write-File (Join-Path $work $name) $all[$name] }
+}
+
+# One more way in, defined in Hudson's file and named by the game
+function With-WayIn([string]$definition, [string]$call)
+{
+    return @{
+        '3dc/avp/hudson.cpp' = $hudsonGood['3dc/avp/hudson.cpp'] + "`n" + $definition + "`n";
+        '3dc/avp/game.cpp' = $hudsonGood['3dc/avp/game.cpp'] + "`nvoid More()`n{`n`t$call`n}`n"
+    }
+}
+
+function With-Changed([string]$name, [string]$from, [string]$to)
+{
+    return @{ $name = $hudsonGood[$name].Replace($from, $to) }
+}
+
+$gameMore = $hudsonGood['3dc/avp/game.cpp']
+$hudsonMore = $hudsonGood['3dc/avp/hudson.cpp']
+$letThrough = "A player's game can't run Hudson"
+$notAsleep = "which doesn't start by doing nothing unless HudsonRunIsOn"
+
 $hudsonCases = @(
-    @{ File = '3dc/avp/hudson.cpp'; Text = "code`n"; Reason = 'Hudson is in this commit: a file named 3dc/avp/hudson.cpp'; What = 'a file named after Hudson is refused' },
-    @{ File = 'tools/hudson/run.ps1'; Text = "code`n"; Reason = 'Hudson is in this commit: a file named tools/hudson/run.ps1'; What = 'and one in a folder of its own' },
-    @{ File = '3dc/avp/game.cpp'; Text = "#include `"hudson.h`"`n"; Reason = 'Hudson is in this commit: 3dc/avp/game.cpp line 1 includes one of its files'; What = 'a line including one of its files is refused' },
-    @{ File = '3dc/avp/game.cpp'; Text = "int a;`n`tHudson_PlayInput(status);`n"; Reason = 'Hudson is in this commit: 3dc/avp/game.cpp line 2 uses its code'; What = 'a call into its code is refused' },
-    @{ File = '3dc/avp/pmove.cpp'; Text = "`tif (HudsonPlay_IsRunning()) { }`n"; Reason = 'Hudson is in this commit: 3dc/avp/pmove.cpp line 1 uses its code'; What = 'and one with a longer name, such as HudsonPlay_' },
-    @{ File = 'tests/net_test.cpp'; Text = "`tHudsonTest_AddRawPart(0);`n"; Reason = 'Hudson is in this commit: tests/net_test.cpp line 1 uses its code'; What = 'and in a test' }
+    @{ What = 'the smallest Hudson that starts asleep is let through'; Files = @{}; Passes = "A player's game can't run Hudson: 2 of its names are used by the game, each one checked." },
+    @{ What = 'a way in written "return HudsonRunIsOn && ...;" is let through'; Files = (With-WayIn "bool Hudson_IsOn()`n{`n`treturn HudsonRunIsOn && plan.on;`n}" 'if (Hudson_IsOn()) { }'); Passes = $letThrough },
+    @{ What = 'and "return HudsonRunIsOn ? ... : ...;"'; Files = (With-WayIn "int Hudson_Place()`n{`n`treturn HudsonRunIsOn ? place : -1;`n}" 'x = Hudson_Place();'); Passes = $letThrough },
+    @{ What = 'and "return (HudsonRunIsOn && ...) ? ... : ...;"'; Files = (With-WayIn "int Hudson_Row()`n{`n`treturn (HudsonRunIsOn && plan.asked) ? plan.row : -1;`n}" 'x = Hudson_Row();'); Passes = $letThrough },
+    @{ What = 'and counters first, then "if (!HudsonRunIsOn || ...) return;"'; Files = (With-WayIn "void Hudson_SayIt(int a)`n{`n`tstatic int said = 0;`n`n`tif (!HudsonRunIsOn || said > 9)`n`t{`n`t`treturn;`n`t}`n`n`tsaid++;`n}" 'Hudson_SayIt(1);'); Passes = $letThrough },
+    @{ What = 'and a whole body inside "if (HudsonRunIsOn && ...)"'; Files = (With-WayIn "void Hudson_Over()`n{`n`tif (HudsonRunIsOn && plan.net)`n`t{`n`t`tEndIt();`n`t}`n}" 'Hudson_Over();'); Passes = $letThrough },
+    @{ What = 'a comment or a string naming Hudson in the game is let through'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`n// Hudson_Unknown is a name in a comment`nconst char *name = `"Hudson_Unknown`";`n" }; Passes = $letThrough },
+    @{ What = 'setting one of its variables back to false is let through'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Reset()`n{`n`tHudsonMarineIsOn = false;`n}`n" }; Passes = $letThrough },
+    @{ What = 'a type of its that only holds values is let through'; Files = @{ '3dc/avp/hudson.h' = "struct HudsonCounts`n{`n`tint a;`n`tint b;`n};`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonCounts counts;`n}`n" }; Passes = $letThrough },
+    @{ What = 'a default argument and values without a call are let through'; Files = @{ '3dc/avp/hudson_nav.cpp' = "static const int kFar = 3;`nstatic int places[2] = { 1, 2 };`n`nstatic void Steer(int x, int stopsShort = Far())`n{`n`tint y = Measure(x);`n}`n" }; Passes = $letThrough },
+    @{ What = 'a way in that starts by doing something is refused'; Files = (With-WayIn "void Hudson_Go()`n{`n`tDoIt();`n}" 'Hudson_Go();'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Go, $notAsleep (3dc/avp/hudson.cpp line 28)" },
+    @{ What = 'and one whose check gives up only with something else too (&&)'; Files = (With-WayIn "void Hudson_Go()`n{`n`tif (!HudsonRunIsOn && plan.x)`n`t{`n`t`treturn;`n`t}`n`n`tDoIt();`n}" 'Hudson_Go();'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Go, $notAsleep (3dc/avp/hudson.cpp line 28)" },
+    @{ What = 'and "return HudsonRunIsOn && a || b;", which gives b without a run'; Files = (With-WayIn "bool Hudson_Is()`n{`n`treturn HudsonRunIsOn && a || b;`n}" 'if (Hudson_Is()) { }'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Is, $notAsleep (3dc/avp/hudson.cpp line 28)" },
+    @{ What = 'and a body inside "if (HudsonRunIsOn ...)" with more after it'; Files = (With-WayIn "void Hudson_Over()`n{`n`tif (HudsonRunIsOn)`n`t{`n`t`tEndIt();`n`t}`n`n`tDoIt();`n}" 'Hudson_Over();'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Over, $notAsleep (3dc/avp/hudson.cpp line 28)" },
+    @{ What = 'HudsonRunIsOn starting true is refused'; Files = (With-Changed '3dc/avp/hudson.cpp' 'bool HudsonRunIsOn = false;' 'bool HudsonRunIsOn = true;'); Reason = 'HudsonRunIsOn must be defined once, as bool HudsonRunIsOn = false; it is: 3dc/avp/hudson.cpp line 1: bool HudsonRunIsOn = true;' },
+    @{ What = 'the game turning HudsonRunIsOn on is refused'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid Cheat()`n{`n`tHudsonRunIsOn = true;`n}`n" }; Reason = '3dc/avp/game.cpp line 13 changes HudsonRunIsOn: only Hudson_ReadCommandLine may, once, to true' },
+    @{ What = 'a run asked for without the first check is refused'; Files = (With-Changed '3dc/avp/hudson.cpp' "`tif (!HudsonPlan_IsAskedFor(commandLine))`n`t{`n`t`treturn;`n`t}`n`n" ''); Reason = 'Hudson_ReadCommandLine (3dc/avp/hudson.cpp line 3) must start by giving up unless HudsonPlan_IsAskedFor(commandLine)' },
+    @{ What = 'a run turned on before the folder is checked is refused'; Files = (With-Changed '3dc/avp/hudson.cpp' "`tif (!HudsonPlan_FolderIsAllowed(commandLine))`n`t{`n`t`tTerminateProcess(0, 1);`n`t}`n`n`tHudsonRunIsOn = true;" "`tHudsonRunIsOn = true;`n`n`tif (!HudsonPlan_FolderIsAllowed(commandLine))`n`t{`n`t`tTerminateProcess(0, 1);`n`t}"); Reason = "Hudson_ReadCommandLine (3dc/avp/hudson.cpp line 3) must check the folder, and end the game if it's one a run mustn't touch, before HudsonRunIsOn = true" },
+    @{ What = 'a run asked for with -dev alone is refused'; Files = (With-Changed '3dc/avp/hudson_plan.cpp' ' && CommandLineHasWord(commandLine, "-hudson")' ''); Reason = 'HudsonPlan_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-hudson");' },
+    @{ What = 'the game calling a HudsonTest_ function of its own is refused'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n`nvoid Other()`n{`n`tHudsonTest_Send(1);`n}`n" }; Reason = "3dc/avp/game.cpp line 18 calls HudsonTest_Send, which only Hudson's own files may call" },
+    @{ What = 'the game turning on one of its variables is refused'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Cheat()`n{`n`tHudsonMarineIsOn = true;`n}`n" }; Reason = "3dc/avp/game.cpp line 13 changes HudsonMarineIsOn: outside Hudson's files it may only be read, or set back to false" },
+    @{ What = 'one of its variables starting on is refused'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = true;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Look()`n{`n`tif (HudsonMarineIsOn) { }`n}`n" }; Reason = "HudsonMarineIsOn (3dc/avp/hudson.cpp line 28) starts as true: Hudson's variables must start off (false, 0, -1 or nothing)" },
+    @{ What = 'a macro of its used by the game is refused'; Files = @{ '3dc/avp/hudson.h' = "#define HudsonDoIt() DoIt()`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonDoIt();`n}`n" }; Reason = "3dc/avp/game.cpp line 13 uses the macro HudsonDoIt: a macro of Hudson's can hide code, so the game mustn't use one" },
+    @{ What = 'a type of its with code of its own used by the game is refused'; Files = @{ '3dc/avp/hudson.h' = "struct HudsonThing`n{`n`tint a;`n`tvoid Go();`n};`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonThing thing;`n}`n" }; Reason = "3dc/avp/game.cpp line 13 uses HudsonThing, a type of Hudson's with code of its own: the game may only use Hudson's types that hold nothing but values" },
+    @{ What = 'a name the check can''t place is refused'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonSomething(1);`n}`n" }; Reason = "3dc/avp/game.cpp line 13 names HudsonSomething, and this check can't tell what it is, so it can't say a player's game won't run it" },
+    @{ What = 'an object of its built before WinMain, whose making runs code, is refused'; Files = @{ '3dc/avp/hudson_nav.h' = "class HudsonMap`n{`npublic:`n`tHudsonMap();`n};`n"; '3dc/avp/hudson_nav.cpp' = "static HudsonMap theWholeMap;`n" }; Reason = "3dc/avp/hudson_nav.cpp line 1: theWholeMap, a HudsonMap, is built before the game starts, and making one runs code of Hudson's that nobody has read for this" },
+    @{ What = 'a value kept by its file worked out by a call is refused'; Files = @{ '3dc/avp/hudson_nav.cpp' = "static double startedAt = SecondsNow();`n`nstatic void Steer(int x, int stopsShort = 0)`n{`n}`n" }; Reason = '3dc/avp/hudson_nav.cpp line 1: a value kept by the file is worked out by calling SecondsNow, before the game starts' }
 )
 
 foreach ($case in $hudsonCases)
 {
-    Make-GoodRepository
-    Write-File (Join-Path $work $case.File) $case.Text
-    Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) $case.Reason $case.What
+    Make-HudsonRepository $case.Files
+
+    if ($case.ContainsKey('Passes'))
+    {
+        $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
+        Check ($result.Code -eq 0 -and $result.Text.Contains($case.Passes)) "$($case.What). It said: $($result.Text)"
+    }
+    else
+    {
+        Expect-Refused 'check-hudson-asleep.ps1' @('-Repository', $work) $case.Reason $case.What
+    }
 }
 
+# No Hudson at all, as in a commit from before it came in, is let through
 Make-GoodRepository
-$projectWithHudson = (Get-Content -Raw (Join-Path $work 'win32/VS2026/AvP.vcxproj')) -replace '</Project>', "`n<ClCompile Include=`"..\..\3dc\avp\hudson.cpp`" />`n</Project>"
-Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') $projectWithHudson
-Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) 'Hudson is in this commit: win32/VS2026/AvP.vcxproj line 2, in a project, names one of its files' 'a project line naming one of its files is refused, even with the file gone'
+$result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0 -and $result.Text.Contains("None of Hudson is in this commit, so a player's game can't run it.")) "no Hudson at all is let through. It said: $($result.Text)"
 
-# The two mentions main has always had: a comment about a profile called HUDSON, and a test's player called Hudson. Neither is Hudson's code.
-Make-GoodRepository
-Write-File (Join-Path $work '3dc/d3d_render.cpp') "// switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.`n"
-Write-File (Join-Path $work 'tests/net_start_test.cpp') "static char playerName[] = `"Hudson`";`n"
-$result = Run-Script 'check-no-hudson.ps1' @('-Repository', $work)
-Check ($result.Code -eq 0) "the word Hudson in a comment, or as a test's player, is let through. It said: $($result.Text)"
-
-# Only the check and this test may name what it looks for: the same words anywhere else are refused
-Make-GoodRepository
-Write-File (Join-Path $work 'tools/check-other.ps1') "if (HudsonPlay_IsRunning) { }`n"
-Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) 'Hudson is in this commit: tools/check-other.ps1 line 1 uses its code' 'leaving out the check itself leaves out nothing else'
-
-# The real repository, as it is now: only what git tracks, so that nothing built beside it counts. If this is ever refused, Hudson has come
-# into the repository, or the check has started to catch something that isn't Hudson.
+# The real repository, as it is now: only what git tracks, so that nothing built beside it counts. If this is ever refused, a way into Hudson
+# that a player's game could reach has come into the repository, or the check has started to refuse something that's asleep.
 Clear-Work
 
 foreach ($tracked in @(& git -C $repository ls-files))
@@ -495,8 +592,641 @@ foreach ($tracked in @(& git -C $repository ls-files))
     }
 }
 
-$result = Run-Script 'check-no-hudson.ps1' @('-Repository', $work)
-Check ($result.Code -eq 0) "the real repository has none of Hudson in it. It said: $($result.Text)"
+$result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0 -and $result.Text.Contains($letThrough)) "the real repository's Hudson stays asleep in a player's game. It said: $($result.Text)"
+
+# --- check-servers-dev-only.ps1: the owner's ruling (2026-11-09) that a player's game can reach none of our servers. Each way it can be
+# broken is refused, for its own reason, and each way the code is written to need -dev is let through. The cases are AvP-docs'
+# servers_dev_only_cases.js, tried by hand on 2026-11-09, written out here.
+$serverGood = @{ '3dc/d3d_render.cpp' = (@'
+int DevMode = 0;
+'@) + "`n"; '3dc/avp/win95/winmain.cpp' = (@'
+void Begin(const char *command_line)
+{
+	DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
+}
+'@) + "`n"; '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }
+$serverCases = @(
+    @{ What = 'no server code at all is let through'; None = $true; Files = @{ '3dc/game.cpp' = (@'
+void Frame()
+{
+}
+'@) + "`n" }; Passes = 'None of the game''s server code is in this commit, so a player''s game can''t reach a server.' },
+    @{ What = 'the smallest list that needs -dev for its server is let through'; None = $false; Files = @{  }; Passes = 'A player''s game can''t reach a server: no server is built in, every call beyond this PC is in 3dc/relay_list.cpp and needs one, and 1 server settings are read only with -dev.' },
+    @{ What = 'a server setting read only inside if (DevMode) is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+int Relay_ListPort(void)
+{
+	int port = 443;
+
+	if (DevMode)
+	{
+		int const setting = Config_GetInt("[Network]", "RelayListPort", 443);
+		port = setting;
+	}
+
+	return port;
+}
+'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
+    @{ What = 'and one read, then ignored without -dev unless empty, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+
+	if (setting.empty())
+	{
+	}
+	else if (!DevMode)
+	{
+		LogString("ignored");
+	}
+	else
+	{
+		UseThePin(setting);
+	}
+}
+'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
+    @{ What = 'a server built into the game is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "nyc3.relay.example";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must define kRelayBuiltInServer once, as static const char kRelayBuiltInServer[] = ""; (no server built into the game)' },
+    @{ What = 'a server name the settings give without -dev is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must give back the built-in name without -dev' },
+    @{ What = 'a server setting a player''s game would use is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+	UseThePin(setting);
+}
+'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
+    @{ What = 'and one whose -dev branch is the wrong way round'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+
+void ReadThePin(void)
+{
+	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
+
+	if (!DevMode)
+	{
+		UseThePin(setting);
+	}
+}
+'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
+    @{ What = 'and a key setting in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void ReadTheKeys(void)
+{
+	std::string const fingerprint = Config_GetString("[Online]", "RelayKeysFingerprint", "");
+	Keep(fingerprint);
+}
+'@) + "`n" }; Reason = 'reads the setting RelayKeysFingerprint from [Online], and a player''s game would use it' },
+    @{ What = 'a name looked up outside the list''s file is refused'; None = $false; Files = @{ '3dc/networking.cpp' = (@'
+void LookUp(const char *name)
+{
+	getaddrinfo(name, NULL, &hints, &found);
+}
+'@) + "`n" }; Reason = '3dc/networking.cpp line 3 calls getaddrinfo, which reaches beyond this PC: only 3dc/relay_list.cpp may' },
+    @{ What = 'and a web call outside it'; None = $false; Files = @{ '3dc/news.cpp' = (@'
+void Fetch(void)
+{
+	HINTERNET s = WinHttpOpen(L"x", 0, 0, 0, 0);
+}
+'@) + "`n" }; Reason = '3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC' },
+    @{ What = 'the list calling a host other than the one it started with is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, otherServer, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to shared->server' },
+    @{ What = 'the list starting with no name is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must take its name from Relay_ServerName, and make nothing when there''s none' },
+    @{ What = 'the list''s server written a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
+static const char kRelayBuiltInServer[] = "";
+
+const char *Relay_ServerName(void)
+{
+	static char name[254];
+	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+
+	if (!DevMode)
+	{
+		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+
+		if (!setting.empty())
+		{
+			LogString("the settings' RelayServer is for tests only");
+		}
+	}
+	else
+	{
+		memcpy(name, setting.c_str(), setting.size() + 1);
+	}
+
+	return name;
+}
+
+namespace
+{
+	bool Start(void)
+	{
+		const char *const name = Relay_ServerName();
+
+		if (!name[0])
+		{
+			return false;
+		}
+
+		for (size_t i = 0; name[i]; i++)
+		{
+			made->server[i] = static_cast<wchar_t>(name[i]);
+		}
+
+		made->server[0] = 0;
+		return true;
+	}
+
+	void Call(void)
+	{
+		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+	}
+}
+'@) + "`n" }; Reason = 'must write the list''s server in one place only, from the name it started with' },
+    @{ What = 'DevMode starting on is refused'; None = $false; Files = @{ '3dc/d3d_render.cpp' = (@'
+int DevMode = 1;
+'@) + "`n" }; Reason = 'DevMode must be defined once, as int DevMode = 0; it is: 3dc/d3d_render.cpp line 1: int DevMode = 1;' },
+    @{ What = 'DevMode turned on anywhere else is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Cheat(void)
+{
+	DevMode = 1;
+}
+'@) + "`n" }; Reason = '3dc/menus.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' },
+    @{ What = 'DevMode turned on by another word is refused'; None = $false; Files = @{ '3dc/avp/win95/winmain.cpp' = (@'
+void Begin(const char *command_line)
+{
+	DevMode = CommandLineHasWord(command_line, "-play") ? 1 : 0;
+}
+'@) + "`n" }; Reason = '3dc/avp/win95/winmain.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' }
+)
+
+foreach ($case in $serverCases)
+{
+    Make-GoodRepository
+    $all = @{}
+    if (-not $case.None) { foreach ($name in $serverGood.Keys) { $all[$name] = $serverGood[$name] } }
+    foreach ($name in $case.Files.Keys) { $all[$name] = $case.Files[$name] }
+    foreach ($name in $all.Keys) { Write-File (Join-Path $work $name) ($all[$name] -replace "`r", '') }
+
+    if ($case.ContainsKey('Passes'))
+    {
+        $result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
+        Check ($result.Code -eq 0 -and $result.Text.Contains($case.Passes)) "$($case.What). It said: $($result.Text)"
+    }
+    else
+    {
+        Expect-Refused 'check-servers-dev-only.ps1' @('-Repository', $work) $case.Reason $case.What
+    }
+}
+
+# The real repository, as it is now: only what git tracks. If this is ever refused, a way to one of our servers that a player's game
+# could take has come in, or the check has started to refuse something that needs -dev.
+Clear-Work
+
+foreach ($tracked in @(& git -C $repository ls-files))
+{
+    $from = Join-Path $repository $tracked
+
+    if (Test-Path -LiteralPath $from -PathType Leaf)
+    {
+        $to = Join-Path $work $tracked
+        New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+        Copy-Item -LiteralPath $from -Destination $to -Force
+    }
+}
+
+$result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0 -and ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains('None of the game''s server code'))) "the real repository's game can reach no server without -dev. It said: $($result.Text)"
 
 # --- The checks that ask GitHub. There's no network here, so all that can be tried is that it refuses to go on without being on avpx_main.
 Make-GoodRepository
@@ -708,8 +1438,10 @@ $result = Run-Script 'check-release.ps1' @('-Version', $good, '-WithoutGitHub')
 Check ($result.Text.Contains('RELEASE-BLOCKERS.md still lists') -or $result.Text.Contains('Everything that can be checked')) "check-release.ps1 finds the repository by itself. It said: $($result.Text)"
 
 # What it answers depends on what's been built beside the code, but it has to be one of the script's own answers.
-$result = Run-Script 'check-no-hudson.ps1' @()
-Check ($result.Text.Contains('None of Hudson is in this commit') -or $result.Text.Contains('Hudson is in this commit:')) "check-no-hudson.ps1 finds the repository by itself. It said: $($result.Text)"
+$result = Run-Script 'check-hudson-asleep.ps1' @()
+Check ($result.Text.Contains("A player's game can't run Hudson") -or $result.Text.Contains('None of Hudson is in this commit') -or $result.Text.Contains('REFUSED: ')) "check-hudson-asleep.ps1 finds the repository by itself. It said: $($result.Text)"
+$result = Run-Script 'check-servers-dev-only.ps1' @()
+Check ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains("None of the game's server code") -or $result.Text.Contains('REFUSED: ')) "check-servers-dev-only.ps1 finds the repository by itself. It said: $($result.Text)"
 
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'License.txt')
@@ -727,9 +1459,14 @@ Write-Sums
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
 
 Clear-Work
-Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-no-hudson.ps1 passes when it should'
-Write-File (Join-Path $work '3dc/hudson.cpp') 'code'
-Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
+Check ((Run-AsAStep 'check-hudson-asleep.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-hudson-asleep.ps1 passes when it should'
+Write-File (Join-Path $work '3dc/avp/hudson.cpp') 'bool HudsonRunIsOn = true;'
+Check ((Run-AsAStep 'check-hudson-asleep.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
+
+Clear-Work
+Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-servers-dev-only.ps1 passes when it should'
+Write-File (Join-Path $work '3dc/net.cpp') 'void Look() { getaddrinfo(n, 0, 0, 0); }'
+Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
 
 Remove-Item -Force -LiteralPath $stepFile
 
@@ -843,7 +1580,7 @@ $big.SetLength(32000001)
 $big.Dispose()
 Expect-Refused 'check-virustotal.ps1' @('-Package', (Join-Path $work 'big.zip'), '-Sha256', $zipHash) 'VirusTotal takes at most 32000000 in one upload' 'a zip too big for one upload is refused'
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
+foreach ($name in 'tools/check-release.ps1', 'tools/check-hudson-asleep.ps1', 'tools/check-servers-dev-only.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -870,7 +1607,8 @@ Check ($top -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|r
 Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything'
 
 Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
-Check ($checkJob -match 'run: \./tools/check-no-hudson\.ps1\n') 'and refuses any of Hudson'
+Check ($checkJob -match 'run: \./tools/check-hudson-asleep\.ps1\n') 'and refuses any way a player''s game could run Hudson'
+Check ($checkJob -match 'run: \./tools/check-servers-dev-only\.ps1\n') 'and refuses any way a player''s game could reach one of our servers'
 Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses a new function the game does not use'
 Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
@@ -987,11 +1725,55 @@ $listInBuild = [regex]::Match($buildWorkflow, '\$required = (.*)').Groups[1].Val
 $listInCheck = [regex]::Match($checkScript, '\$requiredChecks = (.*)').Groups[1].Value.Trim()
 Check ($listInBuild.Length -gt 0 -and $listInBuild -ceq $listInCheck) 'a release asks for the same checks as a test build'
 
-# --- Every pull request refuses any of Hudson as well, in a check that's already required, so a hook left behind fails the pull request that brings it
+# --- The test build, read as text. What it makes is recorded by a job that builds nothing, and only once that job has checked it, so the
+# owner can ask GitHub to vouch for a test build as for a release. Added 2026-11-09 by Melanikus for the AvP port.
+$buildWithoutComments = ((($buildWorkflow -replace "`r", '') -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+$buildJobs = [regex]::Split($buildWithoutComments, '(?m)^  (?=(?:build|attest):\n)')
+Check ($buildJobs.Count -eq 3) 'the test build has its two jobs, and no others'
+$buildTop = $buildJobs[0]; $testBuildJob = $buildJobs[1]; $attestJob = $buildJobs[$buildJobs.Count - 1]
+Check ($buildTop -match '(?m)^on:\n  workflow_dispatch:\n' -and $buildTop -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):') 'the test build starts by hand, and in no other way'
+Check ($buildTop -notmatch ':\s*write\b' -and $testBuildJob -notmatch ':\s*write\b') 'the job that builds, which runs the libraries'' own build scripts, can write nothing and record nothing'
+Check ($attestJob -match '(?m)^    needs: build$') 'what the test build made is recorded once it is made'
+Check ($attestJob -match '(?m)^    permissions:\n      contents: read\n      id-token: write( +#[^\n]*)?\n      attestations: write( +#[^\n]*)?\n    steps:') 'by a job that can read, prove which workflow it is, and record, and nothing more'
+Check (-not $attestJob.Contains('actions/checkout') -and -not $attestJob.Contains('./tools/') -and -not $attestJob.Contains('vcpkg')) 'which has no copy of the code and builds nothing'
+Check ($testBuildJob.Contains('name: avp-${{ github.ref_name }}') -and $attestJob.Contains("name: avp-`${{ github.ref_name }}`n          path: package`n")) 'it gets the very package the build kept'
+Check-Order $attestJob "name: Refuse a package or libraries that don't match their list" 'subject-path: package/SHA256SUMS.txt' "the package's list is checked before it is recorded"
+Check-Order $attestJob "name: Refuse a package or libraries that don't match their list" 'subject-path: libraries/SHA256SUMS.txt' "and so is the libraries' list"
+Check ($attestJob.Contains("foreach (`$folder in 'package', 'libraries') {")) 'the check is made on both'
+Check ($attestJob.Contains('foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force) {')) 'and it looks at hidden files too, so none gets through unlisted'
+Check ($attestJob.Contains("is there and isn't listed") -and $attestJob.Contains("is listed and isn't there") -and $attestJob.Contains("isn't what the list says")) 'every file must be on the list, every one on it must be there, and each must be the same'
+$testBuildAttests = @([regex]::Matches($attestJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ') | ForEach-Object { $_.Groups[1].Value })
+$releaseAttest = [regex]::Match($publishJob, 'uses: actions/attest-build-provenance@([0-9a-f]{40}) ').Groups[1].Value
+Check ($testBuildAttests.Count -eq 2 -and $releaseAttest.Length -eq 40 -and @($testBuildAttests | Where-Object { $_ -cne $releaseAttest }).Count -eq 0) 'both are recorded by the action release.yml uses, pinned to the same commit'
+
+# tools/install-build.ps1, which the owner uses to install a test build, asks GitHub to vouch for the list before it believes it
+$installScript = (Get-Content -Raw (Join-Path $repository 'tools/install-build.ps1')) -replace "`r", ''
+$vouching = 'gh attestation verify $sums -R $repo --cert-identity "https://github.com/$repo/.github/workflows/build.yml@refs/heads/$branch" --source-ref "refs/heads/$branch" --source-digest $run.headSha --deny-self-hosted-runners'
+Check ($installScript.Contains("    $vouching`n    if (`$LASTEXITCODE -ne 0) { throw ")) 'install-build.ps1 asks GitHub to vouch for the list: that workflow exactly, on avpx_main, at the commit it downloaded, and stops if it can''t'
+Check-Order $installScript $vouching 'foreach ($line in Get-Content -LiteralPath $sums) {' 'before it reads the list'
+Check-Order $installScript $vouching 'Copy-Item -LiteralPath' 'and before it copies anything'
+Check-Order $installScript "if (`"`$(`$run.headSha)`" -cnotmatch '\A[0-9a-f]{40}\z') { throw" 'gh api "repos/$repo/compare/$($run.headSha)' 'the commit GitHub named is checked before it is used'
+Check ($installScript.Contains('foreach ($item in Get-ChildItem -LiteralPath $download -Recurse -File -Force) {')) 'and every file in the download is looked at, hidden ones too'
+
+# -Commit (Secondary's dry run of the weekend, R2-5): the machine checks the build is the commit the owner was told to test
+Check ($installScript.Contains("    if (`$Commit -cnotmatch '\A[0-9a-fA-F]{40}\z') { throw ")) 'a commit given to install-build.ps1 must be all 40 hex digits'
+Check ($installScript.Contains("if (`$Commit) { `$which += @('--commit', `$Commit) }`n`$found = gh @which`n")) 'GitHub is asked for a build of that commit only'
+Check-Order $installScript 'if ($Commit -and $run.headSha -cne $Commit) { throw ' 'gh run download $run.databaseId' 'and the build it names is checked to be of that commit before anything is downloaded'
+
+# An older gh refuses a flag it doesn't know, which would read as something else (Secondary's read of #187, B-2): each flag is looked for
+# in gh's own help first
+Check ($installScript.Contains("@(`$listHelp, '--commit'), @(`$verifyHelp, '--cert-identity'), @(`$verifyHelp, '--source-ref'), @(`$verifyHelp, '--source-digest'), @(`$verifyHelp, '--deny-self-hosted-runners')") -and
+    $installScript.Contains('if (-not $flag[0].Contains($flag[1])) { throw "This gh is too old for the checks.')) 'install-build.ps1 refuses a gh too old to know every flag its checks use'
+Check-Order $installScript 'foreach ($flag in @(' '$found = gh @which' 'before it asks GitHub anything'
+
+# --- Every pull request refuses any way a player's game could run Hudson as well, in a check that's already required, so a way in left awake fails
+# the pull request that brings it
 $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''
 Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
-Check-Order $testsWorkflow 'name: Unit tests' './tools/check-no-hudson.ps1' 'and the required Unit tests check refuses any of Hudson'
-Check-Order $testsWorkflow './tools/check-no-hudson.ps1' './tests/build.ps1' 'before it builds anything'
+Check-Order $testsWorkflow 'name: Unit tests' './tools/check-hudson-asleep.ps1' 'and the required Unit tests check refuses any way a player''s game could run Hudson'
+Check-Order $testsWorkflow './tools/check-hudson-asleep.ps1' './tests/build.ps1' 'before it builds anything'
+Check-Order $testsWorkflow 'name: Unit tests' './tools/check-servers-dev-only.ps1' 'and the required Unit tests check refuses any way a player''s game could reach one of our servers'
+Check-Order $testsWorkflow './tools/check-servers-dev-only.ps1' './tests/build.ps1' 'before it builds anything'
 
 # --- Pull requests try the release's own checks on the machine the release runs them on
 $ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
@@ -999,7 +1781,8 @@ $releaseMachine = [regex]::Match($checkJob, '(?m)^    runs-on: (\S+)').Groups[1]
 $ubuntuMachine = [regex]::Match($ubuntuJob, '(?m)^    runs-on: (\S+)').Groups[1].Value
 $ubuntuName = [regex]::Match($ubuntuJob, '(?m)^    name: (.+)$').Groups[1].Value.Trim()
 Check ($releaseMachine.Length -gt 0 -and $ubuntuMachine -ceq $releaseMachine) 'pull requests try the checks on the machine the release uses'
-Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-no-hudson\.ps1\s') 'and refuse any of Hudson there, with the same PowerShell'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-hudson-asleep\.ps1\s') 'and refuse any way a player''s game could run Hudson there, with the same PowerShell'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-servers-dev-only\.ps1\s') 'and refuse any way a player''s game could reach one of our servers there, with the same PowerShell'
 Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tests/release-test\.ps1 -OnlyNewFunctions\s') 'and try the new-function rows there'
 Check ($ubuntuJob -match '(?m)^          fetch-depth: 0\b') 'with the history, so the real code gets read as well'
 Check ($ubuntuJob.Contains('persist-credentials: false')) 'leaving no token behind'

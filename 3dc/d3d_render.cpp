@@ -1,4 +1,12 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
+//   away (#176, particle_depth.h)
+//   the lights' coronas are drawn before the gun, on a screen list of their own, instead of last of all with the HUD, where they showed
+//   through the gun and over the HUD (#178)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a polygon's corners are put in the middle of the texels they name, as the 1999 Direct3D code had them, so a smoothly filtered
+//   edge no longer takes colour from the texture's other edge (#148, texel_centre.h); the same for particles, which share one sheet
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
 //   broken picture coordinates
@@ -26,6 +34,7 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+//   a Hudson run can ask what lighting is really being drawn, and take a picture of a frame before it goes to the screen
 //   the marine's shoulder lamp is drawn on the finished picture of the world, under the HUD, and while it's on in Gouraud the surface pictures are drawn for it. See shoulder_lamp.h
 //   it goes on before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   the developers' view moves from G to J, which no default control set uses, because G is now the marine's shoulder lamp
@@ -52,6 +61,15 @@
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
 //   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   the tag on the top right, which says how the shadows and the lighting are set, is off until it's asked for (F7, or -dev
+//   -statuson), so it no longer covers the game and the relay's line in play; F7 says in the log each time it shows or hides it
+// Modified 2026-11-09 by Melanikus for the AvP port:
+//   a run of Hudson playing a level on foot draws the way he means to walk and where he's been as real shapes in the level, with walls
+//   hiding them (only in such a run: a normal game draws none of it)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an animated polygon's corners are read in 16.16, as CreateTxAnimUVArray now gives them, so flowing animated textures move smoothly
+//   (#97, reported by Bobblen). See texture_animation.h
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -65,6 +83,7 @@
 #include "RenderList.h"
 #include "VertexBuffer.h"
 #include "FmvCutscenes.h"
+#include "menu_shape.h"   // the menus' one scale on a wide screen (MenuShape_WidthShare)
 #include "surface_normals.h"
 #include "shoulder_lamp.h"
 #include "view_settings.h"
@@ -94,6 +113,8 @@
 #include "lighting.h"
 #include "showcmds.h"
 #include "frustum.h"
+#include "texel_centre.h"
+#include "particle_depth.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
 #include "pixel_look.h"
@@ -105,6 +126,7 @@
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
+#include "hudson.h"
 #include "light_choice.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
@@ -114,6 +136,9 @@
 #define AVP_BUILD_COMMIT "not known"
 #endif
 #include "static_frame.h"
+#include "hudson_vision.h"
+#include "hudson_play.h"
+#include "hudson_play_ribbon.h"
 #include "surface_static.h"
 #include "static_level.h"
 #include "normal_lines.h"
@@ -227,6 +252,10 @@ RenderList *orthoList = 0;
 RenderList *decalList  = 0;
 RenderList *weaponList = 0;
 
+// The lights' coronas, on a screen list of their own. It shares the screen list's buffers, but it's drawn before the gun, where orthoList,
+// the HUD's, is drawn after it (#178: see ExecuteBuffer)
+static RenderList *coronaList = 0;
+
 static HRESULT LastError; // remove me eventually (when no more D3D calls exist in this file)
 
 // set our std::vectors capacity allowing us to use them as regular arrays
@@ -234,6 +263,7 @@ void RenderListInit()
 {
 	mainList     = new RenderList("mainList",     400, &d3d.mainVB,  &d3d.mainIB,  &d3d.mainDecl);
 	orthoList    = new RenderList("orthoList",    50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);
+	coronaList   = new RenderList("coronaList",   50,  &d3d.orthoVB, &d3d.orthoIB, &d3d.orthoDecl);
 	particleList = new RenderList("particleList", 200, &d3d.particleVB, &d3d.particleIB, &d3d.particleDecl);
 	decalList    = new RenderList("decalList",    200, &d3d.decalVB, &d3d.decalIB, &d3d.decalDecl);
 	weaponList   = new RenderList("weaponList",   80,  &d3d.mainVB,  &d3d.mainIB,  &d3d.mainDecl);
@@ -249,6 +279,9 @@ void RenderListDeInit()
 
 	delete orthoList;
 	orthoList = 0;
+
+	delete coronaList;
+	coronaList = 0;
 
 	delete decalList;
 	decalList = 0;
@@ -290,12 +323,25 @@ inline float FMV_HPos2DC(int32_t pos)
 	return (float(pos / (float)480) * 2) - 1;
 }
 
+// True only while the menus' starfield is drawn (menus.cpp, DrawMainMenusBackdrop), which keeps the screen's whole width while everything
+// else of the menus keeps its true shape (menu_shape.h says why: the owner's choice, 2026-11-10). Each quad's place is worked out as it's
+// drawn (DrawQuad), so this only has to be true around that one draw. Added 2026-11-10 by Melanikus for the AvP port.
+bool MenuBackdropFullWidth = false;
+
+// How much of the screen's width the menus' grid takes (menu_shape.h): the 4:3 part in the middle of a wider screen, so the grid has one
+// scale both ways; the whole of a 4:3 or narrower one, as always. Films are drawn by FMV_WPos2DC, above, and keep the whole width, as does
+// the starfield (MenuBackdropFullWidth). Added 2026-11-10 by Melanikus for the AvP port.
+static float MenuWidthShare(void)
+{
+	return MenuShape_WidthShare(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, MenuBackdropFullWidth);
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
 	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
-		return (float(pos / (float)640) * 2) - 1;
+		return ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();
 	}
 	else {
 		return (float(pos / (float)ScreenDescriptorBlock.SDB_Width) * 2) - 1;
@@ -419,6 +465,7 @@ static bool LockExecuteBuffer()
 	particleList->Reset();
 	mainList->Reset();
 	orthoList->Reset();
+	coronaList->Reset();
 	decalList->Reset();
 	weaponList->Reset();
 
@@ -491,6 +538,10 @@ static void DrawSolidsWithHeights();
 // Did the last main draw go through the heights? The tag says so, because Relief map being chosen doesn't mean it could be drawn.
 static bool mainDrawUsedHeights = false;
 
+// Added 2026-11-09 by Melanikus for the AvP port (#177): true while the frame is in its stretch of see-through polygons without depth
+// (D3D_SeeThroughWithoutDepth_Begin and _End, below), so a list drawn and started again in the middle of the stretch gets its start again
+static bool seeThroughWithoutDepth = false;
+
 // Draws everything waiting in the lists and starts them again, for when a list is full in the middle of a frame. If the frame couldn't start, there's nothing to draw.
 static void FlushLists()
 {
@@ -502,6 +553,12 @@ static void FlushLists()
 	UnlockExecuteBufferAndPrepareForUse();
 	ExecuteBuffer();
 	LockExecuteBuffer();
+
+	// The lists start empty again, and the glass still to come in the stretch has to go without depth too (#177)
+	if (seeThroughWithoutDepth)
+	{
+		mainList->AddCommand(kCommandSeeThroughWithoutDepth);
+	}
 }
 
 float cot(float in)
@@ -530,6 +587,83 @@ extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
 static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
+
+// Draws Hudson on foot's ribbon: see hudson_play_ribbon.h. It goes through the same sum as the level's own polygons (TranslatePointIntoViewspace), so it lands exactly where the
+// level is, and the depth buffer can compare the two. That's what makes a wall hide it. The main pixel shader wants a texture and there's none, so a plain one does for this. Everything
+// this changes on the card is put back afterwards, because it's in the middle of the frame, and it only happens on a run of his.
+static void DrawHudsonPlayRibbon()
+{
+	static std::vector<HudsonPlayRibbonCorner> corners;
+	static std::vector<D3DLVERTEX> vertices;
+
+	HudsonPlay_RibbonCorners(corners);
+
+	if (corners.empty())
+	{
+		return;
+	}
+
+	vertices.resize(corners.size());
+
+	for (size_t i = 0; i < corners.size(); i++)
+	{
+		VECTORCH place;
+
+		place.vx = corners[i].x;
+		place.vy = corners[i].y;
+		place.vz = corners[i].z;
+		TranslatePointIntoViewspace(&place);
+
+		vertices[i].x = (float)place.vx;
+		vertices[i].y = (float)-place.vy;
+		vertices[i].z = (float)place.vz;
+		vertices[i].color = RGBA_MAKE(corners[i].red, corners[i].green, corners[i].blue, 255);
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+
+	// This is what makes a wall hide it. Turning it off would paint it over the wall.
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	// It can be looked at from any side
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(vertices.size() / 3), &vertices[0], sizeof(D3DLVERTEX));
+
+	asItWas->Apply();
+	asItWas->Release();
+}
 
 static bool ExecuteBuffer()
 {
@@ -640,6 +774,12 @@ static bool ExecuteBuffer()
 		DrawNormalLines();
 	}
 
+	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
+	if (toyFinalFlush && HudsonPlay_RibbonIsOn())
+	{
+		DrawHudsonPlayRibbon();
+	}
+
 	// render any particles
 	if (particleList->GetSize())
 	{
@@ -652,6 +792,18 @@ static bool ExecuteBuffer()
 		particleList->Draw();
 	}
 
+	// The lights' coronas, where 1999 drew its light flares: in front of the level, because each is a glow round a light, but behind the gun and the
+	// HUD. They used to go on the HUD's own list, which is drawn last of all, so a corona showed through the gun and over the HUD (#178). Now
+	// they're on a screen list of their own, drawn here. The gun's drawing below starts by clearing the depth, and covers them.
+	if (coronaList->GetSize())
+	{
+		// the same projection as the HUD's, since a corona is a flat square on the screen
+		d3d.effectSystem->SetActive(d3d.orthoEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);
+
+		coronaList->Draw();
+	}
+
 	// The marine's shoulder lamp, on the finished picture of the world. Only on the last drawing of a frame, because a frame can be drawn in several goes when its buffers fill up.
 	// It comes before the gun on purpose. The lamp lights a wall by adding the wall's own colour, read from a picture of the walls, at each spot on the screen. The gun and the hands aren't
 	// in that picture, so a lamp drawn over them added the colour of the wall behind them, which made the gun look see-through. Now the gun goes on afterwards, whole and solid.
@@ -660,7 +812,20 @@ static bool ExecuteBuffer()
 
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
+		compareTheLamp = Hudson_LampCompareIsDue();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("before");
+		}
+
 		DrawShoulderLamp();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("after");
+			Hudson_SaveLampCompareSurface(SurfacePictures_Colour());
+		}
 	}
 
 	// Other marines' lamp beams, on the finished picture of the world and before the gun, which they mustn't shine through. Only on the last
@@ -692,6 +857,16 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		weaponList->Draw();
+	}
+
+	if (compareTheLamp)
+	{
+		Hudson_SaveLampCompareScreen("final");
+	}
+
+	if (toyFinalFlush && Hudson_NetPictureIsDue())
+	{
+		Hudson_SaveLampCompareScreen(Hudson_NetPictureKind());
 	}
 
 	// render any orthographic quads
@@ -1487,8 +1662,8 @@ void DrawCoronas()
 	float RecipW = 1.0f / (float) texWidth;
 	float RecipH = 1.0f / (float) texHeight;
 
-	// set a command to disable z-writes
-	orthoList->AddCommand(kCommandZWriteDisable);
+	// set a command to disable z-writes. The coronas go on their own list, drawn before the gun (#178: see ExecuteBuffer)
+	coronaList->AddCommand(kCommandZWriteDisable);
 
 	for (size_t i = 0; i < coronaArray.size(); i++)
 	{
@@ -1559,7 +1734,7 @@ void DrawCoronas()
 		uint32_t sizeX = (ScreenDescriptorBlock.SDB_Width / 100) * 10;
 		uint32_t sizeY = sizeX;//(ScreenDescriptorBlock.SDB_Height / 100) * 11;
 
-		if (!orthoList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		if (!coronaList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
 			continue; // no room for this one, and the end of this function still has to run
 		}
 
@@ -1599,13 +1774,13 @@ void DrawCoronas()
 		orthoVertex[orthoVBOffset].v = 0.0f * RecipH;
 		orthoVBOffset++;
 
-		orthoList->CreateOrthoIndices(orthoIndex);
+		coronaList->CreateOrthoIndices(orthoIndex);
 	}
 
 	coronaArray.clear();
 
 	// set a command to enable z-writes
-	orthoList->AddCommand(kCommandZWriteEnable);
+	coronaList->AddCommand(kCommandZWriteEnable);
 
 	// restore RenderPolygon.NumberOfVertices value...
 	RenderPolygon.NumberOfVertices = numVertsBackup;
@@ -1679,6 +1854,14 @@ static void WriteSurfaceNormals(const POLYHEADER *polygon, int shapePolygon)
 	}
 }
 
+// How many of a polygon's corner numbers make one texel of its picture. An animated texture's corners come from CreateTxAnimUVArray
+// (kshape.cpp) in 16.16 fixed point, 65536 to a texel, so that a flowing one can move by less than a texel at a time, as it did in 1999.
+// Every other polygon's are whole texels. See texture_animation.h (#97).
+static float CornerNumbersPerTexel(const POLYHEADER *polygon)
+{
+	return (polygon->PolyFlags & iflag_txanim) ? 65536.0f : 1.0f;
+}
+
 void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr, int shapePolygon)
 {
 	// bjd - This is the function responsible for drawing level geometry and the players weapon
@@ -1691,8 +1874,8 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 	uint32_t texWidth, texHeight;
 	Tex_GetDimensions(textureID, texWidth, texHeight);
 
-	float RecipW = 1.0f / /*(float)*/ texWidth;
-	float RecipH = 1.0f / /*(float)*/ texHeight;
+	float RecipW = 1.0f / ((float)texWidth * CornerNumbersPerTexel(inputPolyPtr));
+	float RecipH = 1.0f / ((float)texHeight * CornerNumbersPerTexel(inputPolyPtr));
 
 	if (gunLayer) {
 		if (!weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode)) {
@@ -1722,8 +1905,9 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 		mainVertex[vb].color = RGBA_MAKE(GammaValues[vertices->R], GammaValues[vertices->G], GammaValues[vertices->B], vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(GammaValues[vertices->SpecularR], GammaValues[vertices->SpecularG], GammaValues[vertices->SpecularB], /*255*/0);
 
-		mainVertex[vb].u = (float)(vertices->U) * RecipW;
-		mainVertex[vb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names, as the 1999 Direct3D code had it: see texel_centre.h (#148)
+		mainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		vb++;
 	}
 
@@ -1822,8 +2006,9 @@ void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	uint32_t texWidth, texHeight;
 	Tex_GetDimensions(textureID, texWidth, texHeight);
 
-	float RecipW = 1.0f / (float) texWidth;
-	float RecipH = 1.0f / (float) texHeight;
+	// an animated polygon's corners are in 16.16 (see CornerNumbersPerTexel)
+	float RecipW = 1.0f / ((float)texWidth * CornerNumbersPerTexel(inputPolyPtr));
+	float RecipH = 1.0f / ((float)texHeight * CornerNumbersPerTexel(inputPolyPtr));
 
 //	mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL);
 	if (gunLayer) {
@@ -1847,8 +2032,9 @@ void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	   	mainVertex[vb].color = RGBA_MAKE(vertices->R, vertices->G, vertices->B, vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(0,0,0,/*255*/0);
 
-		mainVertex[vb].u = (float)(vertices->U) * RecipW;
-		mainVertex[vb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names, as for every textured polygon: see texel_centre.h (#148)
+		mainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		vb++;
 	}
 
@@ -2029,6 +2215,10 @@ void D3D_DrawParticle_Rain(PARTICLE *particlePtr, VECTORCH *prevPositionPtr)
 	}
 }
 
+// Modified 2026-11-09 by Melanikus for the AvP port (#177): these two stay empty. In the 1999 game they drew what was waiting, turned depth
+// writes off (Setup) and on again (End), and End drew the particles. Here the particles are drawn once, after everything else, and the
+// calls come in another order (HandleDecalSystem after HandleParticleSystem), so bodies here would leave depth writes off into the next
+// frame. The one stretch that mattered, see-through polygons and particles, is D3D_SeeThroughWithoutDepth_Begin and _End below.
 void D3D_DecalSystem_Setup()
 {
 /*
@@ -2047,6 +2237,25 @@ void D3D_DecalSystem_End()
 	ExecuteBuffer();
 	LockExecuteBuffer();
 */
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port (#177): the stretch of see-through polygons and particles. The 1999 game drew it with depth
+// writes off (D3D_DecalSystem_Setup and _End above, around OutputTranslucentPolyList and the particles), so particles behind glass still
+// showed. Here the particles are drawn after the whole main list, so glass that wrote depth hid them: Bobblen147's marines firing behind
+// a window, with no muzzle flash. Between Begin and End, see-through polygons don't write depth; solid ones still do, because this game
+// draws the walls of the fixed buffer and the shadows after the solid polygons, and a solid one without depth would be painted over.
+// The one difference from 1999 left: a particle behind glass is drawn over the pane rather than under it. A glowing particle looks the
+// same either way; smoke isn't dimmed by the pane.
+void D3D_SeeThroughWithoutDepth_Begin()
+{
+	seeThroughWithoutDepth = true;
+	mainList->AddCommand(kCommandSeeThroughWithoutDepth);
+}
+
+void D3D_SeeThroughWithoutDepth_End()
+{
+	seeThroughWithoutDepth = false;
+	mainList->AddCommand(kCommandSeeThroughWithDepth);
 }
 
 void D3D_Decal_Output(DECAL *decalPtr, RENDERVERTEX *renderVerticesPtr)
@@ -2122,8 +2331,9 @@ void D3D_Decal_Output(DECAL *decalPtr, RENDERVERTEX *renderVerticesPtr)
 
 		decalVertex[decalVb].colour = colour;
 
-		decalVertex[decalVb].u = (float)(vertices->U) * RecipW;
-		decalVertex[decalVb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names: see texel_centre.h (#148)
+		decalVertex[decalVb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		decalVertex[decalVb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		decalVb++;
 	}
 
@@ -2232,29 +2442,22 @@ static void D3D_Particle_Output(PARTICLE *particlePtr, PARTICLEVERTEX *renderVer
 	{
 		PARTICLEVERTEX *vertices = &renderVerticesPtr[i];
 
-		float zvalue;
+		// A particle drawn at the back (the stars) is moved out along its own line from the eye, behind everything the level draws, as 1999
+		// drew it: see particle_depth.h (#176). It covers the same pixels. Every other particle stays where it is. The only particle drawn in
+		// front, the light flare, doesn't come through here: it's a corona, drawn by DrawCoronas.
+		float const outToTheBack = particleDescPtr->IsDrawnAtBack ? ParticleDepth_AtTheBack(vertices->z, zNear, zFar) : 1.0f;
 
-		if (particleDescPtr->IsDrawnInFront)
-		{
-			zvalue = 0.0f;
-		}
-		else if (particleDescPtr->IsDrawnAtBack)
-		{
-			zvalue = 1.0f;
-		}
-		else
-		{
-			zvalue = (float)vertices->z;
-		}
-
-		particleVertex[pVb].x = vertices->x;
-		particleVertex[pVb].y = -vertices->y;
-		particleVertex[pVb].z = vertices->z;
+		particleVertex[pVb].x = vertices->x * outToTheBack;
+		particleVertex[pVb].y = -vertices->y * outToTheBack;
+		particleVertex[pVb].z = vertices->z * outToTheBack;
 
 		particleVertex[pVb].colour = colour;
 
-		particleVertex[pVb].u = vertices->u * RecipW;
-		particleVertex[pVb].v = vertices->v * RecipH;
+		// The middle of the texel the corner names, as 1999's particles had it: see texel_centre.h (#148). A particle's picture is one part
+		// of a sheet shared with others, so an edge on a texel line mixed in the next picture's edge, and clamping doesn't help inside a
+		// sheet. Its corners are whole texel numbers, copied into floats by AddParticle.
+		particleVertex[pVb].u = TexelCentre((int)vertices->u, 1.0f, RecipW);
+		particleVertex[pVb].v = TexelCentre((int)vertices->v, 1.0f, RecipH);
 		pVb++;
 	}
 
@@ -2466,9 +2669,13 @@ void PostLandscapeRendering()
 		if (drawMirrorSurfaces)
 		{
 			// dirt on mirror in marines room
+			// Modified 2026-11-09 by Melanikus for the AvP port (#177): the mirror's dirt is see-through, and drawn before the particles,
+			// so with depth it hid the smoke and flashes in the mirror. The 1999 game drew those particles before the dirt went on.
+			D3D_SeeThroughWithoutDepth_Begin();
 			RenderParticlesInMirror();
 			RenderMirrorSurface();
 			RenderMirrorSurface2();
+			D3D_SeeThroughWithoutDepth_End();
 		}
 		if (drawWater)
 		{
@@ -2845,8 +3052,10 @@ void D3D_SkyPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVertice
 		mainVertex[vb].color = RGBA_MAKE(vertices->R,vertices->G,vertices->B,vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(0,0,0,/*255*/0);
 
-		mainVertex[vb].u = ((float)vertices->U) * RecipW;
-		mainVertex[vb].v = ((float)vertices->V) * RecipH;
+		// The middle of the texel the corner names, as 1999 had it: see texel_centre.h (#148). The sky's corners are in 16.16, so half a
+		// texel is 32768 of them, and RecipW above already has the 65536 in it.
+		mainVertex[vb].u = TexelCentre(vertices->U, 65536.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 65536.0f, RecipH);
 		vb++;
 	}
 
@@ -2899,6 +3108,9 @@ void ThisFramesRenderingHasBegun()
 	surfacePicturesAreFromThisFrame = false;
 	surfaceNormalsWereWrittenThisFrame = false;
 
+	// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)
+	seeThroughWithoutDepth = false;
+
 	// calls a function to perform d3d_device->Begin();
 	if (R_BeginScene())
 	{
@@ -2927,6 +3139,7 @@ void ThisFramesRenderingHasFinished()
 		particleList->Reset();
 		mainList->Reset();
 		orthoList->Reset();
+		coronaList->Reset();
 		decalList->Reset();
 		weaponList->Reset();
 
@@ -2956,6 +3169,11 @@ void ThisFramesRenderingHasFinished()
 		FrameTiming_EndFrame();
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 		Mark_EndFrame(d3d.lpD3DDevice);
+
+		if (HudsonRunIsOn)
+		{
+			Hudson_TakePictureIfDue();
+		}
 	}
 
 	// Whether or not it could be drawn, this frame is over, and its beams with it
@@ -4050,7 +4268,7 @@ static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
 int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and J, F7, F8 and the shoot tool's keys do nothing
-int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
+int ShadowStatusOn = 0;     // the tag on the top right of the screen: off until F7 shows it, or -dev -statuson starts with it on
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
 static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
@@ -4882,11 +5100,21 @@ static void ToySetVolumeProgram(LPDIRECT3DDEVICE9 device)
 	device->SetPixelShader(NULL);
 }
 
+// For Hudson's vision: what this frame's shadow pass did.
+static HudsonVisionShadows visionShadows = { false, 0, 0, 0 };
+
 // the prisms in toyVerts, then whatever this light has kept on the card, under the same stencil and depth settings
 static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	HRESULT result = S_OK;
 
+	// break=prisms: a run breaks the shadows on purpose, to see that Hudson's finding really fires
+	if (HudsonBreaksPrisms)
+	{
+		return result;
+	}
+
+	visionShadows.corners += toyNumVerts;
 
 	FrameTiming_Mark(kStageShading);
 	FrameTiming_CountPrismCorners(toyNumVerts, 0);
@@ -4925,6 +5153,7 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 
 		ToySetVolumeProgram(d3d.lpD3DDevice);
 		FrameTiming_CountPrismCorners(numWorldCorners, keptCornersThisPass);
+		visionShadows.corners += numWorldCorners + keptCornersThisPass;
 		FrameTiming_Mark(kStagePrismsKept);
 	}
 
@@ -5289,6 +5518,7 @@ static void DrawShoulderLamp()
 
 	if (isARealLight)
 	{
+		ShoulderLamp_NoteARealLightFrame();
 		return;
 	}
 
@@ -5912,6 +6142,51 @@ struct RoutePictures
 		return pictures;
 	}
 };
+
+// See hudson_vision.h. Reads what's drawn now, and doesn't draw anything or change what the card is doing.
+bool SurfacePictures_LookAtThisFrame(HudsonVisionCounts *counts, HudsonVisionView *view)
+{
+	RoutePictures pictures;
+
+	if (!toyDepthSurface || !SurfacePictures_Normal() || !SurfacePictures_Colour() || !pictures.Read(d3d.lpD3DDevice, toyDepthSurface))
+	{
+		return false;
+	}
+
+	view->width = (int)pictures.colour.description.Width;
+	view->height = (int)pictures.colour.description.Height;
+	view->projection11 = d3d.matProjection._11;
+	view->projection22 = d3d.matProjection._22;
+	ToyShadows_ViewMatrix(view->view);
+	view->shadows = visionShadows;
+
+	HudsonVision_Count(pictures.InMemory(), pictures.colour.description.Width, pictures.colour.description.Height, pictures.normal.description.Format == D3DFMT_A2R10G10B10, counts);
+
+	// Only if there's something to compare. Reading the screen stops the game for a moment too. A screen of another shape of pixel can't be read this way, and then there's just nothing to say.
+	view->screenPixels = 0;
+
+	IDirect3DSurface9 *screen = 0;
+
+	if (counts->samples > 0 && SUCCEEDED(d3d.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen)))
+	{
+		PictureInMemory finished;
+
+		if (finished.Read(d3d.lpD3DDevice, screen) && (finished.description.Format == D3DFMT_X8R8G8B8 || finished.description.Format == D3DFMT_A8R8G8B8))
+		{
+			for (int i = 0; i < counts->samples; i++)
+			{
+				if (HudsonVision_ScreenAt(finished.bits, finished.pitch, (int)finished.description.Width, (int)finished.description.Height, counts->sampleX[i], counts->sampleY[i], &view->screen[view->screenPixels]))
+				{
+					view->screenPixels++;
+				}
+			}
+		}
+
+		screen->Release();
+	}
+
+	return true;
+}
 
 // Two empty pictures match perfectly, so a line of zeros only means something if there was a surface to compare. An error goes in the log, so that this can't be read as a pass.
 static void SayIfNothingWasCompared(const char *which, int frame, const PictureDifferences &differences)
@@ -7307,8 +7582,41 @@ static void DrawStatusLine(const char *text, int rightX, int y, int scale)
 	}
 }
 
+// The tag's sizes. Half the HUD's own size is still easy to read in a video, and hides less.
+// Modified 2026-11-09 by Melanikus for the AvP port: the sizes and the most lines are worked out here, once, so ShadowStatus_Bottom below
+// reaches as far as the tag itself does, and the relay's line in play (online_screens_page.cpp) can sit under it.
+enum { kShadowStatusMostLines = 15 };
+
+struct ShadowStatusSizes
+{
+	int scale, lineHeight, margin;
+};
+
+static ShadowStatusSizes ShadowStatus_Sizes()
+{
+	ShadowStatusSizes sizes;
+	sizes.scale = (HUDScaleFactor / 2 > ONE_FIXED) ? HUDScaleFactor / 2 : ONE_FIXED;
+	sizes.lineHeight = MUL_FIXED(sizes.scale, HUD_FONT_HEIGHT + 3);
+	sizes.margin = MUL_FIXED(sizes.scale, 6);
+	return sizes;
+}
+
+int ShadowStatus_Bottom()
+{
+	if (!DevMode || !ShadowStatusOn)
+	{
+		return 0;
+	}
+
+	// the dark backing's bottom edge (ShadowStatus_Draw) when the tag has every line it can have, so it's the same whatever it says now
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	return sizes.margin / 2 + sizes.lineHeight * kShadowStatusMostLines + sizes.margin;
+}
+
 // The tag on the top right of the screen, which says how this build is running, so that a moment in a video can be matched to the log. It's only
 // a few more polygons on the list the display already uses, so it can't hold anything up. It's only there while a level is being shown.
+// It's off until it's asked for, with F7 in play or -dev -statuson at the start, because it covers the top right of the game, where the relay's
+// line in play is.
 static void ShadowStatus_Draw()
 {
 	const char *ToyShadows_RoomName();
@@ -7321,7 +7629,7 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 15, kLineLength = 48 };
+	enum { kMostLines = kShadowStatusMostLines, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
@@ -7388,10 +7696,10 @@ static void ShadowStatus_Draw()
 		}
 	}
 
-	// half the HUD's own size is still easy to read in a video, and hides less
-	int const scale = (HUDScaleFactor / 2 > ONE_FIXED) ? HUDScaleFactor / 2 : ONE_FIXED;
-	int const lineHeight = MUL_FIXED(scale, HUD_FONT_HEIGHT + 3);
-	int const margin = MUL_FIXED(scale, 6);
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	int const scale = sizes.scale;
+	int const lineHeight = sizes.lineHeight;
+	int const margin = sizes.margin;
 	int const rightX = ScreenDescriptorBlock.SDB_Width - margin;
 
 	int widest = 0;
@@ -8176,6 +8484,11 @@ static bool MainDrawUsesHeights()
 	return mainDrawUsedHeights;
 }
 
+bool ViewSwitches_MainDrawWentThroughHeights()
+{
+	return mainDrawUsedHeights;
+}
+
 // The solid polygons, by the shader that marches through their height pictures. The normals and tangents are attached for this one draw, and taken off again straight after, so every other
 // draw sees the game's list of corners as it always has.
 static void DrawSolidsWithHeights()
@@ -8406,7 +8719,8 @@ static void ToyShadows_Draw()
 
 	KeepDeveloperToolsOutOfNetworkGames();
 
-	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like J.
+	// F8 saves the next frames as images, and F7 shows or hides the tag on the screen, which starts hidden, and says which in the log, so a
+	// film can be matched to it. Neither is used by the game. Not while typing, like J.
 	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
@@ -8417,6 +8731,7 @@ static void ToyShadows_Draw()
 		if (DebouncedKeyboardInput[KEY_F7])
 		{
 			ShadowStatusOn = !ShadowStatusOn;
+			LogString(ShadowStatusOn ? "tag: shown on the top right (F7)" : "tag: hidden (F7)");
 		}
 
 		// F9 shoots, F10 stops the polygon last shot from casting, and F5 undoes the newest stop. See shadow_shoot.cpp. The game leaves these three keys alone.
@@ -8478,6 +8793,11 @@ static void ToyShadows_Draw()
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
 	report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+
+	visionShadows.volumesOn = volumesThisFrame;
+	visionShadows.lights = report.lights;
+	visionShadows.casters = report.casters;
+	visionShadows.corners = 0;
 
 
 	if (!report.lights)

@@ -1,0 +1,58 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "RULE: the menus are stretched to the whole width again",
+			"changes": [
+				{
+					"file": "3dc/menu_shape.h",
+					"from": "\treturn (float)(high * 4) / (float)(wide * 3);",
+					"to": "\treturn 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "RULE: the starfield is narrowed with the rest",
+			"changes": [
+				{
+					"file": "3dc/menu_shape.h",
+					"from": "\tif (backdrop || wide <= 0",
+					"to": "\tif (wide <= 0"
+				}
+			]
+		},
+		{
+			"name": "RULE: a 4:3 screen is narrowed too",
+			"changes": [
+				{
+					"file": "3dc/menu_shape.h",
+					"from": " || wide * 3 <= high * 4)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: WPos2DC leaves the grid stretched",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\treturn ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();",
+					"to": "\t\treturn (float(pos / (float)640) * 2) - 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the starfield is never said to be the starfield",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tMenuBackdropFullWidth = true;\n",
+					"to": "\t\t;\n"
+				}
+			]
+		}
+	]
+}

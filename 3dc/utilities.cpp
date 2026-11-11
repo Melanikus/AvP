@@ -1,3 +1,7 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a second copy of the game on the same machine keeps its files in a folder of its own, by a fixed name (-dev -secondcopy)
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a run keeps its files beside the game, and has nobody to show a message to
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the save folder is never missing: without one the path is empty and the log says why once, where before the log and this went round until the game crashed
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -28,6 +32,7 @@
 //   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
 //   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
+#include "hudson.h"
 #include <string>
 #include <algorithm>
 #include "configFile.h"
@@ -42,6 +47,9 @@
 
 static char saveFolder[MAX_PATH] = {0};
 static bool noSaveFolder = false;
+
+// Whether this is the second copy, whose files go in a folder of their own (SaveFolder_UseTheSecondCopy, save_folder.h)
+static bool saveFolderIsTheSecondCopy = false;
 
 // What went wrong finding the save folder. It isn't logged there, because the log asks for the save folder before it can write anything. See TheLogWriter in logString.cpp.
 // It's plain characters because this can be asked for before the game's own start, when a std::string in this file might not be ready.
@@ -137,6 +145,31 @@ bool UseSaveTestFolder(const char *gameFolder)
 	return !noSaveFolder;
 }
 
+bool SaveFolder_UseTheSecondCopy()
+{
+	// Once the folder has been found, or found not to be there, everything since has gone where it said, so it isn't changed
+	if (saveFolder[0] != 0 || noSaveFolder)
+	{
+		return false;
+	}
+
+	saveFolderIsTheSecondCopy = true;
+	return true;
+}
+
+// Added 2026-11-09 by Melanikus for the AvP port: what the kept online identity's file is named by (net_identity_store.cpp), which lives
+// outside the save folder and needs a name of its own for each. The first was asked for there and defined nowhere, so the game couldn't
+// link; net_identity_store_test now checks both are here.
+bool SaveFolder_IsTheSecondCopy()
+{
+	return saveFolderIsTheSecondCopy;
+}
+
+bool SaveFolder_IsAHudsonRun()
+{
+	return HudsonRunIsOn;
+}
+
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one
@@ -154,24 +187,34 @@ char *GetSaveFolderPath()
 
 	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
 	// For a save test it's made in the save test's own folder instead, the same way, and never in the player's Documents, even if that folder can't be used.
+	// A Hudson run has a folder of its own beside the game in place of Documents, so it never touches the player's. (Merged 2026-11-10 by
+	// Melanikus for the AvP port: the save test's folder comes first, then a Hudson run's, then the player's Documents.)
 	char documents[MAX_PATH] = {0};
-	char const *whatWentWrong = saveTestFolder.empty() ? "Can't find the player's Documents folder" : "The save test's folder can't be used";
+	char const *whatWentWrong = !saveTestFolder.empty() ? "The save test's folder can't be used" :
+		HudsonRunIsOn ? "Can't find the run's own folder" : "Can't find the player's Documents folder";
 	std::string where;
 	bool placeKnown = false;
 
-	if (saveTestFolder.empty())
+	if (!saveTestFolder.empty())
+	{
+		if (saveTestFolder.length() < sizeof(documents))
+		{
+			memcpy(documents, saveTestFolder.c_str(), saveTestFolder.length() + 1);
+			placeKnown = true;
+		}
+	}
+	else if (HudsonRunIsOn)
+	{
+		placeKnown = Hudson_RunFolder(documents, sizeof(documents));
+	}
+	else
 	{
 		placeKnown = SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents));
-	}
-	else if (saveTestFolder.length() < sizeof(documents))
-	{
-		memcpy(documents, saveTestFolder.c_str(), saveTestFolder.length() + 1);
-		placeKnown = true;
 	}
 
 	if (placeKnown)
 	{
-		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
+		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where, saveFolderIsTheSecondCopy);
 	}
 
 	if (whatWentWrong)
@@ -310,6 +353,7 @@ HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData)
 void avp_MessageBox(const char* message, int type)
 {
 #ifdef _WIN32
+	Hudson_StopIfTheGameWantsToAsk(message);
 	ReleaseDirect3D();
 	MessageBox(hWndMain, message, "AvP Error", type);
 #endif

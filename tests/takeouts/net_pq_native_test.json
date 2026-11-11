@@ -1,0 +1,28 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "ML-DSA is checked with a context, not the empty one",
+			"changes": [
+				{
+					"file": "3dc/net_pq_native.cpp",
+					"from": "message, messageSize, NULL, 0, publicKey, kNetPqDsaPublicBytes);",
+					"to": "message, messageSize, message, messageSize, publicKey, kNetPqDsaPublicBytes);"
+				}
+			]
+		},
+		{
+			"name": "the post-quantum half says it isn't there",
+			"changes": [
+				{
+					"file": "3dc/net_pq_native.cpp",
+					"from": "return true;",
+					"to": "return false;"
+				}
+			]
+		}
+	]
+}

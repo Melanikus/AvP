@@ -33,7 +33,7 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
    - The first beta was named `betarelease` and its day, `betarelease20261107`, which allowed one a day. That name isn't taken any more.
      The one published that way stays as it is.
 2. The first job checks whether this commit may be released. If it refuses, the last lines of its log say why, starting `REFUSED:`.
-   `tools/check-release.ps1`, `tools/check-no-hudson.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
+   `tools/check-release.ps1`, `tools/check-hudson-asleep.ps1`, `tools/check-servers-dev-only.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
    built or published at this point.
 3. The second job builds the game and checks the package. `tools/check-release-package.ps1` is the list of what it looks for. The first
    build on a clean machine takes a while, because the libraries are built from source.
@@ -111,6 +111,14 @@ can't do that, so it takes the libraries GitHub built, once, and checks them bef
 - `SHA256SUMS` beside the zip has the zip's hash, and `SHA256SUMS.txt` inside the zip has the hash of every file in it.
 - `gh attestation verify <the zip> --repo Melanikus/AvP` asks GitHub whether that file really came out of this repository's workflow.
 - `BUILD.txt` inside the zip names the commit.
+- A test build (Build workflow, artifact `avp-avpx_main`) has no zip hash of its own. Instead, Build records how the package's
+  `SHA256SUMS.txt` was made ("Record how the package was built"), once a job that builds nothing has checked every file against it.
+  `gh attestation verify SHA256SUMS.txt --repo Melanikus/AvP --cert-identity
+  https://github.com/Melanikus/AvP/.github/workflows/build.yml@refs/heads/avpx_main --source-ref refs/heads/avpx_main --source-digest <commit> --deny-self-hosted-runners`
+  asks GitHub whether that list came out of Build, on avpx_main, at that commit (all 40 digits), on GitHub's own machines. Without
+  `--source-digest`, any older build of avpx_main would pass too. Then every file must have the hash the list gives it, with none
+  missing and none extra, and `BUILD.txt` must say `avpx_main` and that commit. `tools/install-build.ps1` does all of it, with the
+  commit of the run it downloaded.
 
 ## Reading a crash a tester sends
 

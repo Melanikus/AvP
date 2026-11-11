@@ -130,7 +130,7 @@
       <Culture>0x0000</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>winmm.lib;shell32.lib;shlwapi.lib;d3d9.lib;dxguid.lib;ws2_32.lib;ole32.lib;user32.lib;xinput.lib;d3dx9d.lib;enet.lib;ogg.lib;vorbis.lib;vorbisfile.lib;OpenAL32.lib;pthreadVC3d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winmm.lib;shell32.lib;shlwapi.lib;d3d9.lib;dxguid.lib;ws2_32.lib;ole32.lib;user32.lib;xinput.lib;d3dx9d.lib;enet.lib;ogg.lib;vorbis.lib;vorbisfile.lib;OpenAL32.lib;pthreadVC3d.lib;mlkem_native.lib;mldsa_native.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)\$(TargetName)$(TargetExt)</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -216,7 +216,7 @@
       <Culture>0x0809</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>winmm.lib;shell32.lib;shlwapi.lib;d3d9.lib;dxguid.lib;ws2_32.lib;ole32.lib;user32.lib;xinput.lib;d3dx9.lib;enet.lib;ogg.lib;vorbis.lib;vorbisfile.lib;OpenAL32.lib;pthreadVC3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winmm.lib;shell32.lib;shlwapi.lib;d3d9.lib;dxguid.lib;ws2_32.lib;ole32.lib;user32.lib;xinput.lib;d3dx9.lib;enet.lib;ogg.lib;vorbis.lib;vorbisfile.lib;OpenAL32.lib;pthreadVC3.lib;mlkem_native.lib;mldsa_native.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)\$(TargetName)$(TargetExt)</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -281,7 +281,6 @@
     <ClCompile Include="..\..\3dc\avp\bh_rubberduck.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_self_destruct.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_sounds.cpp" />
-    <ClCompile Include="..\..\3dc\avp\bh_spcl.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_switch_door.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_track.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_types.cpp" />
@@ -340,6 +339,7 @@
     <ClCompile Include="..\..\3dc\avp\sfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\shapes\cube.cpp" />
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp" />
+    <ClCompile Include="..\..\3dc\avp\near_wake.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_bind.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\coord_strategies.cpp" />
@@ -380,6 +380,9 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\mp_config.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\user_profile.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\console_command.cpp" />
@@ -410,6 +413,20 @@
     <ClCompile Include="..\..\3dc\avp\win95\npc_ghosts.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldnet.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\progress_bar.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_play.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_video.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_video_writer.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_plan.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_graph.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_grid.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_grid_level.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_save.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_nav_feel.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\projload.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\screenshot.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\strategy_chunk.cpp" />
@@ -446,7 +463,18 @@
     <ClCompile Include="..\..\3dc\MusicPlayer.cpp" />
     <ClCompile Include="..\..\3dc\networking.cpp" />
     <ClCompile Include="..\..\3dc\net_close.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list.cpp" />
+    <ClCompile Include="..\..\3dc\relay_list_text.cpp" />
+    <ClCompile Include="..\..\3dc\relay_auto.cpp" />
+    <ClCompile Include="..\..\3dc\window_slot_game.cpp" />
+    <ClCompile Include="..\..\3dc\window_slot.cpp" />
     <ClCompile Include="..\..\3dc\net_host.cpp" />
+    <ClCompile Include="..\..\3dc\net_crypto_cng.cpp" />
+    <ClCompile Include="..\..\3dc\net_identity_store.cpp" />
+    <ClCompile Include="..\..\3dc\net_handshake_a.cpp" />
+    <ClCompile Include="..\..\3dc\net_pq_native.cpp" />
+    <ClCompile Include="..\..\3dc\pq_key_exchange.cpp" />
+    <ClCompile Include="..\..\3dc\pq_signature_check.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
@@ -467,7 +495,9 @@
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\view_keys.cpp" />
+    <ClCompile Include="..\..\3dc\fast_random.cpp" />
     <ClCompile Include="..\..\3dc\hud_scale.cpp" />
+    <ClCompile Include="..\..\3dc\texture_animation.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -513,7 +543,7 @@
     <ClCompile Include="..\..\3dc\win95\enumsch.cpp" />
     <ClCompile Include="..\..\3dc\win95\enum_chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\environment_chunk.cpp" />
-    <ClCompile Include="..\..\3dc\win95\fail.cpp" />
+    <ClCompile Include="..\..\3dc\fail.cpp" />
     <ClCompile Include="..\..\3dc\win95\hierarchy_chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\huffman.cpp" />
     <ClCompile Include="..\..\3dc\win95\io.cpp" />
@@ -532,6 +562,10 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake_game.h" />
+    <ClInclude Include="..\..\3dc\avp\link_misses.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
     <ClInclude Include="..\..\3dc\avp\win95\npc_ghosts.h" />
     <ClInclude Include="..\..\3dc\avp\bh_ais.h" />
@@ -563,7 +597,6 @@
     <ClInclude Include="..\..\3dc\avp\bh_rubberduck.h" />
     <ClInclude Include="..\..\3dc\avp\bh_self_destruct.h" />
     <ClInclude Include="..\..\3dc\avp\bh_sounds.h" />
-    <ClInclude Include="..\..\3dc\avp\bh_spcl.h" />
     <ClInclude Include="..\..\3dc\avp\bh_switch_door.h" />
     <ClInclude Include="..\..\3dc\avp\bh_track.h" />
     <ClInclude Include="..\..\3dc\avp\bh_types.h" />
@@ -675,6 +708,10 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\mp_config.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h" />
     <ClInclude Include="..\..\3dc\coop_lobby.h" />
     <ClInclude Include="..\..\3dc\custom_map_name.h" />
     <ClInclude Include="..\..\3dc\level_switch.h" />
@@ -711,6 +748,23 @@
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h" />
     <ClInclude Include="..\..\3dc\net_checks.h" />
     <ClInclude Include="..\..\3dc\net_host.h" />
+    <ClInclude Include="..\..\3dc\net_crypto.h" />
+    <ClInclude Include="..\..\3dc\net_pq.h" />
+    <ClInclude Include="..\..\3dc\net_noise.h" />
+    <ClInclude Include="..\..\3dc\net_identity.h" />
+    <ClInclude Include="..\..\3dc\net_identity_file.h" />
+    <ClInclude Include="..\..\3dc\net_identity_store.h" />
+    <ClInclude Include="..\..\3dc\net_identity_run.h" />
+    <ClInclude Include="..\..\3dc\net_handshake_a.h" />
+    <ClInclude Include="..\..\3dc\net_handshake_b.h" />
+    <ClInclude Include="..\..\3dc\net_sealed_game.h" />
+    <ClInclude Include="..\..\3dc\net_peer_v2.h" />
+    <ClInclude Include="..\..\3dc\net_v2_fragments.h" />
+    <ClInclude Include="..\..\3dc\net_v2_replay.h" />
+    <ClInclude Include="..\..\3dc\net_v2_direction.h" />
+    <ClInclude Include="..\..\3dc\pq_key_exchange.h" />
+    <ClInclude Include="..\..\3dc\pq_signature_check.h" />
+    <ClInclude Include="..\..\3dc\net_relay.h" />
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h" />
     <ClInclude Include="..\..\3dc\avp\sound_address.h" />
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
@@ -729,6 +783,11 @@
     <ClInclude Include="..\..\3dc\include\shape.h" />
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
     <ClInclude Include="..\..\3dc\net_close.h" />
+    <ClInclude Include="..\..\3dc\relay_list.h" />
+    <ClInclude Include="..\..\3dc\relay_list_text.h" />
+    <ClInclude Include="..\..\3dc\relay_auto.h" />
+    <ClInclude Include="..\..\3dc\window_slot.h" />
+    <ClInclude Include="..\..\3dc\relay_shared.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />
@@ -760,7 +819,7 @@
     <ClInclude Include="..\..\3dc\win95\enumsch.hpp" />
     <ClInclude Include="..\..\3dc\win95\enum_chunk.hpp" />
     <ClInclude Include="..\..\3dc\win95\environment_chunk.hpp" />
-    <ClInclude Include="..\..\3dc\win95\fail.h" />
+    <ClInclude Include="..\..\3dc\fail.h" />
     <ClInclude Include="..\..\3dc\win95\hash_tem.hpp" />
     <ClInclude Include="..\..\3dc\win95\hierarchy_chunk.hpp" />
     <ClInclude Include="..\..\3dc\win95\huffman.hpp" />

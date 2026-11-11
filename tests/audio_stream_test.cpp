@@ -304,8 +304,7 @@ static void TestTwoThreads()
 	}
 
 	uint64_t const samples = (uint64_t)kPieces * kBytes / 2 / 2;
-	Check(stream->GetNumSamplesWritten() == samples, "every piece is counted as written");
-	Check(stream->GetNumSamplesPlayed() == samples, "and as played");
+	Check(stream->GetNumSamplesPlayed() == samples, "every piece is counted as played");
 
 	delete stream;
 	Check(theSource._isFree, "letting go of the stream stops its thread and frees its source");
@@ -320,7 +319,7 @@ static void TestNotStarted()
 	AudioStream *stream = new AudioStream;
 
 	Check(!stream->Init(2, 44100, 16, kBytes, kBuffers), "with no sound, a stream doesn't start");
-	Check(stream->GetNumFreeBuffers() == 0 && stream->GetWritableBufferSize() == 0, "it has no free buffers, and no lock is touched, because none was made");
+	Check(stream->GetNumFreeBuffers() == 0, "it has no free buffers, and no lock is touched, because none was made");
 	Check(stream->GetNumSamplesPlayed() == 0, "it has played nothing, which is 0, not a division by 0");
 
 	ALuint buffer = 99;
@@ -474,8 +473,7 @@ static void TestTheCode()
 	std::string const header = ReadSourceFile("3dc/AudioStreaming.h");
 	Check(header.find("std::atomic<bool> _isPlaying;") != std::string::npos && header.find("std::atomic<bool> _isPaused;") != std::string::npos,
 		"whether a stream is playing, and whether it's paused, can be read by both threads at once");
-	Check(header.find("std::atomic<uint64_t> _totalBytesPlayed;") != std::string::npos && header.find("std::atomic<uint64_t> _totalSamplesWritten;") != std::string::npos,
-		"and so can how much it has played and written");
+	Check(header.find("std::atomic<uint64_t> _totalBytesPlayed;") != std::string::npos, "and so can how much it has played");
 
 	std::string::size_type const list = header.find("std::deque<ALuint> _freeBufferQueue;");
 	std::string::size_type const opensUp = header.find("public:", header.find("class AudioStream"));

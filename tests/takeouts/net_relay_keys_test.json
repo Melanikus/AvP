@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the fingerprint has no words in front of the keys",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "{ reinterpret_cast<const uint8_t *>(kNetRelayKeysWords), sizeof(kNetRelayKeysWords) - 1 },",
+					"to": "{ reinterpret_cast<const uint8_t *>(kNetRelayKeysWords), 0 },"
+				}
+			]
+		},
+		{
+			"name": "the fingerprint takes the words' 0 too",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "{ reinterpret_cast<const uint8_t *>(kNetRelayKeysWords), sizeof(kNetRelayKeysWords) - 1 },",
+					"to": "{ reinterpret_cast<const uint8_t *>(kNetRelayKeysWords), sizeof(kNetRelayKeysWords) },"
+				}
+			]
+		},
+		{
+			"name": "the ML-KEM key isn't in the fingerprint",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "{ keys->kem, kNetPqKemPublicBytes },",
+					"to": "{ keys->kem, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the P-384 key isn't in the fingerprint",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "{ keys->p384, kNetCryptoP384PublicBytes },",
+					"to": "{ keys->p384, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the check compares the first 16 bytes only",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "for (size_t i = 0; i < kNetRelayKeysFingerprintBytes; i++)\n\t{\n\t\tdiffer |=",
+					"to": "for (size_t i = 0; i < 16; i++)\n\t{\n\t\tdiffer |="
+				}
+			]
+		},
+		{
+			"name": "a setting's region isn't checked",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "if (!RelayList_IsRegion(named) || !NetRelayKeys_FingerprintFromHex(colon + 1, read))",
+					"to": "if (!NetRelayKeys_FingerprintFromHex(colon + 1, read))"
+				}
+			]
+		},
+		{
+			"name": "a refused setting leaves what was there",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "\tregion[0] = '\\0';\n\tmemset(fingerprint, 0, kNetRelayKeysFingerprintBytes);\n\n\tif (!setting)",
+					"to": "\tif (!setting)"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint in capitals is taken",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "\t\tif (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tif (text[kNetRelayKeysFingerprintHexLetters]",
+					"to": "\t\tif (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tif (text[kNetRelayKeysFingerprintHexLetters]"
+				}
+			]
+		},
+		{
+			"name": "a fingerprint with a digit too many is taken",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "\tif (text[kNetRelayKeysFingerprintHexLetters] != '\\0')\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a fingerprint is read from its first 32 digits, as before the ruling",
+			"changes": [
+				{
+					"file": "3dc/net_relay_keys.h",
+					"from": "for (size_t i = 0; i < kNetRelayKeysFingerprintHexLetters; i++)\n\t{\n\t\tchar const c = text[i];",
+					"to": "for (size_t i = 0; i < 32; i++)\n\t{\n\t\tchar const c = text[i];"
+				}
+			]
+		}
+	]
+}

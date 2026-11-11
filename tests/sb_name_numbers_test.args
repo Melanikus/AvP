@@ -1,0 +1,1 @@
+/std:c++17 /EHsc /MD /J /W3 /FC /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /I3dc/avp tests/sb_name_numbers_test.cpp /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h

@@ -1,9 +1,12 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game of the same-as-single-player mode, a level's end goes to the host, who moves everyone on
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   in a Hudson run with a marine, the hive and the squad don't run, unless the run asked for a fight
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a level's start asks d3d_hud.cpp how big the HUD is drawn, for every species, in place of the motion tracker's width / 640
 //   (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   the lift's change of environment, which could never be asked for, is no longer looked for each frame (#135)
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -31,6 +34,7 @@
 #include "version.h"
 #include "bh_rubberduck.h"
 #include "bh_marine.h"
+#include "hudson.h"
 #include "dxlog.h"
 #include "menus.h"
 #include "user_profile.h"
@@ -364,8 +368,12 @@ void UpdateGame(void)
 	/*-------------- Patrick 11/1/97 ----------------
 	Call the alien hive management function
 	-------------------------------------------------*/
-	DoHive();
-	DoSquad();
+	// a Hudson run with a marine keeps everything else still, so nothing new turns up, unless it asked for a fight
+	if (!HudsonMarineIsOn || HudsonWorldIsLive)
+	{
+		DoHive();
+		DoSquad();
+	}
 
 	ObjectBehaviours();
 
@@ -396,11 +404,6 @@ void UpdateGame(void)
 	}
 
 	ObjectDynamics();
-
-	// now for the env teleports
-	if (RequestEnvChangeViaLift) {
-		CleanUpLiftControl();
-	}
 
 	/* netgame support */
 	if (AvP.Network != I_No_Network) {
