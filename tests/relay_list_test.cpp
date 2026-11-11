@@ -1015,8 +1015,12 @@ static void TestTheMenus()
 	std::string const firstOpen = SourceSlice(menus, "\t\t\tif (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t\t\t{", "\n\t\t\t}\n",
 		kSliceEndAfterTheStart, FailedSlice);
 	std::string const askAgain = SourceSlice(menus, "\t\tif (OnlinePage_TimeToAskAgain())\n\t\t{", "\n\t\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && CountOf(menus, "RelayList_FindGames();") == 2,
-		"the page of games found asks the list when it's opened and when the player asks again, and nowhere else");
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): and the Multiplayer page asks every line with a yes as it
+	// opens, so its Host on row has each line's approval and round trip; nowhere else, never on each answer, never on a timer
+	std::string const multiplayerOpens = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(firstOpen, "RelayList_FindGames();") && Has(askAgain, "RelayList_FindGames();") && Has(multiplayerOpens, "RelayList_FindGames();") &&
+		CountOf(menus, "RelayList_FindGames();") == 3,
+		"the menus ask the lines when the page of games found opens, when the player asks again there, and when the Multiplayer page opens, and nowhere else");
 
 	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
 	Check(page.size() > 20000, "online_screens_page.cpp was found and read");
@@ -1044,7 +1048,8 @@ static void TestTheMenus()
 		Has(page, "pageState = listCantConnect ? kPageCantConnect : kPageCantFetch;"), "and the page shows which of the two it was by that");
 
 	std::string const multiplayerPage = SourceSlice(menus, "\t\tcase AVPMENU_MULTIPLAYER:\n", "\t\t\tbreak;", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(multiplayerPage, "RelayList_FindRelays();"), "the multiplayer page asks where the relays are, before a game can be hosted");
+	Check(Has(multiplayerPage, "RelayList_FindGames();") && !Has(menus, "RelayList_FindRelays"),
+		"the multiplayer page asks every line with a yes where it stands, before a game can be hosted; there are no relays to ask for, as each line's is its own");
 
 	// A new search of the LAN empties the page's list of games, so the relay's games go back on it each time the page is set up: after
 	// that search, and before the page's rows are made from the list

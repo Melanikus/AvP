@@ -520,8 +520,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\t\tRelayList_FindRelays();\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
-					"to": "\t\t\t\tRelayList_FindRelays();\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
+					"from": "\t\t\t\trelayGamesKept = 0;\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
+					"to": "\t\t\t\trelayGamesKept = 0;\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
 				}
 			]
 		},
@@ -536,11 +536,11 @@
 			]
 		},
 		{
-			"name": "SOURCE: the multiplayer page does not ask where the relays are",
+			"name": "SOURCE: the multiplayer page does not ask the lines where they stand",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tRelayList_FindRelays();\n\n\t\t\t//skirmishMode must be false",
+					"from": "\t\t\tRelayList_FindGames();\n\n\t\t\t//skirmishMode must be false",
 					"to": "\t\t\t//skirmishMode must be false"
 				}
 			]
