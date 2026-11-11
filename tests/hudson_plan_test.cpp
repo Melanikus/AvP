@@ -2294,7 +2294,7 @@ static void TestTourAndSharedMachine()
 		std::string const list = ReadSourceFile("3dc/relay_list.cpp");
 		std::string const agreed = Between(list, "bool TheLineIsAgreed(const ServersCfgServer &line)", "bool Start(void)");
 		// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: the run's Yes is each line's own, by its hash)
-		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "bool RelayList_LineToAgree(RelayListLineToAgree *out)");
+		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "int RelayList_LineCount(void)");
 		Check(Has(agreed, "if (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];\n\t\t\treturn !hudsonRunShowsTheYesPage || "
 			"(LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));\n\t\t}"),
 			"SOURCE: yespage=: a Hudson run's line is agreed at once, unless it asked for the yes page, and then only after its own Yes to that line");
