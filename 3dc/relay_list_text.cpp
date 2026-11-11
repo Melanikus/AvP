@@ -1586,3 +1586,40 @@ RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes
 	*answer = kAccessWords[found].answer;
 	return kRelayListAccepted;
 }
+
+// Added 2026-11-11 by Melanikus for the AvP port: see relay_list_text.h. A place is kept for the line in use until it's reached, so a ninth
+// agreed line before it can't push it out.
+int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states)
+{
+	if (!agreed || !visits || !states || count < 0)
+	{
+		return 0;
+	}
+
+	int made = 0;
+	bool inUseToCome = inUse >= 0 && inUse < count;
+
+	for (int place = 0; place < count; place++)
+	{
+		if (place == inUse)
+		{
+			inUseToCome = false;
+		}
+
+		if (!agreed[place])
+		{
+			states[place] = kRelayLineNoYes;
+		}
+		else if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))
+		{
+			states[place] = kRelayLineNotAsked;
+		}
+		else
+		{
+			visits[made++] = place;
+			states[place] = kRelayLineAsking;
+		}
+	}
+
+	return made;
+}

@@ -2263,17 +2263,20 @@ static void TestTourAndSharedMachine()
 		// screens). The yes a Hudson run gives on the page holds for that run alone, never in this PC's servers-trusted.cfg (PO's ruling)
 		std::string const list = ReadSourceFile("3dc/relay_list.cpp");
 		std::string const agreed = Between(list, "bool TheLineIsAgreed(const ServersCfgServer &line)", "bool Start(void)");
-		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLine(void)", "void HudsonTest_RelayListShowsTheYesPage(void)");
-		Check(Has(agreed, "if (HudsonRunIsOn)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}"),
-			"SOURCE: yespage=: a Hudson run's line is agreed at once, unless it asked for the yes page, and then only after its own Yes");
-		Check(ComesBefore(agreeing, "if (HudsonRunIsOn)\n\t{\n\t\thudsonRunSaidYes = true;", "TheLineIsAgreed(*line);")
-			&& ComesBefore(agreeing, "hudsonRunSaidYes = true;", "ServersTrust_Add(&yeses, hash);")
-			&& ComesBefore(agreeing, "hudsonRunSaidYes = true;", "NetIdentityStore_KeepTrust(yeses)")
-			&& Has(Between(agreeing, "hudsonRunSaidYes = true;", "TheLineIsAgreed(*line);"), "return true;"),
-			"SOURCE: and that Yes holds for the run alone: it returns before any yes is read, added or kept, so servers-trusted.cfg never gets it");
+		// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: the run's Yes is each line's own, by its hash)
+		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "bool RelayList_LineToAgree(RelayListLineToAgree *out)");
+		Check(Has(agreed, "if (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];\n\t\t\treturn !hudsonRunShowsTheYesPage || "
+			"(LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));\n\t\t}"),
+			"SOURCE: yespage=: a Hudson run's line is agreed at once, unless it asked for the yes page, and then only after its own Yes to that line");
+		std::string const runsYes = Between(agreeing, "if (HudsonRunIsOn)\n\t{", "\telse\n\t{");
+		std::string const playersYes = Between(agreeing, "\telse\n\t{", "// The list may have started");
+		Check(Has(runsYes, "ServersTrust_Add(&hudsonRunYeses, hash);") && !Has(runsYes, "&yeses") && !Has(runsYes, "KeepTrust") &&
+			Has(playersYes, "ServersTrust_Add(&yeses, hash);") && Has(playersYes, "NetIdentityStore_KeepTrust(yeses)") &&
+			CountOf(list, "NetIdentityStore_KeepTrust(") == 1 && CountOf(list, "ServersTrust_Add(&hudsonRunYeses, hash);") == 1,
+			"SOURCE: and that Yes holds for the run alone: it goes into the run's own yeses, never the kept ones, so servers-trusted.cfg never gets it");
 		Check(Has(list, "void HudsonTest_RelayListShowsTheYesPage(void)\n{\n\thudsonRunShowsTheYesPage = true;\n}") && CountOf(list, "hudsonRunShowsTheYesPage = true;") == 1
-			&& CountOf(list, "hudsonRunSaidYes = true;") == 1 && Has(list, "bool hudsonRunShowsTheYesPage = false;") && Has(list, "bool hudsonRunSaidYes = false;"),
-			"SOURCE: both flags start false, and each is set in one place only");
+			&& Has(list, "bool hudsonRunShowsTheYesPage = false;") && Has(list, "ServersTrustYeses hudsonRunYeses = {};"),
+			"SOURCE: both start off (false, and no yes), and the page's flag is set in one place only");
 		Check(ComesBefore(hudson, "if (refusalFromReading)\n\t{\n\t\tWriteResult(refusalFromReading, kHudsonExitBadArguments);",
 			"if (plan.yesPage != kHudsonYesPageNone)\n\t{\n\t\tHudsonTest_RelayListShowsTheYesPage();\n\t}") && CountOf(hudson, "HudsonTest_RelayListShowsTheYesPage();") == 1,
 			"SOURCE: the run asks for the page once, with yespage=, before the menus");

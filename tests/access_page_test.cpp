@@ -199,7 +199,7 @@ static void TestOnlyWithAServer()
 	Check(Has(pageCase, "if (!AccessPage_Opened(AvPMenus.MenuElements))\n\t\t\t{\n\t\t\t\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\t\t\t\treturn;"),
 		"and a page that refuses sends the menus back to the Multiplayer page");
 
-	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccess(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccessOn(int place,", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3b): -dev decides nothing online, so relay_list.cpp no longer asks it; the
 	// page itself is the way in, and it stays -dev only until the access page's own pull request opens it (PO, 2026-11-10)
 	Check(ask.find("if (!fingerprint)\n\t{\n\t\treturn false;") != std::string::npos && ask.find("if (!fingerprint)") < ask.find("Wake();")
@@ -390,36 +390,33 @@ static void TestOnlyToTheLinesServer()
 	std::string const table = ReadSource("3dc/avp/language.cpp");
 	Check(!list.empty() && !page.empty() && table.size() > 10000, "relay_list.cpp, the page and language.cpp were found and read");
 
-	// No line: nothing is made or sent, and the log says why
-	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccess(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const refusal = ask.find("if (!Server())\n\t{\n\t\tLogString(\"Relay list: an access request goes only to the server a \" SERVERS_CFG_FILE_NAME \" line names");
-	size_t const refusalEnds = ask.find("return false;", refusal);
-	Check(refusal != std::string::npos && refusalEnds != std::string::npos && refusalEnds < ask.find("\n\t}\n", refusal) + 4,
-		"RelayList_AskForAccess refuses when no servers.cfg line names a server, and says why in the log");
-	Check(refusal != std::string::npos && ask.find("if (!fingerprint)") < refusal && refusal < ask.find("RelayList_AccessBody(") &&
-		refusal < ask.find("shared->accessWanted = true;") && refusal < ask.find("Wake();"),
-		"after the fingerprint check, and before the request is made, queued or the thread woken");
+	// No line: nothing is made or sent, and the log says why. Modified 2026-11-11 by Melanikus for the AvP port (one model for every
+	// line): the request is for one line, by its place, and goes to that line's server alone, after that line's own yes.
+	std::string const askOn = SourceSlice(list, "bool RelayList_AskForAccessOn(int place,", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const refusal = askOn.find("if (place < 0 || place >= theFile.serverCount)\n\t{\n\t\tLogString(\"Relay list: an access request goes only to a server a \" SERVERS_CFG_FILE_NAME \" line names");
+	size_t const noYes = askOn.find("if (!TheLineIsAgreed(theFile.servers[place]))\n\t{\n\t\tLogString(\"Relay list: an access request waits for the player's yes to its server, so nothing was sent\");\n\t\treturn false;\n\t}");
+	size_t const queued = askOn.find("shared->accessWantedOn[place] = true;");
+	Check(refusal != std::string::npos && noYes != std::string::npos && queued != std::string::npos && askOn.find("if (!fingerprint)") < refusal &&
+		refusal < noYes && noYes < askOn.find("RelayList_AccessBody(") && noYes < queued && queued < askOn.find("Wake();"),
+		"a request for no line, or for a line without the player's yes, is refused with the reason in the log, before anything is made, queued or woken");
+	std::string const ask = SourceSlice(list, "bool RelayList_AskForAccess(const char *name", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(ask, "if (!Server())\n\t{\n\t\tLogString(\"Relay list: an access request goes only to the server a \" SERVERS_CFG_FILE_NAME \" line names") &&
+		Has(ask, "return RelayList_AskForAccessOn(theServer.inUse, name, statics, fingerprint);") && !Has(ask, "shared"),
+		"the one-line call refuses with no line, and otherwise is the same per-line call, for the line in use");
+	size_t const started = askOn.find("if (!RelayList_AccessBody(name, statics, body, sizeof(body)) || !Start())\n\t{\n\t\treturn false;\n\t}");
+	Check(started != std::string::npos && started < queued, "with a line and its yes, the request is queued only once the list has started");
 
-	// With a line: queued only once the list has started, and the list starts only for a line the player has said yes to
-	size_t const started = ask.find("if (!RelayList_AccessBody(name, statics, body, sizeof(body)) || !Start())\n\t{\n\t\treturn false;\n\t}");
-	Check(started != std::string::npos && started < ask.find("shared->accessWanted = true;") && started < ask.find("Wake();"),
-		"with a line, the request is queued only once the list has started");
-	std::string const starting = SourceSlice(list, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const yes = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
-	// (Modified 2026-11-11 by Melanikus for the AvP port: the list's state is made by NewServer now, one for each server, so the yes
-	// comes before that. A text that isn't there is never "after" the yes: find gives npos, so it's looked for on its own too.)
-	size_t const made = starting.find("Shared *made = NewServer(*line);");
-	Check(yes != std::string::npos && made != std::string::npos && yes < made,
-		"and the list starts only for a line the player has said yes to, so a line without the yes sends no request either");
-
-	// The request goes through Call alone, which checks the server's key against the line before a byte of it leaves
-	std::string const thread = SourceSlice(list, "void AskForAccess(const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])", "\n\t}\n",
-		kSliceEndAfterTheStart, FailedSlice);
+	// The request goes through Call alone, on a visit to that line, which checks the server's key against the line before a byte of it leaves
+	std::string const thread = SourceSlice(list, "void AskForAccessOn(int place, const ServersCfgServer &line, const char *body, const uint8_t fingerprint[kNetIdentityFingerprintBytes])",
+		"\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// (Modified 2026-11-11 by Melanikus for the AvP port: Call and CheckTheServer take the server they're for, as there's one for each line)
 	std::string const call = SourceSlice(list, "Answer Call(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)",
 		"\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(thread, "Answer const a = Call(shared, L\"POST\", L\"/v1/access-requests\", body, accessAnswerText, sizeof(accessAnswerText));") &&
-		CountOf(list, "/v1/access-requests") == 1, "the request goes out in one place, through Call, to the line in use");
+	size_t const visited = thread.find("Shared *const visit = NewServer(line);");
+	size_t const posted = thread.find("Answer const a = Call(visit, L\"POST\", L\"/v1/access-requests\", body, visit->accessAnswerText, sizeof(visit->accessAnswerText));");
+	size_t const forgotten = thread.find("ForgetTheVisit(visit);");
+	Check(visited != std::string::npos && posted != std::string::npos && forgotten != std::string::npos && visited < posted && posted < forgotten &&
+		CountOf(list, "/v1/access-requests") == 1, "the request goes out in one place, through Call, on a visit to its own line, wiped after");
 	size_t const checked = call.find("const char *const unchecked = CheckTheServer(s);");
 	Check(checked != std::string::npos && checked < call.find("CallChecked(") && Has(call, "check.keepIt = false;"),
 		"and Call checks the server first, then sends only to the key that matched, never keeping a new one");

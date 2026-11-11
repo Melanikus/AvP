@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"servers.cfg"
 	],
 	"rows": [
 		{
@@ -809,7 +810,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tTell(\"the game is off the list\");",
+					"from": "\t\t\tTell(shared, \"the game is off the list\");",
 					"to": "\t\t\tLogString(\"the game is off the list\");"
 				}
 			]
@@ -1289,7 +1290,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "L\"/v1/games?version=%d\", shared->version);",
+					"from": "L\"/v1/games?version=%d\", visit->version);",
 					"to": "L\"/v1/games?version=%d\", kMultiplayerVersion);"
 				}
 			]
@@ -1379,7 +1380,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, keys.p384, keys.kem);",
+					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(s->keysAnswer, a.bytes, region, keys.p384, keys.kem);",
 					"to": "RelayListRefusal const refusal = kRelayListAccepted;"
 				}
 			]
@@ -1409,8 +1410,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "if (shared->keyState == kKeyRefused || (!check.keepIt && shared->keyState != kKeyGood))",
-					"to": "if (shared->keyState == kKeyRefused)"
+					"from": "if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood))",
+					"to": "if (keyNow == kKeyRefused)"
 				}
 			]
 		},
@@ -1439,7 +1440,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, shared->lineFingerprint);",
+					"from": "bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);",
 					"to": "bool const good = true;"
 				}
 			]
@@ -1449,8 +1450,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "shared->keyState = good ? kKeyGood : kKeyRefused;",
-					"to": "shared->keyState = kKeyGood;"
+					"from": "s->keyState = good ? kKeyGood : kKeyRefused;",
+					"to": "s->keyState = kKeyGood;"
 				}
 			]
 		},
@@ -1459,7 +1460,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tconst char *const unchecked = CheckTheServer();\n\n\t\tif (unchecked)\n",
+					"from": "\t\tconst char *const unchecked = CheckTheServer(s);\n\n\t\tif (unchecked)\n",
 					"to": "\t\tconst char *const unchecked = NULL;\n\n\t\tif (unchecked)\n"
 				}
 			]
@@ -1489,7 +1490,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)",
+					"from": "if (!why && region[0] && strncmp(region, visit->relayRegion, sizeof(visit->relayRegion)) != 0)",
 					"to": "if (false)"
 				}
 			]
@@ -1499,8 +1500,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "L\"%u.%u.%u.%u\", (line->address >> 24) & 0xFFu,",
-					"to": "L\"%u.%u.%u.%u\", (line->address >> 16) & 0xFFu,"
+					"from": "L\"%u.%u.%u.%u\", (line.address >> 24) & 0xFFu,",
+					"to": "L\"%u.%u.%u.%u\", (line.address >> 16) & 0xFFu,"
 				}
 			]
 		},
@@ -1529,7 +1530,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tEnterCriticalSection(&shared->lock);\n\t\tshared->serverWhy = NULL;\n\t\tLeaveCriticalSection(&shared->lock);\n",
+					"from": "\t\tEnterCriticalSection(&s->lock);\n\t\ts->serverWhy = NULL;\n\t\tLeaveCriticalSection(&s->lock);\n",
 					"to": ""
 				}
 			]
@@ -1539,7 +1540,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\treturn CantUse(a.why);",
+					"from": "\t\t\treturn CantUse(s, a.why);",
 					"to": "\t\t\treturn a.why;"
 				}
 			]
@@ -1549,7 +1550,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\treturn CantUse(kSaidNo);",
+					"from": "\t\t\treturn CantUse(s, kSaidNo);",
 					"to": "\t\t\treturn kSaidNo;"
 				}
 			]
@@ -1725,12 +1726,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the list starts before the player's yes",
+			"name": "SOURCE: the list's own state has the line in use's server before the player's yes",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (!line || !TheLineIsAgreed(*line))",
-					"to": "\t\tif (!line)"
+					"from": "\t\tif (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}\n",
+					"to": ""
 				}
 			]
 		},
@@ -1759,8 +1760,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}",
-					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}"
+					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];"
 				}
 			]
 		},
@@ -1829,8 +1830,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}",
-					"to": "\t\tif (!line || (!theServer.pickNow.there && !TheLineIsAgreed(*line)))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+					"from": "\t\tuint8_t hash[kServersTrustHashBytes];\n\t\treturn LineHash(line, hash) && ServersTrust_Has(yeses, hash);",
+					"to": "\t\tuint8_t hash[kServersTrustHashBytes];\n\t\treturn LineHash(line, hash) && (theServer.pickNow.there || ServersTrust_Has(yeses, hash));"
 				}
 			]
 		},
@@ -1939,8 +1940,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (place < 0 || place >= theFile.serverCount)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line",
-					"to": "\tif (place < 0)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line"
+					"from": "\tif (place < 0 || place >= theFile.serverCount)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line = theFile.servers[place];\n\n\tif (!ShowTheLine(&line, &out->line))\n\t{\n\t\tmemset(out, 0, sizeof(*out));\n\t\treturn false;\n\t}\n\n\tout->lineNumber = line.lineNumber;\n\tout->inUse",
+					"to": "\tif (place < 0)\n\t{\n\t\treturn false;\n\t}\n\n\tServersCfgServer const &line = theFile.servers[place];\n\n\tif (!ShowTheLine(&line, &out->line))\n\t{\n\t\tmemset(out, 0, sizeof(*out));\n\t\treturn false;\n\t}\n\n\tout->lineNumber = line.lineNumber;\n\tout->inUse"
 				}
 			]
 		},
@@ -1979,8 +1980,138 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return !hudsonRunShowsTheYesPage || hudsonRunSaidYes;",
-					"to": "return true;"
+					"from": "return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));",
+					"to": "return !hudsonRunShowsTheYesPage || LineHash(line, runHash);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call goes through a state with no server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes to another line gives the list's own state its server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (shared && place == theServer.inUse)",
+					"to": "\tif (shared)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a find asks no line its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tagreed[place] = TheLineIsAgreed(theFile.servers[place]);",
+					"to": "\t\tagreed[place] = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay's keys are asked of a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!TheLineIsAgreed(theFile.servers[place]) || !Start())",
+					"to": "\tif (!Start())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host's choice outlives its line's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "!TheLineIsAgreed(theFile.servers[hostChoice])",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listing goes through the list's own state, not its line's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tAnswer const a = Call(hostServer, posting ? L\"POST\" : L\"PUT\"",
+					"to": "\t\t\tAnswer const a = Call(shared, posting ? L\"POST\" : L\"PUT\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay keys' visit isn't wiped",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tTell(visit, why ? why : \"the relay's keys are the ones its server's line proved\");\n\t\t\tPassOnTheNews(visit, line.lineNumber);\n\t\t\tForgetTheVisit(visit);\n",
+					"to": "\t\t\tTell(visit, why ? why : \"the relay's keys are the ones its server's line proved\");\n\t\t\tPassOnTheNews(visit, line.lineNumber);\n"
+				}
+			]
+		},
+		{
+			"name": "a find visits a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (!agreed[place])\n\t\t{\n\t\t\tstates[place] = kRelayLineNoYes;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tstates[place] = kRelayLineNoYes;"
+				}
+			]
+		},
+		{
+			"name": "the line in use loses its place to the agreed lines before it",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\telse if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))",
+					"to": "\t\telse if (made >= kRelayListMostVisits)"
+				}
+			]
+		},
+		{
+			"name": "a find visits a ninth line",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.h",
+					"from": "int const kRelayListMostVisits = 8;",
+					"to": "int const kRelayListMostVisits = 9;"
+				}
+			]
+		},
+		{
+			"name": "servers.cfg ships a third server",
+			"changes": [
+				{
+					"file": "servers.cfg",
+					"from": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n",
+					"to": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n203.0.113.9  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  Sydney\n"
+				}
+			]
+		},
+		{
+			"name": "servers.cfg drops Frankfurt",
+			"changes": [
+				{
+					"file": "servers.cfg",
+					"from": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's own list of the servers it ships with drifts from servers.cfg",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\\n\";",
+					"to": "\t\"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Berlin\\n\";"
 				}
 			]
 		}

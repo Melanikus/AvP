@@ -172,7 +172,7 @@ struct RelayListServerGame
 	int line;
 };
 
-int const kRelayListMostVisits = 8;                                                // the most good lines asked in one find
+// (kRelayListMostVisits, the most good lines asked in one find, is in relay_list_text.h, with the choice of which: RelayList_ChooseVisits)
 int const kRelayListMostAllGames = kRelayListMostVisits * kRelayListMostGames;    // the most games of all of them together
 
 // Once for each find, after every visit has ended: true, with every agreed line's games, each tagged with its line, in the lines' order
@@ -180,12 +180,8 @@ int const kRelayListMostAllGames = kRelayListMostVisits * kRelayListMostGames;  
 bool RelayList_FoundAllGames(RelayListServerGame *games, int *count);
 
 // How a good line stands after the last find (place: as RelayList_LineAt numbers them), and why, in the game's own fixed words, when
-// it's kRelayLineNoAnswer. Asking means no find has ended since it was asked, or none has been asked.
-int const kRelayLineNoYes = 0;       // the player hasn't said yes to it: it isn't asked, and its row says to say yes to see its games
-int const kRelayLineAsking = 1;
-int const kRelayLineAnswered = 2;    // its games are among RelayList_FoundAllGames's (it may have none)
-int const kRelayLineNoAnswer = 3;    // it couldn't be reached, its keys don't match its line, or its answer was refused: why says which
-int const kRelayLineNotAsked = 4;    // past the first kRelayListMostVisits agreed lines, so not asked this time
+// it's kRelayLineNoAnswer. Asking means no find has ended since it was asked, or none has been asked. (The states, kRelayLine..., are in
+// relay_list_text.h.)
 int RelayList_LineGamesState(int place, const char **why);
 
 // ---- ONE MODEL FOR EVERY LINE. Added 2026-11-11 by Melanikus for the AvP port (PO's design from the owner's rulings of that day: "They

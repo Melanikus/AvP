@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include <vector>
 #include "source_slice.h"
 
 static int checksFailed = 0;
@@ -863,14 +864,56 @@ static void TestTheCalls()
 	// Added 2026-11-10 by Melanikus for the AvP port (#175's last part): THE PLAYER'S YES. The list needs the whole game (WinHTTP, the store,
 	// the main thread), so its side of the gate is read in the code; servers_trust_test tries the yes's hash and its file, and net_start_test
 	// what networking.cpp does before it.
-	size_t const gate = starting.find("if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}");
-	size_t const madeAt = starting.find("Shared *made = NewServer(*line);");
-	Check(gate != std::string::npos && madeAt != std::string::npos && gate < madeAt,
-		"the list starts only for a line the player has said yes to: before it makes anything, or writes the server it would call");
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the yes is each line's own. Nothing goes to a line's
+	// server before its yes: every way of asking a line checks that line's yes on the main thread before the line is handed to the list's
+	// thread, the thread only ever calls lines it was handed so, and the list's own state has no server at all until the line in use has
+	// its yes (kKeyNoLine), so nothing can go through that either.
+	size_t const agreedFirst = starting.find("bool const lineAgreed = TheLineIsAgreed(*line);\n\t\tShared *made = NewServer(*line);");
+	size_t const noLine = starting.find("if (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}");
+	size_t const threadMade = starting.find("CreateThread(");
+	Check(agreedFirst != std::string::npos && noLine != std::string::npos && threadMade != std::string::npos && agreedFirst < noLine && noLine < threadMade,
+		"the list's own state has the line in use's server only after its yes: until then it has none, from before its thread starts");
+	std::string const checkedCall = SourceSlice(source, "Answer CallChecked(Shared *s, const wchar_t *method", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const noLineRefused = checkedCall.find("if (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}");
+	std::string const serverCheck = SourceSlice(source, "const char *CheckTheServer(Shared *s)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const noLineChecked = serverCheck.find("if (keyNow == kKeyNoLine)\n\t\t{\n\t\t\treturn kNoServer;\n\t\t}");
+	Check(noLineRefused != std::string::npos && noLineRefused < checkedCall.find("WinHttpOpen(") && noLineChecked != std::string::npos &&
+		noLineChecked < serverCheck.find("CallChecked("), "and a state with no server is sent nothing: every call refuses it before anything is opened");
+	std::string const agreeingAt = SourceSlice(source, "bool RelayList_AgreeToTheLineAt(int place)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const giveServer = agreeingAt.find("if (shared && place == theServer.inUse)");
+	Check(giveServer != std::string::npos && giveServer < agreeingAt.find("if (shared->keyState == kKeyNoLine)\n\t\t{\n\t\t\tshared->keyState = kKeyNotChecked;\n\t\t}") &&
+		CountOf(source, "keyState = kKeyNotChecked;") == 2, "it gets that server only from the player's yes to that very line, its key not yet checked");
+
+	// Each way of asking a line: that line's yes first, then the line handed to the thread, as a copy, by its place
+	std::string const findAll = SourceSlice(source, "void RelayList_FindGames(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const findYes = findAll.find("agreed[place] = TheLineIsAgreed(theFile.servers[place]);");
+	size_t const chosen = findAll.find("int const visits = RelayList_ChooseVisits(agreed, count, theServer.inUse, places, states);");
+	std::string const accessAsk = SourceSlice(source, "bool RelayList_AskForAccessOn(int place,", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const accessYes = accessAsk.find("if (!TheLineIsAgreed(theFile.servers[place]))\n\t{\n\t\tLogString(\"Relay list: an access request waits for the player's yes to its server, so nothing was sent\");");
+	std::string const keysAsk = SourceSlice(source, "bool RelayList_AskForRelayKeysOn(int place, const char *region)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const keysYes = keysAsk.find("if (!TheLineIsAgreed(theFile.servers[place]) || !Start())");
+	std::string const hostLineNow = SourceSlice(source, "int RelayList_HostLine(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const roomOpened = SourceSlice(source, "void RelayList_HostRoomOpened(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const hostYes = roomOpened.find("int const place = RelayList_HostLine();");
+	Check(findYes != std::string::npos && chosen != std::string::npos && findYes < chosen && chosen < findAll.find("lines[v] = theFile.servers[places[v]];") &&
+		accessYes != std::string::npos && accessYes < accessAsk.find("shared->accessLines[place] = theFile.servers[place];") &&
+		keysYes != std::string::npos && keysYes < keysAsk.find("shared->keysLine = theFile.servers[place];") &&
+		Has(hostLineNow, "!TheLineIsAgreed(theFile.servers[hostChoice])") && hostYes != std::string::npos &&
+		hostYes < roomOpened.find("shared->hostLine = theFile.servers[place];"),
+		"a find, an access request, a relay's keys and a host's listing each hand the thread a line only after that line's yes");
+	Check(CountOf(source, "memcpy(shared->visitLines, lines,") == 1 && CountOf(source, "shared->accessLines[place] = theFile.servers[place];") == 1 &&
+		CountOf(source, "shared->keysLine = theFile.servers[place];") == 1 && CountOf(source, "shared->hostLine = theFile.servers[place];") == 1 &&
+		Has(source, "AskForAccessOn(place, accessLines[place], accessBody, accessFingerprint);") &&
+		Has(source, "ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);") && Has(source, "UseTheHostLine(hostPlace, hostLine);") &&
+		Has(source, "NewServer(lines[v])") && CountOf(source, "NewServer(") == 7 && CountOf(source, "Call(shared,") == 0,
+		"and the thread calls only those lines: each visit is made from one of them, and nothing is called through the list's own state");
+
 	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
-	// held for that run alone (hudson_plan_test reads where that Yes goes, and that it's never kept)
-	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\treturn !hudsonRunShowsTheYesPage || hudsonRunSaidYes;\n\t\t}");
+	// held for that run alone (hudson_plan_test reads where that Yes goes, and that it's never kept). Modified 2026-11-11 by Melanikus for
+	// the AvP port: that Yes is each line's own too, by the line's hash.
+	size_t const hudsonFirst = agreed.find("\t{\n\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];\n\t\t\treturn !hudsonRunShowsTheYesPage || "
+		"(LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));\n\t\t}");
 	Check(hudsonFirst != std::string::npos && hudsonFirst < agreed.find("if (!yesesRead)") && Has(agreed, "return LineHash(line, hash) && ServersTrust_Has(yeses, hash);") &&
 		Has(source, "extern bool HudsonRunIsOn;") && !Has(source, "HudsonRunIsOn =") && !Has(source, "HudsonRunIsOn=") ,
 		"the one way past it is a Hudson run, which this file only reads; anyone else's line needs its own hash among the kept yeses");
@@ -880,8 +923,8 @@ static void TestTheCalls()
 	std::string const yesState = SourceSlice(source, "int RelayList_ServerState(const char **why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	size_t const needsYes = yesState.find("if (line && !TheLineIsAgreed(*line))\n\t{\n\t\treturn kRelayServerNeedsYes;\n\t}");
 	Check(needsYes != std::string::npos && needsYes < yesState.find("if (!shared)"), "a line without the yes is said to need it, before anything else");
-	Check(CountOf(source, "ServersTrust_Add(") == 1 && Has(SourceSlice(source, "bool RelayList_AgreeToTheLine(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice),
-		"ServersTrust_Add(&yeses, hash);"), "and only the player's yes adds one");
+	Check(CountOf(source, "ServersTrust_Add(") == 2 && Has(agreeingAt, "ServersTrust_Add(&yeses, hash);") && Has(agreeingAt, "ServersTrust_Add(&hudsonRunYeses, hash);"),
+		"and only a yes adds one: the player's, kept, or a Hudson run's, for the run alone");
 
 	// Both keep their first answer for the run, so nothing may ask them before winmain.cpp reads -dev: winmain.cpp itself never asks.
 	// Modified 2026-11-09 by Melanikus for the AvP port: its one call of the list's is RelayList_BeforeQuitting, after the menus have ended
@@ -1609,17 +1652,133 @@ static void TestRelayKeys()
 	std::string const source = ReadSource("3dc/relay_list.cpp");
 	// Modified 2026-11-10 by Melanikus for the AvP port (#175): they're the keys the server's check took (CheckTheServer, whose own checks
 	// are in TestTheCalls), proved by the server's servers.cfg line, and handed over only for its relay's region
-	std::string const fetch = SourceSlice(source, "void ReadTheRelayKeys(const char *region, int asking)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const checked = fetch.find("const char *why = CheckTheServer(shared);");
-	size_t const sameRegion = fetch.find("if (!why && strncmp(region, shared->relayRegion, sizeof(shared->relayRegion)) != 0)");
-	size_t const given = fetch.find("memcpy(p384, shared->relayP384, sizeof(p384));");
-	Check(checked != std::string::npos && sameRegion != std::string::npos && given != std::string::npos && checked < sameRegion && sameRegion < given,
-		"SOURCE: the keys handed over are the ones the server's check proved, and only for the region of the server's own relay");
-	std::string const came = SourceSlice(source, "int RelayList_RelayKeysCame(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(came, "if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)") && Has(came, "if (came == kRelayKeysCame)\n\t\t{"),
-		"SOURCE: only the answer to the newest asking is taken, and only keys that came whole are handed over");
+	// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: they're fetched on a visit to the line they're asked
+	// for, the game's own or the host's, and that visit is wiped once they're copied out)
+	std::string const fetch = SourceSlice(source, "void ReadTheRelayKeysOn(int place, const ServersCfgServer &line, const char *region, int asking)", "\n\t}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	size_t const made = fetch.find("Shared *const visit = NewServer(line);");
+	size_t const checked = fetch.find("const char *why = visit ? CheckTheServer(visit) : kCantStart;");
+	size_t const sameRegion = fetch.find("if (!why && region[0] && strncmp(region, visit->relayRegion, sizeof(visit->relayRegion)) != 0)");
+	size_t const given = fetch.find("memcpy(p384, visit->relayP384, sizeof(p384));");
+	size_t const forgotten = fetch.find("ForgetTheVisit(visit);");
+	Check(made != std::string::npos && checked != std::string::npos && sameRegion != std::string::npos && given != std::string::npos &&
+		forgotten != std::string::npos && made < checked && checked < sameRegion && sameRegion < given && given < forgotten,
+		"SOURCE: the keys handed over are the ones that line's check proved, on a visit of its own, only for its own relay's region, then the visit is wiped");
+	std::string const came = SourceSlice(source, "int RelayList_RelayKeysCameOn(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(came, "if (shared->keysAsked > 0 && shared->keysAnswered == shared->keysAsked)") && Has(came, "if (came == kRelayKeysCame)\n\t\t{") &&
+		Has(came, "*place = shared->keysAnsweredPlace;"),
+		"SOURCE: only the answer to the newest asking is taken, with the line it's for, and only keys that came whole are handed over");
 	Check(CountOf(source, "RelayKey\"") == 0 && CountOf(source, "relay-keys?region") == 0,
 		"SOURCE: no RelayKey setting is read, and no region is asked about: the line's own server answers for its own relay");
+}
+
+// Added 2026-11-11 by Melanikus for the AvP port (one model for every line; Fifth's check of the owner's rulings asked for 1, 2 and 9
+// lines, 9 being past kRelayListMostVisits): which lines a find visits, run for real. A line without the yes is never visited, the line in
+// use always has a place, and no more than kRelayListMostVisits are.
+static bool SameVisits(const int *visits, int made, const int *expected, int expectedCount)
+{
+	if (made != expectedCount)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < made; i++)
+	{
+		if (visits[i] != expected[i])
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void TestTheVisitsChosen()
+{
+	puts("24. which lines a find visits, with 1, 2 and 9 lines");
+	int visits[kRelayListMostVisits];
+	int states[9];
+
+	bool const one[1] = { true };
+	int const onlyIt[1] = { 0 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(one, 1, 0, visits, states), onlyIt, 1) && states[0] == kRelayLineAsking,
+		"1 line, with its yes: it's visited");
+	bool const oneNo[1] = { false };
+	Check(RelayList_ChooseVisits(oneNo, 1, 0, visits, states) == 0 && states[0] == kRelayLineNoYes,
+		"1 line without its yes: nothing is visited, though it's the line in use");
+
+	bool const two[2] = { true, true };
+	int const both[2] = { 0, 1 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(two, 2, 0, visits, states), both, 2) && states[0] == kRelayLineAsking && states[1] == kRelayLineAsking,
+		"2 lines, both with the yes: both are visited, in the file's order");
+	bool const secondOnly[2] = { false, true };
+	int const second[1] = { 1 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(secondOnly, 2, 0, visits, states), second, 1) && states[0] == kRelayLineNoYes &&
+		states[1] == kRelayLineAsking, "2 lines, only the second with the yes: only it is visited, whichever line is in use");
+
+	bool const nine[9] = { true, true, true, true, true, true, true, true, true };
+	int const firstEight[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(nine, 9, 0, visits, states), firstEight, 8) && states[7] == kRelayLineAsking &&
+		states[8] == kRelayLineNotAsked, "9 lines with the yes: the first 8 are visited, and the ninth isn't asked this time");
+	int const keptForTheNinth[8] = { 0, 1, 2, 3, 4, 5, 6, 8 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(nine, 9, 8, visits, states), keptForTheNinth, 8) && states[7] == kRelayLineNotAsked &&
+		states[8] == kRelayLineAsking, "9 lines with the line in use last: a place is kept for it, so it's visited, and the eighth waits");
+	Check(SameVisits(visits, RelayList_ChooseVisits(nine, 9, -1, visits, states), firstEight, 8),
+		"9 lines and none in use: the first 8 are visited");
+	bool const nineButOne[9] = { true, true, true, false, true, true, true, true, true };
+	int const aroundIt[8] = { 0, 1, 2, 4, 5, 6, 7, 8 };
+	Check(SameVisits(visits, RelayList_ChooseVisits(nineButOne, 9, 3, visits, states), aroundIt, 8) && states[3] == kRelayLineNoYes,
+		"9 lines, the line in use without its yes: it's never visited, and the other 8 are");
+
+	Check(RelayList_ChooseVisits(NULL, 1, 0, visits, states) == 0 && RelayList_ChooseVisits(one, 1, 0, NULL, states) == 0 &&
+		RelayList_ChooseVisits(one, 1, 0, visits, NULL) == 0 && RelayList_ChooseVisits(one, -1, 0, visits, states) == 0,
+		"and with nothing to choose from or nowhere to write, nothing is visited");
+}
+
+// Added 2026-11-11 by Melanikus for the AvP port (the owner's ruling for this release: New York and Frankfurt both in it). The servers.cfg
+// the game ships with names exactly those two, New York first; and the game's own list of the servers it ships with (relay_list.cpp,
+// kShippedServers, which says which lines are "ours" from what the game holds, never from the file) is exactly the same two. A server added
+// to or dropped from either, or the two drifting apart, fails here.
+static std::vector<std::string> ServerLinesOf(const std::string &text)
+{
+	std::vector<std::string> lines;
+	size_t at = 0;
+
+	while (at < text.size())
+	{
+		size_t end = text.find('\n', at);
+		if (end == std::string::npos)
+		{
+			end = text.size();
+		}
+
+		std::string const line = text.substr(at, end - at);
+
+		if (!line.empty() && line[0] != '#')
+		{
+			lines.push_back(line);
+		}
+
+		at = end + 1;
+	}
+
+	return lines;
+}
+
+static void TestTheShippedServers()
+{
+	puts("25. the servers the game ships with");
+	char const *const kNewYork = "104.131.35.41  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York";
+	char const *const kFrankfurt = "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt";
+
+	std::vector<std::string> const shipped = ServerLinesOf(ReadSource("servers.cfg"));
+	Check(shipped.size() == 2 && shipped[0] == kNewYork && shipped[1] == kFrankfurt,
+		"servers.cfg ships exactly two servers, New York, then Frankfurt");
+
+	std::string const source = ReadSource("3dc/relay_list.cpp");
+	std::string const ours = SourceSlice(source, "static const char kShippedServers[] =\n", ";\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(ours == std::string("static const char kShippedServers[] =\n\t\"") + kNewYork + "\\n\"\n\t\"" + kFrankfurt + "\\n\"" && CountOf(source, "kShippedServers") == 3,
+		"and the game's own list of them is exactly the same two, in the same order, used in one place");
 }
 
 // Added 2026-11-10 by Melanikus for the AvP port (#175 2b): every servers.cfg line on the pages, and the player's pick of one. Which line
@@ -1655,7 +1814,7 @@ static void TestTheServerLists()
 	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const state = SourceSlice(source, "int RelayList_ServerState(const char **why)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const toAgree = SourceSlice(source, "bool RelayList_LineToAgree(RelayListLineToAgree *out)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(starting, "if (!line || !TheLineIsAgreed(*line))\n\t\t{\n\t\t\treturn false;\n\t\t}") && !Has(starting, "pick") &&
+	Check(Has(starting, "bool const lineAgreed = TheLineIsAgreed(*line);") && !Has(starting, "pick") &&
 		!Has(agreed, "pick") && !Has(state, "pick") && !Has(toAgree, "pick") && !Has(picking, "ServersTrust_Add") && !Has(picking, "KeepTrust"),
 		"a picked line needs its yes like any line: the gate, the yes and the page that asks for it never look at the pick, and a pick adds no yes");
 
@@ -1752,6 +1911,8 @@ int main()
 	TestRelayKeys();
 	TestTheTestServer();
 	TestTheServerLists();
+	TestTheVisitsChosen();
+	TestTheShippedServers();
 
 	if (checksFailed)
 	{

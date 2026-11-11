@@ -313,4 +313,23 @@ int const kRelayListShownNameLetters = 32;
 size_t const kRelayListShownAddressBytes = 28;
 bool RelayList_ShownAddress(uint32_t address, int listPort, int relayPort, char *out, size_t room);
 
+// ---- Which lines a find visits (one model for every line). Added 2026-11-11 by Melanikus for the AvP port; it was RelayList_FindGames'
+// own, and it's here so relay_list_test can run it, with 1, 2 and 9 lines. It contacts nothing: it only chooses.
+
+int const kRelayListMostVisits = 8;   // the most good lines asked in one find
+
+// How a good line stands after the last find
+int const kRelayLineNoYes = 0;       // the player hasn't said yes to it: it isn't asked, and its row says to say yes to see its games
+int const kRelayLineAsking = 1;
+int const kRelayLineAnswered = 2;    // its games are among RelayList_FoundAllGames's (it may have none)
+int const kRelayLineNoAnswer = 3;    // it couldn't be reached, its keys don't match its line, or its answer was refused: why says which
+int const kRelayLineNotAsked = 4;    // past the first kRelayListMostVisits agreed lines, so not asked this time
+
+// Every good line the player has said yes to (agreed[place]), in the file's order, at most kRelayListMostVisits of them: their places go
+// into visits (room for kRelayListMostVisits), and each line's state into states (room for count): kRelayLineAsking for a line that's
+// visited, kRelayLineNoYes for one without the yes, kRelayLineNotAsked for one past the most. The line in use (inUse, or -1 for none)
+// always has a place, however many agreed lines come before it, as joins wait for its answer. A line without the yes is never visited.
+// Gives how many visits there are; 0, with nothing written, if agreed, visits or states is missing or count is below 0.
+int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states);
+
 #endif

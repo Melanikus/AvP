@@ -170,8 +170,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tOnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, server, sizeof(server));\n\t\tchar from[96];",
-					"to": "\t\tsnprintf(server, sizeof(server), \"%s\", Relay_ServerName());\n\t\tchar from[96];"
+					"from": "\t\t\tOnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));",
+					"to": "\t\t\tsnprintf(names[named], sizeof(names[named]), \"%s\", shown.line.name);"
 				}
 			]
 		},
@@ -182,6 +182,16 @@
 					"file": "tools/check-online-play.ps1",
 					"from": "|online_screens|servers_page)[\\w]*",
 					"to": "|online_screens)[\\w]*"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the games page draws the line in use's name as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tOnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, names[0], sizeof(names[0]));",
+					"to": "\t\tsnprintf(names[0], sizeof(names[0]), \"%s\", Relay_ServerName());"
 				}
 			]
 		}
