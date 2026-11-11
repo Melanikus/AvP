@@ -923,6 +923,16 @@
 					"to": "RenderSmallMenuText(relayNews, MENU_CENTREX, answering ? 56 : 40,"
 				}
 			]
+		},
+		{
+			"name": "while the page is timing the relay, the ping is a question mark",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "joinerMs == kOnlineJoinerMsMeasuring ? \"...\" : \"?\"",
+					"to": "\"?\""
+				}
+			]
 		}
 	]
 }

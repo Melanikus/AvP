@@ -268,7 +268,10 @@ static int LiveRows(OnlineRow *rows, int most)
 		if (session.throughRelay)
 		{
 			OnlineScreens_SafeName(session.relayRegion, sizeof(session.relayRegion), row.region, sizeof(row.region));
-			OnlineScreens_PingWords(true, Net_JoinerMsToRelay(row.region), HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
+			// "..." while the page is still timing that relay (added 2026-11-10 by Melanikus for the AvP port)
+			int const joinerMs = Net_JoinerMsToRelay(row.region);
+			OnlineScreens_PingWords(true, joinerMs < 0 && Net_RelayBeingTimed(row.region) ? kOnlineJoinerMsMeasuring : joinerMs,
+				HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
 		}
 		else
 		{
@@ -345,6 +348,10 @@ void OnlinePage_Opened(void)
 	searchBox[0] = '\0';
 	lastGameKept = false;
 	StartFetching();
+
+	// The server's relay is timed afresh each time the page opens, for the ping column (networking.h; added 2026-11-10 by Melanikus for the
+	// AvP port)
+	Net_StopTimingTheRelay();
 }
 
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why)
@@ -437,6 +444,10 @@ static int VisibleIndexOf(const OnlineGameKey &key)
 bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 {
 	(void)listChanged;   // the rows are read from the list every frame: there are at most ten, and that keeps them right whatever changed
+
+	// The page's own round trip to the server's relay, for the ping column. It starts by itself once the list names the relay, which is
+	// only after the player's yes to its line (networking.h; added 2026-11-10 by Melanikus for the AvP port).
+	Net_TimeTheRelayForThePage();
 
 	PageState const stateBefore = pageState;
 	OnlineRow before[kOnlineMostRows];

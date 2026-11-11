@@ -3424,6 +3424,96 @@
 					"to": "\t// before the channel opens, and it hears nothing then.\n\treturn 0;\n}"
 				}
 			]
+		},
+		{
+			"name": "an online host is hosted before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line without the yes is said to be being asked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (state == kRelayServerNeedsYes)\n\t{\n\t\treturn kNetServerNeedsYes;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn kNetServerNeedsYes;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "the page's timing hears an answer from anywhere",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (from.host == pageTimedRelay.host)\n\t\t{\n\t\t\tpageTimer.Hear(",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tpageTimer.Hear("
+				}
+			]
+		},
+		{
+			"name": "the page's timing leaves its socket open once it's done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tbool const timed = pageTimer.RelayMs(0, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs);\n\t\tClosePageTimingSocket();\n",
+					"to": "\t\tbool const timed = pageTimer.RelayMs(0, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs);\n"
+				}
+			]
+		},
+		{
+			"name": "a page closed while it's timing leaves its socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "void Net_StopTimingTheRelay(void)\n{\n\tClosePageTimingSocket();\n",
+					"to": "void Net_StopTimingTheRelay(void)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "the page's time is given while it's still timing",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!region || pageTiming != kPageTimingTimed ||",
+					"to": "if (!region || pageTiming == kPageTimingNotYet ||"
+				}
+			]
+		},
+		{
+			"name": "a time too long to be one is given by the page",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "bool const timed = pageTimer.RelayMs(0, &ms) && ms <= static_cast<uint32_t>(kRelayMostHostMs);",
+					"to": "bool const timed = pageTimer.RelayMs(0, &ms);"
+				}
+			]
+		},
+		{
+			"name": "the page is told a relay is being timed once it's done",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "return region && pageTiming == kPageTimingMeasuring &&",
+					"to": "return region && pageTiming != kPageTimingNotYet &&"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: leaving the games page leaves its timing going",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t// port; networking.h)\n\t\tNet_StopTimingTheRelay();\n",
+					"to": "\t\t// port; networking.h)\n"
+				}
+			]
 		}
 	]
 }
