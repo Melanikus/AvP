@@ -230,7 +230,10 @@ param(
     # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens (hudson_plan.h's yespage= and
     # hostrow=)
     [string]$YesPage = '',        # yes or no: with -Access request or check, the run sees the yes page the Online access row opens, as a player's first time does, and presses that row. The yes holds for the run alone
-    [string]$HostRow = ''         # online or athome: with -Net host, the host hosts as a player does, through the Multiplayer page's Host row, Start game and Start, with the server's wait if it hasn't answered
+    [string]$HostRow = '',        # online or athome: with -Net host, the host hosts as a player does, through the Multiplayer page's Host row, Start game and Start, with the server's wait if it hasn't answered
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port, for three copies at once (two hosts and a third's Find games): the game's own
+    # port, written into this run's settings ([Networking] PortNumber), so two copies hosting on one machine don't both take 23513
+    [int]$PortNumber = 0          # 1024 to 65535, never 23514 (the search's port). Left out, the settings' own 23513
 )
 $ErrorActionPreference = 'Stop'
 
@@ -272,7 +275,9 @@ if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends b
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
 # Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port; its key line went with #175, as the
 # servers.cfg line proves the relay's keys, and every relay run is version 2 since #175 PR 3a)
-if ($SecondCopy -and $Net -ne 'join' -and -not $Access) { Stop-Here "-SecondCopy is the joiner of a pair on this machine, or the second copy's own -Access run, so it needs -Net join or -Access" }
+# Modified 2026-11-10 by Melanikus (Third): or the second copy hosting a game of its own, with its own identity, beside another copy's game
+if ($SecondCopy -and $Net -ne 'join' -and $Net -ne 'host' -and -not $Access) { Stop-Here "-SecondCopy is the second copy of the game on this machine, joining, hosting, or asking for access with its own identity, so it needs -Net join, -Net host or -Access" }
+if ($PortNumber -ne 0 -and ($PortNumber -lt 1024 -or $PortNumber -gt 65535 -or $PortNumber -eq 23514)) { Stop-Here "-PortNumber is from 1024 to 65535, and never 23514, the search's port" }
 # The presses (added 2026-11-10 by Melanikus (Third) for the AvP port): each to Hudson's own words and ranges (hudson_plan.cpp), and only
 # with the kind of run it belongs to. -cmatch, because Hudson's words are small letters and PowerShell's -match ignores case
 if ($Access -and $Access -cnotmatch '\A(request|check|newid)\z') { Stop-Here "-Access is request, check or newid" }
@@ -508,6 +513,18 @@ if ($refusal) { Stop-Here "the run's folder can't be cleared: $refusal" }
 $saves = Join-Path $folder $(if ($SecondCopy) { 'HudsonRun\My Games\Aliens versus Predator (second copy)' } else { 'HudsonRun\My Games\Aliens versus Predator' })
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
+
+# -PortNumber: this run's own port, in place of the settings' one line for it (added 2026-11-10 by Melanikus (Third) for the AvP port). The
+# line must be there exactly once, as tools\hudson\AliensVsPredator.cfg has it, or the run doesn't start
+if ($PortNumber -ne 0)
+{
+    $runSettings = Join-Path $saves 'AliensVsPredator.cfg'
+    $settingsText = [System.IO.File]::ReadAllText($runSettings)
+    $portLine = [regex]::Matches($settingsText, '(?m)^PortNumber = 23513\r?$')
+    if ($portLine.Count -ne 1) { Stop-Here "the run's settings don't have the one line PortNumber = 23513 that -PortNumber changes" }
+    [System.IO.File]::WriteAllText($runSettings, $settingsText.Remove($portLine[0].Index, 'PortNumber = 23513'.Length).Insert($portLine[0].Index, "PortNumber = $PortNumber"))
+    Write-Host "run-hudson: this run's game port is $PortNumber"
+}
 
 # -Relay's server (modified 2026-11-10 by Melanikus for the AvP port, #175, in place of the -dev settings RelayServer, RelayListPort,
 # RelayListPin, RelayServerName and RelayKey): the one servers.cfg line the game reads, beside bin\, written only into a copy made for
