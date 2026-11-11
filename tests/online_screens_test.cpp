@@ -1019,8 +1019,22 @@ static void TestTheHomeRefusals()
 	Check(!Has(page, "Net_TypedAddressRefusedWhy") && !Has(page, "typedRefused"), "and there's no typed address's refusal to show any more");
 
 	Check(Has(page, "static char failedLine[200];") && Has(page, "void OnlinePage_JoinFailed(const char *why)\n{\n\tchar safe[160];") &&
-		Has(top, "WrappedWords(failedLine, kFirstRowTop + rows * kRowStep + 14, 2, ONE_FIXED);"),
+		Has(top, "int linesTop = kFirstRowTop + (visibleCount > 0 ? visibleCount : 1) * kRowStep + 14;") && Has(top, "WrappedWords(failedLine, linesTop, 2, ONE_FIXED);"),
 		"the page's failure line has room for those words, and two lines to draw them in");
+
+	// Every line without games on the list says why, by its own name (added 2026-11-11 by Melanikus for the AvP port: "Nobody blocked
+	// silently", and every server through the same page)
+	std::string const stands = SourceSlice(page, "bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(stands, "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;") && Has(stands, "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;") &&
+		Has(stands, "case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;") && Has(stands, "case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;") &&
+		Has(stands, "default: words = now.access == kRelayAccessIsApproved ? -1 : TEXTSTRING_FINDGAMES_LINE_NOTAPPROVED; break;"),
+		"NOBODY BLOCKED SILENTLY: a line with no yes, being asked, with no answer, not asked, or not approved each has its words");
+	Check(Has(stands, "OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));") &&
+		Has(stands, "OnlineScreens_SafeName(now.why ? now.why : \"\", sizeof(why), why, sizeof(why));") &&
+		Has(stands, "_snprintf(out, size - 1, \"%s: %s %s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);"),
+		"by the line's own name, made safe, with the list's why made safe too, only ever as arguments");
+	Check(Has(top, "if (OnlineScreens_LineStandsWords(place, lineWords, sizeof(lineWords)))") && Has(top, "linesTop + HUD_FONT_HEIGHT <= kLinesBottom"),
+		"and the page draws them under the list, one line each, above the menus' bottom");
 	std::string const wrapped = SourceSlice(page, "static void WrappedWords(const char *text, int top, int lines, int alpha)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(wrapped, "RECT area = { MENU_LEFTXEDGE, top, MENU_RIGHTXEDGE, top + lines * HUD_FONT_HEIGHT };"),
 		"between the menus' edges, as tall as its lines");

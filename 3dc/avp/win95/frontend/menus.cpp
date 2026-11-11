@@ -1849,12 +1849,17 @@ static void DrawTheHostLine(void)
 //    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
 //    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.
 // True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
+static void HostOnChoiceForARun(void);   // below, with the Host on row
+
 static bool HostThroughTheRowsForARun(int level)
 {
 	LoadAllAvPMenuGfx();
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
+
+	// A run has nobody to choose a server on the Host on row, so it chooses as a player would (added 2026-11-11)
+	HostOnChoiceForARun();
 
 	// (Modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": there's no Host row to set any more; every game is hosted
 	// online.)
@@ -1943,7 +1948,7 @@ static bool HostThroughTheRowsForARun(int level)
 // choose"): the Multiplayer page's row for the server a game is hosted on. Its choices are "choose a server", then every line that has
 // approved this PC (RelayList_ApprovedLines), in servers.cfg's order, each by its own name, made safe, and its round trip from the list's
 // last visit to it. It starts on "choose a server" at every start of the game, nothing is ever chosen for the player, and nothing hosts
-// until they choose: Start game and Co-op campaign say so here, and Net_HostGame refuses too. With no line approved, its one choice says
+// until they choose: Start game and Co-op campaign say so here, and the host itself refuses too. With no line approved, its one choice says
 // where to ask. Added 2026-11-11 by Melanikus for the AvP port.
 static int hostOnPlaces[kServersCfgMostLines];
 static int hostOnCount = 0;
@@ -1992,6 +1997,24 @@ static void HostOnFollowsTheRow(void)
 	if (RelayList_HostLine() != want)
 	{
 		(void)RelayList_HostOn(want);
+	}
+}
+
+// A Hudson run's choice on the Host on row (hostrow=): the row's first approved line, as a player could choose it, and the run's log
+// says so. Only HostThroughTheRowsForARun calls this; nothing chooses for a player (added 2026-11-11 by Melanikus for the AvP port).
+static void HostOnChoiceForARun(void)
+{
+	HostOnFollowsTheRow();
+
+	if (hostOnCount > 0)
+	{
+		MP_HostOnChoice = 1;
+		HostOnFollowsTheRow();
+		LogString("hudson: the run chooses the Host on row's first server, as a player could");
+	}
+	else
+	{
+		LogString("hudson: the Host on row has no server that has approved this copy, so nothing can be hosted");
 	}
 }
 

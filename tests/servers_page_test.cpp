@@ -238,7 +238,8 @@ static void TestTheWiring()
 
 	// The Multiplayer page's Servers row: always there, under the player's name (the Host row that was between them went with the game at
 	// home, 2026-11-10); it goes to a page that contacts nothing, so it asks no yes
-	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int hostOnCount)", "\n}\n",
+		kSliceEndAfterTheStart, FailedSlice);
 	size_t const nameRow = setter.find("AvPMenu_Multiplayer[row++] = PlayerNameRow;");
 	size_t const serversRow = setter.find("\tAvPMenu_Multiplayer[row++] = ServersRow;\n");
 	Check(serversRow != std::string::npos && nameRow != std::string::npos && nameRow < serversRow && serversRow < setter.find("= StartGameRow;") &&
@@ -252,13 +253,14 @@ static void TestTheWiring()
 	// Find games: one line, which servers the games come from. Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every
 	// server in servers.cfg goes through the same page): every line whose server answered, each by its own name in servers.cfg, or before
 	// any has answered the line in use's. Each name is made safe before it's written, and is only ever an argument, never the format.
+	// Modified again the same day (one model for every line): read through RelayList_LineNow, and with none answered, no heading at all, as
+	// each line's own words below the list say where it stands.
 	std::string const gamesTop = SourceSlice(games, "void OnlinePage_DrawTop(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	std::string const comeFrom = SourceSlice(games, "static bool ServersTheGamesComeFrom(char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	size_t const eachSafe = comeFrom.find("OnlineScreens_SafeName(shown.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));");
-	size_t const inUseSafe = comeFrom.find("OnlineScreens_SafeName(Relay_ServerName(), kServersCfgNameLetters, names[0], sizeof(names[0]));");
+	size_t const eachSafe = comeFrom.find("OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));");
 	size_t const fromLine = comeFrom.find("int used = snprintf(out, size, \"%s %s\", GetTextString(TEXTSTRING_FINDGAMES_FROM), names[0]);");
-	Check(eachSafe != std::string::npos && inUseSafe != std::string::npos && fromLine != std::string::npos && eachSafe < fromLine && inUseSafe < fromLine &&
-		Has(comeFrom, "if (RelayList_LineGamesState(place, &why) == kRelayLineAnswered && RelayList_LineAt(place, &shown))") &&
+	Check(eachSafe != std::string::npos && fromLine != std::string::npos && eachSafe < fromLine &&
+		Has(comeFrom, "if (RelayList_LineNow(place, &now) && now.state == kRelayLineAnswered)") && Has(comeFrom, "if (named == 0)\n\t{\n\t\treturn false;\n\t}") &&
 		Has(comeFrom, "snprintf(out + used, size - used, \" %s %s\", GetTextString(TEXTSTRING_FINDGAMES_AND), names[i])") &&
 		Has(comeFrom, "snprintf(out + used, size - used, \", %s\", names[i]);") && Has(gamesTop, "if (ServersTheGamesComeFrom(from, sizeof(from)))"),
 		"the games page says which servers its games come from, each one that answered by its line's name, made safe, only ever as an argument");

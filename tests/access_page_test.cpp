@@ -176,18 +176,20 @@ static void TestOnlyWithAServer()
 	Check(Has(table, "\tPlayerNameRow,\n\tStartGameRow,\n\tCoopRow,\n\tJoinGameRow,\n\tEndOfTheRows,\n") && !Has(table, "OnlineAccessRow") &&
 		!Has(table, "HostWhereRow"), "the Multiplayer page's table has its four rows of 1999, then its end, and the Online access row isn't in it");
 
-	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed)", "\n}\n", kSliceEndAfterTheStart,
-		FailedSlice);
+	std::string const setter = SourceSlice(data, "void MenuData_SetMultiplayerRows(bool aServerIsNamed, char **hostOnNames, int hostOnCount)", "\n}\n",
+		kSliceEndAfterTheStart, FailedSlice);
+	std::string const hostOnChoices = SourceSlice(data, "void MenuData_SetHostOnChoices(char **hostOnNames, int hostOnCount)", "\n}\n",
+		kSliceEndAfterTheStart, FailedSlice);
 	size_t const joinRow = setter.find("AvPMenu_Multiplayer[row++] = JoinGameRow;");
 	size_t const accessRow = setter.find("\tif (aServerIsNamed)\n\t{\n\t\tAvPMenu_Multiplayer[row++] = OnlineAccessRow;\n\t}");
 	Check(joinRow != std::string::npos && accessRow != std::string::npos && joinRow < accessRow && CountOf(data, "= OnlineAccessRow;") == 1 &&
-		CountOf(data, "AvPMenu_Multiplayer[row") == CountOf(setter, "AvPMenu_Multiplayer[row"),
-		"the row is put there, last, only when a server is named, and nothing else writes the table");
-	Check(CountOf(menus, "MenuData_SetMultiplayerRows(") == 1 && Has(menus, "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0);"),
-		"and the menus write the rows in one place only, saying whether servers.cfg names a server (relay_list.h, Relay_ServerName)");
+		CountOf(data, "AvPMenu_Multiplayer[row") == CountOf(setter, "AvPMenu_Multiplayer[row") + CountOf(hostOnChoices, "AvPMenu_Multiplayer[row"),
+		"the row is put there, last, only when a server is named, and nothing else writes the table (but the Host on row's choices, 2026-11-11)");
+	Check(CountOf(menus, "MenuData_SetMultiplayerRows(") == 1 && Has(menus, "MenuData_SetMultiplayerRows(RelayList_LineCount() > 0, hostOnChoices, hostOnCount);"),
+		"and the menus write the rows in one place only, saying whether servers.cfg has a line (relay_list.h, RelayList_LineCount)");
 
 	std::string const opening = SourceSlice(menus, "case AVPMENU_MULTIPLAYER:\n", "break;", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(opening, "MenuData_SetMultiplayerRows(Relay_ServerName()[0] != 0);"), "each time the Multiplayer page opens, before its rows are counted");
+	Check(Has(opening, "MenuData_SetMultiplayerRows(RelayList_LineCount() > 0, hostOnChoices, hostOnCount);"), "each time the Multiplayer page opens, before its rows are counted");
 
 	std::string const opened = SourceSlice(page, "bool AccessPage_Opened(AVPMENU_ELEMENT *rows)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(opened.find("if (!Relay_ServerName()[0])\n\t{\n\t\treturn false;\n\t}") != std::string::npos &&

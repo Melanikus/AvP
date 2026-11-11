@@ -2126,7 +2126,7 @@ static void TestTourAndSharedMachine()
 			"remoterelay= goes to the networking code, and the result says which one address it let through");
 		Check(Has(networking, "if (!SessionData[sessionNumber].throughRelay)\n\t{\n\t\tjoinRefusedWhy = kNotThroughTheList;") && !Has(networking, "Net_ConnectToThisMachine("),
 			"and it joins no game but one through the relay, as a player does: there's no plain join, to this machine or anywhere");
-		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
+		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(address) && !TheRemoteRelay(address))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
 			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by its address, checked before anything is sent to one");
 		Check(!Has(networking, "broadcastSocket") && !Has(networking, "AskAboutGames(") && !Has(networking, "NetLoopbackSearch"),
 			"and there's no socket for finding games at all, for a run or a player: nothing on this network is asked or answered");
