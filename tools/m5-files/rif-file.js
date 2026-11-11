@@ -1,4 +1,6 @@
 // Written 2026-11-07 by Melanikus for the AvP port.
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   chunksIn and readModelFile can take a chunk with any name, as the game does, for tools/levels/lift-table.js (#189)
 //
 // Reading and writing the game's model files (.rif), shared by rif-pick.js and rif-drop-picture.js. It only reads files it's
 // given and makes new bytes; the tools that use it decide what to write, and where.
@@ -115,12 +117,15 @@ function isChunkName(bytes, at) {
 }
 
 // The chunks in a row, from start to end. The row has to fill that space exactly, with no bytes over.
-function chunksIn(bytes, start, end, where) {
+// anyName lets a chunk have any 8 bytes for its name, as the game itself does: it keeps a chunk with a name it doesn't know as
+// plain bytes (Miscellaneous_Chunk, Chunk_With_Children::DynCreate in 3dc/win95/chunk.cpp). The game's own Sulaco.RIF has one
+// named "(" and seven zeros, between two of its things. Only its size is checked then. Left out, the name has to look like one.
+function chunksIn(bytes, start, end, where, anyName = false) {
   const list = [];
   let at = start;
   while (at < end) {
     if (end - at < 12) stop(`${where}: ${end - at} bytes are left over at the end`);
-    if (!isChunkName(bytes, at)) stop(`${where}: something that isn't a chunk, at byte ${at}`);
+    if (!anyName && !isChunkName(bytes, at)) stop(`${where}: something that isn't a chunk, at byte ${at}`);
     const size = bytes.readInt32LE(at + 8);
     if (size < 12 || size > end - at) stop(`${where}: ${bytes.toString('latin1', at, at + 8)} at byte ${at} has a size that doesn't fit`);
     list.push({ name: bytes.toString('latin1', at, at + 8), at, size, body: at + 12, end: at + size });
@@ -145,8 +150,9 @@ function chunkHeading(name, bodySize) {
   return h;
 }
 
-// A whole model file, unpacked if it was packed. Gives back the bytes and the chunks inside its one REBINFF2 chunk.
-function readModelFile(from) {
+// A whole model file, unpacked if it was packed. Gives back the bytes and the chunks inside its one REBINFF2 chunk. anyName is
+// chunksIn's, for the chunks inside it: a tool that only reads, such as tools/levels/lift-table.js, takes what the game takes.
+function readModelFile(from, anyName = false) {
   if (fs.statSync(from).size > kLargestFile) stop(`${from} is far bigger than any model file`);
   const raw = fs.readFileSync(from);
   let data;
@@ -156,7 +162,7 @@ function readModelFile(from) {
 
   const whole = chunksIn(data, 0, data.length, from);
   if (whole.length !== 1 || whole[0].name !== 'REBINFF2') stop(`${from} isn't one REBINFF2 chunk holding the rest`);
-  return { data, top: chunksIn(data, whole[0].body, whole[0].end, 'the file') };
+  return { data, top: chunksIn(data, whole[0].body, whole[0].end, 'the file', anyName) };
 }
 
 module.exports = { stop, setToolName, chunksIn, textIn, chunkHeading, readModelFile };

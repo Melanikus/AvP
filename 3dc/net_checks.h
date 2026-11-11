@@ -1,5 +1,7 @@
 // Modified 2026-11-10 by Melanikus for the AvP port:
 //   whether an address is on the player's home network, where a plain game is still allowed under version 2 (NetAddress_IsThisNetwork, #188)
+//   in the mode that plays as single player, someone waits at a lift's far end only on its half of the shaft and near it, never
+//   by the size of the car's whole shape (NetLiftIsWaitingAtTheFarEnd, #189)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   how long ago a joiner heard about a lift car is counted by the machine's own clock (NetLiftMsSince, #90)
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -594,22 +596,115 @@ inline bool NetOtherSpeciesCanBeAFriend(bool coopGame, bool sameAsSinglePlayer)
 	return coopGame && !sameAsSinglePlayer;
 }
 
-// How near the middle of a platform lift's far end someone has to be, for a network game to send the lift to them. The game
-// always said 5 m. But five lifts in the campaigns are wider than that, so someone standing beside one is further than 5 m from
-// its middle and could never call it. So in the mode that plays as single player does, it's 5 m from the lift's edge. The size
-// comes from the level's file, so one below nothing counts as nothing, and one past any real lift counts as that limit, which
-// also means the sum can't overflow.
-inline int NetLiftCallReach(int liftRadius, bool sameAsSinglePlayer)
-{
-	int const fromTheMiddle = 5000;
-	int const widestRealLift = 100000;
+// How far a platform lift's call reaches in a network game: the game's own 5 m, from 1999
+int const kNetLiftCallReach = 5000;
 
-	if (!sameAsSinglePlayer || liftRadius <= 0)
+// The most a lift's car counts as reaching out from its middle, along x or along z, when seen from above. No real lift comes near
+// 100 m (the widest in the stock levels reaches 6.6 m from its middle), so a bigger number can only come from a broken or hostile
+// level file.
+int const kNetLiftWidestHalf = 100000;
+
+// A platform lift's car seen from above: the radius of the circle round its footprint, from its shape's x and z extents in the
+// level's file. The circle stays the same whichever way the lift is turned. It's the distance from the middle to the car's
+// furthest corner, rounded up to a whole mm.
+inline int NetLiftFootprintRadius(int minX, int maxX, int minZ, int maxZ)
+{
+	// How far the car reaches out from its middle along each line, on whichever side is further, at most kNetLiftWidestHalf
+	long long const leftX = minX < 0 ? -(long long)minX : (long long)minX;
+	long long const rightX = maxX < 0 ? -(long long)maxX : (long long)maxX;
+	long long const leftZ = minZ < 0 ? -(long long)minZ : (long long)minZ;
+	long long const rightZ = maxZ < 0 ? -(long long)maxZ : (long long)maxZ;
+	long long halfX = leftX > rightX ? leftX : rightX;
+	long long halfZ = leftZ > rightZ ? leftZ : rightZ;
+
+	halfX = halfX < kNetLiftWidestHalf ? halfX : kNetLiftWidestHalf;
+	halfZ = halfZ < kNetLiftWidestHalf ? halfZ : kNetLiftWidestHalf;
+
+	// The corner's distance is the square root of halfX squared plus halfZ squared (Pythagoras). This finds the smallest whole number
+	// whose square is at least that, by halving the range it can be in until one number is left. Whole numbers only, so every
+	// machine gets the same answer.
+	long long const squared = halfX * halfX + halfZ * halfZ;
+	long long low = 0;
+	long long high = halfX + halfZ;
+
+	while (low < high)
 	{
-		return fromTheMiddle;
+		long long const middle = (low + high) / 2;
+
+		if (middle * middle < squared)
+		{
+			low = middle + 1;
+		}
+		else
+		{
+			high = middle;
+		}
 	}
 
-	return fromTheMiddle + (liftRadius < widestRealLift ? liftRadius : widestRealLift);
+	return (int)low;
+}
+
+// Whether someone counts as waiting at a platform lift's far end, so that the host of a network game sends the car to him
+// (NetPlayerAtOtherTerminal, bh_platform_lift.cpp). Places are the game's, in mm, and a bigger y is lower down. The car is at rest
+// at its near end, at the height nearEndY, and its far end is at farEndY. carX and carZ are the middle of the car seen from above.
+//
+// Outside the mode that plays as single player, it's the game's own rule from 1999: nearer than 5 m to the middle of the far end.
+// distanceToTheFarEnd is that distance, as the game measures it (VectorDistance), and nothing else is looked at.
+//
+// In the mode, three things have to be true:
+// - he's on the far end's half of the shaft, as in single player's own rule (PlayerIsNearOtherTerminal, bh_platform_lift.cpp);
+// - he's within 5 m of the far end's height;
+// - seen from above, he's within 5 m of the edge of the car (footprintRadius, from NetLiftFootprintRadius), so someone standing
+//   beside the far end of a wide lift can still call it, which is what the mode's wider reach was for.
+// Until #189 the mode took 5 m plus the radius of the car's whole shape. But some cars' shapes are frames as tall as their shafts
+// (Derelict's lift down into the hive is 3.9 m wide and 36.9 m tall), so standing at the car's own end counted as waiting at the
+// other one. The car went away from him and left the shaft open, and came back, and went again.
+inline bool NetLiftIsWaitingAtTheFarEnd(int distanceToTheFarEnd, int playerX, int playerY, int playerZ, int carX, int carZ, int nearEndY,
+	int farEndY, int footprintRadius, bool sameAsSinglePlayer)
+{
+	if (!sameAsSinglePlayer)
+	{
+		return distanceToTheFarEnd < kNetLiftCallReach;
+	}
+
+	// A car with nowhere to go has no far end
+	if (farEndY == nearEndY)
+	{
+		return false;
+	}
+
+	// On the far end's half of the shaft. The middle is worked out as single player's rule does, in bigger numbers so it can't overflow.
+	long long const middleY = ((long long)nearEndY + (long long)farEndY) / 2;
+	bool const farEndIsBelow = farEndY > nearEndY;
+	bool const onTheFarHalf = farEndIsBelow ? playerY > middleY : playerY < middleY;
+
+	if (!onTheFarHalf)
+	{
+		return false;
+	}
+
+	// Within 5 m of the far end's height
+	long long const belowTheFarEnd = (long long)playerY - (long long)farEndY;
+
+	if (belowTheFarEnd >= kNetLiftCallReach || -belowTheFarEnd >= kNetLiftCallReach)
+	{
+		return false;
+	}
+
+	// Within 5 m of the car's edge, seen from above. The footprint is held to what NetLiftFootprintRadius can give, and each distance
+	// is checked on its own first, so the squares below stay small enough to add up.
+	long long const widestFootprint = 141422;
+	long long const footprint = footprintRadius <= 0 ? 0 : footprintRadius < widestFootprint ? footprintRadius : widestFootprint;
+	long long const flatReach = kNetLiftCallReach + footprint;
+	long long const awayX = (long long)playerX - (long long)carX;
+	long long const awayZ = (long long)playerZ - (long long)carZ;
+
+	if (awayX >= flatReach || -awayX >= flatReach || awayZ >= flatReach || -awayZ >= flatReach)
+	{
+		return false;
+	}
+
+	return awayX * awayX + awayZ * awayZ < flatReach * flatReach;
 }
 
 // A lift's sync message, in the mode that plays as single player (NETMESSAGE_LIFTSTATE): which end it names. 0 is the top, the
