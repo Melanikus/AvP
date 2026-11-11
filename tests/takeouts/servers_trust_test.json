@@ -93,6 +93,86 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "the picked line isn't the one used",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\t\tif (hashed[i] && Same(hashes[i], pick.hash))\n\t\t{\n\t\t\treturn i;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\treturn i;"
+				}
+			]
+		},
+		{
+			"name": "a line whose hash couldn't be worked out can be the pick's",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "if (hashed[i] && Same(hashes[i], pick.hash))",
+					"to": "if (Same(hashes[i], pick.hash))"
+				}
+			]
+		},
+		{
+			"name": "no pick still picks the line its hash names",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "for (int i = 0; pick.there && i < count; i++)",
+					"to": "for (int i = 0; i < count; i++)"
+				}
+			]
+		},
+		{
+			"name": "two picks are taken",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "ReadHashes(text, bytes, \"pick \", 1, &picks, badLine)",
+					"to": "ReadHashes(text, bytes, \"pick \", 2, &picks, badLine)"
+				}
+			]
+		},
+		{
+			"name": "a yes is taken as a pick",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "ReadHashes(text, bytes, \"pick \", 1, &picks, badLine)",
+					"to": "ReadHashes(text, bytes, \"yes \", 1, &picks, badLine)"
+				}
+			]
+		},
+		{
+			"name": "a pick is taken in the yeses' file",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "return ReadHashes(text, bytes, \"yes \", kServersTrustMostYeses, out, badLine);",
+					"to": "return ReadHashes(text, bytes, \"pick \", kServersTrustMostYeses, out, badLine);"
+				}
+			]
+		},
+		{
+			"name": "the pick's file is written without its last newline",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\tout[at++] = '\\n';\n\treturn at;\n}\n\nint ServersTrust_LineToUse",
+					"to": "\treturn at;\n}\n\nint ServersTrust_LineToUse"
+				}
+			]
+		},
+		{
+			"name": "the pick is written without its room checked",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "if (!hash || !out || room < need)",
+					"to": "if (!hash || !out)"
+				}
+			]
 		}
 	]
 }
