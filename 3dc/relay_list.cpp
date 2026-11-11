@@ -382,6 +382,9 @@ namespace
 		// past the run, and nothing in it is anything a server sent but the answers' own fixed meanings.
 		int linePings[kServersCfgMostLines];
 		int lineGames[kServersCfgMostLines];
+		// Its relay's region from its last good visit, or "" (relay_list.h, RelayListLineNow.region): the one word here a server sent, read
+		// as a region and kept only when its keys matched the line. Added 2026-11-11 by Melanikus for the AvP port, for the host page.
+		char lineRegions[kServersCfgMostLines][kRelayListRegionLetters + 1];
 		bool accessWantedOn[kServersCfgMostLines];
 		ServersCfgServer accessLines[kServersCfgMostLines];   // the lines to ask, as the main thread copied them after their yes
 		bool accessAskingOn[kServersCfgMostLines];
@@ -1110,6 +1113,18 @@ namespace
 			int got = 0;
 			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
 
+			// The region its server gave, only from a visit that answered and whose keys matched the line; read from the visit before the
+			// list's lock is taken, so one lock is never held inside the other
+			char region[kRelayListRegionLetters + 1] = {};
+
+			if (visit && !why && KeyStateOf(visit) == kKeyGood)
+			{
+				EnterCriticalSection(&visit->lock);
+				memcpy(region, visit->relayRegion, kRelayListRegionLetters);
+				LeaveCriticalSection(&visit->lock);
+			}
+
+			region[kRelayListRegionLetters] = 0;
 			EnterCriticalSection(&shared->lock);
 
 			for (int g = 0; !why && g < got && g < kRelayListMostGames && shared->allCount < kRelayListMostAllGames; g++)
@@ -1125,6 +1140,7 @@ namespace
 				shared->lineWhys[place] = why;
 				shared->linePings[place] = visit ? visit->pingMs : -1;
 				shared->lineGames[place] = why ? 0 : (got < kRelayListMostGames ? got : kRelayListMostGames);
+				memcpy(shared->lineRegions[place], region, sizeof(region));
 			}
 
 			// The line in use's games are also its own answer, for joining (RelayList_FoundGames)
@@ -2182,6 +2198,7 @@ void RelayList_FindGames(void)
 		shared->lineStates[place] = states[place];
 		shared->linePings[place] = -1;   // until this find measures it again
 		shared->lineGames[place] = 0;
+		shared->lineRegions[place][0] = 0;
 		shared->lineWhys[place] = NULL;
 	}
 
@@ -2679,7 +2696,9 @@ bool RelayList_LineNow(int place, RelayListLineNow *out)
 		out->why = shared->lineWhys[place];
 		out->pingMs = shared->linePings[place];
 		out->games = shared->lineGames[place];
+		memcpy(out->region, shared->lineRegions[place], sizeof(out->region));
 		LeaveCriticalSection(&shared->lock);
+		out->region[kRelayListRegionLetters] = 0;
 
 		// A find from before the yes counted it as without one; until a find after the yes has ended, it's being asked
 		out->state = state == kRelayLineNoYes ? kRelayLineAsking : state;

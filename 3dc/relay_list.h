@@ -217,6 +217,11 @@ struct RelayListLineNow
 	int access;                  // kRelayAccess...
 	const char *accessWhy;       // kRelayAccessNoAnswer's why, fixed words of the game's own; NULL otherwise
 	int games;                   // how many of the last find's games (RelayList_FoundAllGames) are its own
+	// Its relay's region, from the line's last GOOD visit: the word its server gave with the relay's keys, read as a region (1 to 16 small
+	// letters, digits and -) and kept only when those keys matched the line's fingerprint; "" when there's none. It's the server's own
+	// word, so a page shows it made safe and as the server's; nothing chooses a relay by it (a relay is a line's: RelayList_RelayOf).
+	// Added 2026-11-11 by Melanikus for the AvP port, for the host page.
+	char region[kRelayListRegionLetters + 1];
 };
 
 // False, with out wiped, for a place out of range

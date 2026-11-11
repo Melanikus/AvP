@@ -910,7 +910,19 @@ static void TestTheCalls()
 		Has(source, "NewServer(lines[v])") && CountOf(source, "NewServer(") == 7 && CountOf(source, "Call(shared,") == 0,
 		"and the thread calls only those lines: each visit is made from one of them, and nothing is called through the list's own state");
 
-	std::string const agreed = SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	// Each line's relay region, for the host page (added 2026-11-11 by Melanikus for the AvP port): the one word a server sent that the
+	// pages read, kept only from a visit that answered and whose keys matched the line, cleared as each find starts, and copied out ended
+	std::string const visitAll = SourceSlice(source, "void VisitEveryLine(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const regionKept = visitAll.find("if (visit && !why && KeyStateOf(visit) == kKeyGood)\n\t\t\t{\n\t\t\t\tEnterCriticalSection(&visit->lock);\n\t\t\t\t"
+		"memcpy(region, visit->relayRegion, kRelayListRegionLetters);");
+	std::string const lineNow = SourceSlice(source, "bool RelayList_LineNow(int place, RelayListLineNow *out)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(regionKept != std::string::npos && regionKept < visitAll.find("region[kRelayListRegionLetters] = 0;\n\t\t\tEnterCriticalSection(&shared->lock);") &&
+		CountOf(source, "memcpy(shared->lineRegions[place], region, sizeof(region));") == 1 && CountOf(source, "shared->lineRegions[place][0] = 0;") == 1 &&
+		CountOf(source, "lineRegions[") == 4 && Has(lineNow, "memcpy(out->region, shared->lineRegions[place], sizeof(out->region));") &&
+		Has(lineNow, "out->region[kRelayListRegionLetters] = 0;"),
+		"a line's relay region comes only from a visit that answered with keys matching the line, is cleared as a find starts, and is copied out ended");
+
+	std::string const agreed =SourceSlice(source, "bool TheLineIsAgreed(const ServersCfgServer &line)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// Modified 2026-11-10 by Melanikus (Third) for the AvP port: a Hudson run with yespage= gets past only after its own Yes on the page,
 	// held for that run alone (hudson_plan_test reads where that Yes goes, and that it's never kept). Modified 2026-11-11 by Melanikus for
 	// the AvP port: that Yes is each line's own too, by the line's hash.

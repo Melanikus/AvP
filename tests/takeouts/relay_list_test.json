@@ -2114,6 +2114,16 @@
 					"to": "\t\"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Berlin\\n\";"
 				}
 			]
+		},
+		{
+			"name": "a line's relay region is kept from a visit that didn't answer, or whose keys didn't match its line",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (visit && !why && KeyStateOf(visit) == kKeyGood)\n",
+					"to": "\t\t\tif (visit)\n"
+				}
+			]
 		}
 	]
 }
