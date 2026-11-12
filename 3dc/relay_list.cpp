@@ -105,21 +105,49 @@ namespace
 	int hostChoice = -1;
 	int hostRoomLine = -1;
 
+	// ONLINE PLAY IS A BUILD'S CHOICE, never a file's or a switch's. Added 2026-11-11 by Melanikus for the AvP port: the owner's ruling
+	// R-GOAL-8 ("Online off in beta.2"), and PO's call that a file alone mustn't turn it on, as a servers.cfg posted anywhere would
+	// otherwise switch on, in a published build, an online client whose open items are parked. Only a build made with the define
+	// AVPX_ONLINE_PLAY reads servers.cfg. AvP.vcxproj makes the define only for /p:AvpxOnlinePlay=1, which our own builds for online runs
+	// ask for, and no workflow or packaging script ever does (tools/check-online-play.ps1, rule O). Any other build never opens the file,
+	// whatever is beside bin and whatever the command line says (-dev included: it decides nothing online, rule D), and goes on exactly
+	// as if there were no servers.cfg. It's a function, not an #if around the read, so every build compiles both ways, and no compiler or
+	// scanner misses either.
+	bool ThisBuildPlaysOnline(void)
+	{
+#if defined(AVPX_ONLINE_PLAY)
+		return true;
+#else
+		return false;
+#endif
+	}
+
 	const ServersCfgServer *Server(void)
 	{
 		if (!theServer.read)
 		{
 			theServer.read = true;
 			theServer.inUse = -1;
-			theServer.opening = ServersCfg_ReadTheGames(&theFile);
 
-			if (theServer.opening != kServersCfgOpened)
+			if (!ThisBuildPlaysOnline())
 			{
-				LogString(std::string("Relay list: ") + ServersCfg_OpeningWords(theServer.opening));
+				// Never opened. theFile is as it was made (zero: read, no servers, nothing refused), so every page goes on as with no file.
+				theServer.opening = kServersCfgNotThere;
+				LogString("Relay list: this build plays no online games (it was made without AVPX_ONLINE_PLAY), so " SERVERS_CFG_FILE_NAME
+					" isn't read, and there are no servers");
 			}
-			else if (theFile.fileRefusal != kServersCfgFileRead)
+			else
 			{
-				LogString(std::string("Relay list: " SERVERS_CFG_FILE_NAME " isn't used: ") + ServersCfg_FileWords(theFile.fileRefusal));
+				theServer.opening = ServersCfg_ReadTheGames(&theFile);
+
+				if (theServer.opening != kServersCfgOpened)
+				{
+					LogString(std::string("Relay list: ") + ServersCfg_OpeningWords(theServer.opening));
+				}
+				else if (theFile.fileRefusal != kServersCfgFileRead)
+				{
+					LogString(std::string("Relay list: " SERVERS_CFG_FILE_NAME " isn't used: ") + ServersCfg_FileWords(theFile.fileRefusal));
+				}
 			}
 
 			for (int i = 0; i < theFile.refusedCount; i++)

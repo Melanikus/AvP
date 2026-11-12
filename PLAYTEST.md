@@ -88,7 +88,7 @@ This beta plays no online games. It ships no `servers.cfg`, the file that names 
 game has no server to reach, and it reaches none. The **Online** row on the Multiplayer page says so. Co-op campaigns and the other
 multiplayer games come back with online play, in a later beta.
 
-A `servers.cfg` added by hand isn't part of this test, so please don't add one.
+This build doesn't read one either: a `servers.cfg` added by hand changes nothing, whatever the command line.
 
 ## 4. What we'd like you to try
 - **Try the Custom maps** page, on the Single player page.

@@ -886,10 +886,28 @@ namespace
 	ServersTrustYeses yeses = {};
 	ServersTrustYeses hudsonRunYeses = {};
 
+	bool ThisBuildPlaysOnline(void)
+	{
+#if defined(AVPX_ONLINE_PLAY)
+		return true;
+#else
+		return false;
+#endif
+	}
+
 	const ServersCfgServer *Server(void)
 	{
 		static ServersCfgFileRead file;
-		ServersCfg_ReadTheGames(&file);
+
+		if (!ThisBuildPlaysOnline())
+		{
+			file.serverCount = 0;
+		}
+		else
+		{
+			ServersCfg_ReadTheGames(&file);
+		}
+
 		return file.serverCount > 0 ? &file.servers[0] : NULL;
 	}
 
@@ -1563,6 +1581,16 @@ int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits
 
 	return made;
 }
+'@ + "`n"); 'win32/VS2026/AvP.vcxproj' = (@'
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!-- Rule O (added 2026-11-11): only a build asked for with /p:AvpxOnlinePlay=1 gets the define, and so reads servers.cfg -->
+  <ItemDefinitionGroup Condition="'$(AvpxOnlinePlay)'=='1'">
+    <ClCompile>
+      <PreprocessorDefinitions>AVPX_ONLINE_PLAY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
 '@ + "`n"); 'servers.cfg' = (@'
 # The servers this game plays online through
 203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
@@ -2512,7 +2540,31 @@ bool HostPage_PressedRow(int row)
 			return false;
 	}
 }
-'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' }
+'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' },
+    # Rule O (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-8, "Online off in beta.2"): only a build made with
+    # AVPX_ONLINE_PLAY reads servers.cfg, and nothing of this repository's own makes one. The model above passes it; each case is one way
+    # back to a build that plays online.
+    @{ What = 'O: the define made in a header of its own is refused'; None = $false; Files = @{ '3dc/online.h' = "#define AVPX_ONLINE_PLAY 1`n" };
+        Reason = 'O: the game''s code must name the define AVPX_ONLINE_PLAY once, in 3dc/relay_list.cpp''s ThisBuildPlaysOnline, and nowhere else' },
+    @{ What = 'O: a ThisBuildPlaysOnline that says yes without the define is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "#else`n`t`treturn false;`n#endif`n"; To = "#else`n`t`treturn true;`n#endif`n" } };
+        Reason = 'O: ThisBuildPlaysOnline (3dc/relay_list.cpp line' },
+    @{ What = 'O: servers.cfg read before the question is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "`t`tstatic ServersCfgFileRead file;`n`n`t`tif (!ThisBuildPlaysOnline())"; To = "`t`tstatic ServersCfgFileRead file;`n`t`tServersCfg_ReadTheGames(&file);`n`n`t`tif (!ThisBuildPlaysOnline())" } };
+        Reason = 'O: Server() (3dc/relay_list.cpp line' },
+    @{ What = 'O: servers.cfg read by a build that plays no online games is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "`t`t`tfile.serverCount = 0;`n"; To = "`t`t`tServersCfg_ReadTheGames(&file);`n" } };
+        Reason = 'O: Server() (3dc/relay_list.cpp line' },
+    @{ What = 'O: a project that makes the define for every build is refused'; None = $false; Files = @{ 'win32/VS2026/AvP.vcxproj' = @{ From = "<ItemDefinitionGroup Condition=""'`$(AvpxOnlinePlay)'=='1'"">"; To = '<ItemDefinitionGroup>' } };
+        Reason = 'O: win32/VS2026/AvP.vcxproj must make AVPX_ONLINE_PLAY only in its one group for the property AvpxOnlinePlay=1' },
+    @{ What = 'O: no project file at all is refused'; None = $false; Files = @{ 'win32/VS2026/AvP.vcxproj' = $null }; Reason = 'O: win32/VS2026/AvP.vcxproj isn''t there' },
+    @{ What = 'O: release.yml asking for a build that plays online is refused'; None = $false; Files = @{ '.github/workflows/release.yml' = "        run: msbuild win32/VS2026/AvP.vcxproj /p:Configuration=Release /p:AvpxOnlinePlay=1`n" };
+        Reason = 'O: .github/workflows/release.yml names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: build.yml giving the property as an environment variable, in other capitals, is refused'; None = $false; Files = @{ '.github/workflows/build.yml' = "    env:`n      AVPXONLINEPLAY: '1'`n" };
+        Reason = 'O: .github/workflows/build.yml names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: a workflow that sets CL is refused'; None = $false; Files = @{ '.github/workflows/build.yml' = "    env:`n      CL: /DSOMETHING`n" };
+        Reason = 'O: .github/workflows/build.yml sets CL or _CL_' },
+    @{ What = 'O: a tool script that asks for the property is refused'; None = $false; Files = @{ 'tools/build-and-package.ps1' = "& msbuild win32/VS2026/AvP.vcxproj /p:AvpxOnlinePlay=1`n" };
+        Reason = 'O: tools/build-and-package.ps1 names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: a Directory.Build.props that sets the property is refused'; None = $false; Files = @{ 'Directory.Build.props' = "<Project><PropertyGroup><AvpxOnlinePlay>1</AvpxOnlinePlay></PropertyGroup></Project>`n" };
+        Reason = 'O: Directory.Build.props names AvpxOnlinePlay or AVPX_ONLINE_PLAY' }
 )
 
 foreach ($case in $onlineCases)
