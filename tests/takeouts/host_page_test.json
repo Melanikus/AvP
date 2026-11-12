@@ -223,6 +223,46 @@
 					"to": "\t\tsnprintf(out, room, \"%d %s\", pingMs, msWords ? msWords : \"\");\n"
 				}
 			]
+		},
+		{
+			"name": "the Multiplayer page shows Start game, Co-op campaign and Join game with no servers.cfg line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\tif (RelayList_LineCount() > 0)\n\t{\n",
+					"to": "\tif (RelayList_LineCount() >= 0)\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "the Multiplayer page leaves Join game out even with a servers.cfg line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t\tAvPMenu_Multiplayer[row++] = JoinGameRow;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the Online page gives a file's words when there's no servers.cfg at all",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_NO_FILE), y, ONE_FIXED / 2);\n",
+					"to": "\t\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_FILE_NOT_USED), y, ONE_FIXED / 2);\n"
+				}
+			]
+		},
+		{
+			"name": "the no-servers.cfg words are in another id's place",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\t\"servers.cfg isn't used:\",\n\t\"There's no servers.cfg in the game's folder, so there's no online play.\",\n",
+					"to": "\t\"There's no servers.cfg in the game's folder, so there's no online play.\",\n\t\"servers.cfg isn't used:\",\n"
+				}
+			]
 		}
 	]
 }

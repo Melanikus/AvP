@@ -47,6 +47,7 @@
 #include "MusicPlayer.h"
 #include "online_screens_page.h"
 #include "server_yes_rules.h"
+#include "relay_list.h"           // how many good servers.cfg lines there are, for the Multiplayer page's rows (2026-11-11)
 
 #define MPLAYER_SUPPORT 0
 
@@ -493,9 +494,17 @@ void MenuData_SetMultiplayerRows(void)
 	// Every servers.cfg line, each with its yes and its access (online_page.h). Always there, so that even with no servers.cfg at all its
 	// page can say why (modified 2026-11-11 by Melanikus for the AvP port: the Online page, in place of the Servers row)
 	AvPMenu_Multiplayer[row++] = OnlineRow;
-	AvPMenu_Multiplayer[row++] = StartGameRow;
-	AvPMenu_Multiplayer[row++] = CoopRow;
-	AvPMenu_Multiplayer[row++] = JoinGameRow;
+
+	// Start game, Co-op campaign and Join game only when servers.cfg has a good line. Every game is played through a server (there's no
+	// plain game), so with none they'd lead only to pages with nothing in them. The Online page says why there's none. Added 2026-11-11
+	// by Melanikus for the AvP port: the owner's ruling R-GOAL-8 ("Online off in beta.2", so it ships no servers.cfg), and his pick of how
+	// the page shows it: "Hide them".
+	if (RelayList_LineCount() > 0)
+	{
+		AvPMenu_Multiplayer[row++] = StartGameRow;
+		AvPMenu_Multiplayer[row++] = CoopRow;
+		AvPMenu_Multiplayer[row++] = JoinGameRow;
+	}
 
 	// The rest is the page's end
 	while (row < kMultiplayerRowRoom)

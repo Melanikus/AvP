@@ -2064,6 +2064,16 @@
 					"to": "\t\t\ttheServer.inUse = theFile.serverCount > 1 ? 1 : -1;\n"
 				}
 			]
+		},
+		{
+			"name": "there's said to be no servers.cfg for a file that's there but can't be read",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\treturn theServer.opening == kServersCfgNotThere;\n",
+					"to": "\treturn theServer.opening != kServersCfgOpened;\n"
+				}
+			]
 		}
 	]
 }

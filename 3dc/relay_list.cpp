@@ -1942,6 +1942,12 @@ const char *RelayList_FileWords(void)
 	return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);
 }
 
+bool RelayList_HasNoServersFile(void)
+{
+	Server();
+	return theServer.opening == kServersCfgNotThere;
+}
+
 void HudsonTest_RelayListShowsTheYesPage(void)
 {
 	hudsonRunShowsTheYesPage = true;
