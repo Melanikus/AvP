@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "alien_ways_guide.h"
+#include "npc_grid.h"
 
 // One guide is about 280 KB: room for 64 aliens' ways of 256 points each. So every guide here is made with new, never as a function's own
 // local: those go on the stack, which is 1 MB, and one test function here has six. Several guides on the
@@ -1989,6 +1990,92 @@ static void DoorRule()
 	Check(!AlienWays_DoorLetsAnAlienThrough(static_cast<AlienWaysDoorKind>(7), false, true), "a kind that isn't one of them is taken as shut");
 }
 
+// HOSTILE MAPS B (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md). On the grid, a search
+// that looks at kAlienWaysGridMostLooks cells without reaching its goal gives up and says so, and the same alien's next search goes to the
+// map at once (Primary's fallback). So a level made too big for the grid's search still has its ways. No other test here gives the guide
+// a grid at all.
+// The world is a floor 300 mm wide and 82.5 km long, as 5 strips of 16.5 km joined end to end, each 4,950 square metres seen from above,
+// just under the map's scenery cut. On the grid it's one row of 275,000 cells, so from one end to the other a search has to look at more
+// cells than the guide lets it. On the map it's 5 polygons, and the map's search finds the way at once.
+static void TooFarOnTheGrid()
+{
+	printf("Too far for the grid's search (hostile maps B)\n");
+	int const kStripLength = 16500000, kFirstX = -41250000;
+	std::vector<AlienWaysPolygon> world;
+
+	for (int k = 0; k < 5; k++)
+	{
+		int const x0 = kFirstX + k * kStripLength, x1 = x0 + kStripLength;
+		world.push_back(Polygon({ { x0, 0, 0 }, { x1, 0, 0 }, { x1, 0, 300 }, { x0, 0, 300 } }, kUp));
+	}
+
+	AlienWaysMap map;
+	NpcGrid grid;
+	Check(map.Build(world) == nullptr && grid.Build(world, map) == nullptr, "a floor 82.5 km long builds, on the map and on the grid");
+
+	if (!grid.Ready())
+	{
+		return;
+	}
+
+	// From the first cell's middle to the last's, at z = 150
+	AlienWaysXYZ const from = { kFirstX + 150, 0, 150 }, to = { -kFirstX - 150, 0, 150 };
+
+	// The grid's own search, with room enough to look, does go the whole way: so the guide's search giving up below is its cap, not a grid
+	// with no way along it
+	std::vector<uint32_t> cells;
+	size_t looks = 0;
+	uint32_t const fromCell = grid.NearestCell(from.x, from.y, from.z, kNpcGridAlien, 10);
+	uint32_t const toCell = grid.NearestCell(to.x, to.y, to.z, kNpcGridAlien, 10);
+	// (The search is its own statement, so the count is known before the line that says it is made)
+	bool const wholeWay = fromCell != kNpcGridNoCell && toCell != kNpcGridNoCell
+		&& grid.Search(fromCell, toCell, kNpcGridAlien, kAlienWaysFloorPrice, 1000000, &cells, &looks) == kNpcGridFound;
+	Check(wholeWay && looks > static_cast<size_t>(kAlienWaysGridMostLooks),
+		"with room to look, the grid's own search goes the whole way, looking at more cells than the guide lets it (" + std::to_string(looks) + ")");
+
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	guide.UseGrid(&grid);
+
+	// Its goal is its target, as a hunting alien's is. A way all on the floor to anywhere else is left to the game's own steering
+	// (kAlienWaysOutcomeAllFloor), but one to the target is followed, so the map's way here is the guide's to steer
+	AlienWaysAsk ask = Ask(Alien(1), from, to, world.size());
+	ask.goalIsTheTarget = true;
+	AlienWaysXYZ towards = { 0, 0, 0 };
+	AlienWaysReport gaveUpLine = {};
+	bool gaveUp = false, onTheMap = false, gaveUpFirst = false;
+	int frames = 0;
+
+	// Each frame the alien asks, as the game's own code has it do, and the guide has its turn: on the grid, kAlienWaysGridLooksPerFrame
+	// cells a frame, so the 200,000 take 40 frames
+	for (; frames < 100 && !onTheMap; frames++)
+	{
+		guide.Steer(&map, ask, &towards);
+		Frame(guide, map, 16);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].onGrid && reports[r].tooFar && reports[r].outcome == kAlienWaysOutcomeNoWay)
+			{
+				gaveUp = true;
+				gaveUpLine = reports[r];
+			}
+			else if (!reports[r].onGrid && reports[r].outcome == kAlienWaysOutcomeFound)
+			{
+				onTheMap = true;
+				gaveUpFirst = gaveUp;
+			}
+		}
+	}
+
+	Check(gaveUp && gaveUpLine.looks == kAlienWaysGridMostLooks, "the guide's search on the grid gives up after 200,000 cells, and its line says it looked too far ("
+		+ std::to_string(gaveUpLine.looks) + " cells)");
+	Check(onTheMap && gaveUpFirst, "then the same alien's next search is on the map, and finds the way (by frame " + std::to_string(frames) + ")");
+	Check(guide.Steer(&map, ask, &towards) && guide.Guided(Alien(1)) && towards.x > from.x, "so the alien is guided, along the floor towards its goal");
+}
+
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
 
 // One source file, with Windows line ends made plain
@@ -2378,6 +2465,7 @@ int main()
 	NoBetterThanToday();
 	StartsOnItsOwnKind();
 	DoorRule();
+	TooFarOnTheGrid();
 	StepsMade();
 	SourceOfTheGame();
 

@@ -2319,6 +2319,26 @@
 					"to": "int const kAlienWaysNoHeadwayFor = 300; "
 				}
 			]
+		},
+		{
+			"name": "after a grid search that looked too far, the next is on the grid again, not on the map (hostile maps B)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (searchOnGrid)\n\t\t{\n\t\t\tfollower.mapNext = true;",
+					"to": "\t\tif (searchOnGrid)\n\t\t{\n\t\t\tfollower.mapNext = false;"
+				}
+			]
+		},
+		{
+			"name": "the guide lets the grid's search look at as many cells as it likes (hostile maps B)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "kAlienWaysFloorPrice, kAlienWaysGridMostLooks,",
+					"to": "kAlienWaysFloorPrice, 1000000,"
+				}
+			]
 		}
 	]
 }
