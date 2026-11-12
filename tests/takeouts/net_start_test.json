@@ -296,12 +296,12 @@
 			]
 		},
 		{
-			"name": "starting the game opens the socket",
+			"name": "starting the game opens a socket",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
 					"from": "Con_AddCommand(\"disconnect\", Net_Disconnect);",
-					"to": "Con_AddCommand(\"disconnect\", Net_Disconnect); OpenDiscoverySocket();"
+					"to": "Con_AddCommand(\"disconnect\", Net_Disconnect); enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);"
 				}
 			]
 		},
@@ -2201,7 +2201,7 @@
 			]
 		},
 		{
-			"name": "a game joined on this network keeps the last relay line",
+			"name": "a joined game's relay outlives the game",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
@@ -2476,7 +2476,7 @@
 			]
 		},
 		{
-			"name": "a run's host on the way to the relay hears anyone when no relay is used",
+			"name": "a run's host on the way to the relay hears anyone until its relay is looked up",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
@@ -2891,7 +2891,7 @@
 				{
 					"file": "3dc/networking.cpp",
 					"from": "\t\thost->intercept = NothingIntercept;\n\t\thost->duplicatePeers = kMostConnectionsFromOneAddress;",
-					"to": "\t\thost->intercept = HomeIntercept;\n\t\thost->duplicatePeers = kMostConnectionsFromOneAddress;"
+					"to": "\t\thost->intercept = [](ENetHost *on, ENetEvent *) -> int { return on->receivedAddress.host == relayAddress.host ? 1 : 0; };\n\t\thost->duplicatePeers = kMostConnectionsFromOneAddress;"
 				}
 			]
 		},
