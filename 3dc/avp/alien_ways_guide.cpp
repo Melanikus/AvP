@@ -1078,6 +1078,15 @@ int AlienWays_FloorPriceFor(AlienWaysXYZ at, AlienWaysXYZ goal, bool goalIsTheTa
 	return goalIsTheTarget && Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;
 }
 
+// THE POUNCE (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+bool AlienWays_PouncesNow(int distanceMm, AlienWaysXYZ down, bool touching, long long msSinceLastPounce)
+{
+	int const kind = KindUnder(down);
+	bool const onAFloorOrAWall = kind == kAlienWaysFloor || kind == kAlienWaysWall;
+	bool const rested = msSinceLastPounce < 0 || msSinceLastPounce >= kAlienWaysPounceCoolDown;
+	return distanceMm >= kAlienWaysPounceNearest && distanceMm <= kAlienWaysPounceRange && onAFloorOrAWall && touching && rested;
+}
+
 void AlienWaysGuide::UseGrid(NpcGrid *to)
 {
 	if (to != grid && searching >= 0)

@@ -105,6 +105,9 @@ namespace
 		AlienWaysXYZ seenAt = {};
 		long long seenMs = 0;   // in the level's time, clockMs
 		AlienWaysWho seenWho = {};
+
+		// THE POUNCE (alien_ways_guide.h): when its last pounce began, in the level's time; -1 for none
+		long long pouncedMs = -1;
 	};
 
 	Watched watched[kAlienWaysMostFollowers];
@@ -112,6 +115,10 @@ namespace
 
 	// How many lines this level has had about aliens let go (kAlienWaysMostLetGoLines at most)
 	int letGoLines = 0;
+
+	// How many lines this level has had about pounces (THE POUNCE), kAlienWaysMostPounceLines at most
+	int const kAlienWaysMostPounceLines = 500;
+	int pounceLines = 0;
 
 	// THE ALIENS SEEN THIS LEVEL, for the lines that follow one alien by its id (alien_ways_stuck.h): every alien that has asked for a way, by
 	// its name, with the guide's place it last had, when the guide found its first way, the target it last came for, and whether it has
@@ -1355,6 +1362,75 @@ bool AlienWays_KeepsClinging(STRATEGYBLOCK *alien)
 	return alien && AlienWays_On() && ReadyMap() && theGuide.KeepsClinging(WhoIs(alien));
 }
 
+// THE POUNCE (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+bool AlienWays_PounceNow(STRATEGYBLOCK *alien, int distanceToTarget)
+{
+	if (!alien || !alien->DynPtr || !AlienWays_On())
+	{
+		return false;
+	}
+
+	AlienWaysWho const who = WhoIs(alien);
+	Watched const *const w = WatchedFor(who, false);
+	DYNAMICSBLOCK const *const dynamics = alien->DynPtr;
+	AlienWaysXYZ const down = { dynamics->OrientMat.mat21, dynamics->OrientMat.mat22, dynamics->OrientMat.mat23 };
+	AlienWaysPoint to;
+	AlienWaysXYZ from, next;
+	// A sliding alien touches nothing, as the level's walls are off for it, but it counts as on what it slides along: its slide ends first
+	bool const touching = dynamics->IsInContactWithFloor || theGuide.Sliding(who, &to, &from, &next);
+	long long const since = w && w->pouncedMs >= 0 ? clockMs - w->pouncedMs : -1;
+	return AlienWays_PouncesNow(distanceToTarget, down, touching, since);
+}
+
+void AlienWays_PounceStarts(STRATEGYBLOCK *alien, int distanceToTarget)
+{
+	if (!alien || !alien->DynPtr)
+	{
+		return;
+	}
+
+	AlienWaysWho const who = WhoIs(alien);
+	AlienWaysPoint to;
+	AlienWaysXYZ from, next;
+
+	if (theGuide.Sliding(who, &to, &from, &next))
+	{
+		theGuide.SlideEnded(who, false);
+	}
+
+	EndSlide(alien);           // the level's walls and its gravity back, sliding or not
+	theGuide.Forget(who);      // nothing steers it in the air: the pounce is 1999's from here
+
+	Watched *const w = WatchedFor(who, true);
+
+	if (w)
+	{
+		w->pouncedMs = clockMs;
+	}
+
+	if (pounceLines < kAlienWaysMostPounceLines)
+	{
+		pounceLines++;
+		DYNAMICSBLOCK const *const d = alien->DynPtr;
+		char words[200];
+		snprintf(words, sizeof(words), " pounces at its target %.1f m away, from (%.1f, %.1f, %.1f), its body's down (%d, %d, %d)",
+			distanceToTarget / 1000.0, d->Position.vx / 1000.0, d->Position.vy / 1000.0, d->Position.vz / 1000.0, d->OrientMat.mat21, d->OrientMat.mat22,
+			d->OrientMat.mat23);
+		LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + words);
+	}
+}
+
+bool AlienWays_PounceIsOurs(STRATEGYBLOCK *alien)
+{
+	if (!alien || !AlienWays_On())
+	{
+		return false;
+	}
+
+	Watched const *const w = WatchedFor(WhoIs(alien), false);
+	return w && w->pouncedMs >= 0 && clockMs - w->pouncedMs < kAlienWaysPounceCoolDown;
+}
+
 // THE SLIDE's checks of its end (Secondary's review, S5): whether the alien's box, with its foot at end, is clear of the level and of
 // anything else. The box is CE_ALIEN's crouched (extents.cpp): 450 mm round, 900 tall from its foot, up. Rays go from its middle to each of
 // its faces and corners, and each must reach that far with nothing in the way. Added 2026-11-11 by Melanikus (Third) for the AvP port.
@@ -1877,6 +1953,7 @@ void AlienWays_LevelEnd()
 
 	frameNumber = 0;
 	letGoLines = 0;
+	pounceLines = 0;
 	clockMs = 0;
 	wouldHaveLines = 0;
 	placesSecond = -1;

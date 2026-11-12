@@ -2200,6 +2200,26 @@ static void TheNearFloor()
 	}
 }
 
+// THE POUNCE (alien_ways_guide.h; the owner's R-LAVA-11, 2026-11-11, #109). Added 2026-11-11 by Melanikus (Third) for the AvP port. The
+// rule, at each of its edges. bh_near.cpp's side is read below, from its source.
+static void ThePounce()
+{
+	printf("The pounce: close, in sight, from the floor or a wall\n");
+	AlienWaysXYZ const onTheFloor = { 0, 65536, 0 }, onAWall = { 65536, 0, 0 }, onTheCeiling = { 0, -65536, 0 };
+
+	Check(AlienWays_PouncesNow(kAlienWaysPounceNearest, onTheFloor, true, -1) && !AlienWays_PouncesNow(kAlienWaysPounceNearest - 1, onTheFloor, true, -1),
+		"from 3 m it pounces, and nearer it doesn't: 1999's attack has it there");
+	Check(AlienWays_PouncesNow(kAlienWaysPounceRange, onTheFloor, true, -1) && !AlienWays_PouncesNow(kAlienWaysPounceRange + 1, onTheFloor, true, -1),
+		"out to 4.5 m, and no further: past that it follows its way");
+	Check(AlienWays_PouncesNow(4000, onAWall, true, -1), "it pounces from a wall too");
+	Check(!AlienWays_PouncesNow(4000, onTheCeiling, true, -1), "but not from a ceiling");
+	Check(!AlienWays_PouncesNow(4000, onTheFloor, false, -1), "nor when it isn't touching what it's on (a sliding alien counts as touching)");
+	Check(!AlienWays_PouncesNow(4000, AlienWaysXYZ{ 0, 0, 0 }, true, -1), "nor with no down to say what it's on");
+	Check(!AlienWays_PouncesNow(4000, onTheFloor, true, kAlienWaysPounceCoolDown - 1) && AlienWays_PouncesNow(4000, onTheFloor, true, kAlienWaysPounceCoolDown),
+		"and a new pounce waits 2 s after the last one began");
+	Check(kAlienWaysPounceNearest == 3000 && kAlienWaysPounceRange == 4500 && kAlienWaysPounceCoolDown == 2000, "the owner's numbers: from 3 m to 4.5 m, 2 s apart");
+}
+
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
 
 // One source file, with Windows line ends made plain
@@ -2518,6 +2538,40 @@ static void SourceOfTheGame()
 	// THE NEAR FLOOR's words in the log (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
 	Check(Has(ways, "if (line.outcome != kAlienWaysOutcomeStuck && line.nearFloor)\n\t{\n\t\tdetails = \". Near its target, the floor cost what a wall does\" + details;"),
 		"SOURCE: a search near the target itself says in its line that its floor cost what a wall does");
+
+	// THE POUNCE, the game's side (added 2026-11-11 by Melanikus (Third) for the AvP port, #109). In Approach it comes first: before the
+	// alien's way, and before 1999's own pounce. It's for standard aliens only, with the ways on.
+	{
+		char const *const hook = "\tif ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {\n\t\treturn;\n\t}\n";
+		size_t const at = near.find(hook);
+		Check(at != std::string::npos && at > near.find("static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)\n{")
+			&& at < near.find("AlienWays_Steer(sbPtr, alienStatusPointer->Target, &targetPos, &wayDirection)") && at < near.find("/* Might want to pounce. */"),
+			"SOURCE: in Approach a standard alien's pounce comes first, before its way and before 1999's own pounce");
+		std::string const ours = Between(near, "static int StartAlienWaysPounce(STRATEGYBLOCK *sbPtr, int distanceToTarget) {", "\n}\n");
+		Check(Has(ours, "\tATTACK_DATA *const thisAttack = AlienPounceAttackIfAble(sbPtr);\n") && !Has(ours, "AlienIsAbleToPounce(")
+			&& ComesBefore(ours, "\tAlienWays_PounceStarts(sbPtr, distanceToTarget);\n", "\tBeginAlienPounce(sbPtr, thisAttack);\n"),
+			"SOURCE: it asks 1999's rules but the flat floor, ends any slide and lets the guide go, then begins 1999's pounce");
+		std::string const able = Between(near, "ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {", "\n}\n");
+		Check(ComesBefore(able, "if(sbPtr->DynPtr->OrientMat.mat22<63000) {", "return AlienPounceAttackIfAble(sbPtr);")
+			&& ComesBefore(able, "if(sbPtr->DynPtr->IsInContactWithFloor==0) {", "return AlienPounceAttackIfAble(sbPtr);")
+			&& Has(Between(near, "static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {", "\n}\n"), "thisAttack=AlienIsAbleToPounce(sbPtr);"),
+			"SOURCE: 1999's own pounce still starts only from a flat floor, as before");
+		Check(Has(near, "\t\t||(((alienStatusPointer->Target->DynPtr->Position.vy-sbPtr->DynPtr->Position.vy)>1000)\n\t\t\t&&!AlienWays_PounceIsOurs(sbPtr))) {\n"),
+			"SOURCE: only the alien ways' pounce may have its target below it, as from a wall");
+		std::string const now = Between(ways, "bool AlienWays_PounceNow(STRATEGYBLOCK *alien, int distanceToTarget)", "\n}\n");
+		std::string const starts = Between(ways, "void AlienWays_PounceStarts(STRATEGYBLOCK *alien, int distanceToTarget)", "\n}\n");
+		Check(Has(now, "\tif (!alien || !alien->DynPtr || !AlienWays_On())\n\t{\n\t\treturn false;\n\t}\n")
+			&& Has(now, "return AlienWays_PouncesNow(distanceToTarget, down, touching, since);"),
+			"SOURCE: it pounces only with the alien ways on (never with FLOORISLAVA OFF, and only where the aliens are run), by the rule above");
+		Check(ComesBefore(starts, "\t\ttheGuide.SlideEnded(who, false);\n", "\ttheGuide.Forget(who);")
+			&& Has(starts, "\tEndSlide(alien);           // the level's walls and its gravity back, sliding or not\n")
+			&& Has(starts, "\t\tw->pouncedMs = clockMs;\n") && Has(starts, "\" pounces at its target %.1f m away"),
+			"SOURCE: its start ends a slide, walls and gravity back, lets the guide go, starts its cool-down, and the log says so");
+		std::string const bhAlien = ReadSourceFile("3dc/avp/bh_alien.h");
+		size_t const minRange = bhAlien.find("#define ALIEN_POUNCE_MINRANGE");
+		Check(minRange != std::string::npos && bhAlien.substr(minRange, bhAlien.find('\n', minRange) - minRange).find("(3000)") != std::string::npos,
+			"SOURCE: the pounce's nearest is 1999's own ALIEN_POUNCE_MINRANGE, 3 m");
+	}
 	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s is %.1f m from its target at %s, in clear sight"),
 		"SOURCE: the log says when an alien is handed over, and how far from its target");
 	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
@@ -2607,6 +2661,7 @@ int main()
 	DoorRule();
 	TooFarOnTheGrid();
 	TheNearFloor();
+	ThePounce();
 	StepsMade();
 	SourceOfTheGame();
 

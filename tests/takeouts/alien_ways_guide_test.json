@@ -2429,6 +2429,136 @@
 					"to": "\tif (false && line.nearFloor)\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: no pounce comes before the way (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {\n",
+					"to": "\tif (false) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any kind of alien pounces so (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {\n",
+					"to": "\tif (AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the alien ways pounce asks 1999's flat floor after all (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tATTACK_DATA *const thisAttack = AlienPounceAttackIfAble(sbPtr);\n",
+					"to": "\tATTACK_DATA *const thisAttack = AlienIsAbleToPounce(sbPtr);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: 1999's own pounce no longer needs a flat floor (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t/* First rule.  Must be on a flat floor. */\n\tif(sbPtr->DynPtr->OrientMat.mat22<63000) {\n",
+					"to": "\t/* First rule.  Must be on a flat floor. */\n\tif(false) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every pounce may have its target below it (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\t\t&&!AlienWays_PounceIsOurs(sbPtr))) {\n",
+					"to": "\t\t\t&&false)) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pounce leaves the slide going (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tEndSlide(alien);           // the level's walls and its gravity back, sliding or not\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the guide goes on steering a pouncing alien (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.Forget(who);      // nothing steers it in the air: the pounce is 1999's from here\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pounce comes with the ways off too (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (!alien || !alien->DynPtr || !AlienWays_On())\n\t{\n\t\treturn false;\n\t}\n\n\tAlienWaysWho const who = WhoIs(alien);\n\tWatched const *const w = WatchedFor(who, false);\n",
+					"to": "\tif (!alien || !alien->DynPtr)\n\t{\n\t\treturn false;\n\t}\n\n\tAlienWaysWho const who = WhoIs(alien);\n\tWatched const *const w = WatchedFor(who, false);\n"
+				}
+			]
+		},
+		{
+			"name": "the pounce reaches further than 4.5 m (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "distanceMm <= kAlienWaysPounceRange && onAFloorOrAWall",
+					"to": "distanceMm <= kAlienWaysPounceRange + 1000 && onAFloorOrAWall"
+				}
+			]
+		},
+		{
+			"name": "the pounce comes nearer than 3 m (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return distanceMm >= kAlienWaysPounceNearest && ",
+					"to": "return distanceMm >= 0 && "
+				}
+			]
+		},
+		{
+			"name": "the pounce comes from a ceiling too (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "bool const onAFloorOrAWall = kind == kAlienWaysFloor || kind == kAlienWaysWall;",
+					"to": "bool const onAFloorOrAWall = kind >= 0;"
+				}
+			]
+		},
+		{
+			"name": "the pounce comes without touching anything (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "onAFloorOrAWall && touching && rested;",
+					"to": "onAFloorOrAWall && rested;"
+				}
+			]
+		},
+		{
+			"name": "the pounce has no cool-down (THE POUNCE)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "msSinceLastPounce >= kAlienWaysPounceCoolDown;",
+					"to": "msSinceLastPounce >= 0;"
+				}
+			]
 		}
 	]
 }

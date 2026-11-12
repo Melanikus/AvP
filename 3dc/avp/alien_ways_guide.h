@@ -143,6 +143,23 @@ int const kAlienWaysReplansWithin = 60000;        // ms: a minute
 // original game should only take over (walk directly/pounce) when we're in clear view/end of the path". 8 m is both where 1999's pounce can start (ALIEN_POUNCE_STARTMAXRANGE) and where 1999's alien starts curving at its target
 // (ALIEN_CURVETOPLAYERDIST). The guide takes it back only beyond kAlienWaysTakeBackRange, so an alien near the line doesn't flip between
 // the two every frame.
+// THE POUNCE (the owner's R-LAVA-11, 2026-11-11, #109): "if I wanted to kill me, I would've pounced in range instead of following the
+// beautiful path", "Pounce from the wall when in range", "Maybe 4~5 meters", and "We still want it following paths". So a standard
+// alien with the alien ways on pounces at its target the moment it's between kAlienWaysPounceNearest (1999's own ALIEN_POUNCE_MINRANGE:
+// nearer, its attack has it) and kAlienWaysPounceRange, in 1999's own line of sight, from the floor or a wall, before its way and before
+// 1999's own pounce. Further off, it follows its way. It's 1999's pounce (bh_near.cpp) without its 25% election and without its rule
+// that a pounce starts from a flat floor, and a new one waits kAlienWaysPounceCoolDown after the last began. In his own play (genshd1,
+// 2026-11-11), 9 of the 13 aliens handed over to 1999's code were on a wall or a ceiling, where 1999's pounce never starts.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port.
+int const kAlienWaysPounceNearest = 3000;         // mm, ALIEN_POUNCE_MINRANGE (bh_alien.h)
+int const kAlienWaysPounceRange = 4500;           // mm
+int const kAlienWaysPounceCoolDown = 2000;        // ms
+
+// Whether an alien pounces now, by THE POUNCE's rules: its distance from its target, in mm; its body's down, for what it's on (a floor
+// or a wall, not a ceiling); whether it's touching what it's on, or sliding; and the ms since its last such pounce began, or -1 for
+// none. The game asks 1999's other rules after: its line of sight, its legs, its wounds and the rest (bh_near.cpp).
+bool AlienWays_PouncesNow(int distanceMm, AlienWaysXYZ down, bool touching, long long msSinceLastPounce);
+
 int const kAlienWaysHandOverRange = 8000;         // mm
 int const kAlienWaysTakeBackRange = 10000;        // mm
 

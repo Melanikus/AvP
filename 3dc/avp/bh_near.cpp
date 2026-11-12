@@ -76,6 +76,9 @@ extern void Execute_Alien_Dying(STRATEGYBLOCK *sbPtr);
 int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr);
 int AlienIsAbleToStand(STRATEGYBLOCK *sbPtr);
 static int StartAlienPounce(STRATEGYBLOCK *sbPtr);
+static int StartAlienWaysPounce(STRATEGYBLOCK *sbPtr, int distanceToTarget);   // THE POUNCE (alien_ways.h; added 2026-11-11, Third)
+static void BeginAlienPounce(STRATEGYBLOCK *sbPtr, ATTACK_DATA *thisAttack);
+static ATTACK_DATA *AlienPounceAttackIfAble(STRATEGYBLOCK *sbPtr);
 static int AlienHasPathToTarget(STRATEGYBLOCK *sbPtr);
 
 extern ATTACK_DATA Alien_Special_Gripping_Attack;
@@ -871,6 +874,14 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);
+
+	// THE POUNCE (alien_ways.h; the owner's R-LAVA-11, 2026-11-11: "if I wanted to kill me, I would've pounced in range instead of
+	// following the beautiful path"). A standard alien with the alien ways on pounces at its target the moment it's close, in a clear line
+	// of sight, from the floor or a wall: before its way, and before 1999's own pounce below. Added 2026-11-11 by Melanikus (Third) for
+	// the AvP port, #109.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {
+		return;
+	}
 
  	/* target acquisition ? */
 	{
@@ -2424,13 +2435,7 @@ static int AlienHasPathToTarget(STRATEGYBLOCK *sbPtr) {
 
 ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 
-	ALIEN_STATUS_BLOCK *alienStatusPointer;
-	ATTACK_DATA *thisAttack;
-	VECTORCH targetPoint;
-
 	LOCALASSERT(sbPtr);
-	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-	LOCALASSERT(alienStatusPointer);
 
 	/* First rule.  Must be on a flat floor. */
 	if(sbPtr->DynPtr->OrientMat.mat22<63000) {
@@ -2439,6 +2444,24 @@ ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 	if(sbPtr->DynPtr->IsInContactWithFloor==0) {
 		return(NULL);
 	}
+
+	// The rest of 1999's rules, which THE POUNCE asks too (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109: they were here)
+	return AlienPounceAttackIfAble(sbPtr);
+}
+
+// 1999's rules for a pounce after its flat floor: not in an air duct, its legs, not badly hurt, the target near and in a clear line of
+// sight, and a pounce sequence to play. Gives back the attack, or NULL. AlienIsAbleToPounce asks them after the flat floor; THE POUNCE
+// (alien_ways.h) asks them from a wall too. (Split out of AlienIsAbleToPounce 2026-11-11 by Melanikus (Third) for the AvP port, #109.)
+static ATTACK_DATA *AlienPounceAttackIfAble(STRATEGYBLOCK *sbPtr) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer;
+	ATTACK_DATA *thisAttack;
+	VECTORCH targetPoint;
+
+	LOCALASSERT(sbPtr);
+	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	LOCALASSERT(alienStatusPointer);
+
 	/* And not in an airduct. */
 	if(sbPtr->containingModule->m_flags & MODULEFLAG_AIRDUCT) {
 		return(NULL);
@@ -2500,12 +2523,9 @@ ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 
 static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 
-	ALIEN_STATUS_BLOCK *alienStatusPointer;
 	ATTACK_DATA *thisAttack;
 
 	LOCALASSERT(sbPtr);
-	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-	LOCALASSERT(alienStatusPointer);
 
 	/* Check validity, and do it. */
 
@@ -2515,6 +2535,35 @@ static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 		/* Can't do it. */
 		return(0);
 	}
+
+	BeginAlienPounce(sbPtr, thisAttack);
+	return(1);
+}
+
+// THE POUNCE's start (alien_ways.h): 1999's pounce, without its 25% election and without its flat-floor rule, as the owner asked for one
+// from a wall too. 1999's other rules hold (AlienPounceAttackIfAble). Its slide ends first and the guide lets it go (AlienWays_PounceStarts),
+// then it's 1999's own pounce state: gravity back, the body righting itself, turning to face its target, and one leap. Added 2026-11-11
+// by Melanikus (Third) for the AvP port, #109.
+static int StartAlienWaysPounce(STRATEGYBLOCK *sbPtr, int distanceToTarget) {
+
+	ATTACK_DATA *const thisAttack = AlienPounceAttackIfAble(sbPtr);
+
+	if (thisAttack == NULL) {
+		return 0;
+	}
+
+	AlienWays_PounceStarts(sbPtr, distanceToTarget);
+	BeginAlienPounce(sbPtr, thisAttack);
+	return 1;
+}
+
+// 1999's pounce, begun with the attack it plays (split out of StartAlienPounce 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+static void BeginAlienPounce(STRATEGYBLOCK *sbPtr, ATTACK_DATA *thisAttack) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer;
+
+	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	LOCALASSERT(alienStatusPointer);
 
 	SetAlienShapeAnimSequence_Core(sbPtr, static_cast<enum HModelSequenceTypes>(thisAttack->Sequence_Type), thisAttack->Sub_Sequence,
 		thisAttack->Sequence_Length, thisAttack->TweeningTime);
@@ -2526,8 +2575,6 @@ static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 
 	alienStatusPointer->BehaviourState = ABS_Pounce;
 	alienStatusPointer->NearStateTimer=0;
-
-	return(1);
 }
 
 static void CheckPounceIntegrity(STRATEGYBLOCK *sbPtr) {
@@ -2549,8 +2596,11 @@ static void CheckPounceIntegrity(STRATEGYBLOCK *sbPtr) {
 		return;
 	}
 
+	// THE POUNCE (alien_ways.h): from a wall its target is often below it, so an alien ways pounce isn't dropped for that (added 2026-11-11
+	// by Melanikus (Third) for the AvP port, #109)
 	if ((alienStatusPointer->Target->SBdptr==NULL)
-		||((alienStatusPointer->Target->DynPtr->Position.vy-sbPtr->DynPtr->Position.vy)>1000)) {
+		||(((alienStatusPointer->Target->DynPtr->Position.vy-sbPtr->DynPtr->Position.vy)>1000)
+			&&!AlienWays_PounceIsOurs(sbPtr))) {
 
 		/* Yuck.  Target is far, or too far below you. */
 		NPC_InitMovementData(&(alienStatusPointer->moveData));

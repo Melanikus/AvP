@@ -129,6 +129,19 @@ void AlienWays_Slide(struct strategyblock *alien);
 // alien_ways_guide.h). False with the switch off. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109).
 bool AlienWays_KeepsClinging(struct strategyblock *alien);
 
+// THE POUNCE (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109). Whether this alien pounces at its target
+// now, distanceToTarget mm away: the alien ways on, and AlienWays_PouncesNow's rules. bh_near.cpp asks it first in Approach, for a
+// standard alien, and asks 1999's other rules for a pounce after it.
+bool AlienWays_PounceNow(struct strategyblock *alien, int distanceToTarget);
+
+// The pounce has begun: a slide ends (the level's walls and its gravity back), the guide lets the alien go, so nothing steers it in the
+// air, its cool-down starts, and the log says so
+void AlienWays_PounceStarts(struct strategyblock *alien, int distanceToTarget);
+
+// Whether this alien's pounce is the alien ways' own, begun within kAlienWaysPounceCoolDown: then its target may be below it
+// (CheckPounceIntegrity, bh_near.cpp), as from a wall it often is
+bool AlienWays_PounceIsOurs(struct strategyblock *alien);
+
 // The guide's place for this alien: the N of the log's "alien N" lines, so another line can name the same alien. -1 when it has none, and
 // with the switch off. A place is given again once its alien is let go, so it names an alien only together with when. Added 2026-11-11 by
 // Melanikus (Third) for the AvP port, for Hudson's per-alien lines (#109).
