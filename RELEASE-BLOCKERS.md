@@ -14,4 +14,4 @@ RELEASING.md says how a release is made.
 
 ## What's in the way
 
-- **The save loader's proof (SAVE-HOSTILE-1).** Its checks are in, but the test runs that prove them on broken saves haven't been done yet, and a new save doesn't yet say which level it belongs to.
+Nothing.
