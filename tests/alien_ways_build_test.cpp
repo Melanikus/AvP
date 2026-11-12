@@ -304,6 +304,33 @@ static void SourceOfTheGame()
 	Check(Has(level, "up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);"), "SOURCE: and every stored facing is turned in 64 bits");
 	Check(Has(level, "extern SCENE Global_Scene;"), "SOURCE: the listing says which scene is loaded the way the game's own files do (the Game build needs it)");
 
+	// HOSTILE MAPS D (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md): the listing's own
+	// cap, kAlienWaysMostListed. It can't be run here, as it reads the game's own shapes, so it's read. Each of the three loops that add to
+	// the list (a shape's polygons, the level's modules, its still objects) stops once the list is past the cap, and the count is checked
+	// after every polygon added, one at a time. So the list never holds more than one polygon past the cap. A listing past it is let go of,
+	// all of it, and refused with its reason, which the game's log gives ("alien ways: no map: ..."); one the memory runs out for is too.
+	std::string const levelHeader = ReadSourceFile("3dc/avp/alien_ways_level.h");
+	Check(Has(levelHeader, "size_t const kAlienWaysMostListed = 400000;"), "SOURCE: the listing's cap is 400,000 polygons");
+	Check(Has(level, "for (int number = 0; number < shape->numitems && !listing->tooMany; number++)")
+		&& Has(level, "for (int i = 0; i < ModuleArraySize && !listing->tooMany; i++)")
+		&& Has(level, "for (int i = 0; i < NumActiveStBlocks && !listing->tooMany; i++)"),
+		"SOURCE: every loop that adds to the listing stops once it's past its cap");
+	std::string const shapeLoop = Between(level, "for (int number = 0; number < shape->numitems && !listing->tooMany; number++)", "static void AddModules(Listing *listing)");
+	Check(CountOf(level, "AlienWays_AddPolygon(") == 1 && Has(shapeLoop, "AlienWays_AddPolygon(") && !Has(level, "polygons->push_back(")
+		&& !Has(level, "polygons->insert(") && !Has(level, "polygons->resize(") && !Has(level, "polygons->emplace"),
+		"SOURCE: polygons are added to the list in one place only, one at a time, inside a shape's loop");
+	Check(Has(shapeLoop, "\t\tif (listing->polygons->size() > kAlienWaysMostListed)\n\t\t{\n\t\t\tlisting->tooMany = true;\n\t\t}"),
+		"SOURCE: and after each one, the count is checked against the cap");
+	std::string const listing = Between(level, "const char *AlienWaysLevel_List(", "\n}\n");
+	Check(Has(listing, "\tif (listing.tooMany)\n\t{\n\t\tstd::vector<AlienWaysPolygon>().swap(*polygons);\n\t\tstd::vector<AlienWaysRange>().swap(*modules);\n"
+		"\t\tstd::vector<AlienWaysLevelDoor>().swap(*doors);\n\t\treturn kWhyTooMany;\n\t}"),
+		"SOURCE: a listing past its cap is let go of, all of it, and refused with its reason");
+	Check(Has(listing, "\tcatch (const std::bad_alloc &)\n\t{\n\t\tstd::vector<AlienWaysPolygon>().swap(*polygons);") && Has(listing, "\t\treturn kWhyNoMemory;\n"),
+		"SOURCE: and one the memory runs out for is let go of and refused too, never a crash");
+	Check(Has(ways, "\tconst char *const why = AlienWaysLevel_List(&polygons, &theModules, &theDoors, &counts);")
+		&& Has(ways, "\tif (why)\n\t{\n\t\tLogErrorString(std::string(\"alien ways: no map: \") + why);\n\t\treturn;\n\t}"),
+		"SOURCE: the game's log gives the listing's reason, and the level goes without the alien ways");
+
 	char const *const files[] = { "alien_ways.cpp", "alien_ways_build.cpp", "alien_ways_guide.cpp", "alien_ways_level.cpp", "alien_ways_map.cpp" };
 
 	for (char const *const name : files)

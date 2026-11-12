@@ -264,6 +264,16 @@
 					"to": "+ \"some joins onto hidden faces"
 				}
 			]
+		},
+		{
+			"name": "the listing's count is never checked against its cap (hostile maps D)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "if (listing->polygons->size() > kAlienWaysMostListed)",
+					"to": "if (false && listing->polygons->size() > kAlienWaysMostListed)"
+				}
+			]
 		}
 	]
 }
