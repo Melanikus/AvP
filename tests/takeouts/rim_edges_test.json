@@ -69,7 +69,7 @@
 			"changes": [
 				{
 					"file": "3dc/TextureManager.cpp",
-					"from": "\tif (decoded && usage == TextureUsage_Normal)\n\t{\n\t\tRimEdges_ColourTheHoles(dest, width, height, pitch);\n\t}\n",
+					"from": "\tif (decoded && usage == TextureUsage_Normal)\n\t{\n\t\tRimEdges_ColourTheHoles(dest, width, height, pitch, edgeCell);\n\t}\n",
 					"to": "\tif (decoded && usage == TextureUsage_Normal)\n\t{\n\t}\n"
 				}
 			]
@@ -81,6 +81,76 @@
 					"file": "3dc/TextureManager.cpp",
 					"from": "\tif (decoded && usage == TextureUsage_Normal)\n",
 					"to": "\tif (usage == TextureUsage_Normal)\n"
+				}
+			]
+		},
+		{
+			"name": "a sheet is coloured as one picture, so the glow's bottom row takes the white under it again",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "\t\t\t\t\tif (cell != 0)\n",
+					"to": "\t\t\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a hole on a sheet takes colour from the next small picture",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "if ((uint32_t)sx / cell != x / cell || (uint32_t)sy / cell != y / cell)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a short last square reaches round the sheet's edge",
+			"changes": [
+				{
+					"file": "3dc/rim_edges.h",
+					"from": "if (sx < 0 || sy < 0 || sx >= (int64_t)width || sy >= (int64_t)height)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the size of a sheet's squares never reaches the colouring",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\t\tRimEdges_ColourTheHoles(dest, width, height, pitch, edgeCell);\n",
+					"to": "\t\tRimEdges_ColourTheHoles(dest, width, height, pitch);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the effects sheet's first load is as one picture",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "\t\t/* load in sfx */\n\t\tSpecialFXImageNumber = Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\", kEffectsSheetCell);\n",
+					"to": "\t\t/* load in sfx */\n\t\tSpecialFXImageNumber = Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the effects sheet's second load is as one picture",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "\tHUDFontsImageNumber  = Tex_CreateFromRIM(\"graphics/Common/HUDfonts.RIM\");\n\tSpecialFXImageNumber = Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\", kEffectsSheetCell);\n",
+					"to": "\tHUDFontsImageNumber  = Tex_CreateFromRIM(\"graphics/Common/HUDfonts.RIM\");\n\tSpecialFXImageNumber = Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the effects sheet's squares are 64, so the 32-texel pictures inside one take each other's colours",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "static uint32_t const kEffectsSheetCell = 32;",
+					"to": "static uint32_t const kEffectsSheetCell = 64;"
 				}
 			]
 		}
