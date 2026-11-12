@@ -255,6 +255,27 @@ static size_t Crossings(NpcGrid const &grid, std::vector<uint32_t> const &way, N
 	return count;
 }
 
+// How long a way is, in millimetres: from each cell's middle to the next one's, start to goal. -1 if a cell of it has no middle. So a test
+// can show that a price chose a way, and not its length. Added 2026-11-12 by Melanikus for the AvP port (#109, corners repel).
+static double WayLength(NpcGrid const &grid, std::vector<uint32_t> const &way)
+{
+	double length = 0.0;
+
+	for (size_t k = 1; k < way.size(); k++)
+	{
+		double a[3], b[3];
+
+		if (!grid.Middle(way[k - 1], a) || !grid.Middle(way[k], b))
+		{
+			return -1.0;
+		}
+
+		length += sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
+	}
+
+	return length;
+}
+
 static void Cells()
 {
 	printf("The cells of the room with the pillar\n");
@@ -1530,6 +1551,7 @@ static void Joins()
 		uint32_t const up = built ? only.NearestCell(1650, -1650, 1450, kNpcGridAlien, 10) : kNpcGridNoCell;
 		Check(built && only.Search(start, up, kNpcGridAlien, 1, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(only, way) &&
 			Crossings(only, way, kNpcGridJoinThrough) == 1, "with no other way onto the wall's face, an alien still goes up it by the THROUGH join");
+		double const throughLength = WayLength(only, way);   // about 300 + 180 + 1500: to the floor's last cell, across the join, up the face
 
 		// With the floor in front of it too, that floor's own join is linked from its own cells, so it's INSIDE (F1), and an alien in front
 		// goes up the face from there, not by the THROUGH join behind it
@@ -1567,6 +1589,21 @@ static void Joins()
 		Check(builtBoth && both.Search(inFront, goal, kNpcGridAlien, 1, 100000, &way, &looks) == kNpcGridFound && WayIsMoves(both, way) &&
 			Crossings(both, way, kNpcGridJoinThrough) == 0 && Crossings(both, way, kNpcGridJoinInside) == 1,
 			"an alien in front goes up the face from the floor in front of it, not by the THROUGH join behind");
+
+		// An alien BEHIND the wall, from the same place as in the world above, going to the same place on the face. The two floors lie in
+		// one plane and are joined, so they're one sheet, and a way can go along it from behind the wall to the floor in front, as on a
+		// floor that runs on under a crate. Up the face by the INSIDE join there is about 600 + 250 + 1500 = 2350, longer than by the THROUGH
+		// join behind it, about 1980. But the THROUGH join costs kNpcGridThroughPrice more, 10 m, so the way goes by the INSIDE join, where
+		// the game's climbing turns an alien onto the face. Without that price, the shorter way by the THROUGH join is the one found. Added
+		// 2026-11-12 by Melanikus for the AvP port (#109): before this, nothing here failed if the price was taken away (Take-outs row 53).
+		uint32_t const behindTheWall = builtBoth ? both.NearestCell(1650, 0, 1050, kNpcGridAlien, 10) : kNpcGridNoCell;
+		Check(builtBoth && behindTheWall != kNpcGridNoCell && both.Search(behindTheWall, goal, kNpcGridAlien, 1, 100000, &way, &looks) == kNpcGridFound &&
+			WayIsMoves(both, way) && Crossings(both, way, kNpcGridJoinThrough) == 0 && Crossings(both, way, kNpcGridJoinInside) == 1,
+			"an alien behind the wall goes up its face by the INSIDE join in front, not by the THROUGH join behind, which costs 10 m more");
+		double const insideLength = WayLength(both, way);
+		Check(throughLength > 0.0 && insideLength > throughLength, "though that way is the longer one (" +
+			Number(static_cast<size_t>(insideLength + 0.5)) + " mm, against " + Number(static_cast<size_t>(throughLength + 0.5)) +
+			" by the THROUGH join): the price chose it, not the length");
 	}
 
 	// A stair's treads face the same way, so the step links between them aren't sorted: an alien on the stairs goes by them as before
