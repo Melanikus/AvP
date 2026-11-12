@@ -658,6 +658,13 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 		details = ". After a re-plan" + details;
 	}
 
+	// And one near the target itself, whose floor cost what a wall does (THE NEAR FLOOR, alien_ways_guide.h; added 2026-11-11 by Melanikus
+	// (Third) for the AvP port, #109)
+	if (line.outcome != kAlienWaysOutcomeStuck && line.nearFloor)
+	{
+		details = ". Near its target, the floor cost what a wall does" + details;
+	}
+
 	// The polygons its way is on, for measuring how several aliens' ways stack (lanes, #138)
 	std::string polygons;
 

@@ -1040,8 +1040,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,\n",
-					"to": "kAlienWaysFloorPrice, nullptr, next,\n"
+					"from": "floorPrice, claimsOn ? &claims : nullptr, next,\n",
+					"to": "floorPrice, nullptr, next,\n"
 				}
 			]
 		},
@@ -2335,8 +2335,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "kAlienWaysFloorPrice, kAlienWaysGridMostLooks,",
-					"to": "kAlienWaysFloorPrice, 1000000,"
+					"from": "floorPrice, kAlienWaysGridMostLooks,",
+					"to": "floorPrice, 1000000,"
 				}
 			]
 		},
@@ -2367,6 +2367,66 @@
 					"file": "3dc/avp/alien_ways.cpp",
 					"from": "\tVECTORCH const &middle = AIModuleArray[strongestModule].m_world;\n",
 					"to": "\tVECTORCH const middle = { 0, 0, 0 };\n"
+				}
+			]
+		},
+		{
+			"name": "the floor near the target costs as much as anywhere (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return goalIsTheTarget && Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;",
+					"to": "return kAlienWaysFloorPrice;"
+				}
+			]
+		},
+		{
+			"name": "the near floor is for any goal, not only the target (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return goalIsTheTarget && Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;",
+					"to": "return Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;"
+				}
+			]
+		},
+		{
+			"name": "the near floor is at any distance from the target (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return goalIsTheTarget && Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;",
+					"to": "return goalIsTheTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;"
+				}
+			]
+		},
+		{
+			"name": "the grid's search keeps the old floor price near the target (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "kNpcGridAlien, floorPrice, kAlienWaysGridMostLooks,",
+					"to": "kNpcGridAlien, kAlienWaysFloorPrice, kAlienWaysGridMostLooks,"
+				}
+			]
+		},
+		{
+			"name": "the map's search keeps the old floor price near the target (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.last.goal, floorPrice, claimsOn ? &claims : nullptr, next,",
+					"to": "follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never says a search's floor was cheap (THE NEAR FLOOR)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (line.outcome != kAlienWaysOutcomeStuck && line.nearFloor)\n",
+					"to": "\tif (false && line.nearFloor)\n"
 				}
 			]
 		}

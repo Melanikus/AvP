@@ -208,6 +208,7 @@ void AlienWaysGuide::Clear()
 	searchAskedAt = searchMicroseconds = 0;
 	searchFrames = 0;
 	searchFlanker = false;
+	searchNearFloor = false;
 	grid = nullptr;
 	searchOnGrid = false;
 	searchTooFar = false;
@@ -1017,15 +1018,19 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		// polygons shut for it whichever search finds it.
 		const std::vector<uint8_t> *const shut = ShutForTheSearch(*map, follower, from, to);
 
+		// THE NEAR FLOOR (alien_ways_guide.h): near the target itself the floor costs what a wall does, in either search
+		int const floorPrice = AlienWays_FloorPriceFor(follower.last.at, follower.last.goal, follower.last.goalIsTheTarget);
+		line.nearFloor = floorPrice != kAlienWaysFloorPrice;
+
 		if (onGrid)
 		{
-			why = grid->StartSearch(follower.last.at, follower.last.goal, kNpcGridAlien, kAlienWaysFloorPrice, kAlienWaysGridMostLooks,
+			why = grid->StartSearch(follower.last.at, follower.last.goal, kNpcGridAlien, floorPrice, kAlienWaysGridMostLooks,
 				claimsOn ? &claims : nullptr, next, shut,
 				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
 		}
 		else
 		{
-			why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
+			why = map->StartSearch(from, follower.last.at, to, follower.last.goal, floorPrice, claimsOn ? &claims : nullptr, next,
 				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor,
 				shut);
 		}
@@ -1061,9 +1066,16 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		searchMicroseconds = 0;
 		searchFrames = 0;
 		searchFlanker = flanker;
+		searchNearFloor = line.nearFloor;
 		searchOnGrid = onGrid;
 		searchTooFar = false;
 	}
+}
+
+// THE NEAR FLOOR (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+int AlienWays_FloorPriceFor(AlienWaysXYZ at, AlienWaysXYZ goal, bool goalIsTheTarget)
+{
+	return goalIsTheTarget && Distance(at, goal) <= kAlienWaysNearTarget ? kAlienWaysNearFloorPrice : kAlienWaysFloorPrice;
 }
 
 void AlienWaysGuide::UseGrid(NpcGrid *to)
@@ -1155,6 +1167,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	line.microseconds = searchMicroseconds;
 	line.looks = searchOnGrid ? static_cast<int>(grid->LastSearchLooks()) : map->LastSearchLooks();
 	line.flanker = searchFlanker;
+	line.nearFloor = searchNearFloor;
 	line.cost = searchOnGrid ? -1.0 : map->LastSearchCost();
 	line.arrivalDegrees = -1;
 	line.onGrid = searchOnGrid;

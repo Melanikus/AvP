@@ -2076,6 +2076,130 @@ static void TooFarOnTheGrid()
 	Check(guide.Steer(&map, ask, &towards) && guide.Guided(Alien(1)) && towards.x > from.x, "so the alien is guided, along the floor towards its goal");
 }
 
+// THE NEAR FLOOR (alien_ways_guide.h; the owner's pick, 2026-11-11, #109: "Cheap floor near you"). Added 2026-11-11 by Melanikus (Third)
+// for the AvP port. Near the target itself the floor costs what a wall does, so a chase across a floor takes the floor, and a ledge the
+// floor doesn't reach is still climbed.
+
+// The corridor of the other tests, tiles metres long along z, with its two walls and its ceiling
+static std::vector<AlienWaysPolygon> CorridorOf(int tiles)
+{
+	std::vector<AlienWaysPolygon> world;
+
+	for (int k = 0; k < tiles; k++)
+	{
+		world.push_back(Polygon({ { 0, 0, k * 1000 }, { 2000, 0, k * 1000 }, { 2000, 0, (k + 1) * 1000 }, { 0, 0, (k + 1) * 1000 } }, kUp));
+	}
+
+	int const end = tiles * 1000;
+	world.push_back(Polygon({ { 0, 0, 0 }, { 0, -3000, 0 }, { 0, -3000, end }, { 0, 0, end } }, kUpright));
+	world.push_back(Polygon({ { 2000, 0, 0 }, { 2000, -3000, 0 }, { 2000, -3000, end }, { 2000, 0, end } }, kUpright));
+	world.push_back(Polygon({ { 0, -3000, 0 }, { 2000, -3000, 0 }, { 2000, -3000, end }, { 0, -3000, end } }, kDown));
+	return world;
+}
+
+// One alien's ask for a way to its target, frame by frame until the search ends, with the line it ended with. False if none ended.
+static bool WayToItsTarget(AlienWaysGuide &guide, AlienWaysMap &map, AlienWaysXYZ at, AlienWaysXYZ target, size_t polygons, bool isTheTarget,
+	AlienWaysReport *line)
+{
+	AlienWaysAsk ask = Ask(Alien(1), at, target, polygons);
+	ask.goalIsTheTarget = isTheTarget;
+	ask.hasTarget = true;
+	ask.target = Alien(9);
+	AlienWaysXYZ towards;
+
+	for (int frame = 0; frame < 100; frame++)
+	{
+		guide.Steer(&map, ask, &towards);
+		Frame(guide, map, 16);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			if (reports[r].outcome == kAlienWaysOutcomeFound || reports[r].outcome == kAlienWaysOutcomeAllFloor || reports[r].outcome == kAlienWaysOutcomeNoWay)
+			{
+				*line = reports[r];
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static void TheNearFloor()
+{
+	printf("Near its target, the floor costs what a wall does\n");
+
+	// The rule itself, at its edges
+	AlienWaysXYZ const here = { 0, 0, 0 };
+	Check(AlienWays_FloorPriceFor(here, AlienWaysXYZ{ 0, 0, kAlienWaysNearTarget }, true) == kAlienWaysNearFloorPrice
+		&& AlienWays_FloorPriceFor(here, AlienWaysXYZ{ 0, 0, kAlienWaysNearTarget + 1 }, true) == kAlienWaysFloorPrice,
+		"to the target itself, the floor is cheap out to 12 m, and only that far");
+	Check(AlienWays_FloorPriceFor(here, AlienWaysXYZ{ 0, 0, 5000 }, false) == kAlienWaysFloorPrice, "to a point that isn't the target, it costs as ever");
+	Check(kAlienWaysNearFloorPrice == 1 && kAlienWaysNearTarget == 12000, "cheap means a wall's own price, near means 12 m");
+
+	// A chase of 9 m along the corridor, to the target itself: the way takes the floor, with no wall and no ceiling, and it's followed
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysReport line = {};
+	{
+		const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+		bool const ended = WayToItsTarget(*guideRoom, map, kStart, kGoal, 13, true, &line);
+		AlienWaysXYZ towards;
+		AlienWaysAsk again = Ask(Alien(1), kStart, kGoal, 13);
+		again.goalIsTheTarget = true;
+		again.hasTarget = true;
+		again.target = Alien(9);
+		Check(ended && line.outcome == kAlienWaysOutcomeFound && line.nearFloor && line.wallMm == 0.0 && line.ceilingMm == 0.0 && Near(line.floorMm, 9000.0, 1.0)
+			&& guideRoom->Steer(&map, again, &towards),
+			"a chase of 9 m across the floor to its target takes the floor: " + std::to_string(line.floorMm) + " mm of floor, " + std::to_string(line.wallMm)
+			+ " of wall, and the alien follows it");
+	}
+
+	// The same chase to a point on the way to the target, not the target itself: the floor costs 10 times, and it climbs, as before
+	{
+		const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+		bool const ended = WayToItsTarget(*guideRoom, map, kStart, kGoal, 13, false, &line);
+		Check(ended && !line.nearFloor && line.wallMm > 0.0, "the same 9 m to a point that isn't the target still climbs (" + std::to_string(line.wallMm) + " mm of wall)");
+	}
+
+	// A chase of 14 m to the target itself, past the 12 m: it climbs, as before
+	{
+		std::vector<AlienWaysPolygon> const longer = CorridorOf(15);
+		AlienWaysMap longMap;
+		const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+		bool const ended = longMap.Build(longer) == nullptr
+			&& WayToItsTarget(*guideRoom, longMap, kStart, AlienWaysXYZ{ 1000, 0, 14500 }, longer.size(), true, &line);
+		Check(ended && !line.nearFloor && line.wallMm > 0.0, "a chase of 14 m to its target, past the 12 m, still climbs (" + std::to_string(line.wallMm) + " mm of wall)");
+	}
+
+	// A ledge the floor doesn't reach: the alien on the floor below, its target 2 m up on the floor above, 4.5 m away. Even near, with the
+	// floor cheap, the way climbs the ledge's face, as there's no other way up.
+	{
+		std::vector<AlienWaysPolygon> ledge;
+		ledge.push_back(Polygon({ { 0, 0, 0 }, { 2000, 0, 0 }, { 2000, 0, 4000 }, { 0, 0, 4000 } }, kUp));
+		ledge.push_back(Polygon({ { 0, 0, 4000 }, { 2000, 0, 4000 }, { 2000, -2000, 4000 }, { 0, -2000, 4000 } }, kUpright));
+		ledge.push_back(Polygon({ { 0, -2000, 4000 }, { 2000, -2000, 4000 }, { 2000, -2000, 8000 }, { 0, -2000, 8000 } }, kUp));
+		AlienWaysMap ledgeMap;
+		const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+		bool const ended = ledgeMap.Build(ledge) == nullptr
+			&& WayToItsTarget(*guideRoom, ledgeMap, AlienWaysXYZ{ 1000, 0, 2000 }, AlienWaysXYZ{ 1000, -2000, 6000 }, ledge.size(), true, &line);
+		Check(ended && line.outcome == kAlienWaysOutcomeFound && line.nearFloor && line.wallMm >= 1900.0,
+			"a ledge 2 m up, its target 4.5 m away: with the floor cheap it still climbs the ledge's face (" + std::to_string(line.wallMm) + " mm of wall)");
+	}
+
+	// The same 9 m chase on the grid, as the owner plays it: the floor
+	{
+		std::vector<AlienWaysPolygon> const corridor = Corridor(true);
+		NpcGrid grid;
+		const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+		guideRoom->UseGrid(&grid);
+		bool const ended = grid.Build(corridor, map) == nullptr && WayToItsTarget(*guideRoom, map, kStart, kGoal, 13, true, &line);
+		Check(ended && line.onGrid && line.outcome == kAlienWaysOutcomeFound && line.nearFloor && line.wallMm == 0.0 && line.ceilingMm == 0.0,
+			"on the grid, the 9 m chase to its target takes the floor too (" + std::to_string(line.floorMm) + " mm of floor, " + std::to_string(line.wallMm) + " of wall)");
+	}
+}
+
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
 
 // One source file, with Windows line ends made plain
@@ -2390,6 +2514,10 @@ static void SourceOfTheGame()
 	Check(Has(scent, "\tVECTORCH const &middle = AIModuleArray[strongestModule].m_world;\n")
 		&& Has(scent, "if (!AlienWays_PlaceCorner(AlienWaysXYZ{ place.vx, place.vy, place.vz }, nullptr, AlienWaysXYZ{ middle.vx, middle.vy, middle.vz }, &placed))"),
 		"SOURCE: and it puts the place back into the world from the AI module's middle, in 64 bits, refusing one past 64 km");
+
+	// THE NEAR FLOOR's words in the log (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	Check(Has(ways, "if (line.outcome != kAlienWaysOutcomeStuck && line.nearFloor)\n\t{\n\t\tdetails = \". Near its target, the floor cost what a wall does\" + details;"),
+		"SOURCE: a search near the target itself says in its line that its floor cost what a wall does");
 	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s is %.1f m from its target at %s, in clear sight"),
 		"SOURCE: the log says when an alien is handed over, and how far from its target");
 	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
@@ -2478,6 +2606,7 @@ int main()
 	StartsOnItsOwnKind();
 	DoorRule();
 	TooFarOnTheGrid();
+	TheNearFloor();
 	StepsMade();
 	SourceOfTheGame();
 

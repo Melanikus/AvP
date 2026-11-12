@@ -59,6 +59,18 @@ struct AlienWaysRange
 
 // The rules. Each is a first guess, to be tuned from the log's lines and from film.
 int const kAlienWaysFloorPrice = 10;              // the floor costs 10 times as much as a wall or a ceiling. Step 2c's knee.
+
+// THE NEAR FLOOR (the owner's pick, 2026-11-11, #109: "Cheap floor near you"). When the goal is the target itself and the alien is within
+// kAlienWaysNearTarget of it in a straight line, the floor costs kAlienWaysNearFloorPrice, the same as a wall or a ceiling, in both
+// searches. So the last metres go the short way, and a wall or a ceiling is still used wherever the floor doesn't reach. In his own play
+// (genshd1, 2026-11-11), 10 of the 22 ways asked for from within 12 m of him were twice the straight line or more, over walls and
+// ceilings, when he was right there. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+int const kAlienWaysNearTarget = 12000;           // mm
+int const kAlienWaysNearFloorPrice = 1;           // the walls' and ceilings' own price
+
+// The floor's price for a search from at to goal: kAlienWaysNearFloorPrice when the goal is the target itself and within
+// kAlienWaysNearTarget, kAlienWaysFloorPrice otherwise
+int AlienWays_FloorPriceFor(AlienWaysXYZ at, AlienWaysXYZ goal, bool goalIsTheTarget);
 size_t const kAlienWaysMostFollowers = 64;        // aliens with a way at once. One more is steered by the game's own code.
 int const kAlienWaysLooksPerFrame = 500;          // polygons all the searches may look at in one frame, between them
 
@@ -341,6 +353,9 @@ struct AlienWaysReport
 	// For a way found: it came while the alien slid, so it wasn't taken, and the alien asks again once it's there (THE SLIDE, ONCE IT
 	// GOES; added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
 	bool heldForSlide;
+	// For a search's outcome: its floor was priced as a wall, near the target itself (THE NEAR FLOOR; added 2026-11-11 by Melanikus
+	// (Third) for the AvP port, #109)
+	bool nearFloor;
 };
 
 class AlienWaysGuide
@@ -553,6 +568,7 @@ private:
 	long long searchAskedAt, searchMicroseconds;
 	int searchFrames;
 	bool searchFlanker;                 // the search running is a flanker's
+	bool searchNearFloor;               // and its floor is priced as a wall, near the target (THE NEAR FLOOR)
 
 	// The grid (UseGrid), whether the search running is on it, whether it gave up for looking at too many cells, the polygons the search
 	// keeps off, a byte for each map polygon (ShutForTheSearch: the doors shut when it started, and the polygons shut for its alien; it has to
