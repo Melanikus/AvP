@@ -1062,8 +1062,13 @@ static void Slides()
 	const char *why = 0;
 	bool const tooFar = !guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -(kAlienWaysMostPush + 10), 0 }, &why) && why != 0;
 	bool const tooWide = !guide.PushSlide(Alien(1), AlienWaysXYZ{ -kAwayFromWall * 150, 0, 0 }, &why) && why != 0;
-	Check(tooFar && tooWide && guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall),
-		"a push of more than kAlienWaysMostPush, or one that makes its gap 1 m or more, is refused, and the point is as it was");
+	// More than kAlienWaysMostPush back towards where it set off is refused as well, though its gap would then be only 0.39 m: so it's the
+	// push's own length that refuses it. Added 2026-11-12 by Melanikus (Third) for the AvP port (#109): the take-out row "a push of any
+	// length is kept" wasn't noticed, as the 0.51 m push up above makes its gap 1.03 m, which the gap's own limit refuses too.
+	bool const tooFarBack = !guide.PushSlide(Alien(1), AlienWaysXYZ{ kAwayFromWall * (kAlienWaysMostPush + 10), 0, 0 }, &why) && why != 0;
+	Check(tooFar && tooWide && tooFarBack && guide.Sliding(Alien(1), &to, &from, &next) && Same(AlienWaysXYZ{ to.x, to.y, to.z }, kOntoTheWall),
+		"a push of more than kAlienWaysMostPush, up or back towards where it set off, or one that makes its gap 1 m or more, is refused, "
+		"and the point is as it was");
 	Check(guide.PushSlide(Alien(1), AlienWaysXYZ{ 0, -200, 0 }, &why) && why == 0 && guide.Sliding(Alien(1), &to, &from, &next) &&
 		Same(AlienWaysXYZ{ to.x, to.y, to.z }, AlienWaysXYZ{ kOntoTheWall.x, kOntoTheWall.y - 200, kOntoTheWall.z }) && Same(from, near),
 		"a push of 0.2 m up is kept: it slides to the point 0.2 m higher, from where it was");
@@ -1110,6 +1115,54 @@ static void Slides()
 		bool const again = HeldTillItSlides(refused, map, Ask(Alien(1), near, kGoal, 13), 2000, &line, &stuck) >= 0;
 		Check(slid && !refused.Sliding(Alien(1), &to, &from, &next) && !again && stuck,
 			"refused, it slides no more, isn't made to slide again while it makes no headway, and is found stuck");
+	}
+
+	// Nor is any other slide tried while it makes no headway, as on a new way that isn't a re-plan's. Added 2026-11-12 by Melanikus (Third)
+	// for the AvP port (#109): the take-out row "a slide refused is tried again while the alien makes no headway" wasn't noticed, as the
+	// refused point alone keeps it from sliding to the same point again. Refused 0.95 m from the wall's foot, 0.3 m to one side of its
+	// stretch, its target then shows itself 1.3 m further along the floor. That goal has moved, so a new way comes, all on the floor, as the
+	// floor is cheap near its target: its next point, where the next floor tile starts, is 0.8 m off and nowhere near the refused one.
+	// Held where it was, its clock runs on, as it hasn't moved since: it isn't made to slide there, and the watchdog finds it stuck.
+	{
+		const std::unique_ptr<AlienWaysGuide> otherRoom(new AlienWaysGuide);
+		AlienWaysGuide &other = *otherRoom;
+		other.SetSlides(true);
+		GuidedAlien(other, Alien(1));
+		other.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+		AlienWaysXYZ const aside = Beside(900, 0, 200);
+		bool const slid = HeldTillItSlides(other, map, Ask(Alien(1), aside, kGoal, 13), 1700, &line, &stuck) >= 0;
+		other.SlideEnded(Alien(1), false);
+		AlienWaysAsk forTarget = Ask(Alien(1), aside, Beside(900, 0, 1500), 13);
+		forTarget.goalIsTheTarget = true;
+		forTarget.hasTarget = true;
+		forTarget.target = Alien(9);
+		AlienWaysReport way = {};
+		bool found = false, again = false, stuckThere = false;
+
+		for (int ms = 0; ms <= 1000 && !stuckThere; ms += 100)
+		{
+			other.Steer(&map, forTarget, &towards);
+			Frame(other, map, 100);
+			const AlienWaysReport *reports = nullptr;
+			size_t const count = ReportsOf(other, &reports);
+
+			for (size_t r = 0; r < count; r++)
+			{
+				if (!found && reports[r].outcome == kAlienWaysOutcomeFound)
+				{
+					found = true;
+					way = reports[r];
+				}
+
+				again = again || reports[r].outcome == kAlienWaysOutcomeSlide;
+				stuckThere = stuckThere || reports[r].outcome == kAlienWaysOutcomeStuck;
+			}
+		}
+
+		Check(slid && found && way.floorMm > 0.0 && way.wallMm <= 0.0 && !again && stuckThere,
+			"refused, then on a new way along the floor, it isn't made to slide to that way's point while it makes no headway, and is found "
+			"stuck (the way: " + std::to_string(way.points) + " points, " + std::to_string(static_cast<int>(way.floorMm)) + " mm of floor, " +
+			std::to_string(static_cast<int>(way.wallMm)) + " mm of wall)");
 	}
 
 	// A REFUSED POINT (THE SLIDE, ONCE IT GOES; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): refused, then 150 mm nearer,
@@ -1270,6 +1323,70 @@ static void HeldForTheSlide()
 	}
 
 	Check(takenNow, "and it asks for a way again at once, which is taken");
+}
+
+// THE SLIDE, ONCE IT GOES (alien_ways_guide.h), HELD FROM A NEW WAY: once it's there it asks again at once, even when nothing else would
+// have it ask, as when the goal it searched for has come back. Added 2026-11-12 by Melanikus (Third) for the AvP port (#109): the take-out
+// row "a way held for a slide isn't asked for again" wasn't noticed, as in HeldForTheSlide its goal is still 3.5 m off once it's there,
+// which has it ask again anyway.
+static void AskedAgainOnceThere()
+{
+	printf("The slide, held from a way that comes while it slides: asked for again once it's there, its goal back where it was\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	AlienWaysPoint to;
+	AlienWaysXYZ from, next;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	guide.SetSlides(true);
+	GuidedAlien(guide, Alien(1));
+	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+
+	// As in HeldForTheSlide: held 900 mm from the wall's foot, its goal moves 3.5 m at 400 ms, and the way that search finds comes while it
+	// slides. Then its goal is back where it was, and its way is under 2 s old, so neither would have it ask again.
+	AlienWaysXYZ const near = Beside(900, 0, 500), movedGoal = { kGoal.x, kGoal.y, kGoal.z - 3500 };
+	bool held = false;
+	int heldAt = -1;
+
+	for (int ms = 0; ms < 500 + kAlienWaysMostSlideMs && !held; ms += 100)
+	{
+		guide.Steer(&map, Ask(Alien(1), near, ms >= 400 ? movedGoal : kGoal, 13), &towards);
+		Frame(guide, map, 100, nullptr, ms >= 400 ? 2 : kAlienWaysLooksPerFrame);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			held = held || (reports[r].outcome == kAlienWaysOutcomeFound && reports[r].heldForSlide);
+		}
+
+		heldAt = held && heldAt < 0 ? ms : heldAt;
+	}
+
+	bool const stillSliding = guide.Sliding(Alien(1), &to, &from, &next);
+	guide.SlideEnded(Alien(1), true);
+	AlienWaysAsk there = Ask(Alien(1), Beside(450, 0, 500), kGoal, 13);
+	there.down = IntoTheWall();
+	bool takenNow = false;
+	int takenAt = -1;
+
+	for (int ms = 0; ms <= 300 && !takenNow; ms += 100)
+	{
+		guide.Steer(&map, there, &towards);
+		Frame(guide, map, 100);
+		const AlienWaysReport *reports = nullptr;
+		size_t const count = ReportsOf(guide, &reports);
+
+		for (size_t r = 0; r < count; r++)
+		{
+			takenNow = takenNow || (reports[r].outcome == kAlienWaysOutcomeFound && !reports[r].heldForSlide);
+		}
+
+		takenAt = takenNow && takenAt < 0 ? ms : takenAt;
+	}
+
+	Check(held && stillSliding && takenNow, "with its goal back where it was, once it's there it asks for a way again at once, which is taken (held at " +
+		std::to_string(heldAt) + " ms, taken " + std::to_string(takenAt) + " ms after it got there)");
 }
 
 // R-LAVA-9, the owner's ruling (2026-11-11): "choose a better path and it was awesome" mustn't be "hacked out" (THE SLIDE, ONCE IT GOES,
@@ -2408,8 +2525,12 @@ static void SourceOfTheGame()
 		"SOURCE: a slide that goes on into Hunt or Wander is over, and its walls and gravity are back, on any frame its way steers it");
 	// S1 and S6, the guide's half: the gap from where the box touches, and never across a THROUGH join on the grid
 	std::string const guideCode = ReadSourceFile("3dc/avp/alien_ways_guide.cpp");
+	// The THROUGH half is named whole, the line that has it looked at on the grid with it, as with that line made false it slid across any
+	// join. Modified 2026-11-12 by Melanikus (Third) for the AvP port (#109): the take-out row "SOURCE: a slide goes across a join onto a
+	// hidden face" wasn't noticed, as only its JoinOf line was named.
 	Check(Has(guideCode, "Distance(TouchPoint(ask.at, ask.down, KindUnder(ask.down)), follower.points[follower.heading]) < kAlienWaysMostSlide")
-		&& Has(guideCode, "grid->JoinOf(grid->NearestCell(ask.at.x, ask.at.y, ask.at.z, kNpcGridAlien, kNpcGridReach), follower.pointCells[follower.heading]) == kNpcGridJoinThrough"),
+		&& Has(guideCode, "\t\t\t!(grid && follower.pointCells[follower.heading] != kNpcGridNoCell &&\n"
+			"\t\t\t\tgrid->JoinOf(grid->NearestCell(ask.at.x, ask.at.y, ask.at.z, kNpcGridAlien, kNpcGridReach), follower.pointCells[follower.heading]) == kNpcGridJoinThrough))"),
 		"SOURCE: a slide's gap is from where its box touches, and it never slides across a join onto a hidden face");
 	// THE SLIDE, ONCE IT GOES (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the slide keeps its own
 	// point; Steer's slide comes before the hand-over; no slide starts while a re-plan waits; and a re-plan's way clears the refused point
@@ -2693,6 +2814,7 @@ int main()
 	Slides();
 	PushClear();
 	HeldForTheSlide();
+	AskedAgainOnceThere();
 	KeepTheBetterWay();
 	Clinging();
 	AskingAgain();
