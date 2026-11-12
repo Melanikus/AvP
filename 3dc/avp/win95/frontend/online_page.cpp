@@ -292,9 +292,16 @@ bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room)
 	AVPMENU_ELEMENT const newIdentity = {AVPMENU_ELEMENT_GOTOMENU, {TEXTSTRING_ACCESS_NEWID}, {AVPMENU_ONLINE_NEW_IDENTITY}, {0}, {0}, TEXTSTRING_ONLINE_NEWID_HELP};
 	AVPMENU_ELEMENT const back = {AVPMENU_ELEMENT_GOTOMENU, {TEXTSTRING_SERVERS_BACK}, {AVPMENU_MULTIPLAYER}, {0}, {0}, TEXTSTRING_BLANK};
 	AVPMENU_ELEMENT const end = {AVPMENU_ELEMENT_ENDOFMENU};
-	rows[row++] = name;
-	rows[row++] = copy;
-	rows[row++] = newIdentity;
+	// The name, the code and the identity are only for asking a server, so with no server (no good servers.cfg line, as in every build
+	// that plays no online games) the page has only Back. Added 2026-11-11 by Melanikus for the AvP port: online off in beta.2 (the
+	// owner's ruling R-GOAL-9), and his "Hide them".
+	if (lineCount > 0)
+	{
+		rows[row++] = name;
+		rows[row++] = copy;
+		rows[row++] = newIdentity;
+	}
+
 	rows[row++] = back;
 	rows[row] = end;
 
@@ -453,15 +460,16 @@ void OnlineLines_DrawTop(int chosen)
 {
 	char line[260];
 
-	// This PC's access code, once: the same for every server
-	if (haveIdentity && ourCode[0])
+	// This PC's access code, once: the same for every server, and only when there's a server to give it to (2026-11-11)
+	if (lineCount > 0 && haveIdentity && ourCode[0])
 	{
 		snprintf(line, sizeof(line), "%s: %s %s", GetTextString(TEXTSTRING_ACCESS_YOUR_CODE), ourCode, GetTextString(TEXTSTRING_ONLINE_CODE_SAME));
 		SmallLine(line, kOnlinePageCodeTop, ONE_FIXED);
 	}
 
-	// The page's answer to the last thing pressed
-	if (answer != TEXTSTRING_BLANK)
+	// The page's answer to the last thing pressed: with no server there's nothing to press but Back, so nothing to answer, not even the
+	// identity's own words (2026-11-11)
+	if (lineCount > 0 && answer != TEXTSTRING_BLANK)
 	{
 		SmallLine(GetTextString(answer), kOnlinePageStatusTop, ONE_FIXED);
 	}
@@ -475,21 +483,20 @@ void OnlineLines_DrawTop(int chosen)
 		SmallLine(line, kOnlinePageCountTop, ONE_FIXED / 2);
 	}
 
+	// A build that plays no online games: one line that says so, true whether or not a servers.cfg is there, as it isn't read at all.
+	// Online is off in beta.2 (the owner's ruling R-GOAL-9); PO's words, 2026-11-11. Added 2026-11-11 by Melanikus for the AvP port.
+	if (!RelayList_PlaysOnline())
+	{
+		SmallLine(GetTextString(TEXTSTRING_ONLINE_OFF), kOnlinePageRefusedTop, ONE_FIXED / 2);
+		return;
+	}
+
 	// Why no line is used at all, or each line that isn't, in the game's own words, never the line's own text
 	const char *const fileWords = RelayList_FileWords();
 	int y = kOnlinePageRefusedTop;
 
 	if (fileWords)
 	{
-		// No servers.cfg at all: no online play, said plainly, as a release with online play off ships none (the owner's ruling R-GOAL-9,
-		// 2026-11-11). A file that's there but wrong keeps the game's own words for what's wrong. Added 2026-11-11 by Melanikus for the AvP
-		// port.
-		if (RelayList_HasNoServersFile())
-		{
-			SmallLine(GetTextString(TEXTSTRING_SERVERS_NO_FILE), y, ONE_FIXED / 2);
-			return;
-		}
-
 		char whole[260];
 		snprintf(whole, sizeof(whole), "%s %s", GetTextString(TEXTSTRING_SERVERS_FILE_NOT_USED), fileWords);
 		SmallLine(whole, y, ONE_FIXED / 2);

@@ -1970,10 +1970,9 @@ const char *RelayList_FileWords(void)
 	return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);
 }
 
-bool RelayList_HasNoServersFile(void)
+bool RelayList_PlaysOnline(void)
 {
-	Server();
-	return theServer.opening == kServersCfgNotThere;
+	return ThisBuildPlaysOnline();
 }
 
 void HudsonTest_RelayListShowsTheYesPage(void)

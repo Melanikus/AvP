@@ -85,10 +85,10 @@ bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words);
 // refused whole (too big, too many lines). NULL when the file was read, whatever its lines said.
 const char *RelayList_FileWords(void);
 
-// Whether there's no servers.cfg in the game's folder at all: the one case the Online page says in words of its own, "There's no
-// servers.cfg in the game's folder, so there's no online play" (a release with online play off ships none: the owner's ruling R-GOAL-9,
-// 2026-11-11). False whenever there's a file, good or not. Added 2026-11-11 by Melanikus for the AvP port.
-bool RelayList_HasNoServersFile(void);
+// Whether this build plays online at all: only a build made with AVPX_ONLINE_PLAY does (ThisBuildPlaysOnline, relay_list.cpp). Online
+// is off in beta.2, so no published build does, and the Online page then says so in one line of its own (the owner's ruling R-GOAL-9,
+// 2026-11-11). Added 2026-11-11 by Melanikus for the AvP port, in place of RelayList_HasNoServersFile the same day.
+bool RelayList_PlaysOnline(void);
 
 // Hudson's yespage= (hudson_plan.h), called only from Hudson's own files: from now on, this Hudson run's line needs its own Yes on the yes
 // page, as a player's does, before the list starts. That yes is held for the run alone (RelayList_AgreeToTheLineAt). Added 2026-11-10 by

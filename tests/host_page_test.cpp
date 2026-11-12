@@ -334,18 +334,24 @@ int main()
 
 	// WITH NO SERVERS.CFG LINE (added 2026-11-11, the owner's ruling R-GOAL-9, "Online off in beta.2", so it ships no servers.cfg, and his
 	// "Hide them"): the page has only the player's name and the Online row, as Start game, Co-op campaign and Join game all need a server;
-	// and the Online page says there's no servers.cfg, in words of its own, right after the words it shows before a file's own words
+	// and the Online page, with no server, has only Back and one line: in a build that plays no online games, that it plays none, true
+	// whether or not a servers.cfg is there (PO's A and B, 2026-11-11, after the check with a servers.cfg put in by hand)
 	Check(Has(setter, "\tAvPMenu_Multiplayer[row++] = OnlineRow;\n\n") && Has(setter, "\tif (RelayList_LineCount() > 0)\n\t{\n"
 		"\t\tAvPMenu_Multiplayer[row++] = StartGameRow;\n\t\tAvPMenu_Multiplayer[row++] = CoopRow;\n\t\tAvPMenu_Multiplayer[row++] = JoinGameRow;\n\t}\n") &&
 		Count(setter, "AvPMenu_Multiplayer[row++] =") == 6, "with no good servers.cfg line, the Multiplayer page has no Start game, Co-op campaign or Join game");
 	std::string const online = FileText("3dc/avp/win95/frontend/online_page.cpp");
-	std::string const whyNone = Slice(online, "const char *const fileWords = RelayList_FileWords();", "int const refused = RelayList_RefusedLineCount();");
-	size_t const noFile = whyNone.find("\t\tif (RelayList_HasNoServersFile())\n\t\t{\n\t\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_NO_FILE), y, ONE_FIXED / 2);\n\t\t\treturn;\n\t\t}\n");
-	Check(noFile != std::string::npos && noFile < whyNone.find("GetTextString(TEXTSTRING_SERVERS_FILE_NOT_USED)") && Count(online, "TEXTSTRING_SERVERS_NO_FILE") == 1,
-		"and with no servers.cfg at all, the Online page says so in words of its own, before it would give the file's");
-	Check(Has(FileText("3dc/avp/language.cpp"), "\t\"servers.cfg isn't used:\",\n\t\"There's no servers.cfg in the game's folder, so there's no online play.\",\n") &&
+	std::string const top = Slice(online, "void OnlineLines_DrawTop(int chosen)\n{", "\n}\n");
+	size_t const off = top.find("\tif (!RelayList_PlaysOnline())\n\t{\n\t\tSmallLine(GetTextString(TEXTSTRING_ONLINE_OFF), kOnlinePageRefusedTop, ONE_FIXED / 2);\n\t\treturn;\n\t}\n");
+	Check(off != std::string::npos && off < top.find("const char *const fileWords = RelayList_FileWords();") && Count(online, "TEXTSTRING_ONLINE_OFF") == 1 &&
+		!Has(online, "RelayList_HasNoServersFile"), "and in a build that plays no online games, the Online page says so in one line, before any file's words");
+	Check(Has(top, "\tif (lineCount > 0 && haveIdentity && ourCode[0])\n") && Has(top, "\tif (lineCount > 0 && answer != TEXTSTRING_BLANK)\n"),
+		"WITH NO SERVER the Online page draws no access code, and no answer of the identity's");
+	std::string const onlinePageOpened = Slice(online, "bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room)\n{", "\n}\n");
+	Check(Has(onlinePageOpened, "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n\t\trows[row++] = copy;\n\t\trows[row++] = newIdentity;\n\t}\n\n\trows[row++] = back;\n") &&
+		Count(onlinePageOpened, "rows[row++] =") == 5, "and its rows are only Back: the name to send, Copy access code and Make a new identity come only with a server");
+	Check(Has(FileText("3dc/avp/language.cpp"), "\t\"servers.cfg isn't used:\",\n\t\"This version of the game plays no online games: online play comes in a later beta.\",\n") &&
 		Has(FileText("3dc/avp/langenum.h"), "\tTEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)\n"
-		"\tTEXTSTRING_SERVERS_NO_FILE,"), "and those words are \"There's no servers.cfg in the game's folder, so there's no online play.\", in their id's place");
+		"\tTEXTSTRING_ONLINE_OFF,"), "and those words are \"This version of the game plays no online games: online play comes in a later beta.\", in their id's place");
 	Check(Has(data, "static AVPMENU_ELEMENT AvPMenu_HostOn[kHostPageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };") &&
 		Has(data, "{AVPMENU_FONT_SMALL,\tTEXTSTRING_HOSTPAGE_TITLE,\t\t\tAvPMenu_HostOn,\t\t\t\t\tAVPMENU_MULTIPLAYER, 0},"),
 		"the host page has room for every line's row, and Esc on it goes back to the Multiplayer page");

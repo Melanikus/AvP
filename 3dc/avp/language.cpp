@@ -206,7 +206,7 @@ static char OurTextStrings[][200] =
 	"More lines aren't used (the log says why):",
 	"servers.cfg names no server.",
 	"servers.cfg isn't used:",
-	"There's no servers.cfg in the game's folder, so there's no online play.",
+	"This version of the game plays no online games: online play comes in a later beta.",
 	"Games from",
 	"and",
 	"say yes to it on the Online page, to see its games",

@@ -245,22 +245,72 @@
 			]
 		},
 		{
-			"name": "the Online page gives a file's words when there's no servers.cfg at all",
+			"name": "a build that plays no online games shows another line on the Online page",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_page.cpp",
-					"from": "\t\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_NO_FILE), y, ONE_FIXED / 2);\n",
-					"to": "\t\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_FILE_NOT_USED), y, ONE_FIXED / 2);\n"
+					"from": "\t\tSmallLine(GetTextString(TEXTSTRING_ONLINE_OFF), kOnlinePageRefusedTop, ONE_FIXED / 2);\n",
+					"to": "\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_NONE), kOnlinePageRefusedTop, ONE_FIXED / 2);\n"
 				}
 			]
 		},
 		{
-			"name": "the no-servers.cfg words are in another id's place",
+			"name": "the no-online words are in another id's place",
 			"changes": [
 				{
 					"file": "3dc/avp/language.cpp",
-					"from": "\t\"servers.cfg isn't used:\",\n\t\"There's no servers.cfg in the game's folder, so there's no online play.\",\n",
-					"to": "\t\"There's no servers.cfg in the game's folder, so there's no online play.\",\n\t\"servers.cfg isn't used:\",\n"
+					"from": "\t\"servers.cfg isn't used:\",\n\t\"This version of the game plays no online games: online play comes in a later beta.\",\n",
+					"to": "\t\"This version of the game plays no online games: online play comes in a later beta.\",\n\t\"servers.cfg isn't used:\",\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still offers the name to send, Copy access code and Make a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n",
+					"to": "\tif (lineCount >= 0)\n\t{\n\t\trows[row++] = name;\n"
+				}
+			]
+		},
+		{
+			"name": "with a server the Online page leaves out the name to send, Copy access code and Make a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n",
+					"to": "\tif (lineCount < 0)\n\t{\n\t\trows[row++] = name;\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still draws the access code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0 && haveIdentity && ourCode[0])\n",
+					"to": "\tif (haveIdentity && ourCode[0])\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still shows the identity's answer",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0 && answer != TEXTSTRING_BLANK)\n",
+					"to": "\tif (answer != TEXTSTRING_BLANK)\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays online says on the Online page that it plays none",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (!RelayList_PlaysOnline())\n",
+					"to": "\tif (RelayList_PlaysOnline())\n"
 				}
 			]
 		}

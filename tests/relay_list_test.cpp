@@ -1883,9 +1883,9 @@ static void TestTheServerLists()
 	Check(Has(fileWords, "return ServersCfg_OpeningWords(theServer.opening);") &&
 		Has(fileWords, "return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);"),
 		"and a file not used at all says why in the game's own words");
-	std::string const noFile = SourceSlice(source, "bool RelayList_HasNoServersFile(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(noFile, "\tServer();\n\treturn theServer.opening == kServersCfgNotThere;"),
-		"and there's no servers.cfg only when the game's folder has none, never for a file that's there but wrong (added 2026-11-11: online off in beta.2, R-GOAL-9)");
+	std::string const playsOnline = SourceSlice(source, "bool RelayList_PlaysOnline(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(playsOnline, "\treturn ThisBuildPlaysOnline();") && !Has(source, "RelayList_HasNoServersFile"),
+		"and the pages ask whether this build plays online by the list's own question, never one of their own (2026-11-11: online off in beta.2, R-GOAL-9)");
 
 	// Start gives back everything it made when it can't start the list, in one place (PO's ruling): the lock, both events and the memory
 	size_t const made = starting.find("Shared *made = NewServer(*line);");
