@@ -1070,6 +1070,183 @@ static void Limits()
 	}
 }
 
+// HOSTILE MAPS A (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md). Whoever made a level
+// chose its numbers, and once floor is lava is on, every player's game builds the grid from any level it loads (Tao 3: input is hostile).
+// The map keeps no corner more than 64 km from the middle of the world (kAlienWaysMostCoordinate), so these levels are made up at that
+// edge, and just past it.
+
+// A room 3 m square and 3 m high: its floor at y = floorY and its ceiling 3 m above that, from x0 to x0 + 3000 and z0 to z0 + 3000, and
+// four walls, all facing in
+static std::vector<AlienWaysPolygon> BoxRoom(int x0, int floorY, int z0)
+{
+	int const x1 = x0 + 3000, z1 = z0 + 3000, top = floorY - 3000;
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Floor(x0, x1, z0, z1, floorY));
+	world.push_back(Ceiling(x0, x1, z0, z1, top));
+	world.push_back(WallAtX(x0, z0, z1, top, floorY, 1));
+	world.push_back(WallAtX(x1, z0, z1, top, floorY, -1));
+	world.push_back(WallAtZ(z0, x0, x1, top, floorY, 1));
+	world.push_back(WallAtZ(z1, x0, x1, top, floorY, -1));
+	return world;
+}
+
+// Where two grids differ, when the second's world is the first's moved by "moved" millimetres along each axis: in their counts, or in a
+// cell's sheet, flags, room, kind or polygon, its middle (which has to be moved by exactly that), its links or its falls. Nothing, if
+// they're the same grid.
+static std::string HowTheyDiffer(NpcGrid const &first, NpcGrid const &second, double moved)
+{
+	if (first.Cells() == 0)
+	{
+		return "the first has no cells";
+	}
+
+	if (first.Cells() != second.Cells() || first.SurfaceCells() != second.SurfaceCells() || first.Sheets() != second.Sheets()
+		|| first.Links() != second.Links() || first.Falls() != second.Falls() || first.Steps() != second.Steps())
+	{
+		return "their counts";
+	}
+
+	for (uint32_t c = 0; c < first.Cells(); c++)
+	{
+		if (first.SheetOf(c) != second.SheetOf(c) || first.Flags(c) != second.Flags(c) || first.Room(c) != second.Room(c)
+			|| first.KindOf(c) != second.KindOf(c) || first.PolygonOf(c) != second.PolygonOf(c))
+		{
+			return "cell " + Number(c);
+		}
+
+		double a[3], b[3];
+
+		if (!first.Middle(c, a) || !second.Middle(c, b)
+			|| fabs(b[0] - a[0] - moved) > 0.5 || fabs(b[1] - a[1] - moved) > 0.5 || fabs(b[2] - a[2] - moved) > 0.5)
+		{
+			return "cell " + Number(c) + "'s middle";
+		}
+
+		size_t linksA = 0, linksB = 0, fallsA = 0, fallsB = 0;
+		const uint32_t *const toA = first.LinksOf(c, &linksA);
+		const uint32_t *const toB = second.LinksOf(c, &linksB);
+		const uint32_t *const fallA = first.FallsOf(c, &fallsA);
+		const uint32_t *const fallB = second.FallsOf(c, &fallsB);
+
+		if (linksA != linksB || fallsA != fallsB)
+		{
+			return "cell " + Number(c) + "'s links or falls";
+		}
+
+		for (size_t k = 0; k < linksA; k++)
+		{
+			if (toA[k] != toB[k] || first.JoinOf(c, toA[k]) != second.JoinOf(c, toB[k]))
+			{
+				return "cell " + Number(c) + "'s links";
+			}
+		}
+
+		for (size_t k = 0; k < fallsA; k++)
+		{
+			if (fallA[k] != fallB[k])
+			{
+				return "cell " + Number(c) + "'s falls";
+			}
+		}
+	}
+
+	return "";
+}
+
+static void EdgeOfTheWorld()
+{
+	printf("At the edge of the world (hostile maps A)\n");
+	const char *why = nullptr;
+
+	// 1. A room in each far corner of the world, exactly at the edge. It's moved there from near the middle by 63,999 m along each axis,
+	// which is a whole number of cells (213,330 of 300 mm) and of metre boxes (63,999). So every cell, ray and box out there is the same one
+	// moved, and the grid has to be the same grid, cell for cell, with a marine's way across it the same way.
+	// - On the plus side the room is from -2 m to 1 m along each axis near the middle, its floor at y = 1 m (y goes down). Moved, its far
+	//   corner and its floor are exactly 64 km out.
+	// - On the minus side it's from -1 m to 2 m, its ceiling at y = -1 m. Moved, its far corner and its ceiling are 64 km out the other way.
+	// A marine goes from corner to corner, from the first cell middle he fits on (450 mm from the walls) to the last.
+	int const kMoved = 63999000;
+
+	for (int side = 1; side >= -1; side -= 2)
+	{
+		std::string const name = side > 0 ? "plus" : "minus";
+		int const low = side > 0 ? -2000 : -1000;           // the room's lowest x and z near the middle
+		int const floorY = low + 3000;                       // and its floor, its highest y
+		int const firstMiddle = side > 0 ? -1350 : -450;     // the marine's first cell middle along x and z, and his last, 1.8 m on
+		int const move = side * kMoved;
+		AlienWaysMap nearMap, farMap;
+		NpcGrid nearGrid, farGrid;
+		bool const nearBuilt = Build(BoxRoom(low, floorY, low), &nearMap, &nearGrid, &why);
+		bool const farBuilt = nearBuilt && Build(BoxRoom(low + move, floorY + move, low + move), &farMap, &farGrid, &why);
+		Check(nearBuilt && farBuilt, "the room builds near the middle, and in the " + name + " corner of the world, 64 km out" + (why ? std::string(" (") + why + ")" : ""));
+
+		if (!nearBuilt || !farBuilt)
+		{
+			continue;
+		}
+
+		std::string const differ = HowTheyDiffer(nearGrid, farGrid, move);
+		Check(differ.empty(), "and it's the same grid in both places, cell for cell, each cell moved by 63,999 m along each axis (" + Number(farGrid.Cells())
+			+ " cells" + (differ.empty() ? std::string("") : ", but they differ in " + differ) + ")");
+
+		std::vector<uint32_t> nearWay, farWay;
+		size_t nearLooks = 0, farLooks = 0;
+		int const lastMiddle = firstMiddle + 1800;
+		uint32_t const nearFrom = nearGrid.NearestCell(firstMiddle, floorY, firstMiddle, kNpcGridMarine, 10);
+		uint32_t const nearTo = nearGrid.NearestCell(lastMiddle, floorY, lastMiddle, kNpcGridMarine, 10);
+		uint32_t const farFrom = farGrid.NearestCell(firstMiddle + move, floorY + move, firstMiddle + move, kNpcGridMarine, 10);
+		uint32_t const farTo = farGrid.NearestCell(lastMiddle + move, floorY + move, lastMiddle + move, kNpcGridMarine, 10);
+		bool const found = nearFrom != kNpcGridNoCell && nearTo != kNpcGridNoCell && nearFrom != nearTo
+			&& nearGrid.Search(nearFrom, nearTo, kNpcGridMarine, 1, 100000, &nearWay, &nearLooks) == kNpcGridFound
+			&& farGrid.Search(farFrom, farTo, kNpcGridMarine, 1, 100000, &farWay, &farLooks) == kNpcGridFound;
+		Check(found && farFrom == nearFrom && farTo == nearTo && farWay == nearWay && farLooks == nearLooks && nearWay.size() > 1,
+			"a marine's way across it, corner to corner, is the same way, cell for cell (" + Number(farWay.size()) + " cells, " + Number(farLooks) + " looked at)");
+	}
+
+	// 2. A corner 1 mm past 64 km: the map leaves its polygon out, as scenery, so the grid never sees it. A floor 1 km by 1 m (1,000 square
+	// metres, so it's too far out that leaves it out, not its size) beside the room in the plus corner, with one corner past the edge, changes
+	// nothing of the room's grid.
+	{
+		std::vector<AlienWaysPolygon> world = BoxRoom(-2000 + kMoved, 1000 + kMoved, -2000 + kMoved);
+		AlienWaysMap roomMap, pastMap;
+		NpcGrid roomGrid, pastGrid;
+		bool const roomBuilt = Build(world, &roomMap, &roomGrid, &why);
+		world.push_back(Floor(63000000, 64000001, 0, 1000, 0));
+		bool const pastBuilt = roomBuilt && Build(world, &pastMap, &pastGrid, &why);
+		Check(pastBuilt && pastMap.Polygons() == roomMap.Polygons() && HowTheyDiffer(roomGrid, pastGrid, 0.0).empty(),
+			"a floor with a corner 1 mm past 64 km is left out, and the grid is the room's alone");
+	}
+
+	// 3. The longest floor a level can give the grid as one polygon: 128 km long, from -64 km to 64 km, and 39 mm wide, so 4,992 square
+	// metres seen from above, just under the map's scenery cut of 5,000. It's one row of cells, from cell -213,334 (-64,000,200 to
+	// -63,999,900) to cell 213,333 (63,999,900 to 64,000,200): 426,668 cells. Each is a little covered (39 mm of its 300, and 100 mm along at
+	// each end, so 3,900 square millimetres, more than the 900 it needs), and none has its middle on it, as the middles are at z = 150. It
+	// builds, keeping what its cells and links need, well inside the cap.
+	{
+		std::vector<AlienWaysPolygon> const strip(1, Floor(-64000000, 64000000, 100, 139, 0));
+		AlienWaysMap stripMap;
+		NpcGrid stripGrid;
+		bool const built = Build(strip, &stripMap, &stripGrid, &why);
+		size_t const covered = CountWith(stripGrid, kNpcGridCoveredOnly);
+		Check(built && stripGrid.Sheets() == 1 && stripGrid.Cells() == 426668 && stripGrid.SurfaceCells() == 426668 && covered == 426668,
+			"a floor 128 km long and 39 mm wide, from one edge of the world to the other, builds: one row of 426,668 cells, all on it, all only covered ("
+			+ (built ? std::string("") : std::string(why ? why : "") + "; ") + Number(stripGrid.Cells()) + " cells, " + Number(stripGrid.SurfaceCells())
+			+ " on it, " + Number(covered) + " only covered)");
+	}
+
+	// 4. A wall 128 km long and 50 m high, as high as the map keeps a wall. Seen from above it covers nothing, so the scenery cut can't leave
+	// it out. Its sheet would be 426,668 cells along it by 167 or 168 up it, over 71 million: more than the 16 million a sheet may have
+	// (mostCellsInASheet). The size is worked out in doubles before anything is made, so nothing that big is ever asked for, or wraps round.
+	{
+		std::vector<AlienWaysPolygon> const wall(1, WallAtZ(0, -64000000, 64000000, -50000, 0, 1));
+		AlienWaysMap wallMap;
+		NpcGrid wallGrid;
+		Check(wallMap.Build(wall) == nullptr && wallMap.Polygons() == 1, "a wall 128 km long and 50 m high, from one edge of the world to the other, is on the map");
+		Check(Says(wallGrid.Build(wall, wallMap), "a sheet has too many cells") && KeptNothing(wallGrid),
+			"and the grid refuses it, as a sheet with too many cells, keeping nothing");
+	}
+}
+
 static void Stopping()
 {
 	printf("Stopping\n");
@@ -1431,6 +1608,7 @@ int main()
 	Doors();
 	Room();
 	Limits();
+	EdgeOfTheWorld();
 	Stopping();
 	Again();
 

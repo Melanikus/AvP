@@ -718,6 +718,16 @@
 					"to": "\t\t\t\t\tint const rank = (grid.polygonOf[c] == polygon ? 0 : 1);\n"
 				}
 			]
+		},
+		{
+			"name": "the map keeps a polygon with a corner past 64 km along x (hostile maps A)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "outside = outside || FarOut(p.x[c]) || FarOut(p.y[c]) || FarOut(p.z[c]);",
+					"to": "outside = outside || FarOut(p.y[c]) || FarOut(p.z[c]);"
+				}
+			]
 		}
 	]
 }
