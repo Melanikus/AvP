@@ -186,6 +186,22 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=", kHudsonRefusedFilmUnknown);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=no film=no", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=video film=no", kHudsonRefusedFilmBothWays);
+	// film=menus and pagehold= (added 2026-11-10 by Melanikus (Third) for the AvP port): a film that starts at the menus needs a run with a
+	// film, and pagehold= needs film=menus
+	Refused("-hudson level=a frames=1 rooms=1 film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 machine=alone film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=numbers film=menus", kHudsonRefusedFilmMenusWithoutFilm);
+	Refused("-hudson level=a frames=1 rooms=1 record=video film=menus", kHudsonRefusedVideoMeasuresTime);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus film=no", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=Menus", kHudsonRefusedFilmUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared pagehold=4", kHudsonRefusedPageHoldWithoutFilmMenus);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=no pagehold=4", kHudsonRefusedPageHoldWithoutFilmMenus);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=0", kHudsonRefusedPageHoldOutOfRange);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=11", kHudsonRefusedPageHoldOutOfRange);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=-1", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=x", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=", kHudsonRefusedPageHoldNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=4 pagehold=4", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 machine=shared record=numbers break=video", kHudsonRefusedBreakVideoWithoutVideo);
 	Refused("-hudson level=a frames=1 rooms=1 lighting=relief vision=check bright=no", kHudsonRefusedBrightNotYes);
 	Refused("-hudson level=a frames=1 rooms=1 lighting=relief vision=check bright=yes bright=yes", kHudsonRefusedAskedTwice);
@@ -310,6 +326,21 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 menus=pictures access=request", kHudsonRefusedMenusWithOthers);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=maybe", kHudsonRefusedAnswerWord);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host answer=letin answer=no", kHudsonRefusedAskedTwice);
+	// #195 (added 2026-11-10 by Melanikus (Third)): -relayhost lets every joiner in without asking, so answer='s rows would never come.
+	// The nyc3 pair of 2026-11-10 had both, and its host answered nobody. -askjoiners hosts the same way and asks.
+	Refused("-dev -relayhost -netv2 -hudson level=invasion frames=5 machine=shared net=host answer=letin", kHudsonRefusedAnswerWithRelayHost);
+	Refused("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host answer=no", kHudsonRefusedAnswerWithRelayHost);
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-dev -askjoiners -netv2 -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0 && plan.answerPress == kHudsonAnswerLetIn,
+			"#195: a host started with -askjoiners may answer");
+		Check(HudsonPlan_Read("-dev -relayhost -askjoiners -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0,
+			"and so may one with -relayhost and -askjoiners, which asks too (relay_auto.h)");
+		Check(HudsonPlan_Read("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host", &plan) == 0 && plan.answerPress == kHudsonAnswerNone,
+			"and -relayhost alone, with no answer=, still lets every joiner in, as before");
+		Check(HudsonPlan_Read("-dev -relayhostx -hudson level=invasion frames=5 machine=shared net=host answer=letin", &plan) == 0,
+			"only -relayhost as a word of its own counts, as the game reads it");
+	}
 	// The answer is a host's
 	Refused("-hudson level=invasion frames=5 machine=shared net=join answer=letin", kHudsonRefusedAnswerWithoutHost);
 	Refused("-hudson level=invasion frames=5 answer=letin", kHudsonRefusedAnswerWithoutHost);
@@ -331,19 +362,87 @@ static void TestBadPlans()
 	Refused("-hudson level=invasion frames=5 machine=shared net=host findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 	Refused("-hudson level=invasion frames=5 findgames=yes", kHudsonRefusedFindGamesWithoutJoin);
 
-	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): a server's name in small letters, once, with net=
+	// yespage= and hostrow= (added 2026-11-10 by Melanikus (Third) for the AvP port): the yes page an access run's first press opens, and
+	// a host through the Multiplayer page's Host row
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=request yespage=yes", &plan) == 0 && plan.yesPage == kHudsonYesPageYes,
+			"yespage=yes: an access run sees the yes page and presses Yes");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=check yespage=no", &plan) == 0 && plan.yesPage == kHudsonYesPageNo,
+			"yespage=no: and No, with access=check too");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 access=request", &plan) == 0 && plan.yesPage == kHudsonYesPageNone,
+			"and without it a run's line needs no yes, as before");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York", &plan) == 0 && plan.hostRow == kHudsonHostRowOnline,
+			"hostrow=online: the host hosts online through the Host row");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host", &plan) == 0 && plan.hostRow == kHudsonHostRowNone,
+			"and without it the host hosts from the code, as before");
+	}
+	Refused("-hudson level=invasion frames=5 access=request yespage=maybe", kHudsonRefusedYesPageWord);
+	Refused("-hudson level=invasion frames=5 access=request yespage=yes yespage=no", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 yespage=yes", kHudsonRefusedYesPageWithoutAccess);
+	Refused("-hudson level=invasion frames=5 access=newid yespage=yes", kHudsonRefusedYesPageWithoutAccess);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join yespage=yes", kHudsonRefusedYesPageWithoutAccess);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=away", kHudsonRefusedHostRowWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=athome", kHudsonRefusedHostRowWord);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hostrow=online", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join typed=yes", kHudsonRefusedUnknownName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join hostrow=online", kHudsonRefusedHostRowWithoutHost);
+	Refused("-hudson level=invasion frames=5 hostrow=online", kHudsonRefusedHostRowWithoutHost);
+	Refused("-dev -relayhost -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
+	Refused("-dev -askjoiners -hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithRelayAuto);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes hostrow=online", kHudsonRefusedHostRowWithCoop);
+
+	// hoston= and joinon= (added 2026-11-11 by Melanikus (Third) for the AvP port): the server a host through the rows chooses, and the one
+	// whose game a Find games run joins, each by its servers.cfg name with _ for a space; a host through the rows always names one
+	{
+		HudsonPlan plan;
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York", &plan) == 0 &&
+			strcmp(plan.hostOn, "New York") == 0 && plan.joinOn[0] == 0,
+			"hoston=New_York: the host chooses \"New York\", its _ a space again, and joins nothing");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=Frankfurt", &plan) == 0 && strcmp(plan.hostOn, "Frankfurt") == 0,
+			"hoston=Frankfurt: a one-word name is itself");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=eu-1.b_c", &plan) == 0 && strcmp(plan.hostOn, "eu-1.b c") == 0,
+			"hoston= takes -, . and digits as they are");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=abcdefghijklmnopqrstuvwxyz01234", &plan) == 0 &&
+			strcmp(plan.hostOn, "abcdefghijklmnopqrstuvwxyz01234") == 0,
+			"hoston= takes a name of 31, servers.cfg's longest");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New_York", &plan) == 0 &&
+			strcmp(plan.joinOn, "New York") == 0 && plan.hostOn[0] == 0,
+			"joinon=New_York: Find games joins only a game New York listed");
+		Check(HudsonPlan_Read("-hudson level=invasion frames=5 machine=shared net=join findgames=yes", &plan) == 0 && plan.joinOn[0] == 0,
+			"and without joinon= any game it may join, as before");
+	}
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online", kHudsonRefusedHostRowWithoutHostOn);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hoston=New_York", kHudsonRefusedHostOnWithoutHostRow);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=_York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New__York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New/York", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=abcdefghijklmnopqrstuvwxyz012345", kHudsonRefusedHostOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host hostrow=online hoston=New_York hoston=Frankfurt", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join joinon=New_York", kHudsonRefusedJoinOnWithoutFindGames);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New%York", kHudsonRefusedJoinOnName);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join findgames=yes joinon=New_York joinon=New_York", kHudsonRefusedAskedTwice);
+
+	// remoterelay= (server #14's run through a relay on another machine, 2026-11-09): its address, once, with net=. Modified 2026-11-10 by
+	// Melanikus for the AvP port (#175): an address's digits and dots, as a servers.cfg line has only an address; a name is refused. Each
+	// of these is 15 letters at most, so it's the letter that's refused and not the length, which is looked at first (above)
 	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=", kHudsonRefusedRemoteRelayEmpty);
-	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayName + 1, 'a')).c_str(), kHudsonRefusedRemoteRelayTooLong);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=Virginia.relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a_b.test", kHudsonRefusedRemoteRelayCharacter);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test remoterelay=a.test", kHudsonRefusedAskedTwice);
-	Refused("-hudson level=invasion frames=5 remoterelay=a.test", kHudsonRefusedRemoteRelayWithoutNet);
+	Refused(("-hudson level=invasion frames=5 machine=shared net=host remoterelay=" + std::string(kHudsonLongestRelayAddress + 1, '1')).c_str(), kHudsonRefusedRemoteRelayTooLong);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", kHudsonRefusedRemoteRelayTooLong);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=relay.avpx.test", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5a", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.5:443", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=-203.0.113.5", kHudsonRefusedRemoteRelayCharacter);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 remoterelay=203.0.113.50", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayWithoutNet);
 	// No hostile kind of run ever goes through a relay beyond this machine
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=yes", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=drain", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=a.test hostile=watch", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=hold", kHudsonRefusedRemoteRelayHostile);
-	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=a.test hostile=flood", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 hostile=yes", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=drain", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host remoterelay=203.0.113.50 hostile=watch", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=hold", kHudsonRefusedRemoteRelayHostile);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join remoterelay=203.0.113.50 hostile=flood", kHudsonRefusedRemoteRelayHostile);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host hostile=yes remoterelay=203.0.113.50", kHudsonRefusedRemoteRelayHostile);
 	{
 		HudsonPlan plan;
@@ -424,6 +523,16 @@ static void TestBadPlans()
 			facts.millisecondsSeen = 1;
 			Check(HudsonPlan_SmokeVerdict(facts, &why) == kHudsonSmokeFailed && strcmp(why, "he died before it was done") == 0, "dying fails it at once");
 		}
+		// #203: a spot beside the other player, for a joiner that started too far away, needs floor, room and a clear view. Added 2026-11-10
+		// by Melanikus (Third) for the AvP port
+		Check(HudsonPlan_SmokeSpotIsGood(true, 1000, true, 1500, true), "#203: a spot with floor 1 m below, room above and a clear view will do");
+		Check(HudsonPlan_SmokeSpotIsGood(true, 0, false, 0, true) && HudsonPlan_SmokeSpotIsGood(true, kHudsonSmokeMostDrop, true, kHudsonSmokeLeastHeadroom, true),
+			"and so will one on the floor under open sky, or with the most drop and the least room");
+		Check(!HudsonPlan_SmokeSpotIsGood(false, 0, false, 0, true), "but not one over nothing, where he'd fall out of the level");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, kHudsonSmokeMostDrop + 1, false, 0, true), "nor one over a drop deeper than 2.5 m");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, -1, false, 0, true), "nor one whose floor ray says less than nothing");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, 1000, true, kHudsonSmokeLeastHeadroom - 1, true), "nor one under a ceiling nearer than 1 m");
+		Check(!HudsonPlan_SmokeSpotIsGood(true, 1000, false, 0, false), "nor one with something between it and the other player");
 		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && !plan.windowOnMainScreen && plan.windowSlot == 0 && plan.windowsTogether == 1, "a run's window goes on the second screen unless it says otherwise, alone there");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 screen=main", &plan) == 0 && plan.windowOnMainScreen, "screen=main keeps it on the main screen");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 screen=second", &plan) == 0 && !plan.windowOnMainScreen, "and screen=second is the same as saying nothing");
@@ -497,10 +606,10 @@ static void TestBadPlans()
 		Check(HudsonPlan_Read("-hudson level=kens-co-op frames=5 machine=shared net=join coop=yes siege=base siegefrom=canyon_01", &plan) == 0 && strcmp(plan.siegeFrom, "canyon_01") == 0, "siegefrom= is read");
 		Check(HudsonPlan_Read("-hudson level=kens-co-op frames=5 machine=shared net=join coop=yes siege=base siegefar=canyon_02", &plan) == 0 && strcmp(plan.siegeFar, "canyon_02") == 0, "siegefar= is read");
 		Check(plan.remoteRelay[0] == 0, "a plan with no remoterelay= has no relay beyond this machine");
-		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=host remoterelay=virginia.relay.avpx.test", &plan) == 0 && strcmp(plan.remoteRelay, "virginia.relay.avpx.test") == 0,
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=host remoterelay=203.0.113.50", &plan) == 0 && strcmp(plan.remoteRelay, "203.0.113.50") == 0,
 			"remoterelay= is read");
-		Check(HudsonPlan_Read(("-hudson level=derelict frames=5 machine=shared net=join remoterelay=" + std::string(kHudsonLongestRelayName, 'a')).c_str(), &plan) == 0
-			&& strlen(plan.remoteRelay) == static_cast<size_t>(kHudsonLongestRelayName), "and a name as long as a server's can be fits");
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 machine=shared net=join remoterelay=255.255.255.255", &plan) == 0
+			&& strlen(plan.remoteRelay) == static_cast<size_t>(kHudsonLongestRelayAddress), "and an address as long as one can be fits (networking.cpp refuses that one: it's everyone's)");
 		Check(!plan.lookAllTheTime, "and it aims for itself, so nothing else looks");
 		{
 			static const int kWide = 200, kTall = 40;
@@ -1405,8 +1514,59 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.cpp"), "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())"), "SOURCE: a host who is out alone starts the level again after dieat=, as single player does");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Follow) { $arguments += \" follow=$Follow\" }"), "SOURCE: and follow=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WalkFrom) { $arguments += \" walkfrom=$($WalkFrom -replace 'm', '-')\" }"), "SOURCE: and a walk");
+		// Added 2026-11-10 by Melanikus (Third) for the AvP port: the presses reach a run through both scripts, each to Hudson's own words and
+		// ranges, so a bad one stops at the script with its reason rather than at the game
+		std::string const runHudson = ReadSourceFile("tools/hudson/run-hudson.ps1");
+		std::string const runPair = ReadSourceFile("tools/hudson/run-net-pair.ps1");
+		Check(Has(runHudson, "if ($Access) { $arguments += \" access=$Access\" }"), "SOURCE: the script can ask for access=");
+		Check(Has(runHudson, "if ($Access -and $Access -cnotmatch '\\A(request|check|newid)\\z')"), "SOURCE: only request, check or newid, in small letters as Hudson takes them");
+		Check(Has(runHudson, "if ($Access -and $Net) {"), "SOURCE: and only in a run with no -Net, as Hudson says");
+		Check(Has(runHudson, "if ($AccessWait -ne 0) { $arguments += \" accesswait=$AccessWait\" }"), "SOURCE: and accesswait=");
+		Check(Has(runHudson, "if ($AccessWait -ne 0 -and ($AccessWait -lt 61 -or $AccessWait -gt 3600))"), "SOURCE: only from 61 to 3600 seconds, Hudson's range");
+		Check(Has(runHudson, "if ($Answer) { $arguments += \" answer=$Answer\" }"), "SOURCE: and answer=");
+		Check(Has(runHudson, "if ($Answer -and $Answer -cnotmatch '\\A(letin|no)\\z')"), "SOURCE: only letin or no");
+		Check(Has(runHudson, "if ($AnswerAfter -ne 0) { $arguments += \" answerafter=$AnswerAfter\" }"), "SOURCE: and answerafter=");
+		Check(Has(runHudson, "if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15))"), "SOURCE: only from 1 to 15 seconds, Hudson's range");
+		Check(Has(runHudson, "if ($FindGames) { $arguments += \" findgames=yes\" }"), "SOURCE: and findgames=");
+		Check(Has(runHudson, "$relaySwitch = if (-not $Relay -or -not $Net) { '' }"), "SOURCE: an -Access run gets the list's lines, and neither -relayhost nor -relayjoin");
+		Check(Has(runPair, "if ($word -eq 'host' -and $HostAnswer) { $words += @('-Answer', $HostAnswer) }"), "SOURCE: the pair's host gets its answer");
+		Check(Has(runPair, "if ($HostAnswer -and $HostAnswer -cnotmatch '\\A(letin|no)\\z')"), "SOURCE: only letin or no");
+		Check(Has(runPair, "if ($word -eq 'join' -and $JoinFindGames) { $words += '-FindGames' }"), "SOURCE: and the pair's joiner Find Games");
+		// Added 2026-11-10 by Melanikus (Third): a host that answers gets -askjoiners, never -relayhost, which lets every joiner in without
+		// asking (relay_auto.cpp), so the page -Answer presses, and its check code, would never show (the nyc3 pair of 2026-11-10)
+		Check(Has(runHudson, "elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' }"),
+			"SOURCE: a host with -Answer hosts with -askjoiners, so it's asked about each joiner and the answer can be pressed");
+		Check(Has(ReadSourceFile("3dc/relay_auto.cpp"), "if (mode == kRelayAutoHost && RelayAuto_AsksJoiners(commandLine, developer))") &&
+			Has(ReadSourceFile("3dc/relay_auto.cpp"), "else if (mode == kRelayAutoHost)\n\t{\n\t\tLogString(\"relay auto: -dev -relayhost: this copy hosts by itself through the relay, and lets every joiner in without asking\");\n\t\tNet_LetEveryJoinerIn(true);"),
+			"SOURCE: and that's because -relayhost alone lets every joiner in, and -askjoiners doesn't");
+		// coop=yes's game is numbered on the co-op list, as the host's own menu numbers it (coop_menu.cpp), never the deathmatch list's,
+		// where a campaign level has no place: the showcase of 2026-11-10 hosted derelict as level 0, and the games page named it
+		// "Stranded". Added 2026-11-10 by Melanikus (Third) for the AvP port, from Secondary's trace.
+		std::string const hosting = Between(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "static void StartNetworkGameForHudsonRun(void)", "netGameData.levelNumber = level;");
+		Check(ComesBefore(hosting, "netGameData.gameType = NGT_Coop;", "int const coopPlace = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);") &&
+			Has(hosting, "if (coopPlace >= 0)\n\t\t{\n\t\t\tlevel = coopPlace;"),
+			"SOURCE: a Hudson host's co-op game is numbered by its campaign level's place on the co-op list, as a player's host menu numbers it");
+		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/coop_menu.cpp"), "netGameData.levelNumber = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);"),
+			"SOURCE: and that's the number the player's own co-op host menu gives");
+		// #203: the smoke test's spot beside the other player, and the pair's DirectX error lines. Added 2026-11-10 by Melanikus (Third)
+		std::string const goOver = Between(ReadSourceFile("3dc/avp/hudson.cpp"), "static void Hudson_SmokeGoOver(STRATEGYBLOCK *me, STRATEGYBLOCK *other)", "\n}\n");
+		Check(Has(goOver, "static const int kSides[8][2]") && Has(goOver, "static const int kDistances[2] = { 3000, 5000 };"), "SOURCE: a far joiner tries eight directions beside the host, at 3 m and then 5 m");
+		Check(Has(goOver, "VECTORCH down = { 0, ONE_FIXED, 0 };") && Has(goOver, "VECTORCH up = { 0, -ONE_FIXED, 0 };"), "SOURCE: looking down for floor and up for room, y going down");
+		Check(Has(goOver, "bool const wayClear = !LOS_ObjectHitPtr || LOS_ObjectHitPtr == other->SBdptr || LOS_Lambda >= howFar;"), "SOURCE: and at the host's middle, the host alone counting as no wall");
+		Check(ComesBefore(goOver, "if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))", "MoveThePlayerTo(place);"), "SOURCE: and goes only to a spot the rule passes");
+		Check(Has(runPair, "$errors = @(Get-Content -LiteralPath $gameLog | Where-Object { $_ -like '*DirectX Error!*' })") && Has(runPair, "$lines += \"d3d_errors_$game=$($errors.Count)\"")
+			&& Has(runPair, "$lines += \"d3d_first_$game=$($errors[0].Trim())\""), "SOURCE: the pair counts each game's DirectX error lines in pair.txt, with the first word for word");
+		Check(ComesBefore(runPair, "if ($smokeFailed) { exit 111 }", "if ($directXErrors -gt 0) { exit 112 }"), "SOURCE: and any of them fails the pair, 112, after the smoke test's 111");
+		// film=menus and pagehold= reach a run through both scripts (the owner's showcase, 2026-11-10)
+		Check(Has(runHudson, "if ($FilmMenus) { $arguments += \" film=menus\" }") && Has(runHudson, "if ($PageHold -ne 0) { $arguments += \" pagehold=$PageHold\" }"),
+			"SOURCE: the script can ask for film=menus and pagehold=");
+		Check(Has(runHudson, "if ($FilmMenus -and -not $WhileInUse) {") && Has(runHudson, "if ($FilmMenus -and ($NoFilm -or $Record -eq 'numbers')) {") &&
+			Has(runHudson, "if ($PageHold -ne 0 -and -not $FilmMenus) {") && Has(runHudson, "if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) {"),
+			"SOURCE: only in a run with a film, and pagehold= only with it, from 1 to 10, as Hudson says");
+		Check(Has(runPair, "if ($FilmMenus) { $words += '-FilmMenus' }") && Has(runPair, "if ($PageHold -ne 0) { $words += @('-PageHold', \"$PageHold\") }"),
+			"SOURCE: and the pair gives both games the same");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
-		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
+		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"), "SOURCE: its first blow on him is noted, its own alien's");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
 	}
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (aliensMade < plan.combatAliens)"), "the next alien comes until there have been as many as were asked for");
@@ -1930,7 +2090,8 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($SiegeFar) { $words += @('-SiegeFar', $SiegeFar) }"), "and the pair passes it on");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "GLOBALASSERT(damage);\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "a blow on a whole thing is noted");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "frag=NULL;\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "and so is a blow on a part of one");
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a siege");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;")
+		&& Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (!plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a run, and its siege part nothing outside a siege");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_Hugger = TRUE;"), "a siege loads the facehugger's model");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_SentryGun = TRUE;"), "and the sentry gun's");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "CreateSentrygun(&place, 0);"), "and the host makes the guns");
@@ -1997,21 +2158,18 @@ static void TestTourAndSharedMachine()
 			"a run's host lets every joiner in without asking, as nobody is there to answer, unless the run answers as a player does (answer=)");
 		Check(Has(hudsonFile, "if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))") && Has(hudsonFile, "fprintf(file, \"remote_relay_address=%u.%u.%u.%u\\n\""),
 			"remoterelay= goes to the networking code, and the result says which one address it let through");
-		Check(Has(networking, "if (NetLoopbackOnly && !SessionData[sessionNumber].throughRelay && !IsThisMachinesOwnAddress(SessionData[sessionNumber].host))\n\t{\n\t\tCon_PrintError(\"Net_ConnectToSession - a Hudson run with net= joins only a game on this machine\");\n\t\treturn NET_FAIL;"),
-			"and it joins no game but one on this machine");
-		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(relay.address) && !TheRemoteRelay(relay))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
-			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by name, checked before anything is sent to one");
-		Check(Has(networking, "if (NetLoopbackOnly && !NetLoopbackSearch)\n\t{\n\t\treturn false;\n\t}\n\n\tif (ENET_SOCKET_NULL != broadcastSocket)"), "and there's no socket for finding games");
-		Check(Has(networking, "\tif (NetLoopbackOnly)\n\t{\n\t\tenet_address_set_host_ip(&thisHost, \"127.0.0.1\");\n\n\t\tif (enet_socket_bind(broadcastSocket, &thisHost) == 0)"),
-			"unless it's trying the search, and then that socket is on this machine's own address too");
-		Check(Has(networking, "if (!NetLoopbackOnly && !AskAboutGames(ENET_HOST_BROADCAST))") && Has(networking, "(!NetLoopbackOnly || IsThisMachinesOwnAddress(typed.host)) && !AskAboutGames(typed.host)"),
-			"and a search asks neither the whole network nor a typed address that isn't this machine's");
+		Check(Has(networking, "if (!SessionData[sessionNumber].throughRelay)\n\t{\n\t\tjoinRefusedWhy = kNotThroughTheList;") && !Has(networking, "Net_ConnectToThisMachine("),
+			"and it joins no game but one through the relay, as a player does: there's no plain join, to this machine or anywhere");
+		Check(Has(networking, "if (NetLoopbackOnly && !IsThisMachinesOwnAddress(address) && !TheRemoteRelay(address))\n\t{\n\t\tLogString(\"net: a Hudson run with net= uses only a relay on this machine, so a relay elsewhere is left out\");\n\t\treturn false;"),
+			"and, through the relay (hosting or joining), it uses only a relay on this machine, or the one beyond it the run was given by its address, checked before anything is sent to one");
+		Check(!Has(networking, "broadcastSocket") && !Has(networking, "AskAboutGames(") && !Has(networking, "NetLoopbackSearch"),
+			"and there's no socket for finding games at all, for a run or a player: nothing on this network is asked or answered");
 		Check(Has(networking, "\treturn (address & 0xFF) == 127;"), "this machine's own addresses are the 127 ones");
 		Check(Has(networking, "LogString(\"net: \" + sstream.str());") && Has(networking, "arrived << \"net: message \" << messagesArrived << \" arrived, \" << dataSize << \" bytes\";") && Has(networking, "LogString(\"net: the other player has left\");"),
 			"a run's log says who joins, by connection number and never an address, what arrives, and who leaves");
 		Check(Has(networking, "bool NetLoopbackOnly = false;"), "and an ordinary game doesn't get any of that");
 		Check(hudsonFile.find("NetLoopbackOnly = true;") == hudsonFile.rfind("NetLoopbackOnly = true;") && !Has(networking, "NetLoopbackOnly = true;") && !Has(menusFile, "NetLoopbackOnly ="), "and only a run with net= can change that");
-		Check(Has(hudsonFile, "if (plan.netMode != kHudsonNetNone)\n\t{\n\t\tNetLoopbackOnly = true;\n\t\tNetLoopbackSearch = plan.typed;\n\n\t\tif (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)"), "and a level that isn't on the multiplayer list is refused");
+		Check(Has(hudsonFile, "if (plan.netMode != kHudsonNetNone)\n\t{\n\t\tNetLoopbackOnly = true;\n\n\t\tif (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)"), "and a level that isn't on the multiplayer list is refused");
 		Check(Has(hudsonFile, "\"net=%s net_stage=%s\\n\""), "the result says how far it got");
 		Check(Has(menusFile, "if (Hudson_NetIsOn())\n\t{\n\t\tStartNetworkGameForHudsonRun();"), "the menus' part goes this way");
 		Check(Has(menusFile, "Hudson_NetStopBecause(\"the client connected, and the host never told it who it is\");"), "a join that stops says where");
@@ -2023,26 +2181,41 @@ static void TestTourAndSharedMachine()
 		// Server #14 beyond this machine (-RemoteRelay): exactly the games' UDP on this machine's address towards the one relay, and HTTPS to that relay's own address
 		Check(Has(pairScript, "if ($protocol -eq 'udp' -and $localAddress -eq $allowedRoute)") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen' -and $remoteAddress -eq $allowedRelay -and $remotePort -eq '443')"),
 			"with -RemoteRelay, the watch lets through only the games' UDP on the way to that relay, and HTTPS to the relay itself");
-		Check(Has(pairScript, "$found = @([System.Net.Dns]::GetHostAddresses($RemoteRelay))") && Has(pairScript, "if ($found.Count -ne 1 -or $found[0].AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork)")
+		// Modified 2026-11-10 by Melanikus for the AvP port (#175): the relay is given by its address, its servers.cfg line's, never a name
+		Check(Has(pairScript, "    $remoteRelayAddress = $RemoteRelay\n") && !Has(pairScript, "GetHostAddresses") && !Has(pairScript, "Resolve-DnsName")
 			&& Has(pairScript, "if ($RemoteRelay) { $lines += @(\"remote_relay=$RemoteRelay\", \"remote_relay_address=$remoteRelayAddress\", \"remote_relay_route=$remoteRelayRoute\") }"),
-			"whose name is looked up once, before anything starts, has to give exactly one IPv4 address, and goes in the record with this machine's address towards it");
+			"whose address is given, as its servers.cfg line has it, so nothing is looked up, and goes in the record with this machine's address towards it");
 		Check(Has(pairScript, "@('udp', '', $exampleRoute, '', '', $false)") && Has(pairScript, "@('tcp', 'Established', $exampleRoute, $exampleRelay, '8443', $true)")
 			&& Has(pairScript, "@('tcp', 'Established', $exampleRoute, '203.0.113.51', '443', $true)") && Has(pairScript, "@('tcp', 'Listen', $exampleRoute, '0.0.0.0', '0', $true)"),
 			"and -CheckTheWatch tries that too: the relay's HTTPS and the games' UDP on the way to it are fine, and another port, another machine or a listener is a finding");
-		Check(Has(oneRun, "if ($RemoteRelay) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "\"RelayServer = $RemoteRelay\", 'RelayListPort = 443'"),
-			"and each game is told the relay's name (remoterelay=), and has it as its relays' list, at HTTPS's own port");
-		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair on protocol version 2's draft. Both games get -netv2 (before -hudson,
-		// as the game's own switches go) and the relay's key line; the joiner is the second copy, so the two have their own identity each;
-		// with the list on this machine pinned, it's reached by its address
-		Check(Has(oneRun, "if ($NetV2) { $relaySwitch += ' -netv2' }") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
+		Check(Has(oneRun, "if ($RemoteRelay -and $Net) { $arguments += \" remoterelay=$RemoteRelay\" }") && Has(oneRun, "$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }\nif ($serversRefusal) { Stop-Here $serversRefusal }")
+			&& ComesBefore(oneRun, "$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }", "$process = Start-Process -FilePath $exePath"),
+			"and each game is told the relay's address (remoterelay=, which Hudson takes only with net=, so an -Access run has the list alone), and has the server's one line in its servers.cfg before it starts");
+		// Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a pair through the relay. The joiner is the second copy (before -hudson, as
+		// the game's own switches go), so the two have their own identity each. Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a):
+		// -NetV2 and the game's -netv2 went with the v2 draft's switch, as every relay game is version 2
+		Check(!Has(oneRun, "NetV2") && !Has(oneRun, "-netv2") && Has(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }")
 			&& ComesBefore(oneRun, "if ($SecondCopy) { $relaySwitch += ' -secondcopy' }", "$arguments = \"-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson"),
-			"SOURCE: -NetV2 and -SecondCopy are the game's own switches, -netv2 and -secondcopy, before -hudson");
-		Check(Has(oneRun, "if ($RelayKey) { $v2Words += \"RelayKey = $RelayKey\" }") && Has(oneRun, "@('RelayServer = 127.0.0.1', \"RelayListPort = $RelayListPort\", \"RelayListPin = $LocalRelayPin\")")
+			"SOURCE: -SecondCopy is the game's own switch, -secondcopy, before -hudson, and there's no -NetV2 any more");
+		// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is the run's one servers.cfg line, so no relay setting is written
+		Check(!Has(oneRun, "RelayKey = ") && !Has(oneRun, "RelayServer = ") && !Has(oneRun, "RelayListPin = ") && !Has(oneRun, "[Network]")
 			&& Has(oneRun, "'HudsonRun\\My Games\\Aliens versus Predator (second copy)'"),
-			"SOURCE: the relay's key line goes in the run's settings, the pinned list on this machine by its address, and the second copy's files are read from its own folder");
-		Check(Has(oneRun, "if ($NetV2 -and -not $RelayKey) { Stop-Here") && Has(pairScript, "if ($NetV2 -and $word -eq 'join') { $words += '-SecondCopy' }")
-			&& Has(pairScript, "$said = Get-HudsonV2WordsRefusal $case[0] $case[1]"),
-			"SOURCE: -NetV2 needs the key line, the pair's joiner is always the second copy, and -CheckTheWatch tries the v2 words' every refusal");
+			"SOURCE: no relay setting goes in the run's settings, and the second copy's files are read from its own folder");
+		Check(Has(oneRun, "if ($Relay -and -not $ServersLine -and -not $ShippedServers) { Stop-Here") && Has(pairScript, "if ($Relay -and $word -eq 'join') { $words += '-SecondCopy' }")
+			&& Has(pairScript, "$said = Get-HudsonServersLineRefusal $case[0] $case[1]") && Has(pairScript, "$said = Get-HudsonRemoteRelayRefusal $case[0]"),
+			"SOURCE: -Relay needs the server's line, the pair's joiner is always the second copy, and -CheckTheWatch tries every refusal of -RemoteRelay and -ServersLine");
+		// Added 2026-11-10 by Melanikus for the AvP port (#175): a run writes servers.cfg only into a copy made for Hudson's runs (PO's
+		// condition), never through a link or over a file it didn't write, and the tests workflow runs -CheckTheWatch, which tries it all
+		{
+			std::string const relayWords = ReadSourceFile("tools/hudson/relay-words.ps1");
+			std::string const testsWorkflow = ReadSourceFile(".github/workflows/tests.yml");
+			Check(Has(relayWords, "if (-not (Test-Path -LiteralPath $mark -PathType Leaf)) { return") && Has(relayWords, "$copyRefusal = Get-HudsonRunCopyRefusal $folder\n        if ($copyRefusal) { return $copyRefusal }")
+				&& Has(relayWords, "if ($place.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return")
+				&& Has(relayWords, "if (Test-HudsonServersTextNamesAServer $text) { return"),
+				"SOURCE: a run writes servers.cfg only into a copy with the mark beside bin, with no link on the way, and never over a file naming a server that it didn't write");
+			Check(Has(testsWorkflow, "        shell: powershell\n        run: ./tools/hudson/run-net-pair.ps1 -CheckTheWatch"),
+				"SOURCE: the tests workflow runs -CheckTheWatch, which tries the words and the servers.cfg a run writes");
+		}
 		Check(Has(pairScript, "if ($protocol -eq 'tcp' -and $state -ne 'Listen')\n    {\n        return $remoteAddress -notmatch $thisMachine\n    }\n\n    return $localAddress -notmatch $thisMachine"),
 			"a TCP connection the game made is judged by its far end, and UDP and a TCP listener by their own address (server #14: the relays' list's HTTPS shows :: while it's connecting)");
 		Check(Has(pairScript, "$noAddress = '^(0\\.0\\.0\\.0|::)$'") && Has(pairScript, "if ($protocol -eq 'tcp' -and $state -eq 'Bound' -and $remoteAddress -match $noAddress)\n    {\n        return $false\n    }"),
@@ -2075,6 +2248,141 @@ static void TestTourAndSharedMachine()
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=alone", &plan) == 0 && !plan.recordVideo, "whichever way it says so");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 record=pictures", &plan) == 0 && !plan.recordVideo && plan.pictures, "not even one with pictures");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=alone film=no", &plan) == 0 && !plan.recordVideo, "and it can say so, which changes nothing");
+	// film=menus (added 2026-11-10 by Melanikus (Third) for the AvP port): a film that starts at the menus, which is still a film
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus && plan.pageHoldSeconds == 0,
+		"film=menus: a run that shares the machine films from the menus on, holding no page unless asked");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared record=video film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus,
+		"and record=video agrees with it, since both ask for a film");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared record=pictures film=menus", &plan) == 0 && plan.recordVideo && plan.filmMenus && plan.pictures,
+		"and a run with pictures keeps them");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=1", &plan) == 0 && plan.pageHoldSeconds == 1, "pagehold= from 1");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared film=menus pagehold=10", &plan) == 0 && plan.pageHoldSeconds == 10, "to 10 seconds");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared", &plan) == 0 && !plan.filmMenus && plan.pageHoldSeconds == 0,
+		"and a run that doesn't ask has its film from the level, as before");
+	{
+		// SOURCE: where film=menus changes the film (hudson.cpp), and the clip's name (hudson_video.cpp)
+		std::string const taking = Between(hudson, "static void TakeVideoFrame()", "// The other game of the pair starts once this file is there");
+		std::string const page = Between(hudson, "void Hudson_SaveThePage(const char *name)", "// ---- The presses a player makes");
+		std::string const cut = Between(hudson, "static bool CutTheFilm(const char *step, D3DSURFACE_DESC *filmSize)", "static void TakeVideoFrame()");
+		std::string const naming = Between(hudson, "static void NameTheClip(const char *step)", "static bool CutTheFilm(");
+		std::string const menusFrame = Between(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "static void MenuFrameForARun(const char *picture, bool holdFirst = true)", "CheckForWindowsMessages();");
+
+		Check(Has(taking, "if (framesDone < 1 && !plan.filmMenus)\n\t{\n\t\treturn;"), "SOURCE: a film starts at the level, unless film=menus starts it at the first frame drawn");
+		Check(Has(taking, "if (plan.filmMenus && framesDone >= 1 && !levelClipCut)") && Has(taking, "CutTheFilm(\"before-level\", &filmSize)"),
+			"SOURCE: with film=menus the level's first frame ends the menus' clip");
+		Check(ComesBefore(taking, "GiveTheFilmThisFrame(filmSize, seconds);", "if (clipEndsAt[0])"), "SOURCE: a picture's clip ends after the frames up to it are in it");
+		Check(Has(page, "if (plan.filmMenus && plan.recordVideo)\n\t{\n\t\t_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, \"%s\", name);"),
+			"SOURCE: and only a picture of the menus ends a clip, only with film=menus");
+		Check(Has(cut, "if (!facts.started || facts.written == 0)\n\t{\n\t\treturn false;"), "SOURCE: a clip with nothing in it isn't cut, so no clip is empty");
+		Check(Has(cut, "HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);") && Has(cut, "if (!facts.finishedInTime)\n\t{\n\t\tfilmGivenUp = true;"),
+			"SOURCE: a cut waits a little for the clip to be finished, and one that isn't ends the run's film there, as the writer can't start again");
+		Check(ComesBefore(cut, "NameTheClip(step);", "StartTheVideo(filmSize);"), "SOURCE: the clip is named before the next one starts");
+		Check(Has(naming, "!HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName))") && Has(naming, "if (!MoveFileA("),
+			"SOURCE: its name is made by the checked rule, and MoveFileA never replaces a file that's there");
+		Check(Has(naming, "memcpy(videoName, clipName, clipLength);\n\tvideoName[clipLength] = 0;"),
+			"SOURCE: the new name is copied by its letters, then ended with a 0 of its own, so the film's name is always ended");
+		Check(Has(hudson, "_snprintf(videoName, sizeof(videoName) - 1, \"hudson-video-%s-clip%02d.mp4\", filmStamp, clipNumber);"),
+			"SOURCE: each clip has its own number, so none has another's name even if it can't be renamed");
+		Check(Has(hudson, "if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))"),
+			"SOURCE: a clip of another size gets a copy of its own size");
+		Check(Has(menusFrame, "if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)"), "SOURCE: pagehold= holds a page to be pictured first");
+		Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "MenuFrameForARun(picture, !letIn);"), "SOURCE: but never the joiner's let in, which the host is waiting on");
+		Check(Has(hudson, "return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;"), "SOURCE: and only in a run with film=menus");
+	}
+	{
+		// SOURCE: yespage= and hostrow= (added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's
+		// screens). The yes a Hudson run gives on the page holds for that run alone, never in this PC's servers-trusted.cfg (PO's ruling)
+		std::string const list = ReadSourceFile("3dc/relay_list.cpp");
+		std::string const agreed = Between(list, "bool TheLineIsAgreed(const ServersCfgServer &line)", "bool Start(void)");
+		// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: the run's Yes is each line's own, by its hash)
+		std::string const agreeing = Between(list, "bool RelayList_AgreeToTheLineAt(int place)", "int RelayList_LineCount(void)");
+		Check(Has(agreed, "if (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];\n\t\t\treturn !hudsonRunShowsTheYesPage || "
+			"(LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));\n\t\t}"),
+			"SOURCE: yespage=: a Hudson run's line is agreed at once, unless it asked for the yes page, and then only after its own Yes to that line");
+		std::string const runsYes = Between(agreeing, "if (HudsonRunIsOn)\n\t{", "\telse\n\t{");
+		std::string const playersYes = Between(agreeing, "\telse\n\t{", "// The list may have started");
+		Check(Has(runsYes, "ServersTrust_Add(&hudsonRunYeses, hash);") && !Has(runsYes, "&yeses") && !Has(runsYes, "KeepTrust") &&
+			Has(playersYes, "ServersTrust_Add(&yeses, hash);") && Has(playersYes, "NetIdentityStore_KeepTrust(yeses)") &&
+			CountOf(list, "NetIdentityStore_KeepTrust(") == 1 && CountOf(list, "ServersTrust_Add(&hudsonRunYeses, hash);") == 1,
+			"SOURCE: and that Yes holds for the run alone: it goes into the run's own yeses, never the kept ones, so servers-trusted.cfg never gets it");
+		Check(Has(list, "void HudsonTest_RelayListShowsTheYesPage(void)\n{\n\thudsonRunShowsTheYesPage = true;\n}") && CountOf(list, "hudsonRunShowsTheYesPage = true;") == 1
+			&& Has(list, "bool hudsonRunShowsTheYesPage = false;") && Has(list, "ServersTrustYeses hudsonRunYeses = {};"),
+			"SOURCE: both start off (false, and no yes), and the page's flag is set in one place only");
+		Check(ComesBefore(hudson, "if (refusalFromReading)\n\t{\n\t\tWriteResult(refusalFromReading, kHudsonExitBadArguments);",
+			"if (plan.yesPage != kHudsonYesPageNone)\n\t{\n\t\tHudsonTest_RelayListShowsTheYesPage();\n\t}") && CountOf(hudson, "HudsonTest_RelayListShowsTheYesPage();") == 1,
+			"SOURCE: the run asks for the page once, with yespage=, before the menus");
+		std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
+		std::string const access = Between(menus, "static void RunTheAccessPagesForHudson(void)", "static int StartLevelForHudsonRun(void)");
+		// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the Online page, then each line's own yes page, opened
+		// from that line's row, pictured and its row pressed, before that line's access request
+		Check(ComesBefore(access, "PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, \"Online\")", "for (int place = 0; asAsked && place < lines; place++)")
+			&& ComesBefore(access, "if (Hudson_YesPagePress() != kHudsonYesPageNone && OnlineLines_NeedsTheYes(place))", "AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;")
+			&& ComesBefore(access, "snprintf(picture, sizeof(picture), \"server-yes-%d.png\", place + 1);", "PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo,")
+			&& ComesBefore(access, "kServerYesRowNo,", "\"a line's row, for its access request\""),
+			"SOURCE: each line's yes page, opened from that line's row on the Online page, is pictured and its row pressed, before that line's access request");
+		// access=newid (added 2026-11-11 by Melanikus for the AvP port, PO after the owner's picture run): it waits for every line's answer to
+		// the Multiplayer page's asks, at most 30 s, before Make a new identity, and the run passes only if the page says one was made
+		Check(ComesBefore(access, "while (bRunning && ALineIsStillAskingForARun() && (DWORD)(GetTickCount() - waitStarted) < 30000u)", "\"Make a new identity\")")
+			&& Has(access, "if (ALineIsStillAskingForARun())\n\t\t{\n\t\t\tLogErrorString(\"hudson: a line's access request was still on its way after 30 s, so no new identity was made\");\n\t\t\tasAsked = false;")
+			&& ComesBefore(access, "\"Yes, make a new identity\")", "if (asAsked && !OnlineLines_SaysTheNewIdentityWasMade())\n\t\t{\n\t\t\tLogErrorString(")
+			&& Has(ReadSourceFile("3dc/avp/win95/frontend/online_page.cpp"), "bool OnlineLines_SaysTheNewIdentityWasMade(void)\n{\n\treturn answer == TEXTSTRING_ACCESS_NEWID_MADE;\n}"),
+			"SOURCE: access=newid waits for every line's answer before Make a new identity, at most 30 s, and passes only if a new identity was made");
+		std::string const rows = Between(menus, "static bool HostThroughTheRowsForARun(int level)\n{", "extern void AvP_UpdateMenus(void)");
+		Check(!Has(rows, "InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_INCREASE);") && ComesBefore(rows, "MenuFrameForARun(\"multiplayer.png\");", "\"Start game\")")
+			&& ComesBefore(rows, "\"Start game\")", "\"Start, to the species page\")") && ComesBefore(rows, "\"Start, to the species page\")", "PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, \"Start\")"),
+			"SOURCE: hostrow=: the Multiplayer page pictured (there's no Host row to move), then Start game, the species page and its Start row, pressed as a player does");
+		Check(Has(rows, "MenuFrameForARun(picture, false);") && Has(rows, "picture = \"host-asking.png\";") && Has(rows, "noAnswer ? \"host-gaveup.png\" : \"host-failed.png\"")
+			&& !Has(rows, "PressTheStartRowAgain") && !Has(rows, "Net_HostGame"),
+			"SOURCE: and the server's wait is the page's own, pictured asking and giving up, with nothing pressed and nothing hosted but by the page");
+		Check(Has(menus, "if (Hudson_NetIsHost() && Hudson_HostRow() != kHudsonHostRowNone)\n\t{")
+			&& ComesBefore(menus, "if (!HostThroughTheRowsForARun(level))", "else if (Hudson_NetIsHost())\n\t{\n\t\t// -dev -relayhost"),
+			"SOURCE: and a host with hostrow= hosts that way, never from the code");
+		std::string const runScript = ReadSourceFile("tools/hudson/run-hudson.ps1");
+		std::string const pairRun = ReadSourceFile("tools/hudson/run-net-pair.ps1");
+		Check(Has(runScript, "if ($YesPage) { $arguments += \" yespage=$YesPage\" }") && Has(runScript, "if ($HostRow) { $arguments += \" hostrow=$HostRow\" }")
+			&& Has(runScript, "elseif ($Net -eq 'host' -and $HostRow) { '' }") && Has(runScript, "elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }") && !Has(runScript, "$Typed"),
+			"SOURCE: run-hudson.ps1 asks for both, gives a host through the rows no host switch, and every joiner -relayjoin");
+		Check(Has(pairRun, "if ($word -eq 'host' -and $HostRow) { $words += @('-HostRow', $HostRow) }")
+			&& Has(pairRun, "if ($HostRow -and $HostRow -cnotmatch '\\A(online)\\z') { Stop-Here") && !Has(pairRun, "$Typed") && !Has(pairRun, "athome"),
+			"SOURCE: run-net-pair.ps1 passes it to the host, online only, with no joiner by a typed address");
+	}
+	{
+		// SOURCE: the host's "ready" for run-net-pair.ps1, which starts the joiner on it (added 2026-11-10 by Melanikus (Third) for the AvP
+		// port). It's asked at the end of every frame (Hudson_TakePictureIfDue, from d3d_render.cpp), the menus' too, so it waits for a frame
+		// of the level: before, a host through the Multiplayer page's rows wasn't listed yet when its joiner looked, and the joiner found
+		// no game (the full-stack pair's step 3, 2026-11-10 23:13)
+		std::string const ready = Between(hudson, "static void SayTheHostIsReady()", "Hudson_NetSay(\"the host is in its level, and answering\");");
+		Check(Has(ready, "if (said || plan.netMode != kHudsonNetHost || framesDone < 1)\n\t{\n\t\treturn;\n\t}"),
+			"SOURCE: the host says it's ready for its joiner only once it has drawn a frame of its level, never at the menus");
+		Check(ComesBefore(hudson, "static void SayTheHostIsReady()", "void Hudson_TakePictureIfDue()") && Has(Between(hudson, "void Hudson_TakePictureIfDue()", "if (plan.recordVideo)"), "SayTheHostIsReady();"),
+			"SOURCE: and it's asked every frame, where the frames of the menus come too");
+	}
+	// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): which hudson-stop files end a run
+	Check(HudsonPlan_StopFileCounts(true, false, false, 100, 100), "#198: a plain hudson-stop written as the run started ends it");
+	Check(HudsonPlan_StopFileCounts(true, false, false, 101, 100), "and so does one written after");
+	Check(!HudsonPlan_StopFileCounts(false, false, false, 101, 100), "none there ends nothing");
+	Check(!HudsonPlan_StopFileCounts(true, true, false, 101, 100), "a folder of that name doesn't");
+	Check(!HudsonPlan_StopFileCounts(true, false, true, 101, 100), "nor a link, which could be anyone's file");
+	Check(!HudsonPlan_StopFileCounts(true, false, false, 99, 100), "nor one older than the run, left from an earlier one");
+	{
+		std::string const watchdog = Between(hudson, "static unsigned __stdcall WatchdogThread(void *)", "void Hudson_ReadCommandLine(const char *commandLine)");
+		std::string const looking = Between(hudson, "static bool AStopFileAsksToEnd()", "static unsigned __stdcall WatchdogThread(void *)");
+		std::string const stopFile = ReadSourceFile("tools/hudson/stop-file.ps1");
+
+		Check(Has(watchdog, "if (AStopFileAsksToEnd())\n\t\t\t{\n\t\t\t\tEndAtOnce(\"it was stopped by hand: a hudson-stop file asked it to end\", kHudsonExitStoppedByHand);"),
+			"SOURCE: a stop file ends the run as its time limit does, through EndAtOnce, so the result is written and the film finished");
+		Check(Has(Between(hudson, "static void EndAtOnce(const char *howItEnded, int code)", "TerminateProcess"), "WriteResult(howItEnded, code);"), "SOURCE: and EndAtOnce writes the result, which finishes the film, before the game ends");
+		Check(Has(watchdog, "if (GetTickCount() - stopLookedAt >= 1000)"), "SOURCE: it's looked for once a second, not every turn");
+		Check(Has(looking, "if (!folder || folder[0] == 0 || runStartedFileTime == 0)"), "SOURCE: and never before the run's start is known");
+		Check(Has(looking, "GetFileAttributesExA((std::string(folder) + kHudsonStopFileName).c_str(), GetFileExInfoStandard, &file)") && !Has(looking, "CreateFile") && !Has(looking, "fopen"),
+			"SOURCE: only its kind and date are read, in the run's own folder, never what's in it");
+		Check(Has(looking, "(file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0") && Has(looking, "HudsonPlan_StopFileCounts(true, isFolder, isLink, writtenAt, runStartedFileTime)"),
+			"SOURCE: and a link or a folder is told apart, and the rule above decides");
+		Check(Has(hudson, "runStartedFileTime = ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;"), "SOURCE: the run's start is noted as Windows dates a file");
+		Check(ComesBefore(stopFile, "if ($targets.Count -eq 0)", "[IO.File]::WriteAllText($stop, '')"), "SOURCE: stop-file.ps1 writes nothing until every folder on the way is looked at");
+		Check(Has(ReadSourceFile("tools/hudson/stop-run.ps1"), ". (Join-Path $PSScriptRoot 'stop-file.ps1')"), "SOURCE: and stop-run.ps1 uses it, the one tests/hudson_clear_folder_test.ps1 tries");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "  38       stopped by hand"), "SOURCE: run-hudson.ps1 says what exit 38 means");
+	}
 	{
 		std::string const taking = Between(hudson, "void Hudson_TakePictureIfDue()", "if (visionIsDue)");
 		std::string const ending = Between(hudson, "static void WriteResult(const char *howItEnded, int code)", "// A run that finished is no error,");
@@ -2345,6 +2653,21 @@ static void CheckFriendlyFire()
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($NoFriendlyFire) { $words += '-NoFriendlyFire' }"), "and so can the pair script");
 }
 
+// floorislava=off: 1999's aliens, for the other side of a film since the flip (#109, F5). Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static void CheckFloorIsLavaWord()
+{
+	puts("floorislava=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 floorislava=off", &plan) == 0 && plan.floorIsLavaOff, "a run can play 1999's aliens");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5", &plan) == 0 && !plan.floorIsLavaOff, "without the word, the alien ways are on, as for every player");
+	Refused("-hudson level=invasion frames=5 floorislava=on", kHudsonRefusedFloorIsLavaNotOff);
+	Refused("-hudson level=invasion frames=5 floorislava=", kHudsonRefusedFloorIsLavaNotOff);
+	Refused("-hudson level=invasion frames=5 floorislava=off floorislava=off", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($FloorIsLavaOff) { $arguments += \" floorislava=off\" }"), "the run script can ask for it");
+	Check(!Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "' -alienways'"), "and passes no -alienways, which the game no longer has");
+}
+
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
 static void SecondsAre(const char *text, long expected)
 {
@@ -2434,11 +2757,39 @@ static void TestTheGridInTheGame()
 	Check(gridLevel.find("(module->m_flags & MODULEFLAG_AIRDUCT) != 0") != std::string::npos, "and a room marked as an air duct is where he crawls");
 }
 
+// Each alien's own blows (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): a blow on him is put down to the alien whose claw it
+// is, by its name, and never to whichever alien a run watches; and in play=yes every alien that comes for him has lines of its own. Only the
+// game can show it works; these read the source for the lines it depends on.
+static void TestEachAliensOwnBlows()
+{
+	std::string const nearCode = ReadSourceFile("3dc/avp/bh_near.cpp");
+	std::string const hudson = ReadSourceFile("3dc/avp/hudson.cpp");
+	std::string const strikes = Between(hudson, "void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)\n{", "\n}\n");
+	std::string const noted = Between(hudson, "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{", "\n}\n");
+	std::string const played = Between(hudson, "void Hudson_PlayInput(void *playerStatus)\n{", "static bool started = false;");
+
+	Check(Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);\n\n\t\t\t\t\tif (alienStatusPointer->Target->SBdptr->HModelControlBlock) {")
+		&& Has(nearCode, "\t\t\t\t\t}\n\n\t\t\t\t\tHudson_AlienStrikes(NULL);\n")
+		&& Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);   // Hudson's runs only, as above (added 2026-11-11 by Melanikus (Third))\n\t\t\t\t\tCauseDamageToObject(alienStatusPointer->Target,"),
+		"both of an alien's claws say which alien it is, just before the damage, and clear it just after");
+	Check(Has(strikes, "\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;\n\t}\n\n\tstrikingAlien = alien;"),
+		"which alien a claw is is kept only in a run, and nothing else is done with it there");
+	Check(Has(hudson, "bool const theWatchedAliensOwn = strikingAlien && watchAlienNamed && NAME_ISEQUAL(strikingAlien->SBname, watchAlienName);")
+		&& Has(hudson, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"),
+		"a watch's first blow is only its own alien's, by its name, never any blow after it was made");
+	Check(Has(noted, "if (plan.play && strikingAlien && target && Player && target == Player->ObStrategyBlock)\n\t{\n\t\tAlienComingStruck(strikingAlien);"),
+		"in play=yes, a claw on him is that alien's first blow, if it's its first");
+	Check(Has(played, "TrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);"),
+		"and every alien that comes for him is followed, once a frame of play=yes");
+}
+
 int main()
 {
 	CheckBotFight();
 	CheckFriendlyFire();
+	CheckFloorIsLavaWord();
 	TestTheGridInTheGame();
+	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");
 
 	TestWhoAsked();

@@ -300,7 +300,11 @@ bool CoopMenu_HostPageOpens(void)
 	netGameData.coopCampaign = kCampaignMarine;
 	netGameData.coopCampaignLevel = 0;
 
-	if (Net_HostGame(MP_PlayerName, MP_SessionName, 0, NGT_Coop, (uint16_t)LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, kCampaignMarine, 0)) == NET_FAIL)
+	// Online, through the server servers.cfg names, or not at all (modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3")
+	uint16_t const firstLevel = (uint16_t)LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, kCampaignMarine, 0);
+	NetResult const hosted = Net_HostGame(MP_PlayerName, MP_SessionName, 0, NGT_Coop, firstLevel);
+
+	if (hosted == NET_FAIL)
 	{
 		return false;
 	}

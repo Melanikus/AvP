@@ -34,17 +34,21 @@ One player hosts, and the others join by typing the host's internet address on t
 
 A port can't be forwarded on any of those. Those players can still join: someone on an ordinary home connection hosts. **The relay, below, is for them.**
 
-## 2. Soon: through the relay
+## 2. Through the relay
 
-**It isn't live yet.** The relay server's address isn't built into the game until its domain is bought, so for now everything in this section is only for testers.
+**Not in a release yet.** The next release turns it on, with our server's line already in its servers.cfg; until then it's in test builds only. The game finds its server in **servers.cfg**, a short text file beside the game's `bin` folder, and never anywhere else: not in the settings, not on the command line.
 
-**What it is:** a server of ours that carries a game's packets between the host and each joiner. Nobody has to forward anything, and a player behind carrier-grade NAT can host. It also keeps a **list of games**, so you pick a game instead of typing an address.
+**What it is:** a server of ours that carries a game's packets between the host and each joiner. Nobody has to forward anything, and a player behind carrier-grade NAT can host. It also keeps a **list of games**, so you pick a game instead of typing an address. **Every game through it is sealed end to end** (version 2 of the relay's protocol): the relay carries it, and neither the relay nor anyone on the way can read or change it.
+
+**Your access is approved first.** The server plays only with players its owner has approved. Your game asks for access on the **Online access** page, with your name and your PC's public key, and the owner says yes or no. (That page is still for testers only.)
+
+**And you say yes to the server.** The first time the game would use a server's line (Find games, Host online, or the Online access page), it shows you the server first: its name, its address and where that is (on the internet, on this PC, or on your own network), and the two ends of its key. Nothing at all goes to it until you say yes. Your yes is kept on this PC, as a hash and never as an address, in `%LOCALAPPDATA%\AVPx\servers-trusted.cfg`. A line with another address, port or key is another server, and you're asked again. To take back every yes, delete that file. (The menus' way to the question is still to come.)
 
 **What you'll see:**
 - **While the page of games found looks,** an alien's tail turns in the middle, and one line says what it's doing: looking on your own network, then asking the list. It asks again every 5 seconds. If it finds nothing in a minute, it stops and says so, and **Enter looks again**. Esc goes back.
 - **The games** are a table: **Game | Level | Players | Region | Ping**. The list's games come after the ones found on your own network.
   - **Region** is the game's relay, or `this network` for a game on your own network.
-  - **Ping** is about how long a packet takes from the host to you through the relay: your own time to that relay, plus the host's. It shows `?` until your game has timed the relay, and `-` for a game on your own network.
+  - **Ping** is about how long a packet takes from the host to you through the relay: your own time to that relay, plus the host's. It shows `?` until your game has been through that relay this run, and `-` for a game on your own network.
   - The table keeps itself up to date every 5 seconds, and **the selection stays on the game you picked**, wherever it moves. A game that has ended shows `gone` once, then goes.
   - A game for another version of the game shows its version, as `V 1.13`, and can't be joined. A full game shows `full`, and can't be joined either.
   - A game on a level you don't have isn't shown. A co-op campaign game still is, as on your own network: its page tells you if you're missing its map.
@@ -52,18 +56,24 @@ A port can't be forwarded on any of those. Those players can still join: someone
 - **Joining** takes a few seconds while the relay introduces you to the host: the tail turns, with `Reaching the relay in saopaulo`, then `The relay is introducing you to the host`. It gives up by itself after about 26 seconds, and **Esc gives up at once**.
 - **Then the host is asked** (above). If the answer is no, or the host is busy, or doesn't answer, or you press Esc, you're back on the list, with that game still selected and a line saying which.
 - **Hosting:**
-  - the game times each relay and opens on the nearest, and its game goes on the list;
+  - the game opens through the server's relay, sealed, and its game goes on the list;
   - a host open through the relay hears only the relay, so **friends on your own network join through the list too**;
-  - if no relay answers, the game is open on your own network instead, as it always was.
-- **There's nothing to set.** The relay server's name will be built into the game.
+  - if the relay can't be reached, or is lost while you play, the online game doesn't start, or it ends: it never goes on unsealed, and it never opens on your own network instead. A game for your own network only is its own choice (its menu is still to come).
+- **There'll be nothing to set.** A release will ship a servers.cfg that already has our server's line in it.
 
-**For testers only.** The settings below are read **only when the game starts with `-dev`**, for a test with a relay server on the same machine. Without `-dev` they're ignored, so a settings file someone shares can't point your game at another server. Note the heading is `[Network]`, not the `[Networking]` that `PortNumber` is under:
+servers.cfg has one line per server: its address, written plainly, its fingerprint and its name, with spaces between them:
 
 ```
-[Network]
-RelayServer = localhost
-RelayListPort = 8443
+# A line starting with # is a note. The game skips notes and empty lines.
+203.0.113.7  <64 small hex digits>  New York
+127.0.0.1:8443:27500  <64 small hex digits>  My test server
 ```
+
+- **The address** is four numbers with dots, never a name. The server's list of games answers HTTPS on port 443 there, and its relay on port 27500, unless the line gives both ports, as `address:listport:relayport`.
+- **The fingerprint** proves the server. Before the game sends the server anything that matters, it checks the server's keys against the fingerprint, and a server whose keys don't match is sent nothing more. Take a server's line only from whoever runs that server.
+- **The name** is what the game shows, up to 31 letters.
+- A line the game can't use is skipped, and the log says which line and why (below). Two lines with the same name or the same address are both skipped.
+- **Which server:** the one you picked among the good lines, or the first good line if you've picked none, once you've said yes to it. A pick is used from the next start of the game, never halfway through one. The game keeps it in `%LOCALAPPDATA%\AVPx\servers-picked.cfg`, as a hash of the line and never as an address, so it can only choose among the lines servers.cfg has. A picked line still needs your yes, like any other.
 
 Two copies of the game on one PC: start the second with `-dev -secondcopy`, so it keeps its own settings, log and saves in `Documents\My Games\Aliens versus Predator (second copy)`.
 
@@ -86,14 +96,14 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | `net: the settings file's PortNumber is …, which the game can't use, so it uses …` | `PortNumber` in the settings isn't a usable port (or it's 23514) | fix it in `AliensVsPredator.cfg` |
 | `net: the host's connection closed` | the host left, or the connection to it ended | nothing |
 | `net: left without hearing back from N connection(s), which may have gone already` | on leaving, some players didn't answer the goodbye | nothing |
-| `net: this game is finding the nearest relay` | hosting through the relay: timing each relay | nothing |
-| `net: this game is opening through the nearest relay, N ms away` | the nearest relay, and its round trip | nothing |
+| `net: this game is finding the nearest relay` | hosting through the relay: its sealed channel to the relay is opening | nothing |
+| `net: this game's sealed channel to the relay is open, N ms away` | the channel to the relay is open, and its round trip | nothing |
 | `net: the relay has opened this game's room, and it's going on the list` | the room is open, and the list is told | nothing |
-| `net: no relay answered, so this game is open on this network only` | no relay answered in time | try again later. Your own network can still join |
-| `net: no relay the list named could be looked up, so this game is open on this network only` | none of the relays the list named has an address the game can use: either their names gave no address, or the address was refused, being private or this PC's own, which only `-dev` allows | check your internet connection. A tester with a relay on this PC or this network needs `-dev` |
+| `net: this game can't be hosted online: …, so it isn't hosted at all (sealed or nothing)` | the game couldn't go through the relay, for the reason given. It's never hosted online unsealed instead | try again later. If it says so, ask for access on the Online access page. Send us the log for any other reason |
+| `net: this game can't be hosted online: you haven't said yes to the server in servers.cfg yet` | nothing was sent: the game asks you first (above) | say yes to the server, then host |
 | `net: this game won't answer searches on this network while it goes through a relay` | hosting through the relay, a search on your own network won't find the game | nothing. Friends there join from the list, like everyone else |
-| `net: this game's room on the relay is gone, so nobody more can join through it: …` | the room couldn't be kept. The reason follows, one of: "the relay didn't answer" (no room within 10 s), "the relay is too busy just now", "the relay has too many games from this address", "the relay said no, for a reason this version doesn't know", "the relay stopped answering, so the room has gone" (no answer to the room's keeps for 45 s). The game is then open on your own network | host again, to get back on the relay |
-| `net: this game is open on this network instead` | after a lost room, the game is open on your own network | nothing |
+| `net: this game's room on the relay is gone, so nobody more can join through it: …` | the room couldn't be kept. The reason follows, one of: "the relay didn't answer" (no room within 10 s), "the relay is too busy just now", "the relay has too many games from this address", "the relay said no, for a reason this version doesn't know", "the relay stopped answering, so the room has gone" (no answer to the room's keeps for 45 s). The online game then ends (the next line) | host again |
+| `net: …, so this online game has ended: it can't go on sealed, and it never opens on this network instead` | the relay was lost, so the game ended rather than go on unsealed | host again |
 | `net: while going through a relay, N packet(s) from elsewhere were dropped` | packets from anyone but the relay reached the host, and were refused | nothing. That's the protection working |
 | `Net_ConnectToSession - couldn't join through the relay: …` and `Relay: couldn't join the game, because …` | a join through the relay failed. The reason is one of the game's own: "the relay knows no game with that code", "that game is full", "the relay is too busy just now", "the relay didn't answer", "the game's host didn't answer through the relay", "no relay could be reached", "the relay said no, for a reason this version doesn't know", "the join was given up" (you pressed Esc, or closed the game during the wait) | for "full" or "no game", pick another game. For "a reason this version doesn't know", update the game. For the others, try again |
 
@@ -102,12 +112,17 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 | Line | What it means | What to do |
 |---|---|---|
 | `Relay list: the game is on the list` and `… off the list` | a host's game was listed, then taken off | nothing |
-| `Relay list: no games from the list, because …` | reading the list failed. The reason is the game's own: "no relay server is set" (normal until it's live), "the relay server couldn't be reached", "… took too long to answer", "… certificate wasn't accepted", "… said no", or a reason the list's answer was refused, such as "the answer has more after its end" | for "couldn't be reached" or "took too long", check your connection. Send us any other |
-| `Relay list: the relay server's certificate wasn't accepted` | Windows didn't accept the server's HTTPS certificate, so the game refused to talk to it | check your PC's date and time. If those are right, tell us: the game never talks to a server Windows doesn't trust |
-| `Relay list: the relay's name looked up to …, which only -dev allows` (and the other "looked up to" lines) | a relay's name led to an address that can't be a relay out on the internet, such as your own network's, so that relay is left out | nothing. That's the protection working |
-| `Relay list: a relay's name gave no address, so that relay is left out` | a relay's name couldn't be looked up | check your connection |
-| `Relay list: the list of relays was refused, …` | the list's answer wasn't what the game expects, so it keeps the last good one | send us the log |
-| `Relay list: the settings' RelayServer is for tests only, with -dev, so the game's own is used` | the settings name a relay server, but the game started without `-dev`, so they're ignored | nothing, unless you're testing |
+| `Relay list: no games from the list, because …` | reading the list failed. The reason is the game's own: "no relay server is set" (no good line in servers.cfg), "the relay server couldn't be reached", "… took too long to answer", "… secure connection couldn't be made", "… said no", "the relay server's keys don't match its line in servers.cfg, …", or a reason the list's answer was refused, such as "the answer has more after its end" | for "couldn't be reached" or "took too long", check your connection. For the keys, see below. Send us any other |
+| `Relay list: the server is servers.cfg line N` (with `, on this PC` or `, on this network` for a server at home, and `, the player's pick` when it's the line you picked) | which line of servers.cfg the game uses | nothing |
+| `Relay list: the player picked servers.cfg line N, for the next start` (or `…, but the pick couldn't be kept, so the next start uses the line it would have`) | you picked a server. The game uses it from its next start | start the game again to use it |
+| `Relay list: servers-picked.cfg isn't used, so the first good line is: …` | the file of your pick isn't one the game wrote (a line it never writes, two picks, a link, or not your Windows user's), so no pick is taken from it | nothing: pick again, and the file is written whole again |
+| `Relay list: servers.cfg line N isn't used: …` | that line was skipped. The reason says what's wrong with it, such as "its fingerprint isn't 64 small hex digits", "its address can't be a server's", or "another line has the same name, so neither is used". The line itself is never written in the log | fix that line, or get it again from whoever runs the server |
+| `Relay list: servers.cfg isn't used: …`, or `Relay list: there's no servers.cfg in the game's folder, …` (and the other lines about finding the file) | the whole file was skipped, such as one over 16 KB or of more than 64 lines, or the game couldn't find or read it | put a good servers.cfg beside the game's `bin` folder |
+| `Relay list: the relay server's keys match its line in servers.cfg` | the server proved it's the one the line names | nothing |
+| `Relay list: the player said yes to the server in servers.cfg, and it's kept for the next time` (or `…, but it couldn't be kept, so it holds for this run only`) | you said yes to the server, and from then on the game may use it | nothing. If it couldn't be kept, you'll be asked again next time |
+| `Relay list: servers-trusted.cfg isn't used, so every server is asked about again: …` | the file of your yeses isn't one the game wrote (a line it never writes, a link, or not your Windows user's), so none is taken from it | nothing: say yes again, and the file is written whole again |
+| `Relay list: the relay server's keys don't match its line in servers.cfg, so nothing more is sent to it` | the server at that address isn't the one the line names: the line is wrong or old, or something else answered at that address. Nothing more goes to it until the game restarts | get the line again from whoever runs the server. If it's right, tell them |
+| `Relay list: the relay server showed another key than the one that matched its line, so nothing was sent to it` | after it matched, the server showed another key on a later call, so that call was dropped before anything went | tell whoever runs the server, and send us the log |
 | `Relay list: couldn't start, …` | the game couldn't start its list calls | send us the log |
 | `Relay list: N earlier piece(s) of news came too fast to keep` | some list lines were left out | nothing |
 | `Relay list: the games page looks for games again` | Enter on the page of games found, after it had stopped looking | nothing |
@@ -125,15 +140,10 @@ Some of these lines have `Error:` in front of them in the log. The words after i
 **What's private:**
 - **The log never holds an address.** No network address or port, and nothing that identifies a relay room: no code, token, ticket or pass. Connections are numbers. The log is safe to post as it is. It does hold the names players typed in the lobby, and your profile's name.
 - **The relay server writes no address down,** in its logs or anywhere else. It sees your address while you play, as any server you talk to does.
+- **A game through the relay is sealed end to end** (version 2 of the relay's protocol: `CRYPTO.md` in the relay server's repository). Neither the relay nor anyone on the way can read or change it. The relay sees who plays with whom, when, and how much, but not what.
 
 **What isn't private:**
 - **The list shows your game's name** to everyone reading the list. Don't put anything private in it.
-- **Today's online play isn't encrypted,** by address or through the relay (version 1 of the relay's protocol). Anyone on the path can read and change the game's packets:
-  - your Wi-Fi;
-  - your provider;
-  - the relay, once it's live.
-
-  The game's packets are only play, but don't type anything private in the game's chat.
-- **Version 2 will encrypt every packet end to end,** so even the relay can't read a game. It's designed (`CRYPTO.md` in the relay server's repository), and comes later.
+- **A game on your own network isn't encrypted.** Anyone on that network, your Wi-Fi included, can read and change its packets. They're only play, but don't type anything private in the game's chat there.
 
 **Only play with people you trust** while this is a test build.

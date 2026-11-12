@@ -16,4 +16,10 @@ extern char MP_Config_Description[202];
 extern char MP_PlayerName[NET_PLAYERNAMELENGTH+3];
 extern char MP_SessionName[MAX_MULTIPLAYER_NAME_LENGTH+23];
 
+// Writes the Multiplayer page's rows, each time it opens: the player's name; the Online row (online_page.h); then Start game, Co-op
+// campaign and Join game, as in 1999. Added 2026-11-10 by Melanikus for the AvP port, in place of MenuData_ShowOnlineAccessRow; modified
+// 2026-11-11 (the owner's rulings: "they will choose their friends' server", "No auto choice, they choose"): there's no Host on row any
+// more, as Start game and Co-op campaign open the host page, where the player chooses the server (host_page.h).
+void MenuData_SetMultiplayerRows(void);
+
 #endif

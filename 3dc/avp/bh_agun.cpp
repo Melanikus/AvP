@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a sentry gun (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the other machines hear when a sentry gun is destroyed, and draw its own model
 //   a network game that plays the same as single player has the level's sentry guns, on the host
@@ -1718,7 +1720,7 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

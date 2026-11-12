@@ -13,10 +13,16 @@
 //   species=predator lets a gun= run play as a Predator
 //   botfight= has the host make an NPC beside the joiner in a network test
 //   friendlyfire=off has the host of a network test turn friendly fire off
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   floorislava=off has the run play 1999's aliens, as the console's FLOORISLAVA OFF does, for the other side of a film (#109's flip)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   custommap= plays a custom map made for single player, by the name the Custom maps page lists it under
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   access= and accesswait= press the Online access page's rows, and answer= and answerafter= the host's answer to a player asking to join
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port:
+//   yespage= shows an access run the yes page and presses one of its rows, and hostrow= hosts through the Multiplayer page's Host row
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   hoston= names the server a host through the rows chooses on the Host on row, and joinon= the server whose game a Find games run joins
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -32,7 +38,8 @@
 //   AvPx.exe -dev -hudson level=derelict frames=5000 rooms=1 lighting=normals shadows=on record=pictures
 //
 // A run that says machine=shared also makes a film of itself, an mp4 in its folder, unless it says film=no or record=numbers. record=pictures keeps a film as well. Taking a film's pictures slows the frames, so a run that measures time has no film,
-// and asking for one by name, with record=video, is refused:
+// and asking for one by name, with record=video, is refused. film=menus starts the film at the menus instead of the level, cut into a clip for each page the menus picture, and pagehold=4 holds each
+// of those pages 4 seconds first, so the film shows it (added 2026-11-10 by Melanikus (Third) for the AvP port):
 //
 //   AvPx.exe -dev -hudson level=derelict frames=400000 seconds=1200 rooms=40 views=2 holdseconds=2 machine=shared
 //
@@ -96,7 +103,7 @@ enum
 	kHudsonLongestRouteName = 32,
 	kHudsonViewDistance = 3000,        // how far away the point he faces is: three metres
 	kHudsonLongestWallName = 31,
-	kHudsonLongestRelayName = 253,     // remoterelay=: a server's name is at most 253 letters (Relay_IsServerName)
+	kHudsonLongestRelayAddress = 15,   // remoterelay=: an IPv4 address is at most 15 letters, 255.255.255.255 (modified 2026-11-10, #175: never a name)
 	kHudsonLongestStrategyName = 59,
 	kHudsonMostTogether = 8,       // together=: the most aliens a watched fight has at once. Each is followed once a second
 	kHudsonDefaultStrategySeconds = 12,
@@ -174,11 +181,46 @@ enum
 	kHudsonAnswerSayNo
 };
 
+// yespage=: an access run sees the yes page, as a player does the first time a way online would use servers.cfg's line. Hudson pictures it
+// (server-yes.png) and presses "Yes, use this server" (yes) or "No, not now" (no). The yes holds for that run alone and is never kept
+// anywhere (relay_list.h, HudsonTest_RelayListShowsTheYesPage). Without yespage=, a Hudson run's line needs no yes, as nobody is there to
+// give it. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens.
+enum
+{
+	kHudsonYesPageNone = 0,
+	kHudsonYesPageYes,
+	kHudsonYesPageNo
+};
+
+// hostrow=: a net=host run hosts as a player does, online (hostrow=online; athome went with the Host row, 2026-11-10, the owner's ruling):
+// the Multiplayer page
+// pictured (multiplayer.png), then Start game, the game's page (host-config.png), the species page (host-species.png) and its Start row. Online, a server that hasn't answered
+// yet is waited for on that page as a player's is: "Asking the server..." (host-asking.png), then hosted, or after 30 s the words for no
+// answer (host-gaveup.png), and the run stops there. Without hostrow=, a host hosts from the code, as before. Added 2026-11-10 by Melanikus
+// (Third) for the AvP port.
+enum
+{
+	kHudsonHostRowNone = 0,
+	kHudsonHostRowOnline
+};
+
+// hoston= and joinon=: the server a run hosts on, or joins a game on, named as servers.cfg names its line. The owner's rulings, 2026-11-11:
+// "they will choose their friends' server" and "No auto choice, they choose". So a host through the rows (hostrow=online) must name its
+// server, and nothing is ever chosen for it. hoston= waits, up to kHudsonMostHostOnSeconds, for that server to be on the Multiplayer page's
+// Host on row (a server is there only once it has approved this copy), chooses it, and pictures the page. joinon= makes a Find games run
+// (findgames=yes) press a game listed by that server, and no other. A plan's words are split at spaces, so a space in the name is written
+// as _ (New_York for "New York"); the name is then compared with the line's own, letter for letter. So a name with an _ of its own can't be
+// named, and no line is chosen by a guess. The name is 1 to kHudsonLongestServerName letters, digits, - and ., with single _ between them.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game.
+int const kHudsonLongestServerName = 31;          // servers.cfg's own most (servers_cfg.h, kServersCfgNameLetters); menus.cpp checks they agree
+int const kHudsonMostHostOnSeconds = 90;          // past the list's first visit to every line, at the menus' start
+
 int const kHudsonDefaultAccessWaitSeconds = 70;   // past the list's one call a minute from one address
 int const kHudsonLeastAccessWaitSeconds = 61;
 int const kHudsonMostAccessWaitSeconds = 3600;
 int const kHudsonDefaultAnswerAfterSeconds = 3;
 int const kHudsonMostAnswerAfterSeconds = 15;     // well inside the 20 s a Hudson joiner waits for the host's word (menus.cpp)
+int const kHudsonMostPageHoldSeconds = 10;        // pagehold=: well inside the joiner's 40 s for the host's word, and the list's 15 s patience
 
 // What a hostile run does, beyond sending each bad message in turn.
 // drain: this client uses up the other machine's blocks with messages, inside every limit.
@@ -241,7 +283,7 @@ struct HudsonPlan
 	char siegeFar[kHudsonLongestWallName + 1];  // siegefar=: the room a siege's xenoborgs are made in, further off, so that they have time to wake. Nothing means where the others come from
 	char customMap[kCustomMapNameMost + 1]; // custommap=: a custom map made for single player, played instead of level=, which still says who plays. Nothing means none
 	char siegeFrom[kHudsonLongestWallName + 1]; // siegefrom=: the room a siege's enemies are made in, with _ for a space in its name. Nothing means the far side of siegeRoom
-	char remoteRelay[kHudsonLongestRelayName + 1]; // remoterelay=: the one relay beyond this machine a run with net= may use, by its server's name (server #14's run through a relay on another machine, 2026-11-09). Nothing means none: this machine only
+	char remoteRelay[kHudsonLongestRelayAddress + 1]; // remoterelay=: the one relay beyond this machine a run with net= may use, by its address, as its server's servers.cfg line gives it (server #14's run through a relay on another machine, 2026-11-09; an address since 2026-11-10, #175). Nothing means none: this machine only
 	bool lookAllTheTime;  // look=yes or look=no: after the smoke test, a player the fight isn't aiming goes on looking at the nearest of what's being fought, or else at the other player. Unless a run asks, a fight or a kill on the campaign does
 	bool listPlaceAsked;  // listplace= was given
 	int listPlace;        // listplace=: a skirmish on this place of the co-op level list, started the way the level row does it
@@ -249,6 +291,7 @@ struct HudsonPlan
 	bool play;            // play=yes: he plays the level on foot, as a player would. See hudson_play.h
 	bool gunAlien;        // gunalien=yes: a gun= run makes an alien in front of him before the throws and shots that it times, for them to hit
 	bool noFriendlyFire;  // friendlyfire=off: the host of a net= run with coop=yes turns friendly fire off, as its menu row would
+	bool floorIsLavaOff;  // floorislava=off: the run types the console's FLOORISLAVA OFF before any level starts, for 1999's aliens
 	int framesPerSecond;  // fps=: a run goes no faster than this many frames a second. Unless it asks, that's kHudsonDefaultFramesPerSecond. 0, from fps=uncapped, is as fast as it can.
 	int killKind;         // killkind=: this run kills the level's own NPC of this kind, the one placed nearest killat=, from kHudsonBotFight.... 0 for none
 	int killX, killY, killZ; // killat=x,y,z: where the level file places it
@@ -273,6 +316,9 @@ struct HudsonPlan
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
+	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
+	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
+	int pageHoldSeconds;  // pagehold=: with film=menus, each page the menus picture is held this many seconds first, 1 to 10, so the film shows it. 0 for none
 	bool breakVideo;      // break=video: the encoder fails for real part way, to prove that a run survives it. It needs a run with a film
 	bool breakPrisms;     // break=prisms: don't send the shadow prisms to the card, so that vision=check can be seen to notice. It needs vision=
 	bool vision;          // vision=check: read the frame's pictures once a view, and say what's missing. See hudson_vision.h
@@ -283,7 +329,6 @@ struct HudsonPlan
 	bool machineShared;   // machine=shared: someone may use the machine during the run, so touching it doesn't end the run, and its timings mean nothing
 	bool hostile;         // hostile=yes: a net= run sends each bad message in turn, to see it refused
 	int hostileKind;      // hostile= can also be drain, watch, hold or flood: see HudsonHostileKind
-	bool typed;           // typed=yes: a net= run's joiner finds the game by searching for a typed address, 127.0.0.1
 	bool coopWalk;        // coopwalk=yes: each level's chain file is walked on both machines
 	bool coop;            // coop=yes: a net= run plays the campaign its level is on
 	int coopEndSeconds;   // coopend=: on the host, each level's end is reached this long after it starts
@@ -314,6 +359,10 @@ struct HudsonPlan
 	int answerAfterSeconds; // answerafter=: the seconds the host's answer rows are up before the press, 1 to 15. Unless asked, 3
 	bool findGames;       // findgames=yes: a net=join run through the relay joins as a player does: Find Games, then the list's game's row, with pictures of the joining page asking (its check code) and let in. Otherwise the list's game is joined from the code, as before
 	bool menuPictures;    // menus=pictures: a run that stays at the menus, pictures four pages (main, Multiplayer, Online access, Options) and the intro's copyright screen and logo, and ends, pressing nothing that sends. For seeing how the menus are drawn at a screen size (menu_shape.h). Added 2026-11-10 by Melanikus for the AvP port
+	int yesPage;          // yespage=: from kHudsonYesPage...: an access run sees the yes page and presses that row. 0 for none: the line needs no yes, as before (added 2026-11-10)
+	int hostRow;          // hostrow=: from kHudsonHostRow...: a net=host run hosts through the Multiplayer page's Host row, as a player does. 0 for none: it hosts from the code, as before (added 2026-11-10)
+	char hostOn[kHudsonLongestServerName + 1];   // hoston=: the server's name, each _ turned back into a space; "" for none (added 2026-11-11)
+	char joinOn[kHudsonLongestServerName + 1];   // joinon=: the same, for the game a Find games run presses; "" for any (added 2026-11-11)
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -364,6 +413,16 @@ double HudsonPlan_OnePictureCovers(double wallLength, double pictureCoordinatesR
 // Is a run being asked for? It needs both words, each on its own. Without them, none of this exists.
 bool HudsonPlan_IsAskedFor(const char *commandLine);
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port). A file of this name in the run's own folder
+// (HudsonRun\My Games\Aliens versus Predator, or the second copy's) asks the run to end, as if it had reached its time: so its result is
+// written and its film finished, which closing the window doesn't promise. tools\hudson\stop-run.ps1 makes it.
+static const char *const kHudsonStopFileName = "hudson-stop";
+
+// Whether a hudson-stop file ends the run. It has to be there, a plain file (never a folder, and never a link, which could be anyone's
+// file), and written after the run started (in the same units as runStartedAt), so one left from an earlier run can't end this one at
+// once. Only that it's there counts, never what's in it, so nothing in it is ever read.
+bool HudsonPlan_StopFileCounts(bool there, bool isFolder, bool isLink, long long writtenAt, long long runStartedAt);
+
 // Reads what comes after -hudson, up to the next word starting with a dash. Gives back 0 if it's all good, or one of the reasons below.
 const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan);
 
@@ -386,8 +445,20 @@ extern const char *const kHudsonRefusedAnswerWithoutHost;
 extern const char *const kHudsonRefusedAnswerAfterNotANumber;
 extern const char *const kHudsonRefusedAnswerAfterOutOfRange;
 extern const char *const kHudsonRefusedAnswerAfterWithoutAnswer;
+extern const char *const kHudsonRefusedAnswerWithRelayHost;
 extern const char *const kHudsonRefusedFindGamesWord;
 extern const char *const kHudsonRefusedFindGamesWithoutJoin;
+extern const char *const kHudsonRefusedYesPageWord;
+extern const char *const kHudsonRefusedYesPageWithoutAccess;
+extern const char *const kHudsonRefusedHostRowWord;
+extern const char *const kHudsonRefusedHostRowWithoutHost;
+extern const char *const kHudsonRefusedHostRowWithRelayAuto;
+extern const char *const kHudsonRefusedHostRowWithCoop;
+extern const char *const kHudsonRefusedHostRowWithoutHostOn;
+extern const char *const kHudsonRefusedHostOnName;
+extern const char *const kHudsonRefusedHostOnWithoutHostRow;
+extern const char *const kHudsonRefusedJoinOnName;
+extern const char *const kHudsonRefusedJoinOnWithoutFindGames;
 extern const char *const kHudsonRefusedBotWeapon;
 extern const char *const kHudsonRefusedDeathWay;
 extern const char *const kHudsonRefusedVsync;
@@ -402,6 +473,7 @@ inline long long HudsonNextFrameDue(long long thisFrameWasDue, long long now, lo
 extern const char *const kHudsonRefusedBotFightWithoutCoop;
 extern const char *const kHudsonRefusedFriendlyFireNotOff;
 extern const char *const kHudsonRefusedFriendlyFireWithoutCoop;
+extern const char *const kHudsonRefusedFloorIsLavaNotOff;
 extern const char *const kHudsonRefusedUnknownName;
 extern const char *const kHudsonRefusedAskedTwice;
 extern const char *const kHudsonRefusedNoLevel;
@@ -520,6 +592,10 @@ extern const char *const kHudsonRefusedNetMeasuresTime;
 extern const char *const kHudsonRefusedNetNotAlone;
 extern const char *const kHudsonRefusedFilmUnknown;
 extern const char *const kHudsonRefusedFilmBothWays;
+extern const char *const kHudsonRefusedFilmMenusWithoutFilm;
+extern const char *const kHudsonRefusedPageHoldNotANumber;
+extern const char *const kHudsonRefusedPageHoldOutOfRange;
+extern const char *const kHudsonRefusedPageHoldWithoutFilmMenus;
 extern const char *const kHudsonRefusedBreakVideoWithoutVideo;
 extern const char *const kHudsonRefusedBreakUnknown;
 extern const char *const kHudsonRefusedBreakWithoutVision;
@@ -663,5 +739,17 @@ enum
 
 // Whether the test is still going on, or has passed or failed. If it failed, *why says what was wrong, the first thing that was. It's only passed when all of it is true at once.
 int HudsonPlan_SmokeVerdict(const HudsonSmokeFacts &facts, const char **why);
+
+// #203: when the two start too far apart to see each other (a big deathmatch map), the joiner goes to a spot beside the other player.
+// A spot only did if the way to it was clear, and on jockey one put the joiner's eyes somewhere dark, where nothing was on the screen.
+// Now a spot also needs something to stand on not far below it, room for a body above it, and nothing between it and the other player's
+// middle. Distances are millimetres along a ray from the spot, at the other player's own height; a ray that hit nothing says hit = false.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+enum
+{
+	kHudsonSmokeMostDrop = 2500,      // the floor at most this far below the spot
+	kHudsonSmokeLeastHeadroom = 1000  // and nothing nearer than this above it
+};
+bool HudsonPlan_SmokeSpotIsGood(bool floorHit, int floorBelow, bool ceilingHit, int ceilingAbove, bool wayClear);
 
 #endif

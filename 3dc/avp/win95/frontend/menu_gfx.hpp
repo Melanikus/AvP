@@ -105,6 +105,8 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, int blue);
 extern int RenderMenuText_Clipped(char *textPtr, int x, int y, int alpha, enum AVPMENUFORMAT_ID format, int topY, int bottomY);
 extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y);
+// How many lines of the small font a text takes, wrapped into a box this wide, by RenderSmallFontString_Wrapped's own rule
+extern int SmallFontString_WrappedLines(const char *textPtr, int width);
 
 extern void DrawAvPMenuGfx(texID_t textureID, int topleftX, int topleftY, int alpha,enum AVPMENUFORMAT_ID format);
 extern void DrawAvPMenuGfx_Clipped(texID_t textureID, int topleftX, int topleftY, int alpha,enum AVPMENUFORMAT_ID format, int topY, int bottomY);

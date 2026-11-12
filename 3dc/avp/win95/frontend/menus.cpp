@@ -52,7 +52,8 @@
 //   the page of games found is the online-play screens' (online_screens_page.h): a table of each game's name, level, players, region and
 //   ping, kept fresh every 5 s with the selection on the same game, and the spinning tail while it looks. A join is found by its game, not
 //   its row. The join's wait through a relay shows its own screen, and -dev -onlinescreens shows every screen for pictures.
-//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, only with -dev
+//   the Online access pages (server #24), and the Multiplayer page's row to them, only with -dev (since 2026-11-11 the Online page,
+//   online_page.h: every servers.cfg line on its own row)
 //   a host asked to let someone in through a relay sees the check code under the asking line (CRYPTO.md section 8)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
@@ -71,6 +72,7 @@
 #include "env_info.h"
 #include "custom_maps.h"
 #include "coop_menu.h"
+#include "level_lists.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -103,10 +105,11 @@
 #include "relay_auto.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
-#include "access_page.h"
+#include "online_page.h"       // every servers.cfg line on its own row, with its yes and its access (2026-11-11)
+#include "host_page.h"         // the server a game is hosted on, chosen by the player on its own page (2026-11-11)
+#include "server_yes_page.h"
+#include "host_wait_rules.h"   // a host's wait for the server, and a failed host's line (PO's rulings, 2026-11-10)
 
-// -dev (d3d_render.cpp): the Online access row and pages are there only with it
-extern int DevMode;
 #include "credits_roll.h"
 
 #if defined(_MSC_VER)
@@ -135,8 +138,6 @@ extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
 static void StartTheCoopCampaign(void);
 void SetBriefingTextToBlank(void);
-extern bool Net_UpdateSessionList(int &SelectedItem);
-extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
 extern void DrawMainMenusBackdrop(void);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -177,17 +178,53 @@ static void SetupNewMenu(enum AVPMENU_ID menuID);
 
 // The relay server's games, for the page of games found: the last good answer, kept here so that they can be put back each time the page
 // is set up again. The page's list is emptied whenever a new search of the LAN starts, and these would go with it.
-static RelayListGame relayGamesFound[kRelayListMostGames];
+// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every server in servers.cfg goes through the same page): every
+// agreed line's games, each with the line that listed it
+static RelayListServerGame relayGamesFound[kRelayListMostAllGames];
 static int relayGamesKept = 0;
 
 // Puts the kept relay games on the page's list, after whatever the LAN found. Net_AddRelaySession leaves out a game that's there already,
 // one this machine can't play, and any once the list is full, so this can be called each time the page is set up.
+// Modified 2026-11-11 by Melanikus for the AvP port (PO's ruling): a game on a line that hasn't approved this PC is shown, greyed, never
+// joined: its line's words under the list say "not approved yet: ask on the Online page" (online_screens_page.cpp).
 static void PutTheRelayGamesOnThePage(void)
 {
 	for (int i = 0; i < relayGamesKept; i++)
 	{
-		(void)Net_AddRelaySession(relayGamesFound[i]);
+		RelayListServerGame const &found = relayGamesFound[i];
+		(void)Net_AddRelaySession(found.game, found.line);
+
+		RelayListLineNow now;
+		bool const approved = RelayList_LineNow(found.line, &now) && now.access == kRelayAccessIsApproved;
+		int const session = Net_FindRelaySession(found.line, found.game.region, found.game.code);
+
+		if (!approved && session >= 0)
+		{
+			SessionData[session].AllowedToJoin = false;
+		}
 	}
+}
+
+// Which lines have approved this PC now, one bit for each line's place (servers.cfg has at most 64), so the games page sees the moment
+// that changes, and the approvals the list was last put on the page with (added 2026-11-11 by Melanikus for the AvP port)
+static_assert(kServersCfgMostLines <= 64, "one bit for each line");
+static uint64_t approvedWhenPut = 0;
+
+static uint64_t TheApprovedLines(void)
+{
+	int places[kServersCfgMostLines];
+	int const count = RelayList_ApprovedLines(places, kServersCfgMostLines);
+	uint64_t lines = 0;
+
+	for (int i = 0; i < count && i < kServersCfgMostLines; i++)
+	{
+		if (places[i] >= 0 && places[i] < kServersCfgMostLines)
+		{
+			lines |= uint64_t(1) << places[i];
+		}
+	}
+
+	return lines;
 }
 
 // Each frame of the page of games found: whether an answer has come from the relay server's list with games to show. An answer that
@@ -195,22 +232,48 @@ static void PutTheRelayGamesOnThePage(void)
 static bool TheRelayGamesHaveCome(void)
 {
 	int count = 0;
-	const char *why = NULL;
 
-	if (!RelayList_FoundGames(relayGamesFound, &count, &why))
+	// Modified 2026-11-11 by Melanikus for the AvP port: every agreed line's games, once every visit of the find has ended
+	if (!RelayList_FoundAllGames(relayGamesFound, &count))
 	{
 		return false;
 	}
 
-	relayGamesKept = why ? 0 : count;
+	relayGamesKept = count < 0 ? 0 : count > kRelayListMostAllGames ? kRelayListMostAllGames : count;
 
-	if (why)
+	// The list failed only when no line answered: then the first line's why, in the list code's own words, as before
+	const char *why = NULL;
+	bool anyAnswered = false;
+
+	for (int place = 0; place < RelayList_LineCount(); place++)
 	{
-		LogString(std::string("Relay list: no games from the list, because ") + why);
+		RelayListLineNow now;
+
+		if (!RelayList_LineNow(place, &now))
+		{
+			continue;
+		}
+
+		anyAnswered = anyAnswered || now.state == kRelayLineAnswered;
+
+		if (now.state == kRelayLineNoAnswer && !why)
+		{
+			why = now.why;
+			LogString(std::string("Relay list: a server gave no games, because ") + (now.why ? now.why : "it didn't answer"));
+		}
 	}
 
+	why = anyAnswered ? NULL : why;
+
 	// The page's ping column needs each game's hostMs, and it says why the list failed
-	OnlinePage_RelayGamesCame(relayGamesFound, relayGamesKept, why);
+	static RelayListGame gamesForThePage[kRelayListMostAllGames];
+
+	for (int i = 0; i < relayGamesKept; i++)
+	{
+		gamesForThePage[i] = relayGamesFound[i].game;
+	}
+
+	OnlinePage_RelayGamesCame(gamesForThePage, relayGamesKept, why);
 
 	return relayGamesKept > 0;
 }
@@ -447,16 +510,25 @@ static void StartTheCoopCampaign(void)
 }
 
 static bool JoinThroughFindGamesForARun(void);   // findgames=yes, below with the other presses a player makes
+static bool HostThroughTheRowsForARun(int level);   // hostrow=, below the host's wait it uses (added 2026-11-10 by Melanikus (Third))
 
 // A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
 // A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
 // Everything is on this machine's own address: see NetLoopbackOnly in networking.cpp. If it can't get as far as starting a level, the run ends here, and its result says how far it got.
+// A run's words for a host that failed: what it was doing, then why, in the game's own fixed words (networking.h, Net_HostFailedWhy). Added
+// 2026-11-10 by Melanikus for the AvP port (PO's ruling Q4): the four hosts only a run makes put the why in their log lines.
+static std::string HostFailedForARun(const char *what)
+{
+	const char *const why = Net_HostFailedWhy();
+	return why ? std::string(what) + ", because " + why : std::string(what);
+}
+
 static void StartNetworkGameForHudsonRun(void)
 {
 	extern int MultiplayerEpisodeForEnvironment(int environment);
 
 	int const onTheList = MultiplayerEpisodeForEnvironment(Hudson_Environment());
-	int const level = onTheList >= 0 ? onTheList : 0;
+	int level = onTheList >= 0 ? onTheList : 0;
 
 	SetDefaultMultiplayerConfig();
 	netGameData.gameType = NGT_Individual;
@@ -479,6 +551,17 @@ static void StartNetworkGameForHudsonRun(void)
 
 		netGameData.gameType = NGT_Coop;
 		netGameData.disableFriendlyFire = Hudson_NoFriendlyFire();
+
+		// The game's level number is the campaign level's place on the co-op list, as the host's own menu gives it (coop_menu.cpp), not
+		// the deathmatch list's, which has no campaign level: derelict came out as -1, then 0, and the games page named it "Stranded" (the
+		// showcase of 2026-11-10, Secondary's trace). A campaign with no such level (-1) keeps the number above. Modified 2026-11-10 by
+		// Melanikus (Third) for the AvP port.
+		int const coopPlace = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);
+
+		if (coopPlace >= 0)
+		{
+			level = coopPlace;
+		}
 	}
 
 	// hostile=yes and no campaign: a species game, the only kind that keeps the species scores one of the bad messages aims at
@@ -493,7 +576,21 @@ static void StartNetworkGameForHudsonRun(void)
 	strcpy(MP_PlayerName, Hudson_NetIsHost() ? "HOST" : "JOIN");
 	strcpy(MP_SessionName, "HUDSON");
 
-	if (Hudson_NetIsHost())
+	if (Hudson_NetIsHost() && Hudson_HostRow() != kHudsonHostRowNone)
+	{
+		// hostrow= (hudson_plan.h): the player's way in, the Multiplayer page's Host row, Start game and the game's Start row, with the
+		// server's wait if there is one, in place of hosting from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+		Hudson_NetSay("the host hosts online, through the Multiplayer page's Start game, as a player does");
+
+		if (!HostThroughTheRowsForARun(level))
+		{
+			Hudson_NetStopBecause(HostFailedForARun("the host's Start row hosted nothing").c_str());
+			return;
+		}
+
+		Hudson_NetSay("the host has its game hosted through the page's rows, and it's loading its level");
+	}
+	else if (Hudson_NetIsHost())
 	{
 		// -dev -relayhost (server #14, relay_auto.h): the list's relays first, so the game opens through the relay. If none come in time,
 		// it hosts on this machine only, as a run always did, and the log says so.
@@ -505,7 +602,7 @@ static void StartNetworkGameForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, level) == NET_FAIL)
 		{
-			Hudson_NetStopBecause("the host couldn't open its port on this machine");
+			Hudson_NetStopBecause(HostFailedForARun("the host couldn't open its port on this machine").c_str());
 			return;
 		}
 
@@ -513,8 +610,6 @@ static void StartNetworkGameForHudsonRun(void)
 	}
 	else
 	{
-		// The other game may still be loading, and it only answers once it's playing. Each try waits for 3 seconds.
-		int const mostTries = 20;
 		bool connected = false;
 
 		// -dev -relayjoin (server #14, relay_auto.h): the list's first game of this version, joined through its relay, the way a player
@@ -551,42 +646,9 @@ static void StartNetworkGameForHudsonRun(void)
 			}
 		}
 
-		// typed=yes: the way a player does who has typed an address. The address is this machine's own, and that's the only place it can go: the first independent read of this code found this page did nothing.
-		if (Hudson_NetIsTyped() && !connected)
-		{
-			DWORD const startedLooking = GetTickCount();
-			bool found = false;
-
-			strcpy(IPAddressString, "127.0.0.1");
-			Hudson_NetSay("the joiner is searching for a game at the address it was given");
-
-			while (!found && GetTickCount() - startedLooking < 60000)
-			{
-				int selection = 0;
-
-				CheckForWindowsMessages();
-				Net_FindAvPSessions();
-				Net_UpdateSessionList(selection);
-				found = NumberOfSessionsFound > 0;
-				Sleep(50);
-			}
-
-			if (!found)
-			{
-				Hudson_NetStopBecause("a search for a typed address found no game");
-				return;
-			}
-
-			Hudson_NetSay("the search found the game");
-			connected = Net_ConnectToSession(0, MP_PlayerName) != NET_FAIL;
-		}
-
-		for (int tryNumber = 0; tryNumber < mostTries && !connected; tryNumber++)
-		{
-			CheckForWindowsMessages();
-			connected = Net_ConnectToThisMachine(level, MP_PlayerName) != NET_FAIL;
-		}
-
+		// Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): a run joins through the
+		// relay, as a player does, or not at all. Its plain ways, a search by a typed address (typed=yes) and a join straight to the game on
+		// this machine, went with the plain game.
 		if (!connected)
 		{
 			Hudson_NetStopBecause("the client got no answer from the host");
@@ -714,9 +776,22 @@ static bool PressTheRowForARun(enum AVPMENU_ELEMENT_ID kind, int value, const ch
 	return false;
 }
 
-// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown
-static void MenuFrameForARun(const char *picture)
+// One frame of the main menus as a player sees them, and, if one is named, its picture before it's shown.
+// pagehold= (Hudson_PageHoldSeconds, with film=menus): a page to be pictured is first held, as it is, that many seconds, so the run's film
+// shows it before the picture ends its clip. holdFirst is false for a page the other game is waiting on this one to leave (the host's
+// yes), which isn't held. Modified 2026-11-10 by Melanikus (Third) for the AvP port.
+static void MenuFrameForARun(const char *picture, bool holdFirst = true)
 {
+	if (picture && holdFirst && Hudson_PageHoldSeconds() > 0)
+	{
+		DWORD const holdStarted = GetTickCount();
+
+		while (bRunning && (DWORD)(GetTickCount() - holdStarted) < (DWORD)Hudson_PageHoldSeconds() * 1000u)
+		{
+			MenuFrameForARun(NULL);
+		}
+	}
+
 	CheckForWindowsMessages();
 	ThisFramesRenderingHasBegun();
 	DrawMainMenusBackdrop();
@@ -745,14 +820,14 @@ static void MenuSecondsForARun(int seconds)
 	}
 }
 
-// After a press that calls the list: frames until its answer is on the page, at most 30 s, then two seconds more, and the page's picture.
-// False if the answer never came.
-static bool PictureTheAnswerForARun(const char *picture)
+// After a press that asks a line's server: frames until its answer is on the page, at most 30 s, then two seconds more, and the page's
+// picture. False if the answer never came. (Modified 2026-11-11 by Melanikus for the AvP port: the answer of the line pressed.)
+static bool PictureTheAnswerForARun(int place, const char *picture)
 {
 	DWORD const started = GetTickCount();
 	bool came = true;
 
-	while (bRunning && AccessPage_CallOnItsWay())
+	while (bRunning && OnlineLines_AskingOn(place))
 	{
 		if ((DWORD)(GetTickCount() - started) > 30000u)
 		{
@@ -772,42 +847,135 @@ static bool PictureTheAnswerForARun(const char *picture)
 // Join Game, Find Games, then, once the list shows a game this version may join through a relay, its row, pressed. The row's own code
 // joins it (Net_ConnectToSession, drawing the joining screen meanwhile). Then the joining page, drawn as a player sees it, is pictured
 // asking the host with its check code (join-asking.png), and let in (join-letin.png). True once the host has let it in.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game: with joinon=, only
+// a game that server listed is pressed (the line servers.cfg names exactly so). And the list is pictured once every server that has
+// approved this copy has a game on it, or at the 30 s, so one picture shows each server's games; the log says how many servers had one.
+
+// Whether the list's game at session is one the server servers.cfg names exactly name listed: any game for an empty name. A game whose
+// line isn't known is no server's.
+static bool GameIsOnTheNamedLine(int session, const char *name)
+{
+	if (!name[0])
+	{
+		return true;
+	}
+
+	RelayListLineNow now;
+	return SessionData[session].serverLine >= 0 && RelayList_LineNow(SessionData[session].serverLine, &now) && strcmp(now.line.name, name) == 0;
+}
+
+// The games page's row of the first game this version may join through a relay, on the named server (GameIsOnTheNamedLine), or -1.
+// linesWithAGame: how many servers have at least one such game on the page, whatever the name.
+static int JoinableGameRowForARun(const char *name, int *linesWithAGame)
+{
+	bool lineHasAGame[kServersCfgMostLines] = {};
+	int row = -1;
+	*linesWithAGame = 0;
+
+	for (int r = 0; r < AvPMenus.NumberOfElementsInMenu; r++)
+	{
+		int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
+
+		if (s < 0 || !SessionData[s].AllowedToJoin || !SessionData[s].throughRelay)
+		{
+			continue;
+		}
+
+		int const line = SessionData[s].serverLine;
+
+		if (line >= 0 && line < kServersCfgMostLines && !lineHasAGame[line])
+		{
+			lineHasAGame[line] = true;
+			(*linesWithAGame)++;
+		}
+
+		if (row < 0 && GameIsOnTheNamedLine(s, name))
+		{
+			row = r;
+		}
+	}
+
+	return row;
+}
+
+// Whether any line's access request is still on its way (online_page.h): the Multiplayer page asks every line with the yes as it opens
+static bool ALineIsStillAskingForARun(void)
+{
+	for (int place = 0; place < OnlineLines_LineCount(); place++)
+	{
+		if (OnlineLines_AskingOn(place))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool JoinThroughFindGamesForARun(void)
 {
 	LoadAllAvPMenuGfx();
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
-	SetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);
-	MenuSecondsForARun(1);
 
-	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	// The Multiplayer page first, then its Join Game row, as a player comes to Find Games (modified 2026-11-11 by Melanikus (Third) for the
+	// AvP port): opening that page asks every line with the yes where this PC stands (OnlineLines_AskTheAgreedLines), and a game is
+	// joinable only on a line that has approved this copy this run. Going straight to Join Game, as the run did before, asked nothing.
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+	bool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, "Join Game") && AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERJOINGAME;
+
+	if (!joined)
+	{
+		LogErrorString("hudson: the Multiplayer page's Join Game didn't open its page");
+	}
+
+	MenuSecondsForARun(1);
+	joined = joined && PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERSELECTSESSION, "Find Games");
+	const char *const joinOn = Hudson_JoinOnName();
+	int approvedPlaces[kServersCfgMostLines];
 	int row = -1;
+	int linesWithAGame = 0;
+	int approved = 0;
 	DWORD const started = GetTickCount();
 
-	// The list's games come within a few seconds of the page opening; at most 30 s
-	while (joined && bRunning && row < 0 && (DWORD)(GetTickCount() - started) < 30000u)
+	// The list's games come within a few seconds of the page opening; at most 30 s. It waits on until every line's answer has come, the
+	// named game is there, and every server that has approved this copy has a game on the page, so the picture shows them all.
+	while (joined && bRunning && (DWORD)(GetTickCount() - started) < 30000u)
 	{
 		MenuFrameForARun(NULL);
+		row = JoinableGameRowForARun(joinOn, &linesWithAGame);
+		approved = RelayList_ApprovedLines(approvedPlaces, kServersCfgMostLines);
 
-		for (int r = 0; r < AvPMenus.NumberOfElementsInMenu && row < 0; r++)
+		if (row >= 0 && linesWithAGame >= approved && !ALineIsStillAskingForARun())
 		{
-			int const s = AvPMenus.MenuElements[r].ElementID == AVPMENU_ELEMENT_LISTCHOICE ? OnlinePage_SessionForRow(r) : -1;
-
-			if (s >= 0 && SessionData[s].AllowedToJoin && SessionData[s].throughRelay)
-			{
-				row = r;
-			}
+			break;
 		}
 	}
 
+	LogString("hudson: Find Games lists games from " + std::to_string(linesWithAGame) + " of the " + std::to_string(approved < 0 ? 0 : approved)
+		+ " server(s) that approved this copy");
+
 	if (row < 0)
 	{
-		LogErrorString("hudson: Find Games showed no game this version may join through a relay");
+		LogErrorString(joinOn[0] ? std::string("hudson: Find Games showed no game this version may join through a relay on the server joinon= names, \"") + joinOn + "\""
+			: std::string("hudson: Find Games showed no game this version may join through a relay"));
 		joined = false;
 	}
 
 	if (joined)
 	{
 		MenuFrameForARun("join-list.png");
+
+		// The picture drew frames, and the list may have changed with them, so the game's row is found again before it's pressed
+		row = JoinableGameRowForARun(joinOn, &linesWithAGame);
+
+		if (row < 0)
+		{
+			LogErrorString("hudson: the list's game went from the page while it was pictured");
+			ReleaseAllAvPMenuGfx();
+			return false;
+		}
+
 		AvPMenus.CurrentlySelectedElement = row;
 		InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
 		LogString("hudson: pressed the list's game");
@@ -846,16 +1014,20 @@ static bool JoinThroughFindGamesForARun(void)
 			askingPictured = true;
 		}
 
-		MenuFrameForARun(picture);
+		// Let in is never held (pagehold=, MenuFrameForARun): once the host has said yes, it's waiting for this game to go on to the level
+		MenuFrameForARun(picture, !letIn);
 	}
 
 	ReleaseAllAvPMenuGfx();
 	return letIn;
 }
 
-// access=: Multiplayer, Online access, then Request access (and Check again after accesswait=), or Make a new identity and Yes. The run
-// stays at the menus, and ends once the presses are done: it plays no level. Its kept identity is a Hudson run's own (the store's
-// NetIdentityStore_FileName), never the player's.
+// access=: Multiplayer, Online, then every line's row in the file's order (modified 2026-11-11 by Melanikus for the AvP port: one model
+// for every line, the same presses for each): with yespage=, the line's yes page, pictured, and the run's row on it; then, for a line with
+// its yes, its access request, its answer pictured, and with access=check, after accesswait=, Check again on each, pictured. Or, with
+// access=newid, Make a new identity and Yes, and nothing else. The run stays at the menus, and ends once the presses are done: it plays
+// no level. Its kept identity is a Hudson run's own (the store's NetIdentityStore_FileName), never the player's. Pictures are named by
+// the line's place counted from 1: server-yes-1.png, access-asked-1.png, access-checked-1.png.
 static void RunTheAccessPagesForHudson(void)
 {
 	int const press = Hudson_AccessPress();
@@ -865,31 +1037,107 @@ static void RunTheAccessPagesForHudson(void)
 	SetupNewMenu(AVPMENU_MULTIPLAYER);
 	MenuSecondsForARun(1);
 
-	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	bool asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, "Online") && AvPMenus.CurrentMenu == AVPMENU_ONLINE;
 	MenuSecondsForARun(2);
+	MenuFrameForARun(asAsked ? "online.png" : NULL);
 
 	if (asAsked && press == kHudsonAccessNewId)
 	{
-		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS_NEW, "Make a new identity");
+		// The Multiplayer page asked every line with its yes as it opened, and a new identity waits until every answer has come
+		// (RelayList_ForgetAccess), so the run waits for them first, at most 30 s, as a player would see them come. Then the page must say
+		// the new identity was made: a run that kept its old identity proves nothing about a fresh one. Added 2026-11-11 by Melanikus for the
+		// AvP port (PO, after the owner's picture run).
+		DWORD const waitStarted = GetTickCount();
+
+		while (bRunning && ALineIsStillAskingForARun() && (DWORD)(GetTickCount() - waitStarted) < 30000u)
+		{
+			MenuFrameForARun(NULL);
+		}
+
+		if (ALineIsStillAskingForARun())
+		{
+			LogErrorString("hudson: a line's access request was still on its way after 30 s, so no new identity was made");
+			asAsked = false;
+		}
+
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_NEW_IDENTITY, "Make a new identity");
 		MenuSecondsForARun(2);
-		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowNewYes, "Yes, make a new identity");
+		asAsked = asAsked && PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlineNewIdentityYes, "Yes, make a new identity");
 		MenuSecondsForARun(2);
 		MenuFrameForARun("access-newid.png");
+
+		if (asAsked && !OnlineLines_SaysTheNewIdentityWasMade())
+		{
+			LogErrorString("hudson: Make a new identity was pressed, and the Online page doesn't say a new identity was made");
+			asAsked = false;
+		}
 	}
 	else if (asAsked)
 	{
-		asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Request access") && PictureTheAnswerForARun("access-asked.png");
+		int const lines = OnlineLines_LineCount();
+		char picture[64];
+
+		for (int place = 0; asAsked && place < lines; place++)
+		{
+			// yespage= (hudson_plan.h): the line's row opens its yes page, as a player's first time does. It's pictured, and the run's row
+			// pressed: both go back to the Online page; after a No nothing goes to that line, and the run goes on to the next. The yes holds
+			// for this run alone (relay_list.h). Added 2026-11-10 by Melanikus (Third) for the AvP port; for each line since 2026-11-11.
+			if (Hudson_YesPagePress() != kHudsonYesPageNone && OnlineLines_NeedsTheYes(place))
+			{
+				bool const yes = Hudson_YesPagePress() == kHudsonYesPageYes;
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, for its yes") &&
+					AvPMenus.CurrentMenu == AVPMENU_SERVER_YES;
+
+				if (!asAsked)
+				{
+					LogErrorString("hudson: yespage= asked for the yes page, and the line's row didn't open it");
+					break;
+				}
+
+				snprintf(picture, sizeof(picture), "server-yes-%d.png", place + 1);
+				MenuFrameForARun(picture);
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, yes ? kServerYesRowYes : kServerYesRowNo, yes ? "Yes, use this server" : "No, not now");
+				MenuSecondsForARun(2);
+
+				if (asAsked && AvPMenus.CurrentMenu != AVPMENU_ONLINE)
+				{
+					LogErrorString("hudson: the yes page's row was pressed, and the run isn't back on the Online page");
+					asAsked = false;
+				}
+			}
+
+			// A line without its yes is asked nothing
+			if (!asAsked || OnlineLines_NeedsTheYes(place))
+			{
+				continue;
+			}
+
+			snprintf(picture, sizeof(picture), "access-asked-%d.png", place + 1);
+			asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, for its access request") &&
+				PictureTheAnswerForARun(place, picture);
+		}
 
 		if (asAsked && press == kHudsonAccessCheck)
 		{
 			MenuSecondsForARun(Hudson_AccessWaitSeconds());
-			asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kAccessRowRequest, "Check again") && PictureTheAnswerForARun("access-checked.png");
+
+			for (int place = 0; asAsked && place < lines; place++)
+			{
+				if (OnlineLines_NeedsTheYes(place))
+				{
+					continue;
+				}
+
+				snprintf(picture, sizeof(picture), "access-checked-%d.png", place + 1);
+				asAsked = PressTheRowForARun(AVPMENU_ELEMENT_ONLINE_ACCESS, kOnlinePageLineRowFirst + place, "a line's row, to check again") &&
+					PictureTheAnswerForARun(place, picture);
+			}
 		}
 	}
 
 	ReleaseAllAvPMenuGfx();
-	Hudson_AccessRunEnds(asAsked ? "the Online access page's rows were pressed, and the server's answers pictured"
-		: "a press on the Online access page couldn't be made, or the server's answer never came", asAsked);
+	Hudson_AccessRunEnds(asAsked ? "the Online page's rows were pressed, each line's, and the servers' answers pictured"
+		: "a press on the Online page couldn't be made, or a server's answer never came", asAsked);
 }
 
 // One frame of one of the intro's two still pictures, drawn as intro.cpp draws it at full brightness, and its picture (menus=pictures):
@@ -922,8 +1170,8 @@ static void IntroFrameForARun(bool copyright, const char *picture)
 }
 
 // menus=pictures: four of the menus' pages as a player sees them, and the intro's two still pictures, each pictured, so how the menus
-// are drawn can be seen at any screen size (menu_shape.h). The only row pressed is Multiplayer's Online access; the page opening sends
-// nothing, since it asks the list only once a request has been sent, which a new run never has. Added 2026-11-10 by Melanikus for the
+// are drawn can be seen at any screen size (menu_shape.h). The only row pressed is Multiplayer's Online; the page opening sends nothing,
+// since it asks a line's server only once this run has sent it a request, which a new run never has. Added 2026-11-10 by Melanikus for the
 // AvP port.
 static void RunTheMenuPicturesForHudson(void)
 {
@@ -938,9 +1186,9 @@ static void RunTheMenuPicturesForHudson(void)
 	MenuSecondsForARun(1);
 	MenuFrameForARun("menu-multiplayer.png");
 
-	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE_ACCESS, "Online access");
+	bool const accessOpened = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_ONLINE, "Online");
 	MenuSecondsForARun(1);
-	MenuFrameForARun("menu-access.png");
+	MenuFrameForARun("menu-online.png");
 
 	SetupNewMenu(AVPMENU_OPTIONS);
 	MenuSecondsForARun(1);
@@ -951,7 +1199,7 @@ static void RunTheMenuPicturesForHudson(void)
 
 	ReleaseAllAvPMenuGfx();
 	Hudson_AccessRunEnds(accessOpened ? "four of the menus' pages and the intro's two still pictures were pictured"
-		: "the Online access row couldn't be pressed, so it wasn't pictured", accessOpened);
+		: "the Online row couldn't be pressed, so it wasn't pictured", accessOpened);
 }
 
 static int StartLevelForHudsonRun(void)
@@ -1039,7 +1287,7 @@ static int StartLevelForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, netGameData.levelNumber) != NET_OK)
 		{
-			LogErrorString("listplace: the skirmish couldn't start, so this run isn't one");
+			LogErrorString(HostFailedForARun("listplace: the skirmish couldn't start, so this run isn't one"));
 		}
 
 		SetLevelToLoadForThisNetworkGame();
@@ -1058,7 +1306,7 @@ static int StartLevelForHudsonRun(void)
 
 		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, 0) != NET_OK)
 		{
-			LogErrorString("class: the skirmish couldn't start, so this run isn't one");
+			LogErrorString(HostFailedForARun("class: the skirmish couldn't start, so this run isn't one"));
 		}
 	}
 
@@ -1112,7 +1360,7 @@ static bool HostByItselfThroughTheRelay(void)
 
 	if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) == NET_FAIL)
 	{
-		LogString("relay auto: this copy couldn't host, so it waits at the menus");
+		LogString(HostFailedForARun("relay auto: this copy couldn't host, so it waits at the menus"));
 		return false;
 	}
 
@@ -1618,10 +1866,325 @@ static void AnswerTheRequestForARun(void)
 	PressTheRowForARun(AVPMENU_ELEMENT_RESUMEGAME, 0, "Resume");
 }
 
+// ---- A host's wait for the server, and a failed host's line (host_wait_rules.h says why). Added 2026-11-10 by Melanikus for the AvP port
+// (PO's rulings Q3 and Q4).
+
+static bool HostsOnline(void);
+
+// What a waiting host does once the server is ready: the config page's Start row hosts the game set up there; Co-op campaign opens its
+// page, which hosts as it opens
+enum HostWaitFor
+{
+	kHostWaitingForNothing,
+	kHostWaitingToStart,
+	kHostWaitingToOpenCoop
+};
+
+static HostWaitFor hostWaiting = kHostWaitingForNothing;
+static enum AVPMENU_ID hostWaitPage = AVPMENU_MULTIPLAYER;   // the page it waits on: leaving it ends the wait
+static uint32_t hostWaitSince = 0;                           // GetTickCount when it began
+static uint32_t hostWaitRetrySince = 0;                      // while a wait's host is tried: when that wait began, so a wait that
+                                                             // follows keeps counting from the first press, never past 30 s in all
+static char hostLine[200];                                   // "Asking the server...", or why a host failed, under the page's rows
+static enum AVPMENU_ID hostLinePage = AVPMENU_MULTIPLAYER;   // the page it's for, the only one it's drawn on
+
+static void ShowTheHostLine(enum AVPMENU_ID page, const char *text)
+{
+	snprintf(hostLine, sizeof(hostLine), "%s", text ? text : "");
+	hostLinePage = page;
+}
+
+// Why a host failed, on the page it was pressed on: the game's words for what failed, then why in its own fixed words
+static void ShowWhyTheHostFailed(enum AVPMENU_ID page, const char *why)
+{
+	char line[sizeof(hostLine)];
+	HostWait_FailedLine(GetTextString(why ? TEXTSTRING_HOST_FAILED : TEXTSTRING_HOST_FAILED_PLAIN), why, line, sizeof(line));
+	ShowTheHostLine(page, line);
+}
+
+// The config page's Start row, pressed again for the player once the server is ready, so the game is hosted just as the row hosts it
+static void PressTheStartRowAgain(void)
+{
+	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
+	{
+		if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_STARTMPGAME)
+		{
+			AvPMenus.CurrentlySelectedElement = row;
+			InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+			return;
+		}
+	}
+}
+
+// A host pressed while the server hasn't answered yet waits for it, on the page it was pressed on. False, with nothing changed, when
+// there's nothing to wait for: no server chosen, or one that has answered. Modified 2026-11-11 by Melanikus for the AvP port (one model
+// for every line): it waits on the line the player chose to host on, whose visit the list makes (RelayList_FindGames visits every line
+// with a yes; the host page asks it as it opens).
+static bool AHostWaits(HostWaitFor what)
+{
+	const char *why = NULL;
+
+	if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)
+	{
+		return false;
+	}
+
+	hostWaiting = what;
+	hostWaitPage = AvPMenus.CurrentMenu;
+	hostWaitSince = hostWaitRetrySince != 0 ? hostWaitRetrySince : GetTickCount();
+	ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_ASKING));
+	return true;
+}
+
+// One frame of a host's wait (host_wait_rules.h). A line left from another page goes, too.
+static void HostWaitFrame(void)
+{
+	if (hostLine[0] && AvPMenus.CurrentMenu != hostLinePage)
+	{
+		hostLine[0] = 0;
+	}
+
+	if (hostWaiting == kHostWaitingForNothing)
+	{
+		return;
+	}
+
+	// Esc, or any other way off the page, ends the wait, and nothing is hosted
+	if (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || AvPMenus.CurrentMenu != hostWaitPage)
+	{
+		hostWaiting = kHostWaitingForNothing;
+		return;
+	}
+
+	const char *why = NULL;
+	int const state = Net_ServerState(&why);
+	HostWaitFor const what = hostWaiting;
+
+	switch (HostWait_Step(state == kNetServerAsking, state == kNetServerReady, state == kNetServerCantUse, hostWaitSince, GetTickCount()))
+	{
+		case kHostWaitGoOn:
+			return;
+
+		case kHostWaitHostNow:
+			hostWaiting = kHostWaitingForNothing;
+			hostLine[0] = 0;
+
+			// The host is tried with the wait's own start kept, so if it's refused for the server being asked again, the wait that follows
+			// goes on counting from the first press
+			hostWaitRetrySince = hostWaitSince;
+
+			if (what == kHostWaitingToStart)
+			{
+				PressTheStartRowAgain();
+			}
+			else
+			{
+				SetupNewMenu(AVPMENU_COOP_HOST);
+			}
+
+			hostWaitRetrySince = 0;
+			return;
+
+		case kHostWaitCantUse:
+			hostWaiting = kHostWaitingForNothing;
+			ShowWhyTheHostFailed(hostWaitPage, why);
+			return;
+
+		case kHostWaitGiveUp:
+			hostWaiting = kHostWaitingForNothing;
+			ShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));
+			return;
+	}
+}
+
+// The line under the page's rows, on its own page only: two lines of the small font fit between the rows' end and the help line's top
+static void DrawTheHostLine(void)
+{
+	if (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || !hostLine[0] || AvPMenus.CurrentMenu != hostLinePage)
+	{
+		return;
+	}
+
+	RECT area = { MENU_LEFTXEDGE, MENU_BOTTOMYEDGE, MENU_RIGHTXEDGE, 420 };
+	RenderSmallFontString_Wrapped(hostLine, &area, ONE_FIXED, 0, 0);
+}
+
+// hostrow=online (hudson_plan.h; athome went with the Host row, 2026-11-10): a Hudson host hosts the way a player does, for the owner's rehearsal of beta.2's
+// screens (PO, 2026-11-10). Added 2026-11-10 by Melanikus (Third) for the AvP port. Each press is a row selected and Enter, as a player
+// does, and one fixed line in the log (PressTheRowForARun):
+// 1. the Multiplayer page, pictured (multiplayer.png);
+// 2. Start game, which opens the host page (host-on.png), where the run chooses its server as a player does (hoston=; modified 2026-11-11
+//    by Melanikus for the AvP port, the owner's "No auto choice, they choose": a run that names none hosts nothing), which opens the
+//    game's page with the run's game on it, pictured (host-config.png), and its Start row, which opens the species page (host-species.png);
+// 3. that page's Start row. With a server that has answered, that hosts at once. With a server that hasn't
+//    answered yet, the page waits for it as a player's does (AHostWaits, HostWaitFrame): "Asking the server..." is pictured
+//    (host-asking.png), then either the row is pressed again for it and it hosts, or after 30 s the page says there was no answer
+//    (host-gaveup.png) and nothing is hosted. Nothing is pressed while it waits, as leaving the page ends the wait.
+// True once the game is hosted, and the menus are going on to the level. level is the game's place on its list, as the run chose it.
+static bool ChooseOnTheHostPageForARun(void);   // below, the host page's part of a run
+
+static bool HostThroughTheRowsForARun(int level)
+{
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_MULTIPLAYER);
+	MenuSecondsForARun(1);
+
+	// (Modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": there's no Host row to set any more; every game is hosted
+	// online.)
+	MenuSecondsForARun(1);
+	MenuFrameForARun("multiplayer.png");
+
+	// A game over the network, never the game's "skirmish" against the computer, whose Start game opens another page (as
+	// HostByItselfThroughTheRelay has it)
+	netGameData.skirmishMode = FALSE;
+
+	// Start game opens the host page, with nothing chosen (modified 2026-11-11 by Melanikus for the AvP port); the run chooses its server
+	// there as a player does, and that opens the game's page
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_CONFIG, "Start game") || AvPMenus.CurrentMenu != AVPMENU_HOST_ON)
+	{
+		LogErrorString("hudson: Start game didn't open the host page");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	// The page is pictured once the named line's row can be chosen (host-on.png), then that row is pressed
+	MenuSecondsForARun(1);
+
+	if (!ChooseOnTheHostPageForARun() || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG)
+	{
+		LogErrorString("hudson: no server was chosen on the host page, so the game's page didn't open");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	// The run's game, on the page whose rows show it, in case opening the page brought back another
+	netGameData.levelNumber = level;
+	MenuSecondsForARun(1);
+	MenuFrameForARun("host-config.png");
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYER_SPECIES_HOST, "Start, to the species page") || AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_SPECIES_HOST)
+	{
+		LogErrorString("hudson: the game's page's Start didn't open the species page");
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	MenuSecondsForARun(1);
+	MenuFrameForARun("host-species.png");
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_STARTMPGAME, 0, "Start"))
+	{
+		ReleaseAllAvPMenuGfx();
+		return false;
+	}
+
+	// The server's answer: hosted at once, or a wait on this page until it's hosted or the page gives up at 30 s (host_wait_rules.h). 40 s
+	// is past both. The wait's own state says which: a line on the page with no wait going on is a host that wasn't hosted.
+	DWORD const pressed = GetTickCount();
+	bool askingPictured = false;
+	bool notHosted = false;
+
+	while (bRunning && AvPMenus.MenusState == MENUSSTATE_MAINMENUS && (DWORD)(GetTickCount() - pressed) < 40000u)
+	{
+		const char *picture = NULL;
+
+		if (hostWaiting == kHostWaitingForNothing && hostLine[0])
+		{
+			notHosted = true;
+			break;
+		}
+
+		if (!askingPictured && hostWaiting != kHostWaitingForNothing && (DWORD)(GetTickCount() - pressed) > 1000u)
+		{
+			LogString("hudson: the page says it's asking the server");
+			picture = "host-asking.png";
+			askingPictured = true;
+		}
+
+		// The page's picture isn't held while it waits (pagehold=): the wait is the page's own, and its 30 s are what's shown
+		MenuFrameForARun(picture, false);
+	}
+
+	if (notHosted)
+	{
+		bool const noAnswer = strcmp(hostLine, GetTextString(TEXTSTRING_HOST_NO_ANSWER)) == 0;
+		MenuSecondsForARun(2);
+		MenuFrameForARun(noAnswer ? "host-gaveup.png" : "host-failed.png");
+		LogErrorString(std::string("hudson: nothing was hosted, and the page says: ") + hostLine);
+	}
+
+	bool const hosted = AvPMenus.MenusState == MENUSSTATE_STARTGAME;
+
+	if (!hosted && !notHosted)
+	{
+		LogErrorString("hudson: the host's Start row was pressed, and in 40 s neither hosted nor said why");
+	}
+
+	ReleaseAllAvPMenuGfx();
+	return hosted;
+}
+
+// THE HOST PAGE'S PART OF A HUDSON RUN (hostrow=online with hoston=, hudson_plan.h): the run presses the row of the line it names, as a
+// player does, once that line can be hosted on, and that opens the game's page. Nothing is chosen for a player, and a run that names no
+// line hosts nothing (the owner, 2026-11-11: "No auto choice, they choose"). Added 2026-11-11 by Melanikus for the AvP port, in place of
+// the Multiplayer page's Host on row; Third's hoston= gives the name. True once a line was chosen.
+static bool ChooseOnTheHostPageForARun(void)
+{
+	// hoston= names a line as servers.cfg does, letter for letter, so it can be as long as servers.cfg's longest name (Third)
+	static_assert(kHudsonLongestServerName == kServersCfgNameLetters, "hoston= and joinon= take a name as long as servers.cfg's longest");
+	const char *const name = Hudson_HostOnName();
+	DWORD const started = GetTickCount();
+	int row = -1;
+
+	// A line can be chosen only once its server has answered and approved this copy, so the run waits for its row, with the page drawn
+	// meanwhile. Nothing is ever chosen by default, not even the page's only line ("No auto choice, they choose", the owner, 2026-11-11).
+	while (name[0] && bRunning && !HostPage_RowCanBeChosen(row = HostPage_RowNamed(name)) &&
+		(DWORD)(GetTickCount() - started) < (DWORD)kHudsonMostHostOnSeconds * 1000u)
+	{
+		MenuFrameForARun(NULL);
+	}
+
+	MenuFrameForARun("host-on.png");
+
+	if (!name[0])
+	{
+		LogErrorString("hudson: no server named for the host page (hoston=), and nothing is chosen for a player: nothing is hosted");
+		return false;
+	}
+
+	if (!HostPage_RowCanBeChosen(row))
+	{
+		// The name came from the plan, which takes only letters, digits, -, . and spaces (hudson_plan.cpp, ReadServerName)
+		LogErrorString(std::string("hudson: the host page never offered the server hoston= names, \"") + name + "\", in " +
+			std::to_string(kHudsonMostHostOnSeconds) + " s: nothing is chosen, so nothing is hosted");
+		return false;
+	}
+
+	if (!PressTheRowForARun(AVPMENU_ELEMENT_HOSTLINE, row, "the host page's row of the server hoston= names") ||
+		RelayList_HostLine() != row - kHostPageLineRowFirst)
+	{
+		LogErrorString(std::string("hudson: the host page's row of \"") + name + "\" was pressed, and the game didn't take it as the server to host on: nothing is hosted");
+		return false;
+	}
+
+	LogString(std::string("hudson: the host page's row of \"") + name + "\", the server hoston= names, chosen as a player chooses it");
+	return true;
+}
+
 extern void AvP_UpdateMenus(void)
 {
 	// A player asking to join this host: the page's two answer rows, in front of its own, while the request waits
 	UpdateTheAnswerRows();
+
+	// A host waiting for the server, and the line under the rows (added 2026-11-10, PO's rulings Q3 and Q4)
+	HostWaitFrame();
+
+	// The host page adds up each line's players from the find's games, when they come (added 2026-11-11, in place of the Host on row)
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_HOST_ON)
+	{
+		HostPage_Frame();
+	}
 
 	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
 	{
@@ -1658,10 +2221,10 @@ extern void AvP_UpdateMenus(void)
 			CountTheRowsOnThisPage();
 		}
 	}
-	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS || AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+	else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE || AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY)
 	{
-		// The server's answer comes on the list's own thread, and the page shows it as it comes
-		AccessPage_Frame(AvPMenus.MenuElements);
+		// The servers' answers come on the list's own thread, and each line's row shows its own as it comes (online_page.h)
+		OnlineLines_Frame();
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
@@ -1773,19 +2336,30 @@ extern void AvP_UpdateMenus(void)
 		int selection = AvPMenus.CurrentlySelectedElement;
 		bool listChanged = false;
 
-		// The LAN's answers, or the relay server's
-		if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())
+		// The server's online list. Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over
+		// nyc3"): it's the only one, as there's no search on this network any more.
+		if (TheRelayGamesHaveCome())
 		{
 			listChanged = true;
 		}
 
-		// Every 5 s while the page is open, it asks again (online_screens.h's search, 12 times at most while it finds nothing): a new search
-		// of the LAN, which empties the list of games found, and the list of games
+		// Every 5 s while the page is open, it asks again (online_screens.h's search, 12 times at most while it finds nothing): the list of
+		// games found starts again empty, and the server's list is asked again
 		if (OnlinePage_TimeToAskAgain())
 		{
-			Net_StopSearchingForSessions();
 			Net_FindAvPSessions();
 			RelayList_FindGames();
+			listChanged = true;
+		}
+
+		// A line's approval came, or went, while the page is open (the Multiplayer page asked each line as it opened): the list starts again
+		// from the games kept, so a game is greyed or joinable as its line stands now, never as it stood when it came (added 2026-11-11 by
+		// Melanikus for the AvP port)
+		uint64_t const approvedNow = TheApprovedLines();
+
+		if (approvedNow != approvedWhenPut)
+		{
+			Net_FindAvPSessions();
 			listChanged = true;
 		}
 
@@ -1793,6 +2367,7 @@ extern void AvP_UpdateMenus(void)
 		if (listChanged)
 		{
 			PutTheRelayGamesOnThePage();
+			approvedWhenPut = approvedNow;
 		}
 
 		// The rows shown, kept steady (online_screens_page.h). When they change, the page's rows are made again, with the selection on the
@@ -1990,12 +2565,6 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
 	AvPMenus.CurrentMenu = menuID;
 
-	// Leaving the page of games found. Nothing else would close what the search has open on the network until the next search.
-	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
-	{
-		Net_StopSearchingForSessions();
-	}
-
 	/* set pointer to the start of the menu's element data */
 	AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default
 
@@ -2071,10 +2640,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_COOP_HOST:
 		{
-			// This page opens the game. If that can't be done, there's no page.
+			// This page opens the game. If that can't be done, there's no page, and the Multiplayer page says why (modified 2026-11-10 by
+			// Melanikus for the AvP port, PO's ruling Q4)
 			if (!CoopMenu_HostPageOpens())
 			{
+				const char *const why = Net_HostFailedWhy();
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
+
+				// A server being asked again (the host asked it afresh) is waited for there, as before a first answer (Third's finding)
+				if (!AHostWaits(kHostWaitingToOpenCoop))
+				{
+					ShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);
+				}
 				return;
 			}
 			break;
@@ -2168,7 +2745,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 		}
 		case AVPMENU_MULTIPLAYERSELECTSESSION:
 		{
-			// send broadcast message to find servers
+			// The list of games found starts again empty, for the online list (nothing is sent on this network)
 			Net_FindAvPSessions();
 
 			if (previousMenuID != AVPMENU_MULTIPLAYERSELECTSESSION)
@@ -2177,11 +2754,11 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 				SaveIPAddress(IP_Address_Name, IPAddressString);
 				Net_JoinGame();
 
-				// The relay server's games as well, when the page is opened, and then every 5 s from its frame (OnlinePage_TimeToAskAgain),
-				// never on each answer. A joiner needs the relays too, to reach a game's region, and to time them for the ping column.
+				// Every line's games, when the page is opened, and then every 5 s from its frame (OnlinePage_TimeToAskAgain), never on each
+				// answer. Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): each line's relay comes from its own
+				// line (RelayList_RelayOf), so there are no relays to ask for first.
 				OnlinePage_Opened();
 				relayGamesKept = 0;
-				RelayList_FindRelays();
 				RelayList_FindGames();
 			}
 
@@ -2293,13 +2870,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_MULTIPLAYER:
 		{
-			// The Online access row is on this page only with -dev (the owner's ruling, 2026-11-09: nothing a release game does may reach
-			// a server yet). It's set before the page's rows are counted.
-			MenuData_ShowOnlineAccessRow(DevMode != 0);
+			// The page's rows (menu_data.cpp, MenuData_SetMultiplayerRows): the Online access row is there when servers.cfg names a server
+			// (modified 2026-11-10 by Melanikus for the AvP port, beta.2: it was -dev only for beta.1). They're set before the page's rows
+			// are counted.
+			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): every line's state is asked for here (a visit to
+			// each line with a yes, PO's call), so the pages after this one start from this moment's answers; the host page asks again as it
+			// opens. The Host on row is gone: Start game and Co-op campaign open the host page instead.
+			MenuData_SetMultiplayerRows();
+			RelayList_FindGames();
 
-			// Where each region's relay is, so that a game hosted from here can go through one. The answer takes a moment, and it's
-			// asked for here, before the host page, so it's there by the time a game is hosted. With no relay server set, it does nothing.
-			RelayList_FindRelays();
+			// And where this PC stands on each line with the player's yes, asked again, as nothing of it is kept between runs (PO's ruling,
+			// 2026-11-11: the host page and Find games show every server that has approved this PC, without the Online page first)
+			OnlineLines_AskTheAgreedLines();
 
 			//skirmishMode must be false
 			netGameData.skirmishMode = FALSE;
@@ -2323,10 +2905,12 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
-		case AVPMENU_ONLINE_ACCESS:
+		// The host page (host_page.h): Start game and Co-op campaign open it every time, with nothing chosen. Its rows are written before
+		// they're counted, and the menus start on its first, the question, which chooses nothing. Added 2026-11-11 by Melanikus for the AvP
+		// port, in place of the Multiplayer page's Host on row.
+		case AVPMENU_HOST_ON:
 		{
-			// Only with -dev. Without it nothing leads here, and if anything ever did, it goes straight back.
-			if (!AccessPage_Opened(AvPMenus.MenuElements))
+			if (!HostPage_Opened(AvPMenus.MenuElements, kHostPageRowRoom))
 			{
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
 				return;
@@ -2334,11 +2918,35 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 		}
 
-		case AVPMENU_ONLINE_ACCESS_NEW:
+		// Every servers.cfg line on its own row (online_page.h): its rows are written before they're counted. Added 2026-11-11 by Melanikus
+		// for the AvP port, in place of the Online access page and the Servers page.
+		case AVPMENU_ONLINE:
 		{
-			if (!AccessPage_QuestionOpened())
+			if (!OnlineLines_Opened(AvPMenus.MenuElements, kOnlinePageRowRoom))
 			{
 				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_ONLINE_NEW_IDENTITY:
+		{
+			if (!OnlineLines_QuestionOpened())
+			{
+				SetupNewMenu(AVPMENU_ONLINE);
+				return;
+			}
+			break;
+		}
+
+		// The player's yes to one servers.cfg line (#175's last part, server_yes_page.h): with no yes waiting for that line after all, back to
+		// the Online page
+		case AVPMENU_SERVER_YES:
+		{
+			if (!ServerYesPage_Opened())
+			{
+				SetupNewMenu(AVPMENU_ONLINE);
 				return;
 			}
 			break;
@@ -2525,6 +3133,11 @@ static void RenderMenu(void)
 			y = layout.rowsTop;
 			coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;
 		}
+		else if (AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY)
+		{
+			// The question's words under the title, and its two rows right under them (modified 2026-11-11: the Online page's question)
+			y = OnlineLines_DrawQuestion(AvPMenus.MenuHeight);
+		}
 		else
 		{
 			y = MENU_CENTREY - AvPMenus.MenuHeight / 2;
@@ -2545,15 +3158,32 @@ static void RenderMenu(void)
 		OnlinePage_DrawTop();
 	}
 
-	// The Online access pages: what Request access does, then the code and the server's answer, above and under the rows
-	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS)
+	// The Online page draws its own rows, each line's a screenful at a time and its own four, and its words around them (online_page.h;
+	// added 2026-11-11, in place of the Servers page's)
+	bool const onlinePage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE;
+
+	if (onlinePage)
 	{
-		AccessPage_DrawTop(y + AvPMenus.MenuHeight);
+		OnlineLines_DrawTop(AvPMenus.CurrentlySelectedElement);
 	}
-	else if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_ONLINE_ACCESS_NEW)
+
+	// The host page draws its own rows, a screenful at a time, and its words around them (host_page.h; added 2026-11-11)
+	bool const hostPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_HOST_ON;
+
+	if (hostPage)
 	{
-		AccessPage_DrawQuestion();
+		HostPage_DrawTop(AvPMenus.CurrentlySelectedElement);
 	}
+
+	// The yes page's words, above its rows (#175's last part)
+	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS && AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
+	{
+		// The rows' top, as RenderMenu places them on this page (modified 2026-11-10: so its words stay above them)
+		ServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);
+	}
+
+	// A host's "Asking the server...", or why it failed, under the rows of the page it was pressed on (added 2026-11-10, PO's rulings)
+	DrawTheHostLine();
 
 	// The joining page, while this player's request to join waits for the host (J4), or once the host has said yes: the tail and its words
 	// instead of the page's own row
@@ -2568,8 +3198,11 @@ static void RenderMenu(void)
 		if (checkCodeLine[0])
 		{
 			RenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-			RenderSmallMenuText(const_cast<char *>(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)), MENU_CENTREX, 74, ONE_FIXED / 2,
-				AVPMENUFORMAT_CENTREJUSTIFIED);
+
+			// Modified 2026-11-10 by Melanikus for the AvP port (the owner's showcase pictures: the two lines were drawn on each other, and
+			// ran almost edge to edge): wrapped and spaced, and never past the answer rows, whose top is y (online_screens.h)
+			OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+				58, y - kOnlineHelpGap);
 		}
 	}
 
@@ -2584,6 +3217,11 @@ static void RenderMenu(void)
 		RenderSmallMenuText(relayNews, MENU_CENTREX, 40, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 
+	// The Online page and its question: a row not chosen brighter than the menus' quarter, so it's read against the starfield (modified
+	// 2026-11-10 by Melanikus for the AvP port: the owner couldn't find Copy access code), and the question's rows a little further apart
+	bool const accessPage = AvPMenus.MenusState == MENUSSTATE_MAINMENUS &&
+		(AvPMenus.CurrentMenu == AVPMENU_ONLINE || AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY);
+
 	for (int e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
 		int targetBrightness;
@@ -2591,6 +3229,10 @@ static void RenderMenu(void)
 		if (e==AvPMenus.CurrentlySelectedElement)
 		{
 			targetBrightness = BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT;
+		}
+		else if (accessPage)
+		{
+			targetBrightness = ONE_FIXED * kOnlinePageRowNotChosenOutOf100 / 100;
 		}
 		else
 		{
@@ -2627,12 +3269,30 @@ static void RenderMenu(void)
 				RenderMenuElement(elementPtr, e, OnlinePage_ControlTop(e));
 			}
 		}
+		else if (hostPage)
+		{
+			// Every row of the host page is drawn by the page: the question, and each line's in its screenful
+			HostPage_DrawRow(elementPtr, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement);
+		}
+		else if (onlinePage)
+		{
+			// A line's row is drawn by the page, in its screenful; the page's own rows are the menus' own, each drawn at its place
+			if (!OnlineLines_DrawLineRow(elementPtr, elementPtr->Brightness, AvPMenus.CurrentlySelectedElement))
+			{
+				int const top = OnlineLines_OwnRowTopOf(elementPtr);
+
+				if (top >= 0)
+				{
+					RenderMenuElement(elementPtr, e, top);
+				}
+			}
+		}
 		else if (!askingPage)
 		{
 			RenderMenuElement(elementPtr,e,y);
 		}
 
-		y += HeightOfMenuElement(elementPtr);
+		y += HeightOfMenuElement(elementPtr) + (AvPMenus.CurrentMenu == AVPMENU_ONLINE_NEW_IDENTITY ? kOnlineQuestionRowsApart : 0);
 	}
 
 	// Render Menu Title
@@ -3870,6 +4530,313 @@ static void ActUponUsersInput(void)
 	}
 }
 
+// Whether a game hosted now would be hosted online: when servers.cfg names a server, as every game is (networking.cpp, Net_HostGame).
+// Added 2026-11-10 by Melanikus for the AvP port, for the ways online; modified the same day (the owner's ruling for beta.2: "Everything over nyc3"):
+// there's no Host row and no game at home, so with no server named nothing is hosted, and the host says why.
+// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: "No auto choice, they choose"): online on the line the player
+// chose on the host page, and with none chosen, nothing is hosted, and the host says to choose one.
+static bool HostsOnline(void)
+{
+	return RelayList_HostLine() >= 0;
+}
+
+// Where Start game or Co-op campaign was going when it opened the host page: the game's page, or the co-op campaign's. Only those two
+// rows set it, and the host page's chosen row goes there (added 2026-11-11 by Melanikus for the AvP port).
+static enum AVPMENU_ID hostPageGoesTo = AVPMENU_MULTIPLAYER_CONFIG;
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_KEYCONFIGOK, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithKeyConfigOk(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		switch (AvPMenus.CurrentMenu)
+		{
+			case AVPMENU_MARINEKEYCONFIG:
+			{
+				MarineInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				MarineInputSecondaryConfig = PlayerInputSecondaryConfig;
+				{
+					AutoWeaponChangeOn = AutoWeaponChangeOn_Temp;
+				}
+				break;
+			}
+			case AVPMENU_PREDATORKEYCONFIG:
+			{
+				PredatorInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				PredatorInputSecondaryConfig = PlayerInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_ALIENKEYCONFIG:
+			{
+				AlienInputPrimaryConfig   = PlayerInputPrimaryConfig;
+				AlienInputSecondaryConfig = PlayerInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_CONTROLS:
+			{
+				ControlMethods = PlayerControlMethods;
+				break;
+			}
+			case AVPMENU_JOYSTICKCONTROLS:
+			{
+				JoystickControlMethods = PlayerJoystickControlMethods;
+				break;
+			}
+		}
+		
+		SaveUserProfile(UserProfilePtr);
+
+		if(AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
+		{
+			SetupNewMenu(AVPMENU_INGAME);
+		}
+		else
+		{
+			SetupNewMenu(AVPMENU_OPTIONS);
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_USERPROFILE, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithUserProfile(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		/* a profile has been selected */
+		int i;
+		UserProfilePtr = GetFirstUserProfile();
+		for (i=0; i<UserProfileNumber; i++)
+			UserProfilePtr = GetNextUserProfile();
+
+		if (UserProfileNumber)
+		{
+			// Edmond too
+			GetSettingsFromUserProfile();
+			// Edmond
+			if (LobbiedGame == LobbiedGame_Server)
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG);			// Edmond
+			}
+			else if (LobbiedGame == LobbiedGame_Client)
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
+			}
+			else
+				SetupNewMenu(AVPMENU_MAIN);
+		}
+		else
+		{
+			SetupNewMenu(AVPMENU_USERPROFILEENTERNAME);
+		}
+	}
+	else if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		if (*elementPtr->SliderValuePtr<elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr+=1;
+			EpisodeSelectScrollOffset-=ONE_FIXED;
+		}
+	}
+	else
+	{
+		if (*elementPtr->SliderValuePtr>0)
+		{
+			*elementPtr->SliderValuePtr-=1;
+			EpisodeSelectScrollOffset+=ONE_FIXED;
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_CHEATMODE_ENVIRONMENT_TEXTSLIDER, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithCheatModeEnvironmentSlider(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
+	{
+		*elementPtr->SliderValuePtr+=1;
+		if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr=0;
+		}
+		CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,TRUE);
+	}
+	else
+	{
+		*elementPtr->SliderValuePtr-=1;
+		if (*elementPtr->SliderValuePtr<0)
+		{
+			*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
+		}
+		CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,FALSE);
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_SPECIES_TEXTSLIDER, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithSpeciesSlider(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
+	{
+		*elementPtr->SliderValuePtr+=1;
+		if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr=0;
+		}
+		GetNextAllowedSpecies(elementPtr->SliderValuePtr,TRUE);
+	}
+	else
+	{
+		*elementPtr->SliderValuePtr-=1;
+		if (*elementPtr->SliderValuePtr<0)
+		{
+			*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
+		}
+		GetNextAllowedSpecies(elementPtr->SliderValuePtr,FALSE);
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_RESETKEYCONFIG, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithResetKeyConfig(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		switch (AvPMenus.CurrentMenu)
+		{
+			case AVPMENU_MARINEKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultMarineInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultMarineInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_PREDATORKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultPredatorInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultPredatorInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_ALIENKEYCONFIG:
+			{
+				PlayerInputPrimaryConfig = DefaultAlienInputPrimaryConfig;
+				PlayerInputSecondaryConfig = DefaultAlienInputSecondaryConfig;
+				break;
+			}
+			case AVPMENU_CONTROLS:
+			{
+				PlayerControlMethods = DefaultControlMethods;
+				break;
+			}
+			case AVPMENU_JOYSTICKCONTROLS:
+			{
+				PlayerJoystickControlMethods = DefaultJoystickControlMethods;
+				break;
+			}
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_NUMBERFIELD, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithNumberField(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if(interactionID == AVPMENU_ELEMENT_INTERACTION_DECREASE)
+	{
+		(*elementPtr->NumberPtr)--;
+		if(*elementPtr->NumberPtr<0)
+		{
+			*elementPtr->NumberPtr=0;
+		}
+	}
+	else if(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		(*elementPtr->NumberPtr)++;
+		if(*elementPtr->NumberPtr>elementPtr->MaxValue)
+		{
+			*elementPtr->NumberPtr=elementPtr->MaxValue;
+		}
+	}
+	else
+	{
+		*elementPtr->NumberPtr=0;
+		AvPMenus.UserEnteringNumber = 1;
+		KeyboardEntryQueue_Clear();
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_BUTTONSETTING, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithButtonSetting(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT) {
+		return;
+	}
+	/* else let it fall through */
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
+	{
+		if (*elementPtr->SliderValuePtr < elementPtr->MaxSliderValue)
+		{
+			*elementPtr->SliderValuePtr += 1;
+			EpisodeSelectScrollOffset -= ONE_FIXED;
+		}
+	}
+	else
+	{
+		if (*elementPtr->SliderValuePtr > 0)
+		{
+			*elementPtr->SliderValuePtr -= 1;
+			EpisodeSelectScrollOffset += ONE_FIXED;
+		}
+	}
+	return;
+}
+
+// InteractWithMenuElement's case AVPMENU_ELEMENT_SAVESETTINGS, moved out unchanged (modified 2026-11-11 by Melanikus for the AvP port) so the security
+// scanner can read InteractWithMenuElement: Snyk Code couldn't parse a function that long, and a file it can't read fails the release's
+// gate. A break that left the case is a return here; the case calls this, then breaks.
+static void InteractWithSaveSettings(AVPMENU_ELEMENT *elementPtr, enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
+{
+	if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+	{
+		SetDetailLevelsFromMenu();
+		SaveUserProfile(UserProfilePtr);
+		
+		if (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
+		{
+			if (AvPMenus.CurrentMenu == AVPMENU_DETAILLEVELS)
+			{
+				SetupNewMenu(AVPMENU_INGAMEAVOPTIONS);
+			}
+			else
+			{
+				SetupNewMenu(AVPMENU_INGAME);
+			}
+		}
+		else
+		{
+			SetupNewMenu(AvPMenusData[AvPMenus.CurrentMenu].ParentMenu);
+		}
+	}
+	return;
+}
+
 static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interactionID)
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -3907,8 +4874,45 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					// save profile, so that multiplayer name is remembered
 					SaveUserProfile(UserProfilePtr);
 				}
-			
-				SetupNewMenu(static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo));
+
+				// (Modified 2026-11-11 by Melanikus for the AvP port, one model for every line: a line's yes is said only on its own row of the
+				// Online page, so no row here asks for one: server_yes_page.h, THE ONE WAY IN.)
+				// Added 2026-11-11 by Melanikus for the AvP port (the owner's rulings: "No auto choice, they choose", "Yes 'host' <ny - ping>,
+				// <eu - ping>, <we - ping> on host screen"): Start game and Co-op campaign open the host page first, every time, with nothing
+				// chosen, and go on to their own page only once the player has chosen a server there (AVPMENU_ELEMENT_HOSTLINE, below)
+				if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER &&
+					(elementPtr->MenuToGoTo == AVPMENU_MULTIPLAYER_CONFIG || elementPtr->MenuToGoTo == AVPMENU_COOP_HOST))
+				{
+					hostPageGoesTo = static_cast<enum AVPMENU_ID>(elementPtr->MenuToGoTo);
+					SetupNewMenu(AVPMENU_HOST_ON);
+					break;
+				}
+
+				const AVPMENU_ID page = static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);
+
+				// The co-op page hosts as it opens, so online it first waits here for the server's answer (added 2026-11-10, PO's ruling Q3)
+				if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
+				{
+					break;
+				}
+
+				SetupNewMenu(page);
+			}
+			break;
+		}
+		// A row of the host page (host_page.h; added 2026-11-11 by Melanikus for the AvP port): the menus go on, to where Start game or
+		// Co-op campaign was going, only when HostPage_PressedRow chose a line. Otherwise the page says why, and nothing is chosen.
+		case AVPMENU_ELEMENT_HOSTLINE:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && HostPage_PressedRow(elementPtr->MaxValue))
+			{
+				// The co-op page hosts as it opens, so online it first waits here for the server's answer (PO's ruling Q3)
+				if (hostPageGoesTo == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))
+				{
+					break;
+				}
+
+				SetupNewMenu(hostPageGoesTo);
 			}
 			break;
 		}
@@ -3944,28 +4948,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 		case AVPMENU_ELEMENT_NUMBERFIELD:
 		{
-			if(interactionID == AVPMENU_ELEMENT_INTERACTION_DECREASE)
-			{
-				(*elementPtr->NumberPtr)--;
-				if(*elementPtr->NumberPtr<0)
-				{
-					*elementPtr->NumberPtr=0;
-				}
-			}
-			else if(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				(*elementPtr->NumberPtr)++;
-				if(*elementPtr->NumberPtr>elementPtr->MaxValue)
-				{
-					*elementPtr->NumberPtr=elementPtr->MaxValue;
-				}
-			}
-			else
-			{
-				*elementPtr->NumberPtr=0;
-				AvPMenus.UserEnteringNumber = 1;
-				KeyboardEntryQueue_Clear();
-			}
+			InteractWithNumberField(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_DUMMYTEXTFIELD:
@@ -4019,25 +5002,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_SPECIES_TEXTSLIDER:
 		{
-			if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
-			{
-				*elementPtr->SliderValuePtr+=1;
-				if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr=0;
-				}
-				GetNextAllowedSpecies(elementPtr->SliderValuePtr,TRUE);
-			}
-			else
-			{
-				*elementPtr->SliderValuePtr-=1;
-				if (*elementPtr->SliderValuePtr<0)
-				{
-					*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
-				}
-				GetNextAllowedSpecies(elementPtr->SliderValuePtr,FALSE);
-			}
+			InteractWithSpeciesSlider(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_CHEATMODE_SPECIES_TEXTSLIDER:
@@ -4088,25 +5053,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_CHEATMODE_ENVIRONMENT_TEXTSLIDER:
 		{
-			if ((interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			  ||(interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE))
-			{
-				*elementPtr->SliderValuePtr+=1;
-				if (*elementPtr->SliderValuePtr>elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr=0;
-				}
-				CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,TRUE);
-			}
-			else
-			{
-				*elementPtr->SliderValuePtr-=1;
-				if (*elementPtr->SliderValuePtr<0)
-				{
-					*elementPtr->SliderValuePtr=elementPtr->MaxSliderValue;
-				}
-				CheatMode_GetNextAllowedEnvironment(elementPtr->SliderValuePtr,FALSE);
-			}
+			InteractWithCheatModeEnvironmentSlider(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -4125,51 +5072,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		
 		case AVPMENU_ELEMENT_USERPROFILE:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				/* a profile has been selected */
-				int i;
-				UserProfilePtr = GetFirstUserProfile();
-				for (i=0; i<UserProfileNumber; i++)
-					UserProfilePtr = GetNextUserProfile();
-
-				if (UserProfileNumber)
-				{
-					// Edmond too
-					GetSettingsFromUserProfile();
-					// Edmond
-					if (LobbiedGame == LobbiedGame_Server)
-					{
-						SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG);			// Edmond
-					}
-					else if (LobbiedGame == LobbiedGame_Client)
-					{
-						SetupNewMenu(AVPMENU_MULTIPLAYER_LOBBIEDCLIENT);
-					}
-					else
-						SetupNewMenu(AVPMENU_MAIN);
-				}
-				else
-				{
-					SetupNewMenu(AVPMENU_USERPROFILEENTERNAME);
-				}
-			}
-			else if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				if (*elementPtr->SliderValuePtr<elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr+=1;
-					EpisodeSelectScrollOffset-=ONE_FIXED;
-				}
-			}
-			else
-			{
-				if (*elementPtr->SliderValuePtr>0)
-				{
-					*elementPtr->SliderValuePtr-=1;
-					EpisodeSelectScrollOffset+=ONE_FIXED;
-				}
-			}
+			InteractWithUserProfile(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
@@ -4218,9 +5121,20 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_ONLINE_ACCESS:
 		{
-			enum AVPMENU_ID page = AVPMENU_ONLINE_ACCESS;
+			enum AVPMENU_ID page = AVPMENU_ONLINE;
 
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && AccessPage_Pressed(elementPtr->MaxValue, &page))
+			// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's
+			if (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)
+			{
+				if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && ServerYesPage_Pressed(elementPtr->MaxValue, &page))
+				{
+					SetupNewMenu(page);
+				}
+				break;
+			}
+
+			// The Online page's rows and its question's (online_page.h): a line's row, Copy access code, and the question's No and Yes
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && OnlineLines_Pressed(elementPtr->MaxValue, &page))
 			{
 				SetupNewMenu(page);
 			}
@@ -4338,27 +5252,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_BUTTONSETTING:
 		{
-			
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT) {
-				break;
-			}
-			/* else let it fall through */
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_INCREASE)
-			{
-				if (*elementPtr->SliderValuePtr < elementPtr->MaxSliderValue)
-				{
-					*elementPtr->SliderValuePtr += 1;
-					EpisodeSelectScrollOffset -= ONE_FIXED;
-				}
-			}
-			else
-			{
-				if (*elementPtr->SliderValuePtr > 0)
-				{
-					*elementPtr->SliderValuePtr -= 1;
-					EpisodeSelectScrollOffset += ONE_FIXED;
-				}
-			}
+			InteractWithButtonSetting(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -4418,7 +5312,14 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					MP_Config_Description[descriptionLength] = '\0';
 				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
-				
+
+				// Online, a host pressed before the server has answered waits for it on this page, and the row is pressed again for the player
+				// once it's ready (added 2026-11-10 by Melanikus for the AvP port, PO's ruling Q3)
+				if (AHostWaits(kHostWaitingToStart))
+				{
+					break;
+				}
+
 				Campaign_SetFromLevelRow();
 				Campaign_SetDifficulty();
 				Campaign_ChooseRollNumber();
@@ -4430,11 +5331,21 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 					netGameData.coopCampaignLevel = 0;
 				}
 
-				if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) != NET_FAIL)
+				// Online, through the server servers.cfg names, or not at all (modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3")
+				NetResult const hosted = Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber);
+
+				if (hosted != NET_FAIL)
 				{
 					AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 					SetLevelToLoadForThisNetworkGame();
 					SetBriefingTextForMultiplayer();
+				}
+				else if (!AHostWaits(kHostWaitingToStart))
+				{
+					// It wasn't hosted: the page says why, rather than nothing at all (added 2026-11-10, PO's ruling Q4). Unless the server is
+					// being asked again: the host asks it afresh (Net_HostGame), so a server whose last asking failed reads as not answered yet,
+					// and then the page waits for its answer, as before a first answer (Third's finding on rc1, 2026-11-10)
+					ShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());
 				}
 			}
 			break;
@@ -4529,6 +5440,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 						else {
 							OnlinePage_JoinFailed(Net_RelayJoinFailedWhy());
 						}
+					}
+					else if (Net_JoinRefusedWhy()) {
+						// Added 2026-11-10 by Melanikus for the AvP port (#188, PO's ruling Q4): a game on this network whose host isn't on the
+						// home network is refused before anything opens, and the page says why, in the networking code's own fixed words
+						LogString(std::string("net: couldn't join the game, because ") + Net_JoinRefusedWhy());
+						OnlinePage_JoinFailed(Net_JoinRefusedWhy());
 					}
 				}
 			}
@@ -4648,92 +5565,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_KEYCONFIGOK:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				switch (AvPMenus.CurrentMenu)
-				{
-					case AVPMENU_MARINEKEYCONFIG:
-					{
-						MarineInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						MarineInputSecondaryConfig = PlayerInputSecondaryConfig;
-						{
-							AutoWeaponChangeOn = AutoWeaponChangeOn_Temp;
-						}
-						break;
-					}
-					case AVPMENU_PREDATORKEYCONFIG:
-					{
-						PredatorInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						PredatorInputSecondaryConfig = PlayerInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_ALIENKEYCONFIG:
-					{
-						AlienInputPrimaryConfig   = PlayerInputPrimaryConfig;
-						AlienInputSecondaryConfig = PlayerInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_CONTROLS:
-					{
-						ControlMethods = PlayerControlMethods;
-						break;
-					}
-					case AVPMENU_JOYSTICKCONTROLS:
-					{
-						JoystickControlMethods = PlayerJoystickControlMethods;
-						break;
-					}
-				}
-				
-				SaveUserProfile(UserProfilePtr);
-
-				if(AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
-				{
-					SetupNewMenu(AVPMENU_INGAME);
-				}
-				else
-				{
-					SetupNewMenu(AVPMENU_OPTIONS);
-				}
-			}
+			InteractWithKeyConfigOk(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 		case AVPMENU_ELEMENT_RESETKEYCONFIG:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				switch (AvPMenus.CurrentMenu)
-				{
-					case AVPMENU_MARINEKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultMarineInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultMarineInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_PREDATORKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultPredatorInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultPredatorInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_ALIENKEYCONFIG:
-					{
-						PlayerInputPrimaryConfig = DefaultAlienInputPrimaryConfig;
-						PlayerInputSecondaryConfig = DefaultAlienInputSecondaryConfig;
-						break;
-					}
-					case AVPMENU_CONTROLS:
-					{
-						PlayerControlMethods = DefaultControlMethods;
-						break;
-					}
-					case AVPMENU_JOYSTICKCONTROLS:
-					{
-						PlayerJoystickControlMethods = DefaultJoystickControlMethods;
-						break;
-					}
-				}
-			}
+			InteractWithResetKeyConfig(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 
@@ -4746,27 +5583,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
 		case AVPMENU_ELEMENT_SAVESETTINGS:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
-			{
-				SetDetailLevelsFromMenu();
-				SaveUserProfile(UserProfilePtr);
-				
-				if (AvPMenus.MenusState == MENUSSTATE_INGAMEMENUS)
-				{
-					if (AvPMenus.CurrentMenu == AVPMENU_DETAILLEVELS)
-					{
-						SetupNewMenu(AVPMENU_INGAMEAVOPTIONS);
-					}
-					else
-					{
-						SetupNewMenu(AVPMENU_INGAME);
-					}
-				}
-				else
-				{
-					SetupNewMenu(AvPMenusData[AvPMenus.CurrentMenu].ParentMenu);
-				}
-			}
+			InteractWithSaveSettings(elementPtr, interactionID);   // moved out unchanged, so the security scanner can read this function
 			break;
 		}
 	
@@ -5194,6 +6011,11 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
+			break;
+		}
+		case AVPMENU_ELEMENT_HOSTLINE:
+		{
+			// The host page draws its own rows (host_page.h, HostPage_DrawRow): nothing is drawn here (added 2026-11-11)
 			break;
 		}
 		case AVPMENU_ELEMENT_LOADMPCONFIG:

@@ -733,6 +733,96 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a clip's step may have any letter",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (!IsANameLetter(step[i]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a clip's film name may have any letter",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (!IsANameLetter(filmName[i]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a capital is a name letter",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "(c >= 'a' && c <= 'z')",
+					"to": "(c >= 'A' && c <= 'z')"
+				}
+			]
+		},
+		{
+			"name": "a clip's step of 41 letters is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "stepLength > kHudsonVideoLongestStep",
+					"to": "stepLength > kHudsonVideoLongestStep + 1"
+				}
+			]
+		},
+		{
+			"name": "a clip's empty step is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (stepLength == 0 || stepLength",
+					"to": "if (stepLength"
+				}
+			]
+		},
+		{
+			"name": "a clip's step keeps its .png",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "stepLength -= pictureLength;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a film that isn't Hudson's gets a clip name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "strncmp(filmName, kStart, startLength) != 0 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a clip's name may fill out with no room for its end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "if (baseLength + 1 + stepLength + endLength + 1 > outSize)",
+					"to": "if (baseLength + 1 + stepLength + endLength > outSize)"
+				}
+			]
+		},
+		{
+			"name": "a clip's name isn't ended with its own 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video.cpp",
+					"from": "out[baseLength + 1 + stepLength + endLength] = 0;",
+					"to": ";"
+				}
+			]
 		}
 	]
 }

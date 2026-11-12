@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for an alien, as only the alien ways' slide does, and it isn't saved
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a saved curve of no length is worked out again, because the game divides by its length
@@ -2420,7 +2423,7 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//get the alien's attack from the attack code
 	alienStatusPointer->current_attack = GetThisAttack_FromUniqueCode(block->currentAttackCode);
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

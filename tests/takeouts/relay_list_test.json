@@ -1,7 +1,8 @@
 {
 	"copy": [
 		"3dc",
-		"tests"
+		"tests",
+		"servers.cfg"
 	],
 	"rows": [
 		{
@@ -155,16 +156,6 @@
 			]
 		},
 		{
-			"name": "a relay's host is taken as it comes",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "(why == kRelayListAccepted && !RelayList_IsRelayHost(rule.text))) ? kRelayListBadHost",
-					"to": "(false)) ? kRelayListBadHost"
-				}
-			]
-		},
-		{
 			"name": "two games with one region and code are taken",
 			"changes": [
 				{
@@ -181,16 +172,6 @@
 					"file": "3dc/relay_list_text.cpp",
 					"from": " && strcmp(g.games[other].region, game.region) == 0)",
 					"to": ")"
-				}
-			]
-		},
-		{
-			"name": "two relays for one region are taken",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "if (strcmp(relays[other].region, relay.region) == 0)",
-					"to": "if (false)"
 				}
 			]
 		},
@@ -261,16 +242,6 @@
 					"file": "3dc/relay_list_text.cpp",
 					"from": "if (!allowed || n >= kRelayListRegionLetters)",
 					"to": "if (n >= kRelayListRegionLetters)"
-				}
-			]
-		},
-		{
-			"name": "a relay's host may be an address",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn false;",
-					"to": "\t\t\treturn true;\n\t\t}\n\t}\n\n\treturn true;"
 				}
 			]
 		},
@@ -365,56 +336,6 @@
 			]
 		},
 		{
-			"name": "a part of a server name may be 64 characters",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "partLength > 63 || ",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a server name may be 254 characters",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "if (length < 1 || length > 253)",
-					"to": "if (length < 1)"
-				}
-			]
-		},
-		{
-			"name": "a part of a server name may end with -",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "name[i - 1] == '-' || ",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a part of a server name may start with -",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": " || name[i - partLength] == '-'",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "an _ is taken in a server name",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "|| c == '-';\n\n\t\tif (!allowed)\n",
-					"to": "|| c == '-' || c == '_';\n\n\t\tif (!allowed)\n"
-				}
-			]
-		},
-		{
 			"name": "co-op never says it is the campaign",
 			"changes": [
 				{
@@ -465,27 +386,17 @@
 			]
 		},
 		{
-			"name": "this machine's own address is a relay without -dev",
+			"name": "this machine's own address is taken for one out on the internet",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "if (!developer && in(0x7F000000u, 8))",
+					"from": "if (in(0x7F000000u, 8))",
 					"to": "if (false)"
 				}
 			]
 		},
 		{
-			"name": "this machine's own address is refused even with -dev",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "if (!developer && in(0x7F000000u, 8))",
-					"to": "if (in(0x7F000000u, 8))"
-				}
-			]
-		},
-		{
-			"name": "10/8 is a relay without -dev",
+			"name": "10/8 is taken for an address out on the internet",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
@@ -505,7 +416,7 @@
 			]
 		},
 		{
-			"name": "192.168/16 is a relay without -dev",
+			"name": "192.168/16 is taken for an address out on the internet",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
@@ -515,7 +426,7 @@
 			]
 		},
 		{
-			"name": "169.254/16 is a relay without -dev",
+			"name": "169.254/16 is taken for an address out on the internet",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
@@ -525,42 +436,12 @@
 			]
 		},
 		{
-			"name": "a carrier's own 100.64/10 is a relay without -dev",
+			"name": "a carrier's own 100.64/10 is taken for an address out on the internet",
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
 					"from": " || in(0x64400000u, 10)",
 					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a relay name is looked up for any kind of address, not IPv4 only",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "hints.ai_family = AF_INET;",
-					"to": "hints.ai_family = AF_UNSPEC;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the address rule is not asked",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "RelayList_AddressRefusal(ntohl(address), shared->developer)",
-					"to": "kRelayAddressUsable"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a relay whose address is refused is kept",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tif (why != kRelayAddressUsable)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;",
-					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tTell(RelayList_AddressWords(why));\n\t\t\t\tcontinue;"
 				}
 			]
 		},
@@ -635,22 +516,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the relays are read into more than 4 KB",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "char relaysAnswer[kRelayListMostRelaysBytes];",
-					"to": "char relaysAnswer[kRelayListMostRelaysBytes * 2];"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the page of games found asks the list each time it is set up again",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\t\tRelayList_FindRelays();\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
-					"to": "\t\t\t\tRelayList_FindRelays();\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
+					"from": "\t\t\t\trelayGamesKept = 0;\n\t\t\t\tRelayList_FindGames();\n\t\t\t}\n",
+					"to": "\t\t\t\trelayGamesKept = 0;\n\t\t\t}\n\t\t\tRelayList_FindGames();\n"
 				}
 			]
 		},
@@ -665,12 +536,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the multiplayer page does not ask where the relays are",
+			"name": "SOURCE: the multiplayer page does not ask the lines where they stand",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "\t\t\tRelayList_FindRelays();\n\n\t\t\t//skirmishMode must be false",
-					"to": "\t\t\t//skirmishMode must be false"
+					"from": "\t\t\tRelayList_FindGames();\n\n\t\t\t// And where this PC stands",
+					"to": "\t\t\t// And where this PC stands"
 				}
 			]
 		},
@@ -689,8 +560,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "if (Net_UpdateSessionList(selection) || TheRelayGamesHaveCome())",
-					"to": "if (Net_UpdateSessionList(selection))"
+					"from": "if (TheRelayGamesHaveCome())",
+					"to": "if (false && TheRelayGamesHaveCome())"
 				}
 			]
 		},
@@ -725,12 +596,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: Find Games' help promises a player the online list, which a release game can't reach",
+			"name": "SOURCE: Find Games' help sends a player to this network's games, which there aren't any more",
 			"changes": [
 				{
 					"file": "3dc/avp/language.cpp",
-					"from": "\"Press ENTER to look for games on this network.\",",
-					"to": "\"Press ENTER to look for games on this network and on the online list of games.\","
+					"from": "\"Press ENTER to see the games on the server's online list.\",",
+					"to": "\"Press ENTER to look for games on this network.\","
 				}
 			]
 		},
@@ -829,8 +700,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
-					"to": "return why == kCantReach || why == kTooLong || why == kCantStart;"
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCantStart || why == kNoChainOff;"
 				}
 			]
 		},
@@ -839,8 +710,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart;",
-					"to": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kTooBig;"
+					"from": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff;",
+					"to": "return why == kCantReach || why == kTooLong || why == kCertificate || why == kCantStart || why == kNoChainOff || why == kTooBig;"
 				}
 			]
 		},
@@ -879,7 +750,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\tif (!joinDrewFrames)\n\t{\n\t\tThisFramesRenderingHasFinished();\n\t\tjoinDrewFrames = true;\n\t}\n\n",
+					"from": "\t\tif (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}\n\n",
 					"to": ""
 				}
 			]
@@ -889,8 +760,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tjoinDrewFrames = false;\n\t\tThisFramesRenderingHasBegun();\n\t\tDrawMainMenusBackdrop();",
-					"to": "\t\tjoinDrewFrames = false;"
+					"from": "\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();\n",
+					"to": ""
 				}
 			]
 		},
@@ -925,26 +796,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the settings' RelayServer is used without -dev",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (!DevMode)\n\t\t{\n\t\t\tmemcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));",
-					"to": "\t\tif (false)\n\t\t{\n\t\t\tmemcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the settings' RelayListPort is used without -dev",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\"",
-					"to": "\t\tif (true)\n\t\t{\n\t\t\tint const setting = Config_GetInt(\"[Network]\", \"RelayListPort\""
-				}
-			]
-		},
-		{
 			"name": "SOURCE: winmain asks for the list's name before -dev is read",
 			"changes": [
 				{
@@ -959,7 +810,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tTell(\"the game is off the list\");",
+					"from": "\t\t\tTell(shared, \"the game is off the list\");",
 					"to": "\t\t\tLogString(\"the game is off the list\");"
 				}
 			]
@@ -1050,72 +901,12 @@
 			]
 		},
 		{
-			"name": "a pin of any length is read",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\tif (strlen(text) != 2 * static_cast<size_t>(kRelayListPinBytes))\n",
-					"to": "\tif (strlen(text) < 2 * static_cast<size_t>(kRelayListPinBytes))\n"
-				}
-			]
-		},
-		{
-			"name": "a refused pin is half written",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tread[i] = static_cast<uint8_t>(high * 16 + low);\n",
-					"to": "\t\tread[i] = static_cast<uint8_t>(high * 16 + low);\n\t\tpin[i] = read[i];\n"
-				}
-			]
-		},
-		{
-			"name": "any certificate matches the pin",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tdifference = static_cast<uint8_t>(difference | (digest[i] ^ pin[i]));\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "the shown name may be any length",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\tif (length > static_cast<size_t>(kRelayListShownNameLetters))\n",
-					"to": "\tif (false)\n"
-				}
-			]
-		},
-		{
-			"name": "the shown name may have a quote",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": " && c != ',')\n",
-					"to": " && c != ',' && c != '\"')\n"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the pinned path also passes an expired certificate",
+			"name": "SOURCE: the certificate's rules are switched off before the key's check is in place",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "DWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID;",
-					"to": "DWORD pass = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the certificate is passed before the pin's check is in place",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tif (WinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK ||\n\t\t\t\t!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)))",
-					"to": "\t\t\tif (!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)) ||\n\t\t\t\tWinHttpSetStatusCallback(request, CheckThePin, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)"
+					"from": "\t\tif (WinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK ||\n\t\t\t!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)))",
+					"to": "\t\tif (!WinHttpSetOption(request, WINHTTP_OPTION_SECURITY_FLAGS, &pass, sizeof(pass)) ||\n\t\t\tWinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)"
 				}
 			]
 		},
@@ -1130,62 +921,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a pinned call whose check never ran is read",
+			"name": "SOURCE: a call whose key check never ran is read",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (shared->pinned && !check.matched)\n\t\t{\n\t\t\ta.why = kPinUnread;",
-					"to": "\t\tif (false)\n\t\t{\n\t\t\ta.why = kPinUnread;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the pin is read without -dev",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\telse if (!DevMode)\n\t\t\t{\n\t\t\t\tLogString(\"Relay list: the settings' RelayListPin is for tests only, with -dev, so it's ignored\");\n\t\t\t}\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a bad pin still leaves a list",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "if (!name[0] || PinRefused())",
-					"to": "if (!name[0])"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: any digits and dots are a server",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": " && (!OnlyDigitsAndDots(setting.c_str()) || IsUsableAddress(setting.c_str())))",
-					"to": ")"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: an unpinned list's relays are taken to be at its address",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "if (shared->atAnAddress && shared->pinned)",
-					"to": "if (shared->atAnAddress)"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the shown name is read without -dev",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\telse if (!DevMode)\n\t\t{\n\t\t\tLogString(\"Relay list: the settings' RelayServerName is for tests only, with -dev, so it's ignored\");\n\t\t}\n",
-					"to": ""
+					"from": "\t\tif (!check.matched)\n\t\t{\n\t\t\ta.why = kKeyUnread;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\ta.why = kKeyUnread;"
 				}
 			]
 		},
@@ -1200,7 +941,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: the body is written before the pin is known to have matched",
+			"name": "SOURCE: the body is written before the key is known to have matched",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
@@ -1209,8 +950,8 @@
 				},
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\t// The pin's check closed the call before anything of it went: the request is gone already\n",
-					"to": "\t\tDWORD written = 0;\n\t\tbool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));\n\t\t// The pin's check closed the call before anything of it went: the request is gone already\n"
+					"from": "\t\t// The key's check closed the call before anything of it went: the request is gone already\n",
+					"to": "\t\tDWORD written = 0;\n\t\tbool const bodyWent = sent && (!body || (WinHttpWriteData(request, body, bodyBytes, &written) && written == bodyBytes));\n\t\t// The key's check closed the call before anything of it went: the request is gone already\n"
 				}
 			]
 		},
@@ -1245,11 +986,11 @@
 			]
 		},
 		{
-			"name": "SOURCE: a call the pin's check closed while the answer was awaited is read on",
+			"name": "SOURCE: a call the key's check closed while the answer was awaited is read on",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (check.closed)\n\t\t{\n\t\t\ta.why = kNotPinned;\n\t\t\tCloseAll(NULL, connection, session);\n\t\t\treturn a;\n\t\t}\n\n\t\tif (!answered)\n",
+					"from": "\t\tif (check.closed)\n\t\t{\n\t\t\ta.why = check.looked ? kKeyChanged : kKeyUnread;\n\t\t\tCloseAll(NULL, connection, session);\n\t\t\treturn a;\n\t\t}\n\n\t\tif (!answered)\n",
 					"to": "\t\tif (!answered)\n"
 				}
 			]
@@ -1305,101 +1046,11 @@
 			]
 		},
 		{
-			"name": "a game's fingerprint isn't one of its fields, so every game with one is refused",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"fingerprint\", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }",
-					"to": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }"
-				}
-			]
-		},
-		{
-			"name": "a fingerprint is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
-					"to": "false"
-				}
-			]
-		},
-		{
-			"name": "a bad fingerprint is called a bad text",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "return kRelayListBadFingerprint;",
-					"to": "return kRelayListBadText;"
-				}
-			]
-		},
-		{
-			"name": "a listing whose fingerprint is all 0 is sent",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "if (fingerprint[i] != 0)",
-					"to": "if (fingerprint[i] == fingerprint[i])"
-				}
-			]
-		},
-		{
-			"name": "the body leaves the host's fingerprint out",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\tAddName(w, \"fingerprint\");\n\t\tAddFingerprint(w, l.fingerprint);\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a fingerprint given to the host counts even when it's all 0",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;",
-					"to": "hostIdentityGiven = true;"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a room that opens with no identity is listed anyway",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\tif (Net_V2DraftOn() && !hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a listing doesn't keep the fingerprint its room opened with",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\tmemcpy(l.fingerprint, hostIdentity, sizeof(l.fingerprint));\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: what the session says later changes a listing's fingerprint, which the list refuses on a PUT",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\tl.version = static_cast<int>(session.version);\n",
-					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.fingerprint, 0, sizeof(l.fingerprint));\n"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a POST or PUT doesn't send the listing's fingerprint",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\tout.fingerprint = l.fingerprint;\n",
+					"from": "\tif (!hostIdentityGiven)\n\t{\n\t\tLogString(\"Relay list: this run has no identity to show joiners yet, so the game isn't put on the list\");\n\t\treturn;\n\t}\n\n",
 					"to": ""
 				}
 			]
@@ -1579,8 +1230,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "profile && i < profileBytes && profile[i]",
-					"to": "profile && profile[i]"
+					"from": "profile && i < profileBytes && profile[i] && n < kRelayAccessNameMostBytes",
+					"to": "profile && profile[i] && n < kRelayAccessNameMostBytes"
 				}
 			]
 		},
@@ -1635,91 +1286,11 @@
 			]
 		},
 		{
-			"name": "SOURCE: a piece of news is kept without its end",
+			"name": "SOURCE: the list asks for the games of a version other than the one it copied at its start",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tkept[letters] = 0;\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a piece of news is kept whole, however long",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "size_t const letters = strnlen(news, kMostNewsLetters);",
-					"to": "size_t const letters = strlen(news);"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a piece of news is copied past its end",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "memcpy(kept, news, letters);",
-					"to": "memcpy(kept, news, kMostNewsLetters);"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a piece of news isn't ended again before it's written",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "\t\t\tpiece[kMostNewsLetters] = 0;\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "without the draft, a game must still carry a fingerprint",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": " - (g.fingerprints ? 0 : 1);",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "without the draft, a game keeps whatever was in its fingerprint",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\t\t\tmemset(game.fingerprint, 0, sizeof(game.fingerprint));\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "a listing without the draft carries the fingerprint",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "\tif (withFingerprint)\n\t{\n\t\tAddName(w, \"fingerprint\");",
-					"to": "\tif (true)\n\t{\n\t\tAddName(w, \"fingerprint\");"
-				}
-			]
-		},
-		{
-			"name": "a listing without the draft needs a fingerprint",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "(withFingerprint && !IsAFingerprint(l.fingerprint))",
-					"to": "!IsAFingerprint(l.fingerprint)"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the list asks for the players' version's games, draft or not",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "L\"/v1/games?version=%d\", shared->version);",
+					"from": "L\"/v1/games?version=%d\", visit->version);",
 					"to": "L\"/v1/games?version=%d\", kMultiplayerVersion);"
 				}
 			]
@@ -1729,28 +1300,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "made->version = Net_OurVersion();",
-					"to": "made->version = kMultiplayerVersion;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the list reads and writes fingerprints without the draft",
-			"changes": [
-				{
-					"file": "3dc/relay_list.cpp",
-					"from": "made->v2Draft = Net_V2DraftOn();",
-					"to": "made->v2Draft = true;"
-				}
-			]
-		},
-		{
-			"name": "keys about another region are taken for the one asked about",
-			"changes": [
-				{
-					"file": "3dc/relay_list_text.cpp",
-					"from": "if (why == kRelayListAccepted && strcmp(answered, region) != 0)",
-					"to": "if (false)"
+					"from": "made->version = kMultiplayerVersion;",
+					"to": "made->version = kMultiplayerVersion - 1;"
 				}
 			]
 		},
@@ -1789,8 +1340,8 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list_text.cpp",
-					"from": "\tmemset(p384, 0, kNetCryptoP384PublicBytes);\n\tmemset(kem, 0, kNetPqKemPublicBytes);\n\n\tif (!region || !RelayList_IsRegion(region))",
-					"to": "\tif (!region || !RelayList_IsRegion(region))"
+					"from": "\tmemset(p384, 0, kNetCryptoP384PublicBytes);\n\tmemset(kem, 0, kNetPqKemPublicBytes);\n\n\tif (!region)\n",
+					"to": "\tif (!region)\n"
 				}
 			]
 		},
@@ -1829,7 +1380,7 @@
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(keysAnswer, a.bytes, region, p384, kem);",
+					"from": "RelayListRefusal const refusal = RelayList_ReadRelayKeys(s->keysAnswer, a.bytes, region, keys.p384, keys.kem);",
 					"to": "RelayListRefusal const refusal = kRelayListAccepted;"
 				}
 			]
@@ -1855,12 +1406,712 @@
 			]
 		},
 		{
-			"name": "SOURCE: the settings' RelayKey is read without -dev",
+			"name": "SOURCE: a call goes to a server not yet checked",
 			"changes": [
 				{
 					"file": "3dc/relay_list.cpp",
-					"from": "\t\tif (DevMode)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");",
-					"to": "\t\tif (true)\n\t\t{\n\t\t\tstd::string const setting = Config_GetString(\"[Network]\", \"RelayKey\", \"\");"
+					"from": "if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood))",
+					"to": "if (keyNow == kKeyRefused)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every call keeps the key it's shown, as the first does",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tcheck.keepIt = false;\n\t\treturn CallChecked(",
+					"to": "\t\tcheck.keepIt = true;\n\t\treturn CallChecked("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a later call goes on whatever key it's shown",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "check->matched = sameSize && differences == 0;",
+					"to": "check->matched = read;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line's fingerprint isn't checked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);",
+					"to": "bool const good = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server whose keys don't match is used anyway",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "s->keyState = good ? kKeyGood : kKeyRefused;",
+					"to": "s->keyState = kKeyGood;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a later call doesn't check the server first",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tconst char *const unchecked = CheckTheServer(s);\n\n\t\tif (unchecked)\n",
+					"to": "\t\tconst char *const unchecked = NULL;\n\n\t\tif (unchecked)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the one server's name comes back",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "bool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{",
+					"to": "const char *Relay_ServerName(void)\n{\n\treturn \"\";\n}\n\nbool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the one server's relay comes back",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "bool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{",
+					"to": "bool RelayList_Relays(RelayListRelay *relays, int *count)\n{\n\treturn false;\n}\n\nbool RelayList_RelayOf(int place, uint32_t *address, int *port)\n{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: keys are handed over for any region",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (!why && region[0] && strncmp(region, visit->relayRegion, sizeof(visit->relayRegion)) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list is given its address some other way than its four numbers",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "L\"%u.%u.%u.%u\", (line.address >> 24) & 0xFFu,",
+					"to": "L\"%u.%u.%u.%u\", (line.address >> 16) & 0xFFu,"
+				}
+			]
+		},
+		{
+			"name": "a relay's keys come back without their region",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tmemcpy(region, answered, sizeof(answered));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused answer about keys leaves a region behind",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tregion[0] = '\\0';\n\n\tif (bytes > kRelayKeysMostAnswerBytes)",
+					"to": "\tif (bytes > kRelayKeysMostAnswerBytes)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new check of the server starts as the last one ended",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tEnterCriticalSection(&s->lock);\n\t\ts->serverWhy = NULL;\n\t\tLeaveCriticalSection(&s->lock);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server that couldn't be reached is still being asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\treturn CantUse(s, a.why);",
+					"to": "\t\t\treturn a.why;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a server that said no is still being asked",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\treturn CantUse(s, kSaidNo);",
+					"to": "\t\t\treturn kSaidNo;"
+				}
+			]
+		},
+		{
+			"name": "a game's host id isn't one of its fields, so every game with one is refused",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },\n\t\t\t{ \"id\", kKindHostId, 0, 0, 0, NULL, NULL, game.hostId }",
+					"to": "{ \"seconds\", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds }"
+				}
+			]
+		},
+		{
+			"name": "a host id is taken without the joining code's rule, so capitals and wrong lengths pass and no bytes are kept",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !NetIdentity_IdFromHex(hex, rule.bytes))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a bad host id is called a bad text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return kRelayListBadHostId;",
+					"to": "return kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "a listing whose host id is all 0 is sent",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (hostId[i] != 0)",
+					"to": "if (hostId[i] == hostId[i])"
+				}
+			]
+		},
+		{
+			"name": "the body leaves the host's id out",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tAddName(w, \"id\");\n\tAddHostId(w, l.hostId);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host id given to the list counts even when it's all 0",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "hostIdentityGiven = hostIdentityGiven || hostIdentity[i] != 0;",
+					"to": "hostIdentityGiven = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listing doesn't keep the host id its room opened with",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tmemcpy(l.hostId, hostIdentity, sizeof(l.hostId));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the session says later changes a listing's host id, which the list refuses on a PUT",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tl.version = static_cast<int>(session.version);\n",
+					"to": "\t\tl.version = static_cast<int>(session.version);\n\t\tmemset(l.hostId, 0, sizeof(l.hostId));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a POST or PUT doesn't send the listing's host id",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tout.hostId = l.hostId;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a listing needs no host id",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": " || !IsAHostId(l.hostId))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "an access answer's fingerprint is taken without the joining code's rule (the one reader of a fingerprint left, since item 6)",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "(why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "an access answer's bad fingerprint is called a bad text",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "return kRelayListBadFingerprint;",
+					"to": "return kRelayListBadText;"
+				}
+			]
+		},
+		{
+			"name": "a game's host id is read as the 16-byte fingerprint of before item 6, so every game's 96 digits are too long",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "why = ReadString(r, hex, kNetIdentityIdHexBytes - 1, &length);",
+					"to": "why = ReadString(r, hex, kNetIdentityFingerprintHexBytes - 1, &length);"
+				}
+			]
+		},
+		{
+			"name": "the body names the host's id \"fingerprint\", as before item 6, which the list refuses",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\tAddName(w, \"id\");\n",
+					"to": "\tAddName(w, \"fingerprint\");\n"
+				}
+			]
+		},
+		{
+			"name": "the games are read into 48 KB again, under the largest list with ids (51,511 bytes)",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.h",
+					"from": "\tkRelayListMostGamesBytes = 57344,",
+					"to": "\tkRelayListMostGamesBytes = 49152,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's own state has the line in use's server before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes is taken for any line",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\treturn LineHash(line, hash) && ServersTrust_Has(yeses, hash);",
+					"to": "\t\treturn LineHash(line, hash);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line without the yes is waited for as if it had one",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;",
+					"to": "\tif (false)\n\t{\n\t\tout->state = kRelayLineNoYes;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run is asked for a yes nobody can give",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (HudsonRunIsOn)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tuint8_t runHash[kServersTrustHashBytes];"
+				}
+			]
+		},
+		{
+			"name": "a profile's name never has letters left out, by the page's reckoning",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn true;\n\t\t}",
+					"to": "\t\tif (!IsAccessNameLetter(profile[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "a shown address that doesn't fit its room is cut, and shown",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)\n\t{\n\t\treturn false;\n\t}",
+					"to": "if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)\n\t{\n\t\tsnprintf(out, room, \"%s\", text);\n\t\treturn true;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a shown address always has its two ports",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (listPort == kServersCfgListPort && relayPort == kServersCfgRelayPort)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a shown address has a port that isn't 1 to 65535",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "if (listPort < 1 || listPort > 65535 || relayPort < 1 || relayPort > 65535)\n\t{\n\t\treturn false;\n\t}\n\n\t// Written here first",
+					"to": "if (false)\n\t{\n\t\treturn false;\n\t}\n\n\t// Written here first"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page's address has its old 24 bytes again",
+			"changes": [
+				{
+					"file": "3dc/relay_list.h",
+					"from": "\tchar address[kRelayListShownAddressBytes];",
+					"to": "\tchar address[24];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page writes its address itself again, cut to its room",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!RelayList_ShownAddress(line->address, line->listPort, line->relayPort, out->address, sizeof(out->address)))\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tunsigned int const a = line->address;\n\tsnprintf(out->address, sizeof(out->address), \"%u.%u.%u.%u:%d:%d\", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,\n\t\tline->listPort, line->relayPort);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picked line skips the yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tuint8_t hash[kServersTrustHashBytes];\n\t\treturn LineHash(line, hash) && ServersTrust_Has(yeses, hash);",
+					"to": "\t\tuint8_t hash[kServersTrustHashBytes];\n\t\treturn LineHash(line, hash) && (theServer.pickNow.there || ServersTrust_Has(yeses, hash));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picked line isn't said to need its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;",
+					"to": "\tif (!theServer.pickNow.there && !TheLineIsAgreed(line))\n\t{\n\t\tout->state = kRelayLineNoYes;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the server list starts the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "int RelayList_LineCount(void)\n{\n\tServer();",
+					"to": "int RelayList_LineCount(void)\n{\n\tStart();\n\tServer();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused line's words are another line's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "*words = ServersCfg_LineWords(theFile.refused[place].why);",
+					"to": "*words = ServersCfg_LineWords(theFile.refused[0].why);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start keeps what it made when it can't start the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tDeleteCriticalSection(&made->lock);\n\t\t\tdelete made;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start leaves its first event open when it can't start the list",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (made->wake)\n\t\t\t{\n\t\t\t\tCloseHandle(made->wake);\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's thread starts without its events",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "if (made->wake && made->endDone)\n\t\t{\n\t\t\tshared = made;",
+					"to": "if (true)\n\t\t{\n\t\t\tshared = made;"
+				}
+			]
+		},
+		{
+			"name": "a yespage= run's line is agreed without its Yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));",
+					"to": "return !hudsonRunShowsTheYesPage || LineHash(line, runHash);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a call goes through a state with no server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (keyNow == kKeyNoLine)\n\t\t{\n\t\t\ta.why = kNoServer;\n\t\t\treturn a;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes to another line gives the list's own state its server",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (shared && place == theServer.inUse)",
+					"to": "\tif (shared)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a find asks no line its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tagreed[place] = TheLineIsAgreed(theFile.servers[place]);",
+					"to": "\t\tagreed[place] = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay's keys are asked of a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tif (!TheLineIsAgreed(theFile.servers[place]) || !Start())",
+					"to": "\tif (!Start())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host's choice outlives its line's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "!TheLineIsAgreed(theFile.servers[hostChoice])",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listing goes through the list's own state, not its line's",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tAnswer const a = Call(hostServer, posting ? L\"POST\" : L\"PUT\"",
+					"to": "\t\t\tAnswer const a = Call(shared, posting ? L\"POST\" : L\"PUT\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay keys' visit isn't wiped",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tTell(visit, why ? why : \"the relay's keys are the ones its server's line proved\");\n\t\t\tPassOnTheNews(visit, line.lineNumber);\n\t\t\tForgetTheVisit(visit);\n",
+					"to": "\t\t\tTell(visit, why ? why : \"the relay's keys are the ones its server's line proved\");\n\t\t\tPassOnTheNews(visit, line.lineNumber);\n"
+				}
+			]
+		},
+		{
+			"name": "a find visits a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\tif (!agreed[place])\n\t\t{\n\t\t\tstates[place] = kRelayLineNoYes;",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tstates[place] = kRelayLineNoYes;"
+				}
+			]
+		},
+		{
+			"name": "the line in use loses its place to the agreed lines before it",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.cpp",
+					"from": "\t\telse if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))",
+					"to": "\t\telse if (made >= kRelayListMostVisits)"
+				}
+			]
+		},
+		{
+			"name": "a find visits a ninth line",
+			"changes": [
+				{
+					"file": "3dc/relay_list_text.h",
+					"from": "int const kRelayListMostVisits = 8;",
+					"to": "int const kRelayListMostVisits = 9;"
+				}
+			]
+		},
+		{
+			"name": "servers.cfg ships a third server",
+			"changes": [
+				{
+					"file": "servers.cfg",
+					"from": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n",
+					"to": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n203.0.113.9  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  Sydney\n"
+				}
+			]
+		},
+		{
+			"name": "servers.cfg drops Frankfurt",
+			"changes": [
+				{
+					"file": "servers.cfg",
+					"from": "64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's own list of the servers it ships with drifts from servers.cfg",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Frankfurt\\n\";",
+					"to": "\t\"64.226.98.1  92830f3782fe8f13cf3aeaa5801b0692e622d60b947c899179f1809ae22dd5f0  Berlin\\n\";"
+				}
+			]
+		},
+		{
+			"name": "a line's relay region is kept from a visit that didn't answer, or whose keys didn't match its line",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\tif (visit && !why && KeyStateOf(visit) == kKeyGood)\n",
+					"to": "\t\t\tif (visit)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a relay keys' visit files no ping",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (place >= 0 && place < kServersCfgMostLines)\n\t\t{\n\t\t\tshared->linePings[place] = visit ? visit->pingMs : -1;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an access request's visit files no ping",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tshared->linePings[place] = visit ? visit->pingMs : -1;   // the line's ping, from this visit as from any (added 2026-11-11)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes doesn't start a find",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\tRelayList_FindGames();\n\treturn true;\n}\n\n// ---- Every servers.cfg line",
+					"to": "\treturn true;\n}\n\n// ---- Every servers.cfg line"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list's own state is made from a line other than the first",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\ttheServer.inUse = theFile.serverCount > 0 ? 0 : -1;\n",
+					"to": "\t\t\ttheServer.inUse = theFile.serverCount > 1 ? 1 : -1;\n"
+				}
+			]
+		},
+		{
+			"name": "the pages ask whether this build plays online by a question of their own",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\treturn ThisBuildPlaysOnline();\n",
+					"to": "\treturn true;\n"
+				}
+			]
+		},
+		{
+			"name": "a build without AVPX_ONLINE_PLAY plays online",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "#else\n\t\treturn false;\n#endif\n",
+					"to": "#else\n\t\treturn true;\n#endif\n"
+				}
+			]
+		},
+		{
+			"name": "a build with AVPX_ONLINE_PLAY plays no online games",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "#if defined(AVPX_ONLINE_PLAY)\n\t\treturn true;\n",
+					"to": "#if defined(AVPX_ONLINE_PLAY)\n\t\treturn false;\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games reads servers.cfg all the same",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\t\ttheServer.opening = kServersCfgNotThere;\n",
+					"to": "\t\t\t\ttheServer.opening = ServersCfg_ReadTheGames(&theFile);\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games doesn't say so in the log",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\t\tLogString(\"Relay list: this build plays no online games (it was made without AVPX_ONLINE_PLAY), so \" SERVERS_CFG_FILE_NAME\n\t\t\t\t\t\" isn't read, and there are no servers\");\n",
+					"to": ""
 				}
 			]
 		}

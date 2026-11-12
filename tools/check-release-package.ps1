@@ -11,6 +11,7 @@ The build has already passed if we get here, so this looks for what a build woul
 - A program in it that isn't the game.
 - One of our game files missing, or not the one this commit lists (package-files/SHA256SUMS.txt).
 - A program or library without its licence beside it (licences/README.txt says which is whose).
+- A servers.cfg, anywhere in it: this release plays no online games (added 2026-11-11, the owner's ruling R-GOAL-9).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package,
@@ -40,6 +41,17 @@ foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_
     {
         Stop-Release "$needed is not in the package"
     }
+}
+
+# No servers.cfg, in any folder and with any capitals: this release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11:
+# "Online off in beta.2"). The game looks for its servers beside bin, and with no servers.cfg there it reaches no server at all
+# (tools/build-and-package.ps1 says more). The release that turns online play on takes this out, and needs servers.cfg at the top
+# again, as it was from 2026-11-10 (#175). Modified 2026-11-11 by Melanikus for the AvP port.
+$serversFiles = @(Get-ChildItem -LiteralPath $Package -Recurse -Force | Where-Object { $_.Name -ieq 'servers.cfg' })
+
+if ($serversFiles.Count -gt 0)
+{
+    Stop-Release "$($serversFiles[0].FullName.Substring((Resolve-Path -LiteralPath $Package).Path.TrimEnd('\', '/').Length + 1) -replace '\\', '/') is in the package, and this release plays no online games, so it ships no servers.cfg"
 }
 
 # A build's symbols and map (.pdb, .map) name the place of a crash. They stay with the build, and a player never needs them.

@@ -565,16 +565,6 @@
 			]
 		},
 		{
-			"name": "a host that's another v2 test build has no words",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens.cpp",
-					"from": "\"The host runs another test build of the v2 draft\",",
-					"to": "\"\","
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the screen asking the host doesn't show the joiner's check code",
 			"changes": [
 				{
@@ -601,16 +591,6 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "\t\tif (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,",
 					"to": "\t\tif (false)\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a host that's another v2 test build is taken for a join that just failed",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
-					"from": "\t\tcase kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));\n\t\t\treturn true;\n",
-					"to": ""
 				}
 			]
 		},
@@ -941,6 +921,276 @@
 					"file": "3dc/avp/win95/frontend/menus.cpp",
 					"from": "RenderSmallMenuText(relayNews, MENU_CENTREX, 40,",
 					"to": "RenderSmallMenuText(relayNews, MENU_CENTREX, answering ? 56 : 40,"
+				}
+			]
+		},
+		{
+			"name": "while the page is timing the relay, the ping is a question mark",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "joinerMs == kOnlineJoinerMsMeasuring ? \"...\" : \"?\"",
+					"to": "\"?\""
+				}
+			]
+		},
+		{
+			"name": "a campaign game shows the name its host sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (campaignName)",
+					"to": "if (campaignName && !hostsName)"
+				}
+			]
+		},
+		{
+			"name": "a campaign level's name isn't made safe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "OnlineScreens_SafeName(campaignName, strlen(campaignName), words, size);",
+					"to": "Put(words, size, campaignName);"
+				}
+			]
+		},
+		{
+			"name": "a host's level name is read to its 0, past the bytes it was given",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "hostsName ? hostsNameBytes : 0",
+					"to": "hostsName ? strlen(hostsName) : 0"
+				}
+			]
+		},
+		{
+			"name": "only a campaign place with no name shows \"-\"",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.cpp",
+					"from": "if (words[0] == '\\0')\n\t{\n\t\tPut(words, size, \"-\");\n\t}\n}\n\n// ---- The ping column",
+					"to": "if (words[0] == '\\0' && campaignName)\n\t{\n\t\tPut(words, size, \"-\");\n\t}\n}\n\n// ---- The ping column"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page never gives the campaign's name, so a campaign game shows the host's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL,",
+					"to": "OnlineScreens_LevelWords(NULL,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the place is looked for on the multiplayer list, where the co-op numbers mean other levels",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_COOPERATIVE_EPISODES,",
+					"to": "LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_MULTIPLAYER_EPISODES,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game that is not co-op is named as a campaign level too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "bool const onACampaign = session.gameStyle == NGT_Coop &&",
+					"to": "bool const onACampaign ="
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's level name is written into the column the old way first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName,",
+					"to": "OnlineScreens_SafeName(session.levelName, sizeof(session.levelName), row.level, sizeof(row.level));\n\t\tOnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's screen doesn't say what not comparing the code means",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),",
+					"to": "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), NULL,"
+				}
+			]
+		},
+		{
+			"name": "RULE: the check code's two help lines are 10 apart again, on each other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\tat.secondTop = at.firstTop + at.firstLines * kOnlineHelpLineHeight + kOnlineHelpGap;",
+					"to": "\tat.secondTop = at.firstTop + 10;"
+				}
+			]
+		},
+		{
+			"name": "RULE: the help lines go past their limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\troom = room < 0 ? 0 : room;",
+					"to": "\troom = 99;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joining page draws its help lines with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\t\tkWordsTop + 50, kOnlineHelpPageBottom);",
+					"to": "\t\t\tkWordsTop + 50, 9999);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's help lines go over its answer rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t58, y - kOnlineHelpGap);",
+					"to": "\t\t\t\t58, 480);"
+				}
+			]
+		},
+		{
+			"name": "RULE: a narrower help text isn't centred between the menus' edges",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens.h",
+					"from": "\treturn width <= 0 || width >= widest ? kOnlineHelpLeft : kOnlineHelpLeft + (widest - width) / 2;",
+					"to": "\treturn kOnlineHelpLeft;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a help text of two lines isn't evened out, so a last word can sit on a line of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\treturn wide;\n}",
+					"to": "\treturn widest;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait closes a frame whether or not one is open",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tjoinClosedAFrame = ThisFramesRenderingIsOpen();",
+					"to": "\t\tjoinClosedAFrame = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the join's wait gives back a frame it never closed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tif (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a join the home network's rule refused says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\t\tOnlinePage_JoinFailed(Net_JoinRefusedWhy());\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page's failure line is one line again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "WrappedWords(failedLine, linesTop, 2, ONE_FIXED);",
+					"to": "WrappedWords(failedLine, linesTop, 1, ONE_FIXED);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the failure line has its old 96 bytes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "static char failedLine[200];",
+					"to": "static char failedLine[96];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line with no yes says nothing on the games page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;",
+					"to": "case kRelayLineNoYes: break;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line that didn't answer says nothing on the games page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;",
+					"to": "case kRelayLineNoAnswer: break;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's name on the games page isn't made safe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\tOnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));\n",
+					"to": "\tPut(name, sizeof(name), now.line.name);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line not approved yet isn't said in R-SRV-P3's words",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\t_snprintf(out, size - 1, \"%s%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);\n",
+					"to": "\t\t_snprintf(out, size - 1, \"%s: %s%s\", name, GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), ping);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an approved line with no games up shows nothing, not even its ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;",
+					"to": "-1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's words never carry its ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_screens_page.cpp",
+					"from": "\t\tsnprintf(ping, sizeof(ping), \" - %s\", measured);\n",
+					"to": ""
 				}
 			]
 		}

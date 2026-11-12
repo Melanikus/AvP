@@ -24,6 +24,9 @@ void OnlinePage_Opened(void);
 // answer, or the list code's own fixed words for one that failed (RelayList_FoundGames), which J1's failure shows, dim.
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why);
 
+// Where one servers.cfg line stands, in words, for the games page's lines under the list (added 2026-11-11 by Melanikus for the AvP port)
+bool OnlineScreens_LineStandsWords(int place, char *out, size_t size);
+
 // Each frame of the page, before OnlinePage_Frame: whether to fetch again, because Refresh was pressed or Enter on a failure. menus.cpp
 // does the asking, as it does when the page opens.
 bool OnlinePage_TimeToAskAgain(void);
@@ -56,6 +59,18 @@ int OnlinePage_SessionForRow(int menuRow);
 // line saying so for a few seconds.
 void OnlinePage_JoinFailed(const char *why);
 void OnlinePage_JoinGivenUp(void);
+
+// The check code's two grey help lines under its own line at codeTop, each wrapped to the words' box and spaced by its height, nothing
+// below limit (online_screens.h, OnlineScreens_HelpLines): for the joining page here, and for the host's "asks to join" rows in
+// menus.cpp. Added 2026-11-10 by Melanikus for the AvP port, after the two lines were drawn on top of each other.
+void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit);
+
+// Two of the online pages' own measures, shared with the yes page (server_yes_page.cpp) since 2026-11-10, so neither is copied:
+// - the small font's width for a letter, as OnlineScreens_FitToWidth takes it;
+// - the narrowest width, at most widest, that keeps text to as many lines of the small font as widest gives it, so a text of two lines
+//   comes out as two of about the same length, never a full line and a last word on its own.
+int OnlinePage_SmallWidth(int letter);
+int OnlinePage_BalancedWidth(const char *text, int widest);
 
 // The page's drawing, each frame: J1's tail and words, or on the list the column headings, "No open sessions" for an empty table, and a
 // failed join's line. Then each game's row of the menu, as bright as the menu has it (BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT for the

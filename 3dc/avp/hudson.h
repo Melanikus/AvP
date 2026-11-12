@@ -43,6 +43,11 @@ extern bool HudsonMarineHoldsFire;
 // Something has hit a marine, in a run with a fight. He's kept alive, so his health can't show whether anything reached him, and this says so in the log. kind is what hit him: the game's number for it, from AMMO_ID in equipment.h.
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind);
 
+// An alien's claw is about to land (alien, just before its CauseDamageToObject in bh_near.cpp), or has (NULL, just after), so a blow can be
+// put down to the alien that struck it, by its own name, and never to whichever alien a run happens to be watching. Nothing outside a run.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: a run's watch had counted a level alien's claw as its own alien's first blow.
+void Hudson_AlienStrikes(const STRATEGYBLOCK *alien);
+
 // A marine has come down after falling, at this speed, and wouldKillHim is what the game's own rule says about that speed. Nothing's hurt in a run, so this is how a walk finds out.
 void Hudson_MarineLanded(const STRATEGYBLOCK *marine, int fallingSpeed, bool wouldKillHim);
 
@@ -76,7 +81,8 @@ enum HudsonExitCode
 	kHudsonExitNetworkGame = 35,       // strategies are only looked at or asked in a game with nobody else in it
 	kHudsonExitNoEnemy = 36,           // combat= couldn't make its alien, or there was nowhere in sight of him to put it
 	kHudsonExitNetStopped = 50,        // net=: the two games couldn't get as far as playing together, and the result's net_stage says where it stopped
-	kHudsonExitStoppedEarly = 37       // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedEarly = 37,      // the game's main loop stopped with nothing having ended the run: its window was closed, or the graphics card failed
+	kHudsonExitStoppedByHand = 38      // someone asked the run to end, with a hudson-stop file (#198): it ended as at its time limit, so its film is finished
 };
 
 // With gun= on the command line, presses the player's keys for this frame. The game calls this straight after reading the real ones. playerStatus is the PLAYER_STATUS. See hudson.cpp.
@@ -142,8 +148,22 @@ int Hudson_AccessWaitSeconds();
 // answer=: kHudsonAnswer..., 0 for none, and answerafter='s seconds
 int Hudson_AnswerPress();
 int Hudson_AnswerAfterSeconds();
+// pagehold= (with film=menus): the seconds each page the menus picture is held first, so the film shows it; 0 for none. Added 2026-11-10
+// by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds();
 // findgames=yes: a joiner through the relay joins by Find Games and the list's game's row, as a player does
 bool Hudson_JoinsThroughFindGames();
+// yespage= (hudson_plan.h, kHudsonYesPage...): the yes page's row an access run presses; none outside a run. Added 2026-11-10 by
+// Melanikus (Third) for the AvP port
+int Hudson_YesPagePress();
+// hostrow= (hudson_plan.h, kHudsonHostRow...): where a host through the Multiplayer page's Host row hosts; none outside a run, or for a
+// host from the code. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_HostRow();
+// hoston= and joinon= (hudson_plan.h): the servers.cfg line name a host through the rows chooses on the Host on row, and the one whose
+// game a Find games run joins, each as servers.cfg keeps it (one space for each _ the plan wrote); "" outside a run or when none is named.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port
+const char *Hudson_HostOnName();
+const char *Hudson_JoinOnName();
 // A picture of this frame, named name, taken once it's drawn whole (Hudson_TakePictureIfDue). Only one waits at a time; a second asked for
 // before the first is taken replaces it.
 void Hudson_PictureThisFrame(const char *name);
@@ -197,7 +217,6 @@ bool Hudson_NetIsCampaign();
 bool Hudson_NetIsHostile();
 
 // typed=yes: the joiner finds the game the way a player does who has typed its address
-bool Hudson_NetIsTyped();
 
 // The campaign has ended, so the run does too.
 void Hudson_NetCampaignIsOver();

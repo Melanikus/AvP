@@ -881,8 +881,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t\treturn;\n\t}",
-					"to": "\tif (isARealLight)\n\t{\n\t\tShoulderLamp_NoteARealLightFrame();\n\t}"
+					"from": "\t\tif (!paintedToo)\n\t\t{\n\t\t\treturn;\n\t\t}\n",
+					"to": ""
 				}
 			]
 		},
@@ -1271,8 +1271,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;",
-					"to": "bool const wasChanged = spotIntensity != kShoulderLampIntensity;"
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
+					"to": "bool const wasChanged = spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;"
 				}
 			]
 		},
@@ -1281,8 +1281,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;",
-					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize;"
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
+					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || lampLook != kShoulderLampLookAsBuilt;"
 				}
 			]
 		},
@@ -1623,6 +1623,76 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "\t// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.\n\tfloat spot[4];",
 					"to": "\t// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.\n\tif (AvP.Network != I_No_Network) return;\n\tfloat spot[4];"
+				}
+			]
+		},
+		{
+			"name": "LAMPLOOK 2 still lets the lamp be a real light",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " && lampLook != kShoulderLampLookPainted;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "putting the spot back leaves the look as it was",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\tlampLook = kShoulderLampLookAsBuilt;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LAMPLOOK reads any digit",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "words[0] < '0' || words[0] > '3'",
+					"to": "words[0] < '0' || words[0] > '9'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: LAMPLOOK works in a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (LampStaysAsBuiltHere(\"LAMPLOOK IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT\", length))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: over the real light the spot brightens at full strength",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "blendedOver ? strength * kShoulderLampOverARealLight : strength",
+					"to": "strength"
+				}
+			]
+		},
+		{
+			"name": "putting back misses a changed look",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
+					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: at full over the real light the walls aren't lit",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "(!isARealLight || fullOver) && surfacePicturesAreFromThisFrame",
+					"to": "!isARealLight && surfacePicturesAreFromThisFrame"
 				}
 			]
 		}

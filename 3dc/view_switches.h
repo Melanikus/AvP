@@ -56,6 +56,10 @@ void LampFollowCommand(char *words);
 void LampSpotSizeCommand(char *words);
 void LampIntensityCommand(char *words);
 
+// How the player's own lamp looks when it could be a real light, playing alone: see LAMPLOOK in shoulder_lamp.h. Added 2026-11-11 by
+// Melanikus (Third) for the AvP port.
+void LampLookCommand(char *words);
+
 // How a lamp's light looks per pixel, for this run of the game, playing alone with -dev. See pixel_look.h.
 void PixelGlowCommand(char *words);
 void PixelCurveCommand(char *words);

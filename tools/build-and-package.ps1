@@ -147,6 +147,13 @@ do {
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
+# No servers.cfg goes in the package: this release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11: "Online off in
+# beta.2", "These are all MP which we already postponed"). The game looks for the file only beside bin (3dc/servers_cfg_file.h), and
+# with none it has no server, so it reaches none: its list starts only for a servers.cfg line (tools/check-online-play.ps1, rule R).
+# The servers.cfg at the repository's root stays there, still held to its rules, for the release that turns online play on: that
+# release copies it here again. Until then tools/check-release-package.ps1 refuses a package with one. Modified 2026-11-11 by Melanikus
+# for the AvP port (the copy was added 2026-11-10, #175).
+
 # --- Each library's own licence, in the folder licences, copied from the very files the build used. licences/README.txt names each
 # program and library in bin, says what it is and which licences go with it, and, for the ones under the GNU licences, where their
 # source is. The libraries ask for this: a copy of a program has to come with their notices. The build stops if something in bin

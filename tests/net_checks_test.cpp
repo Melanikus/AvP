@@ -2,6 +2,9 @@
 //   the checks added since: names, chat lines, a client's budget, typed addresses, who has asked lately, and a sound's address
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   how long ago a joiner heard about a lift car, by its own clock, and that bh_platform_lift.cpp counts it that way (#90)
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   which addresses are the player's home network, at the edges of every range (#188)
+//   who waits at a lift's far end, against every stock lift, and that a deathmatch lift still calls at 1999's 5 m (#189)
 // The test of the checks on what arrives from other players' machines. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // WHAT IT TESTS
@@ -158,18 +161,247 @@ static void TestLiftSync()
 	Check(NetLiftFollowStep(0, 80, 100, true, 450) == 80, "and arrives without going past");
 }
 
+// Every platform lift in the 23 single-player levels that have one, from the game's own level files (#189). Each is
+// { level, name, top, bottom, minX, maxX, minZ, maxZ, radius }, in the game's mm, and a bigger y is lower down:
+//   top, bottom: the two ends of the car's travel;
+//   minX, maxX, minZ, maxZ: how far the car's shape reaches from its middle, seen from above;
+//   radius: the size of the car's whole shape, which the call used until #189.
+// Made by tools/levels/lift-table.js, which says where each number is in a level file, run in the game's avp_rifs folder:
+//   node <the repository>/tools/levels/lift-table.js area52 derelict derelict_a escape escape_p fall fall_m furyall furyall_a genshd1 invasion
+//     invasion_a invasion_p odobenus stat101 sulaco sulaco_a sulaco_p temple temple_m temple_p vaults vaults_m
+struct StockLift
+{
+	char const *level;
+	char const *name;
+	int top, bottom, minX, maxX, minZ, maxZ, radius;
+};
+
+static StockLift const kStockLifts[] =
+{
+	{ "area52", "CANSLIFT", 9028, 23077, -2338, 2338, -2338, 2337, 8462 },
+	{ "area52", "skblift", -15888, -5310, -2338, 2338, -1558, 1558, 8779 }, // starts at the bottom
+	{ "area52", "LIB-LIFT", 10367, 16588, -1125, 1992, -3116, 3117, 3724 },
+	{ "area52", "LIFT1", -9301, -889, -3116, 3117, -3428, 3429, 5338 }, // starts at the bottom
+	{ "derelict", "lift-SKB", -18269, 1211, -4675, 4674, -2338, 2338, 20302 },
+	{ "derelict", "lft-VIEWC", -18269, 5506, -2337, 2338, -4675, 4675, 25163 },
+	{ "derelict", "lift-SKA", -18270, -13193, -4675, 4675, -2337, 2338, 5744 },
+	{ "derelict", "lft-VIEWA", -13205, 5503, -2337, 2338, -4675, 4675, 19479 },
+	{ "derelict", "lft-COMM", -6581, 1621, -1948, 1948, -3896, 3896, 9038 },
+	{ "derelict", "lft-JOCKEY", 1818, 30921, -1948, 1948, -1948, 1948, 36932 },
+	{ "derelict", "liftcar01", 29650, 45229, -1948, 1948, -1948, 1948, 3612 },
+	{ "derelict_a", "lift-SKB", -18269, 1211, -4675, 4674, -2338, 2338, 20302 },
+	{ "derelict_a", "lft-VIEWC", -18269, 5506, -2337, 2338, -4675, 4675, 25163 },
+	{ "derelict_a", "lift-SKA", -18270, -13193, -4675, 4675, -2337, 2338, 5744 },
+	{ "derelict_a", "lft-VIEWA", -13205, 5503, -2337, 2338, -4675, 4675, 19479 },
+	{ "derelict_a", "lft-COMM", -6581, 1621, -1948, 1948, -3896, 3896, 9038 },
+	{ "escape", "lift01", -31160, -19479, -1948, 1948, -1948, 1948, 3612 }, // starts at the bottom
+	{ "escape_p", "lift01", -31160, -19479, -1948, 1948, -1948, 1948, 3612 }, // starts at the bottom
+	{ "fall", "lift", -2076, 25226, -3896, 3897, -3896, 3897, 6639 },
+	{ "fall_m", "lift", -2076, 25226, -3896, 3897, -3896, 3897, 6639 },
+	{ "furyall", "LEADLIFT", 10895, 38179, -1949, 1948, -2598, 5195, 5586 },
+	{ "furyall", "sqlift", 6719, 37133, -1948, 1949, -2728, 2727, 3375 }, // starts at the bottom
+	{ "furyall", "mainlift", -15168, 35583, -4540, 4540, -3027, 3027, 6938 },
+	{ "furyall", "plift", -20918, -9237, -3897, 3896, -3897, 3897, 11532 }, // starts at the bottom
+	{ "furyall", "lift", 8479, 20183, -3897, 3897, -3897, 3897, 5542 }, // starts at the bottom
+	{ "furyall_a", "LEADLIFT", 10895, 38179, -1949, 1948, -2598, 5195, 5586 },
+	{ "furyall_a", "sqlift", 6719, 37133, -1948, 1949, -2728, 2727, 3375 }, // starts at the bottom
+	{ "furyall_a", "mainlift", -15180, 35505, -4540, 4540, -3027, 3027, 6938 },
+	{ "furyall_a", "plift", -20918, -9237, -3897, 3896, -3897, 3897, 11532 }, // starts at the bottom
+	{ "genshd1", "liftplt", -13272, 2325, -3904, 3905, -3896, 3897, 5530 }, // starts at the bottom
+	{ "genshd1", "SHDLFT", -3642, 1735, -1949, 1948, -1948, 1949, 2763 }, // starts at the bottom
+	{ "genshd1", "liftcar01", -24, 15590, -1948, 1949, -1949, 1948, 3614 }, // starts at the bottom
+	{ "invasion", "Platlift", -16344, -8556, -2050, 2136, -2211, 2259, 3139 }, // starts at the bottom
+	{ "invasion", "toplftsh01", -27351, -16198, -1866, 1835, -2079, 2080, 2666 }, // starts at the bottom
+	{ "invasion", "Platlift2", -10938, -3152, -1949, 1948, -2145, 2144, 11378 },
+	{ "invasion", "Platlift3", -1801, 11038, -1949, 1948, -1951, 1950, 18715 }, // starts at the bottom
+	{ "invasion", "3rdLift01", -1872, 11381, -1948, 1948, -3898, 3898, 15989 },
+	{ "invasion_a", "Platlift", -16344, -8556, -2050, 2136, -2211, 2259, 3139 }, // starts at the bottom
+	{ "invasion_a", "Platlift2", -11014, -3122, -1949, 1948, -2145, 2144, 11378 }, // starts at the bottom
+	{ "invasion_a", "Platlift3", -1819, 10986, -1949, 1948, -1951, 1950, 18715 }, // starts at the bottom
+	{ "invasion_a", "3rdLift01", -1872, 11381, -1948, 1948, -3898, 3898, 15989 },
+	{ "invasion_p", "Platlift", -16344, -8556, -2050, 2136, -2211, 2259, 3139 }, // starts at the bottom
+	{ "invasion_p", "toplftsh01", -27378, -16203, -1866, 1835, -2079, 2080, 2666 },
+	{ "invasion_p", "Platlift2", -11014, -3122, -1949, 1948, -2145, 2144, 11378 }, // starts at the bottom
+	{ "invasion_p", "Platlift3", -1819, 10986, -1949, 1948, -1951, 1950, 18715 }, // starts at the bottom
+	{ "invasion_p", "3rdLift01", -1872, 11381, -1948, 1948, -3898, 3898, 15989 },
+	{ "odobenus", "DoorLift01", -2212, 5456, -5845, 5845, -1949, 1948, 8201 }, // starts at the bottom
+	{ "odobenus", "Lift", 2113, 13833, -1786, 1787, -1786, 1787, 1860 }, // starts at the bottom
+	{ "odobenus", "lIFT2", 5919, 13426, -1754, 1753, -1754, 1753, 10233 }, // starts at the bottom
+	{ "stat101", "liftcarP02", -115621, -68891, -4092, 4091, -3613, 3613, 6953 }, // starts at the bottom
+	{ "sulaco", "finallift", -4870, 10728, -1948, 1949, -5845, 5845, 6164 },
+	{ "sulaco", "platlift04", -5587, 6110, -1949, 1948, -3447, 450, 4061 }, // starts at the bottom
+	{ "sulaco", "platlift02", -3621, 8050, -3448, 449, -1948, 1948, 4061 },
+	{ "sulaco", "platlift", -3604, 4162, -3447, 449, -1949, 1948, 4061 }, // starts at the bottom
+	{ "sulaco_a", "finallift", -4870, 10728, -1948, 1949, -5845, 5845, 6164 },
+	{ "sulaco_a", "platlift04", -5587, 6110, -1949, 1948, -3447, 450, 4061 }, // starts at the bottom
+	{ "sulaco_a", "platlift02", -3621, 8050, -3448, 449, -1948, 1948, 4061 },
+	{ "sulaco_a", "platlift", -3604, 4162, -3447, 449, -1949, 1948, 4061 }, // starts at the bottom
+	{ "sulaco_p", "finallift", -4837, 6591, -1948, 1949, -5845, 5845, 6164 }, // starts at the bottom
+	{ "sulaco_p", "platlift04", -5587, 6110, -1949, 1948, -3447, 450, 4061 }, // starts at the bottom
+	{ "sulaco_p", "platlift02", -3652, 8019, -3448, 449, -1948, 1948, 4061 },
+	{ "sulaco_p", "platlift", -3604, 4162, -3447, 449, -1949, 1948, 4061 }, // starts at the bottom
+	{ "temple", "genlift01", 51483, 60085, -1948, 1949, -1949, 1948, 2839 }, // starts at the bottom
+	{ "temple", "genlift", 31679, 51181, -1948, 1949, -1948, 1948, 2941 },
+	{ "temple", "biglift", 59600, 94280, -4286, 4287, -1948, 1949, 4744 }, // starts at the bottom
+	{ "temple_m", "genlift", 31692, 51175, -1948, 1949, -1948, 1948, 2941 },
+	{ "temple_m", "biglift", 59600, 94280, -4286, 4287, -1948, 1949, 4744 }, // starts at the bottom
+	{ "temple_p", "genlift01", 51483, 60085, -1948, 1949, -1949, 1948, 2839 }, // starts at the bottom
+	{ "temple_p", "genlift", 31679, 51172, -1948, 1949, -1948, 1948, 2941 },
+	{ "temple_p", "biglift", 59600, 94280, -4286, 4287, -1948, 1949, 4744 }, // starts at the bottom
+	{ "temple_p", "powlift", 56987, 89230, -6624, 6625, -1948, 1948, 7658 },
+	{ "vaults", "LIFT01", 1718, 13713, -2338, 2338, -2338, 2337, 4237 }, // starts at the bottom
+	{ "vaults", "ALIENS-LFT", 11907, 18450, -2052, 1064, -2805, 2805, 5860 },
+	{ "vaults_m", "ALIENS-LFT", 11907, 18450, -2052, 1064, -2805, 2805, 5860 },
+};
+
+// In the mode that plays as single player: does someone at x, y, z wait at the far end of a car at rest at nearEnd, whose middle
+// is at carX, carZ? The game's own distance only counts outside the mode, so it's given as one that would say no there.
+static bool WaitsInTheMode(int x, int y, int z, int carX, int carZ, int nearEnd, int farEnd, int footprint)
+{
+	return NetLiftIsWaitingAtTheFarEnd(999999, x, y, z, carX, carZ, nearEnd, farEnd, footprint, true);
+}
+
 static void TestLiftCallReach()
 {
 	puts("calling a platform lift");
 
-	Check(NetLiftCallReach(6905, false) == 5000, "outside the mode, it's always 5 m");
-	Check(NetLiftCallReach(6905, true) == 11905, "in the mode, it's 5 m from the edge of the widest lift in the campaigns");
-	Check(NetLiftCallReach(1, true) == 5001, "a small lift is the same rule");
-	Check(NetLiftCallReach(0, true) == 5000, "a lift with no size is 5 m");
-	Check(NetLiftCallReach(-1, true) == 5000, "a size below nothing from a level's file counts as nothing");
-	Check(NetLiftCallReach(99999, true) == 104999, "a size just under the limit counts as itself");
-	Check(NetLiftCallReach(100000, true) == 105000, "and the limit is the most");
-	Check(NetLiftCallReach(2147483647, true) == 105000, "so the biggest number a file can hold doesn't overflow");
+	// Outside the mode it's 1999's rule, by the game's own distance, and nothing else is looked at
+	Check(kNetLiftCallReach == 5000, "the call reaches 5 m, as the game always said");
+	Check(NetLiftIsWaitingAtTheFarEnd(4999, 0, 0, 0, 0, 0, 0, 30000, 2755, false), "outside the mode, nearer than 5 m to the far end's middle waits there");
+	Check(!NetLiftIsWaitingAtTheFarEnd(5000, 0, 30000, 0, 0, 0, 0, 30000, 2755, false), "and 5 m away doesn't, even standing in the shaft at the far end");
+	Check(NetLiftIsWaitingAtTheFarEnd(4999, 99999, -99999, 99999, 0, 0, 0, 0, 0, false), "the place, the ends and the car's size don't matter there: a deathmatch lift is as it was");
+
+	// The car seen from above
+	Check(NetLiftFootprintRadius(-1948, 1948, -1948, 1948) == 2755, "a square car 3.9 m across reaches 2.755 m to its corners, rounded up");
+	Check(NetLiftFootprintRadius(-4675, 4674, -2338, 2338) == 5228, "a long one, such as Derelict's lift-SKB, reaches 5.228 m");
+	Check(NetLiftFootprintRadius(-3447, 449, -1949, 1948) == 3960, "a car off its middle counts by its further side");
+	Check(NetLiftFootprintRadius(-1948, 1948, -3447, 450) == 3960, "along z too");
+	Check(NetLiftFootprintRadius(-3, 3, -4, 4) == 5, "a corner a whole number of mm away is exactly that, not one more");
+	Check(NetLiftFootprintRadius(0, 0, 0, 0) == 0, "a car with no size has none");
+	Check(NetLiftFootprintRadius(-2147483647 - 1, 2147483647, -2147483647 - 1, 2147483647) == 141422,
+		"the biggest numbers a level's file can hold count as 100 m each way, and don't overflow");
+
+	// In the mode. A made-up lift: a 30 m shaft from -3000 down to 27000, a 3.9 m car with its middle at 1000, 2000. So someone
+	// waits at the far end within 5 m of its height, and within 2755 + 5000 = 7755 mm of the car's middle, seen from above.
+	int const top = -3000, bottom = 27000, carX = 1000, carZ = 2000, footprint = 2755;
+
+	Check(!WaitsInTheMode(carX, top - 1000, carZ, carX, carZ, top, bottom, footprint),
+		"#189: standing on the car at the top isn't waiting at the bottom, so the car doesn't go away from him");
+	Check(!NetLiftIsWaitingAtTheFarEnd(0, carX, top - 1000, carZ, carX, carZ, top, bottom, footprint, true), "and the game's own distance doesn't count in the mode");
+	Check(WaitsInTheMode(carX + 7000, bottom - 1000, carZ, carX, carZ, top, bottom, footprint), "standing beside the bottom, 7 m from the car's middle, calls it down to him");
+	Check(WaitsInTheMode(carX, bottom, carZ, carX, carZ, top, bottom, footprint), "and so does standing in the shaft at the bottom");
+	Check(WaitsInTheMode(carX + 7754, bottom, carZ, carX, carZ, top, bottom, footprint), "the reach is 5 m past the car's edge");
+	Check(!WaitsInTheMode(carX + 7755, bottom, carZ, carX, carZ, top, bottom, footprint), "and no further");
+	Check(!WaitsInTheMode(carX, bottom, carZ - 7755, carX, carZ, top, bottom, footprint), "the same along z");
+	Check(WaitsInTheMode(carX + 5483, bottom, carZ + 5483, carX, carZ, top, bottom, footprint), "on the slant, it's the distance that counts: 7.754 m");
+	Check(!WaitsInTheMode(carX + 5484, bottom, carZ + 5484, carX, carZ, top, bottom, footprint), "and 7.756 m is too far");
+	Check(WaitsInTheMode(carX, bottom + 4999, carZ, carX, carZ, top, bottom, footprint), "up to 5 m below the far end's height counts");
+	Check(!WaitsInTheMode(carX, bottom + 5000, carZ, carX, carZ, top, bottom, footprint), "but not 5 m");
+	Check(WaitsInTheMode(carX, bottom - 4999, carZ, carX, carZ, top, bottom, footprint), "and up to 5 m above it");
+	Check(!WaitsInTheMode(carX, bottom - 5000, carZ, carX, carZ, top, bottom, footprint), "but not 5 m, as in a room over the far end");
+	Check(WaitsInTheMode(carX, top - 1000, carZ, carX, carZ, bottom, top, footprint), "with the car at the bottom, standing at the top calls it up");
+	Check(!WaitsInTheMode(carX, bottom - 1000, carZ, carX, carZ, bottom, top, footprint), "and standing on it at the bottom doesn't");
+
+	// The half of the shaft, on its own: a 6 m shaft from 0 down to 6000, so its middle is 3000, and every height here is within 5 m
+	// of the far end's
+	Check(WaitsInTheMode(0, 3001, 0, 0, 0, 0, 6000, footprint), "just past the middle of a short shaft, on the far end's half, counts");
+	Check(!WaitsInTheMode(0, 3000, 0, 0, 0, 0, 6000, footprint), "the middle itself doesn't, as in single player");
+	Check(!WaitsInTheMode(0, 2999, 0, 0, 0, 0, 6000, footprint), "nor the car's own half, though it's within 5 m of the far end's height");
+	Check(!WaitsInTheMode(0, 4000, 0, 0, 0, 5000, 5000, footprint), "a car with nowhere to go has no far end, even for someone 1 m over it");
+
+	// Numbers from a hostile level or message: nothing overflows, and nothing far away counts
+	int const most = 2147483647, least = -2147483647 - 1;
+	Check(!WaitsInTheMode(most, bottom, least, carX, carZ, top, bottom, footprint), "someone as far away as a number can say doesn't count");
+	Check(!WaitsInTheMode(least, bottom, most, most, least, top, bottom, footprint), "nor with the car as far the other way");
+	Check(WaitsInTheMode(0, most, 0, 0, 0, least, most, most), "ends at the very top and bottom of the numbers don't overflow: at the far end, he waits");
+	Check(!WaitsInTheMode(0, least, 0, 0, 0, least, most, most), "and at the car's own end he doesn't");
+	Check(WaitsInTheMode(carX + 146421, bottom, carZ, carX, carZ, top, bottom, most), "a car bigger than any real one counts as the biggest the footprint can be");
+	Check(!WaitsInTheMode(carX + 146422, bottom, carZ, carX, carZ, top, bottom, most), "and no bigger");
+	Check(WaitsInTheMode(carX + 4999, bottom, carZ, carX, carZ, top, bottom, -5), "a size below nothing counts as nothing, not as less");
+	Check(!WaitsInTheMode(carX + 5000, bottom, carZ, carX, carZ, top, bottom, -5), "so the reach is 5 m from the middle then");
+
+	// Every stock lift, with its car at either end. Round its own end, from 2 m above it to 2 m below and out to 3 m past the reach,
+	// straight out along x and z and on the slant, nobody counts as waiting at the far end. Beside the far end, 4 m past the car's
+	// edge, and in the shaft at the far end, someone does.
+	size_t const lifts = sizeof(kStockLifts) / sizeof(kStockLifts[0]);
+	int calledFromItsOwnEnd = 0, notCalledFromItsFarEnd = 0, oldRuleCalledFromItsOwnEnd = 0, widest = 0;
+
+	for (size_t i = 0; i < lifts; i++)
+	{
+		StockLift const &lift = kStockLifts[i];
+		int const reach = NetLiftFootprintRadius(lift.minX, lift.maxX, lift.minZ, lift.maxZ);
+		bool wrong = false;
+
+		widest = reach > widest ? reach : widest;
+
+		// The old rule: someone over the car's middle at its own end is the shaft's length from the far end, and the old reach was
+		// 5 m plus the radius of the whole shape
+		if (lift.bottom - lift.top < kNetLiftCallReach + lift.radius)
+		{
+			oldRuleCalledFromItsOwnEnd++;
+		}
+
+		for (int carIsAtTheTop = 0; carIsAtTheTop < 2; carIsAtTheTop++)
+		{
+			int const nearEnd = carIsAtTheTop ? lift.top : lift.bottom;
+			int const farEnd = carIsAtTheTop ? lift.bottom : lift.top;
+
+			for (int up = -2000; up <= 2000; up += 500)
+			{
+				for (int out = 0; out <= reach + kNetLiftCallReach + 3000; out += 250)
+				{
+					int const slant = out * 7 / 10;
+
+					if (WaitsInTheMode(out, nearEnd + up, 0, 0, 0, nearEnd, farEnd, reach) || WaitsInTheMode(0, nearEnd + up, -out, 0, 0, nearEnd, farEnd, reach) ||
+						WaitsInTheMode(-slant, nearEnd + up, slant, 0, 0, nearEnd, farEnd, reach))
+					{
+						calledFromItsOwnEnd++;
+						wrong = true;
+					}
+				}
+			}
+
+			if (!WaitsInTheMode(reach + 4000, farEnd, 0, 0, 0, nearEnd, farEnd, reach) || !WaitsInTheMode(0, farEnd, 0, 0, 0, nearEnd, farEnd, reach))
+			{
+				notCalledFromItsFarEnd++;
+				wrong = true;
+			}
+		}
+
+		if (wrong)
+		{
+			printf("  (%s's %s is called wrongly)\n", lift.level, lift.name);
+		}
+
+		if (lift.top >= lift.bottom)
+		{
+			printf("  (%s's %s has no travel)\n", lift.level, lift.name);
+		}
+	}
+
+	Check(lifts == 74, "the table holds all 74 platform lifts of the single-player levels");
+	Check(oldRuleCalledFromItsOwnEnd == 36, "the old rule called 36 of them from the end the car was at: the bug is in the table");
+	Check(calledFromItsOwnEnd == 0, "now no stock lift is called from round the end its car is at, whichever end that is");
+	Check(notCalledFromItsFarEnd == 0, "and every one is called by someone beside its far end, or standing in its shaft there");
+	Check(widest == 6906, "the widest stock car, Temple's powlift, reaches 6.906 m from its middle: the size the old test meant");
+
+	// The game's own lines: the rule is asked in both places, the shape's whole radius is gone, and the host's player calls a car
+	// in the mode as single player does, while single player's own call is as it was
+	std::string const lift = ReadSourceFile("3dc/avp/bh_platform_lift.cpp");
+
+	Check(!lift.empty(), "SOURCE: the lift's file can be read");
+	Check(Has(lift, "/* remote player */\n\t\t\t\tLOCALASSERT(sbPtr->DynPtr);\n\t\t\t\tif(WaitingAtTheFarEnd(&(sbPtr->DynPtr->Position),&(otherTerminal),nearEndHeight,footprint)) return 1;"),
+		"SOURCE: a joiner waits at the far end by the rule");
+	Check(Has(lift, "/* local player */\n\t\t\tLOCALASSERT(sbPtr->DynPtr);\n\t\t\tif(WaitingAtTheFarEnd(&(sbPtr->DynPtr->Position),&(otherTerminal),nearEndHeight,footprint)) return 1;"),
+		"SOURCE: and so does the host's own player");
+	Check(Has(lift, "return NetLiftIsWaitingAtTheFarEnd(VectorDistance(where, farEnd), where->vx, where->vy, where->vz, farEnd->vx, farEnd->vz, nearEndHeight, farEnd->vy,"),
+		"SOURCE: with the game's own distance, for outside the mode");
+	Check(!Has(lift, "shaperadius"), "SOURCE: the radius of the car's whole shape calls nothing");
+	Check(Has(lift, "NetLiftFootprintRadius(liftShape->shapeminx, liftShape->shapemaxx, liftShape->shapeminz, liftShape->shapemaxz)"), "SOURCE: the car's footprint does");
+	Check(Has(lift, "if(ActivatedByPlayer(dynPtr) || HostSeesTheCarFromTheOtherHalf(sbPtr))"), "SOURCE: the host's player calls a car he sees from the other half");
+	Check(Has(lift, "if (!SameAsSinglePlayer() || !sbPtr->SBdptr || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)\n\t{\n\t\treturn 0;\n\t}\n\n\treturn PlayerIsNearOtherTerminal(sbPtr);"),
+		"SOURCE: only in the mode, and only when it's drawn on his screen");
+	Check(Has(lift, "if(ActivatedByPlayer(dynPtr) || PlayerIsNearOtherTerminal(sbPtr))"), "SOURCE: single player's own call is as it was");
 }
 
 // Whether the host has heard from everyone else on the loading screen
@@ -477,100 +709,9 @@ static void TestDamageMultiples()
 	Check(!NetDamageMultipleIsGood(-2147483647 - 1), "however large");
 }
 
-// Text that tells on anyone who looks past the end of its room. Looking too far gives the same answer as not looking, so these count the looks instead.
-struct TextThatCountsLooksPast
-{
-	const char *letters;
-	size_t room;
-	mutable int looksPast;
-
-	char operator[](size_t at) const
-	{
-		if (at >= room)
-		{
-			looksPast++;
-			return '\0';
-		}
-
-		return letters[at];
-	}
-};
-
-static void TestTypedAddresses()
-{
-	char const *const good[] = { "127.0.0.1", "192.168.1.20", "0.0.0.0", "255.255.255.255" };
-	char const *const bad[] = { "", "localhost", "127.0.0", "127.0.0.1.5", "256.0.0.1", "1.2.3.4 ", " 1.2.3.4", "1..2.3", "1.2.3.", "1234.1.1.1", "0x7f.0.0.1", "1.2.3.4/8", "-1.2.3.4" };
-
-	for (char const *address : good)
-	{
-		Check(NetTypedAddressIsGood(address, 17), address);
-	}
-
-	for (char const *address : bad)
-	{
-		Check(!NetTypedAddressIsGood(address, 17), address);
-	}
-
-	char noEnd[4] = { '1', '.', '2', '.' };
-
-	Check(!NetTypedAddressIsGood(noEnd, sizeof(noEnd)), "one that runs off the end of its room isn't read past it");
-	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
-
-	// What's past its room has to stay unread, even if it would make a good address. Each of these stops at the very end of its room in a different place, so each place the check looks from comes right up against the end.
-	char const *const fillTheirRoom[] = { "", "1", "1.", "1.2", "1.2.", "1.2.3", "1.2.3.", "1.2.3.4", "123.123.123.123" };
-
-	for (size_t i = 0; i < sizeof(fillTheirRoom) / sizeof(fillTheirRoom[0]); i++)
-	{
-		TextThatCountsLooksPast text = { fillTheirRoom[i], strlen(fillTheirRoom[i]), 0 };
-
-		Check(!NetTypedAddressIsGoodWithin(text, text.room), fillTheirRoom[i]);
-		Check(text.looksPast == 0, "and nothing past its room is looked at");
-	}
-
-	// And the same check still says yes to a good one, so the "no" answers above aren't only because it can't say yes
-	TextThatCountsLooksPast whole = { "1.2.3.4", 8, 0 };
-
-	Check(NetTypedAddressIsGoodWithin(whole, whole.room), "a good address with its end inside its room is good");
-	Check(whole.looksPast == 0, "and nothing past its room is looked at for that one either");
-}
-
 static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, size_t)
 {
 	return 1 + (size_t)part[0];
-}
-
-static void TestWhoHasAskedLately()
-{
-	NetAddressCount table[3];
-
-	memset(table, 0, sizeof(table));
-
-	Check(NetAddressHasRoom(table, 3, 11, 1000, 2), "an address has room to ask");
-	Check(NetAddressHasRoom(table, 3, 11, 1100, 2), "up to its limit");
-	Check(!NetAddressHasRoom(table, 3, 11, 1200, 2), "and no more that second");
-	Check(NetAddressHasRoom(table, 3, 22, 1300, 2), "another address has its own count");
-	Check(NetAddressHasRoom(table, 3, 11, 2000, 2), "and the first has room again the next second");
-
-	// More addresses than places: the one heard from longest ago makes room, and nothing is written past the end
-	Check(NetAddressHasRoom(table, 3, 33, 2100, 2), "a third address fits");
-	Check(NetAddressHasRoom(table, 3, 44, 2200, 2), "and a fourth takes the oldest place");
-	Check(table[0].address != 0 && table[1].address != 0 && table[2].address != 0, "every place is in use");
-
-	bool fourthThere = false, secondGone = true;
-
-	for (int i = 0; i < 3; i++)
-	{
-		fourthThere = fourthThere || table[i].address == 44;
-		secondGone = secondGone && table[i].address != 22;
-	}
-
-	Check(fourthThere && secondGone, "it was the oldest that went");
-
-	// An address of 0 is real: only "used" says whether a place is empty
-	NetAddressCount zero[2];
-
-	memset(zero, 0, sizeof(zero));
-	Check(NetAddressHasRoom(zero, 2, 0, 5000, 1) && !NetAddressHasRoom(zero, 2, 0, 5100, 1), "an address that's all zeroes is counted like any other");
 }
 
 static void TestRoomForAmounts()
@@ -752,8 +893,6 @@ int main()
 	TestSoundAddresses();
 	TestWhatAClientMaySpend();
 	TestRoomForAmounts();
-	TestWhoHasAskedLately();
-	TestTypedAddresses();
 	TestPressMessages();
 	TestEveryoneElseIsReady();
 	TestLiftCallReach();

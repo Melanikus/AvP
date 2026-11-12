@@ -1,6 +1,7 @@
 {
 	"copy": [
 		"3dc",
+		"win32",
 		"tests"
 	],
 	"rows": [
@@ -15,12 +16,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the Predator's triangle leaves the sight's 4/3 on (the port's old line)",
+			"name": "SOURCE: the Predator's triangle leaves the sight's 4/3 on (the line beta.1 was built with)",
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "\t\tcentreY = MUL_FIXED((((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);\n",
-					"to": "\t\tcentreY = MUL_FIXED((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY, z);\n"
+					"from": "\tcentreY = MUL_FIXED((((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);\n",
+					"to": "\tcentreY = MUL_FIXED((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY, z);\n"
 				}
 			]
 		},
@@ -46,6 +47,76 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "\tfloat xScale = originalYScale / aspect;\n",
 					"to": "\tfloat xScale = originalYScale;\n"
+				}
+			]
+		},
+		{
+			"name": "COMPILED: the triangle's 3/4 goes back under #ifdef USE_D3DVIEWTRANSFORM, as the first fix had it, and the compiled line has none",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tcentreY = MUL_FIXED((((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);\n",
+					"to": "#ifdef USE_D3DVIEWTRANSFORM\n\tcentreY = MUL_FIXED((((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);\n#else\n\tcentreY = MUL_FIXED((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY, z);\n#endif\n"
+				}
+			]
+		},
+		{
+			"name": "COMPILED: the aim's 3/4 goes under an #if this test can't answer",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "\tGunMuzzleDirectionInVS.vy =\n\t\t(((GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY))*3)/4;\n",
+					"to": "#ifdef AVP_DEBUG_VERSION\n\tGunMuzzleDirectionInVS.vy =\n\t\t(((GunMuzzleSightY-(ScreenDescriptorBlock.SDB_Height<<15))/(VDBPtr->VDB_ProjY))*3)/4;\n#else\n\tGunMuzzleDirectionInVS.vy = 0;\n#endif\n"
+				}
+			]
+		},
+		{
+			"name": "COMPILED: a file of the game defines USE_D3DVIEWTRANSFORM",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "float CameraZoomScale = 1.0f;\n",
+					"to": "#define USE_D3DVIEWTRANSFORM\nfloat CameraZoomScale = 1.0f;\n"
+				}
+			]
+		},
+		{
+			"name": "COMPILED: the game's project defines USE_D3DVIEWTRANSFORM for the Release build",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "<PreprocessorDefinitions>USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;",
+					"to": "<PreprocessorDefinitions>USE_D3DVIEWTRANSFORM;USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;"
+				}
+			]
+		},
+		{
+			"name": "ZOOM: the triangle's depth is multiplied by the zoom again (the line beta.1 was built with)",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\n\t{\n\t\tint a = 160;\n",
+					"to": "\n\tz = (float)z*CameraZoomScale;\n\n\t{\n\t\tint a = 160;\n"
+				}
+			]
+		},
+		{
+			"name": "ZOOM: the world's depths are multiplied by the zoom again, as the 1999 game's were",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tViewMatrix[11] = ((float)-v.vz);// * CameraZoomScale;\n",
+					"to": "\tViewMatrix[11] = ((float)-v.vz) * CameraZoomScale;\n"
+				}
+			]
+		},
+		{
+			"name": "ZOOM: the projection's field of view stops following the zoom",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "float fovY = D3DXToRadian(d3d.fieldOfView * CameraZoomScale);",
+					"to": "float fovY = D3DXToRadian(d3d.fieldOfView);"
 				}
 			]
 		}

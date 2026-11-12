@@ -115,6 +115,9 @@ static void D3D_OutputTriangles();
 
 void ThisFramesRenderingHasBegun();
 void ThisFramesRenderingHasFinished();
+// Whether a frame is open now: begun, and not yet finished. Added 2026-11-10 by Melanikus for the AvP port (#202), so a screen that draws
+// frames of its own can close an open one first, and only one that's open.
+bool ThisFramesRenderingIsOpen();
 
 // How far down the screen the -dev tag at the top right can reach, in pixels, with every line it can have: 0 when it isn't shown (no -dev,
 // or F7 turned it off). Anything else drawn at the top right goes below this, so the two never overlap.

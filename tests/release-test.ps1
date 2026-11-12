@@ -2,7 +2,7 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1, tools/check-hudson-asleep.ps1, tools/check-servers-dev-only.ps1, tools/check-release-package.ps1 and
+- tools/check-release.ps1, tools/check-hudson-asleep.ps1, tools/check-online-play.ps1, tools/check-release-package.ps1 and
   tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
   and tools/check-virustotal.ps1 on made-up answers from VirusTotal. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
@@ -448,7 +448,9 @@ Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-
 # --- Hudson, the team's test bot, has been in the game since 2026-11-09 (the owner: "Hudson goes into avpx_main"), and a player's game must
 # never run any of it. check-hudson-asleep.ps1 proves that. Each way it can be broken is refused, for its own reason, and each way Hudson's
 # code is written to stay asleep is let through. The smallest Hudson that passes: a run turned on only by both words and the folder check,
-# and one way in that starts asleep. The same cases were tried by hand with AvP-docs' hudson_asleep_cases.js on 2026-11-09: 28 right.
+# and one way in that starts asleep. The same cases were tried by hand with a separate script of the same cases on 2026-11-09: 28 right.
+# Modified 2026-11-10 by Melanikus for the AvP port (#212): eight more, marked (#212). Until then a line counted as a declaration by its
+# shape alone, so "return", "else" or "do" in front of a call or a write let it through, and a comment after a declaration made it a call.
 $hudsonGood = @{
     '3dc/avp/hudson.cpp' = (@(
         'bool HudsonRunIsOn = false;',
@@ -537,6 +539,8 @@ $hudsonCases = @(
     @{ What = 'setting one of its variables back to false is let through'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Reset()`n{`n`tHudsonMarineIsOn = false;`n}`n" }; Passes = $letThrough },
     @{ What = 'a type of its that only holds values is let through'; Files = @{ '3dc/avp/hudson.h' = "struct HudsonCounts`n{`n`tint a;`n`tint b;`n};`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonCounts counts;`n}`n" }; Passes = $letThrough },
     @{ What = 'a default argument and values without a call are let through'; Files = @{ '3dc/avp/hudson_nav.cpp' = "static const int kFar = 3;`nstatic int places[2] = { 1, 2 };`n`nstatic void Steer(int x, int stopsShort = Far())`n{`n`tint y = Measure(x);`n}`n" }; Passes = $letThrough },
+    @{ What = 'a game file''s own HudsonTest_ function declared with a comment after it is let through (#212)'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a);   // only Hudson's files call it`n`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n" }; Passes = $letThrough },
+    @{ What = 'and one declared inside extern "C" { } (#212)'; Files = @{ '3dc/avp/game.h' = "extern `"C`" {`n`tvoid HudsonTest_Send(int a);`n}`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n" }; Passes = $letThrough },
     @{ What = 'a way in that starts by doing something is refused'; Files = (With-WayIn "void Hudson_Go()`n{`n`tDoIt();`n}" 'Hudson_Go();'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Go, $notAsleep (3dc/avp/hudson.cpp line 28)" },
     @{ What = 'and one whose check gives up only with something else too (&&)'; Files = (With-WayIn "void Hudson_Go()`n{`n`tif (!HudsonRunIsOn && plan.x)`n`t{`n`t`treturn;`n`t}`n`n`tDoIt();`n}" 'Hudson_Go();'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Go, $notAsleep (3dc/avp/hudson.cpp line 28)" },
     @{ What = 'and "return HudsonRunIsOn && a || b;", which gives b without a run'; Files = (With-WayIn "bool Hudson_Is()`n{`n`treturn HudsonRunIsOn && a || b;`n}" 'if (Hudson_Is()) { }'); Reason = "3dc/avp/game.cpp line 13 names Hudson_Is, $notAsleep (3dc/avp/hudson.cpp line 28)" },
@@ -547,7 +551,13 @@ $hudsonCases = @(
     @{ What = 'a run turned on before the folder is checked is refused'; Files = (With-Changed '3dc/avp/hudson.cpp' "`tif (!HudsonPlan_FolderIsAllowed(commandLine))`n`t{`n`t`tTerminateProcess(0, 1);`n`t}`n`n`tHudsonRunIsOn = true;" "`tHudsonRunIsOn = true;`n`n`tif (!HudsonPlan_FolderIsAllowed(commandLine))`n`t{`n`t`tTerminateProcess(0, 1);`n`t}"); Reason = "Hudson_ReadCommandLine (3dc/avp/hudson.cpp line 3) must check the folder, and end the game if it's one a run mustn't touch, before HudsonRunIsOn = true" },
     @{ What = 'a run asked for with -dev alone is refused'; Files = (With-Changed '3dc/avp/hudson_plan.cpp' ' && CommandLineHasWord(commandLine, "-hudson")' ''); Reason = 'HudsonPlan_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-hudson");' },
     @{ What = 'the game calling a HudsonTest_ function of its own is refused'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n`nvoid Other()`n{`n`tHudsonTest_Send(1);`n}`n" }; Reason = "3dc/avp/game.cpp line 18 calls HudsonTest_Send, which only Hudson's own files may call" },
+    @{ What = 'and calling one with "return" in front, which looked like a declaration (#212)'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nint HudsonTest_Count()`n{`n`treturn 1;`n}`n`nint Other()`n{`n`treturn HudsonTest_Count();`n}`n" }; Reason = "3dc/avp/game.cpp line 18 calls HudsonTest_Count, which only Hudson's own files may call" },
+    @{ What = 'and with "else" in front (#212)'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n`nvoid Other(int a)`n{`n`tif (a) { }`n`telse HudsonTest_Send(1);`n}`n" }; Reason = "3dc/avp/game.cpp line 19 calls HudsonTest_Send, which only Hudson's own files may call" },
+    @{ What = 'and with "do" in front (#212)'; Files = @{ '3dc/avp/game.cpp' = $gameMore + "`nvoid HudsonTest_Send(int a)`n{`n`tSend(a);`n}`n`nvoid Other()`n{`n`tdo HudsonTest_Send(1);`n`twhile (0);`n}`n" }; Reason = "3dc/avp/game.cpp line 18 calls HudsonTest_Send, which only Hudson's own files may call" },
     @{ What = 'the game turning on one of its variables is refused'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Cheat()`n{`n`tHudsonMarineIsOn = true;`n}`n" }; Reason = "3dc/avp/game.cpp line 13 changes HudsonMarineIsOn: outside Hudson's files it may only be read, or set back to false" },
+    @{ What = 'and turning it on after "else", which looked like its definition (#212)'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Cheat(int a)`n{`n`tif (a) { }`n`telse HudsonMarineIsOn = true;`n}`n" }; Reason = "3dc/avp/game.cpp line 14 changes HudsonMarineIsOn: outside Hudson's files it may only be read, or set back to false" },
+    @{ What = 'and after "return" (#212)'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nbool Cheat()`n{`n`treturn HudsonMarineIsOn = true;`n}`n" }; Reason = "3dc/avp/game.cpp line 13 changes HudsonMarineIsOn: outside Hudson's files it may only be read, or set back to false" },
+    @{ What = 'and a local of the same name inside a game function, started on (#212)'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = false;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Cheat()`n{`n`tbool HudsonMarineIsOn = true;`n`tUse(HudsonMarineIsOn);`n}`n" }; Reason = "3dc/avp/game.cpp line 13 changes HudsonMarineIsOn: outside Hudson's files it may only be read, or set back to false" },
     @{ What = 'one of its variables starting on is refused'; Files = @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nbool HudsonMarineIsOn = true;`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Look()`n{`n`tif (HudsonMarineIsOn) { }`n}`n" }; Reason = "HudsonMarineIsOn (3dc/avp/hudson.cpp line 28) starts as true: Hudson's variables must start off (false, 0, -1 or nothing)" },
     @{ What = 'a macro of its used by the game is refused'; Files = @{ '3dc/avp/hudson.h' = "#define HudsonDoIt() DoIt()`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonDoIt();`n}`n" }; Reason = "3dc/avp/game.cpp line 13 uses the macro HudsonDoIt: a macro of Hudson's can hide code, so the game mustn't use one" },
     @{ What = 'a type of its with code of its own used by the game is refused'; Files = @{ '3dc/avp/hudson.h' = "struct HudsonThing`n{`n`tint a;`n`tvoid Go();`n};`n"; '3dc/avp/game.cpp' = $gameMore + "`nvoid Other()`n{`n`tHudsonThing thing;`n}`n" }; Reason = "3dc/avp/game.cpp line 13 uses HudsonThing, a type of Hudson's with code of its own: the game may only use Hudson's types that hold nothing but values" },
@@ -595,622 +605,2008 @@ foreach ($tracked in @(& git -C $repository ls-files))
 $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
 Check ($result.Code -eq 0 -and $result.Text.Contains($letThrough)) "the real repository's Hudson stays asleep in a player's game. It said: $($result.Text)"
 
-# --- check-servers-dev-only.ps1: the owner's ruling (2026-11-09) that a player's game can reach none of our servers. Each way it can be
-# broken is refused, for its own reason, and each way the code is written to need -dev is let through. The cases are AvP-docs'
-# servers_dev_only_cases.js, tried by hand on 2026-11-09, written out here.
-$serverGood = @{ '3dc/d3d_render.cpp' = (@'
-int DevMode = 0;
-'@) + "`n"; '3dc/avp/win95/winmain.cpp' = (@'
-void Begin(const char *command_line)
+# --- check-online-play.ps1: the owner's rulings (2026-11-09 and 2026-11-10) that a player's game plays online only the safe way: only with
+# the servers its servers.cfg names, only by protocol version 2, only sealed, and never plain. Each way it can be broken is refused,
+# for its own rule's reason, and each safe way of writing it is let through. The model is the smallest such game, in the real code's
+# forms. Written 2026-11-10 by Melanikus for the AvP port (#175 PR 3b), in place of check-servers-dev-only.ps1's cases.
+$onlineGood = @{ '3dc/networking.h' = (@'
+const int kMultiplayerVersion = 116;
+'@ + "`n"); '3dc/net_host.cpp' = (@'
+ENetHost *Net_MakeENetHost(const ENetAddress *address, size_t connections, size_t mostMessageBytes, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth)
 {
-	DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
+	ENetHost *const host = enet_host_create(address, connections, kNetChannels, incomingBandwidth, outgoingBandwidth);
+	return host;
 }
-'@) + "`n"; '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
+'@ + "`n"); '3dc/networking.cpp' = (@'
+static bool RelayControlDatagram(uint16_t fromPort, const uint8_t *data, size_t size, uint32_t now)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
+	return true;
+}
 
-	if (!DevMode)
+static void RelayV2TakeOpened(uint32_t now)
+{
+	RelayControlDatagram(opened[0].fromPort, opened[0].message, kBytes, now);
+}
+
+static void LoopbackOnlyAddress(ENetAddress *address)
+{
+	ENetSocket const probe = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+	enet_socket_connect(probe, &to);
+	enet_socket_destroy(probe);
+}
+
+static int ENET_CALLBACK NothingIntercept(ENetHost *on, ENetEvent *event)
+{
+	return 1;
+}
+
+static int ENET_CALLBACK RelayIntercept(ENetHost *on, ENetEvent *event)
+{
+	if (relayV2Step != kRelayV2None)
 	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
+		return RelayEndToEndHeard(on, now);
+	}
 
-		if (!setting.empty())
+	relayStrangersDropped++;
+	return 1;
+}
+
+static bool RelayHostStart(const char **why)
+{
+	int const line = RelayList_HostLine();
+
+	if (line < 0)
+	{
+		*why = kNoServerChosen;
+		return false;
+	}
+
+	if (!host || !RelayLookUp(line, &relayCandidates[0]))
+	{
+		return false;
+	}
+
+	if (!RelayV2Begin(relayCandidates[0], line, NULL, true, why))
+	{
+		return false;
+	}
+
+	host->intercept = RelayIntercept;
+	host->sendHook = RelaySealedSend;
+	return true;
+}
+
+static void RelayHostGiveUp(const char *reason)
+{
+	if (host)
+	{
+		host->intercept = NothingIntercept;
+	}
+
+	RelayHostNews(kNetRelayHostEnded, reason);
+}
+
+static bool RelayLookUp(int line, ENetAddress *out)
+{
+	uint32_t address = 0;
+	int port = 0;
+
+	if (!RelayList_RelayOf(line, &address, &port) || port < 1)
+	{
+		return false;
+	}
+
+	out->host = address;
+	out->port = static_cast<uint16_t>(port);
+	return true;
+}
+
+static bool RelayV2Begin(const ENetAddress &relay, int line, const char *region, bool times, const char **why)
+{
+	if (!RelayList_AskForRelayKeysOn(line, region))
+	{
+		*why = "the relay's keys couldn't be asked for";
+		return false;
+	}
+
+	relayV2Address = relay;
+	relayV2Line = line;
+	return true;
+}
+
+static int RelayV2Turn(ENetHost *on, uint32_t now, const char **why)
+{
+	const char *listWhy = NULL;
+	int keysLine = -1;
+	char keysRegion[kRelayListRegionLetters + 1] = "";
+	int const came = RelayList_RelayKeysCameOn(&keysLine, keysRegion, relayV2Keys.p384, relayV2Keys.kem, &listWhy);
+
+	if (came != kRelayKeysCame || keysLine != relayV2Line)
+	{
+		*why = listWhy;
+		return kRelayV2None;
+	}
+
+	return kRelayV2Ready;
+}
+
+static uint16_t RelayHandshake(int line, const char *region, const char *code)
+{
+	const char *channelWhy = NULL;
+	return RelayV2Begin(relayAddress, line, region, false, &channelWhy) ? 27501 : 0;
+}
+
+static uint16_t RelayJoin(int line, const char *region, const char *code)
+{
+	relayJoinFailedWhy = kNetRelayNoRelay;
+	relayEndToEndJoinFailed = NULL;
+	return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+}
+
+bool Net_AddRelaySession(const RelayListGame &game, int line)
+{
+	if (line < 0 || line >= RelayList_LineCount())
+	{
+		return false;
+	}
+
+	return AddRelaySession(line, game.code, game.region);
+}
+
+NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level)
+{
+	bool const online = !netGameData.skirmishMode;
+
+	if (online && RelayList_HostLine() < 0)
+	{
+		return NET_FAIL;
+	}
+
+	const char *notAgreedWhy = NULL;
+
+	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
+	{
+		return NET_FAIL;
+	}
+
+	if (!netGameData.skirmishMode)
+	{
+		host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
+
+		if (NULL == host)
 		{
-			LogString("the settings' RelayServer is for tests only");
+			return NET_FAIL;
+		}
+
+		if (OnTheRemoteRoute(ServerAddress))
+		{
+			host->intercept = RelayIntercept;
+		}
+
+		const char *notOnline = NULL;
+
+		if (!RelayHostStart(&notOnline))
+		{
+			enet_host_destroy(host);
+			host = NULL;
+			return NET_FAIL;
+		}
+
+		Con_PrintMessage("net: this game won't answer searches on this network while it goes through a relay {");
+	}
+
+	return NET_OK;
+}
+
+NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
+{
+	ServerAddress.host = SessionData[sessionNumber].host;
+
+	if (!SessionData[sessionNumber].throughRelay)
+	{
+		return NET_FAIL;
+	}
+
+	host = Net_MakeENetHost(NULL, 1, kMostMessageBytes, 0, 0);
+
+	if (NetLoopbackOnly && OnTheRemoteRoute(ourAddress))
+	{
+		host->intercept = RelayIntercept;
+	}
+
+	if (SessionData[sessionNumber].throughRelay)
+	{
+		uint16_t const relayPort = RelayJoin(SessionData[sessionNumber].serverLine, SessionData[sessionNumber].relayRegion, SessionData[sessionNumber].relayCode);
+
+		if (relayPort == 0)
+		{
+			enet_host_destroy(host);
+			return NET_FAIL;
+		}
+
+		relayEndToEndJoinFailed = RelayEndToEndJoin(SessionData[sessionNumber].relayRegion, relayPort, SessionData[sessionNumber].relayHostId);
+
+		if (relayEndToEndJoinFailed)
+		{
+			enet_host_destroy(host);
+			return NET_FAIL;
 		}
 	}
-	else
+
+	ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);
+	return NET_OK;
+}
+
+void Net_FindAvPSessions()
+{
+	NumberOfSessionsFound = 0;
+}
+'@ + "`n"); '3dc/relay_list.cpp' = (@'
+namespace
+{
+	struct Shared
 	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
+		CRITICAL_SECTION lock;
+		HANDLE wake;
+		wchar_t server[64];
+		INTERNET_PORT port;
+		uint8_t lineFingerprint[kNetServerFingerprintBytes];
+		uint32_t relayAddress;
+		int keyState;
+		uint8_t goodKey[kNetServerFingerprintMostKeyBytes];
+		size_t goodKeySize;
+		KeyCheck firstCheck;
+		KeyCheck laterCheck;
+		int newsNumber;
+		const char *serverWhy;
+		char keysAnswer[4096];
+		char gamesAnswer[65536];
+		char accessAnswerText[4096];
+		int visitCount;
+		ServersCfgServer visitLines[kRelayListMostVisits];
+		int visitPlaces[kRelayListMostVisits];
+		int lineStates[kServersCfgMostLines];
+		bool keysWanted;
+		int keysPlace;
+		ServersCfgServer keysLine;
+		const char *keysWhy;
+		bool accessWantedOn[kServersCfgMostLines];
+		ServersCfgServer accessLines[kServersCfgMostLines];
+		const char *accessWhyOn[kServersCfgMostLines];
+		bool hostWanted;
+		int hostPlace;
+		ServersCfgServer hostLine;
+	};
+
+	Shared *shared = NULL;
+	Shared *hostServer = NULL;
+	int hostServerPlace = -1;
+	int hostChoice = -1;
+	int hostRoomLine = -1;
+	ServersTrustYeses yeses = {};
+	ServersTrustYeses hudsonRunYeses = {};
+
+	bool ThisBuildPlaysOnline(void)
+	{
+#if defined(AVPX_ONLINE_PLAY)
+		return true;
+#else
+		return false;
+#endif
 	}
 
-	return name;
+	const ServersCfgServer *Server(void)
+	{
+		static ServersCfgFileRead file;
+
+		if (!ThisBuildPlaysOnline())
+		{
+			file.serverCount = 0;
+		}
+		else
+		{
+			ServersCfg_ReadTheGames(&file);
+		}
+
+		return file.serverCount > 0 ? &file.servers[0] : NULL;
+	}
+
+	void Tell(Shared *s, const char *news)
+	{
+		if (!news || !s)
+		{
+			return;
+		}
+
+		EnterCriticalSection(&s->lock);
+		s->newsNumber++;
+		LeaveCriticalSection(&s->lock);
+	}
+
+	const char *CantUse(Shared *s, const char *why)
+	{
+		EnterCriticalSection(&s->lock);
+		s->serverWhy = why;
+		LeaveCriticalSection(&s->lock);
+		return why;
+	}
+
+	int KeyStateOf(Shared *s)
+	{
+		EnterCriticalSection(&s->lock);
+		int const state = s->keyState;
+		LeaveCriticalSection(&s->lock);
+		return state;
+	}
+
+	void CALLBACK CheckTheKey(HINTERNET request, DWORD_PTR context, DWORD status, LPVOID, DWORD)
+	{
+		KeyCheck *const check = reinterpret_cast<KeyCheck *>(context);
+
+		if (status != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST || !check || check->closed || !check->owner)
+		{
+			return;
+		}
+
+		Shared const *const server = check->owner;
+		bool const read = ReadTheKey(request, check);
+
+		if (check->keepIt)
+		{
+			check->matched = read;
+		}
+		else
+		{
+			bool const sameSize = read && check->shownSize == server->goodKeySize;
+			uint8_t differences = 0;
+
+			for (size_t i = 0; sameSize && i < check->shownSize; i++)
+			{
+				differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);
+			}
+
+			check->matched = sameSize && differences == 0;
+		}
+
+		if (!check->matched)
+		{
+			check->closed = true;
+			WinHttpCloseHandle(request);
+		}
+	}
+
+	Answer CallChecked(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room, KeyCheck &check)
+	{
+		Answer a = { false, 0, kCantStart, 0, -1 };
+		check.owner = s;
+		int const keyNow = KeyStateOf(s);
+
+		// Nothing at all through a state with no line, nothing to a server whose keys didn't match its line
+		if (keyNow == kKeyNoLine)
+		{
+			return a;
+		}
+
+		if (keyNow == kKeyRefused || (!check.keepIt && keyNow != kKeyGood))
+		{
+			return a;
+		}
+
+		HINTERNET session = WinHttpOpen(L"AVPx", 0, NULL, NULL, 0);
+		HINTERNET connection = WinHttpConnect(session, s->server, s->port, 0);
+		HINTERNET request = WinHttpOpenRequest(connection, method, path, NULL, NULL, NULL, WINHTTP_FLAG_SECURE);
+
+		if (WinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)
+		{
+			return a;
+		}
+
+		BOOL const sent = body
+			? WinHttpSendRequest(request, L"Content-Type: application/json\r\n", static_cast<DWORD>(-1), NULL, 0, 1, reinterpret_cast<DWORD_PTR>(&check))
+			: WinHttpSendRequest(request, NULL, 0, NULL, 0, 0, reinterpret_cast<DWORD_PTR>(&check));
+
+		if (!check.matched)
+		{
+			return a;
+		}
+
+		DWORD written = 0;
+		bool const bodyWent = sent && (!body || WinHttpWriteData(request, body, 1, &written));
+		a.worked = bodyWent && WinHttpReceiveResponse(request, NULL);
+		return a;
+	}
+
+	const char *CheckTheServer(Shared *s)
+	{
+		int const keyNow = KeyStateOf(s);
+
+		if (keyNow == kKeyNoLine)
+		{
+			return "no server";
+		}
+
+		if (keyNow != kKeyNotChecked)
+		{
+			return keyNow == kKeyGood ? NULL : "the keys don't match";
+		}
+
+		KeyCheck &first = s->firstCheck;
+		memset(&first, 0, sizeof(first));
+		first.keepIt = true;
+		Answer const a = CallChecked(s, L"GET", L"/v1/relay-keys", NULL, s->keysAnswer, sizeof(s->keysAnswer), first);
+
+		if (!a.worked)
+		{
+			Tell(s, a.why);
+			return CantUse(s, a.why);
+		}
+
+		bool const good = NetServerFingerprint_IsTheLines(first.shown, first.shownSize, &keys, s->lineFingerprint);
+
+		if (good)
+		{
+			memcpy(s->goodKey, first.shown, first.shownSize);
+			s->goodKeySize = first.shownSize;
+		}
+
+		s->keyState = good ? kKeyGood : kKeyRefused;
+		return good ? NULL : "the keys don't match";
+	}
+
+	Answer Call(Shared *s, const wchar_t *method, const wchar_t *path, const char *body, char *answer, size_t room)
+	{
+		const char *const unchecked = CheckTheServer(s);
+
+		if (unchecked)
+		{
+			Answer const none = { false, 0, unchecked, 0, -1 };
+			return none;
+		}
+
+		KeyCheck &check = s->laterCheck;
+		memset(&check, 0, sizeof(check));
+		check.keepIt = false;
+		return CallChecked(s, method, path, body, answer, room, check);
+	}
+
+	Shared *NewServer(const ServersCfgServer &line);
+	void ForgetTheVisit(Shared *visit);
+
+	void ForgetTheHostLine(void)
+	{
+		if (hostServer)
+		{
+			ForgetTheVisit(hostServer);
+		}
+
+		hostServer = NULL;
+		hostServerPlace = -1;
+	}
+
+	void UseTheHostLine(int place, const ServersCfgServer &line)
+	{
+		if (hostServer && hostServerPlace == place)
+		{
+			return;
+		}
+
+		ForgetTheHostLine();
+		hostServer = NewServer(line);
+		hostServerPlace = hostServer ? place : -1;
+	}
+
+	bool SendTheListing(const char *body)
+	{
+		if (!hostServer)
+		{
+			Tell(shared, "no line to host on");
+			return false;
+		}
+
+		Answer const a = Call(hostServer, L"POST", L"/v1/games", body, hostAnswer, sizeof(hostAnswer));
+		return a.worked;
+	}
+
+	const char *VisitTheLine(Shared *visit, int *count)
+	{
+		*count = 0;
+		Answer const a = Call(visit, L"GET", L"/v1/games", NULL, visit->gamesAnswer, sizeof(visit->gamesAnswer));
+
+		if (!a.worked)
+		{
+			return a.why;
+		}
+
+		*count = 1;
+		return NULL;
+	}
+
+	void PassOnTheNews(const Shared *visit, int lineNumber)
+	{
+		for (int n = 0; n < visit->newsNumber; n++)
+		{
+			Tell(shared, "a visit's news");
+		}
+	}
+
+	void VisitEveryLine(void)
+	{
+		ServersCfgServer lines[kRelayListMostVisits];
+		int places[kRelayListMostVisits];
+		EnterCriticalSection(&shared->lock);
+		int const count = shared->visitCount;
+		memcpy(lines, shared->visitLines, sizeof(lines));
+		memcpy(places, shared->visitPlaces, sizeof(places));
+		LeaveCriticalSection(&shared->lock);
+
+		for (int v = 0; v < count; v++)
+		{
+			int const place = places[v] >= 0 && places[v] < kServersCfgMostLines ? places[v] : -1;
+			Shared *const visit = place >= 0 ? NewServer(lines[v]) : NULL;
+			int got = 0;
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+
+			if (place >= 0)
+			{
+				EnterCriticalSection(&shared->lock);
+				shared->lineStates[place] = why ? kRelayLineNoAnswer : kRelayLineAnswered;
+				LeaveCriticalSection(&shared->lock);
+			}
+
+			if (visit)
+			{
+				PassOnTheNews(visit, lines[v].lineNumber);
+				ForgetTheVisit(visit);
+			}
+		}
+	}
+
+	void ReadTheRelayKeysOn(int place, const ServersCfgServer &line, const char *region, int asking)
+	{
+		Shared *const visit = NewServer(line);
+		const char *const why = visit ? CheckTheServer(visit) : kCantStart;
+
+		EnterCriticalSection(&shared->lock);
+		shared->keysWhy = why;
+		LeaveCriticalSection(&shared->lock);
+
+		if (visit)
+		{
+			PassOnTheNews(visit, line.lineNumber);
+			ForgetTheVisit(visit);
+		}
+	}
+
+	void AskForAccessOn(int place, const ServersCfgServer &line, const char *body, const uint8_t *fingerprint)
+	{
+		Shared *const visit = NewServer(line);
+		const char *why = kCantStart;
+
+		if (visit)
+		{
+			Answer const a = Call(visit, L"POST", L"/v1/access-requests", body, visit->accessAnswerText, sizeof(visit->accessAnswerText));
+			why = a.why;
+			Tell(visit, why);
+		}
+
+		EnterCriticalSection(&shared->lock);
+		shared->accessWhyOn[place] = why;
+		LeaveCriticalSection(&shared->lock);
+
+		if (visit)
+		{
+			PassOnTheNews(visit, line.lineNumber);
+			ForgetTheVisit(visit);
+		}
+	}
+
+	DWORD WINAPI ListThread(void *)
+	{
+		for (;;)
+		{
+			WaitForSingleObject(shared->wake, INFINITE);
+
+			EnterCriticalSection(&shared->lock);
+			bool const host = shared->hostWanted;
+			shared->hostWanted = false;
+			int const hostPlace = shared->hostPlace;
+			ServersCfgServer const hostLine = shared->hostLine;
+			bool const keys = shared->keysWanted;
+			shared->keysWanted = false;
+			char keysRegion[kRelayListRegionLetters + 1];
+			memcpy(keysRegion, shared->keysRegion, sizeof(keysRegion));
+			int const keysAsking = shared->keysAsked;
+			int const keysPlace = shared->keysPlace;
+			ServersCfgServer const keysLine = shared->keysLine;
+			bool accessOn[kServersCfgMostLines];
+			ServersCfgServer accessLines[kServersCfgMostLines];
+			memcpy(accessOn, shared->accessWantedOn, sizeof(accessOn));
+			memset(shared->accessWantedOn, 0, sizeof(shared->accessWantedOn));
+			memcpy(accessLines, shared->accessLines, sizeof(accessLines));
+			char accessBody[kRelayAccessMostBodyBytes + 1];
+			uint8_t accessFingerprint[kNetIdentityFingerprintBytes];
+			memcpy(accessBody, shared->accessBody, sizeof(accessBody));
+			memcpy(accessFingerprint, shared->accessFingerprint, sizeof(accessFingerprint));
+			LeaveCriticalSection(&shared->lock);
+
+			if (host)
+			{
+				UseTheHostLine(hostPlace, hostLine);
+				SendTheListing("{}");
+			}
+
+			if (keys)
+			{
+				ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);
+			}
+
+			for (int place = 0; place < kServersCfgMostLines; place++)
+			{
+				if (accessOn[place])
+				{
+					AskForAccessOn(place, accessLines[place], accessBody, accessFingerprint);
+				}
+			}
+
+			VisitEveryLine();
+		}
+	}
 }
 
 namespace
 {
+	bool TheLineIsAgreed(const ServersCfgServer &line)
+	{
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+
+		uint8_t hash[kServersTrustHashBytes];
+		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
+	}
+
+	Shared *NewServer(const ServersCfgServer &line)
+	{
+		Shared *made = new (std::nothrow) Shared;
+
+		if (!made)
+		{
+			return NULL;
+		}
+
+		memset(made, 0, sizeof(*made));
+		InitializeCriticalSection(&made->lock);
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line.address >> 24) & 0xFFu,
+			(line.address >> 16) & 0xFFu, (line.address >> 8) & 0xFFu, line.address & 0xFFu);
+		made->port = static_cast<INTERNET_PORT>(line.listPort);
+		memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));
+		made->relayAddress = htonl(line.address);
+		made->keyState = kKeyNotChecked;
+		return made;
+	}
+
+	void ForgetTheVisit(Shared *visit)
+	{
+		DeleteCriticalSection(&visit->lock);
+		SecureZeroMemory(visit, sizeof(*visit));
+		delete visit;
+	}
+
 	bool Start(void)
 	{
-		const char *const name = Relay_ServerName();
+		if (shared)
+		{
+			return true;
+		}
 
-		if (!name[0])
+		const ServersCfgServer *const line = Server();
+
+		if (!line)
 		{
 			return false;
 		}
 
-		for (size_t i = 0; name[i]; i++)
+		bool const lineAgreed = TheLineIsAgreed(*line);
+		Shared *made = NewServer(*line);
+
+		if (!made)
 		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
+			return false;
 		}
 
+		if (!lineAgreed)
+		{
+			made->keyState = kKeyNoLine;
+		}
+
+		shared = made;
+		return true;
+	}
+}
+
+bool RelayList_LineNow(int place, RelayListLineNow *out)
+{
+	memset(out, 0, sizeof(*out));
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	ServersCfgServer const &line = theFile.servers[place];
+
+	if (!TheLineIsAgreed(line))
+	{
+		out->state = kRelayLineNoYes;
 		return true;
 	}
 
-	void Call(void)
+	out->state = kRelayLineAsking;
+
+	if (shared)
 	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
+		out->pingMs = -1;
 	}
+
+	return true;
 }
-'@) + "`n" }
-$serverCases = @(
-    @{ What = 'no server code at all is let through'; None = $true; Files = @{ '3dc/game.cpp' = (@'
+
+bool RelayList_AgreeToTheLineAt(int place)
+{
+	Server();
+	uint8_t hash[kServersTrustHashBytes];
+
+	if (place < 0 || place >= theFile.serverCount || !LineHash(theFile.servers[place], hash))
+	{
+		return false;
+	}
+
+	if (HudsonRunIsOn)
+	{
+		ServersTrust_Add(&hudsonRunYeses, hash);
+	}
+	else
+	{
+		TheLineIsAgreed(theFile.servers[place]);
+		ServersTrust_Add(&yeses, hash);
+		NetIdentityStore_KeepTrust(yeses);
+	}
+
+	if (shared && place == theServer.inUse)
+	{
+		EnterCriticalSection(&shared->lock);
+
+		if (shared->keyState == kKeyNoLine)
+		{
+			shared->keyState = kKeyNotChecked;
+		}
+
+		LeaveCriticalSection(&shared->lock);
+	}
+
+	return true;
+}
+
+bool RelayList_AgreeToTheLine(void)
+{
+	Server();
+	return RelayList_AgreeToTheLineAt(theServer.inUse);
+}
+
+void RelayList_FindGames(void)
+{
+	if (!Start())
+	{
+		return;
+	}
+
+	int const count = theFile.serverCount < kServersCfgMostLines ? theFile.serverCount : kServersCfgMostLines;
+	bool agreed[kServersCfgMostLines] = {};
+
+	for (int place = 0; place < count; place++)
+	{
+		agreed[place] = TheLineIsAgreed(theFile.servers[place]);
+	}
+
+	int places[kRelayListMostVisits];
+	int states[kServersCfgMostLines];
+	int const visits = RelayList_ChooseVisits(agreed, count, theServer.inUse, places, states);
+	ServersCfgServer lines[kRelayListMostVisits];
+
+	for (int v = 0; v < visits; v++)
+	{
+		lines[v] = theFile.servers[places[v]];
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+	memcpy(shared->visitLines, lines, sizeof(ServersCfgServer) * static_cast<size_t>(visits));
+	memcpy(shared->visitPlaces, places, sizeof(int) * static_cast<size_t>(visits));
+	LeaveCriticalSection(&shared->lock);
+}
+
+bool RelayList_AskForRelayKeysOn(int place, const char *region)
+{
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	if (!TheLineIsAgreed(theFile.servers[place]) || !Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->keysWanted = true;
+	shared->keysPlace = place;
+	shared->keysLine = theFile.servers[place];
+	LeaveCriticalSection(&shared->lock);
+	return true;
+}
+
+bool RelayList_AskForAccessOn(int place, const char *name, const uint8_t *fingerprint)
+{
+	Server();
+
+	if (place < 0 || place >= theFile.serverCount)
+	{
+		return false;
+	}
+
+	if (!TheLineIsAgreed(theFile.servers[place]))
+	{
+		return false;
+	}
+
+	if (!Start())
+	{
+		return false;
+	}
+
+	EnterCriticalSection(&shared->lock);
+	shared->accessLines[place] = theFile.servers[place];
+	shared->accessWantedOn[place] = true;
+	LeaveCriticalSection(&shared->lock);
+	return true;
+}
+
+bool RelayList_HostOn(int place)
+{
+	Server();
+
+	if (place == -1)
+	{
+		hostChoice = -1;
+		return true;
+	}
+
+	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
+	{
+		return false;
+	}
+
+	const char *why = NULL;
+
+	if (AccessOn(place, &why) != kRelayAccessIsApproved)
+	{
+		return false;
+	}
+
+	hostChoice = place;
+	return true;
+}
+
+int RelayList_HostLine(void)
+{
+	if (hostRoomLine >= 0)
+	{
+		return hostRoomLine;
+	}
+
+	const char *why = NULL;
+
+	if (hostChoice >= 0 && (hostChoice >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[hostChoice]) ||
+		AccessOn(hostChoice, &why) != kRelayAccessIsApproved))
+	{
+		hostChoice = -1;
+	}
+
+	return hostChoice;
+}
+
+void RelayList_HostRoomOpened(const char *region, const char *code)
+{
+	if (!Start())
+	{
+		return;
+	}
+
+	int const place = RelayList_HostLine();
+
+	if (place < 0)
+	{
+		return;
+	}
+
+	hostRoomLine = place;
+
+	EnterCriticalSection(&shared->lock);
+	shared->hostWanted = true;
+	shared->hostPlace = place;
+	shared->hostLine = theFile.servers[place];
+	LeaveCriticalSection(&shared->lock);
+}
+
+void RelayList_HostRoomEnded(void)
+{
+	hostRoomLine = -1;
+}
+'@ + "`n"); '3dc/relay_list_text.cpp' = (@'
+int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states)
+{
+	if (!agreed || !visits || !states || count < 0)
+	{
+		return 0;
+	}
+
+	int made = 0;
+	bool inUseToCome = inUse >= 0 && inUse < count;
+
+	for (int place = 0; place < count; place++)
+	{
+		if (place == inUse)
+		{
+			inUseToCome = false;
+		}
+
+		if (!agreed[place])
+		{
+			states[place] = kRelayLineNoYes;
+		}
+		else if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))
+		{
+			states[place] = kRelayLineNotAsked;
+		}
+		else
+		{
+			visits[made++] = place;
+			states[place] = kRelayLineAsking;
+		}
+	}
+
+	return made;
+}
+'@ + "`n"); 'win32/VS2026/AvP.vcxproj' = (@'
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!-- Rule O (added 2026-11-11): only a build asked for with /p:AvpxOnlinePlay=1 gets the define, and so reads servers.cfg -->
+  <ItemDefinitionGroup Condition="'$(AvpxOnlinePlay)'=='1'">
+    <ClCompile>
+      <PreprocessorDefinitions>AVPX_ONLINE_PLAY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
+'@ + "`n"); 'servers.cfg' = (@'
+# The servers this game plays online through
+203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
+'@ + "`n") }
+
+# The same list with a Hudson run's yes page (yespage=, rule Y's second form; added 2026-11-10 by Melanikus (Third) for the AvP port): the
+# run's ask, its Yes for each line held for the run alone, and the switch Hudson's files call. Modified 2026-11-11 by Melanikus for the AvP
+# port (one model for every line): the run's Yes is one for each line, in its own yeses (hudsonRunYeses), never the kept ones.
+$yesPageList = ($onlineGood['3dc/relay_list.cpp'] -replace "`r", '')
+$yesPageList = $yesPageList.Replace("`tShared *shared = NULL;`n", "`tShared *shared = NULL;`n`tbool hudsonRunShowsTheYesPage = false;`n")
+$yesPageList = $yesPageList.Replace("`t`tif (HudsonRunIsOn)`n`t`t{`n`t`t`treturn true;`n`t`t}",
+    "`t`tif (HudsonRunIsOn)`n`t`t{`n`t`t`tuint8_t runHash[kServersTrustHashBytes];`n`t`t`treturn !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));`n`t`t}")
+$yesPageHudsonsYes = "`t`tif (!ServersTrust_Has(hudsonRunYeses, hash) && hudsonRunYeses.count < kServersTrustMostYeses)`n`t`t{`n`t`t`tServersTrust_Add(&hudsonRunYeses, hash);`n`t`t}`n"
+$yesPageList = $yesPageList.Replace("`t`tServersTrust_Add(&hudsonRunYeses, hash);`n", $yesPageHudsonsYes)
+$yesPageList = $yesPageList + "`nvoid HudsonTest_RelayListShowsTheYesPage(void)`n{`n`thudsonRunShowsTheYesPage = true;`n}`n"
+$yesPageElsewhere = "`nvoid Elsewhere(void)`n{`n`tFLAG`n}`n"
+
+$onlineCases = @(
+    @{ What = 'no network code at all is let through'; None = $true; Files = @{ '3dc/game.cpp' = (@'
 void Frame()
 {
 }
-'@) + "`n" }; Passes = 'None of the game''s server code is in this commit, so a player''s game can''t reach a server.' },
-    @{ What = 'the smallest list that needs -dev for its server is let through'; None = $false; Files = @{  }; Passes = 'A player''s game can''t reach a server: no server is built in, every call beyond this PC is in 3dc/relay_list.cpp and needs one, and 1 server settings are read only with -dev.' },
-    @{ What = 'a server setting read only inside if (DevMode) is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+'@ + "`n") }; Passes = 'None of the game''s network code is in this commit, so a player''s game can''t play online at all.' },
+    @{ What = 'the smallest game that plays online only the safe way is let through, and its servers are printed'; None = $false; Files = @{  }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 1' },
+    @{ What = 'and it names its one server, with its address and fingerprint'; None = $false; Files = @{  }; Passes = '  New York: 203.0.113.7, fingerprint bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e' },
+    @{ What = 'network code with the list''s file missing is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $null }; Reason = 'isn''t there, so this check can''t say how it plays online' },
+    @{ What = 'D: DevMode named in networking.cpp is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
 
-const char *Relay_ServerName(void)
+void Weaker()
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
-}
-
-int Relay_ListPort(void)
-{
-	int port = 443;
-
 	if (DevMode)
 	{
-		int const setting = Config_GetInt("[Network]", "RelayListPort", 443);
-		port = setting;
+		LetEveryoneIn();
 	}
-
-	return port;
 }
-'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
-    @{ What = 'and one read, then ignored without -dev unless empty, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
+'@ + "`n") } }; Reason = 'D: 3dc/networking.cpp line 227 names DevMode' },
+    @{ What = 'D: and in any relay_ file'; None = $false; Files = @{ '3dc/relay_auto.cpp' = (@'
+bool Auto()
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
+	return DevMode != 0;
 }
-
-namespace
+'@ + "`n") }; Reason = 'D: 3dc/relay_auto.cpp line 3 names DevMode' },
+    @{ What = 'D: and on the online pages (the Online page, the yes page, the online screens)'; None = $false; Files = @{ '3dc/avp/win95/frontend/online_page.cpp' = (@'
+bool OnlineLines_QuestionOpened(void)
 {
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
+	return DevMode != 0;
 }
-
-void ReadThePin(void)
+'@ + "`n") }; Reason = 'D: 3dc/avp/win95/frontend/online_page.cpp line 3 names DevMode' },
+    @{ What = 'D: DevMode in a comment, or outside the network''s files, is let through'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+// Nothing here asks DevMode
+'@ + "`n") }; '3dc/menus.cpp' = (@'
+int Shown()
 {
-	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
-
-	if (setting.empty())
-	{
-	}
-	else if (!DevMode)
-	{
-		LogString("ignored");
-	}
-	else
-	{
-		UseThePin(setting);
-	}
+	return DevMode;
 }
-'@) + "`n" }; Passes = 'A player''s game can''t reach a server' },
-    @{ What = 'a server built into the game is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "nyc3.relay.example";
-
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
-}
-'@) + "`n" }; Reason = 'must define kRelayBuiltInServer once, as static const char kRelayBuiltInServer[] = ""; (no server built into the game)' },
-    @{ What = 'a server name the settings give without -dev is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
-}
-'@) + "`n" }; Reason = 'must give back the built-in name without -dev' },
-    @{ What = 'a server setting a player''s game would use is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
-}
-
-void ReadThePin(void)
-{
-	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
-	UseThePin(setting);
-}
-'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
-    @{ What = 'and one whose -dev branch is the wrong way round'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
-}
-
-void ReadThePin(void)
-{
-	std::string const setting = Config_GetString("[Network]", "RelayListPin", "");
-
-	if (!DevMode)
-	{
-		UseThePin(setting);
-	}
-}
-'@) + "`n" }; Reason = 'reads the setting RelayListPin from [Network], and a player''s game would use it' },
-    @{ What = 'and a key setting in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
-void ReadTheKeys(void)
-{
-	std::string const fingerprint = Config_GetString("[Online]", "RelayKeysFingerprint", "");
-	Keep(fingerprint);
-}
-'@) + "`n" }; Reason = 'reads the setting RelayKeysFingerprint from [Online], and a player''s game would use it' },
-    @{ What = 'a name looked up outside the list''s file is refused'; None = $false; Files = @{ '3dc/networking.cpp' = (@'
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'N: a name looked up anywhere is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
 void LookUp(const char *name)
 {
 	getaddrinfo(name, NULL, &hints, &found);
 }
-'@) + "`n" }; Reason = '3dc/networking.cpp line 3 calls getaddrinfo, which reaches beyond this PC: only 3dc/relay_list.cpp may' },
-    @{ What = 'and a web call outside it'; None = $false; Files = @{ '3dc/news.cpp' = (@'
+'@ + "`n") }; Reason = 'N: 3dc/menus.cpp line 3 calls getaddrinfo, which turns a name into an address' },
+    @{ What = 'N: and by ENet''s own name lookup'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Find(ENetAddress *a)
+{
+	enet_address_set_host(a, "relay.example");
+}
+'@ + "`n") } }; Reason = 'calls enet_address_set_host, which turns a name into an address' },
+    @{ What = 'N: an address written as one (enet_address_set_host_ip) is let through'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Find(ENetAddress *a)
+{
+	enet_address_set_host_ip(a, "10.0.0.2");
+}
+'@ + "`n") } }; Passes = 'Online play is only the safe way' },
+    @{ What = 'N: a web call outside the list''s file is refused'; None = $false; Files = @{ '3dc/news.cpp' = (@'
 void Fetch(void)
 {
 	HINTERNET s = WinHttpOpen(L"x", 0, 0, 0, 0);
 }
-'@) + "`n" }; Reason = '3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC' },
-    @{ What = 'the list calling a host other than the one it started with is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
+'@ + "`n") }; Reason = 'N: 3dc/news.cpp line 3 calls WinHttpOpen, which reaches beyond this PC: only 3dc/relay_list.cpp may' },
+    @{ What = 'N: the list calling another host than the line''s address is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+WinHttpConnect(session, s->server,
+'@); To = (@'
+WinHttpConnect(session, otherServer,
+'@) } }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to s->server' },
+    @{ What = 'C: a [Network] setting is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
 
-const char *Relay_ServerName(void)
+void ReadThePin(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
+	std::string const setting = Config_GetString("[Network]", "Anything", "");
 }
-
-namespace
+'@ + "`n") } }; Reason = 'C: 3dc/relay_list.cpp line 708 reads Anything from [Network]' },
+    @{ What = 'C: and a setting about a server in any section'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void ReadTheKeys(void)
 {
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, otherServer, shared->port, 0);
-	}
+	std::string const f = Config_GetString("[Online]", "RelayKeysFingerprint", "");
 }
-'@) + "`n" }; Reason = 'calls WinHttpConnect to otherServer: the list''s calls may only go to shared->server' },
-    @{ What = 'the list starting with no name is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
+'@ + "`n") }; Reason = 'C: 3dc/menus.cpp line 3 reads RelayKeysFingerprint from [Online]' },
+    @{ What = 'C: a setting whose name only looks like one, such as a hotkey, is let through'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+int ReadTheKey(void)
 {
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
+	return Config_GetInt("[Video]", "RenderingKey", 0);
 }
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'F: no servers.cfg is refused'; None = $false; Files = @{ 'servers.cfg' = $null }; Reason = 'F: servers.cfg isn''t there' },
+    @{ What = 'F: a carriage return in it is refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+# a note<CR>
+203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York<CR>
+'@ + "`n") }; Reason = 'F: servers.cfg holds a byte (13)' },
+    @{ What = 'F: an empty line is refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+# a note
 
-namespace
+203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
+'@ + "`n") }; Reason = 'F: servers.cfg line 2 is empty or has a space at an end' },
+    @{ What = 'F: a home network''s address is refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+192.168.1.5  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  At home
+'@ + "`n") }; Reason = 'F: servers.cfg line 1 has an address that isn''t one public IPv4 address' },
+    @{ What = 'F: a fingerprint in capitals is refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+203.0.113.7  BB0E2958DADE79033A90F34811C84837B404708CC004C5B1D37D9A26F28D663E  New York
+'@ + "`n") }; Reason = 'F: servers.cfg line 1 has a fingerprint that isn''t 64 small hex digits' },
+    @{ What = 'F: two lines with the same name are refused'; None = $false; Files = @{ 'servers.cfg' = (@'
+203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
+203.0.113.8  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  new  york
+'@ + "`n") }; Reason = 'F: servers.cfg line 2 has the name of line 1' },
+    @{ What = 'F: and two at the same address, whatever their ports'; None = $false; Files = @{ 'servers.cfg' = (@'
+203.0.113.7  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  New York
+203.0.113.7:8443:27500  bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e  Again
+'@ + "`n") }; Reason = 'F: servers.cfg line 2 has the address of line 1' },
+    @{ What = 'F: notes alone are let through, and no server is printed'; None = $false; Files = @{ 'servers.cfg' = (@'
+# no server in this one
+'@ + "`n") }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 0' },
+    @{ What = 'F: a line with both ports and tabs is let through'; None = $false; Files = @{ 'servers.cfg' = (@'
+203.0.113.7:8443:27500	bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e	New York
+'@ + "`n") }; Passes = '  New York: 203.0.113.7:8443:27500, fingerprint bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e' },
+    @{ What = 'R: servers.cfg read outside the list''s file is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Peek(void)
 {
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
-		return true;
-	}
-
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
+	ServersCfgFileRead file;
+	ServersCfg_ReadTheGames(&file);
 }
-'@) + "`n" }; Reason = 'must take its name from Relay_ServerName, and make nothing when there''s none' },
-    @{ What = 'the list''s server written a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = (@'
-static const char kRelayBuiltInServer[] = "";
-
-const char *Relay_ServerName(void)
-{
-	static char name[254];
-	std::string const setting = Config_GetString("[Network]", "RelayServer", "");
-
-	if (!DevMode)
-	{
-		memcpy(name, kRelayBuiltInServer, sizeof(kRelayBuiltInServer));
-
-		if (!setting.empty())
-		{
-			LogString("the settings' RelayServer is for tests only");
-		}
-	}
-	else
-	{
-		memcpy(name, setting.c_str(), setting.size() + 1);
-	}
-
-	return name;
-}
-
-namespace
-{
-	bool Start(void)
-	{
-		const char *const name = Relay_ServerName();
-
-		if (!name[0])
-		{
-			return false;
-		}
-
-		for (size_t i = 0; name[i]; i++)
-		{
-			made->server[i] = static_cast<wchar_t>(name[i]);
-		}
-
+'@ + "`n") }; Reason = 'R: 3dc/menus.cpp reads servers.cfg: only 3dc/relay_list.cpp may' },
+    @{ What = 'R: the list''s server written from anything but the line''s four numbers is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		swprintf(made->server, sizeof(made->server) / sizeof(made->server[0]), L"%u.%u.%u.%u", (line.address >> 24) & 0xFFu,
+			(line.address >> 16) & 0xFFu, (line.address >> 8) & 0xFFu, line.address & 0xFFu);
+'@ + "`n"); To = (@'
+		wcscpy(made->server, line.wideName);
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must write a server in one place only, NewServer, from the line''s four numbers' },
+    @{ What = 'R: and written a second way'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		made->keyState = kKeyNotChecked;
+'@ + "`n"); To = (@'
+		made->keyState = kKeyNotChecked;
 		made->server[0] = 0;
-		return true;
-	}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp uses the list''s server in a way this check doesn''t know' },
+    @{ What = 'R: the relay at another address than the line''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+made->relayAddress = htonl(line.address);
+'@); To = (@'
+made->relayAddress = htonl(otherAddress);
+'@) } }; Reason = 'R: 3dc/relay_list.cpp must write the relay''s address in one place only' },
+    @{ What = 'R: the list starting without a line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		const ServersCfgServer *const line = Server();
 
-	void Call(void)
-	{
-		HINTERNET connection = WinHttpConnect(session, shared->server, shared->port, 0);
-	}
+		if (!line)
+		{
+			return false;
+		}
+'@ + "`n"); To = (@'
+		const ServersCfgServer *const line = Server();
+'@ + "`n") } }; Reason = 'R: the list''s start (3dc/relay_list.cpp line 452) must make nothing when there''s no line' },
+    @{ What = 'K: a request sent outside CallChecked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		KeyCheck &check = s->laterCheck;
+'@ + "`n"); To = (@'
+		WinHttpSendRequest(request, NULL, 0, NULL, 0, 0, 0);
+		KeyCheck &check = s->laterCheck;
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 222 calls WinHttpSendRequest outside CallChecked' },
+    @{ What = 'K: a call that goes before the server is checked is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+(!check.keepIt && keyNow != kKeyGood)
+'@); To = (@'
+(!check.keepIt && keyNow == kKeyRefused)
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 134) must hold its key check to its own server, then send nothing through a state with no line, nothing to a server whose keys didn''t match' },
+    @{ What = 'K: a body or an answer with no key matched is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (!check.matched)
+		{
+			return a;
+		}
+
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 134) must set CheckTheKey going before the request is sent' },
+    @{ What = 'K: and the key''s check set going after the request is sent'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (WinHttpSetStatusCallback(request, CheckTheKey, WINHTTP_CALLBACK_FLAG_SEND_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)
+		{
+			return a;
+		}
+
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'must set CheckTheKey going before the request is sent' },
+    @{ What = 'K: a key compared until its first difference is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			bool const sameSize = read && check->shownSize == server->goodKeySize;
+			uint8_t differences = 0;
+
+			for (size_t i = 0; sameSize && i < check->shownSize; i++)
+			{
+				differences |= static_cast<uint8_t>(check->shown[i] ^ server->goodKey[i]);
+			}
+
+			check->matched = sameSize && differences == 0;
+'@); To = (@'
+			check->matched = read && memcmp(check->shown, server->goodKey, check->shownSize) == 0;
+'@) } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 98) must compare every byte of the list''s key' },
+    @{ What = 'K: a call whose key doesn''t match left open is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			check->closed = true;
+			WinHttpCloseHandle(request);
+'@ + "`n"); To = (@'
+			check->closed = true;
+'@ + "`n") } }; Reason = 'K: CheckTheKey (3dc/relay_list.cpp line 98) must compare every byte' },
+    @{ What = 'K: CallChecked called from anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Sneak(void)
+{
+	CallChecked(L"GET", L"/v1/games", NULL, buffer, sizeof(buffer), anyCheck);
 }
-'@) + "`n" }; Reason = 'must write the list''s server in one place only, from the name it started with' },
-    @{ What = 'DevMode starting on is refused'; None = $false; Files = @{ '3dc/d3d_render.cpp' = (@'
-int DevMode = 1;
-'@) + "`n" }; Reason = 'DevMode must be defined once, as int DevMode = 0; it is: 3dc/d3d_render.cpp line 1: int DevMode = 1;' },
-    @{ What = 'DevMode turned on anywhere else is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+'@ + "`n") } }; Reason = 'calls CallChecked: only CheckTheServer (the first call) and Call (every other) may' },
+    @{ What = 'K: the list''s key kept without the line''s fingerprint is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (good)
+		{
+			memcpy(s->goodKey, first.shown, first.shownSize);
+			s->goodKeySize = first.shownSize;
+		}
+'@ + "`n"); To = (@'
+		memcpy(s->goodKey, first.shown, first.shownSize);
+		s->goodKeySize = first.shownSize;
+'@ + "`n") } }; Reason = 'K: CheckTheServer (3dc/relay_list.cpp line 175) must make its server''s own first check, and keep the list''s key only when it and the relay''s keys make that server''s line''s fingerprint' },
+    @{ What = 'K: a call that doesn''t hold the server to its line first is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		const char *const unchecked = CheckTheServer(s);
+'@ + "`n"); To = (@'
+		const char *const unchecked = NULL;
+'@ + "`n") } }; Reason = 'K: Call (3dc/relay_list.cpp line 212) must hold its server to its line first' },
+    @{ What = 'K: the server called good anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		made->keyState = kKeyNotChecked;
+'@ + "`n"); To = (@'
+		made->keyState = kKeyGood;
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp must write the key that matched in CheckTheServer alone' },
+    @{ What = 'Y: the list started with a server for a line without the player''s yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		bool const lineAgreed = TheLineIsAgreed(*line);
+'@); To = (@'
+		bool const lineAgreed = true;
+'@) } }; Reason = 'Y: the list''s start (3dc/relay_list.cpp line 452) must give a line the player hasn''t said yes to no server' },
+    @{ What = 'Y: a yes taken for any line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		return LineHash(line, hash) && ServersTrust_Has(yeses, hash);
+'@); To = (@'
+		return LineHash(line, hash);
+'@) } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 414) must let a Hudson run past alone' },
+    @{ What = 'Y: another way past the yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+'@ + "`n"); To = (@'
+		if (HudsonRunIsOn)
+		{
+			return true;
+		}
+
+		if (TesterSaysSo)
+		{
+			return true;
+		}
+'@ + "`n") } }; Reason = 'Y: TheLineIsAgreed (3dc/relay_list.cpp line 414) must let a Hudson run past alone' },
+    @{ What = 'Y: Hudson''s flag set in the list''s file is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
 void Cheat(void)
 {
-	DevMode = 1;
+	HudsonRunIsOn = true;
 }
-'@) + "`n" }; Reason = '3dc/menus.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' },
-    @{ What = 'DevMode turned on by another word is refused'; None = $false; Files = @{ '3dc/avp/win95/winmain.cpp' = (@'
-void Begin(const char *command_line)
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 708 changes HudsonRunIsOn' },
+    @{ What = 'Y: a yes added anywhere but the player''s own is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Sneak(void)
 {
-	DevMode = CommandLineHasWord(command_line, "-play") ? 1 : 0;
+	ServersTrust_Add(&yeses, anyHash);
 }
-'@) + "`n" }; Reason = '3dc/avp/win95/winmain.cpp line 3 changes DevMode: only the line that reads -dev from the command line may' }
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 708 adds a yes: only the player''s own' },
+    @{ What = 'Y: a Hudson run''s yes page, with its guards, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 1' },
+    @{ What = 'Y: the yes page''s first line without its flags is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			return true;
+		}
+
+		uint8_t hash
+'@); To = (@'
+			uint8_t runHash[kServersTrustHashBytes];
+			return !hudsonRunShowsTheYesPage || (LineHash(line, runHash) && ServersTrust_Has(hudsonRunYeses, runHash));
+		}
+
+		uint8_t hash
+'@) } }; Reason = 'Y: 3dc/relay_list.cpp must start hudsonRunShowsTheYesPage false, once' },
+    @{ What = 'Y: a Hudson run''s Yes kept as a player''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList.Replace("`t`t`tServersTrust_Add(&hudsonRunYeses, hash);`n", "`t`t`tServersTrust_Add(&hudsonRunYeses, hash);`n`t`t`tServersTrust_Add(&yeses, hash);`n") }; Reason = 'Y: RelayList_AgreeToTheLineAt (3dc/relay_list.cpp line 514) must hold a Hudson run''s Yes for the run alone' },
+    @{ What = 'Y: the yes page asked for anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList + $yesPageElsewhere.Replace('FLAG', 'hudsonRunShowsTheYesPage = true;') }; Reason = 'Y: 3dc/relay_list.cpp changes hudsonRunShowsTheYesPage in 3 places' },
+    @{ What = 'Y: a Hudson run''s Yes set anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList + $yesPageElsewhere.Replace('FLAG', 'ServersTrust_Add(&hudsonRunYeses, anyHash);') }; Reason = 'Y: 3dc/relay_list.cpp uses a Hudson run''s yeses in a way this check doesn''t know' },
+    @{ What = 'Y: a line without the yes waited for as if it had one is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	if (!TheLineIsAgreed(line))
+	{
+		out->state = kRelayLineNoYes;
+'@); To = (@'
+	if (false)
+	{
+		out->state = kRelayLineNoYes;
+'@) } }; Reason = 'Y: RelayList_LineNow (3dc/relay_list.cpp line 484) must say a line without the player''s yes needs it' },
+    @{ What = 'Y: an online host before the yes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && Net_ServerState(&notAgreedWhy) == kNetServerNeedsYes)
+'@); To = (@'
+	if (false)
+'@) } }; Reason = 'H: Net_HostGame (3dc/networking.cpp line 136) must refuse a chosen line without the player''s yes' },
+    @{ What = 'V: a v2 draft switch named anywhere is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+bool Which()
+{
+	return Net_V2DraftOn();
+}
+'@ + "`n") }; Reason = 'V: 3dc/menus.cpp line 3 names Net_V2DraftOn' },
+    @{ What = 'V: and version 1''s picker'; None = $false; Files = @{ '3dc/net_relay.h' = (@'
+class NetRelayPicker
+{
+};
+'@ + "`n") }; Reason = 'V: 3dc/net_relay.h line 1 names NetRelayPicker' },
+    @{ What = 'V: a network version before protocol version 2''s is refused'; None = $false; Files = @{ '3dc/networking.h' = (@'
+const int kMultiplayerVersion = 115;
+'@ + "`n") }; Reason = 'V: 3dc/networking.h must say the network version once' },
+    @{ What = 'V: a later one is let through'; None = $false; Files = @{ '3dc/networking.h' = (@'
+const int kMultiplayerVersion = 117;
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'V: a relay message read plain is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	relayStrangersDropped++;
+	return 1;
+}
+
+static bool RelayHostStart
+'@); To = (@'
+	RelayControlDatagram(on->receivedAddress.port, on->receivedData, on->receivedDataLength, now);
+	relayStrangersDropped++;
+	return 1;
+}
+
+static bool RelayHostStart
+'@) } }; Reason = 'V: 3dc/networking.cpp line 30 reads a relay message: only RelayV2TakeOpened may' },
+    @{ What = 'V: the relay''s intercept letting the rest through is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	relayStrangersDropped++;
+	return 1;
+}
+
+static bool RelayHostStart
+'@); To = (@'
+	return 0;
+}
+
+static bool RelayHostStart
+'@) } }; Reason = 'V: RelayIntercept (3dc/networking.cpp line 23) must end by dropping whatever comes without the channel' },
+    # EVERY SERVER THE SAME WAY (added 2026-11-11 by Melanikus for the AvP port: all servers' games, the owner's "same code, for 2 or more
+    # servers"). Each server's state is made from its own line by NewServer, holds its own key checks, and a visit ends wiped: each way of
+    # carrying one server's trust over to another is refused
+    @{ What = 'R: a server''s state made a second way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+Shared *Spare(void)
+{
+	return new Shared;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new' },
+    @{ What = 'R: and kept as a plain variable'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+Shared spare;
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable' },
+    @{ What = 'R: a server''s state copied whole from the line in use''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void CopyTheTrust(Shared *to)
+{
+	memcpy(to, shared, sizeof(Shared));
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable, and copy none whole' },
+    @{ What = 'R: and by assignment'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void CopyTheTrust(Shared *to)
+{
+	*to = *shared;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must make a server''s state only by NewServer''s one new, keep none as a plain variable, and copy none whole' },
+    @{ What = 'R: the line in use''s state set anywhere but Start is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Swap(Shared *other)
+{
+	shared = other;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp line 708 sets shared to other: only Start may' },
+    @{ What = 'R: and another server''s state called shared, which hides it'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Hide(Shared *shared)
+{
+	Tell(shared, "hidden");
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp must start shared as nothing, once, and call nothing else shared' },
+    @{ What = 'R: a server''s state made anywhere but its five makers is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Peek(void)
+{
+	Shared *other = NewServer(theFile.servers[1]);
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp line 708 makes a server''s state: only Start, VisitEveryLine, ReadTheRelayKeysOn, AskForAccessOn, UseTheHostLine may' },
+    @{ What = 'R: a visit made from lines the find didn''t choose is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+memcpy(lines, shared->visitLines, sizeof(lines));
+'@); To = (@'
+memcpy(lines, theFile.servers, sizeof(lines));
+'@) } }; Reason = 'R: VisitEveryLine (3dc/relay_list.cpp line 288) must make each visit by NewServer from the lines the find chose' },
+    @{ What = 'K: a key check kept for the whole file is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+static KeyCheck lastCheck;
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp keeps a KeyCheck for the whole file' },
+    @{ What = 'K: a key''s size taken from the line in use''s is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void TrustLikeTheLineInUse(Shared *visit)
+{
+	visit->goodKeySize = shared->goodKeySize;
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp uses a server''s goodKeySize in a way this check doesn''t know' },
+    @{ What = 'K: a line''s fingerprint taken from anything but its line is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Pin(Shared *visit, const uint8_t *seen)
+{
+	memcpy(visit->lineFingerprint, seen, 32);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp uses a server''s lineFingerprint in a way this check doesn''t know' },
+    @{ What = 'K: a server made without its line''s fingerprint is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		memcpy(made->lineFingerprint, line.fingerprint, sizeof(made->lineFingerprint));
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: NewServer (3dc/relay_list.cpp line 425) must take its server''s fingerprint from its own line' },
+    @{ What = 'K: something kept between one call and the next is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		*count = 0;
+		Answer const a = Call(visit,
+'@); To = (@'
+		static int visitsSoFar = 0;
+		visitsSoFar++;
+		*count = 0;
+		Answer const a = Call(visit,
+'@) } }; Reason = 'K: VisitTheLine (3dc/relay_list.cpp line 266) must keep nothing of its own between calls (no static)' },
+    @{ What = 'K: the line in use''s state written in a call to another server is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		s->serverWhy = why;
+'@); To = (@'
+		shared->serverWhy = why;
+'@) } }; Reason = 'K: CantUse (3dc/relay_list.cpp line 82) must keep nothing of its own between calls (no static) and touch only the server it was given, never shared' },
+    @{ What = 'K: another server handed on inside a call is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			Tell(s, a.why);
+'@); To = (@'
+			Tell(first.owner, a.why);
+'@) } }; Reason = 'K: 3dc/relay_list.cpp line 196 hands Tell another server than its own: inside a call it must be s' },
+    @{ What = 'K: and outside one'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void AskAgain(Shared *other)
+{
+	CheckTheServer(other);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 708 hands CheckTheServer another server than its own: inside a call it must be shared or hostServer' },
+    @{ What = 'K: a visit called anywhere but where it''s made is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Peek(Shared *visit)
+{
+	VisitTheLine(visit, &count);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 708 hands VisitTheLine another server than its own: inside a call it must be shared or hostServer' },
+    @{ What = 'K: the line in use visited in place of a fresh visit is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+visit ? VisitTheLine(visit, &got) : kCantStart;
+'@); To = (@'
+visit ? VisitTheLine(shared, &got) : kCantStart;
+'@) } }; Reason = 'K: 3dc/relay_list.cpp line 303 hands VisitTheLine another server than its own: inside a call it must be visit' },
+    @{ What = 'K: a visit given back without being wiped is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		SecureZeroMemory(visit, sizeof(*visit));
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: ForgetTheVisit (3dc/relay_list.cpp line 445) must wipe the whole visit and give it back, and do nothing else' },
+    @{ What = 'K: a visit with a way out before its end is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+'@ + "`n"); To = (@'
+			const char *const why = visit ? VisitTheLine(visit, &got) : kCantStart;
+
+			if (!why)
+			{
+				continue;
+			}
+'@ + "`n") } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 288) must end every visit it makes with ForgetTheVisit(visit), with no way out before it' },
+    @{ What = 'K: a visit kept after its end is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+				ForgetTheVisit(visit);
+'@ + "`n"); To = (@'
+				lastVisit = visit;
+				ForgetTheVisit(visit);
+'@ + "`n") } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 288) must end every visit it makes with ForgetTheVisit(visit), with no way out before it, and keep nothing of it' },
+    @{ What = 'K: a visit never forgotten is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+				ForgetTheVisit(visit);
+'@ + "`n"); To = (@'
+'@) } }; Reason = 'K: VisitEveryLine (3dc/relay_list.cpp line 288) must end every visit it makes with ForgetTheVisit(visit)' },
+    @{ What = 'K: the line in use''s state forgotten is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Drop(void)
+{
+	ForgetTheVisit(shared);
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp line 708 calls ForgetTheVisit: only VisitEveryLine, ReadTheRelayKeysOn, AskForAccessOn may' },
+    @{ What = 'Y: a line visited without the player''s yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		agreed[place] = TheLineIsAgreed(theFile.servers[place]);
+'@); To = (@'
+		agreed[place] = true;
+'@) } }; Reason = 'Y: RelayList_FindGames (3dc/relay_list.cpp line 554) must ask each line''s yes' },
+    @{ What = 'Y: and a line put in the visits after the choice'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+'@); To = (@'
+	lines[0] = theFile.servers[0];
+	EnterCriticalSection(&shared->lock);
+	shared->visitCount = visits;
+'@) } }; Reason = 'Y: RelayList_FindGames (3dc/relay_list.cpp line 554) must ask each line''s yes' },
+    @{ What = 'Y: the choice taking a line without its yes is refused'; None = $false; Files = @{ '3dc/relay_list_text.cpp' = @{ From = (@'
+		if (!agreed[place])
+'@); To = (@'
+		if (false)
+'@) } }; Reason = 'Y: RelayList_ChooseVisits (3dc/relay_list_text.cpp line 1) must never choose a line without its yes' },
+    @{ What = 'Y: and more lines than there''s room for'; None = $false; Files = @{ '3dc/relay_list_text.cpp' = @{ From = (@'
+		else if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))
+'@); To = (@'
+		else if (made > kRelayListMostVisits)
+'@) } }; Reason = 'Y: RelayList_ChooseVisits (3dc/relay_list_text.cpp line 1) must never choose a line without its yes, and never more than kRelayListMostVisits' },
+    @{ What = 'Y: lines chosen anywhere but a find is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Choose(void)
+{
+	RelayList_ChooseVisits(everyLine, count, 0, places, states);
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 708 chooses lines to visit: only RelayList_FindGames may' },
+    @{ What = 'Y: relay keys asked of a line without its yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	if (!TheLineIsAgreed(theFile.servers[place]) || !Start())
+'@); To = (@'
+	if (!Start())
+'@) } }; Reason = 'Y: RelayList_AskForRelayKeysOn (3dc/relay_list.cpp line 586) must refuse a line the player hasn''t said yes to before it hands it to the list''s thread' },
+    @{ What = 'Y: an access request to a line without its yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	if (!TheLineIsAgreed(theFile.servers[place]))
+	{
+		return false;
+	}
+
+	if (!Start())
+'@); To = (@'
+	if (!Start())
+'@) } }; Reason = 'Y: RelayList_AskForAccessOn (3dc/relay_list.cpp line 608) must refuse a line the player hasn''t said yes to before it hands it to the list''s thread' },
+    @{ What = 'Y: a room put on a line it wasn''t given is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	int const place = RelayList_HostLine();
+'@); To = (@'
+	int const place = hostChoice;
+'@) } }; Reason = 'Y: RelayList_HostRoomOpened (3dc/relay_list.cpp line 678) must refuse a line the player hasn''t said yes to before it hands it to the list''s thread' },
+    @{ What = 'Y: a line handed to the list''s thread any other way is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Sneak(void)
+{
+	shared->keysLine = theFile.servers[0];
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp uses keysLine in a way this check doesn''t know' },
+    @{ What = 'Y: a line chosen to host on without its yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+	if (place < 0 || place >= theFile.serverCount || !TheLineIsAgreed(theFile.servers[place]))
+'@); To = (@'
+	if (place < 0 || place >= theFile.serverCount)
+'@) } }; Reason = 'Y: RelayList_HostOn (3dc/relay_list.cpp line 634) must refuse a line the player hasn''t said yes to before it''s chosen' },
+    @{ What = 'Y: the line to host on given without its yes and its approval is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+ || !TheLineIsAgreed(theFile.servers[hostChoice]) ||
+		AccessOn(hostChoice, &why) != kRelayAccessIsApproved))
+'@); To = (@'
+))
+'@) } }; Reason = 'Y: RelayList_HostLine (3dc/relay_list.cpp line 660) must give the room''s line, or a chosen line only while it has its yes and its approval' },
+    @{ What = 'Y: the room''s line set anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Keep(int place)
+{
+	hostRoomLine = place;
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp uses hostRoomLine in a way this check doesn''t know' },
+    @{ What = 'R: a visit made from a line the main thread didn''t hand over is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+ReadTheRelayKeysOn(keysPlace, keysLine, keysRegion, keysAsking);
+'@); To = (@'
+ReadTheRelayKeysOn(keysPlace, theFile.servers[0], keysRegion, keysAsking);
+'@) } }; Reason = 'R: ReadTheRelayKeysOn must be called once, from ListThread (3dc/relay_list.cpp line 359), with the line the main thread copied after its yes' },
+    @{ What = 'R: and the host''s line made from another'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Again(void)
+{
+	UseTheHostLine(0, theFile.servers[0]);
+}
+'@ + "`n") } }; Reason = 'R: UseTheHostLine must be called once, from ListThread (3dc/relay_list.cpp line 359)' },
+    @{ What = 'R: the host''s line set anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Swap(Shared *other)
+{
+	hostServer = other;
+}
+'@ + "`n") } }; Reason = 'R: 3dc/relay_list.cpp line 708 sets hostServer to other: only' },
+    @{ What = 'K: a key state read without its lock is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		check.owner = s;
+		int const keyNow = KeyStateOf(s);
+'@); To = (@'
+		check.owner = s;
+		int const keyNow = s->keyState;
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 134) must hold its key check to its own server, then send nothing through a state with no line' },
+    @{ What = 'K: a state with no line that sends is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		if (keyNow == kKeyNoLine)
+		{
+			return a;
+		}
+
+'@); To = (@'
+'@) } }; Reason = 'K: CallChecked (3dc/relay_list.cpp line 134) must hold its key check to its own server, then send nothing through a state with no line' },
+    @{ What = 'K: a state with no line given one without the yes is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void Unlock(void)
+{
+	shared->keyState = kKeyNotChecked;
+}
+'@ + "`n") } }; Reason = 'K: 3dc/relay_list.cpp must write the key that matched in CheckTheServer alone, and a server''s key state only in' },
+    @{ What = 'K: the host''s line kept when another is made is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+		ForgetTheHostLine();
+		hostServer = NewServer(line);
+'@); To = (@'
+		hostServer = NewServer(line);
+'@) } }; Reason = 'K: UseTheHostLine (3dc/relay_list.cpp line 242) must be exactly' },
+    @{ What = 'K: a relay-keys visit never forgotten is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			ForgetTheVisit(visit);
+		}
+	}
+
+	void AskForAccessOn
+'@); To = (@'
+		}
+	}
+
+	void AskForAccessOn
+'@) } }; Reason = 'K: ReadTheRelayKeysOn (3dc/relay_list.cpp line 320) must end every visit it makes with ForgetTheVisit(visit)' },
+    @{ What = 'K: an access visit with a way out before its end is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
+			why = a.why;
+'@ + "`n"); To = (@'
+			why = a.why;
+
+			if (!why)
+			{
+				return;
+			}
+'@ + "`n") } }; Reason = 'K: AskForAccessOn (3dc/relay_list.cpp line 336) must end every visit it makes with ForgetTheVisit(visit), with no way out before it' },
+    @{ What = 'Y: the lines to visit written anywhere else is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ Add = (@'
+
+void VisitAll(void)
+{
+	memcpy(shared->visitLines, theFile.servers, sizeof(shared->visitLines));
+}
+'@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp uses the lines to visit in a way this check doesn''t know' },
+    @{ What = 'S: a host through the relay that doesn''t seal is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	host->sendHook = RelaySealedSend;
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'S: RelayHostStart (3dc/networking.cpp line 34) must hear the relay alone and seal what the host sends' },
+    @{ What = 'S: a host that goes on without the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+			host = NULL;
+			return NET_FAIL;
+		}
+
+		Con_PrintMessage
+'@); To = (@'
+			host = NULL;
+		}
+
+		Con_PrintMessage
+'@) } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
+    @{ What = 'S: a host handed over before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		const char *notOnline = NULL;
+'@ + "`n"); To = (@'
+		const char *notOnline = NULL;
+		if (Plain()) { return NET_OK; }
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
+    @{ What = 'S: the relay asked only sometimes is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		if (!RelayHostStart(&notOnline))
+'@ + "`n"); To = (@'
+		if (Sometimes())
+		if (!RelayHostStart(&notOnline))
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
+    @{ What = 'S: a host made in a block of its own before the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
+'@ + "`n"); To = (@'
+		if (Plain())
+		{
+			host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, 0, 0);
+			return NET_OK;
+		}
+'@ + "`n") } }; Reason = 'S: Net_HostGame (3dc/networking.cpp line 136) must make one host and give it to the relay' },
+    @{ What = 'S: a lost relay that leaves the host hearing anyone is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		host->intercept = NothingIntercept;
+'@ + "`n"); To = (@'
+		host->intercept = AnyoneIntercept;
+'@ + "`n") } }; Reason = 'S: RelayHostGiveUp (3dc/networking.cpp line 59) must end the online game, which then hears nothing' },
+    @{ What = 'S: a joiner that connects when handshake B fails is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+		if (relayEndToEndJoinFailed)
+		{
+			enet_host_destroy(host);
+			return NET_FAIL;
+		}
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'S: Net_ConnectToSession (3dc/networking.cpp line 181) must make handshake B (RelayEndToEndJoin) before it connects' },
+    @{ What = 'P: a host with no server named is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && RelayList_HostLine() < 0)
+'@ + "`n"); To = (@'
+	if (false)
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
+    @{ What = 'P: and one refused only inside another block'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (online && RelayList_HostLine() < 0)
+	{
+		return NET_FAIL;
+	}
+'@ + "`n"); To = (@'
+	if (Later())
+	{
+		if (online && RelayList_HostLine() < 0)
+		{
+			return NET_FAIL;
+		}
+	}
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
+    @{ What = 'P: and a skirmish made online is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	bool const online = !netGameData.skirmishMode;
+'@ + "`n"); To = (@'
+	bool online = !netGameData.skirmishMode;
+	online = false;
+'@ + "`n") } }; Reason = 'P: Net_HostGame (3dc/networking.cpp line 136) must refuse an online game with no server first' },
+    @{ What = 'P: a join that isn''t through the relay is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n"); To = (@'
+	if (false)
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 181) must refuse a game that isn''t through the relay first' },
+    @{ What = 'P: and one refused only sometimes'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n"); To = (@'
+	if (Sometimes())
+	if (!SessionData[sessionNumber].throughRelay)
+'@ + "`n") } }; Reason = 'P: Net_ConnectToSession (3dc/networking.cpp line 181) must refuse a game that isn''t through the relay first' },
+    @{ What = 'P: an ENet host made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Elsewhere()
+{
+	host = Net_MakeENetHost(NULL, 1, 0, 0, 0);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes an ENet host: only Net_HostGame and Net_ConnectToSession may' },
+    @{ What = 'P: and one made without Net_MakeENetHost'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ByItself()
+{
+	host = enet_host_create(NULL, 1, 1, 0, 0);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes an ENet host by itself: only Net_MakeENetHost' },
+    @{ What = 'P: a socket that sends to the whole network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Everyone()
+{
+	enet_socket_set_option(s, ENET_SOCKOPT_BROADCAST, 1);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes a socket that sends to the whole network' },
+    @{ What = 'P: a socket made anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Listen()
+{
+	s = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 makes a socket: only LoopbackOnlyAddress may' },
+    @{ What = 'P: a socket given a port is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	enet_socket_connect(probe, &to);
+'@ + "`n"); To = (@'
+	enet_socket_bind(probe, &any);
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 14 gives a socket a port: nothing may' },
+    @{ What = 'P: a search that asks this network is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	NumberOfSessionsFound = 0;
+'@ + "`n"); To = (@'
+	NumberOfSessionsFound = 0;
+	Ask(ENET_HOST_BROADCAST);
+'@ + "`n") } }; Reason = 'P: Net_FindAvPSessions (3dc/networking.cpp line 220) must only start the list of games found again' },
+    @{ What = 'P: the plain game''s own names coming back are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+static int ENET_CALLBACK HomeIntercept(ENetHost *on, ENetEvent *event)
+{
+	return 0;
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 225 names HomeIntercept' },
+    @{ What = 'P: a host''s intercept cleared is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void Forget()
+{
+	host->intercept = NULL;
+}
+'@ + "`n") } }; Reason = 'P: 3dc/networking.cpp line 227 clears a host''s intercept' },
+    @{ What = 'J: a join through a relay chosen by its region is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	return RelayLookUp(line, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+'@ + "`n"); To = (@'
+	return RelayLookUpByRegion(region, &relayAddress) ? RelayHandshake(line, region, code) : 0;
+'@ + "`n") } }; Reason = 'J: RelayJoin (3dc/networking.cpp line 119) must take the relay of the game''s own line' },
+    @{ What = 'J: a line''s relay read from anywhere but the list''s code is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!RelayList_RelayOf(line, &address, &port) || port < 1)
+'@ + "`n"); To = (@'
+	address = TheRelayFor(region);
+	if (port < 1)
+'@ + "`n") } }; Reason = 'J: RelayLookUp (3dc/networking.cpp line 69) must read a line''s relay from the list''s code alone' },
+    @{ What = 'J: keys taken for another line than the one asked are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (came != kRelayKeysCame || keysLine != relayV2Line)
+'@ + "`n"); To = (@'
+	if (came != kRelayKeysCame)
+'@ + "`n") } }; Reason = 'J: a relay''s keys must be asked of its own line' },
+    @{ What = 'J: keys asked for without a line are refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!RelayList_AskForRelayKeysOn(line, region))
+'@ + "`n"); To = (@'
+	if (!RelayList_AskForTheKeysOf(region))
+'@ + "`n") } }; Reason = 'J: a relay''s keys must be asked of its own line' },
+    @{ What = 'J: a join through another line than its game''s is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+RelayJoin(SessionData[sessionNumber].serverLine,
+'@); To = (@'
+RelayJoin(0,
+'@) } }; Reason = 'J: Net_ConnectToSession (3dc/networking.cpp line 181) must join through the game''s own line' },
+    @{ What = 'J: a relay reached from outside the network''s file is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void Elsewhere()
+{
+	RelayJoin(0, region, code);
+}
+'@ + "`n") }; Reason = 'J: 3dc/menus.cpp line 3 reaches a relay from outside the network''s own file' },
+    @{ What = 'J: a game from no line kept is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (line < 0 || line >= RelayList_LineCount())
+'@ + "`n"); To = (@'
+	if (false)
+'@ + "`n") } }; Reason = 'J: Net_AddRelaySession (3dc/networking.cpp line 126) must drop a game from no line first' },
+    @{ What = 'J: a one-server call named again is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void TheOldWay()
+{
+	RelayList_Relays(relays, &named);
+}
+'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 names RelayList_Relays, a call for the one server' },
+    @{ What = 'J: the network''s file calling servers.cfg''s code itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ReadIt()
+{
+	ServersCfg_GameFolderOf(path, folder, sizeof(folder));
+}
+'@ + "`n") } }; Reason = 'J: 3dc/networking.cpp line 227 calls the servers.cfg reader itself' },
+    @{ What = 'R: the network''s file reading servers.cfg itself is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ReadIt()
+{
+	ServersCfg_ReadTheGames(&file);
+}
+'@ + "`n") } }; Reason = 'R: 3dc/networking.cpp reads servers.cfg: only 3dc/relay_list.cpp may' },
+    @{ What = 'H: a host whose missing choice is refused only later is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (line < 0)
+	{
+		*why = kNoServerChosen;
+		return false;
+	}
+
+'@ + "`n"); To = (@'
+
+'@) } }; Reason = 'H: RelayHostStart (3dc/networking.cpp line 34) must take the relay of the chosen line alone, and refuse first with none' },
+    @{ What = 'H: a host on another line than the chosen one is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ From = (@'
+	if (!host || !RelayLookUp(line, &relayCandidates[0]))
+'@ + "`n"); To = (@'
+	if (!host || !RelayLookUp(0, &relayCandidates[0]))
+'@ + "`n") } }; Reason = 'H: RelayHostStart (3dc/networking.cpp line 34) must take the relay of the chosen line alone, and refuse first with none' },
+    @{ What = 'H: a relay host started from anywhere else is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
+
+void ElsewhereHosted()
+{
+	RelayHostStart(&why);
+}
+'@ + "`n") } }; Reason = 'H: 3dc/networking.cpp line 227 starts a host through a relay: only Net_HostGame may' },
+    # THE PLAYER'S CHOICE (added 2026-11-11 by Melanikus for the AvP port, hash 2, the owner's "No auto choice, they choose"): a line is
+    # chosen only by the host page's Enter on that line's row, in its kHostPageChooseIt case; clearing the choice is let through anywhere
+    @{ What = 'H: a line chosen to host on anywhere but the host page is refused'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void PickTheFirst()
+{
+	RelayList_HostOn(0);
+}
+'@ + "`n") }; Reason = 'H: 3dc/menus.cpp line 3 chooses the line to host on: only the host page''s Enter on a line''s row may' },
+    @{ What = 'H: the choice cleared anywhere is let through'; None = $false; Files = @{ '3dc/menus.cpp' = (@'
+void ForgetTheChoice()
+{
+	RelayList_HostOn(-1);
+}
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'H: the host page choosing a line in its kHostPageChooseIt case is let through'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+
+		default:
+			return false;
+	}
+}
+'@ + "`n") }; Passes = 'Online play is only the safe way' },
+    @{ What = 'H: the host page choosing a line outside its kHostPageChooseIt case is refused'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			return false;
+
+		default:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+	}
+}
+'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' },
+    @{ What = 'H: and a host page that chooses twice is refused'; None = $false; Files = @{ '3dc/avp/win95/frontend/host_page.cpp' = (@'
+bool HostPage_PressedRow(int row)
+{
+	int const place = row - kHostPageLineRowFirst;
+	(void)RelayList_HostOn(place);
+
+	switch (HostPage_Pressed(false, says))
+	{
+		case kHostPageChooseIt:
+			if (RelayList_HostOn(place))
+			{
+				return true;
+			}
+
+			return false;
+
+		default:
+			return false;
+	}
+}
+'@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' },
+    # Rule O (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-9, "Online off in beta.2"): only a build made with
+    # AVPX_ONLINE_PLAY reads servers.cfg, and nothing of this repository's own makes one. The model above passes it; each case is one way
+    # back to a build that plays online.
+    @{ What = 'O: the define made in a header of its own is refused'; None = $false; Files = @{ '3dc/online.h' = "#define AVPX_ONLINE_PLAY 1`n" };
+        Reason = 'O: the game''s code must name the define AVPX_ONLINE_PLAY once, in 3dc/relay_list.cpp''s ThisBuildPlaysOnline, and nowhere else' },
+    @{ What = 'O: a ThisBuildPlaysOnline that says yes without the define is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "#else`n`t`treturn false;`n#endif`n"; To = "#else`n`t`treturn true;`n#endif`n" } };
+        Reason = 'O: ThisBuildPlaysOnline (3dc/relay_list.cpp line' },
+    @{ What = 'O: servers.cfg read before the question is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "`t`tstatic ServersCfgFileRead file;`n`n`t`tif (!ThisBuildPlaysOnline())"; To = "`t`tstatic ServersCfgFileRead file;`n`t`tServersCfg_ReadTheGames(&file);`n`n`t`tif (!ThisBuildPlaysOnline())" } };
+        Reason = 'O: Server() (3dc/relay_list.cpp line' },
+    @{ What = 'O: servers.cfg read by a build that plays no online games is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = "`t`t`tfile.serverCount = 0;`n"; To = "`t`t`tServersCfg_ReadTheGames(&file);`n" } };
+        Reason = 'O: Server() (3dc/relay_list.cpp line' },
+    @{ What = 'O: a project that makes the define for every build is refused'; None = $false; Files = @{ 'win32/VS2026/AvP.vcxproj' = @{ From = "<ItemDefinitionGroup Condition=""'`$(AvpxOnlinePlay)'=='1'"">"; To = '<ItemDefinitionGroup>' } };
+        Reason = 'O: win32/VS2026/AvP.vcxproj must make AVPX_ONLINE_PLAY only in its one group for the property AvpxOnlinePlay=1' },
+    @{ What = 'O: no project file at all is refused'; None = $false; Files = @{ 'win32/VS2026/AvP.vcxproj' = $null }; Reason = 'O: win32/VS2026/AvP.vcxproj isn''t there' },
+    @{ What = 'O: release.yml asking for a build that plays online is refused'; None = $false; Files = @{ '.github/workflows/release.yml' = "        run: msbuild win32/VS2026/AvP.vcxproj /p:Configuration=Release /p:AvpxOnlinePlay=1`n" };
+        Reason = 'O: .github/workflows/release.yml names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: build.yml giving the property as an environment variable, in other capitals, is refused'; None = $false; Files = @{ '.github/workflows/build.yml' = "    env:`n      AVPXONLINEPLAY: '1'`n" };
+        Reason = 'O: .github/workflows/build.yml names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: a workflow that sets CL is refused'; None = $false; Files = @{ '.github/workflows/build.yml' = "    env:`n      CL: /DSOMETHING`n" };
+        Reason = 'O: .github/workflows/build.yml sets CL or _CL_' },
+    @{ What = 'O: a tool script that asks for the property is refused'; None = $false; Files = @{ 'tools/build-and-package.ps1' = "& msbuild win32/VS2026/AvP.vcxproj /p:AvpxOnlinePlay=1`n" };
+        Reason = 'O: tools/build-and-package.ps1 names AvpxOnlinePlay or AVPX_ONLINE_PLAY' },
+    @{ What = 'O: a Directory.Build.props that sets the property is refused'; None = $false; Files = @{ 'Directory.Build.props' = "<Project><PropertyGroup><AvpxOnlinePlay>1</AvpxOnlinePlay></PropertyGroup></Project>`n" };
+        Reason = 'O: Directory.Build.props names AvpxOnlinePlay or AVPX_ONLINE_PLAY' }
 )
 
-foreach ($case in $serverCases)
+foreach ($case in $onlineCases)
 {
-    Make-GoodRepository
+    Clear-Work
+    # Every text's line ends are taken as plain ones first, whatever git made of this file's, so a change is found in the model as it's written
     $all = @{}
-    if (-not $case.None) { foreach ($name in $serverGood.Keys) { $all[$name] = $serverGood[$name] } }
-    foreach ($name in $case.Files.Keys) { $all[$name] = $case.Files[$name] }
-    foreach ($name in $all.Keys) { Write-File (Join-Path $work $name) ($all[$name] -replace "`r", '') }
+    if (-not $case.None) { foreach ($name in $onlineGood.Keys) { $all[$name] = $onlineGood[$name] -replace "`r", '' } }
+
+    foreach ($name in $case.Files.Keys)
+    {
+        $change = $case.Files[$name]
+
+        if ($null -eq $change) { $all.Remove($name) }
+        elseif ($change -is [string]) { $all[$name] = $change -replace "`r", '' }
+        elseif ($change.ContainsKey('Add')) { $all[$name] = "$($all[$name])" + ($change.Add -replace "`r", '') }
+        else
+        {
+            $text = $all[$name]
+            $from = $change.From -replace "`r", ''
+            $at = $text.IndexOf($from, [System.StringComparison]::Ordinal)
+            Check ($at -ge 0 -and $at -eq $text.LastIndexOf($from, [System.StringComparison]::Ordinal)) "$($case.What): its change is in the model's $name exactly once"
+            if ($at -ge 0) { $all[$name] = $text.Substring(0, $at) + ($change.To -replace "`r", '') + $text.Substring($at + $from.Length) }
+        }
+    }
+
+    # <CR> is the one carriage return a case needs, written so that git can't change it
+    foreach ($name in $all.Keys) { Write-File (Join-Path $work $name) ($all[$name] -replace '<CR>', "`r") }
 
     if ($case.ContainsKey('Passes'))
     {
-        $result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
+        $result = Run-Script 'check-online-play.ps1' @('-Repository', $work)
         Check ($result.Code -eq 0 -and $result.Text.Contains($case.Passes)) "$($case.What). It said: $($result.Text)"
     }
     else
     {
-        Expect-Refused 'check-servers-dev-only.ps1' @('-Repository', $work) $case.Reason $case.What
+        Expect-Refused 'check-online-play.ps1' @('-Repository', $work) $case.Reason $case.What
     }
 }
 
-# The real repository, as it is now: only what git tracks. If this is ever refused, a way to one of our servers that a player's game
-# could take has come in, or the check has started to refuse something that needs -dev.
+# The real repository, as it is now: only what git tracks. If this is ever refused, a way online that isn't the safe one has come in,
+# or the check has started to refuse the real code's own forms.
 Clear-Work
 
 foreach ($tracked in @(& git -C $repository ls-files))
@@ -1225,8 +2621,8 @@ foreach ($tracked in @(& git -C $repository ls-files))
     }
 }
 
-$result = Run-Script 'check-servers-dev-only.ps1' @('-Repository', $work)
-Check ($result.Code -eq 0 -and ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains('None of the game''s server code'))) "the real repository's game can reach no server without -dev. It said: $($result.Text)"
+$result = Run-Script 'check-online-play.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0 -and $result.Text.Contains('Online play is only the safe way')) "the real repository's game plays online only the safe way. It said: $($result.Text)"
 
 # --- The checks that ask GitHub. There's no network here, so all that can be tried is that it refuses to go on without being on avpx_main.
 Make-GoodRepository
@@ -1338,6 +2734,18 @@ foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43
     Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$name is not in the package" "a package without $name is refused"
 }
 
+# This release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11): a servers.cfg anywhere in the package is refused, whatever its
+# capitals (added 2026-11-11 by Melanikus for the AvP port)
+Make-GoodPackage
+Write-File (Join-Path $package 'servers.cfg') '203.0.113.7  0123  New York'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'servers.cfg is in the package, and this release plays no online games, so it ships no servers.cfg' 'a package with a servers.cfg beside bin is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/Servers.CFG') '203.0.113.7  0123  New York'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'bin/Servers.CFG is in the package, and this release plays no online games, so it ships no servers.cfg' 'and so is one in a folder, in other capitals'
+
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'SHA256SUMS.txt')
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'SHA256SUMS.txt is not in the package' 'a package with no list of hashes is refused'
@@ -1440,8 +2848,8 @@ Check ($result.Text.Contains('RELEASE-BLOCKERS.md still lists') -or $result.Text
 # What it answers depends on what's been built beside the code, but it has to be one of the script's own answers.
 $result = Run-Script 'check-hudson-asleep.ps1' @()
 Check ($result.Text.Contains("A player's game can't run Hudson") -or $result.Text.Contains('None of Hudson is in this commit') -or $result.Text.Contains('REFUSED: ')) "check-hudson-asleep.ps1 finds the repository by itself. It said: $($result.Text)"
-$result = Run-Script 'check-servers-dev-only.ps1' @()
-Check ($result.Text.Contains("A player's game can't reach a server") -or $result.Text.Contains("None of the game's server code") -or $result.Text.Contains('REFUSED: ')) "check-servers-dev-only.ps1 finds the repository by itself. It said: $($result.Text)"
+$result = Run-Script 'check-online-play.ps1' @()
+Check ($result.Text.Contains('Online play is only the safe way') -or $result.Text.Contains("None of the game's network code") -or $result.Text.Contains('REFUSED: ')) "check-online-play.ps1 finds the repository by itself. It said: $($result.Text)"
 
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'License.txt')
@@ -1464,9 +2872,9 @@ Write-File (Join-Path $work '3dc/avp/hudson.cpp') 'bool HudsonRunIsOn = true;'
 Check ((Run-AsAStep 'check-hudson-asleep.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
 
 Clear-Work
-Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-servers-dev-only.ps1 passes when it should'
+Check ((Run-AsAStep 'check-online-play.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-online-play.ps1 passes when it should'
 Write-File (Join-Path $work '3dc/net.cpp') 'void Look() { getaddrinfo(n, 0, 0, 0); }'
-Check ((Run-AsAStep 'check-servers-dev-only.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
+Check ((Run-AsAStep 'check-online-play.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
 
 Remove-Item -Force -LiteralPath $stepFile
 
@@ -1580,7 +2988,7 @@ $big.SetLength(32000001)
 $big.Dispose()
 Expect-Refused 'check-virustotal.ps1' @('-Package', (Join-Path $work 'big.zip'), '-Sha256', $zipHash) 'VirusTotal takes at most 32000000 in one upload' 'a zip too big for one upload is refused'
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-hudson-asleep.ps1', 'tools/check-servers-dev-only.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
+foreach ($name in 'tools/check-release.ps1', 'tools/check-hudson-asleep.ps1', 'tools/check-online-play.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -1608,7 +3016,7 @@ Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything
 
 Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
 Check ($checkJob -match 'run: \./tools/check-hudson-asleep\.ps1\n') 'and refuses any way a player''s game could run Hudson'
-Check ($checkJob -match 'run: \./tools/check-servers-dev-only\.ps1\n') 'and refuses any way a player''s game could reach one of our servers'
+Check ($checkJob -match 'run: \./tools/check-online-play\.ps1\n') 'and refuses any way a player''s game could play online but the safe way'
 Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses a new function the game does not use'
 Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
@@ -1772,8 +3180,8 @@ $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tes
 Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
 Check-Order $testsWorkflow 'name: Unit tests' './tools/check-hudson-asleep.ps1' 'and the required Unit tests check refuses any way a player''s game could run Hudson'
 Check-Order $testsWorkflow './tools/check-hudson-asleep.ps1' './tests/build.ps1' 'before it builds anything'
-Check-Order $testsWorkflow 'name: Unit tests' './tools/check-servers-dev-only.ps1' 'and the required Unit tests check refuses any way a player''s game could reach one of our servers'
-Check-Order $testsWorkflow './tools/check-servers-dev-only.ps1' './tests/build.ps1' 'before it builds anything'
+Check-Order $testsWorkflow 'name: Unit tests' './tools/check-online-play.ps1' 'and the required Unit tests check refuses any way a player''s game could play online but the safe way'
+Check-Order $testsWorkflow './tools/check-online-play.ps1' './tests/build.ps1' 'before it builds anything'
 
 # --- Pull requests try the release's own checks on the machine the release runs them on
 $ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
@@ -1782,7 +3190,7 @@ $ubuntuMachine = [regex]::Match($ubuntuJob, '(?m)^    runs-on: (\S+)').Groups[1]
 $ubuntuName = [regex]::Match($ubuntuJob, '(?m)^    name: (.+)$').Groups[1].Value.Trim()
 Check ($releaseMachine.Length -gt 0 -and $ubuntuMachine -ceq $releaseMachine) 'pull requests try the checks on the machine the release uses'
 Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-hudson-asleep\.ps1\s') 'and refuse any way a player''s game could run Hudson there, with the same PowerShell'
-Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-servers-dev-only\.ps1\s') 'and refuse any way a player''s game could reach one of our servers there, with the same PowerShell'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-online-play\.ps1\s') 'and refuse any way a player''s game could play online but the safe way there, with the same PowerShell'
 Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tests/release-test\.ps1 -OnlyNewFunctions\s') 'and try the new-function rows there'
 Check ($ubuntuJob -match '(?m)^          fetch-depth: 0\b') 'with the history, so the real code gets read as well'
 Check ($ubuntuJob.Contains('persist-credentials: false')) 'leaving no token behind'

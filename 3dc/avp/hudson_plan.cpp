@@ -22,6 +22,8 @@
 //   species=predator lets a gun= run play as a Predator, for trying the staff
 //   botfight= has the host make an NPC beside the joiner in a network test
 //   friendlyfire=off has the host of a network test turn friendly fire off
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   floorislava=off has the run play 1999's aliens, as the console's FLOORISLAVA OFF does, for the other side of a film (#109's flip)
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port. See hudson_plan.h.
 
 #include "hudson_plan.h"
@@ -88,8 +90,22 @@ const char *const kHudsonRefusedAnswerWithoutHost = "answer= is the host's answe
 const char *const kHudsonRefusedAnswerAfterNotANumber = "answerafter= is a number of seconds";
 const char *const kHudsonRefusedAnswerAfterOutOfRange = "answerafter= is from 1 to 15 seconds, well inside the joiner's 20 s wait";
 const char *const kHudsonRefusedAnswerAfterWithoutAnswer = "answerafter= says when the host answers, so it needs answer=";
+const char *const kHudsonRefusedAnswerWithRelayHost = "answer= presses the host's rows when a player asks to join, and -relayhost lets every joiner in without asking, so they'd never come: start the host with -askjoiners";
 const char *const kHudsonRefusedFindGamesWord = "findgames= can only be yes";
 const char *const kHudsonRefusedFindGamesWithoutJoin = "findgames= is a joiner's way in, through Find Games, so it needs net=join";
+// Added 2026-11-10 by Melanikus (Third) for the AvP port: yespage= and hostrow= (hudson_plan.h)
+const char *const kHudsonRefusedYesPageWord = "yespage= can only be yes or no";
+const char *const kHudsonRefusedYesPageWithoutAccess = "yespage= is the yes page an access run's first press opens, so it needs access=request or access=check";
+const char *const kHudsonRefusedHostRowWord = "hostrow= can only be online: beta.2 hosts online only, through a server's relay";
+const char *const kHudsonRefusedHostRowWithoutHost = "hostrow= is a host's way in, through the Multiplayer page's Host row, so it needs net=host";
+const char *const kHudsonRefusedHostRowWithRelayAuto = "hostrow= hosts through the Multiplayer page's rows, and -relayhost or -askjoiners host by themselves as the menus start, so the rows would never be pressed";
+const char *const kHudsonRefusedHostRowWithCoop = "hostrow= presses Start game, a deathmatch's way in, so it can't be a coop=yes run";
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: hoston= and joinon= (hudson_plan.h)
+const char *const kHudsonRefusedHostRowWithoutHostOn = "hostrow=online needs hoston=, the server to choose on the Host on row: nothing is chosen for a player, so a run names its own";
+const char *const kHudsonRefusedHostOnName = "hoston= is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with a single _ for each space between them";
+const char *const kHudsonRefusedHostOnWithoutHostRow = "hoston= chooses on the Multiplayer page's Host on row, which only hostrow=online goes through, so it needs hostrow=online";
+const char *const kHudsonRefusedJoinOnName = "joinon= is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with a single _ for each space between them";
+const char *const kHudsonRefusedJoinOnWithoutFindGames = "joinon= chooses among Find games' games, so it needs findgames=yes";
 const char *const kHudsonRefusedPicturesWord = "pictures= can only be no, and only on a net= run";
 const char *const kHudsonRefusedKillWords = "killkind= (marine, predator, xenoborg or queen), killat=x,y,z and killer= (host or join) go together, on a net= run with coop=yes";
 const char *const kHudsonRefusedFramesPerSecond = "fps= is a number from 10 to 1000, or uncapped";
@@ -97,6 +113,7 @@ const char *const kHudsonRefusedBotFightUnknown = "botfight= is alien, marine, f
 const char *const kHudsonRefusedBotFightWithoutCoop = "botfight= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be off";
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
+const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -110,8 +127,13 @@ const char *const kHudsonRefusedBreakVideoWithoutVideo = "break=video breaks the
 const char *const kHudsonRefusedNetUnknown = "net= isn't host or join";
 const char *const kHudsonRefusedNetMeasuresTime = "net= is two games at once on one machine, so it can't measure time: it needs machine=shared";
 const char *const kHudsonRefusedNetNotAlone = "net= can't go with rooms=, nav=, route=, strategies=, strategy=, wall=, vision=, compare= or combat=, which all need a game to themselves";
-const char *const kHudsonRefusedFilmUnknown = "film= can only say no: a run that shares the machine has a film anyway, and one that measures time can't";
+const char *const kHudsonRefusedFilmUnknown = "film= can only say no or menus: a run that shares the machine has a film anyway, and one that measures time can't";
 const char *const kHudsonRefusedFilmBothWays = "record=video asks for a film and film=no says not to";
+// film=menus and pagehold= (hudson_plan.h). Added 2026-11-10 by Melanikus (Third) for the AvP port
+const char *const kHudsonRefusedFilmMenusWithoutFilm = "film=menus starts the film at the menus, so it needs a run with a film: machine=shared, and not record=numbers";
+const char *const kHudsonRefusedPageHoldNotANumber = "pagehold= is a number of seconds";
+const char *const kHudsonRefusedPageHoldOutOfRange = "pagehold= is from 1 to 10 seconds, well inside what the joiner and the list wait for";
+const char *const kHudsonRefusedPageHoldWithoutFilmMenus = "pagehold= holds the menus' pages for the film, so it needs film=menus";
 const char *const kHudsonRefusedPicturesWithoutRooms = "record=pictures means nothing without rooms=, a gun or a walk";
 const char *const kHudsonRefusedWallEmpty = "wall= has no name";
 const char *const kHudsonRefusedWallTooLong = "wall= is too long";
@@ -165,9 +187,9 @@ const char *const kHudsonRefusedSiegeFarWithoutSiege = "siegefar= says where a s
 const char *const kHudsonRefusedSiegeFromTooLong = "siegefrom= has a room name that's too long";
 const char *const kHudsonRefusedSiegeFromCharacter = "siegefrom= has a character a room name can't have here: write a space as _";
 const char *const kHudsonRefusedSiegeFromWithoutSiege = "siegefrom= says where a siege's enemies come from, so it needs siege=";
-const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no server's name";
-const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= has a name longer than a server's can be";
-const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character a server's name can't have here: small letters, digits, - and . only";
+const char *const kHudsonRefusedRemoteRelayEmpty = "remoterelay= has no address";
+const char *const kHudsonRefusedRemoteRelayTooLong = "remoterelay= is longer than an IPv4 address can be";
+const char *const kHudsonRefusedRemoteRelayCharacter = "remoterelay= has a character an IPv4 address can't have: digits and . only";
 const char *const kHudsonRefusedRemoteRelayWithoutNet = "remoterelay= says which relay a network run may use, so it needs net=";
 const char *const kHudsonRefusedRemoteRelayHostile = "remoterelay= takes a run beyond this machine, where the other end could be anybody's game, so it can't be a hostile= run";
 const char *const kHudsonRefusedStepSeconds = "stepseconds= is a whole number of seconds, from 10 to 600";
@@ -324,6 +346,37 @@ static bool ReadNumber(const char *text, size_t length, int *number)
 	return true;
 }
 
+// hoston= and joinon= (hudson_plan.h): a servers.cfg line's name as a plan writes it, with _ for each space, into name, which has room for
+// kHudsonLongestServerName letters and its ending 0. Only letters, digits, - and . are taken, with one _ between two of them, never at
+// either end or two together: then each _ is one space, as servers.cfg keeps a name (one space for each run of them), and nothing else
+// from the command line reaches the name. False, with name empty, for anything else. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static bool ReadServerName(const char *text, size_t length, char *name)
+{
+	name[0] = 0;
+
+	if (length == 0 || length > (size_t)kHudsonLongestServerName || text[0] == '_' || text[length - 1] == '_')
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < length; i++)
+	{
+		char const c = text[i];
+		bool const letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.';
+
+		if (!letter && !(c == '_' && text[i - 1] != '_'))
+		{
+			name[0] = 0;
+			return false;
+		}
+
+		name[i] = c == '_' ? ' ' : c;
+	}
+
+	name[length] = 0;
+	return true;
+}
+
 // Where -hudson is, as a word on its own. It's the same test as CommandLineHasWord, but this needs the place.
 static const char *FindHudsonWord(const char *commandLine)
 {
@@ -356,6 +409,11 @@ static const char *FindHudsonWord(const char *commandLine)
 	}
 
 	return 0;
+}
+
+bool HudsonPlan_StopFileCounts(bool there, bool isFolder, bool isLink, long long writtenAt, long long runStartedAt)
+{
+	return there && !isFolder && !isLink && writtenAt >= runStartedAt;
 }
 
 bool HudsonPlan_IsAskedFor(const char *commandLine)
@@ -413,6 +471,9 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenAccess = false, seenAccessWait = false, seenAnswer = false, seenAnswerAfter = false, seenFindGames = false;
 	bool seenMenus = false;
+	bool seenYesPage = false, seenHostRow = false;   // added 2026-11-10 by Melanikus (Third) for the AvP port
+	bool seenHostOn = false, seenJoinOn = false;     // added 2026-11-11 by Melanikus (Third) for the AvP port
+	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
 	bool seenGun = false;
@@ -1281,20 +1342,6 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->coop = true;
 		}
-		else if (WordIs(place, nameLength, "typed"))
-		{
-			if (plan->typed)
-			{
-				return kHudsonRefusedAskedTwice;
-			}
-
-			if (!WordIs(value, valueLength, "yes"))
-			{
-				return kHudsonRefusedCoopNotYes;
-			}
-
-			plan->typed = true;
-		}
 		else if (WordIs(place, nameLength, "hostile"))
 		{
 			if (plan->hostile)
@@ -1352,6 +1399,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->noFriendlyFire = true;
+		}
+		else if (WordIs(place, nameLength, "floorislava"))
+		{
+			// 1999's aliens, for the other side of a film, as the console's FLOORISLAVA OFF gives a player. Only off: the ways are on in every
+			// run without it. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109's flip, F5).
+			if (plan->floorIsLavaOff)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "off"))
+			{
+				return kHudsonRefusedFloorIsLavaNotOff;
+			}
+
+			plan->floorIsLavaOff = true;
 		}
 		else if (WordIs(place, nameLength, "fps"))
 		{
@@ -1484,6 +1547,78 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->findGames = true;
+		}
+		else if (WordIs(place, nameLength, "yespage"))
+		{
+			// Added 2026-11-10 by Melanikus (Third) for the AvP port: see kHudsonYesPage... in hudson_plan.h
+			if (seenYesPage)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenYesPage = true;
+
+			if (WordIs(value, valueLength, "yes"))
+			{
+				plan->yesPage = kHudsonYesPageYes;
+			}
+			else if (WordIs(value, valueLength, "no"))
+			{
+				plan->yesPage = kHudsonYesPageNo;
+			}
+			else
+			{
+				return kHudsonRefusedYesPageWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "hostrow"))
+		{
+			// Added 2026-11-10 by Melanikus (Third) for the AvP port: see kHudsonHostRow... in hudson_plan.h
+			if (seenHostRow)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenHostRow = true;
+
+			if (WordIs(value, valueLength, "online"))
+			{
+				plan->hostRow = kHudsonHostRowOnline;
+			}
+			else
+			{
+				return kHudsonRefusedHostRowWord;
+			}
+		}
+		else if (WordIs(place, nameLength, "hoston"))
+		{
+			// Added 2026-11-11 by Melanikus (Third) for the AvP port: see hoston= in hudson_plan.h
+			if (seenHostOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenHostOn = true;
+
+			if (!ReadServerName(value, valueLength, plan->hostOn))
+			{
+				return kHudsonRefusedHostOnName;
+			}
+		}
+		else if (WordIs(place, nameLength, "joinon"))
+		{
+			// Added 2026-11-11 by Melanikus (Third) for the AvP port: see joinon= in hudson_plan.h
+			if (seenJoinOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenJoinOn = true;
+
+			if (!ReadServerName(value, valueLength, plan->joinOn))
+			{
+				return kHudsonRefusedJoinOnName;
+			}
 		}
 		else if (WordIs(place, nameLength, "answerafter"))
 		{
@@ -1717,9 +1852,33 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			seenFilm = true;
 
-			if (!WordIs(value, valueLength, "no"))
+			// film=menus asks for a film that starts at the menus (checked against the rest below); film=no for none
+			if (WordIs(value, valueLength, "menus"))
+			{
+				plan->filmMenus = true;
+			}
+			else if (!WordIs(value, valueLength, "no"))
 			{
 				return kHudsonRefusedFilmUnknown;
+			}
+		}
+		else if (WordIs(place, nameLength, "pagehold"))
+		{
+			if (seenPageHold)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenPageHold = true;
+
+			if (!ReadNumber(value, valueLength, &plan->pageHoldSeconds))
+			{
+				return kHudsonRefusedPageHoldNotANumber;
+			}
+
+			if (plan->pageHoldSeconds < 1 || plan->pageHoldSeconds > kHudsonMostPageHoldSeconds)
+			{
+				return kHudsonRefusedPageHoldOutOfRange;
 			}
 		}
 		else if (WordIs(place, nameLength, "lamp"))
@@ -2070,17 +2229,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedRemoteRelayEmpty;
 			}
 
-			if (valueLength > kHudsonLongestRelayName)
+			if (valueLength > kHudsonLongestRelayAddress)
 			{
 				return kHudsonRefusedRemoteRelayTooLong;
 			}
 
-			// A server's name, in small letters. networking.cpp checks it again as one (Relay_IsServerName): nothing on the command line is believed.
+			// An address's digits and dots (modified 2026-11-10 by Melanikus for the AvP port, #175: a servers.cfg line's address, never a
+			// name). networking.cpp reads it again as one plain IPv4 address: nothing on the command line is believed.
 			for (size_t i = 0; i < valueLength; i++)
 			{
 				char const c = value[i];
 
-				if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.'))
+				if (!((c >= '0' && c <= '9') || c == '.'))
 				{
 					return kHudsonRefusedRemoteRelayCharacter;
 				}
@@ -2571,14 +2731,15 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	// A run that shares the machine films itself unless it says otherwise, because the user wants to see them, and it only reads what's already drawn, so it can't spoil a run that compares pictures. There are two ways to say no: film=no, and record=numbers,
 	// which means numbers and nothing else. A run that measures time has no film, because a film slows the frames it records, and asking for one by name there is refused just below.
-	if (plan->recordVideo && seenFilm)
+	// film=menus asks for a film too, one that starts at the menus, so only film=no is the other way round from record=video
+	if (plan->recordVideo && seenFilm && !plan->filmMenus)
 	{
 		return kHudsonRefusedFilmBothWays;
 	}
 
 	bool const saidOnlyNumbers = seenRecord && !plan->pictures && !plan->recordVideo;
 
-	if (plan->machineShared && !seenFilm && !saidOnlyNumbers)
+	if (plan->machineShared && (!seenFilm || plan->filmMenus) && !saidOnlyNumbers)
 	{
 		plan->recordVideo = true;
 	}
@@ -2586,6 +2747,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->recordVideo && !plan->machineShared)
 	{
 		return kHudsonRefusedVideoMeasuresTime;
+	}
+
+	// film=menus: a run with no film (one that measures time, or says record=numbers) has nothing to start at the menus. pagehold= only
+	// holds the pages for that film. Added 2026-11-10 by Melanikus (Third) for the AvP port
+	if (plan->filmMenus && !plan->recordVideo)
+	{
+		return kHudsonRefusedFilmMenusWithoutFilm;
+	}
+
+	if (seenPageHold && !plan->filmMenus)
+	{
+		return kHudsonRefusedPageHoldWithoutFilmMenus;
 	}
 
 	if (plan->breakVideo && !plan->recordVideo)
@@ -2867,9 +3040,58 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedAnswerAfterWithoutAnswer;
 	}
 
+	// #195 (added 2026-11-10 by Melanikus (Third) for the AvP port): answer= presses the host's rows when a player asks to join, and
+	// -relayhost lets every joiner in without asking (relay_auto.cpp), so those rows would never come. Which won used to depend on which
+	// was read last (-relayhost, in winmain.cpp), and the run said nothing. A host that answers is started with -askjoiners, which hosts
+	// the same way and asks (relay_auto.h); -relayhost with -askjoiners asks too.
+	if (plan->answerPress != kHudsonAnswerNone && CommandLineHasWord(commandLine, "-relayhost") && !CommandLineHasWord(commandLine, "-askjoiners"))
+	{
+		return kHudsonRefusedAnswerWithRelayHost;
+	}
+
 	if (seenFindGames && plan->netMode != kHudsonNetJoin)
 	{
 		return kHudsonRefusedFindGamesWithoutJoin;
+	}
+
+	// yespage= and hostrow= (added 2026-11-10 by Melanikus (Third) for the AvP port): the yes page opens at an access run's first press,
+	// Online access (a new identity sends nothing, so it has no yes to ask); and a host through the rows is a deathmatch host's, which
+	// neither hosts by itself as the menus start (relay_auto.h) nor plays a campaign
+	if (seenYesPage && plan->accessPress != kHudsonAccessRequest && plan->accessPress != kHudsonAccessCheck)
+	{
+		return kHudsonRefusedYesPageWithoutAccess;
+	}
+
+	if (seenHostRow && plan->netMode != kHudsonNetHost)
+	{
+		return kHudsonRefusedHostRowWithoutHost;
+	}
+
+	if (seenHostRow && (CommandLineHasWord(commandLine, "-relayhost") || CommandLineHasWord(commandLine, "-askjoiners")))
+	{
+		return kHudsonRefusedHostRowWithRelayAuto;
+	}
+
+	if (seenHostRow && plan->coop)
+	{
+		return kHudsonRefusedHostRowWithCoop;
+	}
+
+	// hoston= and joinon= (added 2026-11-11 by Melanikus (Third) for the AvP port): a host through the rows names its server, as nothing is
+	// chosen for a player ("No auto choice, they choose"), and each name is for the one way in that chooses one
+	if (seenHostRow && !seenHostOn)
+	{
+		return kHudsonRefusedHostRowWithoutHostOn;
+	}
+
+	if (seenHostOn && !seenHostRow)
+	{
+		return kHudsonRefusedHostOnWithoutHostRow;
+	}
+
+	if (seenJoinOn && !plan->findGames)
+	{
+		return kHudsonRefusedJoinOnWithoutFindGames;
 	}
 
 	if (seenSiegeFrom && !seenSiege)
@@ -3260,6 +3482,14 @@ void HudsonPlan_WindowPart(int areaLeft, int areaTop, int areaWidth, int areaHei
 	*top = areaTop;
 	*width = big ? bigWidth : areaWidth - bigWidth;
 	*height = areaHeight;
+}
+
+bool HudsonPlan_SmokeSpotIsGood(bool floorHit, int floorBelow, bool ceilingHit, int ceilingAbove, bool wayClear)
+{
+	bool const standsOnSomething = floorHit && floorBelow >= 0 && floorBelow <= kHudsonSmokeMostDrop;
+	bool const hasRoom = !ceilingHit || ceilingAbove >= kHudsonSmokeLeastHeadroom;
+
+	return standsOnSomething && hasRoom && wayClear;
 }
 
 int HudsonPlan_SmokeVerdict(const HudsonSmokeFacts &facts, const char **why)

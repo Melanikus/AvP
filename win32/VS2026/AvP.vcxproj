@@ -249,8 +249,24 @@
       <OutputFile>.\Release/AvP.bsc</OutputFile>
     </Bscmake>
   </ItemDefinitionGroup>
+  <!-- Online play is a build's choice (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-9, "Online off in
+       beta.2"): only a build asked for with /p:AvpxOnlinePlay=1 gets AVPX_ONLINE_PLAY, and only such a build reads servers.cfg
+       (3dc/relay_list.cpp, ThisBuildPlaysOnline). Our own builds for online test runs ask for it. No workflow and no packaging script
+       ever does, so no published build plays online; tools/check-online-play.ps1, rule O, holds that. -->
+  <ItemDefinitionGroup Condition="'$(AvpxOnlinePlay)'=='1'">
+    <ClCompile>
+      <PreprocessorDefinitions>AVPX_ONLINE_PLAY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_view.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_build.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_guide.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_level.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp" />
+    <ClCompile Include="..\..\3dc\avp\npc_grid.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_agun.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_ais.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_alien.cpp" />
@@ -379,8 +395,10 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\mp_config.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\host_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp" />
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_page.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\server_yes_page.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\user_profile.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.cpp" />
@@ -471,6 +489,10 @@
     <ClCompile Include="..\..\3dc\net_crypto_cng.cpp" />
     <ClCompile Include="..\..\3dc\net_identity_store.cpp" />
     <ClCompile Include="..\..\3dc\net_handshake_a.cpp" />
+    <ClCompile Include="..\..\3dc\servers_cfg.cpp" />
+    <ClCompile Include="..\..\3dc\servers_cfg_file.cpp" />
+    <ClCompile Include="..\..\3dc\servers_trust.cpp" />
+    <ClCompile Include="..\..\3dc\net_server_key.cpp" />
     <ClCompile Include="..\..\3dc\net_pq_native.cpp" />
     <ClCompile Include="..\..\3dc\pq_key_exchange.cpp" />
     <ClCompile Include="..\..\3dc\pq_signature_check.cpp" />
@@ -559,6 +581,19 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
+    <ClInclude Include="..\..\3dc\avp\floor_is_lava.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_view.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_build.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_level.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_lookahead.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_stuck.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_map.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_claims.h" />
+    <ClInclude Include="..\..\3dc\avp\npc_grid.h" />
+    <ClInclude Include="..\..\3dc\avp\npc_grid_pieces.h" />
+    <ClInclude Include="..\..\3dc\avp\npc_grid_smooth.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
     <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h" />
@@ -622,6 +657,7 @@
     <ClInclude Include="..\..\3dc\avp\hmodel.h" />
     <ClInclude Include="..\..\3dc\avp\model_needs.h" />
     <ClInclude Include="..\..\3dc\avp\save_checks.h" />
+    <ClInclude Include="..\..\3dc\avp\save_level_record.h" />
     <ClInclude Include="..\..\3dc\avp\huddefs.h" />
     <ClInclude Include="..\..\3dc\avp\campaign_kit.h" />
     <ClInclude Include="..\..\3dc\avp\inventory.h" />
@@ -705,9 +741,13 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\mp_config.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page_rules.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page_rules.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_page.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_rules.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h" />
     <ClInclude Include="..\..\3dc\coop_lobby.h" />
     <ClInclude Include="..\..\3dc\custom_map_name.h" />
@@ -753,6 +793,11 @@
     <ClInclude Include="..\..\3dc\net_identity_store.h" />
     <ClInclude Include="..\..\3dc\net_identity_run.h" />
     <ClInclude Include="..\..\3dc\net_handshake_a.h" />
+    <ClInclude Include="..\..\3dc\servers_cfg.h" />
+    <ClInclude Include="..\..\3dc\servers_cfg_file.h" />
+    <ClInclude Include="..\..\3dc\servers_trust.h" />
+    <ClInclude Include="..\..\3dc\net_server_fingerprint.h" />
+    <ClInclude Include="..\..\3dc\net_server_key.h" />
     <ClInclude Include="..\..\3dc\net_handshake_b.h" />
     <ClInclude Include="..\..\3dc\net_sealed_game.h" />
     <ClInclude Include="..\..\3dc\net_peer_v2.h" />

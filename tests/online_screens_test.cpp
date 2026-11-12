@@ -195,6 +195,53 @@ static void TestSafeNames()
 	Check(to[0] == '\0', "no name at all gives an empty one");
 }
 
+// ---- The level column. Added 2026-11-10 by Melanikus for the AvP port (PO's ruling): a co-op game on one of the 32 campaign places is
+// named by the game, never by its host. Where the page works out which game that is, is read from its source (TestWhereTheyAreDrawn).
+
+static void TestTheLevelColumn()
+{
+	puts("The level column");
+
+	char words[64];
+
+	OnlineScreens_LevelWords("Derelict", "Stranded", 40, words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "a campaign level's own name is shown, and the name its host sent isn't");
+
+	char const hostile[] = { 'E', 'v', 'i', 'l', 10, 27, '%', 's', 0 };
+	OnlineScreens_LevelWords("Derelict", hostile, sizeof(hostile), words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "whatever the host sent, letters a screen can't show included");
+
+	OnlineScreens_LevelWords("Derelict", "", 40, words, sizeof(words));
+	Check(strcmp(words, "Derelict") == 0, "and when it sent nothing, as an honest host does for a campaign level, there's no \"-\"");
+
+	// The game's own words come from language.txt, a file a player can change, so they're made safe like any name
+	OnlineScreens_LevelWords("Der\x1b" "elict", "", 40, words, sizeof(words));
+	Check(strcmp(words, "Der?elict") == 0, "a campaign name is made safe too");
+
+	OnlineScreens_LevelWords("", "Stranded", 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "and a campaign place with no name of its own shows \"-\", still never the host's");
+
+	OnlineScreens_LevelWords(NULL, hostile, sizeof(hostile), words, sizeof(words));
+	Check(strcmp(words, "Evil??%s") == 0, "any other game shows the name its host sent, made safe");
+
+	OnlineScreens_LevelWords(NULL, "", 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "and \"-\" when the host sent none");
+
+	OnlineScreens_LevelWords(NULL, NULL, 40, words, sizeof(words));
+	Check(strcmp(words, "-") == 0, "or no name at all");
+
+	char const noEnd[9] = { 'H', 'a', 'd', 'l', 'e', 'y', 'X', 'Y', 0 };
+	OnlineScreens_LevelWords(NULL, noEnd, 6, words, sizeof(words));
+	Check(strcmp(words, "Hadley") == 0, "a host's name with no 0 is read no further than the bytes it's given");
+
+	OnlineScreens_LevelWords("Derelict", NULL, 0, words, 4);
+	Check(strcmp(words, "Der") == 0, "a name longer than its room is cut, and ends with a 0");
+
+	words[0] = 'Q';
+	OnlineScreens_LevelWords("Derelict", "Stranded", 40, words, 0);
+	Check(words[0] == 'Q', "a room of no bytes isn't written at all");
+}
+
 // Every letter 10 wide and a dot 4, and a note of the lowest letter number asked about
 static int lowestLetterAsked = 1000;
 
@@ -479,6 +526,11 @@ static void TestPingAndWaits()
 
 	OnlineScreens_PingWords(true, -1, 30, words, sizeof(words));
 	Check(strcmp(words, "?") == 0, "until the joiner has timed the relay, the ping is a question mark");
+	// Added 2026-11-10 by Melanikus for the AvP port (PO's ruling): while the games page is timing the relay, three dots
+	OnlineScreens_PingWords(true, kOnlineJoinerMsMeasuring, 30, words, sizeof(words));
+	Check(strcmp(words, "...") == 0, "while the games page is timing the relay, the ping is three dots");
+	OnlineScreens_PingWords(true, -3, 30, words, sizeof(words));
+	Check(strcmp(words, "?") == 0, "and any other time below 0 is still a question mark");
 
 	OnlineScreens_PingWords(true, 40, 30, words, sizeof(words));
 	Check(strcmp(words, "about 70 ms") == 0, "a relay game's ping is the joiner's time to the relay and the host's, added");
@@ -702,6 +754,18 @@ static void TestWhereTheyAreDrawn()
 		"over the games the search lets through, going to Refresh when there are none");
 	std::string const opened = SourceSlice(page, "void OnlinePage_Opened(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(opened, "lastGameKept = false;"), "a page just opened forgets the game last selected");
+
+	// The level column (added 2026-11-10 by Melanikus for the AvP port, PO's ruling). A co-op game is on a campaign place when its number
+	// is one of the 32 on the co-op list, and the name comes from the co-op pages' own list for that place. Nothing else writes the column.
+	std::string const rows = SourceSlice(page, "static int LiveRows(OnlineRow *rows, int most)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(rows, "bool const onACampaign = session.gameStyle == NGT_Coop &&\n\t\t\tLevelList_CampaignAt(session.levelIndex, "
+		"MAX_NO_OF_COOPERATIVE_EPISODES, &campaign, &campaignLevel);"),
+		"a game is on a campaign place only when it's a co-op game and its number is one of the 32 on the co-op list");
+	Check(Has(rows, "OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName, "
+		"sizeof(session.levelName),\n\t\t\trow.level, sizeof(row.level));"),
+		"and then the column shows the co-op pages' own name for that place, and the host's name for any other game");
+	// (on the rows' code itself: an empty slice would have nothing in it to find, and pass)
+	Check(rows.size() > 500 && !Has(rows, "OnlineScreens_SafeName(session.levelName"), "the host's level name reaches the column by no other way");
 }
 
 // ---- The check code (protocol version 2, CRYPTO.md section 8). Added 2026-11-09 by Melanikus for the AvP port. It reads the source with
@@ -766,7 +830,7 @@ static void TestTheCheckCode()
 
 	std::string const joiner = Between(page, "static void DrawTheCheckCode(void)", "\n}\n");
 	Check(Has(joiner, "if (!Net_RelayCheckCodeNow(digits))") && Has(joiner, "OnlineScreens_CheckCodeWords(digits, line, sizeof(line));") &&
-		Has(joiner, "Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans)"), "a joiner's own code is shown, with what it's for, once its handshake has made one");
+		Has(joiner, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans)"), "a joiner's own code is shown, with what it's for, once its handshake has made one");
 
 	std::string const asking = Between(page, "bool OnlinePage_DrawAsking(void)", "\n}\n");
 	size_t const firstDraw = asking.find("DrawTheCheckCode();");
@@ -780,6 +844,19 @@ static void TestTheCheckCode()
 		Has(menus, "if (checkCodeLine[0])\n\t\t{\n\t\t\tRenderSmallMenuText(checkCodeLine, MENU_CENTREX, 58,") &&
 		Has(menus, "OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost)"), "and it's shown under the asking line, with what it's for");
 
+	// Beta.2 (the owner's ruling, 2026-11-09): friends compare it outside the game, never in its chat, which runs over the very connection
+	// the code checks; a stranger may go on without comparing, and is told what that means, on both screens. Added by Melanikus.
+	Check(strstr(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), "by voice or Discord, never in the game's chat") != NULL &&
+		strstr(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), "by voice or Discord, never in the game's chat") != NULL,
+		"the code is compared by voice or Discord, never in the game's own chat");
+	Check(strcmp(OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+		"Not comparing is your choice: the game is still encrypted, but someone in the middle can't be ruled out") == 0,
+		"and a stranger who doesn't compare it is told what that means");
+	// Modified 2026-11-10 by Melanikus for the AvP port: both texts are drawn by OnlinePage_DrawCheckCodeHelp now, the second under the first
+	Check(Has(joiner, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),") &&
+		Has(menus, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),"),
+		"on both screens, under what the code is for");
+
 	// And nothing covers it. The relay's news on the co-op host page waits while a join request's rows are up, its 8 s starting again, and
 	// is shown once they've gone, where the asking line was (Secondary's second dry run of the weekend, R1-4: it was drawn at y 56, over
 	// the code at 58). Added 2026-11-09 by Melanikus for the AvP port.
@@ -792,15 +869,196 @@ static void TestTheCheckCode()
 		Has(menus, "OnlineHost_NewsLine(relayNews, sizeof(relayNews), answering))\n\t{\n\t\tRenderSmallMenuText(relayNews, MENU_CENTREX, 40,"),
 		"so the co-op host page holds it back while it answers, and never draws it over the check code");
 
-	std::string const ended = Between(page, "bool OnlinePage_JoinEnded(void)", "\n}\n");
-	Check(Has(ended, "case kNetJoinAnswerOtherBuild:\n\t\t\tSayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));"),
-		"a host that's another test build of the v2 draft is said so, not taken for a join that just failed");
+	// (Removed 2026-11-10 by Melanikus for the AvP port, #175 PR 3a: the answer for a host that's another test build of the v2 draft went
+	// with the draft's same-commit rule.)
+}
+
+// The check code's two help lines (online_screens.h, OnlineScreens_HelpLines). Added 2026-11-10 by Melanikus for the AvP port, after the
+// owner's showcase pictures: they were drawn 10 apart in the small font, which is 15 high, so they lay on each other, on the joining page
+// and on the host's "asks to join" rows.
+static void TestTheHelpLines()
+{
+	puts("The check code's help lines");
+
+	bool apart = true;
+	bool inside = true;
+	bool wholeWhenThereIsRoom = true;
+	bool secondCutFirst = true;
+	int const codeTops[] = { 58, 320 };
+	int const limits[] = { 196, 300, kOnlineHelpPageBottom };
+
+	for (int top : codeTops)
+	{
+		for (int limit : limits)
+		{
+			// A limit with no room for the code's line and a gap under it isn't one a page has
+			if (limit < top + kOnlineHelpLineHeight + kOnlineHelpCodeGap + kOnlineHelpGap)
+			{
+				continue;
+			}
+
+			for (int first = -1; first <= 6; first++)
+			{
+				for (int second = -1; second <= 6; second++)
+				{
+					OnlineHelpLines const at = OnlineScreens_HelpLines(top, first, second, limit);
+					int const wantFirst = first < 0 ? 0 : first;
+					int const wantSecond = second < 0 ? 0 : second;
+
+					// A small line's height at least between each, so no line lies on another
+					apart = apart && at.firstTop >= top + kOnlineHelpLineHeight && at.firstLines >= 0 && at.secondLines >= 0 &&
+						at.secondTop >= at.firstTop + at.firstLines * kOnlineHelpLineHeight + 1 &&
+						at.bottom == at.secondTop + at.secondLines * kOnlineHelpLineHeight;
+					inside = inside && at.bottom <= limit && at.firstLines <= wantFirst && at.secondLines <= wantSecond;
+
+					bool const fits = at.firstTop + (wantFirst + wantSecond) * kOnlineHelpLineHeight + kOnlineHelpGap <= limit;
+					wholeWhenThereIsRoom = wholeWhenThereIsRoom && (!fits || (at.firstLines == wantFirst && at.secondLines == wantSecond));
+					secondCutFirst = secondCutFirst && (at.firstLines == wantFirst || at.secondLines == 0);
+				}
+			}
+		}
+	}
+
+	Check(apart, "the code's line, the first help text and the second each sit under the one before, a small line apart at least: none lies on another");
+	Check(inside, "nothing goes past the limit, the joining page's help line or the host's answer rows");
+	Check(wholeWhenThereIsRoom, "both are drawn whole when there's room");
+	Check(secondCutFirst, "and when there isn't, the second is cut first");
+
+	// The box: the widest is the menus' own edges, and a narrower one sits in its middle, never past them (the owner, 2026-11-10: "so each
+	// text fits whole", with no last word on a line of its own)
+	bool centred = true;
+
+	// Modified 2026-11-10 by Melanikus for the AvP port (a red take-out row, a21cf0ef's row 99): the two gaps, left and right, are held to
+	// within a pixel of each other either way. The check before allowed any left gap smaller than the right, so a box put at the left
+	// edge passed it.
+	for (int width = -1; width <= 700; width++)
+	{
+		int const left = OnlineScreens_HelpBoxLeft(width);
+		int const used = width <= 0 || width > kOnlineHelpRight - kOnlineHelpLeft ? kOnlineHelpRight - kOnlineHelpLeft : width;
+		int const gapsDiffer = (left - kOnlineHelpLeft) - (kOnlineHelpRight - (left + width));
+		centred = centred && left >= kOnlineHelpLeft && left + used <= kOnlineHelpRight &&
+			(width <= 0 || width >= kOnlineHelpRight - kOnlineHelpLeft || (gapsDiffer <= 1 && gapsDiffer >= -1));
+	}
+
+	Check(OnlineScreens_HelpBoxLeft(400) == 120 && OnlineScreens_HelpBoxLeft(579) == 30 && OnlineScreens_HelpBoxLeft(1) == 319,
+		"a text 400 wide starts at 120, half of what's left either side; 579 wide at 30; 1 wide at 319");
+
+	Check(kOnlineHelpLeft == 30 && kOnlineHelpRight == 610, "the widest the help texts may be is the menus' own edges, 30 to 610");
+	Check(centred, "and a text wrapped narrower sits in their middle, never past them");
+
+	// The two places as they are: two lines each at the most, as each text takes between those edges, fit whole under the joiner's code
+	// (at kWordsTop + 50, 320) above the page's help line, and under the host's (at 58) above its answer rows, which start lower than 200
+	OnlineHelpLines const joiner = OnlineScreens_HelpLines(320, 2, 2, kOnlineHelpPageBottom);
+	OnlineHelpLines const host = OnlineScreens_HelpLines(58, 2, 2, 196);
+	Check(joiner.firstLines == 2 && joiner.secondLines == 2 && host.firstLines == 2 && host.secondLines == 2,
+		"the joining page and the host's rows have room for both texts at two lines each");
+
+	// And the game draws them that way, by reading its source
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const joinerDraws = Between(page, "static void DrawTheCheckCode(void)", "\n}\n");
+	Check(Has(joinerDraws, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),\n\t\t\tkWordsTop + 50, kOnlineHelpPageBottom);") &&
+		!Has(joinerDraws, "kWordsTop + 70") && !Has(joinerDraws, "kWordsTop + 80"),
+		"the joining page draws both through the rule, under its code at kWordsTop + 50, and no longer 10 apart");
+	Check(Has(menus, "OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeansHost), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),\n\t\t\t\t58, y - kOnlineHelpGap);") &&
+		!Has(menus, "MENU_CENTREX, 74, ONE_FIXED / 2") && !Has(menus, "MENU_CENTREX, 84, ONE_FIXED / 2"),
+		"and so does the host's, under its code at 58, above its answer rows");
+	std::string const helpers = Between(page, "void OnlinePage_DrawCheckCodeHelp(", "\n}\n");
+	// (OnlinePage_BalancedWidth since 2026-11-10, when the yes page came to share it: online_screens_page.h)
+	Check(Has(helpers, "int const firstWidth = first ? OnlinePage_BalancedWidth(first, widest) : widest;") &&
+		Has(helpers, "int const secondWidth = second ? OnlinePage_BalancedWidth(second, widest) : widest;") &&
+		Has(helpers, "SmallFontString_WrappedLines(first, firstWidth)") && Has(helpers, "SmallFontString_WrappedLines(second, secondWidth)") &&
+		Has(page, "int const left = OnlineScreens_HelpBoxLeft(width);\n\tRECT area = { left, top, left + width, top + lines * kOnlineHelpLineHeight };"),
+		"each text is wrapped to the narrowest width that keeps its lines, its lines counted by the wrapping rule itself, and drawn into a box that tall, in the middle");
+	std::string const balanced = Between(page, "int OnlinePage_BalancedWidth(const char *text, int widest)", "\n}\n");
+	Check(Has(balanced, "if (SmallFontString_WrappedLines(text, middle) == lines)\n\t\t{\n\t\t\twide = middle;") && Has(balanced, "return wide;"),
+		"and that width is the narrowest found to keep as many lines as the widest gives");
+	Check(Has(menus, "area.top    = 420;") && kOnlineHelpPageBottom == 420, "the joining page's limit is where the menus draw their help line, 420");
+}
+
+// The join's own frames (#202, Third's read of 2026-11-10: every Hudson join through Find Games logged D3DERR_INVALIDCALL from BeginScene
+// once, right after the list's game was pressed). A player's Enter starts the join inside the menus' open frame; a Hudson run presses the
+// row between frames. The wait closes a frame only if one is open, and gives back only a frame it closed, so whichever way the join began,
+// no frame is ever begun inside another. Read in the source, since it needs the game. Added 2026-11-10 by Melanikus for the AvP port.
+static void TestTheJoinsFrames()
+{
+	puts("The join's own frames");
+
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const render = ReadSource("3dc/d3d_render.cpp");
+	std::string const drawing = Between(page, "void OnlinePage_DrawJoining(const char *region)", "\n}\n");
+	std::string const over = Between(page, "void OnlinePage_JoinWaitOver(void)", "\n}\n");
+
+	size_t const asked = drawing.find("joinClosedAFrame = ThisFramesRenderingIsOpen();");
+	size_t const closed = drawing.find("if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasFinished();\n\t\t}");
+	size_t const begun = drawing.find("ThisFramesRenderingHasBegun();");
+	Check(asked != std::string::npos && closed != std::string::npos && asked < closed && closed < begun,
+		"the join's wait closes the frame that was open when it began, and only if one was, before it begins a frame of its own");
+	Check(Has(over, "if (joinClosedAFrame)\n\t\t{\n\t\t\tThisFramesRenderingHasBegun();\n\t\t\tDrawMainMenusBackdrop();\n\t\t}") &&
+		Has(over, "joinClosedAFrame = false;"), "and when it's over it gives back only a frame it closed");
+	Check(Has(render, "bool ThisFramesRenderingIsOpen()\n{\n\treturn frameIsOpen;\n}"), "whether a frame is open is the renderer's own word on it");
+}
+
+// A join refused before anything is opened (#188, PO's ruling Q4; modified 2026-11-10 by Melanikus for the AvP port, the owner's ruling
+// for beta.2: "Everything over nyc3"): a game that isn't through a server's relay is plain, and refused, and the games page says why, in
+// the networking code's own fixed words. They're longer than a line, so the page's failure line takes two. A typed address's refusal went
+// with the typed address. Read in the code, as the page needs the whole game.
+static void TestTheHomeRefusals()
+{
+	puts("a join refused for not going through the relay, said on the games page (by reading the source)");
+	std::string const menus = ReadSource("3dc/avp/win95/frontend/menus.cpp");
+	std::string const page = ReadSource("3dc/avp/win95/frontend/online_screens_page.cpp");
+	std::string const names = ReadSource("3dc/avp/language.cpp");   // the game's own words (added 2026-11-11)
+	Check(menus.size() > 1000 && page.size() > 1000 && names.size() > 1000, "the menus', the page's and the words' sources were found and read");
+
+	std::string const joining = SourceSlice(menus, "NetResult const joined = Net_ConnectToSession(s, MP_PlayerName);", "\n\t\t\tbreak;\n", kSliceEndAfterTheStart, FailedSlice);
+	size_t const refused = joining.find("else if (Net_JoinRefusedWhy()) {");
+	Check(refused != std::string::npos && refused > joining.find("else if (SessionData[s].throughRelay) {") &&
+		Has(joining, "OnlinePage_JoinFailed(Net_JoinRefusedWhy());"), "a join the networking code refused says why on the page");
+
+	std::string const top = SourceSlice(page, "void OnlinePage_DrawTop(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(!Has(page, "Net_TypedAddressRefusedWhy") && !Has(page, "typedRefused"), "and there's no typed address's refusal to show any more");
+
+	Check(Has(page, "static char failedLine[200];") && Has(page, "void OnlinePage_JoinFailed(const char *why)\n{\n\tchar safe[160];") &&
+		Has(top, "int linesTop = kFirstRowTop + (visibleCount > 0 ? visibleCount : 1) * kRowStep + 14;") && Has(top, "WrappedWords(failedLine, linesTop, 2, ONE_FIXED);"),
+		"the page's failure line has room for those words, and two lines to draw them in");
+
+	// Every line without games on the list says why, by its own name (added 2026-11-11 by Melanikus for the AvP port: "Nobody blocked
+	// silently", and every server through the same page)
+	std::string const stands = SourceSlice(page, "bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(stands, "case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;") && Has(stands, "case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;") &&
+		Has(stands, "case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;") && Has(stands, "case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;") &&
+		Has(stands, "words = now.access != kRelayAccessIsApproved ? TEXTSTRING_NOTAPPROVED_BEFORE : now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;"),
+		"NOBODY BLOCKED SILENTLY: a line with no yes, being asked, with no answer, not asked, not approved, or approved with no games up each has its words");
+	// Modified 2026-11-11 by Melanikus for the AvP port (hash 2): a line not approved yet is said in PO's ruling's words (R-SRV-P3), "Not
+	// approved on <name> yet: ask on the Online page", the name between the two parts and never inside a printf form
+	Check(Has(stands, "_snprintf(out, size - 1, \"%s%s%s%s\", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);") &&
+		Has(names, "\"Not approved on \",\n\t\" yet: ask on the Online page\","),
+		"a line not approved yet: \"Not approved on <name> yet: ask on the Online page\", in PO's words (R-SRV-P3)");
+	// Added 2026-11-11 by Melanikus for the AvP port (the owner: "We should show the server ping to the user if no games are up"): every
+	// line's words end with its own ping when its last visit measured one, in the host page's words, so an approved line with no games still
+	// shows its server's round trip
+	size_t const pingMade = stands.find("HostPage_PingWords(now.pingMs, now.state, GetTextString(TEXTSTRING_HOSTPAGE_MS), GetTextString(TEXTSTRING_PING_ASKING), measured, sizeof(measured));");
+	Check(Has(stands, "if (now.pingMs >= 0)\n\t{") && pingMade != std::string::npos && pingMade < stands.find("if (words == TEXTSTRING_NOTAPPROVED_BEFORE)") &&
+		Has(stands, "snprintf(ping, sizeof(ping), \" - %s\", measured);") &&
+		Has(stands, "_snprintf(out, size - 1, \"%s: %s%s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), ping);") &&
+		Has(names, "\"no games up yet\","), "AN APPROVED LINE WITH NO GAMES SHOWS ITS PING: \"<name>: no games up yet - 42 ms\", and every line's words carry its ping once measured");
+	Check(Has(stands, "OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));") &&
+		Has(stands, "OnlineScreens_SafeName(now.why ? now.why : \"\", sizeof(why), why, sizeof(why));") &&
+		Has(stands, "_snprintf(out, size - 1, \"%s: %s %s\", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);"),
+		"by the line's own name, made safe, with the list's why made safe too, only ever as arguments");
+	Check(Has(top, "if (OnlineScreens_LineStandsWords(place, lineWords, sizeof(lineWords)))") && Has(top, "linesTop + HUD_FONT_HEIGHT <= kLinesBottom"),
+		"and the page draws them under the list, one line each, above the menus' bottom");
+	std::string const wrapped = SourceSlice(page, "static void WrappedWords(const char *text, int top, int lines, int alpha)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(wrapped, "RECT area = { MENU_LEFTXEDGE, top, MENU_RIGHTXEDGE, top + lines * HUD_FONT_HEIGHT };"),
+		"between the menus' edges, as tall as its lines");
 }
 
 int main()
 {
 	TestTheTail();
 	TestSafeNames();
+	TestTheLevelColumn();
 	TestFitting();
 	TestSplitting();
 	TestRows();
@@ -808,7 +1066,10 @@ int main()
 	TestPingAndWaits();
 	TestWords();
 	TestTheCheckCode();
+	TestTheHelpLines();
+	TestTheJoinsFrames();
 	TestWhereTheyAreDrawn();
+	TestTheHomeRefusals();
 
 	if (checksFailed)
 	{

@@ -21,6 +21,7 @@ static double aimDown = 0.0;
 static double followSeconds = kShoulderLampFollowSeconds;
 static double spotSize = kShoulderLampSpotSize;
 static double spotIntensity = kShoulderLampIntensity;
+static int lampLook = kShoulderLampLookAsBuilt;   // LAMPLOOK (shoulder_lamp.h; added 2026-11-11 by Melanikus (Third))
 static float placeFromEyes[3] = { (float)kShoulderLampAcross, (float)kShoulderLampUp, (float)kShoulderLampAhead };
 
 void ShoulderLamp_Toggle()
@@ -73,9 +74,10 @@ long ShoulderLamp_FramesDrawn()
 	return framesDrawn;
 }
 
+// LAMPLOOK 2 keeps it painted, as "Lamps cast shadows" off does (modified 2026-11-11 by Melanikus (Third) for the AvP port)
 bool ShoulderLamp_CanBeALight()
 {
-	return lampIsOn && playerCouldHaveALamp && realLightIsWanted;
+	return lampIsOn && playerCouldHaveALamp && realLightIsWanted && lampLook != kShoulderLampLookPainted;
 }
 
 void ShoulderLamp_SetRealLightWanted(bool wanted)
@@ -299,12 +301,38 @@ bool ShoulderLamp_IntensityFromWords(const char *words, unsigned int length, dou
 
 bool ShoulderLamp_PutSpotBack()
 {
-	bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;
+	bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;
 
 	spotSize = kShoulderLampSpotSize;
 	spotIntensity = kShoulderLampIntensity;
+	lampLook = kShoulderLampLookAsBuilt;
 
 	return wasChanged;
+}
+
+// Added 2026-11-11 by Melanikus (Third) for the AvP port: LAMPLOOK (shoulder_lamp.h)
+int ShoulderLamp_Look()
+{
+	return lampLook;
+}
+
+void ShoulderLamp_SetLook(int look)
+{
+	if (look == kShoulderLampLookRealOnly || look == kShoulderLampLookBoth || look == kShoulderLampLookPainted || look == kShoulderLampLookBothFull)
+	{
+		lampLook = look;
+	}
+}
+
+bool ShoulderLamp_LookFromWords(const char *words, unsigned int length, int *look)
+{
+	if (!words || length != 1 || words[0] < '0' || words[0] > '3')
+	{
+		return false;
+	}
+
+	*look = words[0] - '0';
+	return true;
 }
 
 void ShoulderLamp_SpotNumbers(float *four)

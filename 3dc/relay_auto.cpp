@@ -83,118 +83,102 @@ int RelayAuto_Mode(void)
 	return mode;
 }
 
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): a run's host needs a line to host on, as a player
+// chooses one on the Host on row. Nothing chooses for a player; a run is a test of the game, and it chooses the first line that has
+// approved its PC, saying so in its log, once the list's visits have said which those are.
 bool RelayAuto_WaitForRelays(void)
 {
-	LogString("relay auto: asking the list for the relays");
-	RelayList_FindRelays();
+	LogString("relay auto: asking every line for its state, to host on one that has approved this copy");
+	RelayList_FindGames();
 
 	DWORD const started = GetTickCount();
-	RelayListRelay relays[kRelayListMostRelays];
-	int count = 0;
+	int places[kServersCfgMostLines];
 
 	while (GetTickCount() - started < kRelayAutoRelaysWithinMs && KeepAnswering())
 	{
-		if (RelayList_Relays(relays, &count) && count > 0)
+		int const approved = RelayList_ApprovedLines(places, kServersCfgMostLines);
+
+		if (approved > 0 && RelayList_HostOn(places[0]))
 		{
-			LogString("relay auto: the list named " + std::to_string(count) + " relay(s), so this copy hosts through the nearest");
+			LogString("relay auto: this run hosts on servers.cfg's line " + std::to_string(places[0] + 1) + " of the good ones, the first that approved it");
 			return true;
 		}
 
 		Sleep(kRelayAutoWaitMs);
 	}
 
-	LogString("relay auto: no relay came from the list in time, so this copy hosts on this network only");
+	LogString("relay auto: no line approved this copy in time, so it hosts nothing");
 	return false;
 }
 
 int RelayAuto_FindAGame(void)
 {
-	LogString("relay auto: asking the list for games of this version");
-	RelayList_FindRelays();
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): every line's games, and the game is joined through its
+	// own line (its relay comes from that line, so there's nothing more to wait for once the game has come)
+	LogString("relay auto: asking every line for games of this version");
 	RelayList_FindGames();
 
 	DWORD const started = GetTickCount();
 	DWORD askedAt = started;
-	static RelayListGame games[kRelayListMostGames];   // kept off the stack: 100 games are about 25 KB
-	RelayListGame chosen = {};                         // the game picked, kept while its region's relay is waited for
-	bool haveChosen = false;
+	static RelayListServerGame all[kRelayListMostAllGames];   // kept off the stack
+	static RelayListGame games[kRelayListMostAllGames];
 	const char *lastWhy = NULL;
 
 	while (GetTickCount() - started < kRelayAutoGameWithinMs && KeepAnswering())
 	{
 		int count = 0;
-		const char *why = NULL;
 
-		if (!haveChosen && RelayList_FoundGames(games, &count, &why))
+		if (RelayList_FoundAllGames(all, &count))
 		{
-			int const picked = why ? -1 : RelayAuto_PickGame(games, count, Net_OurVersion());
+			int const kept = count < 0 ? 0 : count > kRelayListMostAllGames ? kRelayListMostAllGames : count;
 
-			// The list's answer was refused: its words are the game's own (relay_list.h), said once each time they change
-			if (why && why != lastWhy)
+			for (int i = 0; i < kept; i++)
 			{
-				LogString(std::string("relay auto: the list's answer couldn't be used: ") + why);
-				lastWhy = why;
+				games[i] = all[i].game;
 			}
+
+			int const picked = RelayAuto_PickGame(games, kept, kMultiplayerVersion);
 
 			if (picked >= 0)
 			{
-				chosen = games[picked];
-				haveChosen = true;
-				LogString("relay auto: the list has a game of this version");
-			}
-		}
+				int const line = all[picked].line;
 
-		// The relays come in an answer of their own, which may come after the games' one. The join needs its game's region's relay, so
-		// the game is joined only once that's known (RelayJoin finds it the same way).
-		if (haveChosen)
-		{
-			RelayListRelay relays[kRelayListMostRelays];
-			int relayCount = 0;
-			bool regionKnown = false;
-
-			if (RelayList_Relays(relays, &relayCount))
-			{
-				for (int i = 0; i < relayCount && i < static_cast<int>(kRelayListMostRelays); i++)
-				{
-					regionKnown = regionKnown || strncmp(relays[i].region, chosen.region, sizeof(relays[i].region)) == 0;
-				}
-			}
-
-			if (regionKnown)
-			{
-				if (!Net_AddRelaySession(chosen))
+				if (!Net_AddRelaySession(games[picked], line))
 				{
 					LogString("relay auto: the list's first game of this version couldn't go on the list of sessions");
 					return -1;
 				}
 
-				int const session = Net_FindRelaySession(chosen.region, chosen.code);
-				LogString(session >= 0 ? "relay auto: its relay is known too, so this copy joins it"
+				int const session = Net_FindRelaySession(line, games[picked].region, games[picked].code);
+				LogString(session >= 0 ? "relay auto: a line has a game of this version, so this copy joins it through that line's relay"
 					: "relay auto: the list's game went on the list of sessions, but can't be found there");
 				return session;
 			}
+
+			// No game of this version: each line's state says why, once each time it changes, in the list code's own words
+			for (int place = 0; place < RelayList_LineCount(); place++)
+			{
+				RelayListLineNow now;
+
+				if (RelayList_LineNow(place, &now) && now.state == kRelayLineNoAnswer && now.why && now.why != lastWhy)
+				{
+					LogString(std::string("relay auto: a line's answer couldn't be used: ") + now.why);
+					lastWhy = now.why;
+				}
+			}
 		}
 
-		// Nothing yet, or nothing of this version: the host may still be opening its room, so the list is asked again. Once there's a game,
-		// it's the relays that are asked for again.
+		// Nothing yet, or nothing of this version: the host may still be opening its room, so every line is asked again
 		if (GetTickCount() - askedAt >= kRelayAutoAskAgainMs)
 		{
-			if (haveChosen)
-			{
-				RelayList_FindRelays();
-			}
-			else
-			{
-				RelayList_FindGames();
-			}
-
+			RelayList_FindGames();
 			askedAt = GetTickCount();
 		}
 
 		Sleep(kRelayAutoWaitMs);
 	}
 
-	LogString(haveChosen ? "relay auto: the list's game came, but its region's relay didn't, in time" : "relay auto: no game of this version came from the list in time");
+	LogString("relay auto: no game of this version came from any line in time");
 	return -1;
 }
 

@@ -32,6 +32,12 @@
 //   same letters in it isn't taken for a switch; -ip refuses a word too long to be an address, instead of cutting it short
 //   -staticcomparedrop turns the comparing on itself, as it did when -staticcompare was found inside it
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
+//   -alienways, with -dev, built the alien ways map at each level's start while it was made and filmed. Gone since the flip (2026-11-11):
+//   the ways are on for every player, and the console's FLOORISLAVA OFF puts 1999's aliens back (alien_ways.h)
+//   -alienwaysaim=N, with -dev, says how far along its way an alien aims, in mm, from 0 to 10000; 0 is the aim before the look-ahead
+//   -alienwayswatch=N, with -dev, gives the alien with the guide's place N, from 0 to 63, a line in the log every frame (alien_ways.h)
+//   -alienwaysgrid, with -dev and -alienways, had the aliens search the grid every NPC will share. Gone since the flip: they always do
+//   -alienwaysview, with -dev, draws each alien's way over the level, for films (added 2026-11-11 by Melanikus (Third))
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   -dev -secondcopy: a second copy on the same machine keeps its files in a folder of its own, by a fixed name (save_folder.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
@@ -46,6 +52,7 @@
 //   the log says at the start that NEWDYNAMICCOLLISIONS is on, as every run starts (#180, new_dynamic_collisions.h)
 
 #include "3dc.h"
+#include "alien_ways.h"
 #include "window_slot.h"
 #include "build_identity.h"
 #include "mark_key.h"
@@ -370,10 +377,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			LogString("developer tools: on (-dev)");
 		}
 
-		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -netv2, protocol version 2's draft, for tests only (networking.h). Only
-		// whether the word is there is read; networking.cpp decides whether it counts (with -dev, in a build that knows its commit).
-		NetV2DraftAsked = CommandLineHasWord(command_line, "-netv2");
-
 		// Modified 2026-11-09 by Melanikus for the AvP port: -dev -relayhost and -dev -relayjoin, hosting or joining through the relay on
 		// its own for a test (relay_auto.h). Read once -dev is, since they do nothing without it.
 		RelayAuto_ReadCommandLine(command_line, DevMode != 0);
@@ -450,6 +453,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (devSwitch("-shadownearest"))
 		{
 			ShadowLightsByNearest = 1;
+		}
+		// The alien ways ("For Aliens, Floor is lava", #109) are on for every player since the flip (2026-11-11): each level's start reads
+		// what the console's FLOORISLAVA asked (floor_is_lava.h), and the aliens search the grid (npc_grid.h). -alienways and -alienwaysgrid,
+		// the developer's switches for them while they were made and filmed, are gone. The ones below are still a developer's.
+
+		// Modified 2026-11-08 by Melanikus for the AvP port: the alien's mover on the grid's way (#149, alien_ways.h). It picks one goal for an
+		// alien whatever its state, and heads it straight there when there's no way. Its own switch, so one exe films the grid with and
+		// without it. (Modified 2026-11-11 by Melanikus (Third): the grid is always on since the flip, so it needs only -dev.)
+		if (devSwitch("-alienwaysmover"))
+		{
+			AlienWaysMoverSwitchedOn = 1;
+			LogString("alien ways: the mover picks where each alien heads, the same whatever its state, and heads it straight there with no way (-alienwaysmover)");
+		}
+
+		// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): the developer's view of the aliens' ways,
+		// coloured lines through the level (alien_ways_view.h), drawn only when asked for, so it stays a filming tool now the ways are on for
+		// every player. It needs nothing else: it draws only the guide's ways, and with FLOORISLAVA OFF there are none. (Whether this
+		// level has the ways can't be asked here, as it's only known once a level starts: modified 2026-11-11 by Melanikus (Third), the flip.)
+		if (devSwitch("-alienwaysview"))
+		{
+			AlienWaysViewSwitchedOn = 1;
+			LogString("alien ways: each alien's way is drawn over the level (-alienwaysview)");
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))
@@ -551,6 +576,46 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			else
 			{
 				LogString("shadows: -shadowbiassteps needs a number from 1 to 64, so it was ignored");
+			}
+		}
+		// How far along its way an alien aims, so it curves round bends (alien_ways.h). Anything but a whole number from 0 to 10000 leaves it
+		// at 1.5 m; 0 aims at the way's next point, as before, so a film can compare the two.
+		char const *aimSwitch = devNumber("-alienwaysaim=");
+		if (aimSwitch)
+		{
+			char const *number = aimSwitch + strlen("-alienwaysaim=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 0 && asked <= kAlienWaysAimMostAheadMm)
+			{
+				AlienWaysAimAheadMm = (int)asked;
+				LogString("alien ways: an alien aims " + std::to_string(asked) + " mm along its way (-alienwaysaim)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwaysaim needs a whole number from 0 to 10000, so it was ignored");
+			}
+		}
+		// One alien, by the guide's place for it, gets a line in the log every frame: what its state did, whether its way steered it, its grip
+		// and the marine scent round it (alien_ways.h). Off unless asked. Anything but a whole number from 0 to 63 leaves it off.
+		char const *watchSwitch = devNumber("-alienwayswatch=");
+		if (watchSwitch)
+		{
+			char const *number = watchSwitch + strlen("-alienwayswatch=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 0 && asked <= kAlienWaysMostWatchPlace)
+			{
+				AlienWaysWatchPlace = (int)asked;
+				LogString("alien ways: the alien with the guide's place " + std::to_string(asked) + " is watched every frame (-alienwayswatch)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwayswatch needs a whole number from 0 to 63, so it was ignored");
 			}
 		}
 		extern int KeptSnap;

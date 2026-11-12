@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a file cut short is read",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\t\tif (end == bytes)\n\t\t{\n\t\t\tif (badLine) { *badLine = lineNumber; }\n\t\t\treturn kServersTrustBadLine;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a capital hex digit is taken",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\tint HexValue(char c)\n\t{\n",
+					"to": "\tint HexValue(char c)\n\t{\n\t\tif (c >= 'A' && c <= 'F')\n\t\t{\n\t\t\treturn c - 'A' + 10;\n\t\t}\n\n"
+				}
+			]
+		},
+		{
+			"name": "the same yes twice is taken",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\t\t\tif (ServersTrust_Has(read, hash))\n\t\t\t{",
+					"to": "\t\t\tif (false)\n\t\t\t{"
+				}
+			]
+		},
+		{
+			"name": "a file bigger than the game writes is read",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "if (bytes > static_cast<size_t>(kServersTrustMostBytes))",
+					"to": "if (bytes > static_cast<size_t>(2 * kServersTrustMostBytes))"
+				}
+			]
+		},
+		{
+			"name": "a return inside a line is taken",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "if (!((c >= 32 && c <= 126) || (c == '\\t' && size > 0 && line[0] == '#')))",
+					"to": "if (!((c >= 32 && c <= 126) || c == '\\r' || (c == '\\t' && size > 0 && line[0] == '#')))"
+				}
+			]
+		},
+		{
+			"name": "a yes leaves out the relay's port",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\tout[at++] = static_cast<uint8_t>(relayPort >> 8);",
+					"to": "\tout[at++] = 0;"
+				}
+			]
+		},
+		{
+			"name": "a port out of range makes a yes",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "if (!fingerprint || listPort < 1 || listPort > 65535 || relayPort < 1 || relayPort > 65535)",
+					"to": "if (!fingerprint)"
+				}
+			]
+		},
+		{
+			"name": "the game's own note isn't a note",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "char const kTheNote[] = \"# servers-trusted.cfg:",
+					"to": "char const kTheNote[] = \"servers-trusted.cfg:"
+				}
+			]
+		},
+		{
+			"name": "a yes that's there already is added again",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "\tif (ServersTrust_Has(*yeses, hash))\n\t{\n\t\treturn true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a pick is taken in the yeses' file",
+			"changes": [
+				{
+					"file": "3dc/servers_trust.cpp",
+					"from": "return ReadHashes(text, bytes, \"yes \", kServersTrustMostYeses, out, badLine);",
+					"to": "return ReadHashes(text, bytes, \"pick \", kServersTrustMostYeses, out, badLine);"
+				}
+			]
+		}
+	]
+}

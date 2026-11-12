@@ -51,7 +51,14 @@ Java's.
 relay's side made, and the game's handshake B is held to it the same way. The relay's repository makes the file from its own code
 (`java/test/avpx/v2/CryptoV2Vectors.java`), and its tests fail if the file and the code ever disagree.
 
-**Where it comes from.** AVPx-Dedicated-Server, branch v2, commit `2b8dcd6`, file `test-vectors/crypto-v2.json`: Split's 120 bytes
+**Where it comes from.** AVPx-Dedicated-Server, branch beta2-server, commit `2694c87` (the same file through `b026cdf`), file
+`test-vectors/crypto-v2.json`: SERVER-BLOCKERS item 6, the host named by its whole id (2026-11-10, taken by Primary). Each player gives
+its `id`, all 48 bytes, beside its `fingerprint`, and handshake B's prologue mixes the host's id, not its fingerprint (CRYPTO.md 5.1
+point 17 and section 8). From `2b8dcd6`'s copy (compared field by field, 43 differences): B1, B's split and everything of handshake A
+are the same bytes; new are `handshakeA.player.id`, `handshakeB.host.id` and `handshakeB.joiner.id`; and B2 to B5, every step's h
+from B's prologue on, the transcript, the check code, B's datagrams and its refusals follow from the new prologue.
+
+The copy before it, `2b8dcd6`'s (sha256 `08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17`, 207,719 bytes): Split's 120 bytes
 (2026-11-09, CRYPTO.md 5.1 point 3 and section 9 as Third wrote them in `a7a369f`, for Secondary's reads, finding 2.1 of each). Split
 now gives two 48-byte secrets, then the two IVs, and every epoch's key, epoch 0's too, is HKDF-Expand(the direction's secret, "AVPX
 epoch v2" || e, 32). From `244235f`'s copy (compared section by section): every byte of the handshakes is the same (A1 to A3, B1 to
@@ -60,8 +67,10 @@ B5, each step's h and ck, the transcripts). New: both splits, whose fields are n
 keys, now from `secret`, with epoch 0 among them; the sealed control messages, the sealed game datagrams, and the refusals built on
 them. The signatures section is gone: nothing in the game or the relay checks a signature until the signed relays directory.
 
-- 207,719 bytes, with plain line ends (LF);
-- sha256 `08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17`.
+This file, `2694c87`'s:
+
+- 208,113 bytes, with plain line ends (LF);
+- sha256 `06b40f269a6940761074d77b92125e678bed259e1d5b4c07218ea8ef8db32720`.
 
 The gate checks that sha256 ("Check protocol version 2's test vectors are the relay's own"). A newer one is taken the same way as
 `relay-v1.json`'s, above.

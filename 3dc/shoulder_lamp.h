@@ -78,7 +78,37 @@ void ShoulderLamp_SetIntensity(double intensity);
 bool ShoulderLamp_SpotSizeFromWords(const char *words, unsigned int length, double *size);
 bool ShoulderLamp_IntensityFromWords(const char *words, unsigned int length, double *intensity);
 
-// Puts both back as built. It says whether either had been changed, so that the log can say so once and not every frame.
+// LAMPLOOK. Added 2026-11-11 by Melanikus (Third) for the AvP port, at the owner's ask: since d43e17ec (other marines' lamps, #108), with
+// lights added per pixel and "Lamps cast shadows" on, the player's own lamp is a real light. DrawShoulderLamp then draws nothing of the
+// painted lamp, and its flickering spot with the hot middle, and the cone's haze in the dark, were gone. He hadn't asked for that. How it
+// looks when it could be a real light, for this run of the game (nothing keeps it for the next one):
+// - kShoulderLampLookRealOnly (0): the real light alone, with its shadows, as d43e17ec made it.
+// - kShoulderLampLookBoth (1): the real light with its shadows, and over it the painted spot's flicker and hot middle and the cone's
+//   haze. DrawShoulderLamp says how they're blended so the light isn't doubled (kShoulderLampOverARealLight). It's the default
+//   (kShoulderLampLookAsBuilt): the owner, 2026-11-11, "Restore it, show me", "With shadows".
+// - kShoulderLampLookPainted (2): the painted lamp alone, as with "Lamps cast shadows" off: the lamp is never a real light.
+// - kShoulderLampLookBothFull (3): the real light with its shadows, and over it the painted lamp at full, walls and wet glint included,
+//   exactly as it was drawn on its own on 2026-11-05 (4143c5c4, the owner's video). In the spot it adds to what the real light gives, so it's
+//   brighter there than either alone; 1 is the same look blended so it isn't.
+// A network game keeps it as built, like the spot's size and strength: a brighter lamp than the other players have would be cheating.
+int const kShoulderLampLookRealOnly = 0;
+int const kShoulderLampLookBoth = 1;
+int const kShoulderLampLookPainted = 2;
+int const kShoulderLampLookBothFull = 3;
+int const kShoulderLampLookAsBuilt = kShoulderLampLookBoth;   // the default, which a network game keeps
+
+// Over the real light (kShoulderLampLookBoth), how strongly the painted spot brightens what's there, as a part of what it does alone
+float const kShoulderLampOverARealLight = 0.25f;
+
+// What LAMPLOOK says now. Setting a number that isn't one of the four leaves it as it was.
+int ShoulderLamp_Look();
+void ShoulderLamp_SetLook(int look);
+
+// Reads the number typed after LAMPLOOK: only "0", "1", "2" or "3". Anything else gives back false, and leaves look alone.
+bool ShoulderLamp_LookFromWords(const char *words, unsigned int length, int *look);
+
+// Puts the spot's size, its strength and LAMPLOOK back as built. It says whether any had been changed, so that the log can say so once and
+// not every frame. (Modified 2026-11-11 by Melanikus (Third): LAMPLOOK too.)
 bool ShoulderLamp_PutSpotBack();
 
 // What shaders/shoulderLamp.psh reads as Spot: the size, the size as built over the size, the strength, and a spare 0.

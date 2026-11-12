@@ -2,7 +2,7 @@
 // Melanikus for the AvP port.
 //
 // The list is a page on the relay server, over HTTPS (relay_shared.h says what the relay is). A host puts its game on it, and a player
-// reads it to pick a game. It also says where each region's relay is. PROTOCOL.md in the server's repository, section 4, is the whole of
+// reads it to pick a game. It also gives its own relay's keys. PROTOCOL.md in the server's repository, section 4, is the whole of
 // what goes back and forth, and this is written to it (at 7014de1). relay_list.cpp makes the calls. This part only turns things into text
 // and back, so that a test can try all of it.
 //
@@ -12,9 +12,15 @@
 //
 // tests/relay_list_test.cpp tries every refusal, and the bodies.
 //
-// Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's fingerprint, the short name of the identity
-// that host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A
-// host sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
+// Modified 2026-11-09 by Melanikus for the AvP port: every game on the list carries its host's id, the whole name of the identity that
+// host proves in protocol version 2's handshake B (net_identity.h), so a joiner knows which host to expect before it says a word. A host
+// sends its own with its listing. On this version of the game every listing has one: an answer with a game that hasn't is refused.
+// (Modified 2026-11-10 by Melanikus for the AvP port, SERVER-BLOCKERS item 6: the field is "id", the 48-byte id as 96 hex digits, in
+// place of "fingerprint", its first 16 bytes. The list refuses the old field.)
+//
+// Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is a servers.cfg line, with one relay at its own address, so the
+// relays' list (GET /v1/relays) isn't read any more, and a relay's keys come with their region from the list's own relay. The readers only
+// the -dev settings used are gone too: the pin and the shown name.
 
 #ifndef RELAY_LIST_TEXT_H
 #define RELAY_LIST_TEXT_H
@@ -23,7 +29,7 @@
 #include <stdint.h>
 
 #include "relay_shared.h"
-#include "net_identity.h"   // a fingerprint's size, and the one rule for its 32 hex digits, which the joining code uses too
+#include "net_identity.h"   // an id's size, and the one rule for its 96 hex digits, which the joining code uses too
 
 enum
 {
@@ -38,8 +44,7 @@ enum
 	kRelayListMostSeconds = 31536000,    // how long a game has been listed: a year at most
 	kRelayListMostHostMs = 9999,         // the host's round trip to its relay, in ms; 0 if it wasn't measured
 	kRelayListMostLevelNumber = 100,     // 0 to 99 for a stock level, 100 for a custom one, found by its name
-	kRelayListMostGamesBytes = 49152,    // an answer to GET /v1/games: 48 KB at most (the protocol's worst case is 46,011 bytes)
-	kRelayListMostRelaysBytes = 4096,    // an answer to GET /v1/relays: 4 KB at most (its worst case is 1,868 bytes)
+	kRelayListMostGamesBytes = 57344,    // an answer to GET /v1/games: 56 KB at most (the protocol's worst case is 51,511 bytes, with ids)
 	kRelayListMostOwnerBytes = 1024,     // an answer to POST: {"owner"}, far less than this
 	kRelayListMostBodyBytes = 1024       // the list takes a body of at most 1 KB
 };
@@ -50,8 +55,8 @@ enum
 {
 	kRelayAccessNameMostBytes = 15,      // a name: 1 to 15 bytes, the most a profile's name can be (MAX_SIZE_OF_USERS_NAME, user_profile.h)
 	kRelayAccessKeyLetters = 2220,       // the public halves of an identity, 1,665 bytes, in base64: always exactly this many letters
-	kRelayAccessCodeLetters = 16,        // the access code: 16 code letters
-	kRelayAccessCodeTextBytes = 20,      // written XXXX-XXXX-XXXX-XXXX, with the 0 at the end
+	kRelayAccessCodeLetters = 8,         // the access code: 8 code letters (16 before 2026-11-10: RelayAccess_Code says why it's safe)
+	kRelayAccessCodeTextBytes = 10,      // written XXXX-XXXX, with the 0 at the end
 	kRelayAccessMostBodyBytes = 4096,    // the list takes a request of at most 4 KB, its own limit (the other calls keep 1 KB)
 	kRelayAccessMostAnswerBytes = 512    // and answers it with far less than this
 };
@@ -78,10 +83,10 @@ struct RelayListGame
 	int version;
 	int hostMs;
 	long seconds;
-	uint8_t fingerprint[kNetIdentityFingerprintBytes];   // the host's identity for this run, which handshake B must find it holds
+	uint8_t hostId[kNetIdentityIdBytes];   // the host's whole id for this run, which handshake B must find it holds
 };
 
-// One region's relay: where a game of that region is joined. networking.cpp reads these (RelayList_Relays).
+// One region's relay: where a game of that region is joined. (The one-server call that gave these went 2026-11-11: a relay is a line's, RelayList_RelayOf.)
 struct RelayListRelay
 {
 	char region[kRelayListRegionLetters + 1];
@@ -90,8 +95,9 @@ struct RelayListRelay
 	uint32_t address;   // the host's IPv4 address, as ENetAddress.host keeps it (network byte order), looked up by the list's thread
 };
 
-// Why the address a relay's name looked up to isn't used. A relay is somewhere out on the internet, so an address that can't be one isn't
-// sent anything: a wrong or hostile name could otherwise aim the game's messages at this network's own devices, or at many at once.
+// What kind of address an address is, for the servers.cfg reader's rule of which can be a server's (servers_cfg.h). Some never are: a
+// wrong or hostile line could otherwise aim the game's messages at many machines at once. Modified 2026-11-10 by Melanikus for the AvP
+// port (#175): this was the rule for the address a relay's name looked up to, until the server became a servers.cfg line with no names.
 enum RelayAddressRefusal
 {
 	kRelayAddressUsable,
@@ -103,12 +109,9 @@ enum RelayAddressRefusal
 	kRelayAddressLoopback       // 127/8: this machine itself
 };
 
-// The rule for an address, given with its first number in the highest byte (192.168.0.1 is 0xC0A80001). Private and loopback addresses
-// are refused unless developer is true (-dev), so that a relay on this machine or this network can be tested.
-RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer);
-
-// The words for a refusal of an address, for the log: never the address itself
-const char *RelayList_AddressWords(RelayAddressRefusal why);
+// The kind of an address, given with its first number in the highest byte (192.168.0.1 is 0xC0A80001). (Modified 2026-11-10 by Melanikus
+// for the AvP port, #175: -dev's way, which took private and loopback addresses as usable, is gone with the -dev settings it was for.)
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address);
 
 // What a host puts on the list. The texts are the game's own, already fitted (RelayList_FitText).
 struct RelayListListing
@@ -127,7 +130,7 @@ struct RelayListListing
 	int maxPlayers;
 	int version;
 	int hostMs;
-	const uint8_t *fingerprint;                // this run's identity's fingerprint (net_identity.h): there has to be one, and not all 0
+	const uint8_t *hostId;                     // this run's identity's whole id (net_identity.h): there has to be one, and not all 0
 };
 
 // Why an answer was refused. Each has its own words, for the log and for the tests.
@@ -148,7 +151,6 @@ enum RelayListRefusal
 	kRelayListBadText,         // a name, level or mode that isn't printable ASCII of its length
 	kRelayListBadCode,         // a code that isn't 8 code letters
 	kRelayListBadRegion,       // a region that isn't 1 to 16 small letters, digits and -
-	kRelayListBadHost,         // a relay's host that isn't a DNS name, or is an address instead of one
 	kRelayListBadSecret,       // an owner that isn't 32 hex digits, small letters
 	kRelayListBadNumber,       // a number that isn't a whole number in its range
 	kRelayListMorePlayersThanRoom, // players over maxPlayers
@@ -157,7 +159,8 @@ enum RelayListRefusal
 	kRelayListEndsTooSoon,     // the text stops before its end
 	kRelayListNotWhatComesNext, // something else where a , : } or ] has to be
 	kRelayListMoreAfterTheEnd, // more after the closing }
-	kRelayListBadFingerprint,  // a game's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadFingerprint,  // an access answer's fingerprint that isn't 32 hex digits, small letters
+	kRelayListBadHostId,       // a game's host id that isn't 96 hex digits, small letters (added 2026-11-10, SERVER-BLOCKERS item 6)
 	kRelayListBadStatus,       // an access request's answer with an HTTP status the protocol never gives it
 	kRelayListBadWord,         // a state or an error that isn't one of the protocol's words for its status
 	kRelayListNotOurKey        // an answer to an access request that isn't about this PC's own key
@@ -168,34 +171,31 @@ const char *RelayList_RefusalWords(RelayListRefusal why);
 
 // Reads a GET /v1/games answer. games has room for kRelayListMostGames. ourVersion is the version that was asked for. On a refusal,
 // count is 0 and nothing in games is to be used.
-// Modified 2026-11-09 by Melanikus for the AvP port: fingerprints says whether the games carry their host's fingerprint, which only a v2
-// draft's do (networking.h, Net_V2DraftOn). Then a game without one is refused. Without it, the answer is read as version 1's, with no
-// fingerprint field, and each game's fingerprint is left all 0.
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count);
-
-// Reads a GET /v1/relays answer. relays has room for kRelayListMostRelays.
-RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count);
+// Modified 2026-11-09 by Melanikus for the AvP port: every game carries its host's id, and a game without one is refused. (Modified
+// 2026-11-10, #175 PR 3a: version 1's answer, with no id field, went with version 1.)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count);
 
 // Reads a POST's answer, {"owner"}: the 16 bytes a host proves its listing with afterwards
 RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t owner[kRelayListSecretBytes]);
 
 // Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft, step 7): a relay's static public keys, the answer to
-// GET /v1/relay-keys?region=<region> (CRYPTO.md 12.1): {"region", "p384", "mlkem"}, the P-384 key's 97 bytes and the ML-KEM-1024 key's
-// 1,568, each as exactly twice as many hex digits in small letters. Read as hostile, as every answer is.
-// - Only the relay asked about is taken: an answer about another region is refused.
-// - On a refusal, p384 and kem are left all 0, and nothing of the answer is kept.
-// - Only the keys' form is checked here. Whether they're the relay's real keys is checked after, against the fingerprint the -dev settings
-//   give (net_relay_keys.h); until then, nothing is sent to that relay.
+// GET /v1/relay-keys (CRYPTO.md 12.1): {"region", "p384", "mlkem"}, the P-384 key's 97 bytes and the ML-KEM-1024 key's 1,568, each as
+// exactly twice as many hex digits in small letters. Read as hostile, as every answer is.
+// Modified 2026-11-10 by Melanikus for the AvP port (#175): the game asks with no region (the keys of the relay on the list's own machine,
+// the one the servers.cfg line names), so the answer's region is given back in region, held to a region's own rule, instead of being
+// compared with one asked about.
+// - On a refusal, region is empty, p384 and kem are left all 0, and nothing of the answer is kept.
+// - Only the keys' form is checked here. Whether they're the server's real keys is checked after, with the list's own key, against the
+//   servers.cfg line's fingerprint (net_server_fingerprint.h); until then, nothing more is sent to that server.
 size_t const kRelayKeysMostAnswerBytes = 8192;   // the answer is about 3,370 bytes
-RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
-	uint8_t kem[kNetPqKemPublicBytes]);
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char region[kRelayListRegionLetters + 1],
+	uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes]);
 
 // The body of a POST /v1/games (owner NULL) or a PUT (owner given). False, with nothing to send, if any of it is outside the protocol's
 // limits: the game checks its own words before they go, so the list never has to refuse them. room is the space in body, its 0 included.
-// With withFingerprint (a v2 draft's listing, Net_V2DraftOn), a listing with no fingerprint, or one that's all 0 (no identity was made for
-// this run), is one of those. Without it (modified 2026-11-09 by Melanikus for the AvP port), the body is version 1's, with no fingerprint
-// field at all, whatever the listing holds.
-bool RelayList_ListingBody(const RelayListListing &listing, bool withFingerprint, const uint8_t *owner, char *body, size_t room);
+// A listing with no host id, or one that's all 0 (no identity was made for this run), is one of those. (Modified 2026-11-10 by Melanikus for
+// the AvP port, #175 PR 3a: version 1's body, with no id field, went with version 1.)
+bool RelayList_ListingBody(const RelayListListing &listing, const uint8_t *owner, char *body, size_t room);
 
 // The body of a DELETE /v1/games: the game, by its region and code, and the owner's proof
 bool RelayList_EndingBody(const char *region, const char *code, const uint8_t owner[kRelayListSecretBytes], char *body, size_t room);
@@ -208,15 +208,8 @@ void RelayList_FitText(const char *from, const char *fallback, char *to, size_t 
 // checks they still match). In English, whatever language the host plays in, so everyone reading the list reads the same words.
 const char *RelayList_ModeWords(int gameStyle, bool coopCampaign);
 
-// Whether a name is one to ask Windows to find: 1 to 253 characters, in parts between dots of 1 to 63 letters, digits and -, none
-// starting or ending with -. For the settings' server name, which isn't trusted to be a name just because it's in the file (Tao 3).
-bool Relay_IsServerName(const char *name);
-
 // A region: 1 to 16 small letters, digits and -
 bool RelayList_IsRegion(const char *region);
-
-// A relay's host from the list: a DNS name of 1 to 63 characters, and never an address: a name whose every part is digits is one
-bool RelayList_IsRelayHost(const char *host);
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
 //
@@ -244,9 +237,22 @@ RelayAccessNameRefusal RelayAccess_NameRefusal(const char *name);
 // room for kRelayAccessNameMostBytes + 1.
 void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char *to);
 
-// The access code for an identity's fingerprint. It's the fingerprint's first 80 bits, highest first, as 16 code letters of 5 bits each
-// (the relay codes' letters, kNetRelayCodeAlphabet), in groups of four: XXXX-XXXX-XXXX-XXXX. 80 bits can't be matched by making keys until
-// one fits. The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.
+// Whether making that name left any of the profile's letters out because the rule doesn't take them (an accent, ", \ or anything not
+// printable), so the page can say so rather than drop them without a word (Secondary's dry run of beta.2, T2.2). Spaces aren't counted,
+// and neither is the cut to 15. Added 2026-11-09 by Melanikus for the AvP port.
+bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes);
+
+// The access code for an identity's fingerprint. It's the fingerprint's first 40 bits, highest first, as 8 code letters of 5 bits each
+// (the relay codes' letters, kNetRelayCodeAlphabet), in two groups of four: XXXX-XXXX. They're the first 8 letters of the 16 that builds
+// before 2026-11-10 showed, so the owner's kit matches either by its first 8.
+// Modified 2026-11-10 by Melanikus for the AvP port (the owner: "Shorter code too?"; PO's ruling). 40 bits CAN be matched by making keys
+// until one fits: about a million million tries, hours on hired machines. So the code alone no longer proves which request is the
+// player's. Two things keep a matched code from ever being approved:
+// - the owner's kit refuses a code that more than one request has, and shows them all (avpx-players), so a stranger who asks with a key
+//   made to match a player's code gets a refusal the owner sees, never the player's approval;
+// - the game checks the list's key against its servers.cfg line before it sends a byte, so nobody on the way can drop
+//   the player's request and send their own in its place, which would leave only one request with that code for the kit to find.
+// The server's approve command makes the same code from the same fingerprint, and the two sides' tests share examples.
 void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes]);
 
 // The body of a POST /v1/access-requests: {"v":1,"name":"...","key":"..."}. False, with nothing to send, if the name breaks the rule,
@@ -275,9 +281,10 @@ const char *RelayAccess_AnswerWords(RelayAccessAnswer answer);
 // answer is set only when the whole answer is good.
 RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes, const uint8_t ours[kNetIdentityFingerprintBytes],
 	RelayAccessAnswer *answer);
-// ---- Reaching a test server with no name and no certificate Windows trusts (-dev only; relay_list.cpp). Added 2026-11-09 by Melanikus for
-// the AvP port, so a test can reach the relay on another machine with nothing changed on the tester's computer: no hosts line, nothing
-// added to Windows' trusted certificates.
+// ---- An address written plainly. Added 2026-11-09 by Melanikus for the AvP port, for -dev's test server; modified 2026-11-10 (#175): the
+// game's one reader of an address, for a servers.cfg line (servers_cfg.cpp) and a Hudson run's relay beyond this machine (networking.cpp).
+// The -dev settings it was first written for (RelayServer, RelayListPin, RelayServerName) are gone, with the pin's and the shown name's
+// readers.
 
 // Whether text is exactly one IPv4 address written plainly: four whole numbers from 0 to 255 with a dot between each, no leading zeros
 // (a leading zero means octal to some readers), and nothing else, not even a space. The address goes into hostOrder with its first
@@ -294,32 +301,35 @@ enum RelayIPv4Refusal
 RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder);
 bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder);   // RelayList_IPv4Refusal(...) == kRelayIPv4Read
 
-// The SHA-256 of the list's own certificate, as the settings give it (RelayListPin): exactly 64 hex digits, small letters or capitals,
-// and nothing else. Anything else is refused, with nothing written, and the refusal says why.
-int const kRelayListPinBytes = 32;
-enum RelayPinRefusal
-{
-	kRelayPinRead,
-	kRelayPinNoText,         // no text, or nowhere to put the pin
-	kRelayPinWrongLength,    // not 64 characters: a pin written with colons or spaces between its pairs is longer
-	kRelayPinNotHex          // a character that isn't 0-9, a-f or A-F
-};
-RelayPinRefusal RelayList_PinRefusal(const char *text, uint8_t pin[kRelayListPinBytes]);
-bool RelayList_ReadPin(const char *text, uint8_t pin[kRelayListPinBytes]);   // RelayList_PinRefusal(...) == kRelayPinRead
-
-// Whether a certificate's SHA-256 is the pin's, comparing every byte whatever the first difference (it takes the same time either way)
-bool RelayList_PinMatches(const uint8_t digest[kRelayListPinBytes], const uint8_t pin[kRelayListPinBytes]);
-
-// The name people see for a test server (RelayServerName): 1 to 32 characters, each a letter, a digit, a space or one of ' ( ) - . ,
+// The most letters of a server's name the online screens make room for: a servers.cfg line's name is at most 31 (servers_cfg.h)
 int const kRelayListShownNameLetters = 32;
-enum RelayShownNameRefusal
-{
-	kRelayShownNameGood,
-	kRelayShownNameNoText,       // no text, or an empty one
-	kRelayShownNameTooLong,      // more than 32 characters
-	kRelayShownNameBadCharacter  // a character outside the set: a quote, a newline, a tab, a %, a slash, a letter beyond ASCII
-};
-RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name);
-bool RelayList_IsShownName(const char *name);   // RelayList_ShownNameRefusal(...) == kRelayShownNameGood
+
+// ---- A servers.cfg line's address, as a person reads it on the yes page and the server lists. Added 2026-11-10 by Melanikus for the AvP
+// port (#175's last part). "104.131.35.41", or with both ports when either isn't the usual one (servers_cfg.h's kServersCfgListPort and
+// kServersCfgRelayPort): "203.0.113.7:8443:27500". The longest, "255.255.255.255:65535:65535", is 27 letters, so kRelayListShownAddressBytes
+// holds any address with its 0. address has its first number in the highest byte, as servers_cfg.h keeps it.
+// It's written whole or not at all: false, with out empty, if room is too small or a port isn't 1 to 65535, so a screen never shows an
+// address cut short. (The yes page's first address was 24 bytes, and an address with both ports written out could be cut.)
+size_t const kRelayListShownAddressBytes = 28;
+bool RelayList_ShownAddress(uint32_t address, int listPort, int relayPort, char *out, size_t room);
+
+// ---- Which lines a find visits (one model for every line). Added 2026-11-11 by Melanikus for the AvP port; it was RelayList_FindGames'
+// own, and it's here so relay_list_test can run it, with 1, 2 and 9 lines. It contacts nothing: it only chooses.
+
+int const kRelayListMostVisits = 8;   // the most good lines asked in one find
+
+// How a good line stands after the last find
+int const kRelayLineNoYes = 0;       // the player hasn't said yes to it: it isn't asked, and its row says to say yes to see its games
+int const kRelayLineAsking = 1;
+int const kRelayLineAnswered = 2;    // its games are among RelayList_FoundAllGames's (it may have none)
+int const kRelayLineNoAnswer = 3;    // it couldn't be reached, its keys don't match its line, or its answer was refused: why says which
+int const kRelayLineNotAsked = 4;    // past the first kRelayListMostVisits agreed lines, so not asked this time
+
+// Every good line the player has said yes to (agreed[place]), in the file's order, at most kRelayListMostVisits of them: their places go
+// into visits (room for kRelayListMostVisits), and each line's state into states (room for count): kRelayLineAsking for a line that's
+// visited, kRelayLineNoYes for one without the yes, kRelayLineNotAsked for one past the most. The line in use (inUse, or -1 for none)
+// always has a place, however many agreed lines come before it, as joins wait for its answer. A line without the yes is never visited.
+// Gives how many visits there are; 0, with nothing written, if agreed, visits or states is missing or count is below 0.
+int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states);
 
 #endif

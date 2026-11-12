@@ -422,6 +422,31 @@ void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t si
 	words[size - 1] = '\0';
 }
 
+// ---- The level column (added 2026-11-10 by Melanikus for the AvP port)
+
+void OnlineScreens_LevelWords(const char *campaignName, const char *hostsName, size_t hostsNameBytes, char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	// The game's own words, made safe too, so whatever its text holds is drawn the way every name is
+	if (campaignName)
+	{
+		OnlineScreens_SafeName(campaignName, strlen(campaignName), words, size);
+	}
+	else
+	{
+		OnlineScreens_SafeName(hostsName ? hostsName : "", hostsName ? hostsNameBytes : 0, words, size);
+	}
+
+	if (words[0] == '\0')
+	{
+		Put(words, size, "-");
+	}
+}
+
 // ---- The ping column
 
 void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *words, size_t size)
@@ -439,7 +464,7 @@ void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *
 
 	if (joinerMs < 0)
 	{
-		Put(words, size, "?");
+		Put(words, size, joinerMs == kOnlineJoinerMsMeasuring ? "..." : "?");
 		return;
 	}
 
@@ -500,9 +525,12 @@ static const char *const kWords[] =
 	"Your game is on the list",                                   // kOnlineWordsRelayListed
 	"No relay answered: your game is open on this network only",  // kOnlineWordsRelayNone
 	"Your game's room on the relay has gone",                     // kOnlineWordsRelayGone
-	"The host runs another test build of the v2 draft",           // kOnlineWordsOtherBuild
-	"Read it to the host: the same 6 digits on both screens means nobody is in between",  // kOnlineWordsCheckCodeMeans
-	"Ask the player for theirs: the same 6 digits on both screens means nobody is in between"   // kOnlineWordsCheckCodeMeansHost
+	// The check code, for friends and for strangers (the owner's ruling, 2026-11-09: always shown on both screens; friends compare it
+	// outside the game; a stranger may go on without, told what that means; the game's own chat is never the way to compare, since it runs
+	// over the very connection the code checks)
+	"Friends compare it by voice or Discord, never in the game's chat: the same 6 digits means nobody is in between",  // kOnlineWordsCheckCodeMeans
+	"Ask a friend for theirs by voice or Discord, never in the game's chat: the same 6 digits means nobody is in between",   // kOnlineWordsCheckCodeMeansHost
+	"Not comparing is your choice: the game is still encrypted, but someone in the middle can't be ruled out"   // kOnlineWordsCheckCodeSkipped
 };
 
 static_assert(sizeof(kWords) / sizeof(kWords[0]) == kOnlineWordsCount, "kWords needs one line for each of OnlineWords, in its order");

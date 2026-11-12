@@ -22,9 +22,10 @@
 enum
 {
 	kRelayCodeLetters = static_cast<int>(kNetRelayCodeLetters),  // a game's code, which a joiner picks from the list: 8 code letters
-	kRelayMostPlayers = 8,  // the most players in one game the relay carries, the host included
-	kRelayListPort = 443    // the list's HTTPS. Each relay's own port comes from the list.
+	kRelayMostPlayers = 8   // the most players in one game the relay carries, the host included
 };
+// (Removed 2026-11-10 by Melanikus for the AvP port, #175: kRelayListPort. The list's port is its server's servers.cfg line's,
+// kServersCfgListPort in servers_cfg.h unless the line gives one.)
 
 // The letters a code is made of: 32 of them, with no 0, 1, I or O, so that a code can be read aloud without being mistaken
 static const char *const kRelayCodeAlphabet = kNetRelayCodeAlphabet;

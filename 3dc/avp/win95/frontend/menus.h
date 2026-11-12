@@ -7,7 +7,7 @@
 //   SESSION_DESC keeps the level's name, the game's style and its players, for the games page's columns
 //   a row for the host's answer to a request to join (AVPMENU_ELEMENT_JOINANSWER), and the page of games found's Refresh row
 //   (AVPMENU_ELEMENT_FINDAGAIN)
-//   SESSION_DESC keeps a relay game's host's fingerprint from the list, for protocol version 2's handshake B
+//   SESSION_DESC keeps a relay game's host's whole id from the list, for protocol version 2's handshake B
 //   the Online access pages and their rows (server #24), only with -dev for now
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
@@ -105,6 +105,7 @@ enum AVPMENU_ID
 	AVPMENU_MULTIPLAYER_DELETECONFIG,
 
 	AVPMENU_MULTIPLAYER_JOINING,
+	AVPMENU_HOST_ON,           // the server a game is hosted on, chosen by the player, before Start game's and Co-op's pages: see host_page.h
 
 	AVPMENU_CONTROLS,
 	AVPMENU_JOYSTICKCONTROLS,
@@ -141,8 +142,9 @@ enum AVPMENU_ID
 	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
 	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
 	AVPMENU_COOP_HOSTQUITS,    // a host is asked if they mean to end the game for everyone
-	AVPMENU_ONLINE_ACCESS,     // asking for online access (server #24), only with -dev for now: see access_page.h
-	AVPMENU_ONLINE_ACCESS_NEW  // the question before a new identity is made
+	AVPMENU_ONLINE,            // every servers.cfg line, each with its yes, its access request and where it stands (2026-11-11): see online_page.h
+	AVPMENU_ONLINE_NEW_IDENTITY, // the question before a new identity is made
+	AVPMENU_SERVER_YES         // the player's yes to one servers.cfg line, before anything goes to its server (#175's last part): see server_yes_page.h
 };
 
 enum AVPMENU_FONT_ID
@@ -230,7 +232,8 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 	AVPMENU_ELEMENT_JOINANSWER, // the host's answer to a player asking to join (online_screens_page.h): MaxValue 1 lets them in, 0 says no
-	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online access pages (access_page.h). Its MaxValue is which (kAccessRow...)
+	AVPMENU_ELEMENT_HOSTLINE, // a row of the host page (host_page.h): its question, or a servers.cfg line's row. Its MaxValue says which
+	AVPMENU_ELEMENT_ONLINE_ACCESS, // a row of the Online page, its new identity's question or the yes page (online_page.h, server_yes_page.h). Its MaxValue is which
 	AVPMENU_ELEMENT_FINDAGAIN, // the page of games found's Refresh row, and Enter on its failure screen: fetches the open sessions again
 };
 
@@ -359,7 +362,11 @@ typedef struct
 	bool throughRelay;                               // a game from the relay server's list, joined through its region's relay (relay_list.h)
 	char relayCode[kRelayCodeLetters];               // its code: the 8 letters, with no 0 after them
 	char relayRegion[kRelayListRegionLetters + 1];   // its region, which says which relay
-	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // its host's fingerprint, from the list: who handshake B must find it's talking to
+	uint8_t relayHostId[kNetIdentityIdBytes];   // its host's whole id, from the list: who handshake B must find it's talking to
+	// Which good line of servers.cfg listed it: its place as RelayList_LineAt numbers them, or -1 for the line this run uses. The page names
+	// the game's server by that line, never by anything the server sent (added 2026-11-11 by Melanikus for the AvP port: every server in
+	// servers.cfg goes through the same page)
+	int serverLine;
 	// What the games page shows (online_screens.h). The host sent these, so they're hostile: the page draws the name only after
 	// OnlineScreens_SafeName, and checks the numbers before it uses them.
 	char levelName[kRelayListLevelLetters + 1];      // the level's name, as the host said it

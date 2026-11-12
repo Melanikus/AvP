@@ -4485,131 +4485,6 @@ void DrawWaterFallPoly(VECTORCH *v)
 
 void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 {
-
-#ifdef USE_D3DVIEWTRANSFORM
-	VECTOR2D offset[4];
-	int centreX, centreY;
-	int z = ONE_FIXED - scale;
-
-	// Mel - In the end, all we needed to do was to subtract screen's width and height
-	// from the SmartTargetSight, it's later used to aim predator shoulder cannon and
-	// marine smartgun, so we won't alter it to keep those from breaking, still need
-	// to fix targeting segment's size, but the vertical error in widescreen is almost
-	// unoticeable
-	fixed_t centeredSmartTargetSightX = SmartTargetSightX - (ScreenDescriptorBlock.SDB_Width << 15);
-	fixed_t centeredSmartTargetSightY = SmartTargetSightY - (ScreenDescriptorBlock.SDB_Height << 15);
-	z = MUL_FIXED(MUL_FIXED(z, z), 2048);
-	{
-		// Modified 2026-11-09 by Melanikus for the AvP port (#179), the vertical error the note above names: SmartTarget (targeting.cpp) puts
-		// the sight's height on the screen at 4/3 of the plain sum, because the 1999 game drew its world 4/3 tall and drew this triangle in
-		// that same stretched space. This game draws the world without the stretch, through the same sum as this triangle
-		// (d3d.matProjection), so the 4/3 is taken off here, as the gun's aim takes it off (CalculateWhereGunIsPointing). Without it, the
-		// triangle stood 4/3 as far above or below the middle of the screen as its target did.
-		centreY = MUL_FIXED((((centeredSmartTargetSightY - (ScreenDescriptorBlock.SDB_Height)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);
-
-		if (MIRROR_CHEATMODE) {
-			centreX = MUL_FIXED((- (centeredSmartTargetSightX - (ScreenDescriptorBlock.SDB_Width))) / Global_VDB_Ptr->VDB_ProjX, z);
-		} else {
-			centreX = MUL_FIXED((centeredSmartTargetSightX - (ScreenDescriptorBlock.SDB_Width)) / Global_VDB_Ptr->VDB_ProjX, z);
-		}
-	}
-	float posZ = z * CameraZoomScale;
-	RHW_VERTEX list[4];
-	{
-		int a = 160 * CameraZoomScale;
-		int b = 40  * CameraZoomScale;
-		/* tan(30) = 1/sqrt(3), & 65536/(sqrt(3)) = 37837 */
-		int y = MUL_FIXED(37837, a + 20);
-		offset[0].vx = -a + MUL_FIXED(113512, b);
-		offset[0].vy = y - b;
-		offset[1].vx = -offset[0].vx;
-		offset[1].vy = y - b;
-		offset[2].vx = a;
-		offset[2].vy = y;
-		offset[3].vx = -a;
-		offset[3].vy = y;
-
-		if (theta) {
-			RotateVertex(&offset[0], theta);
-			RotateVertex(&offset[1], theta);
-			RotateVertex(&offset[2], theta);
-			RotateVertex(&offset[3], theta);
-		}
-
-		if (MIRROR_CHEATMODE) {
-			offset[0].vx = -offset[0].vx;
-			offset[1].vx = -offset[1].vx;
-			offset[2].vx = -offset[2].vx;
-			offset[3].vx = -offset[3].vx;
-		}
-
-		// Send our quad to the center of the targetting system
-		for (int i = 0; i < 4; i++) {
-			VerticesBuffer[i].X = (offset[i].vx + centreX);
-			VerticesBuffer[i].Y = (offset[i].vy + centreY);
-		}
-	}
-	{
-		for (int i = 0; i < 4; i++) {
-			VerticesBuffer[i].Z = z;
-
-			if (drawInRed) {
-				VerticesBuffer[i].R = 255;
-				VerticesBuffer[i].G = 0;
-				VerticesBuffer[i].B = 0;
-				VerticesBuffer[i].A = 128;
-			} else {
-				VerticesBuffer[i].R = 255;
-				VerticesBuffer[i].G = 255;
-				VerticesBuffer[i].B = 255;
-				VerticesBuffer[i].A = 128;
-			}
-
-			list[i].x = VerticesBuffer[i].X;
-			list[i].y = VerticesBuffer[i].Y;
-			list[i].z = posZ;
-			list[i].color = RGBA_MAKE(VerticesBuffer[i].R, VerticesBuffer[i].G, VerticesBuffer[i].B, VerticesBuffer[i].A);
-			list[i].rhw = posZ;
-			list[i].u = 0.5f;
-			list[i].v = 0.5f;
-		}
-	}
-
-	if (drawInRed) {
-		VerticesBuffer[0].X = MUL_FIXED(offset[3].vx, scale * 8) + centreX;
-		VerticesBuffer[0].Y = MUL_FIXED(offset[3].vy, scale * 8) + centreY;
-		VerticesBuffer[1].X = MUL_FIXED(offset[2].vx, scale * 8) + centreX;
-		VerticesBuffer[1].Y = MUL_FIXED(offset[2].vy, scale * 8) + centreY;
-		VerticesBuffer[2].X = offset[2].vx + centreX;
-		VerticesBuffer[2].Y = offset[2].vy + centreY;
-		VerticesBuffer[3].X = offset[3].vx + centreX;
-		VerticesBuffer[3].Y = offset[3].vy + centreY;
-
-		for (int i = 0; i < 2; i++) {
-			VerticesBuffer[i].Z = z;
-			VerticesBuffer[i].R = 255;
-			VerticesBuffer[i].G = 0;
-			VerticesBuffer[i].B = 0;
-			VerticesBuffer[i].A = 0;
-		}
-
-		for (int i = 2; i < 4; i++) {
-			VerticesBuffer[i].Z = z;
-			VerticesBuffer[i].R = 255;
-			VerticesBuffer[i].G = 0;
-			VerticesBuffer[i].B = 0;
-			VerticesBuffer[i].A = 128;
-		}
-
-		RenderPolygon.NumberOfVertices = 4;
-	}
-
-	ChangeZWriteEnable(ZWRITE_ENABLED);
-	d3d.rhwDecl->Set();
-	d3d.effectSystem->SetActive(d3d.rhwEffect);
-	d3d.lpD3DDevice->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, &list[0], sizeof(RHW_VERTEX));
-#else
-
 	VECTOR2D offset[4];
 	POLYHEADER fakeHeader;
 	int centreX, centreY;
@@ -4618,7 +4493,16 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 
 	z = MUL_FIXED(MUL_FIXED(z, z), 2048);
 
-	centreY = MUL_FIXED((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY, z);
+	// Modified 2026-11-10 by Melanikus for the AvP port (#179): the triangle's height has a 3/4. SmartTarget (targeting.cpp) puts the sight's
+	// height on the screen at 4/3 of the plain sum, because the 1999 game drew its world 4/3 tall and drew this triangle in that same
+	// stretched space. This game draws the world without the stretch, through the same projection as this triangle (d3d.matProjection,
+	// which the list D3D_ZBufferedGouraudPolygon_Output fills is drawn with), so the 4/3 is taken off here, as the gun's aim takes it off
+	// (CalculateWhereGunIsPointing). Without it, the triangle stood 4/3 as far above or below the middle of the screen as its target, so
+	// it slid off the target as the Predator looked up or down (Bobblen147, on beta.1).
+	// The first fix (2026-11-09) put this 3/4 in a second copy of this function, which was never compiled: it sat under
+	// #ifdef USE_D3DVIEWTRANSFORM, and nothing defines that. The copy is gone, so this is the only one. (Mel's note in it called the
+	// vertical error in widescreen "almost unnoticeable": that error was this 4/3.)
+	centreY = MUL_FIXED((((SmartTargetSightY-(ScreenDescriptorBlock.SDB_Height<<15)) / Global_VDB_Ptr->VDB_ProjY) * 3) / 4, z);
 	if (MIRROR_CHEATMODE) {
 		centreX = MUL_FIXED(( - (SmartTargetSightX-(ScreenDescriptorBlock.SDB_Width<<15))) / Global_VDB_Ptr->VDB_ProjX, z);
 	}
@@ -4626,7 +4510,11 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 		centreX = MUL_FIXED((SmartTargetSightX-(ScreenDescriptorBlock.SDB_Width<<15)) / Global_VDB_Ptr->VDB_ProjX, z);
 	}
 
-	z = (float)z*CameraZoomScale;
+	// Modified 2026-11-10 by Melanikus for the AvP port (#179): the triangle's depth isn't multiplied by the zoom. The 1999 game zoomed by
+	// multiplying every depth in its world by CameraZoomScale (TranslationSetup's view matrix), and this triangle's with them, so the two
+	// stayed together. This game zooms through the projection's field of view instead (UpdateProjectionMatrix, d3d_render.cpp), for the
+	// world and for this triangle alike, and TranslationSetup no longer multiplies the world's depths. Multiplying this one alone put the
+	// triangle 1/CameraZoomScale times as far out as its target, and drew it that much bigger, whenever the Predator zoomed in.
 
 	{
 		int a = 160;
@@ -4760,8 +4648,6 @@ void RenderPredatorTargetingSegment(int theta, int scale, int drawInRed)
 */
 		D3D_ZBufferedGouraudPolygon_Output(&fakeHeader, VerticesBuffer);
 	}
-
-#endif
 }
 
 void RenderPredatorPlasmaCasterCharge(int value, VECTORCH *worldOffsetPtr, MATRIXCH *orientationPtr)

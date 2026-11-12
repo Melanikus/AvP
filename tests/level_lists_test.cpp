@@ -427,7 +427,8 @@ static void TestTheWiring()
 	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
 	Check(Has(versionCheck, "61 * kLevelListCampaignLevels;"), "and so is the level list");
 	Check(Has(versionCheck, "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
-	Check(Has(networking, "const int kMultiplayerVersion = 114;"), "this build's version");
+	// Modified 2026-11-10 by Melanikus for the AvP port (#175 PR 3a): 116, protocol version 2's, for every game
+	Check(Has(networking, "const int kMultiplayerVersion = 116;"), "this build's version");
 }
 
 int main()

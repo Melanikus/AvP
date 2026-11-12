@@ -4,7 +4,8 @@
 // lit by the menus' own highlight glow (Menus/glowy_middle.RIM), drawn the way the HUD draws the motion tracker's turning disc.
 //
 // Modified 2026-11-09 by Melanikus for the AvP port: the check code on the joiner's asking screen and for the host's waiting request
-// (CRYPTO.md section 8), and the words for a host that's another v2 test build (JBLD).
+// (CRYPTO.md section 8). (The words for a host that's another v2 test build, JBLD, went on 2026-11-10 with the v2 draft's same-commit
+// rule, #175 PR 3a.)
 
 #include "3dc.h"
 #include "inline.h"
@@ -25,6 +26,9 @@
 #include "logString.h"
 #include "online_screens.h"
 #include "online_screens_page.h"
+#include "host_page_rules.h"   // a line's ping in words, the same as the host page's (2026-11-11)
+#include "level_lists.h"
+#include "coop_menu.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -117,7 +121,7 @@ struct RelayTime
 static RelayTime relayTimes[kRelayListMostGames];
 static int relayTimesKept = 0;
 
-static char failedLine[96];
+static char failedLine[200];   // modified 2026-11-10: room for the home network's refusals (#188)
 static uint32_t failedAt = 0;
 static bool failedShown = false;
 
@@ -160,15 +164,16 @@ static void Put(char *to, size_t size, const char *from)
 	to[size - 1] = '\0';
 }
 
-// Whether this game has a list of games to ask: until the relay server's name is built in, only a -dev tester's settings give one
-// (Relay_ServerName). Without one, the page is about this network alone, and says nothing of a list.
+// Whether this game has a list of games to ask: whenever servers.cfg has a line (modified 2026-11-11 by Melanikus for the AvP port, one
+// model for every line). Without one, the page says there's nothing to ask.
 static bool ThereIsAList(void)
 {
-	return Relay_ServerName()[0] != '\0';
+	return RelayList_LineCount() > 0;
 }
 
-// The small font's width for a letter, never more than its widest (menu_gfx.cpp's SmallLetterWidth, which is that file's own)
-static int SmallWidth(int letter)
+// The small font's width for a letter, never more than its widest (menu_gfx.cpp's SmallLetterWidth, which is that file's own). Shared with
+// the yes page since 2026-11-10 (online_screens_page.h).
+int OnlinePage_SmallWidth(int letter)
 {
 	int const width = AAFontWidths[letter & 255];
 	return width < 0 ? 0 : (width > 17 ? 17 : width);
@@ -237,6 +242,123 @@ static void PlayersWords(const SESSION_DESC &session, const char *bracket, char 
 	words[size - 1] = '\0';
 }
 
+// The servers.cfg line a game came from (SESSION_DESC's serverLine), as it stands now. False when there's no such line. Added 2026-11-11
+// by Melanikus for the AvP port.
+static bool LineOfTheGame(int line, RelayListLineNow *out)
+{
+	return line >= 0 && RelayList_LineNow(line, out);
+}
+
+// "Games from New York", "Games from New York and Frankfurt", "Games from New York, Frankfurt and Sydney": every good line whose server
+// answered the last find, each by its own name in servers.cfg, made safe, and only ever a %s's argument. Before any has answered, the
+// name of the line this run uses, as before. False with no server named at all. Added 2026-11-11 by Melanikus for the AvP port (the
+// owner's ruling: every server in servers.cfg goes through the same page).
+static bool ServersTheGamesComeFrom(char *out, size_t size)
+{
+	char names[kRelayListMostVisits][kServersCfgNameLetters + 1];
+	int named = 0;
+
+	for (int place = 0; place < RelayList_LineCount() && named < kRelayListMostVisits; place++)
+	{
+		RelayListLineNow now;
+
+		if (RelayList_LineNow(place, &now) && now.state == kRelayLineAnswered)
+		{
+			OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, names[named], sizeof(names[named]));
+			named++;
+		}
+	}
+
+	// None has answered yet: no heading, and each line's own row below says where it stands (modified 2026-11-11)
+	if (named == 0)
+	{
+		return false;
+	}
+
+	int used = snprintf(out, size, "%s %s", GetTextString(TEXTSTRING_FINDGAMES_FROM), names[0]);
+
+	for (int i = 1; i < named && used > 0 && (size_t)used < size; i++)
+	{
+		int const more = i == named - 1 ? snprintf(out + used, size - used, " %s %s", GetTextString(TEXTSTRING_FINDGAMES_AND), names[i])
+			: snprintf(out + used, size - used, ", %s", names[i]);
+		used = more < 0 ? -1 : used + more;
+	}
+
+	return true;
+}
+
+// The lowest a line of words under the list may start, above the menus' bottom edge (added 2026-11-11)
+static const int kLinesBottom = 460;
+
+// Where a line stands, in words, when its games aren't simply on the list: "<its name>: <why>", its name made safe and the words the
+// game's own (the why of a line that didn't answer is the list code's fixed words, made safe too, as anything drawn here is), then its ping
+// when one was measured. False for a line whose server answered, approved this PC and listed games, which are the list's rows. Added
+// 2026-11-11 by Melanikus for the AvP port; modified the same day: an approved line with no games up says so, with its ping.
+static_assert(kRelayListMostVisits == 8, "the not-asked words say the first 8 servers");
+
+bool OnlineScreens_LineStandsWords(int place, char *out, size_t size)
+{
+	RelayListLineNow now;
+
+	if (!out || size == 0 || !RelayList_LineNow(place, &now))
+	{
+		return false;
+	}
+
+	char name[kServersCfgNameLetters + 1];
+	char why[96];
+	OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, name, sizeof(name));
+	OnlineScreens_SafeName(now.why ? now.why : "", sizeof(why), why, sizeof(why));
+
+	int words = -1;
+
+	switch (now.state)
+	{
+		case kRelayLineNoYes: words = TEXTSTRING_FINDGAMES_LINE_NOYES; break;
+		case kRelayLineAsking: words = TEXTSTRING_FINDGAMES_LINE_ASKING; break;
+		case kRelayLineNoAnswer: words = TEXTSTRING_FINDGAMES_LINE_NOANSWER; break;
+		case kRelayLineNotAsked: words = TEXTSTRING_FINDGAMES_LINE_NOTASKED; break;
+		// An approved line whose server has no games up says so, with its ping (modified 2026-11-11 by Melanikus for the AvP port, the
+		// owner's "We should show the server ping to the user if no games are up"); one with games is the list's rows, with their own pings
+		default:
+			words = now.access != kRelayAccessIsApproved ? TEXTSTRING_NOTAPPROVED_BEFORE : now.games > 0 ? -1 : TEXTSTRING_FINDGAMES_LINE_NOGAMES;
+			break;
+	}
+
+	if (words < 0)
+	{
+		return false;
+	}
+
+	// The line's own ping after its words, whenever its last visit measured one (the same words as the host page's, host_page_rules.h)
+	char ping[48] = "";
+
+	if (now.pingMs >= 0)
+	{
+		char measured[40];
+		HostPage_PingWords(now.pingMs, now.state, GetTextString(TEXTSTRING_HOSTPAGE_MS), GetTextString(TEXTSTRING_PING_ASKING), measured, sizeof(measured));
+		snprintf(ping, sizeof(ping), " - %s", measured);
+	}
+
+	// A line not approved yet is said in PO's ruling's own words (R-SRV-P3): "Not approved on <name> yet: ask on the Online page" (modified
+	// 2026-11-11 by Melanikus for the AvP port; the name goes between the two parts, so a % in the text file is only a letter)
+	if (words == TEXTSTRING_NOTAPPROVED_BEFORE)
+	{
+		_snprintf(out, size - 1, "%s%s%s%s", GetTextString(TEXTSTRING_NOTAPPROVED_BEFORE), name, GetTextString(TEXTSTRING_NOTAPPROVED_AFTER), ping);
+	}
+	else if (now.state == kRelayLineNoAnswer && why[0])
+	{
+		_snprintf(out, size - 1, "%s: %s %s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), why);
+	}
+	else
+	{
+		_snprintf(out, size - 1, "%s: %s%s", name, GetTextString(static_cast<enum TEXTSTRING_ID>(words)), ping);
+	}
+
+	out[size - 1] = '\0';
+	return true;
+}
+
 // The rows as the networking code's list has them now
 static int LiveRows(OnlineRow *rows, int most)
 {
@@ -255,19 +377,38 @@ static int LiveRows(OnlineRow *rows, int most)
 		row.canJoin = session.AllowedToJoin;
 
 		OnlineScreens_SplitName(session.Name, sizeof(session.Name), row.name, sizeof(row.name), bracket, sizeof(bracket));
-		OnlineScreens_SafeName(session.levelName, sizeof(session.levelName), row.level, sizeof(row.level));
 
-		if (row.level[0] == '\0')
-		{
-			Put(row.level, sizeof(row.level), "-");
-		}
+		// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): a co-op game on one of the 32 campaign places is named by its
+		// place, in the game's own words, never by the name its host sent. An honest host sends no name for a campaign level (mp_config.cpp's
+		// GetCustomMultiplayerLevelName), so the column said "-", and a dishonest one could send any. Every other game keeps the host's name,
+		// made safe.
+		int campaign = kCampaignNone;
+		int campaignLevel = 0;
+		bool const onACampaign = session.gameStyle == NGT_Coop &&
+			LevelList_CampaignAt(session.levelIndex, MAX_NO_OF_COOPERATIVE_EPISODES, &campaign, &campaignLevel);
+		OnlineScreens_LevelWords(onACampaign ? CoopMenu_LevelName(campaign, campaignLevel) : NULL, session.levelName, sizeof(session.levelName),
+			row.level, sizeof(row.level));
 
 		PlayersWords(session, bracket, row.players, sizeof(row.players));
 
 		if (session.throughRelay)
 		{
 			OnlineScreens_SafeName(session.relayRegion, sizeof(session.relayRegion), row.region, sizeof(row.region));
-			OnlineScreens_PingWords(true, Net_JoinerMsToRelay(row.region), HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
+			// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the joiner's round trip is the channel's, once a
+			// join has made one, or else the list's own last visit to the game's line (relay_list.h's pingMs)
+			RelayListLineNow gameLine;
+			bool const lineKnown = LineOfTheGame(session.serverLine, &gameLine);
+			int const channelMs = Net_JoinerMsToRelay(row.region);
+			int const joinerMs = channelMs >= 0 ? channelMs : lineKnown ? gameLine.pingMs : -1;
+			OnlineScreens_PingWords(true, joinerMs, HostMsFor(session.relayCode), row.ping, sizeof(row.ping));
+
+			// Modified 2026-11-11 by Melanikus for the AvP port (the owner's ruling: every server in servers.cfg goes through the same page): the
+			// column names the server whose line listed the game, by the line's own name in servers.cfg, made safe, never by anything a server
+			// sent. The region above only chose the relay to time.
+			if (lineKnown)
+			{
+				OnlineScreens_SafeName(gameLine.line.name, kServersCfgNameLetters, row.region, sizeof(row.region));
+			}
 		}
 		else
 		{
@@ -311,17 +452,41 @@ static void UpdateAndAdd(const OnlineRow *live, int liveCount)
 
 // ---- The games page
 
-// The server's name, as this game dialled it: the list's host name from the game's own settings (Relay_ServerName), or "this network"
-// when there's no list. Never a name a server sent (AVP Tao 3).
+// The servers being asked, for the page's "asking" words: the one line with a yes by its own name, made safe, or, with several, the
+// first such line's name and how many more. Never a name a server sent (AVP Tao 3). Modified 2026-11-11 by Melanikus for the AvP port
+// (one model for every line).
 static void ServerName(char *name, size_t size)
 {
-	if (ThereIsAList())
+	int asked = 0;
+	char first[kServersCfgNameLetters + 1] = "";
+
+	for (int place = 0; place < RelayList_LineCount(); place++)
 	{
-		OnlineScreens_SafeName(Relay_ServerName(), kRelayListHostLetters, name, size);
+		RelayListLineNow now;
+
+		if (RelayList_LineNow(place, &now) && now.state != kRelayLineNoYes)
+		{
+			if (asked == 0)
+			{
+				OnlineScreens_SafeName(now.line.name, kServersCfgNameLetters, first, sizeof(first));
+			}
+
+			asked++;
+		}
+	}
+
+	if (asked == 0)
+	{
+		Put(name, size, OnlineScreens_Words(kOnlineWordsThisNetwork));
+	}
+	else if (asked == 1)
+	{
+		Put(name, size, first);
 	}
 	else
 	{
-		Put(name, size, OnlineScreens_Words(kOnlineWordsThisNetwork));
+		_snprintf(name, size - 1, "%s +%d", first, asked - 1);
+		name[size - 1] = '\0';
 	}
 }
 
@@ -344,7 +509,6 @@ void OnlinePage_Opened(void)
 	searchBox[0] = '\0';
 	lastGameKept = false;
 	StartFetching();
-	Net_ForgetRelayTimes();
 }
 
 void OnlinePage_RelayGamesCame(const RelayListGame *games, int count, const char *why)
@@ -437,9 +601,6 @@ static int VisibleIndexOf(const OnlineGameKey &key)
 bool OnlinePage_Frame(bool listChanged, int *selectedElement)
 {
 	(void)listChanged;   // the rows are read from the list every frame: there are at most ten, and that keeps them right whatever changed
-
-	// The joiner's round trip to each relay, for the ping column. It starts by itself once the list has named the relays (Fifth's).
-	Net_TimeRelaysForJoining();
 
 	PageState const stateBefore = pageState;
 	OnlineRow before[kOnlineMostRows];
@@ -618,7 +779,7 @@ int OnlinePage_SessionForRow(int menuRow)
 
 void OnlinePage_JoinFailed(const char *why)
 {
-	char safe[64];
+	char safe[160];
 
 	OnlineScreens_SafeName(why, sizeof(safe), safe, sizeof(safe));
 	_snprintf(failedLine, sizeof(failedLine) - 1, "%s: %s", OnlineScreens_Words(kOnlineWordsCouldNotJoin), safe);
@@ -642,6 +803,83 @@ static void Words(const char *text, int x, int y, int alpha, enum AVPMENUFORMAT_
 	char line[128];
 	Put(line, sizeof(line), text);
 	RenderSmallMenuText(line, x, y, alpha, format);
+}
+
+// Words in the small font wrapped between the menus' edges, in at most the lines given from top: one line is centred, more are lined
+// up on the left. Added 2026-11-10 by Melanikus for the AvP port, for words longer than a line (#188's refusals).
+static void WrappedWords(const char *text, int top, int lines, int alpha)
+{
+	char words[256];
+	Put(words, sizeof(words), text);
+	RECT area = { MENU_LEFTXEDGE, top, MENU_RIGHTXEDGE, top + lines * HUD_FONT_HEIGHT };
+	RenderSmallFontString_Wrapped(words, &area, alpha, 0, 0);
+}
+
+// online_screens.h's copy of the small font's height must be the font's own: it can't include hud_layout.h, so the check is here, where
+// the game is built
+static_assert(kOnlineHelpLineHeight == HUD_FONT_HEIGHT, "the check code's help lines are spaced by the small font's height, HUD_FONT_HEIGHT");
+static_assert(kOnlineHelpLeft == MENU_LEFTXEDGE && kOnlineHelpRight == MENU_RIGHTXEDGE, "the help lines' widest box is the menus' own edges");
+
+// The narrowest width, at most widest, that keeps the text to as many lines as widest gives it: so a text of two lines is cut into two of
+// about the same length, never a full line and a last word on its own (the owner, 2026-11-10). A narrower box can only give it as many
+// lines or more, so the narrowest that keeps the count is found by halving the gap between a width too narrow and one that keeps it.
+int OnlinePage_BalancedWidth(const char *text, int widest)
+{
+	int const lines = SmallFontString_WrappedLines(text, widest);
+
+	if (lines <= 1)
+	{
+		return widest;
+	}
+
+	int narrow = widest / lines;   // as many lines from here would need the text to be no longer than the whole box
+	int wide = widest;
+
+	while (wide - narrow > 1)
+	{
+		int const middle = narrow + (wide - narrow) / 2;
+
+		if (SmallFontString_WrappedLines(text, middle) == lines)
+		{
+			wide = middle;
+		}
+		else
+		{
+			narrow = middle;
+		}
+	}
+
+	return wide;
+}
+
+// One help text, grey, wrapped into a box of width wide and exactly as tall as the lines given, in the middle of the menus' edges, so
+// RenderSmallFontString_Wrapped starts it at its top: one line is centred in it, more are lined up on its left
+static void HelpText(const char *text, int width, int top, int lines)
+{
+	if (!text || lines <= 0)
+	{
+		return;
+	}
+
+	char words[256];
+	Put(words, sizeof(words), text);
+	int x = 0;
+	int y = 0;
+	int const left = OnlineScreens_HelpBoxLeft(width);
+	RECT area = { left, top, left + width, top + lines * kOnlineHelpLineHeight };
+	RenderSmallFontString_Wrapped(words, &area, ONE_FIXED / 2, &x, &y);
+}
+
+// Added 2026-11-10 by Melanikus for the AvP port (online_screens_page.h says why)
+void OnlinePage_DrawCheckCodeHelp(const char *first, const char *second, int codeTop, int limit)
+{
+	int const widest = kOnlineHelpRight - kOnlineHelpLeft;
+	int const firstWidth = first ? OnlinePage_BalancedWidth(first, widest) : widest;
+	int const secondWidth = second ? OnlinePage_BalancedWidth(second, widest) : widest;
+	OnlineHelpLines const at = OnlineScreens_HelpLines(codeTop, first ? SmallFontString_WrappedLines(first, firstWidth) : 0,
+		second ? SmallFontString_WrappedLines(second, secondWidth) : 0, limit);
+	HelpText(first, firstWidth, at.firstTop, at.firstLines);
+	HelpText(second, secondWidth, at.secondTop, at.secondLines);
 }
 
 // The tail, lit by the menu's highlight glow. alpha is 0 to ONE_FIXED, as the menus' brightness is.
@@ -687,7 +925,7 @@ static void DrawCell(const char *text, int column, int y, int alpha)
 	char fitted[kOnlineRowLetters];
 
 	Put(fitted, sizeof(fitted), text);
-	OnlineScreens_FitToWidth(fitted, kColumns[column].width - 6, SmallWidth);
+	OnlineScreens_FitToWidth(fitted, kColumns[column].width - 6, OnlinePage_SmallWidth);
 	RenderSmallMenuText(fitted, kColumns[column].x, y, alpha, AVPMENUFORMAT_LEFTJUSTIFIED);
 }
 
@@ -762,6 +1000,15 @@ void OnlinePage_DrawTop(void)
 
 	DrawHeadings();
 
+	// Which servers the games come from (#175 2b, PO's ruling A; added 2026-11-10 by Melanikus for the AvP port; modified 2026-11-11: every
+	// line whose server answered, ServersTheGamesComeFrom)
+	char from[192];
+
+	if (ServersTheGamesComeFrom(from, sizeof(from)))
+	{
+		Words(from, MENU_CENTREX, kHeadingsTop - 17, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+	}
+
 	if (visibleCount == 0)
 	{
 		Words(OnlineScreens_Words(shownCount == 0 ? kOnlineWordsNoSessions : kOnlineWordsNoneMatch), MENU_CENTREX, kFirstRowTop, ONE_FIXED / 2,
@@ -769,10 +1016,25 @@ void OnlinePage_DrawTop(void)
 	}
 
 	// A failed join's line, under the rows, for a few seconds
+	int linesTop = kFirstRowTop + (visibleCount > 0 ? visibleCount : 1) * kRowStep + 14;
+
 	if (failedShown && !HasCome(Now(), failedAt + kFailedLineMs))
 	{
-		int const rows = visibleCount > 0 ? visibleCount : 1;
-		Words(failedLine, MENU_CENTREX, kFirstRowTop + rows * kRowStep + 14, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		WrappedWords(failedLine, linesTop, 2, ONE_FIXED);
+		linesTop += 2 * HUD_FONT_HEIGHT;
+	}
+
+	// Every line that has no games on the list says why, by its own name: no yes yet, being asked, no answer and why, not asked, or not
+	// approved yet (added 2026-11-11 by Melanikus for the AvP port: "Nobody blocked silently", and every server through the same page)
+	for (int place = 0; place < RelayList_LineCount() && linesTop + HUD_FONT_HEIGHT <= kLinesBottom; place++)
+	{
+		char lineWords[200];
+
+		if (OnlineScreens_LineStandsWords(place, lineWords, sizeof(lineWords)))
+		{
+			Words(lineWords, MENU_CENTREX, linesTop, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+			linesTop += HUD_FONT_HEIGHT;
+		}
 	}
 }
 
@@ -825,6 +1087,12 @@ static void JoiningLine(int step, const char *region, char *line, size_t size)
 // wait is over (OnlinePage_JoinWaitOver)
 static bool joinDrewFrames = false;
 
+// Whether the wait closed a frame that was open when it began. Added 2026-11-10 by Melanikus for the AvP port (#202): a player's Enter
+// starts the join inside the menus' open frame, which the wait closes and gives back after; but a Hudson run presses the row between
+// frames, with none open, and giving it one back then left a frame open that nobody finished, so the run's next frame couldn't begin
+// (D3DERR_INVALIDCALL from BeginScene, once a join). So the wait gives back only what it closed.
+static bool joinClosedAFrame = false;
+
 void OnlinePage_DrawJoining(const char *region)
 {
 	char line[96];
@@ -835,7 +1103,13 @@ void OnlinePage_DrawJoining(const char *region)
 	// menus' frame is closed first, once, and each frame of the wait is then a whole frame of its own.
 	if (!joinDrewFrames)
 	{
-		ThisFramesRenderingHasFinished();
+		joinClosedAFrame = ThisFramesRenderingIsOpen();
+
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasFinished();
+		}
+
 		joinDrewFrames = true;
 	}
 
@@ -853,8 +1127,15 @@ void OnlinePage_JoinWaitOver(void)
 	if (joinDrewFrames)
 	{
 		joinDrewFrames = false;
-		ThisFramesRenderingHasBegun();
-		DrawMainMenusBackdrop();
+
+		// Only a frame the wait closed is given back (#202): with none open when the join began, the caller opens its own next
+		if (joinClosedAFrame)
+		{
+			ThisFramesRenderingHasBegun();
+			DrawMainMenusBackdrop();
+		}
+
+		joinClosedAFrame = false;
 	}
 }
 
@@ -915,8 +1196,10 @@ static void DrawTheCheckCode(void)
 
 	if (line[0])
 	{
+		// Modified 2026-11-10 by Melanikus for the AvP port: the two help lines wrapped and spaced, never on each other (online_screens.h)
 		Words(line, MENU_CENTREX, kWordsTop + 50, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
-		Words(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), MENU_CENTREX, kWordsTop + 70, ONE_FIXED / 2, AVPMENUFORMAT_CENTREJUSTIFIED);
+		OnlinePage_DrawCheckCodeHelp(OnlineScreens_Words(kOnlineWordsCheckCodeMeans), OnlineScreens_Words(kOnlineWordsCheckCodeSkipped),
+			kWordsTop + 50, kOnlineHelpPageBottom);
 	}
 }
 
@@ -963,9 +1246,6 @@ bool OnlinePage_JoinEnded(void)
 			return true;
 		case kNetJoinAnswerNoAnswer:
 			SayOnThePage(OnlineScreens_Words(kOnlineWordsNoAnswer));
-			return true;
-		case kNetJoinAnswerOtherBuild:
-			SayOnThePage(OnlineScreens_Words(kOnlineWordsOtherBuild));
 			return true;
 		case kNetJoinAnswerWaiting:
 			// The host's no, busy and no answer all come as answers (networking.h), so a request still waiting when the join ends was Esc
@@ -1208,15 +1488,16 @@ static void RelayLineInPlay(void)
 		return;
 	}
 
-	// The server by the name people see for it (-dev's RelayServerName, the owner's "NY Mel's Server") when it has one, otherwise by the
-	// relay's region, made safe either way, as anything drawn here is
+	// The server by the name people see for it (its servers.cfg line's name: modified 2026-11-10 by Melanikus for the AvP port, #175) when it
+	// has one, otherwise by the relay's region, made safe either way, as anything drawn here is
 	char place[kRelayListShownNameLetters + 1];
 	char line[160];
-	const char *const shownName = Relay_ServerShownName();
+	// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line): the line this game is played through, by its own name
+	RelayListLineNow playedOn;
 
-	if (shownName[0] != '\0')
+	if (state.line >= 0 && RelayList_LineNow(state.line, &playedOn))
 	{
-		OnlineScreens_SafeName(shownName, kRelayListShownNameLetters, place, sizeof(place));
+		OnlineScreens_SafeName(playedOn.line.name, kRelayListShownNameLetters, place, sizeof(place));
 	}
 	else
 	{

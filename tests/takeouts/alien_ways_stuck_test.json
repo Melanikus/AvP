@@ -1,0 +1,458 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the states are named out of bh_alien.h's order",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\"Hunt\", \"Wander\",",
+					"to": "\"Wander\", \"Hunt\","
+				}
+			]
+		},
+		{
+			"name": "a number that isn't a state is called Wait",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "kAlienWaysStateNames[state] : \"an unknown state\";",
+					"to": "kAlienWaysStateNames[state] : \"Wait\";"
+				}
+			]
+		},
+		{
+			"name": "a history never counts its frames",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\t\thistory->filled++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "states it was never in are counted as 0",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\t\tif (counts[s] == 0)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the angle is given in radians",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "acos(cosine) * 180.0 / 3.14159265358979323846 + 0.5",
+					"to": "acos(cosine) + 0.5"
+				}
+			]
+		},
+		{
+			"name": "standard gravity is said the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "facts.standardGravity ? \"on\" : \"off\"",
+					"to": "facts.standardGravity ? \"off\" : \"on\""
+				}
+			]
+		},
+		{
+			"name": "touching the floor is said the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "facts.onFloor ? \"yes\" : \"no\"",
+					"to": "facts.onFloor ? \"no\" : \"yes\""
+				}
+			]
+		},
+		{
+			"name": "a module with an empty name is written as nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "facts.module && facts.module[0] ? facts.module : \"(none)\"",
+					"to": "facts.module ? facts.module : \"(none)\""
+				}
+			]
+		},
+		{
+			"name": "a goal is written when there is none",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\tif (facts.hasGoal)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien that's gone has numbers made up for it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\tif (!facts.found)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the let-go line's words change",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "stopped being guided, in %s",
+					"to": "was let go, in %s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the stuck line gets no second part",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\tdetails = StuckDetails(line.who);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the second part is worked out but never written",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "LogString(std::string(text) + details);",
+					"to": "LogString(text);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its body's down is taken from the matrix's column",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "facts.bodyDown[0] = dynamics->OrientMat.mat21;",
+					"to": "facts.bodyDown[0] = dynamics->OrientMat.mat12;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the obstruction count is never read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "facts.obstructedFrames = status ? status->moveData.numObstructiveCollisions : 0;",
+					"to": "facts.obstructedFrames = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the module is never named",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "facts.module = alien->containingModule ? alien->containingModule->name : 0;",
+					"to": "facts.module = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien's state is never read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "return status ? static_cast<int>(status->BehaviourState) : -1;",
+					"to": "return -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the states aren't noted each frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tAlienWaysStateHistory_Note(&w.history, StateOf(alien));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien that's gone stays on the list",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\tw = Watched();\n\t\t\tcontinue;",
+					"to": "\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the let-go lines have no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (letGoLines < kAlienWaysMostLetGoLines)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's own goal isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tw->goal = *goal;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the let-go count carries into the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tletGoLines = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an alien's id is written in capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "snprintf(text + 2 * i, 3, \"%02x\", bytes[i]);",
+					"to": "snprintf(text + 2 * i, 3, \"%02X\", bytes[i]);"
+				}
+			]
+		},
+		{
+			"name": "an alien's id has its bytes backwards",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\"%02x\", bytes[i]);",
+					"to": "\"%02x\", bytes[sizeof(bytes) - 1 - i]);"
+				}
+			]
+		},
+		{
+			"name": "an alien is named by its place alone",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\" (id \" + AlienWaysStuck_Id(name) + \")\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "the let-go line says an alien, not which",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\"alien ways: %s at (%.1f, %.1f, %.1f) stopped being guided, in %s\", AlienWaysStuck_Who(slot, name).c_str(),",
+					"to": "\"alien ways: an alien%.0s at (%.1f, %.1f, %.1f) stopped being guided, in %s\", AlienWaysStuck_Who(slot, name).c_str(),"
+				}
+			]
+		},
+		{
+			"name": "the reached line gives the time since it asked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "\"%.1f s after its first way\"",
+					"to": "\"%.1f s after it asked\""
+				}
+			]
+		},
+		{
+			"name": "a reach before any way is given a time",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "snprintf(when, sizeof(when), \"before any way was found for it\");",
+					"to": "snprintf(when, sizeof(when), \"%.1f s after its first way\", sinceFirstWayMs / 1000.0);"
+				}
+			]
+		},
+		{
+			"name": "an unknown distance is written as a number",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "if (metres < 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the words for why an alien left change",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "{ \"dead\", \"gone\", \"far\", \"target gone\" }",
+					"to": "{ \"dead\", \"gone\", \"far\", \"no target\" }"
+				}
+			]
+		},
+		{
+			"name": "a reason past the list is given a word from the list",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_stuck.h",
+					"from": "why >= 0 && why < kAlienWaysLeavingKinds ? kAlienWaysLeavingWords[why]",
+					"to": "why >= 0 ? kAlienWaysLeavingWords[why % kAlienWaysLeavingKinds]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a reach is the start of a Pounce, not Attack",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "StateOf(alien) != ABS_Attack)",
+					"to": "StateOf(alien) != ABS_Pounce)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a reached line every frame an alien attacks",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (!s || s->reached)\n",
+					"to": "\t\tif (!s)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the reached lines have no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "for (int i = 0; i < NumActiveStBlocks && reachedLines < kAlienWaysMostReachedLines; i++)",
+					"to": "for (int i = 0; i < NumActiveStBlocks; i++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a far alien isn't told apart",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (!alien->SBdptr)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dying alien isn't dead",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (StateOf(alien) == ABS_Dying || alien->SBDamageBlock.Health <= 0)",
+					"to": "if (alien->SBDamageBlock.Health <= 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no alien let go says why it left",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int const why = WhyItLeaves(lapsed[i], letGo);",
+					"to": "int const why = -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a search's line names its alien by its place alone",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\"alien ways: %s %s: the search was refused: %s\", alien.c_str(), where.c_str(),",
+					"to": "\"alien ways: alien %u %s: the search was refused: %s\", static_cast<unsigned>(line.follower), where.c_str(),"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every way found restarts the reached line's clock",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (s && s->firstWayMs < 0)\n\t\t{\n\t\t\ts->firstWayMs = clockMs;",
+					"to": "if (s)\n\t\t{\n\t\t\ts->firstWayMs = clockMs;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the once-a-second places name aliens by their place alone",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "AlienWaysStuck_Who(slots[i], who.name) + \" at \"",
+					"to": "\"alien \" + std::to_string(slots[i]) + \" at \""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the would-have line says an alien, not which",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "AlienWaysStuck_Who(SlotOf(who), who.name).c_str(), Metres(at).c_str(), module,",
+					"to": "std::string(\"an alien\").c_str(), Metres(at).c_str(), module,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien's target isn't kept on the seen list",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tseenNow->target = ask.target;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien's place isn't noted before the guide's turn",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\ts->slot = slot;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the seen list carries into the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "// Nor of the aliens seen, by their ids (added 2026-11-11 by Melanikus for the AvP port, #109)\n\tstd::vector<Seen>().swap(seen);\n",
+					"to": "// Nor of the aliens seen, by their ids (added 2026-11-11 by Melanikus for the AvP port, #109)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the seen list carries past a restart",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "The reached lines' cap runs on, as the others do.\n\tstd::vector<Seen>().swap(seen);\n",
+					"to": "The reached lines' cap runs on, as the others do.\n"
+				}
+			]
+		}
+	]
+}

@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls off for an object; its gravity is as saved, as the game turns it off for some
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   running out of strategy blocks is checked before one is used
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -2475,7 +2478,7 @@ void LoadStrategy_InanimateObject(SAVE_BLOCK_STRATEGY_HEADER* header)
 	
 	
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

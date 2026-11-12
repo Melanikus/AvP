@@ -200,7 +200,7 @@ public:
 
 	// Starts handshake B with the host the listing named, on this joiner's port of that region's relay. identity lasts as long as this.
 	// False if a draw or the handshake refused; then Why() says why.
-	bool Start(const char *region, uint16_t relayPort, const uint8_t hostFingerprint[kNetIdentityFingerprintBytes], const NetIdentity *identity, uint32_t now)
+	bool Start(const char *region, uint16_t relayPort, const uint8_t hostId[kNetIdentityIdBytes], const NetIdentity *identity, uint32_t now)
 	{
 		Reset();
 		uint8_t ePublic[kNetCryptoP384PublicBytes], ekPublic[kNetPqKemPublicBytes], ekPrivate[kNetPqKemPrivateBytes], nJ[kNetHandshakeBNonceBytes];
@@ -218,7 +218,7 @@ public:
 			return Fail(kNetPeerCouldntDraw);
 		}
 
-		bool const written = handshake.WriteB1(region, relayPort, hostFingerprint, identity, e, ePublic, ekPublic, ekPrivate, nJ, b1);
+		bool const written = handshake.WriteB1(region, relayPort, hostId, identity, e, ePublic, ekPublic, ekPrivate, nJ, b1);
 		NetCrypto_Wipe(ekPrivate, sizeof(ekPrivate));
 		NetCrypto_Wipe(nJ, sizeof(nJ));
 

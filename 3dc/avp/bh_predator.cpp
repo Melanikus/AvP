@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a predator (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a predator's self-destruct reaches players on other machines;
 //   an NPC's voice is heard on other machines in a game that plays as single player;
@@ -7240,7 +7242,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	predatorStatusPointer->Selected_Weapon = GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

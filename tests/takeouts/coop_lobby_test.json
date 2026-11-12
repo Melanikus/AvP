@@ -675,26 +675,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: any lobby state is believed",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "\tif (!CoopLobby_StateIsReal(session.coopLobby))\n\t{\n\t\tLogDroppedMessage(\"a game described itself with a lobby state there isn't\");\n\t\treturn;\n\t}\n\n",
-					"to": ""
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a lobby game without its map leaves the list",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (local_index < 0 && session.coopLobby == kCoopLobbyNone)",
-					"to": "if (local_index < 0)"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a joiner isn't in the lobby from the start",
 			"changes": [
 				{
@@ -759,7 +739,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},\t{0},\t{0},\tTEXTSTRING_COOP_TITLE_HELP},\n",
+					"from": "\tAvPMenu_Multiplayer[row++] = CoopRow;\n",
 					"to": ""
 				}
 			]
@@ -1391,6 +1371,16 @@
 					"file": "3dc/coop_lobby.h",
 					"from": "words[wanted < room ? wanted : room - 1] = 0;",
 					"to": "words[room - 1] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listed game's lobby state is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "|| !CoopLobby_StateIsReal(coopLobby))",
+					"to": ")"
 				}
 			]
 		}

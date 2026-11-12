@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls off for a facehugger; its gravity is as saved, as its leap turns it off
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a saved curve of no length is worked out again, because the game divides by its length
@@ -1453,7 +1456,7 @@ void LoadStrategy_FaceHugger(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(jumping)
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

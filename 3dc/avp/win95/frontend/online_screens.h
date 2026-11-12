@@ -124,18 +124,29 @@ bool OnlineScreens_NameMatches(const char *safeName, const char *safeSearch);
 // ---- The fetching screen (J1): the tail, while the games are fetched from the server the game dialled
 
 // "Fetching localhost's open sessions"; "Connected: 3 sessions open" (and "1 session", and "no sessions"); "Couldn't connect to localhost";
-// "Connected to localhost, but couldn't fetch its open sessions". The server's name is the one this game dialled (Relay_ServerName, or
+// "Connected to localhost, but couldn't fetch its open sessions". The server's name is the one this game dialled (its servers.cfg line's name, or
 // "this network"), never one a server sent, and comes made safe already; it's cut to a host name's 63 letters. words always ends with a 0.
 void OnlineScreens_FetchingWords(const char *safeServer, char *words, size_t size);
 void OnlineScreens_ConnectedWords(int sessions, char *words, size_t size);
 void OnlineScreens_CantConnectWords(const char *safeServer, char *words, size_t size);
 void OnlineScreens_CantFetchWords(const char *safeServer, char *words, size_t size);
 
+// ---- The level column. Added 2026-11-10 by Melanikus for the AvP port (PO's ruling: a campaign level is named from its number).
+// campaignName is the game's own name for the level (the co-op pages' list, CoopMenu_LevelName) when the game is a co-op game on one of the
+// 32 campaign places (level_lists.h), or NULL for any other game. When it's given, it's what the column says, made safe, and the name the
+// host sent is never shown, whatever it says. Otherwise the host's name is shown, made safe. Either way an empty name shows as "-". (The
+// game's own names are never NULL once language.txt is read: language.cpp gives a text the file lacks an empty one.) words always ends
+// with a 0.
+void OnlineScreens_LevelWords(const char *campaignName, const char *hostsName, size_t hostsNameBytes, char *words, size_t size);
+
 // ---- The ping column
 
 // "about N ms" for a game through a relay: the joiner's own time to that game's relay, and the host's (hostMs, 0 when the host didn't
 // measure it), because every packet goes host, relay, joiner (PROTOCOL.md, "How the game uses it"). "?" while the joiner's time isn't
 // known yet (joinerMs below 0). "-" for a game on this network. Times above 9999 ms are taken as 9999, as the list caps them.
+// Modified 2026-11-10 by Melanikus for the AvP port (PO's ruling): "..." while the joiner's time is being measured (joinerMs is
+// kOnlineJoinerMsMeasuring: the games page's own timing of the relay, networking.h's Net_RelayBeingTimed).
+int const kOnlineJoinerMsMeasuring = -2;
 void OnlineScreens_PingWords(bool throughRelay, int joinerMs, int hostMs, char *words, size_t size);
 
 // ---- Joining, and being asked (J3, J4, J5, H1)
@@ -181,9 +192,9 @@ enum OnlineWords
 	kOnlineWordsRelayListed,
 	kOnlineWordsRelayNone,
 	kOnlineWordsRelayGone,
-	kOnlineWordsOtherBuild,           // J5: the host is a v2 test build from another commit, so the two can't play (added 2026-11-09)
-	kOnlineWordsCheckCodeMeans,       // J4 and J5: what the check code is for, under it (CRYPTO.md section 8, added 2026-11-09)
+		kOnlineWordsCheckCodeMeans,       // J4 and J5: what the check code is for, under it (CRYPTO.md section 8, added 2026-11-09)
 	kOnlineWordsCheckCodeMeansHost,   // H1: the same, on the host's screen
+	kOnlineWordsCheckCodeSkipped,     // on both, under that: what not comparing it means, for strangers (the owner's ruling, beta.2)
 	kOnlineWordsCount
 };
 
@@ -212,7 +223,7 @@ void OnlineScreens_RoomGoneWords(const char *safeWhy, char *words, size_t size);
 //   a joiner:   "CLIENT, Relay: nyc3, 290 ms (round trip, client to host through server)", ms being ENet's time to the host and back,
 //               through the server, then ", 146 ms round trip to server" when serverMs isn't below 0: its own time to the server and
 //               back, as the games page measured it before the join.
-// safeRegion is the name people see for the server ("NY Mel's Server", Relay_ServerShownName) when it has one, otherwise the relay's
+// safeRegion is the name people see for the server (its servers.cfg line's name, RelayList_LineNow's line.name) when it has one, otherwise the relay's
 // region. It comes made safe already, and is cut to a shown name's 32 letters; with none it says "a relay". ms below 0 (nothing measured
 // yet) leaves the times out, and a time above 9999 is 9999. words always ends with a 0, cut short if it has to be.
 // Modified 2026-11-09 by Melanikus for the AvP port: the owner's words, serverMs, and the server's shown name.
@@ -224,5 +235,60 @@ void OnlineScreens_PlayLineWords(bool isHost, const char *safeRegion, int ms, in
 // middle. This writes "Check code: 123 456", in two threes so it's easy to read out. Anything that isn't exactly 6 digits gives "", so
 // nothing half-made is ever shown as a code. words always ends with a 0.
 void OnlineScreens_CheckCodeWords(const char *digits, char *words, size_t size);
+
+// THE CHECK CODE'S TWO HELP LINES, under it on the joining page and on the host's "asks to join" rows. Added 2026-11-10 by Melanikus for
+// the AvP port, after the owner's showcase pictures: the two grey lines were drawn 10 apart in the small font, which is 15 high, so they
+// lay on top of each other, and the host's ran almost from one edge of the screen to the other. Now each is wrapped to the menus' own
+// edges (30 to 610 on their 640-wide grid, MENU_LEFTXEDGE and MENU_RIGHTXEDGE: the owner, "so each text fits whole") and placed under the
+// one before by its own height, with a gap. A text that still needs more than one line is wrapped to the narrowest width that keeps that
+// many lines, in the middle (online_screens_page.cpp, BalancedWidth), so its lines come out about the same length: never a full line and
+// a last word on its own. If they don't both fit above the limit given, the second is cut to the lines that fit first, then the first:
+// they never run into what's below. The limit is the joining page's, where the menus' help line starts (420), or the top of the host's
+// answer rows. The grid is the same at every screen size, so this holds at 4:3 and at 16:9 alike.
+int const kOnlineHelpLineHeight = 15;    // the small font's height, HUD_FONT_HEIGHT (online_screens_page.cpp checks it when the game is built)
+int const kOnlineHelpCodeGap = 5;        // between the check code's own line and the first help text
+int const kOnlineHelpGap = 4;            // between the two help texts
+int const kOnlineHelpLeft = 30;          // the widest both may be: the menus' own edges, MENU_LEFTXEDGE and MENU_RIGHTXEDGE
+int const kOnlineHelpRight = 610;
+int const kOnlineHelpPageBottom = 420;   // the joining page's limit: menus.cpp draws the help line from 420
+
+// Where a box of this width starts, in the middle of the widest one: a text wrapped narrower than the edges is centred. A width wider
+// than the edges, or none, gets the edges themselves.
+inline int OnlineScreens_HelpBoxLeft(int width)
+{
+	int const widest = kOnlineHelpRight - kOnlineHelpLeft;
+	return width <= 0 || width >= widest ? kOnlineHelpLeft : kOnlineHelpLeft + (widest - width) / 2;
+}
+
+struct OnlineHelpLines
+{
+	int firstTop;      // the first help text's first line
+	int firstLines;    // how many of its lines are drawn: all of them, unless there's no room
+	int secondTop;     // the second's
+	int secondLines;
+	int bottom;        // under the last line drawn
+};
+
+// Where the two help texts go, under the check code's line at codeTop. firstLines and secondLines are how many lines each takes in the
+// box (SmallFontString_WrappedLines); limit is the most the last may reach.
+inline OnlineHelpLines OnlineScreens_HelpLines(int codeTop, int firstLines, int secondLines, int limit)
+{
+	OnlineHelpLines at;
+
+	firstLines = firstLines < 0 ? 0 : firstLines;
+	secondLines = secondLines < 0 ? 0 : secondLines;
+
+	at.firstTop = codeTop + kOnlineHelpLineHeight + kOnlineHelpCodeGap;
+
+	// How many lines fit for both, with the gap between them; the first takes what it needs of them, and the second the rest
+	int room = (limit - at.firstTop - kOnlineHelpGap) / kOnlineHelpLineHeight;
+	room = room < 0 ? 0 : room;
+	at.firstLines = firstLines > room ? room : firstLines;
+	at.secondLines = secondLines > room - at.firstLines ? room - at.firstLines : secondLines;
+
+	at.secondTop = at.firstTop + at.firstLines * kOnlineHelpLineHeight + kOnlineHelpGap;
+	at.bottom = at.secondTop + at.secondLines * kOnlineHelpLineHeight;
+	return at;
+}
 
 #endif

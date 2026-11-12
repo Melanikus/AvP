@@ -14,6 +14,17 @@
 // Neighbours wrap round the picture's edges, as the graphics card reads a picture drawn with wrap, which is how the level's are drawn.
 // Only solid texels are read and only holes are written, so the answer doesn't depend on which texel is done first.
 //
+// A SHEET OF SMALL PICTURES (cell; added 2026-11-11 by Melanikus (Primary) for the AvP port): some pictures are many small ones laid side
+// by side, like the effects sheet graphics/Common/partclfx.RIM, whose small pictures are squares of 64 and 32 texels. Each is drawn on its
+// own, and a texel of one is never meant to be next to a texel of another. But a hole on the edge of one small picture used to take the
+// colour of the next one's solid texels, across the line between them. The light flare's glow (DrawCoronas, in d3d_render.cpp) sits
+// on that sheet above a picture whose top row is solid white. Its bottom row of holes became white in memory, and smooth filtering
+// mixed that white into the glow's bottom edge, half and half with the row above. Drawn as added light, that's a thin white line under
+// the glow, in two short pieces, just where the row above is still solid: what the owner saw on every light's glow, measured in a Hudson
+// picture on 2026-11-11 (a flare's glow at 1280x720: one row, brighter only in those two pieces). So, given the size of the sheet's
+// squares (cell), a hole takes colour only from solid texels in its own square, and nothing wraps round a square's edges. cell 0 is a
+// single picture, and the rule above stands.
+//
 // pixels: 4 bytes a texel, blue, green, red, alpha, as RimLoader writes them; each row starts pitch bytes after the last. Nothing past
 // width texels of a row is read or written. The answer is false, with nothing changed, if the sizes can't be a picture.
 
@@ -23,7 +34,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-inline bool RimEdges_ColourTheHoles(uint8_t *pixels, uint32_t width, uint32_t height, uint32_t pitch)
+inline bool RimEdges_ColourTheHoles(uint8_t *pixels, uint32_t width, uint32_t height, uint32_t pitch, uint32_t cell = 0)
 {
 	if (!pixels || width == 0 || height == 0 || width > pitch / 4)
 	{
@@ -50,6 +61,22 @@ inline bool RimEdges_ColourTheHoles(uint8_t *pixels, uint32_t width, uint32_t he
 					if (dx == 0 && dy == 0)
 					{
 						continue;
+					}
+
+					// On a sheet of small pictures, a neighbour off the sheet, or in another small picture, isn't this one's neighbour at all
+					if (cell != 0)
+					{
+						int64_t const sx = (int64_t)x + dx, sy = (int64_t)y + dy;
+
+						if (sx < 0 || sy < 0 || sx >= (int64_t)width || sy >= (int64_t)height)
+						{
+							continue;
+						}
+
+						if ((uint32_t)sx / cell != x / cell || (uint32_t)sy / cell != y / cell)
+						{
+							continue;
+						}
 					}
 
 					// One step left of the first column is the last column, as the card reads a picture that wraps

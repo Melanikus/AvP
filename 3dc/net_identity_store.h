@@ -41,6 +41,7 @@
 
 #include "net_identity.h"
 #include "net_identity_file.h"
+#include "servers_trust.h"
 
 // What reading the kept identity found
 enum NetIdentityStoreResult
@@ -73,5 +74,38 @@ NetIdentityStoreResult NetIdentityStore_Load(NetIdentity *out, const char **why)
 // Makes a new identity and keeps it, replacing any kept before: for the first run, and for a player who has asked for a new one or
 // confirmed one. False, with nothing of out left, if it couldn't be made or kept: an identity that isn't kept would be a stranger next run.
 bool NetIdentityStore_MakeAndKeep(NetIdentity *out);
+
+// ---- THE PLAYER'S YESES to servers.cfg lines (servers_trust.h), kept beside the identity with the same care. Added 2026-11-10 by
+// Melanikus for the AvP port (#175's last part).
+// WHERE: %LOCALAPPDATA%\AVPx\servers-trusted.cfg, or servers-trusted-second-copy.cfg for the second copy. Never Documents: a yes leads
+// to the server approving this PC's identity, which never roams (WHERE, above), so a yes that roamed would buy nothing on another PC. A
+// Hudson run keeps none and reads none: relay_list.cpp never asks it, and these say no file and keep nothing in a Hudson run anyway.
+// THE FILE is read through one handle, a plain file owned by this Windows user, as the identity is, and as hostile input
+// (servers_trust.h's rules). It's written whole under a name of its own, made sure of on the disk, and put in place in one step, owned by
+// this user and readable and writable by this user alone. It holds hashes only, so nothing in it is a secret.
+
+// What reading the kept yeses found
+enum NetTrustStoreResult
+{
+	kNetTrustStoreRead,       // the yeses, whole
+	kNetTrustStoreNoFile,     // none is kept: no yes yet, or the file was taken away
+	kNetTrustStoreRefused,    // a file is there, but not one the game wrote: a link, not this user's, or its text breaks servers_trust.h's rules
+	kNetTrustStoreCantRead    // a file is there, but it couldn't be read: in use, or not allowed
+};
+
+// The kept yeses' file name in %LOCALAPPDATA%\AVPx: the player's own, or the second copy's
+const wchar_t *NetIdentityStore_TrustFileName(bool secondCopy);
+
+// Reads the yeses kept at path into out. out is whole only for Read; for every other answer it holds no yes. why, if it's given, is fixed
+// words saying what was wrong when the answer isn't Read or NoFile (never anything from the file).
+NetTrustStoreResult NetIdentityStore_LoadTrustFrom(const wchar_t *path, ServersTrustYeses *out, const char **why);
+
+// Keeps yeses at path: the whole file written under a name of its own beside path, made sure of on the disk, then put in place of
+// whatever was at path. False, with path as it was, if any of that was refused.
+bool NetIdentityStore_KeepTrustTo(const wchar_t *path, const ServersTrustYeses &yeses);
+
+// The same, at this PC's own file (WHERE, above), which is what the game uses (relay_list.cpp). In a Hudson run, NoFile and false.
+NetTrustStoreResult NetIdentityStore_LoadTrust(ServersTrustYeses *out, const char **why);
+bool NetIdentityStore_KeepTrust(const ServersTrustYeses &yeses);
 
 #endif

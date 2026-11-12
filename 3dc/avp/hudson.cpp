@@ -134,6 +134,7 @@
 #include "psndplat.h"
 #include "detaillevels.h"
 #include "networking.h"
+#include "relay_list.h"   // yespage=: HudsonTest_RelayListShowsTheYesPage (added 2026-11-10 by Melanikus (Third))
 #include "enet\enet.h"
 #include <psapi.h>
 #include "d3_func.h"
@@ -148,9 +149,8 @@ extern NetID AvPNetID;
 extern MODULE *playerPherModule;
 extern char LevelName[];
 extern void RemovePickedUpObject(STRATEGYBLOCK *objectPtr);
-extern bool NetLoopbackSearch;                                      // networking.cpp
 extern bool NetLoopbackOnly;                                        // networking.cpp
-extern bool Net_AllowOneRemoteRelay(const char *name);              // networking.cpp: the one relay beyond this machine a run with net= may use
+extern bool Net_AllowOneRemoteRelay(const char *address);           // networking.cpp: the one relay beyond this machine a run with net= may use
 extern uint32_t Net_RemoteRelayAddress();                           // networking.cpp: the one address that let through, 0 if none
 extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.cpp
 extern bool OnlineHost_AskWaiting(char *safeName, size_t size, int *secondsLeft); // online_screens_page.cpp: a player waiting to be let in
@@ -176,6 +176,8 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "pvisible.h"
 #include "pheromone.h"
 #include "pfarlocs.h"
+#include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
+#include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -402,6 +404,11 @@ static bool watchHasLastPlace = false;
 static LONG watchMillimetres[3] = { 0, 0, 0 };   // how far it went on each kind of surface, by WatchSurface
 static LONG watchReachedMilliseconds = -1;       // how long after it was made its first blow landed, or -1
 static LONG watchRoomsSeeEachOther = -1;         // 1 if his room and the alien's are the same or either is visible from the other when it's made, 0 if not, -1 before
+static char watchAlienName[SB_NAME_LENGTH];      // the watched alien's own name, so only its own blows count as its (added 2026-11-11, Third)
+static bool watchAlienNamed = false;
+// The alien whose claw is landing right now (Hudson_AlienStrikes), or none: set just before its damage and cleared just after, on the game's
+// thread, so a blow is put down to the alien that struck it (added 2026-11-11 by Melanikus (Third) for the AvP port)
+static const STRATEGYBLOCK *strikingAlien = 0;
 
 static const char *const kWatchSurfaceWords[3] = { "floor", "wall", "ceiling" };
 static volatile LONG enemyState = kEnemyNotMade;
@@ -489,8 +496,15 @@ static const char *WordForTheEnemy()
 // Something can still go wrong after that: the result is written before the shutdown starts, and the shutdown can stick, or fail an assert. Then the file would go on saying exit=0 about a run that ended
 // another way, so whatever comes later adds a line of its own, saying what really happened. The exit code Windows reports is always the last word.
 // A run's film. See hudson_video.h. The file's name has the time in it, so that a run started by hand can't write over the last one. run-hudson.ps1 moves it to the folder it keeps a run in.
-static char videoName[64] = { 0 };
+static char videoName[128] = { 0 };
 static volatile LONG videoGrabs = 0, videoGrabMicroseconds = 0, videoGrabWorstMicroseconds = 0;
+
+// film=menus (hudson_plan.h): the film starts at the menus and is cut into clips, each named after the step that ends it
+// (TakeVideoFrame). Only the game's own thread touches these. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static char clipEndsAt[64] = "";   // the picture of the menus whose clip ends at the next frame given to the film (Hudson_SaveThePage)
+static int clipNumber = 0;         // the clip being filmed, from 1
+static char filmStamp[32] = "";    // when the first clip started: the same in every clip's name, so a run's clips sort together
+static bool filmGivenUp = false;   // a clip didn't finish in time, so the writer can't start again, and the rest of the run has no film
 static volatile LONG videoSaidItStopped = 0, videoSaidItDropped = 0;
 
 static void SayIfTheVideoHasNews(const HudsonVideoFacts &facts)
@@ -759,8 +773,51 @@ static void WatchForFramesStopping()
 	LogString(line);
 }
 
+// #198, a clean early stop (added 2026-11-10 by Melanikus (Third) for the AvP port): whether a hudson-stop file in the run's own folder
+// asks the run to end (hudson_plan.h, HudsonPlan_StopFileCounts says which files count). Only the file's kind and date are looked at,
+// never what's in it. One that doesn't count is said once in the log, and left alone.
+static long long runStartedFileTime = 0;
+
+static bool AStopFileAsksToEnd()
+{
+	static bool saidIgnored = false;
+	char const *const folder = GetSaveFolderPath();
+
+	// Before the run's start is known, no file can be shown to be newer than it, so none counts
+	if (!folder || folder[0] == 0 || runStartedFileTime == 0)
+	{
+		return false;
+	}
+
+	WIN32_FILE_ATTRIBUTE_DATA file;
+
+	if (!GetFileAttributesExA((std::string(folder) + kHudsonStopFileName).c_str(), GetFileExInfoStandard, &file))
+	{
+		return false;
+	}
+
+	bool const isFolder = (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	bool const isLink = (file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+	long long const writtenAt = ((long long)file.ftLastWriteTime.dwHighDateTime << 32) | file.ftLastWriteTime.dwLowDateTime;
+
+	if (HudsonPlan_StopFileCounts(true, isFolder, isLink, writtenAt, runStartedFileTime))
+	{
+		return true;
+	}
+
+	if (!saidIgnored)
+	{
+		saidIgnored = true;
+		LogErrorString(std::string("hudson: a ") + kHudsonStopFileName + " is in the run's folder, but it's a folder, a link, or older than this run, so it doesn't stop it");
+	}
+
+	return false;
+}
+
 static unsigned __stdcall WatchdogThread(void *)
 {
+	DWORD stopLookedAt = 0;
+
 	for (;;)
 	{
 		Sleep(kWatchdogLooksEveryMilliseconds);
@@ -784,6 +841,18 @@ static unsigned __stdcall WatchdogThread(void *)
 		if (GetTickCount() - startedAt > (DWORD)plan.seconds * 1000)
 		{
 			EndAtOnce("it went past its time limit", kHudsonExitOutOfTime);
+		}
+
+		// #198: someone asked it to end, with a hudson-stop file. It ends the same way as at its time limit: the result written and the
+		// film finished (WriteResult), then the game ended. Looked for once a second, not every turn, since it asks the disk.
+		if (GetTickCount() - stopLookedAt >= 1000)
+		{
+			stopLookedAt = GetTickCount();
+
+			if (AStopFileAsksToEnd())
+			{
+				EndAtOnce("it was stopped by hand: a hudson-stop file asked it to end", kHudsonExitStoppedByHand);
+			}
 		}
 	}
 }
@@ -815,6 +884,11 @@ void Hudson_ReadCommandLine(const char *commandLine)
 	HudsonBreaksPrisms = plan.breakPrisms;
 	HudsonWayOfDying = plan.deathWay;
 	startedAt = GetTickCount();
+
+	// When the run started, as Windows dates a file, so a hudson-stop file left from an earlier run is too old to count (#198)
+	FILETIME now;
+	GetSystemTimeAsFileTime(&now);
+	runStartedFileTime = ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;
 }
 
 // The part of the first screen that isn't the main one left free by any taskbar, in the game's own numbers. False if there's only one screen. Defined further down.
@@ -834,6 +908,20 @@ int Hudson_CheckBeforeStarting()
 	{
 		WriteResult(refusalFromReading, kHudsonExitBadArguments);
 		return kHudsonExitBadArguments;
+	}
+
+	// floorislava=off: the run types the console's own FLOORISLAVA OFF, read by the console's own rule (floor_is_lava.h), before any level
+	// starts, as each level's start reads what was asked. The 1999 side of a film since the flip. Added 2026-11-11 by Melanikus (Third).
+	if (plan.floorIsLavaOff)
+	{
+		FloorIsLava_FromWords("OFF", &FloorIsLavaAsked);
+	}
+
+	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone
+	// (relay_list.h). Here, before the menus, so the list can't have started yet. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+	if (plan.yesPage != kHudsonYesPageNone)
+	{
+		HudsonTest_RelayListShowsTheYesPage();
 	}
 
 	// It only has to fit the main screen if that's where it goes. On the second screen it's made smaller to fit its part, and the game goes on drawing the size that was asked for.
@@ -891,7 +979,6 @@ int Hudson_CheckBeforeStarting()
 	if (plan.netMode != kHudsonNetNone)
 	{
 		NetLoopbackOnly = true;
-		NetLoopbackSearch = plan.typed;
 
 		if (MultiplayerEpisodeForEnvironment(environment) < 0 && !plan.coop)
 		{
@@ -903,10 +990,11 @@ int Hudson_CheckBeforeStarting()
 		// Modified 2026-11-09 by Melanikus for the AvP port: unless the run asks to answer as a player does, with answer= (hudson_plan.h)
 		Net_LetEveryJoinerIn(plan.answerPress == kHudsonAnswerNone);
 
-		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its name (hudson_plan.h)
+		// Server #14's run through a relay on another machine: the one relay the run may use beyond this machine, by its address (hudson_plan.h;
+		// modified 2026-11-10 by Melanikus for the AvP port, #175: a servers.cfg line's address, never a name)
 		if (plan.remoteRelay[0] && !Net_AllowOneRemoteRelay(plan.remoteRelay))
 		{
-			WriteResult("remoterelay= isn't a server's name the game takes", kHudsonExitBadArguments);
+			WriteResult("remoterelay= isn't one plain IPv4 address a relay can have", kHudsonExitBadArguments);
 			return kHudsonExitBadArguments;
 		}
 	}
@@ -3548,6 +3636,8 @@ static void WatchTheAlienStarts(const STRATEGYBLOCK *marine, const STRATEGYBLOCK
 	watchStartedAt = GetTickCount();
 	watchFirstBlowAt = 0;
 	watchSecondsLogged = 0;
+	memcpy(watchAlienName, alien->SBname, sizeof(watchAlienName));
+	watchAlienNamed = true;
 	watchHasLastPlace = false;
 	InterlockedExchange(&watchMillimetres[kWatchFloor], 0);
 	InterlockedExchange(&watchMillimetres[kWatchWall], 0);
@@ -4151,6 +4241,25 @@ static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)
 	}
 }
 
+// An alien's own name, as the game keeps it (8 bytes), in hex, and the alien ways guide's place for it (the "alien N" of their lines), or -1
+static void AlienWords(const STRATEGYBLOCK *alien, char *out, size_t room)
+{
+	unsigned char const *const name = reinterpret_cast<unsigned char const *>(alien->SBname);
+	_snprintf(out, room - 1, "alien %02x%02x%02x%02x%02x%02x%02x%02x (alien ways' %d)", name[0], name[1], name[2], name[3], name[4], name[5], name[6], name[7],
+		AlienWays_PlaceOf(alien));
+	out[room - 1] = 0;
+}
+
+void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)
+{
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	strikingAlien = alien;
+}
+
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 {
 	if (!HudsonRunIsOn)
@@ -4173,7 +4282,11 @@ void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 	LONG const blows = InterlockedIncrement(&blowsOnHim);
 
 	// A watched alien has reached him. The run goes on for a few seconds, so that the film shows it, and then ends: see WatchTheAlien.
-	if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port: only the watched alien's own claw counts (strikingAlien, by its name), never
+	// any blow after it was made: a level's own alien had clawed him 50 m from the watched one, and the watch took that as its first blow.
+	bool const theWatchedAliensOwn = strikingAlien && watchAlienNamed && NAME_ISEQUAL(strikingAlien->SBname, watchAlienName);
+
+	if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)
 	{
 		watchFirstBlowAt = GetTickCount();
 		InterlockedExchange(&watchReachedMilliseconds, (LONG)(watchFirstBlowAt - watchStartedAt));
@@ -4186,9 +4299,15 @@ void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 
 	if (blows <= kBlowsToLog)
 	{
-		char line[120] = { 0 };
+		char line[200] = { 0 };
+		char who[80] = "no alien's claw";
 
-		_snprintf(line, sizeof(line) - 1, "hudson: blow %ld landed on him at frame %ld, of kind %d. He has %d health", blows, framesDone, kind, block->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		if (strikingAlien)
+		{
+			AlienWords(strikingAlien, who, sizeof(who));
+		}
+
+		_snprintf(line, sizeof(line) - 1, "hudson: blow %ld landed on him at frame %ld, of kind %d, by %s. He has %d health", blows, framesDone, kind, who, block->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 		LogString(line);
 	}
 }
@@ -4833,7 +4952,22 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 	SYSTEMTIME now;
 
 	GetLocalTime(&now);
-	_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+
+	if (plan.filmMenus)
+	{
+		// film=menus: one of the run's clips, with the time the first started and its own number, so no clip has another's name
+		if (filmStamp[0] == 0)
+		{
+			_snprintf(filmStamp, sizeof(filmStamp) - 1, "%04d-%02d-%02d-%02d%02d%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+		}
+
+		clipNumber++;
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%s-clip%02d.mp4", filmStamp, clipNumber);
+	}
+	else
+	{
+		_snprintf(videoName, sizeof(videoName) - 1, "hudson-video-%04d-%02d-%02d-%02d%02d%02d.mp4", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+	}
 
 	HudsonVideoWriter_Start((std::string(folder) + videoName).c_str(), (int)filmSize->Width, (int)filmSize->Height, plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, kHudsonVideoMostBytes);
 }
@@ -4842,11 +4976,20 @@ static void StartTheVideo(D3DSURFACE_DESC *filmSize)
 static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds)
 {
 	static IDirect3DSurface9 *copy = 0;
+	static D3DSURFACE_DESC copySize;
 
 	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
 	IDirect3DSurface9 *screen = 0;
 	D3DSURFACE_DESC size;
 	char why[200] = { 0 };
+
+	// film=menus: a clip can start at another size than the one before (the menus and the level may differ), and the copy has to be the
+	// clip's size, so one of another size is let go and made again below (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (copy && (copySize.Width != filmSize.Width || copySize.Height != filmSize.Height || copySize.Format != filmSize.Format))
+	{
+		copy->Release();
+		copy = 0;
+	}
 
 	HRESULT hr = device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen);
 
@@ -4864,6 +5007,7 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 		if (SUCCEEDED(hr) && !copy)
 		{
 			hr = device->CreateOffscreenPlainSurface(filmSize.Width, filmSize.Height, filmSize.Format, D3DPOOL_SYSTEMMEM, &copy, NULL);
+			copySize = filmSize;
 		}
 
 		if (SUCCEEDED(hr))
@@ -4904,15 +5048,87 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 	}
 }
 
+// film=menus: a clip that has just been finished gets the step that ended it at the end of its name (hudson_video.h, HudsonVideo_ClipName:
+// a plain name in the same folder). MoveFileA never replaces a file that's already there, so no clip can be written over. If it can't be
+// renamed, it keeps its numbered name, which is unique too, and the log says so. Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static void NameTheClip(const char *step)
+{
+	char const *const folder = GetSaveFolderPath();
+	char clipName[sizeof(videoName)];
+
+	if (!folder || folder[0] == 0 || !HudsonVideo_ClipName(videoName, step, clipName, sizeof(clipName)))
+	{
+		LogErrorString(std::string("video: a clip couldn't be named after its step, so it keeps the name ") + videoName);
+		return;
+	}
+
+	if (!MoveFileA((std::string(folder) + videoName).c_str(), (std::string(folder) + clipName).c_str()))
+	{
+		LogErrorString(std::string("video: ") + videoName + " couldn't be renamed " + clipName + ", so it keeps its name");
+		return;
+	}
+
+	// The new name's letters, then the 0 that ends them on a line of its own. clipName is as big as videoName and HudsonVideo_ClipName
+	// ended it, so it has at most sizeof(videoName) - 1 letters, and the 0 always fits.
+	size_t const clipLength = strnlen(clipName, sizeof(clipName) - 1);
+
+	memcpy(videoName, clipName, clipLength);
+	videoName[clipLength] = 0;
+	LogString(std::string("video: the clip ") + videoName + " is finished");
+}
+
+// film=menus: ends the clip being filmed at a step (a picture of the menus, or the level's first frame), names it after that step, and
+// starts the next. A clip with nothing in it isn't cut, so no clip is empty. The cut waits a little for the writer to finish
+// (kHudsonVideoCutWaitMilliseconds), because the game, perhaps a network game, is still going; a clip that isn't finished by then can't
+// be followed by another (hudson_video_writer.h), so the rest of the run has no film, and the log says so. True if the next clip started.
+// Added 2026-11-10 by Melanikus (Third) for the AvP port.
+static bool CutTheFilm(const char *step, D3DSURFACE_DESC *filmSize)
+{
+	HudsonVideoFacts facts;
+
+	if (filmGivenUp)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_GetFacts(&facts);
+
+	if (!facts.started || facts.written == 0)
+	{
+		return false;
+	}
+
+	HudsonVideoWriter_Finish(kHudsonVideoCutWaitMilliseconds);
+	HudsonVideoWriter_GetFacts(&facts);
+	SayIfTheVideoHasNews(facts);
+
+	if (!facts.finishedInTime)
+	{
+		filmGivenUp = true;
+		LogErrorString(std::string("video: the clip ") + videoName + " wasn't finished in time at its end, so the rest of this run has no film");
+		return false;
+	}
+
+	char line[200] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "video: a clip of %ld pictures ends at %s (%ld dropped)", facts.written, step, facts.dropped);
+	LogString(line);
+	NameTheClip(step);
+	StartTheVideo(filmSize);
+	return true;
+}
+
 // Takes this moment's picture, if one's due. Reading a frame back is the only part that costs the game anything, so it isn't done unless a picture is wanted, and what it costs goes in the log.
 static void TakeVideoFrame()
 {
 	static bool triedToStart = false;
+	static bool levelClipCut = false;
 	static D3DSURFACE_DESC filmSize;
 	static LARGE_INTEGER started, ticksPerSecond;
 
-	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before
-	if (framesDone < 1)
+	// framesDone only counts frames of the level, so a film starts with the level, not with whatever was on the screen before. With
+	// film=menus (hudson_plan.h) it starts at the first frame drawn, the menus' too (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+	if (framesDone < 1 && !plan.filmMenus)
 	{
 		return;
 	}
@@ -4923,6 +5139,18 @@ static void TakeVideoFrame()
 		StartTheVideo(&filmSize);
 		QueryPerformanceFrequency(&ticksPerSecond);
 		QueryPerformanceCounter(&started);
+	}
+
+	// film=menus: the level's first frame ends the clip of the menus and the loading, so the level starts a clip of its own. Each clip's
+	// clock starts at 0.
+	if (plan.filmMenus && framesDone >= 1 && !levelClipCut)
+	{
+		levelClipCut = true;
+
+		if (CutTheFilm("before-level", &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
 	}
 
 	LARGE_INTEGER before;
@@ -4954,14 +5182,32 @@ static void TakeVideoFrame()
 
 	HudsonVideoWriter_GetFacts(&facts);
 	SayIfTheVideoHasNews(facts);
+
+	// film=menus: a picture of the menus (Hudson_SaveThePage) ends this clip, after the frames up to it are in it
+	if (clipEndsAt[0])
+	{
+		char step[sizeof(clipEndsAt)];
+
+		memcpy(step, clipEndsAt, sizeof(step));
+		clipEndsAt[0] = 0;
+
+		if (CutTheFilm(step, &filmSize))
+		{
+			QueryPerformanceCounter(&started);
+		}
+	}
 }
 
 // The other game of the pair starts once this file is there, because the host only answers once it's playing: tools/hudson/run-net-pair.ps1 waits for it. It says nothing that matters, and the next run clears it.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port: only once the host has drawn a frame of its level (framesDone counts those
+// alone), as this is called at the end of every frame, the menus' too. Before, "ready" meant "has drawn a frame": a host through the
+// Multiplayer page's rows (hostrow=) was still on its pages, not yet on the relays' list, when its joiner looked, and the joiner found no
+// game (the full-stack pair's step 3, 2026-11-10 23:13).
 static void SayTheHostIsReady()
 {
 	static bool said = false;
 
-	if (said || plan.netMode != kHudsonNetHost)
+	if (said || plan.netMode != kHudsonNetHost || framesDone < 1)
 	{
 		return;
 	}
@@ -5046,6 +5292,14 @@ void Hudson_SaveThePage(const char *name)
 	{
 		LogErrorString(std::string("hudson: couldn't save ") + name);
 	}
+
+	// film=menus: this page's picture ends a clip, named after it, at the film's next frame (TakeVideoFrame). Added 2026-11-10 by
+	// Melanikus (Third) for the AvP port.
+	if (plan.filmMenus && plan.recordVideo)
+	{
+		_snprintf(clipEndsAt, sizeof(clipEndsAt) - 1, "%s", name);
+		clipEndsAt[sizeof(clipEndsAt) - 1] = '\0';
+	}
 }
 
 // ---- The presses a player makes (access= and answer=, hudson_plan.h). Added 2026-11-09 by Melanikus for the AvP port.
@@ -5073,6 +5327,12 @@ int Hudson_AnswerAfterSeconds()
 	return HudsonRunIsOn ? plan.answerAfterSeconds : 0;
 }
 
+// pagehold= (with film=menus): the seconds each page the menus picture is held first. Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_PageHoldSeconds()
+{
+	return (HudsonRunIsOn && plan.filmMenus) ? plan.pageHoldSeconds : 0;
+}
+
 bool Hudson_JoinsThroughFindGames()
 {
 	return HudsonRunIsOn ? plan.findGames : false;
@@ -5081,6 +5341,29 @@ bool Hudson_JoinsThroughFindGames()
 bool Hudson_MenuPictures()
 {
 	return HudsonRunIsOn ? plan.menuPictures : false;
+}
+
+// yespage= and hostrow= (hudson_plan.h). Added 2026-11-10 by Melanikus (Third) for the AvP port
+int Hudson_YesPagePress()
+{
+	return HudsonRunIsOn ? plan.yesPage : kHudsonYesPageNone;
+}
+
+int Hudson_HostRow()
+{
+	return HudsonRunIsOn ? plan.hostRow : kHudsonHostRowNone;
+}
+
+// hoston= and joinon= (hudson_plan.h): the server named, with its spaces back; "" outside a run or when none is named. Added 2026-11-11 by
+// Melanikus (Third) for the AvP port
+const char *Hudson_HostOnName()
+{
+	return HudsonRunIsOn ? plan.hostOn : "";
+}
+
+const char *Hudson_JoinOnName()
+{
+	return HudsonRunIsOn ? plan.joinOn : "";
 }
 
 void Hudson_PictureThisFrame(const char *name)
@@ -6291,12 +6574,219 @@ void Hudson_MoveHimOnFoot(const VECTORCH &place)
 	MoveThePlayerTo(place);
 }
 
+// ---- EVERY ALIEN THAT CAME FOR HIM, in a run where he plays a level himself (play=yes). Added 2026-11-11 by Melanikus (Third) for the
+// AvP port, for #109's proof (the owner: the level's own aliens, as they wake near him, floor is lava against 1999). Each alien that takes
+// him as its target gets lines of its own, by its own name (AlienWords), on the game's thread alone:
+//   "came": the frame it first took him as its target, whether it was near (drawn, bh_near) or far (bh_far) then, and how far from him;
+//   "first blow": its own first claw on him (Hudson_AlienStrikes says whose a claw is), seconds after "came", and its metres so far;
+//   "so far": every 30 seconds while it comes for him, its metres on floor, wall and ceiling (by where its gravity points, as the watch
+//   counts them), and its frames near and far;
+//   "gone": once it's no longer in the game (killed, or taken away), the same, for the last time.
+// A run can end between two lines; a reader takes each alien's last. The table holds the first kMostAliensComing; any after that are
+// counted, and the count is said.
+static int const kMostAliensComing = 64;
+static int const kAlienComingSecondsBetweenLines = 30;
+
+struct AlienComing
+{
+	char name[SB_NAME_LENGTH];    // its own name: the table never keeps a pointer to an alien, which may be gone by the next frame
+	LONG firstFrame;
+	DWORD firstTargeted;
+	DWORD firstBlow;              // 0 until its own first claw on him
+	DWORD lastLine;
+	bool nearAtFirst;
+	int metresApartAtFirst;
+	LONG nearFrames;
+	LONG farFrames;
+	LONG millimetres[3];          // by WatchSurface
+	VECTORCH last;
+	bool hasLast;
+	bool seen;                    // in the game's list this frame
+	bool gone;
+};
+
+static AlienComing aliensComing[kMostAliensComing];
+static int aliensComingCount = 0;
+static int aliensComingNotKept = 0;
+
+static AlienComing *AlienComingNamed(const char *name)
+{
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		if (NAME_ISEQUAL(aliensComing[i].name, name))
+		{
+			return &aliensComing[i];
+		}
+	}
+
+	return 0;
+}
+
+static void AlienComingLine(const AlienComing &coming, const STRATEGYBLOCK *alien, const char *what)
+{
+	char who[80] = "an alien";
+	char line[400] = { 0 };
+
+	if (alien)
+	{
+		AlienWords(alien, who, sizeof(who));
+	}
+	else
+	{
+		unsigned char const *const name = reinterpret_cast<unsigned char const *>(coming.name);
+		_snprintf(who, sizeof(who) - 1, "alien %02x%02x%02x%02x%02x%02x%02x%02x", name[0], name[1], name[2], name[3], name[4], name[5], name[6], name[7]);
+	}
+
+	char blow[64] = "no blow of its own yet";
+
+	if (coming.firstBlow)
+	{
+		_snprintf(blow, sizeof(blow) - 1, "its first blow %.1f s after it came", (coming.firstBlow - coming.firstTargeted) / 1000.0);
+		blow[sizeof(blow) - 1] = 0;
+	}
+
+	_snprintf(line, sizeof(line) - 1, "hudson: %s %s at frame %ld: came for him at frame %ld, %s, %d m from him; %s; floor %.1f m, wall %.1f m, ceiling %.1f m; frames near %ld, far %ld",
+		who, what, framesDone, coming.firstFrame, coming.nearAtFirst ? "near" : "far", coming.metresApartAtFirst, blow,
+		coming.millimetres[kWatchFloor] / 1000.0, coming.millimetres[kWatchWall] / 1000.0, coming.millimetres[kWatchCeiling] / 1000.0,
+		coming.nearFrames, coming.farFrames);
+	LogString(line);
+}
+
+// Once a frame of play=yes, on the game's thread: every alien in the game, and those that have him as their target
+static void TrackTheAliensComing(const STRATEGYBLOCK *him)
+{
+	if (!him)
+	{
+		return;
+	}
+
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		aliensComing[i].seen = false;
+	}
+
+	DWORD const now = GetTickCount();
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdataptr || !block->DynPtr)
+		{
+			continue;
+		}
+
+		ALIEN_STATUS_BLOCK const *const status = (const ALIEN_STATUS_BLOCK *)block->SBdataptr;
+		bool const forHim = status->Target == him;
+		AlienComing *coming = AlienComingNamed(block->SBname);
+
+		if (!coming && forHim)
+		{
+			if (aliensComingCount >= kMostAliensComing)
+			{
+				aliensComingNotKept++;
+				continue;
+			}
+
+			coming = &aliensComing[aliensComingCount++];
+			memset(coming, 0, sizeof(*coming));
+			memcpy(coming->name, block->SBname, sizeof(coming->name));
+			coming->firstFrame = framesDone;
+			coming->firstTargeted = now;
+			coming->lastLine = now;
+			coming->nearAtFirst = block->SBdptr != 0;
+			VECTORCH apart = { him->DynPtr->Position.vx - block->DynPtr->Position.vx, him->DynPtr->Position.vy - block->DynPtr->Position.vy,
+				him->DynPtr->Position.vz - block->DynPtr->Position.vz };
+			coming->metresApartAtFirst = Approximate3dMagnitude(&apart) / 1000;
+			AlienComingLine(*coming, block, "came");
+		}
+
+		if (!coming)
+		{
+			continue;
+		}
+
+		coming->seen = true;
+
+		if (!forHim)
+		{
+			coming->hasLast = false;
+			continue;
+		}
+
+		if (block->SBdptr)
+		{
+			coming->nearFrames++;
+		}
+		else
+		{
+			coming->farFrames++;
+		}
+
+		VECTORCH const here = block->DynPtr->Position;
+
+		if (coming->hasLast)
+		{
+			VECTORCH moved = { here.vx - coming->last.vx, here.vy - coming->last.vy, here.vz - coming->last.vz };
+			int const step = Approximate3dMagnitude(&moved);
+
+			if (step < kWatchMostInAFrame)
+			{
+				coming->millimetres[SurfaceItsOn(block->DynPtr)] += step;
+			}
+		}
+
+		coming->last = here;
+		coming->hasLast = true;
+
+		if (now - coming->lastLine >= (DWORD)kAlienComingSecondsBetweenLines * 1000u)
+		{
+			coming->lastLine = now;
+			AlienComingLine(*coming, block, "so far");
+		}
+	}
+
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		if (!aliensComing[i].seen && !aliensComing[i].gone)
+		{
+			aliensComing[i].gone = true;
+			AlienComingLine(aliensComing[i], 0, "gone");
+		}
+	}
+
+	static int notKeptSaid = 0;
+
+	if (aliensComingNotKept > notKeptSaid)
+	{
+		notKeptSaid = aliensComingNotKept;
+		char line[120] = { 0 };
+		_snprintf(line, sizeof(line) - 1, "hudson: %d aliens came for him after the first %d, and aren't followed one by one", aliensComingNotKept, kMostAliensComing);
+		LogString(line);
+	}
+}
+
+// A claw on him in play=yes (Hudson_NoteDamage): the alien that struck it has its first blow, if it's one being followed
+static void AlienComingStruck(const STRATEGYBLOCK *alien)
+{
+	AlienComing *const coming = AlienComingNamed(alien->SBname);
+
+	if (coming && !coming->firstBlow)
+	{
+		coming->firstBlow = GetTickCount();
+		AlienComingLine(*coming, alien, "first blow");
+	}
+}
+
 void Hudson_PlayInput(void *playerStatus)
 {
 	if (!HudsonRunIsOn || !plan.play || levelHasEnded)
 	{
 		return;
 	}
+
+	// Every alien that comes for him, one by one (added 2026-11-11 by Melanikus (Third) for the AvP port)
+	TrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);
 
 	static bool started = false;
 
@@ -7710,11 +8200,6 @@ bool Hudson_NetIsHostile()
 	return HudsonRunIsOn && plan.hostile;
 }
 
-bool Hudson_NetIsTyped()
-{
-	return HudsonRunIsOn && plan.typed;
-}
-
 void Hudson_NetCampaignIsOver()
 {
 	if (HudsonRunIsOn && plan.netMode != kHudsonNetNone)
@@ -9054,39 +9539,86 @@ static bool Hudson_WayIsClear(STRATEGYBLOCK *me, STRATEGYBLOCK *target)
 	return Hudson_WayIsClearTo(me, middle, target->SBdptr);
 }
 
-// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, on the first side with room, and Hudson_SmokeTest puts him back after it.
+// In a game with no campaign they can start far apart, too far to see each other. So the joiner goes over to the host for the test, to a spot beside him, and Hudson_SmokeTest puts him back after it.
+// Modified 2026-11-10 by Melanikus (Third) for the AvP port (#203): a spot used to need only a clear way to it, and on jockey one put the joiner's eyes somewhere dark, with nothing on the
+// screen. Now it also needs floor not far below, room above, and a clear view of the host's middle (HudsonPlan_SmokeSpotIsGood), and eight directions are tried, at 3 m and then 5 m.
 static void Hudson_SmokeGoOver(STRATEGYBLOCK *me, STRATEGYBLOCK *other)
 {
 	static const int kCloseEnoughToSee = 8000; // millimetres
-	static const int kStandsThisFarAway = 3000;
-	static const int kSides[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+	static const int kDistances[2] = { 3000, 5000 };
+	static const int kSides[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
 
 	if (plan.netMode != kHudsonNetJoin || VectorDistance(&me->DynPtr->Position, &other->DynPtr->Position) <= kCloseEnoughToSee)
 	{
 		return;
 	}
 
-	VECTORCH there = other->DynPtr->Position;
+	VECTORCH const there = other->DynPtr->Position;
+	VECTORCH middle;
 
-	for (int side = 0; side < 4; side++)
+	GetTargetingPointOfObject_Far(other, &middle);
+
+	for (int d = 0; d < 2; d++)
 	{
-		VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
-
-		FindPolygonInLineOfSight(&direction, &there, 0, other->SBdptr);
-
-		if (!LOS_ObjectHitPtr || LOS_Lambda > kStandsThisFarAway + 1000)
+		for (int side = 0; side < 8; side++)
 		{
-			VECTORCH place = { there.vx + kSides[side][0] * kStandsThisFarAway, there.vy, there.vz + kSides[side][1] * kStandsThisFarAway };
+			VECTORCH direction = { kSides[side][0] * ONE_FIXED, 0, kSides[side][1] * ONE_FIXED };
+			VECTORCH from = there;
+
+			Normalise(&direction);
+
+			// Nothing in the way to the spot, and a metre past it
+			FindPolygonInLineOfSight(&direction, &from, 0, other->SBdptr);
+
+			if (LOS_ObjectHitPtr && LOS_Lambda <= kDistances[d] + 1000)
+			{
+				continue;
+			}
+
+			VECTORCH place = { there.vx + MUL_FIXED(direction.vx, kDistances[d]), there.vy, there.vz + MUL_FIXED(direction.vz, kDistances[d]) };
+
+			// Something to stand on below it (y goes down), and room above it
+			VECTORCH down = { 0, ONE_FIXED, 0 };
+			VECTORCH up = { 0, -ONE_FIXED, 0 };
+			VECTORCH at = place;
+
+			FindPolygonInLineOfSight(&down, &at, 0, other->SBdptr);
+			bool const floorHit = LOS_ObjectHitPtr != 0;
+			int const floorBelow = LOS_Lambda;
+
+			at = place;
+			FindPolygonInLineOfSight(&up, &at, 0, other->SBdptr);
+			bool const ceilingHit = LOS_ObjectHitPtr != 0;
+			int const ceilingAbove = LOS_Lambda;
+
+			// And nothing between it and his middle, but him
+			VECTORCH toHim = { middle.vx - place.vx, middle.vy - place.vy, middle.vz - place.vz };
+			int const howFar = VectorDistance(&place, &middle);
+
+			at = place;
+			Normalise(&toHim);
+			FindPolygonInLineOfSight(&toHim, &at, 0, me->SBdptr);
+			bool const wayClear = !LOS_ObjectHitPtr || LOS_ObjectHitPtr == other->SBdptr || LOS_Lambda >= howFar;
+
+			if (!HudsonPlan_SmokeSpotIsGood(floorHit, floorBelow, ceilingHit, ceilingAbove, wayClear))
+			{
+				continue;
+			}
+
+			char line[300];
 
 			smokeCameFrom = me->DynPtr->Position;
 			smokeWentOver = true;
 			MoveThePlayerTo(place);
-			LogString("smoke: they started too far apart to see each other, so the joiner has gone over to the host");
+			_snprintf(line, sizeof(line) - 1, "smoke: they started too far apart to see each other, so the joiner has gone over to the host, %d mm to one side, with floor %d mm below, %s above, and a clear view of him",
+				kDistances[d], floorBelow, ceilingHit ? "room" : "open sky");
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
 			return;
 		}
 	}
 
-	LogString("smoke: they started too far apart to see each other, and the joiner found no room beside the host");
+	LogString("smoke: they started too far apart to see each other, and the joiner found no spot beside the host, 3 or 5 m away in 8 directions, with floor, room and a clear view of him");
 }
 
 // The user's rule: "if 2 hudsons join they should always look at each other as a 'smoke test' before acting". On every first join and each level's start, in any mode, each player turns to the other, one right and one left
@@ -9801,7 +10333,19 @@ static void Hudson_SiegeSayWhatWasTurnedAway()
 
 void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)
 {
-	if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target || (target->I_SBtype != I_BehaviourMarine && target->I_SBtype != I_BehaviourAutoGun))
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	// play=yes: a claw on him counts for the alien that struck it (Hudson_AlienStrikes), by its own name (added 2026-11-11 by Melanikus
+	// (Third) for the AvP port)
+	if (plan.play && strikingAlien && target && Player && target == Player->ObStrategyBlock)
+	{
+		AlienComingStruck(strikingAlien);
+	}
+
+	if (!plan.siegeRoom[0] || !target || (target->I_SBtype != I_BehaviourMarine && target->I_SBtype != I_BehaviourAutoGun))
 	{
 		return;
 	}

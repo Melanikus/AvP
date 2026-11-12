@@ -120,7 +120,8 @@ typedef struct
 	uint16_t gameStyle;
 	uint8_t players;
 	uint8_t maxPlayers;
-	uint8_t relayFingerprint[kNetIdentityFingerprintBytes];   // added 2026-11-09 by Melanikus for the AvP port: as menus.h has it (protocol version 2)
+	uint8_t relayHostId[kNetIdentityIdBytes];   // added 2026-11-09 by Melanikus for the AvP port: as menus.h has it (protocol version 2; the whole id since item 6)
+	int serverLine;   // added 2026-11-11 by Melanikus for the AvP port: which good servers.cfg line listed the game, as menus.h has it (one model for every line)
 } SESSION_DESC;
 
 #define MAX_NO_OF_SESSIONS 10

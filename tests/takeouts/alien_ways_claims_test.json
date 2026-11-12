@@ -1,0 +1,268 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the way gets 1 claim, not 2",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "int const kAlienWaysClaimOnTheWay = 2;",
+					"to": "int const kAlienWaysClaimOnTheWay = 1;"
+				}
+			]
+		},
+		{
+			"name": "a polygon beside the way gets as much as one on it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "int const kAlienWaysClaimBesideTheWay = 1;",
+					"to": "int const kAlienWaysClaimBesideTheWay = 2;"
+				}
+			]
+		},
+		{
+			"name": "what's beside the way isn't claimed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "for (size_t i = 0; wayPolygons && firstJoin && joinOther && i < wayCount && !cutShort; i++)",
+					"to": "for (size_t i = 0; false; i++)"
+				}
+			]
+		},
+		{
+			"name": "a polygon on the way and beside it counts both",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "held[i].amount = (std::max)(held[i].amount, amount);",
+					"to": "held[i].amount += amount;"
+				}
+			]
+		},
+		{
+			"name": "claiming again keeps what the alien held",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "Remove(alien);\n\n\t\t// The way's polygons first",
+					"to": "// The way's polygons first"
+				}
+			]
+		},
+		{
+			"name": "taking an alien away leaves its claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "counts[held[i].polygon] -= held[i].amount;",
+					"to": "(void)held[i].amount;"
+				}
+			]
+		},
+		{
+			"name": "a searcher pays for its own claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "ClaimsOn(polygon) - OwnClaimOn(searcher, polygon)",
+					"to": "ClaimsOn(polygon) - 0"
+				}
+			]
+		},
+		{
+			"name": "the price has no cap",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "return (std::max)(1.0, (std::min)(1.0 + step * others, most));",
+					"to": "return (std::max)(1.0, 1.0 + step * others);"
+				}
+			]
+		},
+		{
+			"name": "each claim adds a quarter",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "double const kAlienWaysClaimPriceStep = 0.125;",
+					"to": "double const kAlienWaysClaimPriceStep = 0.25;"
+				}
+			]
+		},
+		{
+			"name": "the cap is twice the price",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "double const kAlienWaysClaimMostPriceFactor = 1.5;",
+					"to": "double const kAlienWaysClaimMostPriceFactor = 2.0;"
+				}
+			]
+		},
+		{
+			"name": "an alien past the most can claim",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (alien < 0 || alien >= kAlienWaysClaimsMostAliens)\n\t\t{\n\t\t\treturn kAlienWaysClaimsNotAnAlien;",
+					"to": "if (alien < 0)\n\t\t{\n\t\t\treturn kAlienWaysClaimsNotAnAlien;"
+				}
+			]
+		},
+		{
+			"name": "an alien past the most can be taken away",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (alien < 0 || alien >= kAlienWaysClaimsMostAliens)\n\t\t{\n\t\t\treturn;\n",
+					"to": "if (alien < 0)\n\t\t{\n\t\t\treturn;\n"
+				}
+			]
+		},
+		{
+			"name": "an alien past the most has its own claims looked up",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (alien < 0 || alien >= kAlienWaysClaimsMostAliens)\n\t\t{\n\t\t\treturn 0;",
+					"to": "if (alien < 0)\n\t\t{\n\t\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "a polygon past the map is claimed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (polygon < 0 || polygon >= polygons)\n\t\t\t{\n\t\t\t\tignored++;",
+					"to": "if (polygon < 0)\n\t\t\t{\n\t\t\t\tignored++;"
+				}
+			]
+		},
+		{
+			"name": "a join's place past the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "endInside = (std::min)(to, listEnd);",
+					"to": "endInside = to;"
+				}
+			]
+		},
+		{
+			"name": "a neighbour that isn't a polygon of the map is claimed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (beside < 0 || beside >= polygons)",
+					"to": "if (beside < 0)"
+				}
+			]
+		},
+		{
+			"name": "the first-join list is read past its end",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (static_cast<size_t>(polygon) + 1 >= firstJoinCount)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "one alien can hold any number",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (held.size() >= kAlienWaysClaimsMostPerAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an alien's claims aren't kept in order",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "std::sort(held.begin(), held.end(), [](const Claim &a, const Claim &b) { return a.polygon < b.polygon; });",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the level's end leaves the counts",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "counts.clear();\n\t\tcounts.shrink_to_fit();",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the level's end leaves each alien's claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "mine[a].clear();\n\t\t\tmine[a].shrink_to_fit();",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a map past the most is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (polygons > kAlienWaysClaimsMostPolygons)\n\t\t{\n\t\t\treturn false;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "claims are made with no map",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "if (counts.empty())\n\t\t{\n\t\t\treturn kAlienWaysClaimsNoMap;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn kAlienWaysClaimsNoMap;"
+				}
+			]
+		},
+		{
+			"name": "a join's place before the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "firstInside = (std::max)(from, 0LL),",
+					"to": "firstInside = from,"
+				}
+			]
+		},
+		{
+			"name": "places before the join list aren't counted as left out",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "\t\t\tignored += static_cast<size_t>((std::max)(0LL, (std::min)(to, 0LL) - from));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "places past the join list aren't counted as left out",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "\t\t\t\tignored += static_cast<size_t>((std::max)(0LL, to - (std::max)(from, listEnd)));\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

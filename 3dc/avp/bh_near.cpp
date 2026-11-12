@@ -1,10 +1,19 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a wandering alien's crouching changes only for a standard alien on a way, or clinging between ways, so predaliens, praetorians
+//   and any alien off the ways wander as they did in 1999 (R-LAVA-2; Secondary's plan for floor is lava, F4)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of one if-statement in the alien's jump code, which was never
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
 //   the same code as before;
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   a standard alien coming for its target follows its way up the walls and along the ceilings, when the alien ways map
+//   has one for it (alien_ways.h), and crawls while it does; without one it moves as it always has (#109);
+//   a standard alien that's hunting, or wandering from module to module, follows its way across the walls and ceilings too, to the
+//   point the game picked for it, and a wandering alien crawls when it should, as a hunting one does (#109);
+//   on a frame its way steers it, in any of those states, the tests that would send it off to avoid something don't act, since running
+//   into a wall is how it climbs;
 //   an alien coming for its target measures how far away the target is only once it knows it has one
 #include "3dc.h"
 #include "io.h"
@@ -36,6 +45,8 @@
 #include "pldnet.h"
 #include "particle.h"
 #include "scream.h"
+#include "alien_ways.h"
+#include "hudson.h"   // Hudson_AlienStrikes: which alien a claw is, in Hudson's runs only (added 2026-11-11 by Melanikus (Third))
 
 extern int ShowHiveState;
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
@@ -65,6 +76,9 @@ extern void Execute_Alien_Dying(STRATEGYBLOCK *sbPtr);
 int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr);
 int AlienIsAbleToStand(STRATEGYBLOCK *sbPtr);
 static int StartAlienPounce(STRATEGYBLOCK *sbPtr);
+static int StartAlienWaysPounce(STRATEGYBLOCK *sbPtr, int distanceToTarget);   // THE POUNCE (alien_ways.h; added 2026-11-11, Third)
+static void BeginAlienPounce(STRATEGYBLOCK *sbPtr, ATTACK_DATA *thisAttack);
+static ATTACK_DATA *AlienPounceAttackIfAble(STRATEGYBLOCK *sbPtr);
 static int AlienHasPathToTarget(STRATEGYBLOCK *sbPtr);
 
 extern ATTACK_DATA Alien_Special_Gripping_Attack;
@@ -285,6 +299,28 @@ void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)
   			break;
   		}
   	}
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: an alien on its way keeps going on a frame its state didn't ask (#109).
+	// A hunting alien that finds no next module by the marine scent goes to Wander for a frame, and Wander sends it straight back to Hunt.
+	// On the Hunt frame nothing asks the alien ways for its way, so its speed stays at the 0 it was given above, and its grip goes. A step
+	// onto another surface needs it to cling for a few frames running, so it never got made: Sixth's 4b40b6cd film had 23 of those stuck.
+	// So when its state didn't ask this frame, the guide drives it along the way it already has, for as long as the guide keeps it (half a
+	// second since it last asked, alien_ways_guide.h), and it keeps hold of what it's on. Its state still decides everything else, as in
+	// 1999: this only stops it standing still and letting go between two frames that both want it on its way.
+	{
+		VECTORCH keepGoing = {0,0,0};
+		bool keptDriving = false;
+
+		if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepDriving(sbPtr, &keepGoing))
+		{
+			sbPtr->DynPtr->UseStandardGravity = 0;
+			NPCSetVelocity(sbPtr, &keepGoing, alienStatusPointer->MaxSpeed);
+			keptDriving = true;
+		}
+
+		// The watch on one alien, if it was asked for (-alienwayswatch): one line for this frame
+		AlienWays_WatchLine(sbPtr, alienStatusPointer->Target != NULL, keptDriving);
+	}
 
 	if (ShowHiveState)
 	{
@@ -750,12 +786,18 @@ static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)
 
 					GetDirectionOfAttack(alienStatusPointer->Target,&rel_pos,&attack_dir);
 
+					// Hudson's runs only: which alien this claw is, so his log puts the blow down to it (hudson.h; nothing outside a run).
+					// Added 2026-11-11 by Melanikus (Third) for the AvP port
+					Hudson_AlienStrikes(sbPtr);
+
 					if (alienStatusPointer->Target->SBdptr->HModelControlBlock) {
 						HtoHDamageToHModel(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED, sbPtr, &attack_dir);
 					} else {
 
 						CauseDamageToObject(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED,&attack_dir);
 					}
+
+					Hudson_AlienStrikes(NULL);
 				} else {
 					VECTORCH rel_pos,attack_dir;
 
@@ -765,7 +807,9 @@ static void AlienNearDamageShell(STRATEGYBLOCK *sbPtr)
 
 					GetDirectionOfAttack(alienStatusPointer->Target,&rel_pos,&attack_dir);
 
+					Hudson_AlienStrikes(sbPtr);   // Hudson's runs only, as above (added 2026-11-11 by Melanikus (Third))
 					CauseDamageToObject(alienStatusPointer->Target,&TemplateAmmo[GetAttackDamageType(sbPtr,flagnum)].MaxDamage[AvP.Difficulty], ONE_FIXED,&attack_dir);
+					Hudson_AlienStrikes(NULL);
 				}
 			}
 		}
@@ -831,6 +875,15 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);
 
+	// THE POUNCE (alien_ways.h; the owner's R-LAVA-11, 2026-11-11: "if I wanted to kill me, I would've pounced in range instead of
+	// following the beautiful path"). A standard alien with the alien ways on pounces at its target the moment it's close, in a clear line
+	// of sight, from the floor, a wall or a ceiling (a leap down: THE CEILING LEAP): before its way, and before 1999's own pounce below.
+	// Added 2026-11-11 by Melanikus (Third) for
+	// the AvP port, #109.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {
+		return;
+	}
+
  	/* target acquisition ? */
 	{
 		if(VectorDistance(&(alienStatusPointer->Target->DynPtr->Position),&(dynPtr->Position)) < ALIEN_CURVETOPLAYERDIST)
@@ -859,7 +912,24 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		curveToPlayer=0;
 	}
 
-	if(curveToPlayer)
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further away than it attacks from, follows its way across the walls and ceilings
+	//   to the point picked above, when the alien ways map has one for it. The floor is dear on that map, so the way keeps off it.
+	//   Without one, it's steered below as it always was. The last stretch, the attack and the pounce stay as they were.
+	VECTORCH wayDirection;
+	bool onAWay = false;
+
+	if ((alienStatusPointer->Type == AT_Standard) && (distanceToPlayer > ALIEN_ATTACKDISTANCE_MIN) && AlienIsAbleToClimb(sbPtr)
+		&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &targetPos, &wayDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+		NPCSetVelocity(sbPtr, &wayDirection, alienStatusPointer->MaxSpeed);
+		AlienWays_Slide(sbPtr);   // a stuck one slides past what stopped it (alien_ways.h; added 2026-11-11 by Melanikus (Third), #109)
+		alienStatusPointer->CurveTimeOut=0; /* forces curve init next time curving is used */
+		onAWay = true;
+	}
+	else if(curveToPlayer)
 	{
 		/* curve to the player... */
 		/* translate target into alien's local space */
@@ -1124,8 +1194,33 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		InitWaypointManager(&alienStatusPointer->waypointManager);
 	}
 
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109): resting after it was found stuck, or waiting for a re-plan's way, an
+	// alien is held back from avoiding as well, so 1999's Avoidance can't carry it off from its target in that rest (Primary's placed runs:
+	// from 19 m out to 37 m). The game's own code still moves it, and the guide ends the rest early when it doesn't get on (THE REST, HELD
+	// FROM AVOIDING, alien_ways_guide.h). Only with the alien ways on.
+	// And it keeps clinging to what it's on then, as do an alien waiting for its next way and one handed over but not yet near its target, so
+	// 1999's far branch above can't drop it off a wall or a ceiling (Secondary's read: 7 of the owner's 16 stucks fell so). Only the game's
+	// own curve at its target, near it and in clear sight, decides its gravity, as in 1999 (KeepsClinging, alien_ways_guide.h; added
+	// 2026-11-11 by Melanikus (Third) for the AvP port, #109).
+	if (!onAWay && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))
+	{
+		dynPtr->UseStandardGravity=0;
+	}
+
+	onAWay = onAWay || AlienWays_HoldsBackAvoiding(sbPtr);
+
 	/* test here for impeding collisions, and not being able to reach target... */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   on a frame its way steers it (onAWay), these tests still run, but they don't send the alien off to avoid anything. To climb, an alien on
+	//   a way runs straight into the foot of a wall, and its body takes a few frames to turn onto it. These tests count that as being blocked,
+	//   or as turning back, and would send it off for 2 s before it could climb: the films showed an alien 9 seconds in 10 in Avoidance. When
+	//   one would have acted, the log says which (AlienWays_WouldHaveAvoided), so a film still shows whether it's real. An alien on a way that
+	//   really can't get on is handed back by the alien ways' own rule (no headway for 1.5 s, then 3 s of the game's own steering), and these
+	//   tests act again then. While on a way it also doesn't break a breakable thing it presses against, or give up its target for one; that's
+	//   only with the alien ways on. In the other avoidance, switched off in this game (ALL_NEW_AVOIDANCE_ALIEN is 0), the test isn't called at all
+	//   while on a way, so its counts would stand still till the alien is off it: harmless while it's off, and worth knowing if it's ever on.
 	#if ALL_NEW_AVOIDANCE_ALIEN
+	if (!onAWay)
 	{
 		if (New_NPC_IsObstructed(sbPtr,&alienStatusPointer->avoidanceManager)) {
 			/* Go to all new avoidance. */
@@ -1140,7 +1235,14 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		STRATEGYBLOCK *destructableObject = NULL;
 		NPC_OBSTRUCTIONREPORT obstruction;
 		NPC_IsObstructed(sbPtr,&(alienStatusPointer->moveData),&obstruction,&destructableObject);
-		if(obstruction.environment)
+		if (onAWay)
+		{
+			if (obstruction.environment || obstruction.destructableObject)
+			{
+				AlienWays_WouldHaveAvoided(sbPtr, false);
+			}
+		}
+		else if(obstruction.environment)
 		{
 			#if 1
 			NPC_InitMovementData(&(alienStatusPointer->moveData));
@@ -1162,7 +1264,11 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		VECTORCH velocityDirection = dynPtr->LinVelocity;
 		Normalise(&velocityDirection);
 
-		if(NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
+		if (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
+		{
+			AlienWays_WouldHaveAvoided(sbPtr, true);
+		}
+		else if(!onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
 		{
 			/* go to avoidance */
 			NPC_OBSTRUCTIONREPORT obstruction = {1,0,0};
@@ -1332,6 +1438,46 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	dynPtr->UseStandardGravity=1;
 
 	/* check if we should be crouched or standing up */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   until now nothing was here, and a wandering alien never changed whether it was crouched. Now it does as a hunting one does
+	//   (AlienNearState_Hunt): it crawls when AlienShouldBeCrawling says so, which it does for an alien on its way across the walls and
+	//   ceilings (alien_ways.h), as well as for the reasons it always had (not upright, in an air duct, too wounded to stand, told to
+	//   crawl, or a praetorian that prefers to), and it stands up again when that stops.
+	//   So an alien on a way crawls in every state that steers it, rather than climbing the walls upright. Wandering has no air duct to
+	//   head for, so that's all it asks.
+	//   Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109; Secondary's plan for floor is lava, F4): only for a standard alien
+	//   on a way, or clinging between ways (KeepsClinging, alien_ways.h). Wander runs for every kind of alien, and the owner's ruling
+	//   R-LAVA-2 is "standard aliens only (predaliens keep today's paths)"; and an alien off the ways is left as it was in 1999, since
+	//   those older reasons would otherwise change the game for every alien, ways or no ways. Its last Steer says whether it's on a way
+	//   (AlienWays_Following), as this comes before Wander asks for its way this frame. It used to be only "the ways switched on", which
+	//   after the flip would have been every alien of every kind.
+	if (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))
+	{
+		int redo=0;
+
+		if(alienStatusPointer->IAmCrouched)
+		{
+			/* curently crouched: should it be running? */
+			if(!AlienShouldBeCrawling(sbPtr))
+			{
+				alienStatusPointer->IAmCrouched = 0;
+				redo=1;
+			}
+		}
+		else
+		{
+			/* currently standing: should it be crawling? */
+			if(AlienShouldBeCrawling(sbPtr))
+			{
+				alienStatusPointer->IAmCrouched = 1;
+				redo=1;
+			}
+		}
+
+		if (redo) {
+			StartAlienMovementSequence(sbPtr);
+		}
+	}
 
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);
@@ -1350,6 +1496,10 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	}
 	#endif
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: the target this frame's way heads for, when the alien knows where its target is.
+	// See below, where it's kept, and the call to AlienWays_Steer that it's given to.
+	STRATEGYBLOCK *huntedTarget = 0;
+
 	/* should we change to approach state? */
 	if(AlienHasPathToTarget(sbPtr))
 	{
@@ -1367,6 +1517,16 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->BehaviourState = ABS_Hunt;
 		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
 		InitWaypointManager(&alienStatusPointer->waypointManager);
+		AlienWays_WatchNote(sbPtr, "Wander knows of its target, so it goes back to Hunt");
+
+		// Modified 2026-11-08 by Melanikus for the AvP port:
+		//   the target is kept here, before it's let go just below, so that this frame's way heads where Hunt's does. The 1999 code
+		//   sends an alien that knows where its target is back and forth between Hunt and Wander, one frame each, and Hunt's way is given
+		//   the target (AlienNearState_Hunt). Without this, the two frames asked for different places, the target and the wander point,
+		//   and the way changed its mind every frame, so hunting aliens never got anywhere (Fifth's reading of Sixth's 5-alien film).
+		//   It's only used during this frame: the game checks each frame, before any state runs, that an alien's target is still the
+		//   same live thing (Validate_Target in bh_alien.cpp), and AlienIsAwareOfTarget is never true of no target at all.
+		huntedTarget = alienStatusPointer->Target;
 	}
 
 	/* Try to reaquire target? */
@@ -1394,11 +1554,46 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* ok: should have a current target at this stage... */
-	NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further from its wander point than it attacks from, follows its way across the walls and
+	//   ceilings to that point, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach). The
+	//   point is the way into a module next to this one, picked above, so the way changes only how it gets there, never where. Without a
+	//   way, without a point, or within that distance of it, it's steered as it always was. Either way the direction goes through the same
+	//   checks below. On a way it crawls: see the start of this state.
+	// Modified again, 2026-11-08: an alien that knows where its target is, and is going back to Hunt (above), gives its way that target,
+	//   as Hunt does, so its way heads for the target itself when the target's module can be seen from the alien's, and for the wander
+	//   point otherwise, the same in both of its frames. Any other wandering alien has let its target go, and gives none.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
+		&& (alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)
+		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
+		&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+	}
+	else
+	{
+		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
 
+	// As in Approach: a climbing alien the alien ways have keeps clinging when no way steers it, so Wander's "don't climb on walls" above
+	// can't drop it off a wall or a ceiling in its rest (KeepsClinging; Secondary's review, S4; added 2026-11-11 by Melanikus (Third), #109)
+	if (!AlienWays_GuidedThisFrame(sbPtr) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepsClinging(sbPtr))
+	{
+		dynPtr->UseStandardGravity=0;
+	}
+
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Wander; modified 2026-11-11 by Melanikus (Third), #109): the way's branch above ran, and never with the switch off
+
 	/* test here for impeding collisions, and not being able to reach target... */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   in Wander, as in Approach: on a frame its way steers it (onAWay), these tests still run, but they don't send the alien off to avoid
+	//   anything, because running into a wall's foot is how it climbs onto it. When one would have, the log says which
+	//   (AlienWays_WouldHaveAvoided). The alien ways' own rule hands back an alien that really can't get on (no headway for 1.5 s), and
+	//   these tests act again then. Bumping into another alien is held back the same way. A breakable thing is still broken.
 	#if ALL_NEW_AVOIDANCE_ALIEN
+	if (!onAWay)   // Wander
 	{
 		if (New_NPC_IsObstructed(sbPtr,&alienStatusPointer->avoidanceManager)) {
 			/* Go to all new avoidance. */
@@ -1413,7 +1608,11 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		STRATEGYBLOCK *destructableObject = NULL;
 		NPC_OBSTRUCTIONREPORT obstruction;
 		NPC_IsObstructed(sbPtr,&(alienStatusPointer->moveData),&obstruction,&destructableObject);
-		if((obstruction.environment)||(obstruction.otherCharacter))
+		if (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Wander
+		{
+			AlienWays_WouldHaveAvoided(sbPtr, false);
+		}
+		else if((obstruction.environment)||(obstruction.otherCharacter))
 		{
 			#if 1
 			/* go to avoidance */
@@ -1432,7 +1631,11 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		}
 	}
 
-	if(NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	if (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Wander
+	{
+		AlienWays_WouldHaveAvoided(sbPtr, true);
+	}
+	else if(!onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
 	{
 		/* go to avoidance */
 		NPC_OBSTRUCTIONREPORT obstruction = {1,0,0};
@@ -1835,6 +2038,8 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 			alienStatusPointer->BehaviourState = ABS_Wander;
 			alienStatusPointer->CurveTimeOut = 0;
 			#endif
+			// Modified 2026-11-08 by Melanikus for the AvP port: the watch on one alien says which way Hunt left (-alienwayswatch, alien_ways.h)
+			AlienWays_WatchNote(sbPtr, "Hunt found no next module by the marine scent, so it goes to Wander");
 			return;
 		}
 
@@ -1847,11 +2052,13 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 				alienStatusPointer->BehaviourState = ABS_Wander;
 				alienStatusPointer->CurveTimeOut = 0;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
+				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent and has no target, so it goes to Wander");
 			} else {
 				alienStatusPointer->Target=NULL;
 				alienStatusPointer->BehaviourState = ABS_Hunt;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
 				alienStatusPointer->CurveTimeOut = 0;
+				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent, so it lets its target go and stays in Hunt");
 			}
 			return;
 		}
@@ -1880,11 +2087,38 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* ok: should have a current target at this stage... */
-	NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further from the point picked above than it attacks from, follows its way across the
+	//   walls and ceilings, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach). Without
+	//   a way, or within that distance of the point, it's steered as it always was. Either way the direction goes through the same checks
+	//   below.
+	//   Its target is given, so when the target's module can be seen from the alien's, the way goes all the way to the target, and not
+	//   only to the point, the way into the next module, a few metres off. Over a few metres the floor always wins, so given only the point,
+	//   a hunting alien never climbed (Sixth's 5-alien film, 2026-11-08). When the target's module can't be seen, or there's no target,
+	//   the way goes to the point, as before.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
+		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
+		&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+	}
+	else
+	{
+		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
+	// Not read from gravity: this state's own 1999 code turns gravity off for a crouched alien that can climb, with no way at all
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr) || AlienWays_HoldsBackAvoiding(sbPtr);   // its way steers it this frame, or it rests after a stuck (Hunt; modified 2026-11-11 by Melanikus (Third), #109): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   in Hunt, as in Approach: on a frame its way steers it (onAWay), these tests still run, but they don't send the alien off to avoid
+	//   anything, because running into a wall's foot is how it climbs onto it. When one would have, the log says which
+	//   (AlienWays_WouldHaveAvoided). The alien ways' own rule hands back an alien that really can't get on (no headway for 1.5 s), and
+	//   these tests act again then. Bumping into another alien is held back the same way. A breakable thing is still broken.
 	#if ALL_NEW_AVOIDANCE_ALIEN
+	if (!onAWay)   // Hunt
 	{
 		if (New_NPC_IsObstructed(sbPtr,&alienStatusPointer->avoidanceManager)) {
 			/* Go to all new avoidance. */
@@ -1899,7 +2133,11 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 		STRATEGYBLOCK *destructableObject = NULL;
 		NPC_OBSTRUCTIONREPORT obstruction;
 		NPC_IsObstructed(sbPtr,&(alienStatusPointer->moveData),&obstruction,&destructableObject);
-		if((obstruction.environment)||(obstruction.otherCharacter))
+		if (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Hunt
+		{
+			AlienWays_WouldHaveAvoided(sbPtr, false);
+		}
+		else if((obstruction.environment)||(obstruction.otherCharacter))
 		{
 			#if 1
 			/* go to avoidance */
@@ -1918,7 +2156,11 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 		}
 	}
 
-	if(NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	if (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Hunt
+	{
+		AlienWays_WouldHaveAvoided(sbPtr, true);
+	}
+	else if(!onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
 	{
 		/* go to avoidance */
 		NPC_OBSTRUCTIONREPORT obstruction = {1,0,0};
@@ -2032,6 +2274,12 @@ int AlienShouldBeCrawling(STRATEGYBLOCK *sbPtr)
 	if (AlienHasNoArms(sbPtr)) {
 		/* This just looks silly. */
 		return(0);
+	}
+
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   an alien following its way across the walls and ceilings crawls all the way along it (alien_ways.h)
+	if (AlienWays_Following(sbPtr)) {
+		return(1);
 	}
 
 	if ((AlienIsEncouragedToCrawl())&&(alienStatus->EnableWaypoints)) {
@@ -2188,13 +2436,7 @@ static int AlienHasPathToTarget(STRATEGYBLOCK *sbPtr) {
 
 ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 
-	ALIEN_STATUS_BLOCK *alienStatusPointer;
-	ATTACK_DATA *thisAttack;
-	VECTORCH targetPoint;
-
 	LOCALASSERT(sbPtr);
-	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-	LOCALASSERT(alienStatusPointer);
 
 	/* First rule.  Must be on a flat floor. */
 	if(sbPtr->DynPtr->OrientMat.mat22<63000) {
@@ -2203,6 +2445,24 @@ ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 	if(sbPtr->DynPtr->IsInContactWithFloor==0) {
 		return(NULL);
 	}
+
+	// The rest of 1999's rules, which THE POUNCE asks too (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109: they were here)
+	return AlienPounceAttackIfAble(sbPtr);
+}
+
+// 1999's rules for a pounce after its flat floor: not in an air duct, its legs, not badly hurt, the target near and in a clear line of
+// sight, and a pounce sequence to play. Gives back the attack, or NULL. AlienIsAbleToPounce asks them after the flat floor; THE POUNCE
+// (alien_ways.h) asks them from a wall too. (Split out of AlienIsAbleToPounce 2026-11-11 by Melanikus (Third) for the AvP port, #109.)
+static ATTACK_DATA *AlienPounceAttackIfAble(STRATEGYBLOCK *sbPtr) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer;
+	ATTACK_DATA *thisAttack;
+	VECTORCH targetPoint;
+
+	LOCALASSERT(sbPtr);
+	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	LOCALASSERT(alienStatusPointer);
+
 	/* And not in an airduct. */
 	if(sbPtr->containingModule->m_flags & MODULEFLAG_AIRDUCT) {
 		return(NULL);
@@ -2264,12 +2524,9 @@ ATTACK_DATA *AlienIsAbleToPounce(STRATEGYBLOCK *sbPtr) {
 
 static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 
-	ALIEN_STATUS_BLOCK *alienStatusPointer;
 	ATTACK_DATA *thisAttack;
 
 	LOCALASSERT(sbPtr);
-	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-	LOCALASSERT(alienStatusPointer);
 
 	/* Check validity, and do it. */
 
@@ -2279,6 +2536,35 @@ static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 		/* Can't do it. */
 		return(0);
 	}
+
+	BeginAlienPounce(sbPtr, thisAttack);
+	return(1);
+}
+
+// THE POUNCE's start (alien_ways.h): 1999's pounce, without its 25% election and without its flat-floor rule, as the owner asked for one
+// from a wall too. 1999's other rules hold (AlienPounceAttackIfAble). Its slide ends first and the guide lets it go (AlienWays_PounceStarts),
+// then it's 1999's own pounce state: gravity back, the body righting itself, turning to face its target, and one leap. Added 2026-11-11
+// by Melanikus (Third) for the AvP port, #109.
+static int StartAlienWaysPounce(STRATEGYBLOCK *sbPtr, int distanceToTarget) {
+
+	ATTACK_DATA *const thisAttack = AlienPounceAttackIfAble(sbPtr);
+
+	if (thisAttack == NULL) {
+		return 0;
+	}
+
+	AlienWays_PounceStarts(sbPtr, distanceToTarget);
+	BeginAlienPounce(sbPtr, thisAttack);
+	return 1;
+}
+
+// 1999's pounce, begun with the attack it plays (split out of StartAlienPounce 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+static void BeginAlienPounce(STRATEGYBLOCK *sbPtr, ATTACK_DATA *thisAttack) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer;
+
+	alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	LOCALASSERT(alienStatusPointer);
 
 	SetAlienShapeAnimSequence_Core(sbPtr, static_cast<enum HModelSequenceTypes>(thisAttack->Sequence_Type), thisAttack->Sub_Sequence,
 		thisAttack->Sequence_Length, thisAttack->TweeningTime);
@@ -2290,8 +2576,6 @@ static int StartAlienPounce(STRATEGYBLOCK *sbPtr) {
 
 	alienStatusPointer->BehaviourState = ABS_Pounce;
 	alienStatusPointer->NearStateTimer=0;
-
-	return(1);
 }
 
 static void CheckPounceIntegrity(STRATEGYBLOCK *sbPtr) {
@@ -2313,8 +2597,11 @@ static void CheckPounceIntegrity(STRATEGYBLOCK *sbPtr) {
 		return;
 	}
 
+	// THE POUNCE (alien_ways.h): from a wall its target is often below it, so an alien ways pounce isn't dropped for that (added 2026-11-11
+	// by Melanikus (Third) for the AvP port, #109)
 	if ((alienStatusPointer->Target->SBdptr==NULL)
-		||((alienStatusPointer->Target->DynPtr->Position.vy-sbPtr->DynPtr->Position.vy)>1000)) {
+		||(((alienStatusPointer->Target->DynPtr->Position.vy-sbPtr->DynPtr->Position.vy)>1000)
+			&&!AlienWays_PounceIsOurs(sbPtr))) {
 
 		/* Yuck.  Target is far, or too far below you. */
 		NPC_InitMovementData(&(alienStatusPointer->moveData));
@@ -2456,6 +2743,21 @@ static void ApplyPounceImpulse(STRATEGYBLOCK *sbPtr) {
 
 }
 
+// THE CEILING LEAP's impulse (alien_ways.h): 1999's speed for a standard alien's leap, by how fast it can run (as ApplyPounceImpulse
+// has it), along the line to its target's middle, with none of it up (AlienWays_CeilingLeapImpulse). Added 2026-11-11 by Melanikus
+// (Third) for the AvP port, #109.
+static void ApplyCeilingLeapImpulse(STRATEGYBLOCK *sbPtr) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+	VECTORCH targetPoint;
+	int speed;
+
+	GetTargetingPointOfObject(alienStatusPointer->Target->SBdptr,&targetPoint);
+	speed=MUL_FIXED(ALIEN_JUMP_SPEED,GetAlienSpeedFactor_ForSequence(sbPtr,HMSQT_AlienRun,(int)ARSS_Standard));
+	AlienWays_CeilingLeapImpulse(&dynPtr->Position, &targetPoint, speed, &dynPtr->LinImpulse);
+}
+
 static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 {
 	ALIEN_STATUS_BLOCK *alienStatusPointer;
@@ -2474,6 +2776,15 @@ static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 	/* NearStateTimer is a status flag. */
 
 	if (alienStatusPointer->NearStateTimer==0) {
+		// THE CEILING LEAP (alien_ways.h): from a ceiling the alien ways' pounce leaps at once, down at its target, without waiting to face
+		// it, as 1999's leap would go up into the ceiling. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+		if (alienStatusPointer->Target && alienStatusPointer->Target->SBdptr && AlienWays_LeapsFromTheCeiling(sbPtr)) {
+			ApplyCeilingLeapImpulse(sbPtr);
+			alienStatusPointer->HModelController.Playing=1;
+			alienStatusPointer->NearStateTimer=1;
+			return;
+		}
+
 		/* Still tweening? */
 		if (alienStatusPointer->HModelController.Tweening==Controller_NoTweening) {
 			/* We've finished!  Are we facing right? */
@@ -2503,6 +2814,15 @@ static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 			CheckPounceIntegrity(sbPtr);
 		}
 	} else {
+		// THE CEILING LEAP turns to face its target in the air, as its body rights itself (added 2026-11-11 by Melanikus (Third), #109)
+		if (alienStatusPointer->Target && AlienWays_LeapsFromTheCeiling(sbPtr)) {
+			VECTORCH towards;
+			towards.vx = alienStatusPointer->Target->DynPtr->Position.vx - sbPtr->DynPtr->Position.vx;
+			towards.vy = 0;
+			towards.vz = alienStatusPointer->Target->DynPtr->Position.vz - sbPtr->DynPtr->Position.vz;
+			NPCOrientateToVector(sbPtr, &towards, NPC_TURNRATE, NULL);
+		}
+
 		/* We must be in the pounce.  Can't break out of this until the anim finishes. */
 
 		if ((alienStatusPointer->HModelController.Tweening==Controller_NoTweening)

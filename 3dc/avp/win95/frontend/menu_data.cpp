@@ -17,7 +17,9 @@
 //   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the page of games found has a row for each game the online-play screens show (online_screens_page.h)
-//   the Online access pages (server #24, access_page.h), and the Multiplayer page's row to them, which is there only with -dev
+//   the Online access pages (server #24), and the Multiplayer page's row to them, which is there only with -dev
+// Modified 2026-11-11 by Melanikus for the AvP port (one model for every line):
+//   the Online page (online_page.h), every servers.cfg line on its own row, in place of the Servers page and the one-server access page
 //   the Join page's first row is "Find Games": its search looks on this network, and with -dev asks the online list of games too
 //   (language.cpp's words, which promise a player only this network)
 #include "3dc.h"
@@ -30,6 +32,8 @@
 #include "hud_gfx.h"
 #include "user_io.h"
 #include "menu_data.h"
+#include "online_page.h"          // the Online page's room for rows, and its question's rows
+#include "host_page_rules.h"      // the host page's room for rows (2026-11-11)
 #include "view_settings.h"
 #include "hud_scale.h"
 #include "menus.h"
@@ -42,7 +46,8 @@
 #include "detaillevels.h"
 #include "MusicPlayer.h"
 #include "online_screens_page.h"
-#include "access_page.h"
+#include "server_yes_rules.h"
+#include "relay_list.h"           // how many good servers.cfg lines there are, for the Multiplayer page's rows (2026-11-11)
 
 #define MPLAYER_SUPPORT 0
 
@@ -453,46 +458,85 @@ static AVPMENU_ELEMENT AvPMenu_PredatorLevels[] =
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
+// The Multiplayer page: the player's name, the Online row (every servers.cfg line, with its yes and its access), then Start game, Co-op
+// campaign and Join game, as in 1999. The rows are written each time the page opens (MenuData_SetMultiplayerRows, below); until then it
+// has its four rows of 1999, and room for the Online row. Modified 2026-11-10 and 2026-11-11 by Melanikus for the AvP port (beta.2): the
+// Online row in place of the Servers and Online access rows, and no Host on row: Start game and Co-op campaign open the host page, where
+// the player chooses the server (host_page.h).
+static AVPMENU_ELEMENT const PlayerNameRow = {AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_MULTIPLAYER_PLAYERNAME},	{NET_PLAYERNAMELENGTH-1},	{(int*)MP_PlayerName},	{0},	TEXTSTRING_MULTIPLAYER_PLAYERNAME_HELP};
+static AVPMENU_ELEMENT const OnlineRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ONLINE_ROW},	{AVPMENU_ONLINE},	{0},	{0},	TEXTSTRING_ONLINE_ROW_HELP};
+static AVPMENU_ELEMENT const StartGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_STARTGAME},	{AVPMENU_MULTIPLAYER_CONFIG},	{0},	{0},	TEXTSTRING_MULTIPLAYER_STARTGAME_HELP};
+static AVPMENU_ELEMENT const CoopRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP};
+static AVPMENU_ELEMENT const JoinGameRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP};
+static AVPMENU_ELEMENT const EndOfTheRows = {AVPMENU_ELEMENT_ENDOFMENU};
+
 static AVPMENU_ELEMENT AvPMenu_Multiplayer[]=
 {
-	{AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_MULTIPLAYER_PLAYERNAME},	{NET_PLAYERNAMELENGTH-1},	{(int*)MP_PlayerName},	{0},	TEXTSTRING_MULTIPLAYER_PLAYERNAME_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_STARTGAME},	{AVPMENU_MULTIPLAYER_CONFIG},	{0},	{0},	TEXTSTRING_MULTIPLAYER_STARTGAME_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_TITLE},	{AVPMENU_COOP_HOST},	{0},	{0},	TEXTSTRING_COOP_TITLE_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MULTIPLAYER_JOINGAME},	{AVPMENU_MULTIPLAYERJOINGAME},	{0},	{0},	TEXTSTRING_MULTIPLAYER_JOINGAME_HELP},
+	PlayerNameRow,
+	StartGameRow,
+	CoopRow,
+	JoinGameRow,
+	EndOfTheRows,
 
-	// The Online access row's place: with -dev it's put here (MenuData_ShowOnlineAccessRow). Without -dev the page ends here.
-	{AVPMENU_ELEMENT_ENDOFMENU},
-
-	{AVPMENU_ELEMENT_ENDOFMENU}
+	// Room for the Online row, and one more end
+	EndOfTheRows,
+	EndOfTheRows
 };
 
-// Where the Online access row goes on the Multiplayer page, and the row itself
-static const int kMultiplayerAccessRow = 4;
-static AVPMENU_ELEMENT const OnlineAccessRow = {AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_ROW},	{AVPMENU_ONLINE_ACCESS},	{0},	{0},	TEXTSTRING_ACCESS_ROW_HELP};
-static AVPMENU_ELEMENT const NoOnlineAccessRow = {AVPMENU_ELEMENT_ENDOFMENU};
+static int const kMultiplayerRowRoom = sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]);
+static_assert(sizeof(AvPMenu_Multiplayer) / sizeof(AvPMenu_Multiplayer[0]) == 7, "the page's four rows of 1999, the Online row, and two ends");
 
-// The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release". So the
-// row is there only with -dev: without it, the Multiplayer page has its four rows of 1999, and nothing leads to the Online access pages.
-void MenuData_ShowOnlineAccessRow(bool developer)
+void MenuData_SetMultiplayerRows(void)
 {
-	AvPMenu_Multiplayer[kMultiplayerAccessRow] = developer ? OnlineAccessRow : NoOnlineAccessRow;
+	int row = 0;
+	AvPMenu_Multiplayer[row++] = PlayerNameRow;
+
+	// Every servers.cfg line, each with its yes and its access (online_page.h). Always there, so that even with no servers.cfg at all its
+	// page can say why (modified 2026-11-11 by Melanikus for the AvP port: the Online page, in place of the Servers row)
+	AvPMenu_Multiplayer[row++] = OnlineRow;
+
+	// Start game, Co-op campaign and Join game only when servers.cfg has a good line. Every game is played through a server (there's no
+	// plain game), so with none they'd lead only to pages with nothing in them. The Online page says why there's none. Added 2026-11-11
+	// by Melanikus for the AvP port: the owner's ruling R-GOAL-9 ("Online off in beta.2", so it ships no servers.cfg), and his pick of how
+	// the page shows it: "Hide them".
+	if (RelayList_LineCount() > 0)
+	{
+		AvPMenu_Multiplayer[row++] = StartGameRow;
+		AvPMenu_Multiplayer[row++] = CoopRow;
+		AvPMenu_Multiplayer[row++] = JoinGameRow;
+	}
+
+	// The rest is the page's end
+	while (row < kMultiplayerRowRoom)
+	{
+		AvPMenu_Multiplayer[row++] = EndOfTheRows;
+	}
 }
 
-// The Online access page (access_page.h): the name to send, then the rows that send it, copy the code, and make a new identity
-static AVPMENU_ELEMENT AvPMenu_OnlineAccess[]=
+// The host page (host_page.h): its rows are written as it opens, the question, a row for each servers.cfg line, and the end, so only its
+// first is set here. The rest are never read before then: the menus count a page's rows up to its end. Added 2026-11-11 by Melanikus for
+// the AvP port, in place of the Multiplayer page's Host on row.
+static AVPMENU_ELEMENT AvPMenu_HostOn[kHostPageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };
+
+// The Online page (online_page.h): its rows are written as it opens, a row for each servers.cfg line, then its own four and the end, so
+// only its first is set here. The rest are never read before then: the menus count a page's rows up to its end. Added 2026-11-11 by
+// Melanikus for the AvP port, in place of the Servers page and the one-server Online access page.
+static AVPMENU_ELEMENT AvPMenu_Online[kOnlinePageRowRoom] = { {AVPMENU_ELEMENT_ENDOFMENU} };
+
+// The question before a new identity: No comes first, so an Enter pressed by chance keeps the identity
+static AVPMENU_ELEMENT AvPMenu_OnlineNewIdentity[]=
 {
-	{AVPMENU_ELEMENT_TEXTFIELD,	{TEXTSTRING_ACCESS_NAME},	{kRelayAccessNameMostBytes},	{(int*)AccessPageName},	{0},	TEXTSTRING_ACCESS_NAME_HELP},
-	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_REQUEST},	{kAccessRowRequest},	{0},	{0},	TEXTSTRING_ACCESS_REQUEST_HELP},
-	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_COPY},	{kAccessRowCopy},	{0},	{0},	TEXTSTRING_ACCESS_COPY_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_ACCESS_NEWID},	{AVPMENU_ONLINE_ACCESS_NEW},	{0},	{0},	TEXTSTRING_ACCESS_NEWID_HELP},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_NO},	{kOnlineNewIdentityNo},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_YES},	{kOnlineNewIdentityYes},	{0},	{0},	TEXTSTRING_BLANK},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
-// The question before a new identity: No comes first, so an Enter pressed by chance keeps the identity
-static AVPMENU_ELEMENT AvPMenu_OnlineAccessNew[]=
+// The player's yes to one servers.cfg line (server_yes_page.h; added 2026-11-10 by Melanikus for the AvP port, #175's last part): No
+// comes first, so an Enter pressed by chance sends nothing to the server
+static AVPMENU_ELEMENT AvPMenu_ServerYes[]=
 {
-	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_NO},	{kAccessRowNewNo},	{0},	{0},	TEXTSTRING_BLANK},
-	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_ACCESS_NEWID_YES},	{kAccessRowNewYes},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_SERVERYES_NO},	{kServerYesRowNo},	{0},	{0},	TEXTSTRING_BLANK},
+	{AVPMENU_ELEMENT_ONLINE_ACCESS,	{TEXTSTRING_SERVERYES_YES},	{kServerYesRowYes},	{0},	{0},	TEXTSTRING_BLANK},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -532,7 +576,7 @@ static AVPMENU_ELEMENT AvPMenu_MultiplayerStartGame[]=
 static AVPMENU_ELEMENT AvPMenu_MultiplayerJoinGame[]=
 {
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_FINDGAMES},	{AVPMENU_MULTIPLAYERSELECTSESSION},	{0},	{0},	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP},
-	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MULTIPLAYER_OPENADDRESS},	{AVPMENU_MULTIPLAYEROPENADDRESS},	{0},	{0},	TEXTSTRING_MULTIPLAYER_OPENADDRESS_HELP},
+	// (Removed 2026-11-10 by Melanikus for the AvP port, the owner's ruling for beta.2: "Everything over nyc3": Open address, as a game at a typed address is plain.)
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -1102,6 +1146,9 @@ AVPMENU AvPMenusData[]=
 	// AVPMENU_MULTIPLAYER_JOINING
 	{AVPMENU_FONT_BIG,TEXTSTRING_MULTIPLAYER_JOININGGAME,		AvPMenu_Multiplayer_Joining,		AVPMENU_MULTIPLAYER_JOINING,	0},
 
+	// AVPMENU_HOST_ON (host_page.h, 2026-11-11): Esc goes back to the Multiplayer page, with nothing chosen
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_HOSTPAGE_TITLE,			AvPMenu_HostOn,					AVPMENU_MULTIPLAYER, 0},
+
 	// AVPMENU_CONTROLS
 	{AVPMENU_FONT_SMALL,TEXTSTRING_MOUSECONTROLS_TITLE,			AvPMenu_ControlsOptions,			AVPMENU_OPTIONS,	0},
 
@@ -1181,15 +1228,18 @@ AVPMENU AvPMenusData[]=
 	// AVPMENU_COOP_HOSTQUITS
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_CoopHostQuits,					AVPMENU_INGAME, 0},
 
-	// AVPMENU_ONLINE_ACCESS
-	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_ROW,			AvPMenu_OnlineAccess,					AVPMENU_MULTIPLAYER, 0},
+	// AVPMENU_ONLINE (2026-11-11): Esc goes back to the Multiplayer page
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_ONLINE_ROW,			AvPMenu_Online,					AVPMENU_MULTIPLAYER, 0},
 
-	// AVPMENU_ONLINE_ACCESS_NEW
-	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_NEWID,			AvPMenu_OnlineAccessNew,					AVPMENU_ONLINE_ACCESS, 0},
+	// AVPMENU_ONLINE_NEW_IDENTITY
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_ACCESS_NEWID,			AvPMenu_OnlineNewIdentity,					AVPMENU_ONLINE, 0},
+
+	// AVPMENU_SERVER_YES: Esc goes back to the Online page, as a no does
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_SERVERYES_TITLE,			AvPMenu_ServerYes,					AVPMENU_ONLINE, 0},
 };
 
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
-static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_ONLINE_ACCESS_NEW + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_SERVER_YES + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
 // The page of games found (online_screens_page.h). On the list: the Search box (the menus' own text field, typing into the page's own
 // buffer of 20 letters), the Refresh row, and a row for each game the search lets through, even none. While the open sessions are fetched

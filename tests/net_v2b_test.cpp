@@ -4,17 +4,18 @@
 // WHAT'S CHECKED, and against what. The relay's repository has a reference handshake B written apart from this one, in Java
 // (AVPx-Dedicated-Server, java/test/avpx/v2/HandshakeB.java), and its test vectors (tests/vectors/crypto-v2.json, copied byte for byte;
 // the gate checks its sha256) hold one whole handshake B made by it from fixed keys and fixed randomness. So:
-//   1. the two identities in the file: their ML-KEM public keys from their seeds, and their fingerprints; and a fingerprint's hex both ways;
+//   1. the two identities in the file: their ML-KEM public keys from their seeds, their fingerprints and their whole ids (item 6); and the
+//      hex of each, both ways;
 //   2. the file's 23 steps, walked one by one with net_noise.h here in the test: every h and ck, every secret and key mixed, every
 //      sealed piece. That checks the test's own reading of CRYPTO.md before it judges the game's code by it;
 //   3. the game's NetHandshakeBJoiner and NetHandshakeBHost, given the file's keys and randomness, make B1 to B5 byte for byte, the same
-//      keys both ways, the same transcript, and the check code 623782;
+//      keys both ways, the same transcript, and the check code 078265;
 //   4. the file's 11 datagrams: each message cut by net_v2_fragments.h under 'AVPE' is exactly the file's, and reads back whole;
 //   5. hostile messages, each refused for its own reason (CRYPTO.md section 16's number where there is one):
 //      - a wrong size, a call out of turn, a bad start;
-//      - B2 made with another host's keys under the listing's fingerprint (10), and B5 revealing another nJ (21), both with good
+//      - B2 made with another host's keys under the listing's id (10), and B5 revealing another nJ (21), both with good
 //        tags, made from the test's own walk;
-//      - another region, port or fingerprint in the prologue (8);
+//      - another region, port or host id in the prologue (8);
 //      - one bit changed in every byte of B1 to B5;
 //   6. two handshakes with fresh keys and real randomness, from the game's own NetIdentity_Make: they agree, and differ from each other;
 //   7. sealed game datagrams (3dc/net_sealed_game.h, CRYPTO.md section 9) with the file's handshake B keys: each one exactly what the test
@@ -183,7 +184,8 @@ static bool IdentityFrom(const char *object, NetIdentity *out)
 	memcpy(out->statics, pub.data(), kNetCryptoP384PublicBytes);
 
 	if (!KemPairFromSeed(BHex(object, "mlkemSeed"), out->statics + kNetCryptoP384PublicBytes, out->kemPrivate)
-		|| !NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint))
+		|| !NetIdentity_Fingerprint(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->fingerprint)
+		|| !NetIdentity_Id(NetIdentity_P384Public(out), NetIdentity_KemPublic(out), out->id))
 	{
 		NetIdentity_Free(out);
 		return false;
@@ -199,7 +201,7 @@ static NetIdentity hostId, joinerId;
 
 static void TestIdentities()
 {
-	printf("\n1. The two identities in the file, and fingerprints\n");
+	printf("\n1. The two identities in the file, their fingerprints and their whole ids\n");
 
 	for (int which = 0; which < 2; which++)
 	{
@@ -218,13 +220,27 @@ static void TestIdentities()
 		BCheck(Equal(BHex(name, "fingerprint"), id->fingerprint, kNetIdentityFingerprintBytes),
 			std::string("its fingerprint (SHA-384 of \"AVPX-ID-2\" and both public keys, the first 16 bytes) is the file's"));
 
-		char hex[kNetIdentityFingerprintHexBytes];
-		NetIdentity_FingerprintHex(id->fingerprint, hex);
+		// Modified 2026-11-10 by Melanikus for the AvP port: the game no longer writes a fingerprint as hex (a listing names its host by the
+		// whole id, SERVER-BLOCKERS item 6), so its writer went, and the file's text is read the one way the game reads one. That reader
+		// takes exactly 32 small hex digits and nothing else, so this also proves the file writes them the way the list does.
 		const JsonValue *const written = TextMember(*b->Member(name), "fingerprint");
-		BCheck(written && written->text == hex, std::string("and as 32 small hex digits it's written exactly as the file writes it: ") + hex);
-
 		uint8_t back[kNetIdentityFingerprintBytes];
-		BCheck(NetIdentity_FingerprintFromHex(hex, back) && memcmp(back, id->fingerprint, sizeof(back)) == 0, "and reads back to the same 16 bytes");
+		BCheck(written && NetIdentity_FingerprintFromHex(written->text.c_str(), back) && memcmp(back, id->fingerprint, sizeof(back)) == 0,
+			std::string("and the file's 32 small hex digits for it, read the game's one way, are the same 16 bytes"));
+
+		// Added 2026-11-10 by Melanikus for the AvP port (SERVER-BLOCKERS item 6): the whole id, which the listing carries and B's prologue
+		// mixes, is the file's, and the fingerprint is its first 16 bytes
+		BCheck(Equal(BHex(name, "id"), id->id, kNetIdentityIdBytes),
+			std::string("its whole id (SHA-384 of \"AVPX-ID-2\" and both public keys, all 48 bytes) is the file's"));
+		BCheck(memcmp(id->id, id->fingerprint, kNetIdentityFingerprintBytes) == 0, "and its fingerprint is the id's first 16 bytes");
+
+		char idHex[kNetIdentityIdHexBytes];
+		NetIdentity_IdHex(id->id, idHex);
+		const JsonValue *const writtenId = TextMember(*b->Member(name), "id");
+		BCheck(writtenId && writtenId->text == idHex, std::string("and as 96 small hex digits the id is written exactly as the file writes it"));
+
+		uint8_t idBack[kNetIdentityIdBytes];
+		BCheck(NetIdentity_IdFromHex(idHex, idBack) && memcmp(idBack, id->id, sizeof(idBack)) == 0, "and reads back to the same 48 bytes");
 	}
 
 	// A listing is input from outside the game: only exactly 32 small hex digits, with nothing after them
@@ -246,6 +262,33 @@ static void TestIdentities()
 	}
 
 	BCheck(!NetIdentity_FingerprintFromHex(NULL, out), "and no fingerprint at all is refused");
+
+	// The same for a listing's whole id: only exactly 96 small hex digits, with nothing after them (added 2026-11-10, item 6)
+	std::string const good = "11e6e2dfda44451c8e4328b8a7cd50ca9591aaeac21b0cebf78a1c8f482b280d02677182138983bb42df6aa7513139ef";
+	std::string capitals = good;
+	capitals[0] = 'A';
+	capitals[1] = 'B';
+	std::string const refusedIds[] = {
+		capitals,                                  // capitals: the list never writes them
+		good.substr(0, 95),                        // 95 digits
+		good + "0",                                // 97
+		good.substr(0, 95) + "g",                  // not a hex digit
+		good.substr(0, 95) + " ",                  // a space
+		good.substr(0, 32),                        // a fingerprint where the id goes
+		"",
+	};
+	uint8_t idOut[kNetIdentityIdBytes];
+
+	for (size_t i = 0; i < sizeof(refusedIds) / sizeof(refusedIds[0]); i++)
+	{
+		memset(idOut, 0xAA, sizeof(idOut));
+		bool const taken = NetIdentity_IdFromHex(refusedIds[i].c_str(), idOut);
+		BCheck(!taken && Equal(Bytes(sizeof(idOut), 0), idOut, sizeof(idOut)),
+			std::string("a listing's id of ") + std::to_string(refusedIds[i].size()) + " letters, not all small hex, or a fingerprint, is refused, and nothing of it kept");
+	}
+
+	BCheck(NetIdentity_IdFromHex(good.c_str(), idOut), "while the host's own 96 digits are taken");
+	BCheck(!NetIdentity_IdFromHex(NULL, idOut), "and no id at all is refused");
 }
 
 // ---- 2. The steps, walked here with net_noise.h
@@ -354,7 +397,7 @@ static void TestSteps()
 	Hash(&noise, named.data(), named.size());
 	uint8_t const portBytes[2] = { static_cast<uint8_t>(port & 0xFF), static_cast<uint8_t>(port >> 8) };
 	Hash(&noise, portBytes, sizeof(portBytes));
-	Hash(&noise, hostId.fingerprint, sizeof(hostId.fingerprint));
+	Hash(&noise, hostId.id, sizeof(hostId.id));   // the host's whole id since item 6 (2026-11-10)
 
 	// B1: e, and the promise
 	Bytes const jeP384 = BHex("joinerEphemeral", "p384Public");
@@ -437,8 +480,8 @@ struct Run
 	NetHandshakeBKeys hostKeys;
 };
 
-// The joiner's WriteB1 with the file's draws, for the expected host's fingerprint, region and port given
-static bool FileB1(NetHandshakeBJoiner *joiner, const uint8_t expected[kNetIdentityFingerprintBytes], const char *region, uint16_t port, uint8_t b1Out[kNetHandshakeBB1Bytes])
+// The joiner's WriteB1 with the file's draws, for the expected host's whole id, region and port given
+static bool FileB1(NetHandshakeBJoiner *joiner, const uint8_t expected[kNetIdentityIdBytes], const char *region, uint16_t port, uint8_t b1Out[kNetHandshakeBB1Bytes])
 {
 	uint8_t ekPublic[kNetPqKemPublicBytes], ekPrivate[kNetPqKemPrivateBytes];
 	Bytes const nJ = BHex("nJ");
@@ -527,7 +570,7 @@ static void TestTheGamesHandshake(Run *run)
 	NetHandshakeBJoiner joiner;
 	NetHandshakeBHost host;
 
-	BCheck(FileB1(&joiner, hostId.fingerprint, region.c_str(), port, run->b1) && Equal(BHex("b1"), run->b1, sizeof(run->b1)),
+	BCheck(FileB1(&joiner, hostId.id, region.c_str(), port, run->b1) && Equal(BHex("b1"), run->b1, sizeof(run->b1)),
 		"the joiner's B1 is the file's, byte for byte (1,713 bytes)");
 	BCheck(FileB2(&host, region.c_str(), port, run->b1, sizeof(run->b1), run->b2) && Equal(BHex("b2"), run->b2, sizeof(run->b2)),
 		"the host reads it, and its B2 is the file's (3,362 bytes)");
@@ -566,7 +609,10 @@ static void TestTheGamesHandshake(Run *run)
 	char code[kNetHandshakeBCheckCodeBytes] = {};
 	const JsonValue *const fileCode = TextMember(*b, "checkCode");
 	bool const made = NetHandshakeB_CheckCode(run->joinerKeys.transcript, code);
-	BCheck(made && fileCode && fileCode->text == code && std::string(code) == "623782", std::string("the check code is the file's, 623782: ") + code);
+	// Modified 2026-11-10 by Melanikus for the AvP port: 078265, since B's prologue mixes the host's whole id (SERVER-BLOCKERS item 6,
+	// 14fc5ddb), which changed the transcript and so the code. The file (the server's 2694c87 copy) has had it since then; this line was
+	// left saying the code before it.
+	BCheck(made && fileCode && fileCode->text == code && std::string(code) == "078265", std::string("the check code is the file's, 078265: ") + code);
 
 	// Every call after the end is out of turn, and gives nothing
 	uint8_t b5[kNetHandshakeBB5Bytes];
@@ -661,7 +707,7 @@ static void TestDatagrams(const Run &run)
 static bool JoinerAtB2(NetHandshakeBJoiner *joiner)
 {
 	uint8_t b1[kNetHandshakeBB1Bytes];
-	return FileB1(joiner, hostId.fingerprint, Region().c_str(), RelayPort(), b1);
+	return FileB1(joiner, hostId.id, Region().c_str(), RelayPort(), b1);
 }
 
 // A joiner whose B3 is written, ready for a B4
@@ -735,7 +781,7 @@ static void TestWrongSizesAndTurns(const Run &run)
 	for (size_t i = 0; i < sizeof(regions) / sizeof(regions[0]); i++)
 	{
 		NetHandshakeBJoiner joiner;
-		BCheck(!FileB1(&joiner, hostId.fingerprint, regions[i], RelayPort(), b1) && joiner.Why() == kNetHandshakeBBadStart,
+		BCheck(!FileB1(&joiner, hostId.id, regions[i], RelayPort(), b1) && joiner.Why() == kNetHandshakeBBadStart,
 			std::string("the region \"") + regions[i] + "\" is a bad start");
 		NetHandshakeBHost host;
 		BCheck(!host.ReadB1(regions[i], RelayPort(), &hostId, run.b1, sizeof(run.b1)) && host.Why() == kNetHandshakeBBadStart,
@@ -744,7 +790,7 @@ static void TestWrongSizesAndTurns(const Run &run)
 
 	{
 		NetHandshakeBJoiner joiner;
-		BCheck(!FileB1(&joiner, hostId.fingerprint, Region().c_str(), 0, b1) && joiner.Why() == kNetHandshakeBBadStart
+		BCheck(!FileB1(&joiner, hostId.id, Region().c_str(), 0, b1) && joiner.Why() == kNetHandshakeBBadStart
 			&& Equal(Bytes(sizeof(b1), 0), b1, sizeof(b1)), "a relay port of 0 is a bad start, and B1's bytes are all 0");
 		NetHandshakeBHost host;
 		NetIdentity none;
@@ -760,12 +806,12 @@ static void TestWrongSizesAndTurns(const Run &run)
 	// A 16-letter region is the longest taken
 	{
 		NetHandshakeBJoiner joiner;
-		BCheck(FileB1(&joiner, hostId.fingerprint, "abcdefghijklmn-0", RelayPort(), b1), "a region of 16 small letters, digits and - is taken");
+		BCheck(FileB1(&joiner, hostId.id, "abcdefghijklmn-0", RelayPort(), b1), "a region of 16 small letters, digits and - is taken");
 	}
 }
 
-// B2 made from the walk with another identity's keys, under the listing's fingerprint: the man in the middle that the fingerprint check
-// is there for. Its tags are good, because the walk has the joiner's own state; only the fingerprint can tell.
+// B2 made from the walk with another identity's keys, under the listing's id: the man in the middle that the id check is there for. Its
+// tags are good, because the walk has the joiner's own state; only the id can tell.
 static void TestWrongHost(const Run &run)
 {
 	printf("\n5b. The wrong host (10), and the wrong prologue (8)\n");
@@ -795,36 +841,36 @@ static void TestWrongHost(const Run &run)
 		"B2 sealing another identity's keys, with good tags, is the wrong host (10): \"this isn't the host the list named\"");
 	BCheck(joiner.HostKemPublic() == NULL, "and the joiner has nothing to answer it with");
 
-	// The listing named another host (here, the joiner's own fingerprint): the prologues differ, so B2's first seal fails at the joiner
+	// The listing named another host (here, the joiner's own id): the prologues differ, so B2's first seal fails at the joiner
 	{
 		NetHandshakeBJoiner other;
 		uint8_t b1[kNetHandshakeBB1Bytes];
-		BCheck(FileB1(&other, joinerId.fingerprint, Region().c_str(), RelayPort(), b1) && !other.ReadB2(run.b2, sizeof(run.b2))
-			&& other.Why() == kNetHandshakeBBadTag, "a joiner that expected another host's fingerprint refuses the real host's B2 at its tag (8)");
+		BCheck(FileB1(&other, joinerId.id, Region().c_str(), RelayPort(), b1) && !other.ReadB2(run.b2, sizeof(run.b2))
+			&& other.Why() == kNetHandshakeBBadTag, "a joiner that expected another host's id refuses the real host's B2 at its tag (8)");
 	}
 
 	// Another region, another port: the same
 	{
 		NetHandshakeBJoiner other;
 		uint8_t b1[kNetHandshakeBB1Bytes];
-		BCheck(FileB1(&other, hostId.fingerprint, "paris", RelayPort(), b1) && !other.ReadB2(run.b2, sizeof(run.b2)) && other.Why() == kNetHandshakeBBadTag,
+		BCheck(FileB1(&other, hostId.id, "paris", RelayPort(), b1) && !other.ReadB2(run.b2, sizeof(run.b2)) && other.Why() == kNetHandshakeBBadTag,
 			"a joiner on another region's relay refuses it at its tag (8)");
 	}
 	{
 		NetHandshakeBJoiner other;
 		uint8_t b1[kNetHandshakeBB1Bytes];
-		BCheck(FileB1(&other, hostId.fingerprint, Region().c_str(), static_cast<uint16_t>(RelayPort() + 1), b1) && !other.ReadB2(run.b2, sizeof(run.b2))
+		BCheck(FileB1(&other, hostId.id, Region().c_str(), static_cast<uint16_t>(RelayPort() + 1), b1) && !other.ReadB2(run.b2, sizeof(run.b2))
 			&& other.Why() == kNetHandshakeBBadTag, "and so does one on another relay port (8)");
 	}
 
-	// And the host's side of the same: a B1 meant for another host's fingerprint gets a B2 its joiner can't take
+	// And the host's side of the same: a B1 meant for another host's id gets a B2 its joiner can't take
 	{
 		NetHandshakeBJoiner other;
 		NetHandshakeBHost host;
 		uint8_t b1[kNetHandshakeBB1Bytes], b2Other[kNetHandshakeBB2Bytes];
-		BCheck(FileB1(&other, joinerId.fingerprint, Region().c_str(), RelayPort(), b1) && FileB2(&host, Region().c_str(), RelayPort(), b1, sizeof(b1), b2Other)
+		BCheck(FileB1(&other, joinerId.id, Region().c_str(), RelayPort(), b1) && FileB2(&host, Region().c_str(), RelayPort(), b1, sizeof(b1), b2Other)
 			&& !other.ReadB2(b2Other, sizeof(b2Other)) && other.Why() == kNetHandshakeBBadTag,
-			"a host answering a B1 meant for another host's fingerprint makes a B2 that joiner refuses (8)");
+			"a host answering a B1 meant for another host's id makes a B2 that joiner refuses (8)");
 	}
 }
 
@@ -1000,7 +1046,7 @@ static bool FreshRun(const NetIdentity *host, const NetIdentity *joinerIdentity,
 	// The joiner's draws, in 5.1 point 14's order: e's P-384 key, e's ML-KEM key, nJ
 	NetEcdhKey *const e = NetCrypto_EcdhNew(ePublic);
 	bool ok = e != NULL && NetPq_KemKeypair(ekPublic, ekPrivate) && NetCrypto_Random(nJ, sizeof(nJ))
-		&& joiner.WriteB1("newyork", 40123, host->fingerprint, joinerIdentity, e, ePublic, ekPublic, ekPrivate, nJ, b1);
+		&& joiner.WriteB1("newyork", 40123, host->id, joinerIdentity, e, ePublic, ekPublic, ekPrivate, nJ, b1);
 	NetCrypto_Wipe(ekPrivate, sizeof(ekPrivate));
 	NetCrypto_Wipe(nJ, sizeof(nJ));
 
@@ -1585,7 +1631,7 @@ static void TestPeers()
 		NetPeerJoiner joiner;
 		NetPeerHostSide host;
 		Wire wire;
-		BCheck(host.Start(region, port, &hostI, 0) && joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "both sides start");
+		BCheck(host.Start(region, port, &hostI, 0) && joiner.Start(region, port, hostI.id, &joinerI, 0), "both sides start");
 		BCheck(!joiner.Ready() && !host.Ready(), "and neither has keys yet");
 		Bytes const early = Pattern(20, 1);
 		Bytes room(early.size() + kNetSealedGameOverheadBytes);
@@ -1634,7 +1680,7 @@ static void TestPeers()
 	// The joiner's sends when nothing answers: at 0, 0.5, 1.5 and 3.5 s, then it gives up at 7.5 s
 	{
 		NetPeerJoiner joiner;
-		BCheck(joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "a joiner starts, and its host never answers");
+		BCheck(joiner.Start(region, port, hostI.id, &joinerI, 0), "a joiner starts, and its host never answers");
 		std::vector<uint32_t> times;
 		uint32_t failedAt = 0;
 
@@ -1659,7 +1705,7 @@ static void TestPeers()
 	// A late frame doesn't push the later sends back: they're counted from the first
 	{
 		NetPeerJoiner joiner;
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
 		SendsOf(&joiner);
 		joiner.Tick(700);   // the first wait ended at 500, but the frame came at 700
 		bool const second = !SendsOf(&joiner).empty();
@@ -1675,7 +1721,7 @@ static void TestPeers()
 		NetPeerHostSide host;
 		Wire wire;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
 		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB2 && before == 0; });
 		BCheck(joiner.Ready() && host.Ready(), "B2 lost once: the join still finishes, at " + std::to_string(wire.now) + " ms");
 		BCheck(wire.hostSent[kNetHandshakeBKindB2].size() == 2 && wire.hostSent[kNetHandshakeBKindB2][0] == wire.hostSent[kNetHandshakeBKindB2][1],
@@ -1688,7 +1734,7 @@ static void TestPeers()
 		NetPeerHostSide host;
 		Wire wire;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
 		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB4 && before == 0; });
 		BCheck(joiner.Ready() && host.Ready(), "B4 lost once: the join still finishes, at " + std::to_string(wire.now) + " ms");
 		BCheck(wire.hostSent[kNetHandshakeBKindB4].size() == 2 && wire.hostSent[kNetHandshakeBKindB4][0] == wire.hostSent[kNetHandshakeBKindB4][1],
@@ -1702,7 +1748,7 @@ static void TestPeers()
 		NetPeerHostSide host;
 		Wire wire;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
 		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int before) { return kind == kNetHandshakeBKindB5 && before == 0; });
 
 		// The wire stops when one side is ready and the other isn't only at its end: run it on until the host has B5
@@ -1715,7 +1761,7 @@ static void TestPeers()
 		NetPeerHostSide host;
 		Wire wire;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
 		wire.Run(&joiner, &host, 3000, [](uint8_t kind, int) { return kind == kNetHandshakeBKindB5; });
 		BCheck(joiner.Ready() && !host.Ready(), "with every B5 lost the joiner has its keys and the host doesn't");
 		BCheck(!GameDatagram(&joiner, &host, true, Pattern(30, 4), wire.now) && host.Drops().sealedEarly == 1,
@@ -1732,9 +1778,9 @@ static void TestPeers()
 		NetPeerHostSide host;
 		Wire wire;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, joinerI.fingerprint, &joinerI, 0);   // the listing named another fingerprint
+		joiner.Start(region, port, joinerI.id, &joinerI, 0);   // the listing named another host's id
 		wire.Run(&joiner, &host, 3000, NoLoss);
-		BCheck(joiner.Failed() && joiner.Why() == kNetHandshakeBBadTag, std::string("a joiner that expected another host's fingerprint fails at B2's tag: ")
+		BCheck(joiner.Failed() && joiner.Why() == kNetHandshakeBBadTag, std::string("a joiner that expected another host's id fails at B2's tag: ")
 			+ ReasonName(joiner.Why()));
 		size_t later = 0;
 
@@ -1759,8 +1805,8 @@ static void TestPeers()
 		NetPeerJoiner joiner, other;
 		NetPeerHostSide host;
 		host.Start(region, port, &hostI, 0);
-		joiner.Start(region, port, hostI.fingerprint, &joinerI, 0);
-		other.Start(region, port, hostI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, hostI.id, &joinerI, 0);
+		other.Start(region, port, hostI.id, &joinerI, 0);
 		std::vector<Bytes> const b1 = SendsOf(&joiner);
 		std::vector<Bytes> const otherB1 = SendsOf(&other);
 
@@ -1826,13 +1872,13 @@ static void TestPeers()
 		NetPeerJoiner joiner;
 		NetPeerHostSide again;
 		Wire wire;
-		joiner.Start(region, port, joinerI.fingerprint, &joinerI, 0);
+		joiner.Start(region, port, joinerI.id, &joinerI, 0);
 		again.Start(region, port, &hostI, 0);
 		wire.Run(&joiner, &again, 3000, NoLoss);
 		bool const failedFirst = joiner.Failed();
 		Wire second;
 		again.Start(region, port, &hostI, 0);
-		BCheck(failedFirst && joiner.Start(region, port, hostI.fingerprint, &joinerI, 0), "a joiner that failed starts again");
+		BCheck(failedFirst && joiner.Start(region, port, hostI.id, &joinerI, 0), "a joiner that failed starts again");
 		second.Run(&joiner, &again, 3000, NoLoss);
 		BCheck(joiner.Ready() && again.Ready(), "and this time the join finishes");
 	}

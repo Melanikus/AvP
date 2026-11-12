@@ -69,11 +69,13 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
-      # The owner's ruling, 2026-11-09: nothing in a release may reach one of our servers; the code for them runs only with -dev. Every
-      # pull request has already run this: this is the last look.
-      - name: Refuse any way a player's game could reach one of our servers
+      # The owner's rulings, 2026-11-09 and 2026-11-10 (#175): a release plays online only the safe way, with the servers its servers.cfg
+      # names (tools/check-online-play.ps1, which also prints them for the release's text). Every pull request has already run this: this
+      # is the last look. This release ships no servers.cfg, so it plays no online games at all (the owner's ruling R-GOAL-9, 2026-11-11:
+      # "Online off in beta.2"; tools/check-release-package.ps1 refuses a package with one), and the code is held to the rules all the same.
+      - name: Refuse any way a player's game could play online but the safe way
         shell: pwsh
-        run: ./tools/check-servers-dev-only.ps1
+        run: ./tools/check-online-play.ps1
 
       # A function added to the game that the game never uses is dead code left behind. It reads the code, so it needs nothing from GitHub.
       - name: Refuse a new function the game does not use

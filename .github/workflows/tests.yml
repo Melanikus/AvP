@@ -33,12 +33,20 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
-      # The owner's ruling, 2026-11-09: "I want the code to test but NOTHING that can be actually accessed by people with the release".
-      # The code that talks to our servers comes in as it's written, and runs only with -dev; this proves a player's game can reach none
-      # of them. Only the owner lifts it.
-      - name: Refuse any way a player's game could reach one of our servers
+      # The owner's rulings, 2026-11-09 and 2026-11-10 (#175): a player's game plays online only the safe way: only with the servers its
+      # servers.cfg names, trusted by their fingerprints alone, only by protocol version 2, only sealed, plain only at home, and -dev
+      # weakens none of it (tools/check-online-play.ps1 says each rule). Only the owner changes them.
+      - name: Refuse any way a player's game could play online but the safe way
         shell: pwsh
-        run: ./tools/check-servers-dev-only.ps1
+        run: ./tools/check-online-play.ps1
+
+      # Hudson's words for a run through a relay server, and the servers.cfg a run writes beside bin\ (tools/hudson/relay-words.ps1): each
+      # word's every refusal, the pair's watch on every kind of socket, and the file written only into a copy made for Hudson's runs, never
+      # over someone else's. It starts no game: -CheckTheWatch only tries the rules, in a folder of its own under the runner's temporary
+      # folder. In Windows PowerShell, as Hudson's runs are. Added 2026-11-10 by Melanikus for the AvP port (#175).
+      - name: Check Hudson's relay words, the pair's watch and a run's servers.cfg
+        shell: powershell
+        run: ./tools/hudson/run-net-pair.ps1 -CheckTheWatch
 
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
@@ -66,15 +74,16 @@ jobs:
           "tests/vectors/relay-v1.json is the relay's file at 26d0580"
 
       # net_v2_parts_test and net_v2a_test read protocol version 2's test vectors, which the relay's Java makes from its own code
-      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 2b8dcd6, Split's 48-byte secrets, made by java/test/avpx/v2/CryptoV2Vectors.java). As
+      # (AVPx-Dedicated-Server, test-vectors/crypto-v2.json at 2694c87, the host named by its whole id: SERVER-BLOCKERS item 6, made by
+      # java/test/avpx/v2/CryptoV2Vectors.java). As
       # relay-v1.json's: byte for byte, or it proves nothing. Added 2026-11-09 by Melanikus for the AvP port.
       - name: Check protocol version 2's test vectors are the relay's own
         shell: pwsh
         run: |
-          $expected = '08f15401f7374a22c248b082a65c60b30486827e204cc7dbc187db983774ab17'
+          $expected = '06b40f269a6940761074d77b92125e678bed259e1d5b4c07218ea8ef8db32720'
           $found = (Get-FileHash -Algorithm SHA256 -LiteralPath tests/vectors/crypto-v2.json).Hash.ToLowerInvariant()
           if ($found -ne $expected) { throw "tests/vectors/crypto-v2.json isn't the relay's file: its sha256 is $found, not $expected" }
-          "tests/vectors/crypto-v2.json is the relay's file at 2b8dcd6"
+          "tests/vectors/crypto-v2.json is the relay's file at 2694c87"
 
       # net_crypto_test reads the published known answers for protocol v2's primitives (NIST CAVP and ACVP, and Wycheproof), copied byte
       # for byte from the relay's repository (AVPx-Dedicated-Server crypto-kat-java 0c4755cf, test-vectors/crypto-kat/; the folder's
@@ -465,9 +474,9 @@ jobs:
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
 
-      - name: Refuse any way a player's game could reach one of our servers
+      - name: Refuse any way a player's game could play online but the safe way
         shell: pwsh
-        run: ./tools/check-servers-dev-only.ps1
+        run: ./tools/check-online-play.ps1
 
       - name: Test the new-function check
         shell: pwsh

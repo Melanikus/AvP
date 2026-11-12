@@ -540,7 +540,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_agun.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -550,7 +550,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_alien.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -560,7 +560,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_corpse.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -570,7 +570,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_facehugger.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -580,7 +580,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -590,7 +590,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_platform_lift.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -600,7 +600,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_predator.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -610,7 +610,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_queen.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsWallsAndGravityOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -620,7 +620,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_xeno.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -630,7 +630,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/player.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -640,7 +640,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/pvisible.cpp",
-					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);",
 					"to": "*sbPtr->DynPtr = block->dynamics;"
 				}
 			]
@@ -1042,6 +1042,86 @@
 					"file": "3dc/avp/savegame.cpp",
 					"from": "\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;\n\t}\n\n\t///make sure",
 					"to": "\t\treturn;\n\t}\n\n\t///make sure"
+				}
+			]
+		},
+		{
+			"name": "a save can turn the level's walls off for anything",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tif (!(canHold & 2) && live->OnlyCollideWithObjects != ownWalls)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a save can turn the gravity off for anything",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tif (!(canHold & 1) && live->GravityOn != ownGravity)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a save's walls off are put right but not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\t\tSave_NoteRefused(\"the level's walls for an object\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien's save can hold its walls and gravity off",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
+					"to": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsWallsAndGravityOff);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's save can hold its gravity off",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
+					"to": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's save can hold the level's walls off",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);",
+					"to": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsWallsAndGravityOff);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: weapon_m79 copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a file outside the loaders' list copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->CollisionReportPtr = 0;\n",
+					"to": "\tlive->CollisionReportPtr = 0;\n\t// *live = block->dynamics;\n"
 				}
 			]
 		}

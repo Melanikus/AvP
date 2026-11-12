@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a line exactly through a corner doesn't look at the cells beside it",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "if (!fits(x + sx, y) || !fits(x, y + sy))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line looks only at its two ends",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "\t\t(*tested)++;\n\n\t\tif (!fits(x, y))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}",
+					"to": "\t\t(*tested)++;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a line longer than allowed is tried anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "if (static_cast<unsigned long long>(nx + ny) + 1 > mostCells)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a run doesn't end at another sheet",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "here.sheet == previous.sheet && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a run doesn't end where two cells aren't next to each other",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "di >= -1 && di <= 1 && dj >= -1 && dj <= 1",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "the cell before a line that isn't clear isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "\t\t\tif (!clear)\n\t\t\t{\n\t\t\t\tif (kept[n - 1] != k - 1)\n\t\t\t\t{\n\t\t\t\t\tkept[n++] = k - 1;\n\t\t\t\t}\n",
+					"to": "\t\t\tif (!clear)\n\t\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "the goal isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "\tif (kept[n - 1] != count - 1)\n\t{\n\t\tkept[n++] = count - 1;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "there's no limit to the tests",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "used < limits.mostTests",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "too little room for the answer is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_smooth.h",
+					"from": "keptRoom < count",
+					"to": "keptRoom < 1"
+				}
+			]
+		}
+	]
+}

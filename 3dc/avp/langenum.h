@@ -1503,32 +1503,14 @@ enum TEXTSTRING_ID
 	TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING,
 
 	// The Online access page (server #24, access_page.cpp), only with -dev for now. Added 2026-11-09 by Melanikus for the AvP port.
-	TEXTSTRING_ACCESS_ROW,               // the Multiplayer page's row, and the page's title
-	TEXTSTRING_ACCESS_ROW_HELP,
-	TEXTSTRING_ACCESS_EXPLAIN,           // what Request access does, above the rows, before anything is sent: two lines of the table,
-	TEXTSTRING_ACCESS_EXPLAIN_MORE,      // since each holds at most 199 characters, drawn as one paragraph
 	TEXTSTRING_ACCESS_NAME,
 	TEXTSTRING_ACCESS_NAME_HELP,
-	TEXTSTRING_ACCESS_REQUEST,
-	TEXTSTRING_ACCESS_REQUEST_HELP,
-	TEXTSTRING_ACCESS_CHECK,             // the same row once a request has been sent
-	TEXTSTRING_ACCESS_CHECK_HELP,
 	TEXTSTRING_ACCESS_COPY,
 	TEXTSTRING_ACCESS_COPY_HELP,
 	TEXTSTRING_ACCESS_NEWID,             // the row, and the confirmation page's title
-	TEXTSTRING_ACCESS_NEWID_HELP,
 	TEXTSTRING_ACCESS_YOUR_CODE,
-	TEXTSTRING_ACCESS_TELL_US,
 	TEXTSTRING_ACCESS_SENDING,
-	TEXTSTRING_ACCESS_WAITING,
-	TEXTSTRING_ACCESS_APPROVED,
-	TEXTSTRING_ACCESS_REFUSED,
-	TEXTSTRING_ACCESS_REVOKED,
-	TEXTSTRING_ACCESS_NOT_TAKEN,
-	TEXTSTRING_ACCESS_BUSY,
-	TEXTSTRING_ACCESS_CLOSED,
 	TEXTSTRING_ACCESS_CANT_REACH,
-	TEXTSTRING_ACCESS_NO_SERVER,
 	TEXTSTRING_ACCESS_WAIT_A_MINUTE,
 	TEXTSTRING_ACCESS_COPIED,
 	TEXTSTRING_ACCESS_NOT_COPIED,
@@ -1543,12 +1525,98 @@ enum TEXTSTRING_ID
 	TEXTSTRING_ACCESS_NEWID_NO,
 	TEXTSTRING_ACCESS_NEWID_MADE,
 	TEXTSTRING_ACCESS_NEWID_FAILED,
+	TEXTSTRING_ACCESS_NAME_LEFT_OUT,     // the profile's name had letters the rule won't take, left out of the name to send (beta.2, 2026-11-09)
+	TEXTSTRING_HOST_ASKING,                  // a host waiting for the server's first answer (host_wait_rules.h, 2026-11-10, PO's ruling Q3)
+	TEXTSTRING_HOST_FAILED,                  // a failed online host's line, before the game's own words for why (Q4)
+	TEXTSTRING_HOST_FAILED_PLAIN,            // a failed host's line when there's no why to give
+	TEXTSTRING_HOST_NO_ANSWER,               // the wait gave up: the server didn't answer in kHostWaitMostMs
+	TEXTSTRING_SERVERS_BACK,
+	TEXTSTRING_SERVERS_LINE,                 // "servers.cfg line", before a refused line's number
+	TEXTSTRING_SERVERS_MORE_NOT_USED,        // before how many more refused lines there are
+	TEXTSTRING_SERVERS_NONE,
+	TEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)
+	TEXTSTRING_ONLINE_OFF,                   // the Online page in a build that plays no online games (online off in beta.2: R-GOAL-9)
+	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
+	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
+	TEXTSTRING_FINDGAMES_LINE_NOYES,         // the games page's words for a line, after its name: no yes yet (2026-11-11)
+	TEXTSTRING_FINDGAMES_LINE_ASKING,        // being asked
+	TEXTSTRING_FINDGAMES_LINE_NOANSWER,      // no answer, before the list code's own why
+	TEXTSTRING_FINDGAMES_LINE_NOTASKED,      // past the first 8 lines
+	// A line this PC isn't approved on yet, on the games page and the host page, in PO's ruling's words (R-SRV-P3): "Not approved on <name>
+	// yet: ask on the Online page", the line's name between the two parts (2026-11-11)
+	TEXTSTRING_NOTAPPROVED_BEFORE,
+	TEXTSTRING_NOTAPPROVED_AFTER,
+	// The host page (host_page.h; added 2026-11-11 by Melanikus for the AvP port, in place of the Multiplayer page's Host on row)
+	TEXTSTRING_HOSTPAGE_TITLE,               // "Host on"
+	TEXTSTRING_HOSTPAGE_CHOOSE,              // the page's question, its first row, which chooses nothing
+	TEXTSTRING_HOSTPAGE_CHOOSE_HELP,
+	TEXTSTRING_HOSTPAGE_CHOOSE_BELOW,        // Enter on the question
+	TEXTSTRING_HOSTPAGE_LINE_HELP,           // a line's row's help
+	TEXTSTRING_HOSTPAGE_NONE,                // every line has answered, and none can be hosted on
+	TEXTSTRING_HOSTPAGE_SERVER,              // the five column headings
+	TEXTSTRING_HOSTPAGE_PING,
+	TEXTSTRING_HOSTPAGE_GAMES,
+	TEXTSTRING_HOSTPAGE_PLAYERS,
+	TEXTSTRING_HOSTPAGE_REGION,
+	TEXTSTRING_HOSTPAGE_MS,                  // after a round trip's number
+	TEXTSTRING_HOSTPAGE_NOYES,               // why a line can't be chosen: no yes yet
+	TEXTSTRING_HOSTPAGE_REFUSED,             // its owner refused this PC
+	TEXTSTRING_HOSTPAGE_ASKING,              // its server is being asked
+	TEXTSTRING_HOSTPAGE_NOANSWER,            // before the list code's own why
+	TEXTSTRING_HOSTPAGE_NOTASKED_BEFORE,     // past the lines a find asks, the number between
+	TEXTSTRING_HOSTPAGE_NOTASKED_AFTER,
+	TEXTSTRING_HOSTPAGE_ASKED_AGAIN,         // Enter on a line that didn't answer
+	TEXTSTRING_HOSTPAGE_CANT,                // a line that lost its yes or approval as it was chosen
+	// A line's ping before its first answer, and an approved line with no games, on the host page and the games page (the owner, 2026-11-11:
+	// "We should show the server ping to the user if no games are up")
+	TEXTSTRING_PING_ASKING,                  // "Asking...", PO's word
+	TEXTSTRING_FINDGAMES_LINE_NOGAMES,       // an approved line whose server has no games up, before its ping
 	TEXTSTRING_MULTIPLAYER_FINDGAMES,
 	TEXTSTRING_MULTIPLAYER_FINDGAMES_HELP,
 	TEXTSTRING_MULTIPLAYER_SEARCH,
 	TEXTSTRING_MULTIPLAYER_SEARCH_HELP,
 	TEXTSTRING_MULTIPLAYER_REFRESH,
 	TEXTSTRING_MULTIPLAYER_REFRESH_HELP,
+
+	// The player's yes to the server in servers.cfg, before anything goes to it (#175's last part, server_yes_page.cpp). Added 2026-11-10
+	// by Melanikus for the AvP port, in PO's words; the owner may reword them once he's seen the page in a Hudson picture. (Before the HUD
+	// size line's, which hud_scale_test keeps last.)
+	TEXTSTRING_SERVERYES_TITLE,          // the page's title and its question
+	TEXTSTRING_SERVERYES_ON_INTERNET,    // after the address: where the server is
+	TEXTSTRING_SERVERYES_ON_THIS_PC,
+	TEXTSTRING_SERVERYES_ON_OWN_NETWORK,
+	TEXTSTRING_SERVERYES_KEY,            // before the fingerprint's two ends
+	TEXTSTRING_SERVERYES_OWNER,          // what the server's owner does and sees
+	TEXTSTRING_SERVERYES_YES,
+	TEXTSTRING_SERVERYES_NO,
+
+	// The Online page (online_page.h): every servers.cfg line on its own row. Added 2026-11-11 by Melanikus for the AvP port, in place of the
+	// Servers page's and the one-server access page's words, which went with them (one model for every line).
+	TEXTSTRING_ONLINE_ROW,                         // the Multiplayer page's row, and the Online page's title (online_page.h, 2026-11-11)
+	TEXTSTRING_ONLINE_ROW_HELP,
+	TEXTSTRING_ONLINE_LINE_HELP,                   // a line's row
+	TEXTSTRING_ONLINE_CODE_SAME,                   // after the access code, at the page's top
+	TEXTSTRING_ONLINE_OURS,                        // a line the game ships with, told from what the game holds
+	TEXTSTRING_ONLINE_NOT_OURS,
+	TEXTSTRING_ONLINE_MS,                          // after a line's round trip
+	TEXTSTRING_ONLINE_PING_ASKING,                // in a line's ping's place while it's being asked (2026-11-11)
+	TEXTSTRING_ONLINE_PING_NOANSWER,              // and once it didn't answer
+	TEXTSTRING_ONLINE_NOYES,                       // a line's state, in words (online_page_rules.h, OnlineLines_StateLine)
+	TEXTSTRING_ONLINE_REFUSED,
+	TEXTSTRING_ONLINE_WAITING,                     // then the code
+	TEXTSTRING_ONLINE_WAITING_AFTER,
+	TEXTSTRING_ONLINE_NOANSWER,                    // then the game's own words for why
+	TEXTSTRING_ONLINE_NOANSWER_AFTER,
+	TEXTSTRING_ONLINE_NOTASKED,
+	TEXTSTRING_ONLINE_APPROVED_GAMES,              // then how many games
+	TEXTSTRING_ONLINE_APPROVED_GAMES_AFTER,
+	TEXTSTRING_ONLINE_APPROVED_FINDING,
+	TEXTSTRING_ONLINE_APPROVED_NOGAMES,            // then the game's own words for why
+	TEXTSTRING_ONLINE_APPROVED_NOTVISITED,         // then the most servers one find asks
+	TEXTSTRING_ONLINE_APPROVED_NOTVISITED_AFTER,
+	TEXTSTRING_ONLINE_NEWID_HELP,                  // Make a new identity's help: R-SRV-P4's words
+	TEXTSTRING_ONLINE_NEWID_WAIT,
+
 	TEXTSTRING_RENDERING_HUDSIZE,
 	TEXTSTRING_RENDERING_HUDSIZE_HELP,
 	MAX_NO_OF_TEXTSTRINGS

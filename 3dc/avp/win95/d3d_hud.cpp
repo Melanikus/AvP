@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an angle from a save file is kept between 0 and 4095 before a sine or cosine lookup
+// Modified 2026-11-11 by Melanikus for the AvP port:
+//   the effects sheet is loaded as a sheet of small pictures (kEffectsSheetCell), so the light flare's glow has no white line along its
+//   bottom
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the HUD's size comes from the screen's height and the player's HUD size, for every species, and a change shows from the next frame
 //   (HUD-SCALE-1, see hud_scale.h); the alien's health bar is as wide as a 4:3 screen; the gunsight is drawn at the HUD's size;
@@ -55,6 +58,12 @@ extern void YClipMotionTrackerVertices(struct VertexTag *v1, struct VertexTag *v
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern char LevelName[];
 signed int HUDTranslucencyLevel = 64;
+
+// The effects sheet (graphics/Common/partclfx.RIM) is many small pictures side by side: the particles' and the light flare's glow, in
+// squares of 64 texels, and some of those cut into squares of 32. Loaded with 32, a see-through texel takes colour only from its own
+// square, never from the next picture across the line (rim_edges.h). Before, the glow's bottom row took the white of the picture below
+// it, and every light's glow had a thin white line under it. Added 2026-11-11 by Melanikus for the AvP port.
+static uint32_t const kEffectsSheetCell = 32;
 static int MotionTrackerHalfWidth;
 static int MotionTrackerTextureSize;
 static int MotionTrackerCentreY;
@@ -244,7 +253,7 @@ void D3D_InitialiseMarineHUD(void)
 		MT_BlipWidth  = 12;
 
 		/* load in sfx */
-		SpecialFXImageNumber = Tex_CreateFromRIM("graphics/Common/partclfx.RIM");
+		SpecialFXImageNumber = Tex_CreateFromRIM("graphics/Common/partclfx.RIM", kEffectsSheetCell);
 	}
 
 	/* centre of motion tracker */
@@ -333,7 +342,7 @@ void LoadCommonTextures(void)
 	}
 	
 	HUDFontsImageNumber  = Tex_CreateFromRIM("graphics/Common/HUDfonts.RIM");
-	SpecialFXImageNumber = Tex_CreateFromRIM("graphics/Common/partclfx.RIM");
+	SpecialFXImageNumber = Tex_CreateFromRIM("graphics/Common/partclfx.RIM", kEffectsSheetCell);
 	CloudyImageNumber    = Tex_CreateFromRIM("graphics/Common/cloudy.RIM");
 	BurningImageNumber   = Tex_CreateFromRIM("graphics/Common/burn.RIM");
 

@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus for the AvP port:
+//   on a sheet of small pictures, a see-through texel takes colour only from its own small picture, so the light flare's glow has no
+//   white line along its bottom
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a picture's see-through texels take their solid neighbours' colour, so smooth filtering draws no outline round its holes (#148)
 // Modified 2026-11-05 by Melanikus for the AvP port:
@@ -249,7 +252,7 @@ bool Tex_UnlockCopy(texID_t textureID, uint32_t level)
 	return R_UnlockTextureCopy(textureList[textureID], level);
 }
 
-texID_t Tex_CreateFromRIM(const std::string &fileName)
+texID_t Tex_CreateFromRIM(const std::string &fileName, uint32_t edgeCell)
 {
 	texID_t textureID;
 	
@@ -310,9 +313,11 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	// Modified 2026-11-08 by Melanikus for the AvP port: each see-through texel takes its solid neighbours' colour, so smooth filtering
 	// doesn't draw a line of the picture's hidden "transparent colour" round every hole and cut-out (#148). In memory only. See rim_edges.h
 	// A film's texture is drawn over by every frame of the film, so it's left as it is.
+	// Modified 2026-11-11 by Melanikus for the AvP port: on a sheet of small pictures (edgeCell), a see-through texel takes colour only from
+	// its own small picture, never the next one's: across that line, the light flare's glow had taken a white line (rim_edges.h).
 	if (decoded && usage == TextureUsage_Normal)
 	{
-		RimEdges_ColourTheHoles(dest, width, height, pitch);
+		RimEdges_ColourTheHoles(dest, width, height, pitch, edgeCell);
 	}
 
 	R_UnlockTexture(newTexture);

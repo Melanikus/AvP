@@ -1,0 +1,508 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "Yes comes first, so an Enter pressed by chance says yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_NO},\t{kServerYesRowNo},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_YES},\t{kServerYesRowYes},\t{0},\t{0},\tTEXTSTRING_BLANK},\n",
+					"to": "\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_YES},\t{kServerYesRowYes},\t{0},\t{0},\tTEXTSTRING_BLANK},\n\t{AVPMENU_ELEMENT_ONLINE_ACCESS,\t{TEXTSTRING_SERVERYES_NO},\t{kServerYesRowNo},\t{0},\t{0},\tTEXTSTRING_BLANK},\n"
+				}
+			]
+		},
+		{
+			"name": "any row but No says yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "\tif (row == kServerYesRowYes)",
+					"to": "\tif (row != kServerYesRowNo)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the server's name is drawn as the file has it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\tOnlineScreens_SafeName(shown.name, sizeof(shown.name), name, sizeof(name));",
+					"to": "\tstrncpy(name, shown.name, sizeof(name) - 1);\n\tname[sizeof(name) - 1] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the yes page's rows are pressed as the access page's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t// The yes page's two rows are this kind too (#175's last part): they're its own, never the access page's\n\t\t\tif (AvPMenus.CurrentMenu == AVPMENU_SERVER_YES)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page opens with no line waiting for a yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tif (!ServerYesPage_Opened())",
+					"to": "\t\t\tif (!ServerYesPage_Opened() && false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host asks for the yes as if it always hosted online",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\treturn RelayList_HostLine() >= 0;\n}",
+					"to": "\treturn true;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: after a No, the list's own state has the server before the player's yes",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\tif (!lineAgreed)\n\t\t{\n\t\t\tmade->keyState = kKeyNoLine;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host row is kept with a multiplayer setup",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "void SaveMultiplayerConfiguration(const char* name)\n{\n",
+					"to": "void SaveMultiplayerConfiguration(const char* name)\n{\n\t(void)MP_HostWhere;\n"
+				}
+			]
+		},
+		{
+			"name": "a server that's ready isn't hosted on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\tif (ready)\n\t{\n\t\treturn kHostWaitHostNow;\n\t}",
+					"to": "\tif (ready)\n\t{\n\t\treturn kHostWaitGoOn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a server that can't be used is waited for",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\tif (cantUse)\n\t{\n\t\treturn kHostWaitCantUse;\n\t}",
+					"to": "\tif (cantUse)\n\t{\n\t\treturn kHostWaitGoOn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a server that never answers is waited for forever",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": ">= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;",
+					"to": ">= kHostWaitMostMs ? kHostWaitGoOn : kHostWaitGoOn;"
+				}
+			]
+		},
+		{
+			"name": "the wait gives up a moment early",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": ">= kHostWaitMostMs ? kHostWaitGiveUp",
+					"to": ">= kHostWaitMostMs - 1 ? kHostWaitGiveUp"
+				}
+			]
+		},
+		{
+			"name": "the wait is two minutes, not the words' 30 seconds",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "uint32_t const kHostWaitMostMs = 30000;",
+					"to": "uint32_t const kHostWaitMostMs = 120000;"
+				}
+			]
+		},
+		{
+			"name": "a failed host's line has no why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%s %s.\", whatFailed ? whatFailed : \"\", why);",
+					"to": "\t\tsnprintf(out, room, \"%s\", whatFailed ? whatFailed : \"\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game at home waits for a server it doesn't use",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (!HostsOnline() || Net_ServerState(&why) != kNetServerAsking)",
+					"to": "if (Net_ServerState(&why) != kNetServerAsking)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wait goes on after the page is left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tif (AvPMenus.MenusState != MENUSSTATE_MAINMENUS || AvPMenus.CurrentMenu != hostWaitPage)\n\t{\n\t\thostWaiting = kHostWaitingForNothing;\n\t\treturn;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\thostWaiting = kHostWaitingForNothing;\n\t\treturn;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wait that gave up hosts anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));\n",
+					"to": "\t\t\tShowTheHostLine(hostWaitPage, GetTextString(TEXTSTRING_HOST_NO_ANSWER));\n\t\t\tPressTheStartRowAgain();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus never run the wait",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tHostWaitFrame();\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start game never waits for the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tif (AHostWaits(kHostWaitingToStart))\n\t\t\t\t{\n\t\t\t\t\tbreak;\n\t\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Co-op campaign never waits for the server",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (page == AVPMENU_COOP_HOST && AHostWaits(kHostWaitingToOpenCoop))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Start that fails says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tShowWhyTheHostFailed(AvPMenus.CurrentMenu, Net_HostFailedWhy());\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a co-op page that can't host goes back without saying why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tShowWhyTheHostFailed(AVPMENU_MULTIPLAYER, why);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run's host that failed doesn't say why",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\treturn why ? std::string(what) + \", because \" + why : std::string(what);",
+					"to": "\treturn std::string(what);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the words for giving up say another limit",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\"The server didn't answer in 30 seconds, so nothing was hosted.",
+					"to": "\"The server didn't answer in a minute, so nothing was hosted."
+				}
+			]
+		},
+		{
+			"name": "the clock going round past 0 makes the wait end at once, or never",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_wait_rules.h",
+					"from": "return static_cast<uint32_t>(now - startedAt) >= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;",
+					"to": "return static_cast<int64_t>(now) - static_cast<int64_t>(startedAt) >= kHostWaitMostMs ? kHostWaitGiveUp : kHostWaitGoOn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host tried again forgets its first press (Third's finding on rc1)",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\thostWaitRetrySince = hostWaitSince;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Start refused while the server is asked again says why at once, and doesn't wait",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "else if (!AHostWaits(kHostWaitingToStart))",
+					"to": "else"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the words offer a game at home again",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "so nothing was hosted. Try again.\",",
+					"to": "so nothing was hosted. Try again, or host at home.\","
+				}
+			]
+		},
+		{
+			"name": "the name is drawn on the title's line again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.nameTop = kServerYesTitleTop + kServerYesBigLine + kServerYesUnderBig;",
+					"to": "at.nameTop = kServerYesTitleTop;"
+				}
+			]
+		},
+		{
+			"name": "where the server is shares the name's line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.whereTop = at.nameTop + kServerYesSmallLine + kServerYesUnderSmall;",
+					"to": "at.whereTop = at.nameTop;"
+				}
+			]
+		},
+		{
+			"name": "the owner's words aren't cut to the room above the rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "at.ownerLines = ownerLines > room ? room : ownerLines;",
+					"to": "at.ownerLines = ownerLines;"
+				}
+			]
+		},
+		{
+			"name": "words narrower than the edges aren't centred",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_rules.h",
+					"from": "return width <= 0 || width >= widest ? kServerYesLeft : kServerYesLeft + (widest - width) / 2;",
+					"to": "return kServerYesLeft;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name isn't cut to the menus' edges",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\tOnlineScreens_FitToWidth(name, widest, OnlinePage_SmallWidth);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the owner's words are wrapped to the widest box, a last word alone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "int const ownerWidth = OnlinePage_BalancedWidth(owner, widest);",
+					"to": "int const ownerWidth = widest;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name is drawn in the title's font",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "RenderSmallMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);",
+					"to": "RenderMenuText(name, MENU_CENTREX, at.nameTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page isn't told where its rows start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "ServerYesPage_Draw(MENU_CENTREY - AvPMenus.MenuHeight / 2);",
+					"to": "ServerYesPage_Draw(480);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a yes isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\t\tRelayList_AgreeToTheLineAt(linePlace);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a No says yes to the line anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\tcase kServerYesGoBack:\n\t\t\tlinePlace = -1;\n",
+					"to": "\t\tcase kServerYesGoBack:\n\t\t\tRelayList_AgreeToTheLineAt(linePlace);\n\t\t\tlinePlace = -1;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a No goes on to the Multiplayer page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\t\tcase kServerYesGoBack:\n\t\t\tlinePlace = -1;\n\t\t\t*page = AVPMENU_ONLINE;",
+					"to": "\t\tcase kServerYesGoBack:\n\t\t\tlinePlace = -1;\n\t\t\t*page = AVPMENU_MULTIPLAYER;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page opens for a line that has its yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/server_yes_page.cpp",
+					"from": "\tif (!RelayList_LineToAgreeAt(place, &waiting))\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another page's row opens the yes page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tconst AVPMENU_ID page = static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);\n",
+					"to": "\t\t\t\tconst AVPMENU_ID page = ServerYesPage_OpenFor(0) ? AVPMENU_SERVER_YES : static_cast<AVPMENU_ID>(elementPtr->MenuToGoTo);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's row doesn't open its yes page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\t\t\tif (ServerYesPage_OpenFor(place))\n",
+					"to": "\t\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page doesn't ask the agreed lines",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tOnlineLines_AskTheAgreedLines();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Multiplayer page asks a line without its yes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (says != kOnlinePageSaysNoYes && OnlineLines_Pressed(",
+					"to": "\t\tif (OnlineLines_Pressed("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game on a line not approved can be joined",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (!approved && session >= 0)\n",
+					"to": "\t\tif (false && session >= 0)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game stays greyed after its line approves this PC",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\tif (approvedNow != approvedWhenPut)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson joiner goes straight to Join Game, so no line is asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tSetupNewMenu(AVPMENU_MULTIPLAYER);\n\tMenuSecondsForARun(1);\n\tbool joined = PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")",
+					"to": "\tSetupNewMenu(AVPMENU_MULTIPLAYERJOINGAME);\n\tMenuSecondsForARun(1);\n\tbool joined = true || PressTheRowForARun(AVPMENU_ELEMENT_GOTOMENU, AVPMENU_MULTIPLAYERJOINGAME, \"Join Game\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson joiner's list is pictured before every line has answered",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (row >= 0 && linesWithAGame >= approved && !ALineIsStillAskingForARun())",
+					"to": "if (row >= 0 && linesWithAGame >= approved)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line with no games shows no ping",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tOnlineLines_NameLine(name, now.ours, now.pingMs,",
+					"to": "\tOnlineLines_NameLine(name, now.ours, now.games > 0 ? now.pingMs : -1,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an approval isn't found until the player leaves the page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (approvedNow)\n\t{\n\t\tRelayList_FindGames();",
+					"to": "\tif (false)\n\t{\n\t\tRelayList_FindGames();"
+				}
+			]
+		}
+	]
+}

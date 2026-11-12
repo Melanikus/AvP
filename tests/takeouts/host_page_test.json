@@ -1,0 +1,348 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the page's question chooses a line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tif (onTheQuestion)\n\t{\n\t\treturn kHostPageSayChoose;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line not approved yet can be hosted on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tif (access != kRelayAccessIsApproved)\n\t{\n\t\treturn kHostPageSaysNotApproved;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line without the yes says something else first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tif (lineState == kRelayLineNoYes)\n\t{\n\t\treturn kHostPageSaysNoYes;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line whose server is still being asked can be hosted on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tif (lineState == kRelayLineAnswered)\n\t{\n\t\treturn kHostPageSaysCanHost;\n\t}\n",
+					"to": "\tif (lineState == kRelayLineAnswered || lineState == kRelayLineAsking)\n\t{\n\t\treturn kHostPageSaysCanHost;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "the screenful doesn't follow the chosen line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tview.first = (place / kHostPageMostShown) * kHostPageMostShown;\n",
+					"to": "\tview.first = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a column reaches into the next",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "{ 35, 200 }, { 240, 80 },",
+					"to": "{ 35, 200 }, { 200, 80 },"
+				}
+			]
+		},
+		{
+			"name": "a host's count of players isn't held to its limits",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tint const one = players < 0 ? 0 : players > kHostPageMostPlayersAGame ? kHostPageMostPlayersAGame : players;\n",
+					"to": "\tint const one = players;\n"
+				}
+			]
+		},
+		{
+			"name": "the players' sum isn't held to its limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\treturn before + one > kHostPageMostPlayers ? kHostPageMostPlayers : before + one;\n",
+					"to": "\treturn before + one;\n"
+				}
+			]
+		},
+		{
+			"name": "a line not approved yet isn't named between R-SRV-P3's two parts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%s%s%s\", before, safeName ? safeName : \"\", after);\n",
+					"to": "\t\tsnprintf(out, room, \"%s%s\", before, after);\n"
+				}
+			]
+		},
+		{
+			"name": "the region isn't marked as the server's own word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "snprintf(cells.region, sizeof(cells.region), \"\\\"%.*s\\\"\", static_cast<int>(kRelayListRegionLetters), safeRegion);",
+					"to": "snprintf(cells.region, sizeof(cells.region), \"%.*s\", static_cast<int>(kRelayListRegionLetters), safeRegion);"
+				}
+			]
+		},
+		{
+			"name": "the count line shows when every line fits",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\tif (count > kHostPageMostShown && view.shown > 0)\n",
+					"to": "\tif (view.shown > 0)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page doesn't clear the choice as it opens",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page.cpp",
+					"from": "\t(void)RelayList_HostOn(-1);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line is chosen outside Enter's kHostPageChooseIt",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page.cpp",
+					"from": "\t\tcase kHostPageAskAgain:\n",
+					"to": "\t\tcase kHostPageAskAgain:\n\t\t\t(void)RelayList_HostOn(place);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start game goes to its page without the host page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\tSetupNewMenu(AVPMENU_HOST_ON);\n",
+					"to": "\t\t\t\t\tSetupNewMenu(hostPageGoesTo);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus go on from the host page with nothing chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && HostPage_PressedRow(elementPtr->MaxValue))\n",
+					"to": "\t\t\tif (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run presses the first line, whatever hoston= names",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tif (!PressTheRowForARun(AVPMENU_ELEMENT_HOSTLINE, row, ",
+					"to": "\tif (!PressTheRowForARun(AVPMENU_ELEMENT_HOSTLINE, kHostPageLineRowFirst, "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Hudson run chooses the line itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tconst char *const name = Hudson_HostOnName();\n\tDWORD const started = GetTickCount();\n",
+					"to": "\tconst char *const name = Hudson_HostOnName();\n\t(void)RelayList_HostOn(0);\n\tDWORD const started = GetTickCount();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Host on row comes back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\tAvPMenu_Multiplayer[row++] = OnlineRow;\n",
+					"to": "\tAvPMenu_Multiplayer[row++] = OnlineRow;\n\tAvPMenu_Multiplayer[row++] = HostOnRow;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page asks the lines on every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page.cpp",
+					"from": "void HostPage_Frame(void)\n{\n\tint count = 0;\n",
+					"to": "void HostPage_Frame(void)\n{\n\tRelayList_FindGames();\n\tint count = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line's ping isn't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page.cpp",
+					"from": "\tCell(ping, HostPage_Column(kHostPageColumnPing), top, light);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a line that isn't being asked says Asking...",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\telse if (lineState == kRelayLineAsking)\n",
+					"to": "\telse if (true)\n"
+				}
+			]
+		},
+		{
+			"name": "a line's ping isn't held to 9999",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/host_page_rules.h",
+					"from": "\t\tsnprintf(out, room, \"%d %s\", pingMs > 9999 ? 9999 : pingMs, msWords ? msWords : \"\");\n",
+					"to": "\t\tsnprintf(out, room, \"%d %s\", pingMs, msWords ? msWords : \"\");\n"
+				}
+			]
+		},
+		{
+			"name": "the Multiplayer page shows Start game, Co-op campaign and Join game with no servers.cfg line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\tif (RelayList_LineCount() > 0)\n\t{\n",
+					"to": "\tif (RelayList_LineCount() >= 0)\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "the Multiplayer page leaves Join game out even with a servers.cfg line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t\tAvPMenu_Multiplayer[row++] = JoinGameRow;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games shows another line on the Online page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tSmallLine(GetTextString(TEXTSTRING_ONLINE_OFF), kOnlinePageRefusedTop, ONE_FIXED / 2);\n",
+					"to": "\t\tSmallLine(GetTextString(TEXTSTRING_SERVERS_NONE), kOnlinePageRefusedTop, ONE_FIXED / 2);\n"
+				}
+			]
+		},
+		{
+			"name": "the no-online words are in another id's place",
+			"changes": [
+				{
+					"file": "3dc/avp/language.cpp",
+					"from": "\t\"servers.cfg isn't used:\",\n\t\"This version of the game plays no online games: online play comes in a later beta.\",\n",
+					"to": "\t\"This version of the game plays no online games: online play comes in a later beta.\",\n\t\"servers.cfg isn't used:\",\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still offers the name to send, Copy access code and Make a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n",
+					"to": "\tif (lineCount >= 0)\n\t{\n\t\trows[row++] = name;\n"
+				}
+			]
+		},
+		{
+			"name": "with a server the Online page leaves out the name to send, Copy access code and Make a new identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n",
+					"to": "\tif (lineCount < 0)\n\t{\n\t\trows[row++] = name;\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still draws the access code",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0 && haveIdentity && ourCode[0])\n",
+					"to": "\tif (haveIdentity && ourCode[0])\n"
+				}
+			]
+		},
+		{
+			"name": "with no server the Online page still shows the identity's answer",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (lineCount > 0 && answer != TEXTSTRING_BLANK)\n",
+					"to": "\tif (answer != TEXTSTRING_BLANK)\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays online says on the Online page that it plays none",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\tif (!RelayList_PlaysOnline())\n\t{\n",
+					"to": "\tif (RelayList_PlaysOnline())\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games loads or makes this PC's identity all the same",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (!RelayList_PlaysOnline())\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n",
+					"to": "\t\tif (RelayList_PlaysOnline() && false)\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays online never loads this PC's identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (!RelayList_PlaysOnline())\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games makes a new identity when asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\t\tif (!RelayList_PlaysOnline())\n\t\t\t{\n\t\t\t\t*page = AVPMENU_ONLINE;\n\t\t\t\treturn true;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

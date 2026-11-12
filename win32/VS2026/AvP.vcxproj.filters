@@ -156,6 +156,18 @@
     <ClCompile Include="..\..\3dc\net_handshake_a.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\servers_cfg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\servers_cfg_file.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\servers_trust.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\net_server_key.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_pq_native.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -392,6 +404,27 @@
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_view.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_build.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_guide.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_level.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\npc_grid.cpp">
+      <Filter>Source Files\behaviours</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bonusabilities.cpp">
       <Filter>Source Files</Filter>
@@ -939,10 +972,16 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\host_page.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\win95\frontend\access_page.cpp">
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\online_page.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\server_yes_page.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\online_screens.cpp">
@@ -1064,6 +1103,45 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\floor_is_lava.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_view.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_build.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_level.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_lookahead.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_stuck.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_map.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_claims.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_grid.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_grid_pieces.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_grid_smooth.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bonusabilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1116,6 +1194,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\save_checks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\save_level_record.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\huddefs.h">
@@ -1392,6 +1473,21 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_a.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\servers_cfg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\servers_cfg_file.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\servers_trust.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_server_fingerprint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_server_key.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\net_handshake_b.h">
@@ -1706,13 +1802,25 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\host_page_rules.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens_page.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page.h">
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\frontend\access_page_rules.h">
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\online_page_rules.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_page.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\server_yes_rules.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\online_screens.h">

@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a lift (Save_RestoreDynamics, save_checks.h)
 /*------------------------------Patrick 14/3/97-----------------------------------
   Source for Platform lift behaviour functions
   --------------------------------------------------------------------------------*/
@@ -12,6 +14,10 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   how long since the host spoke is counted by the machine's own clock, so a long frame or a pause no longer leaves a joiner's car
 //   behind the host's (#90)
+// Modified 2026-11-10 by Melanikus for the AvP port:
+//   in the same-as-single-player mode, someone waits at a lift's far end only on that half of the shaft, within 5 m of that end's
+//   height and within 5 m of the car's edge seen from above; before, a tall car's shape made its own end count as the other (#189).
+//   And the host's own player calls a car as single player does: it's drawn on his screen, and he's on the other half of the shaft
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -41,6 +47,8 @@ static int ActivatedByPlayer(DYNAMICSBLOCK *dynPtr);
 static void Lift_FollowTheHostsCar(STRATEGYBLOCK *sbPtr);
 static int PlayerIsNearOtherTerminal(STRATEGYBLOCK *sbPtr);
 static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr);
+static int WaitingAtTheFarEnd(VECTORCH *where, VECTORCH *farEnd, int nearEndHeight, int footprint);
+static int HostSeesTheCarFromTheOtherHalf(STRATEGYBLOCK *sbPtr);
 static int PLiftIsNearerUpThanDown(STRATEGYBLOCK *sbPtr);
 
 /*------------------------------Patrick 15/3/97-----------------------------------
@@ -84,7 +92,9 @@ void PlatformLiftBehaviour(STRATEGYBLOCK *sbPtr)
 				else if(sbPtr->SBdptr)
 				{			
 					/* check for activation by this player*/
-					if(ActivatedByPlayer(dynPtr))
+					// In the mode that plays as single player, the host's own player also calls the car the way single player does
+					// (#189), so a car the level starts at the other end comes to him, as it would there
+					if(ActivatedByPlayer(dynPtr) || HostSeesTheCarFromTheOtherHalf(sbPtr))
 					{
 						if (platformliftdata->Enabled) ActivatePlatformLift(sbPtr);
 					}
@@ -556,14 +566,17 @@ static int PlayerIsNearOtherTerminal(STRATEGYBLOCK *sbPtr)
 
 /* returns 1 if the player or a remote player is within 5 m of the other end of
 the lift track...*/
+// In the mode that plays as single player, what "at the other end" means is NetLiftIsWaitingAtTheFarEnd's (net_checks.h, #189)
 static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 {
 	int sbIndex = 0;
 	PLATFORMLIFT_BEHAVIOUR_BLOCK *platformliftdata;
 	DYNAMICSBLOCK *dynPtr;
 	VECTORCH otherTerminal;
+	int nearEndHeight;
+	// The car seen from above: how far its footprint reaches from its middle, from its shape in the level's file
 	SHAPEHEADER const *const liftShape = GetShapeData(sbPtr->shapeIndex);
-	int const callReach = NetLiftCallReach(liftShape ? liftShape->shaperadius : 0, SameAsSinglePlayer());
+	int const footprint = liftShape ? NetLiftFootprintRadius(liftShape->shapeminx, liftShape->shapemaxx, liftShape->shapeminz, liftShape->shapemaxz) : 0;
 
 	LOCALASSERT(sbPtr);
 	platformliftdata = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)sbPtr->SBdataptr;
@@ -576,11 +589,13 @@ static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 	{
 		otherTerminal = dynPtr->Position;
 		otherTerminal.vy = platformliftdata->downHeight;
+		nearEndHeight = platformliftdata->upHeight;
 	}
 	else
 	{
 		otherTerminal = dynPtr->Position;
 		otherTerminal.vy = platformliftdata->upHeight;	
+		nearEndHeight = platformliftdata->downHeight;
 	}
 
 	while(sbIndex < NumActiveStBlocks)
@@ -598,17 +613,39 @@ static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 			{
 				/* remote player */
 				LOCALASSERT(sbPtr->DynPtr);
-				if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<callReach) return 1;
+				if(WaitingAtTheFarEnd(&(sbPtr->DynPtr->Position),&(otherTerminal),nearEndHeight,footprint)) return 1;
 			}
 		}
 		else if(sbPtr==Player->ObStrategyBlock)
 		{
 			/* local player */
 			LOCALASSERT(sbPtr->DynPtr);
-			if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<callReach) return 1;
+			if(WaitingAtTheFarEnd(&(sbPtr->DynPtr->Position),&(otherTerminal),nearEndHeight,footprint)) return 1;
 		}
 	}		
 	return 0;
+}
+
+// Whether someone standing at "where" counts as waiting at the lift's far end. Outside the mode that plays as single player, it's
+// 1999's 5 m from the middle of the far end, measured as the game always has (VectorDistance). In the mode, it's the far half of the
+// shaft and near that end: NetLiftIsWaitingAtTheFarEnd, net_checks.h, which the tests check against every stock lift (#189).
+static int WaitingAtTheFarEnd(VECTORCH *where, VECTORCH *farEnd, int nearEndHeight, int footprint)
+{
+	return NetLiftIsWaitingAtTheFarEnd(VectorDistance(where, farEnd), where->vx, where->vy, where->vz, farEnd->vx, farEnd->vz, nearEndHeight, farEnd->vy,
+		footprint, SameAsSinglePlayer() != FALSE) ? 1 : 0;
+}
+
+// In the mode that plays as single player, the host's own player calls a car at rest as single player's rule does: the car is
+// drawn on his screen, and he's on the other half of its shaft (PlayerIsNearOtherTerminal). The joiners' screens aren't known
+// here, so they call it from its far end, or by touching it. Outside the mode, this is never true, as in 1999's network game.
+static int HostSeesTheCarFromTheOtherHalf(STRATEGYBLOCK *sbPtr)
+{
+	if (!SameAsSinglePlayer() || !sbPtr->SBdptr || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return 0;
+	}
+
+	return PlayerIsNearOtherTerminal(sbPtr);
 }
 
 
@@ -813,7 +850,7 @@ void LoadStrategy_PlatformLift(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Enabled)
 	COPYELEMENT_LOAD(OneUse)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 
 }
 

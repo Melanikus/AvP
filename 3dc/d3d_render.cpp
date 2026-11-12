@@ -41,6 +41,9 @@
 //   the LAMPFOLLOW command says how long the shoulder lamp takes to catch up with the view
 //   the keys for the lighting, the shadows and the developers' views can be changed on the rendering page. The first two now work for everyone, and a control with the same key wins
 //   the LAMPSPOTSIZE and LAMPINTENSITY commands say how big and how strong its spot is, playing alone. A network game keeps them as built
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the LAMPLOOK command says how the player's own lamp looks when it could be a real light: the real light, the real light with the
+//   painted spot over it, or painted only. A network game keeps it as built
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the shoulder lamp is drawn before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
@@ -61,6 +64,9 @@
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
 //   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the ALIEN WAYS view: with -dev -alienways, each alien's way is drawn through the level, coloured floor, wall and ceiling, never in a network
+//   game (#109; alien_ways_view.h)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the tag on the top right, which says how the shadows and the lighting are set, is off until it's asked for (F7, or -dev
 //   -statuson), so it no longer covers the game and the relay's line in play; F7 says in the log each time it shows or hides it
@@ -142,6 +148,8 @@
 #include "surface_static.h"
 #include "static_level.h"
 #include "normal_lines.h"
+#include "alien_ways.h"
+#include "alien_ways_view.h"
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
@@ -387,6 +395,8 @@ static std::vector<NormalLinesPolygon> normalLinesPolygons;
 static std::vector<float> normalLinesCorners;
 static int normalLinesNotNoted = 0;
 static void DrawNormalLines();
+static void DrawAlienWays();
+extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
 char const *GetLoadedShapeName(int position);
 
@@ -772,6 +782,13 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && NormalLinesOn)
 	{
 		DrawNormalLines();
+	}
+
+	// The ALIEN WAYS view, the same way: in the frame's last drawing, so a wall hides a way behind it. Only with its own switch, -alienwaysview
+	// (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109: no player ever sees the lines, even with the ways on)
+	if (toyFinalFlush && AlienWaysViewSwitchedOn)
+	{
+		DrawAlienWays();
 	}
 
 	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
@@ -3101,6 +3118,11 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 			mainList->AddTriangle(mainIndex, 1+x+(16*y),17+x+(16*y),16+x+(16*y), kNumMeshVerts);
 		}
 	}
+}
+
+bool ThisFramesRenderingIsOpen()
+{
+	return frameIsOpen;
 }
 
 void ThisFramesRenderingHasBegun()
@@ -5511,15 +5533,26 @@ static IDirect3DSurface9 *toyMaskSurface = 0;
 static IDirect3DSurface9 *toyDepthSurface = 0;
 static bool toyTargetsFailed = false;
 
-// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. When the lamp is a real light this frame, that's all drawn elsewhere, and there's nothing to do here. Everything about how this looks is in shaders/shoulderLamp.psh.
+// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. When the lamp is a real light this frame, that's all drawn elsewhere, and there's nothing to do here, unless
+// LAMPLOOK asks for the painted spot over it. Everything about how this looks is in shaders/shoulderLamp.psh.
 static void DrawShoulderLamp()
 {
 	bool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;
 
+	// LAMPLOOK 1 and 3 (shoulder_lamp.h; added 2026-11-11 by Melanikus (Third) for the AvP port): over the real light, the painted lamp too. 1 blends
+	// it below so the light isn't doubled; 3 draws it at full, walls and glint included, as it was drawn on its own on 2026-11-05.
+	bool const blendedOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBoth;
+	bool const fullOver = isARealLight && ShoulderLamp_Look() == kShoulderLampLookBothFull;
+	bool const paintedToo = blendedOver || fullOver;
+
 	if (isARealLight)
 	{
 		ShoulderLamp_NoteARealLightFrame();
-		return;
+
+		if (!paintedToo)
+		{
+			return;
+		}
 	}
 
 	if (d3d.shoulderLampEffect == kNullEffectID)
@@ -5550,7 +5583,7 @@ static void DrawShoulderLamp()
 	ChangeZWriteEnable(ZWRITE_DISABLED);
 
 	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
-	bool const onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
+	bool const onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
 
 	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
 	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
@@ -5569,13 +5602,22 @@ static void DrawShoulderLamp()
 	ShoulderLamp_SpotNumbers(spot);
 	device->SetPixelShaderConstantF(2, spot, 1);
 
-	// Each drawing of this can at most double a pixel, and these rooms are dark enough that twice nothing much is still nothing much, so it brightens twice
-	float const brighten[4] = { strength, 0.0f, 0.0f, wide };
+	// Each drawing of this can at most double a pixel, and these rooms are dark enough that twice nothing much is still nothing much, so it brightens twice.
+	// Over the real light (LAMPLOOK 1) it brightens once, at kShoulderLampOverARealLight of that, so the spot's flicker and its hot middle show on what
+	// the real light lit, at most a quarter brighter there, where twice on their own they'd make it up to four times as bright (TRANSLUCENCY_BRIGHTEN
+	// keeps what's there and adds that times the spot). The adding below then puts in no wall's own colour, as the real light lights the walls already
+	// (onWalls is false for a real light), so it's only the spot's faint glow and the cone's haze, which light nothing. (Modified 2026-11-11 by
+	// Melanikus (Third) for the AvP port.)
+	float const brighten[4] = { blendedOver ? strength * kShoulderLampOverARealLight : strength, 0.0f, 0.0f, wide };
 
 	device->SetPixelShaderConstantF(0, brighten, 1);
 	ChangeTranslucencyMode(TRANSLUCENCY_BRIGHTEN);
 	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
-	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+
+	if (!blendedOver)
+	{
+		device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+	}
 
 	// This one adds, rather than multiplies, so it shows on black
 	float const add[4] = { strength, 1.0f, 0.0f, wide };
@@ -7932,6 +7974,109 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 	}
 }
 
+// The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), when the developer asks
+// for it (-dev -alienwaysview). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
+// frame of the game. The lines go through the same sums as the level's own polygons, by this frame's ViewMatrix, so a wall hides a way behind
+// it. Everything this changes on the card is put back afterwards, as DrawNormalLines does. Never in a network game: it would show where the
+// aliens are going, through the walls.
+static void DrawAlienWays()
+{
+	if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)
+	{
+		return;
+	}
+
+	static const size_t kMostShown = 64;
+	AlienWaysShown shown[kMostShown];
+	size_t const count = AlienWays_WaysToShow(shown, kMostShown);
+
+	static std::vector<AlienWaysViewEnd> ends;
+	ends.clear();
+
+	for (size_t i = 0; i < count && i < kMostShown; i++)
+	{
+		// A kept way (its alien isn't following it now) is drawn dimmed (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+		if (shown[i].kept)
+		{
+			AlienWaysView_AddKeptWay(ViewMatrix, shown[i].points, shown[i].count, &ends);
+		}
+		else
+		{
+			AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);
+		}
+	}
+
+	if (ends.empty())
+	{
+		return;
+	}
+
+	// Every line about three pixels wide, so the ways are easier to see (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109;
+	// the owner's ask, alien_ways_view.h)
+	AlienWaysView_Thicken(&ends, kAlienWaysViewAside);
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	// The same settings as DrawNormalLines: plain coloured lines, no texture, tested against the level's depth but not written into it
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// Compared with the level's depth, so a wall hides a way behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostLinesInOneDraw = 16000;
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.resize(ends.size());
+
+	for (size_t i = 0; i < ends.size(); i++)
+	{
+		vertices[i].x = ends[i].x;
+		vertices[i].y = ends[i].y;
+		vertices[i].z = ends[i].z;
+		vertices[i].color = ends[i].colour;
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+	{
+		size_t const left = ends.size() / 2 - line;
+
+		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 // The NORMAL LINES view: see normal_lines.h. The lines go through the same sums as the level's own polygons, so the depth buffer can compare them with it, and that's what makes a wall hide them. Everything this changes
 // on the card is put back afterwards, because it's in the middle of the frame. Its pixel shader wants a texture and there's none, so it goes without. A network game gets none of this:
 // these views can show what's behind a wall.
@@ -8132,6 +8277,16 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 		LogString("normal lines: this is a network game, so they're off");
 	}
 
+	// The aliens' ways aren't drawn in a network game (DrawAlienWays asks too), even with -alienwaysview. The switch stays, as it's set once at
+	// start. The log says so once, and only when the view was asked for (modified 2026-11-11 by Melanikus (Third), #109).
+	static bool saidAlienWaysArentDrawn = false;
+
+	if (AlienWaysViewSwitchedOn && !saidAlienWaysArentDrawn)
+	{
+		saidAlienWaysArentDrawn = true;
+		LogString("alien ways view: this is a network game, so the aliens' ways aren't drawn");
+	}
+
 	// A bigger or brighter lamp than the others have would be cheating. How quickly it follows the view isn't: LAMPFOLLOW only moves the lamp.
 	if (ShoulderLamp_PutSpotBack())
 	{
@@ -8309,6 +8464,37 @@ void LampSpotSizeCommand(char *words)
 
 	_snprintf(said, sizeof(said) - 1, "LAMP SPOT SIZE IS %.2f", size);
 	SaySwitch(said);
+}
+
+// LAMPLOOK (shoulder_lamp.h): how the player's own lamp looks when it could be a real light, for this run of the game, playing alone. On its own it
+// says what it is now. Added 2026-11-11 by Melanikus (Third) for the AvP port.
+void LampLookCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	if (LampStaysAsBuiltHere("LAMPLOOK IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT", length))
+	{
+		return;
+	}
+
+	int look = ShoulderLamp_Look();
+
+	if (length > 0 && !ShoulderLamp_LookFromWords(start, (unsigned int)length, &look))
+	{
+		SaySwitch("LAMPLOOK TAKES 0 TO 3: 0 THE REAL LIGHT, 1 THE REAL LIGHT AND THE PAINTED SPOT, 2 PAINTED ONLY, 3 THE REAL LIGHT AND THE PAINTED LAMP AT FULL");
+		return;
+	}
+
+	ShoulderLamp_SetLook(look);
+	SaySwitch(look == kShoulderLampLookBoth ? "LAMP LOOK IS 1: THE REAL LIGHT AND THE PAINTED SPOT, AS BUILT" :
+		(look == kShoulderLampLookPainted ? "LAMP LOOK IS 2: PAINTED ONLY" :
+		(look == kShoulderLampLookBothFull ? "LAMP LOOK IS 3: THE REAL LIGHT AND THE PAINTED LAMP AT FULL" : "LAMP LOOK IS 0: THE REAL LIGHT ONLY")));
 }
 
 void LampIntensityCommand(char *words)

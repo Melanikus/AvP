@@ -8,6 +8,12 @@
 // with nothing changed. Then, reading the game's source as text, that Tex_CreateFromRIM does it after a picture has been decoded, and
 // before the texture is let go of, for every picture but a film's.
 //
+// Added 2026-11-11 by Melanikus for the AvP port, A SHEET OF SMALL PICTURES (cell): a hole on the edge of one small picture takes no
+// colour from the next one, nor from round the sheet's edges, but still takes its own picture's; a cell that doesn't fit the sheet a whole
+// number of times stops at the sheet's edge; and the whole-picture rule is unchanged with no cell. The first case is the light flare's
+// glow in small: a glow whose bottom row is see-through, on top of a picture whose top row is solid white, as on the effects sheet.
+// Then, as text, that the cell size reaches the colouring, and that the effects sheet is loaded with its cells in both places.
+//
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this file on its own. The program gives back a non-zero result if anything failed.
@@ -101,6 +107,11 @@ struct Picture
 static bool ColourIt(Picture &p)
 {
 	return RimEdges_ColourTheHoles(&p.bytes[0], p.width, p.height, p.pitch);
+}
+
+static bool ColourItInCells(Picture &p, uint32_t cell)
+{
+	return RimEdges_ColourTheHoles(&p.bytes[0], p.width, p.height, p.pitch, cell);
 }
 
 static bool Has(std::string const &text, std::string const &what)
@@ -222,6 +233,84 @@ static void TestTheHoles()
 	}
 }
 
+// The light flare's glow in small: a sheet 4 wide and 8 high, of two small pictures 4 square, one above the other. The top one is the glow:
+// two dim solid texels in its row 2, and its row 3 all holes, as the glow's bottom row is. The bottom one is solid white, as the picture
+// under the glow on the effects sheet is.
+static Picture GlowOverWhite()
+{
+	Picture p(4, 8);
+
+	p.Set(1, 2, 10, 10, 10, 255);
+	p.Set(2, 2, 10, 10, 10, 255);
+
+	for (uint32_t y = 4; y < 8; y++)
+	{
+		for (uint32_t x = 0; x < 4; x++)
+		{
+			p.Set(x, y, 255, 255, 255, 255);
+		}
+	}
+
+	return p;
+}
+
+static void TestTheSheets()
+{
+	puts("A sheet of small pictures:");
+
+	// As one picture (no cell), the glow's bottom row takes the white below it: the line under every light's glow
+	{
+		Picture p = GlowOverWhite();
+		ColourIt(p);
+		uint8_t const *const t = p.At(1, 3);
+		Check(t[3] == 0 && t[0] > 150 && t[1] > 150 && t[2] > 150, "as one picture, the glow's bottom row of holes takes the white of the picture under it (the bug, kept for a single picture)");
+	}
+
+	// As a sheet of squares of 4, it takes only the glow's own dim colour
+	{
+		Picture p = GlowOverWhite();
+		Check(ColourItInCells(p, 4), "a sheet is coloured");
+		Check(p.Is(1, 3, 10, 10, 10, 0) && p.Is(2, 3, 10, 10, 10, 0) && p.Is(0, 3, 10, 10, 10, 0) && p.Is(3, 3, 10, 10, 10, 0),
+			"on a sheet, the glow's bottom row of holes takes only its own picture's dim colour, never the white across the line");
+		Check(p.Is(0, 1, 10, 10, 10, 0) && p.Is(3, 1, 10, 10, 10, 0), "and the holes inside the glow are still coloured, as on any picture");
+		Check(p.Is(0, 0, 255, 0, 255, 0), "and a hole with no solid neighbour in its own picture keeps its colour");
+		Check(p.Is(1, 4, 255, 255, 255, 255) && p.Is(3, 7, 255, 255, 255, 255), "and the white picture's solid texels are left exactly as they were");
+	}
+
+	// Nothing wraps round a sheet's edges: a solid texel in the last column of the only square doesn't reach the first column
+	{
+		Picture p(4, 4);
+		p.Set(3, 0, 1, 2, 3, 255);
+		ColourItInCells(p, 4);
+		Check(p.Is(0, 0, 255, 0, 255, 0) && p.Is(0, 3, 255, 0, 255, 0) && p.Is(3, 3, 255, 0, 255, 0),
+			"on a sheet, neighbours don't wrap round the edges, as each small picture is drawn on its own");
+		Check(p.Is(2, 0, 1, 2, 3, 0) && p.Is(2, 1, 1, 2, 3, 0), "but the holes beside it in its own picture take its colour");
+	}
+
+	// Side by side: a hole on the right edge of the left picture takes nothing from the left edge of the right one
+	{
+		Picture p(8, 4);
+
+		for (uint32_t y = 0; y < 4; y++)
+		{
+			p.Set(4, y, 200, 200, 200, 255);
+		}
+
+		ColourItInCells(p, 4);
+		Check(p.Is(3, 1, 255, 0, 255, 0) && p.Is(3, 2, 255, 0, 255, 0), "a hole on a picture's right edge takes nothing from the picture beside it");
+		Check(p.Is(5, 1, 200, 200, 200, 0), "and the picture beside it is coloured from its own texels");
+	}
+
+	// A cell that doesn't fit a whole number of times: the last square is cut short at the sheet's edge, and nothing past it is read
+	{
+		Picture p(6, 1);
+		p.Set(0, 0, 70, 80, 90, 255);
+		ColourItInCells(p, 4);
+		Check(p.Is(5, 0, 255, 0, 255, 0), "a short last square stops at the sheet's edge: its last texel doesn't reach round to the first");
+		Check(p.Is(1, 0, 70, 80, 90, 0), "and the first square is coloured as usual");
+	}
+}
+
 static void TestTheGame()
 {
 	puts("The game does it to every picture it loads:");
@@ -234,17 +323,33 @@ static void TestTheGame()
 	std::string const fromRim = (end == std::string::npos) ? "" : manager.substr(start, end - start);
 
 	size_t const decode = fromRim.find("bool const decoded = newRim.Decode(dest, pitch);");
-	size_t const colour = fromRim.find("if (decoded && usage == TextureUsage_Normal)\n\t{\n\t\tRimEdges_ColourTheHoles(dest, width, height, pitch);\n\t}");
+	size_t const colour = fromRim.find("if (decoded && usage == TextureUsage_Normal)\n\t{\n\t\tRimEdges_ColourTheHoles(dest, width, height, pitch, edgeCell);\n\t}");
 	size_t const unlock = fromRim.find("R_UnlockTexture(newTexture);");
 
 	Check(decode != std::string::npos && colour != std::string::npos && unlock != std::string::npos && decode < colour && colour < unlock,
 		"a picture's holes are coloured after it's decoded, only if it decoded, and before the texture is let go of, for every picture but a film's");
 	Check(fromRim.find("RimEdges_ColourTheHoles(") == fromRim.rfind("RimEdges_ColourTheHoles("), "once");
+
+	// The cell size reaches the colouring from the one who loads the picture, and the effects sheet says its own, in both places it's loaded
+	Check(Has(manager, "texID_t Tex_CreateFromRIM(const std::string &fileName, uint32_t edgeCell)\n{"), "Tex_CreateFromRIM takes the size of a sheet's squares");
+	Check(Has(ReadSourceFile("3dc/TextureManager.h"), "texID_t Tex_CreateFromRIM  (const std::string &fileName, uint32_t edgeCell = 0);"),
+		"and a picture that isn't a sheet needs to say nothing: 0, one picture");
+
+	std::string const hud = ReadSourceFile("3dc/avp/win95/d3d_hud.cpp");
+	std::string const sheetLoad = "SpecialFXImageNumber = Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\", kEffectsSheetCell);";
+	size_t const firstLoad = hud.find(sheetLoad);
+	size_t const secondLoad = (firstLoad == std::string::npos) ? std::string::npos : hud.find(sheetLoad, firstLoad + 1);
+
+	Check(Has(hud, "static uint32_t const kEffectsSheetCell = 32;"), "the effects sheet's squares are 32, its smallest pictures, so every line between two is a line between squares");
+	Check(firstLoad != std::string::npos && secondLoad != std::string::npos && hud.find(sheetLoad, secondLoad + 1) == std::string::npos,
+		"the effects sheet is loaded with its squares in both places it's loaded");
+	Check(!Has(hud, "Tex_CreateFromRIM(\"graphics/Common/partclfx.RIM\")"), "and nowhere without them");
 }
 
 int main()
 {
 	TestTheHoles();
+	TestTheSheets();
 	TestTheGame();
 
 	if (checksFailed)

@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the LAMPLOOK command
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the debug and cheat commands are there in a beta, for testers, and using them doesn't count as cheating (see beta_build.h)
 // Modified 2026-11-05 by Melanikus for the AvP port:
@@ -15,6 +17,8 @@
 //   only a host can restart a network game
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the NEWDYNAMICCOLLISIONS command, which says whether a slide along a wall goes on at any frame rate (#180)
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   the FLOORISLAVA command, which says whether standard aliens climb walls and ceilings to reach you, from the next level's start (#109)
 #include "3dc.h"
 #include "console_command.hpp"
 #include "build_identity.h"
@@ -22,6 +26,7 @@
 #include "fmvCutscenes.h"
 #include "view_switches.h"
 #include "new_dynamic_collisions.h"
+#include "floor_is_lava.h"
 #include "logString.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -351,6 +356,44 @@ static void NewDynamicCollisionsCommand(char *words)
 	LogString(message);
 }
 
+// FLOORISLAVA, the console command: see floor_is_lava.h. A player's setting, not a cheat, and there in a network game too, where only the
+// host's counts, as only the host moves the aliens. It counts from the next level's start, as the aliens' map is built then, so in a level
+// the screen says so too. It isn't kept in the settings. (Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.)
+static void FloorIsLavaCommand(char *words)
+{
+	bool const took = FloorIsLava_FromWords(words, &FloorIsLavaAsked);
+	char const *said = took ? FloorIsLava_Words(FloorIsLavaAsked) : kFloorIsLavaRefused;
+
+	static char message[100];
+	_snprintf(message, sizeof(message) - 1, "%s", said);
+	message[sizeof(message) - 1] = 0;
+
+	// There's no HUD to show it on until a level has started
+	if (AvP.MainLoopRunning)
+	{
+		NewOnScreenMessage(message);
+
+		if (took)
+		{
+			static char fromNext[100];
+			_snprintf(fromNext, sizeof(fromNext) - 1, "%s", kFloorIsLavaFromTheNextLevel);
+			fromNext[sizeof(fromNext) - 1] = 0;
+			NewOnScreenMessage(fromNext);
+		}
+
+		// A machine that joined a network game doesn't run the aliens, so what it asks counts for nothing there: only the host's does
+		if (AvP.Network != I_No_Network && !AvP.NetworkAIServer)
+		{
+			static char hostOnly[100];
+			_snprintf(hostOnly, sizeof(hostOnly) - 1, "%s", kFloorIsLavaOnlyTheHost);
+			hostOnly[sizeof(hostOnly) - 1] = 0;
+			NewOnScreenMessage(hostOnly);
+		}
+	}
+
+	LogString(message);
+}
+
 void CreateGameSpecificConsoleCommands(void)
 {
 	ShowDebuggingText.FPS = 0;
@@ -402,6 +445,13 @@ void CreateGameSpecificConsoleCommands(void)
 
 	ConsoleCommand::Make
 	(
+		"LAMPLOOK",
+		"HOW THE SHOULDER LAMP LOOKS AS A REAL LIGHT: 0 THE REAL LIGHT, 1 THE REAL LIGHT AND THE PAINTED SPOT (AS BUILT), 2 PAINTED ONLY, 3 THE REAL LIGHT AND THE PAINTED LAMP AT FULL. NOT IN A NETWORK GAME",
+		LampLookCommand
+	);
+
+	ConsoleCommand::Make
+	(
 		"SHADOWAMBIENT",
 		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
 		ShadowAmbientCommand
@@ -413,6 +463,14 @@ void CreateGameSpecificConsoleCommands(void)
 		"NEWDYNAMICCOLLISIONS",
 		"WHETHER A SLIDE ALONG A WALL GOES ON AT ANY FRAME RATE: ON OR OFF. OFF MEETS WALLS AS IN 1999. ON ITS OWN, SWITCHES IT",
 		NewDynamicCollisionsCommand
+	);
+
+	// A player's setting too, there for everyone, so that a player can put 1999's aliens back to compare. See floor_is_lava.h. (#109)
+	ConsoleCommand::Make
+	(
+		"FLOORISLAVA",
+		"WHETHER ALIENS CLIMB WALLS AND CEILINGS TO REACH YOU: ON OR OFF. OFF MOVES THEM AS IN 1999. ON ITS OWN, SWITCHES IT. FROM THE NEXT LEVEL",
+		FloorIsLavaCommand
 	);
 
 	// Only do anything with -dev, and they say so without it. See view_switches.h.

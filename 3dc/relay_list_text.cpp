@@ -1,7 +1,12 @@
 // The words that go to and from the relay server's list. relay_list_text.h says what this is for, and what it refuses.
 // Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-10 by Melanikus for the AvP port (#175):
+//   a relay's keys come with their region from the list's own relay (GET /v1/relay-keys asked with no region), and the readers nothing
+//   calls once the server is a servers.cfg line are gone: the relays' list and its host field, the words for a refused relay address, and
+//   -dev's pin and shown name
 
 #include "relay_list_text.h"
+#include "servers_cfg.h"   // the usual ports, which a shown address leaves out (RelayList_ShownAddress)
 
 #include <stdio.h>
 #include <string.h>
@@ -218,9 +223,9 @@ namespace
 		kKindText,     // printable ASCII, 1 to mostLetters characters
 		kKindRegion,
 		kKindCode,
-		kKindHost,
 		kKindNumber,   // a whole number from least to most
-		kKindFingerprint,  // a host's fingerprint: 32 hex digits, small letters, kept as its 16 bytes
+		kKindFingerprint,  // an identity's fingerprint: 32 hex digits, small letters, kept as its 16 bytes (an access answer's "fp")
+		kKindHostId,       // a host's whole id: 96 hex digits, small letters, kept as its 48 bytes (a game's "id", added 2026-11-10)
 		kKindHexBytes      // exactly mostLetters hex digits, small letters, kept as half as many bytes (a relay's keys; added 2026-11-09)
 	};
 
@@ -268,10 +273,10 @@ namespace
 		long most;
 		char *text;
 		long *number;
-		uint8_t *bytes;   // a fingerprint's 16 bytes; every other kind leaves it out, which makes it NULL
+		uint8_t *bytes;   // a fingerprint's 16 bytes, or a host id's 48; every other kind leaves it out, which makes it NULL
 	};
 
-	// The longest field names are 11 (levelNumber, fingerprint). A name longer than this is no field the protocol has.
+	// The longest field names are 11 (levelNumber). A name longer than this is no field the protocol has.
 	const size_t kMostFieldNameLetters = 16;
 	const int kMostFields = 16;
 
@@ -294,10 +299,6 @@ namespace
 				why = ReadString(r, rule.text, kRelayCodeLetters, &length);
 				return (why == kRelayListBadText || (why == kRelayListAccepted && !Relay_IsCode(rule.text, length))) ? kRelayListBadCode : why;
 
-			case kKindHost:
-				why = ReadString(r, rule.text, kRelayListHostLetters, &length);
-				return (why == kRelayListBadText || (why == kRelayListAccepted && !RelayList_IsRelayHost(rule.text))) ? kRelayListBadHost : why;
-
 			case kKindNumber:
 				return ReadNumber(r, rule.least, rule.most, rule.number);
 
@@ -311,6 +312,20 @@ namespace
 				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_FingerprintFromHex(hex, rule.bytes)))
 				{
 					return kRelayListBadFingerprint;
+				}
+
+				return why;
+			}
+
+			case kKindHostId:
+			{
+				// As a fingerprint is, by net_identity.h's own rule for an id: exactly 96 hex digits, small letters, and nothing after them
+				char hex[kNetIdentityIdHexBytes];
+				why = ReadString(r, hex, kNetIdentityIdHexBytes - 1, &length);
+
+				if (why == kRelayListBadText || (why == kRelayListAccepted && !NetIdentity_IdFromHex(hex, rule.bytes)))
+				{
+					return kRelayListBadHostId;
 				}
 
 				return why;
@@ -595,7 +610,6 @@ namespace
 	{
 		RelayListGame *games;
 		int ourVersion;
-		bool fingerprints;   // whether each game carries its host's fingerprint: only a v2 draft's do (RelayList_ReadGames)
 	};
 
 	RelayListRefusal ReadOneGame(Reader &r, void *into, int place)
@@ -604,7 +618,7 @@ namespace
 		RelayListGame &game = g.games[place];
 		long gameStyle = 0, levelNumber = 0, coopLobby = 0, players = 0, maxPlayers = 0, version = 0, hostMs = 0, seconds = 0;
 
-		// Every game carries its host's fingerprint (net_identity.h), so a joiner knows which host to expect: a game without one is refused,
+		// Every game carries its host's id (net_identity.h), so a joiner knows which host to expect: a game without one is refused,
 		// as a game missing any of its fields is, and the whole answer with it
 		FieldRule const rules[] =
 		{
@@ -621,17 +635,10 @@ namespace
 			{ "version", kKindNumber, 0, 1, kRelayListMostVersion, NULL, &version },
 			{ "hostMs", kKindNumber, 0, 0, kRelayListMostHostMs, NULL, &hostMs },
 			{ "seconds", kKindNumber, 0, 0, kRelayListMostSeconds, NULL, &seconds },
-			{ "fingerprint", kKindFingerprint, 0, 0, 0, NULL, NULL, game.fingerprint }
+			{ "id", kKindHostId, 0, 0, 0, NULL, NULL, game.hostId }
 		};
 
-		// Modified 2026-11-09 by Melanikus for the AvP port: the fingerprint is the last rule, and only a v2 draft's games have it. Without,
-		// the rules are version 1's, so a game is read exactly as version 1 reads it, and its fingerprint is left all 0.
-		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0])) - (g.fingerprints ? 0 : 1);
-
-		if (!g.fingerprints)
-		{
-			memset(game.fingerprint, 0, sizeof(game.fingerprint));
-		}
+		int const ruleCount = static_cast<int>(sizeof(rules) / sizeof(rules[0]));
 
 		RelayListRefusal const why = ReadEntry(r, rules, ruleCount);
 
@@ -674,47 +681,6 @@ namespace
 	RelayListRefusal ReadTheGames(Reader &r, void *into, int *count)
 	{
 		return ReadList(r, kRelayListMostGames, ReadOneGame, into, count);
-	}
-
-	// ---- The relays
-
-	RelayListRefusal ReadOneRelay(Reader &r, void *into, int place)
-	{
-		RelayListRelay *const relays = static_cast<RelayListRelay *>(into);
-		RelayListRelay &relay = relays[place];
-		long port = 0;
-
-		FieldRule const rules[] =
-		{
-			{ "region", kKindRegion, 0, 0, 0, relay.region, NULL },
-			{ "host", kKindHost, 0, 0, 0, relay.host, NULL },
-			{ "port", kKindNumber, 0, 1, 65535, NULL, &port }
-		};
-
-		RelayListRefusal const why = ReadEntry(r, rules, static_cast<int>(sizeof(rules) / sizeof(rules[0])));
-
-		if (why != kRelayListAccepted)
-		{
-			return why;
-		}
-
-		relay.port = static_cast<int>(port);
-
-		// One relay for each region
-		for (int other = 0; other < place; other++)
-		{
-			if (strcmp(relays[other].region, relay.region) == 0)
-			{
-				return kRelayListTwice;
-			}
-		}
-
-		return kRelayListAccepted;
-	}
-
-	RelayListRefusal ReadTheRelays(Reader &r, void *into, int *count)
-	{
-		return ReadList(r, kRelayListMostRelays, ReadOneRelay, into, count);
 	}
 
 	RelayListRefusal ReadTheOwner(Reader &r, void *into, int *)
@@ -862,18 +828,18 @@ namespace
 		return code && Relay_IsCode(code, strnlen(code, kRelayCodeLetters + 1));
 	}
 
-	// A fingerprint a host can list its game with: one was given, and it isn't all 0, which is what one never made looks like. A real one is
-	// the start of a SHA-384 sum, which is all 0 so rarely that it never happens.
-	bool IsAFingerprint(const uint8_t *fingerprint)
+	// A host id a host can list its game with: one was given, and it isn't all 0, which is what one never made looks like. A real one is a
+	// SHA-384 sum, which is all 0 so rarely that it never happens.
+	bool IsAHostId(const uint8_t *hostId)
 	{
-		if (!fingerprint)
+		if (!hostId)
 		{
 			return false;
 		}
 
-		for (size_t i = 0; i < kNetIdentityFingerprintBytes; i++)
+		for (size_t i = 0; i < kNetIdentityIdBytes; i++)
 		{
-			if (fingerprint[i] != 0)
+			if (hostId[i] != 0)
 			{
 				return true;
 			}
@@ -882,11 +848,11 @@ namespace
 		return false;
 	}
 
-	// A fingerprint as the list wants it, written by net_identity.h's own writer: 32 hex digits, small letters, in quotes
-	void AddFingerprint(Writer &w, const uint8_t *fingerprint)
+	// A host id as the list wants it, written by net_identity.h's own writer: 96 hex digits, small letters, in quotes
+	void AddHostId(Writer &w, const uint8_t *hostId)
 	{
-		char hex[kNetIdentityFingerprintHexBytes];
-		NetIdentity_FingerprintHex(fingerprint, hex);
+		char hex[kNetIdentityIdHexBytes];
+		NetIdentity_IdHex(hostId, hex);
 
 		AddChar(w, '"');
 		Add(w, hex);
@@ -962,7 +928,6 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 		case kRelayListBadText: return "a name, level or mode isn't printable characters of its length";
 		case kRelayListBadCode: return "a code isn't 8 code letters";
 		case kRelayListBadRegion: return "a region isn't 1 to 16 small letters, digits and -";
-		case kRelayListBadHost: return "a relay's host isn't a name, or is an address instead of one";
 		case kRelayListBadSecret: return "an owner isn't 32 hex digits";
 		case kRelayListBadNumber: return "a number isn't a whole number in its range";
 		case kRelayListMorePlayersThanRoom: return "a game has more players than room for them";
@@ -971,7 +936,8 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 		case kRelayListEndsTooSoon: return "the answer stops before its end";
 		case kRelayListNotWhatComesNext: return "the answer has something else where a , : } or ] has to be";
 		case kRelayListMoreAfterTheEnd: return "the answer has more after its end";
-		case kRelayListBadFingerprint: return "a game's fingerprint isn't 32 hex digits";
+		case kRelayListBadFingerprint: return "an answer's fingerprint isn't 32 hex digits";
+		case kRelayListBadHostId: return "a game's host id isn't 96 hex digits";
 		case kRelayListBadStatus: return "the answer has an HTTP status the protocol never gives an access request";
 		case kRelayListBadWord: return "the answer's state or error isn't one of the protocol's words for its status";
 		case kRelayListNotOurKey: return "the answer is about another key than this PC's";
@@ -980,27 +946,13 @@ const char *RelayList_RefusalWords(RelayListRefusal why)
 	return "the answer was refused for a reason with no words";
 }
 
-RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, bool fingerprints, RelayListGame *games, int *count)
+RelayListRefusal RelayList_ReadGames(const char *body, size_t bytes, int ourVersion, RelayListGame *games, int *count)
 {
 	// No games until the whole list has been read: ReadList gives the count only when every game in it is good
 	*count = 0;
 	int n = 0;
-	GamesInto into = { games, ourVersion, fingerprints };
+	GamesInto into = { games, ourVersion };
 	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostGamesBytes, "games", ReadTheGames, &into, &n);
-
-	if (why == kRelayListAccepted)
-	{
-		*count = n;
-	}
-
-	return why;
-}
-
-RelayListRefusal RelayList_ReadRelays(const char *body, size_t bytes, RelayListRelay *relays, int *count)
-{
-	*count = 0;
-	int n = 0;
-	RelayListRefusal const why = ReadAnswer(body, bytes, kRelayListMostRelaysBytes, "relays", ReadTheRelays, relays, &n);
 
 	if (why == kRelayListAccepted)
 	{
@@ -1025,17 +977,20 @@ RelayListRefusal RelayList_ReadOwner(const char *body, size_t bytes, uint8_t own
 	return why;
 }
 
-// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): see relay_list_text.h
-RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const char *region, uint8_t p384[kNetCryptoP384PublicBytes],
-	uint8_t kem[kNetPqKemPublicBytes])
+// Added 2026-11-09 by Melanikus for the AvP port (protocol version 2's draft): see relay_list_text.h. Modified 2026-11-10 (#175): the
+// answer's region is given back, not compared with one asked about.
+RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, char region[kRelayListRegionLetters + 1],
+	uint8_t p384[kNetCryptoP384PublicBytes], uint8_t kem[kNetPqKemPublicBytes])
 {
 	memset(p384, 0, kNetCryptoP384PublicBytes);
 	memset(kem, 0, kNetPqKemPublicBytes);
 
-	if (!region || !RelayList_IsRegion(region))
+	if (!region)
 	{
 		return kRelayListBadRegion;
 	}
+
+	region[0] = '\0';
 
 	if (bytes > kRelayKeysMostAnswerBytes)
 	{
@@ -1071,14 +1026,10 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const c
 		why = kRelayListMoreAfterTheEnd;
 	}
 
-	// Keys about another region than the one asked about are no use, and are never taken for this one's
-	if (why == kRelayListAccepted && strcmp(answered, region) != 0)
-	{
-		why = kRelayListBadRegion;
-	}
-
+	// The region was held to a region's own rule as it was read (kKindRegion): small letters, digits and -, 1 to 16 of them
 	if (why == kRelayListAccepted)
 	{
+		memcpy(region, answered, sizeof(answered));
 		memcpy(p384, readP384, sizeof(readP384));
 		memcpy(kem, readKem, sizeof(readKem));
 	}
@@ -1086,7 +1037,7 @@ RelayListRefusal RelayList_ReadRelayKeys(const char *body, size_t bytes, const c
 	return why;
 }
 
-bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, const uint8_t *owner, char *body, size_t room)
+bool RelayList_ListingBody(const RelayListListing &l, const uint8_t *owner, char *body, size_t room)
 {
 	Writer w = { body, room, 0, room > 0 };
 
@@ -1099,7 +1050,7 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, cons
 		!IsListText(l.name, kRelayListTextLetters) || !IsListText(l.level, kRelayListLevelLetters) || !IsListText(l.mode, kRelayListTextLetters) ||
 		l.gameStyle < 0 || l.gameStyle > 255 || l.levelNumber < 0 || l.levelNumber > kRelayListMostLevelNumber || l.coopLobby < 0 ||
 		l.coopLobby > 255 || l.maxPlayers < 1 || l.maxPlayers > kRelayMostPlayers || l.players < 1 || l.players > l.maxPlayers ||
-		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || (withFingerprint && !IsAFingerprint(l.fingerprint)))
+		l.version < 1 || l.version > kRelayListMostVersion || l.hostMs < 0 || l.hostMs > kRelayListMostHostMs || !IsAHostId(l.hostId))
 	{
 		return false;
 	}
@@ -1142,12 +1093,9 @@ bool RelayList_ListingBody(const RelayListListing &l, bool withFingerprint, cons
 	AddName(w, "version");
 	AddNumber(w, static_cast<unsigned long long>(l.version));
 
-	// Only a v2 draft's listing carries the fingerprint (modified 2026-11-09 by Melanikus for the AvP port): version 1's has no such field
-	if (withFingerprint)
-	{
-		AddName(w, "fingerprint");
-		AddFingerprint(w, l.fingerprint);
-	}
+	// The host's id (modified 2026-11-09 by Melanikus for the AvP port): "id", all 48 bytes, since 2026-11-10 (SERVER-BLOCKERS item 6)
+	AddName(w, "id");
+	AddHostId(w, l.hostId);
 
 	AddName(w, "hostMs");
 	AddNumber(w, static_cast<unsigned long long>(l.hostMs));
@@ -1212,51 +1160,6 @@ const char *RelayList_ModeWords(int gameStyle, bool coopCampaign)
 	return kModes[gameStyle];
 }
 
-bool Relay_IsServerName(const char *name)
-{
-	if (!name)
-	{
-		return false;
-	}
-
-	size_t const length = strlen(name);
-
-	if (length < 1 || length > 253)
-	{
-		return false;
-	}
-
-	size_t partLength = 0;
-
-	for (size_t i = 0; i <= length; i++)
-	{
-		char const c = name[i];
-
-		// The end of a part: at a dot, or at the end of the name
-		if (c == '.' || c == '\0')
-		{
-			if (partLength < 1 || partLength > 63 || name[i - 1] == '-' || name[i - partLength] == '-')
-			{
-				return false;
-			}
-
-			partLength = 0;
-			continue;
-		}
-
-		bool const allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
-
-		if (!allowed)
-		{
-			return false;
-		}
-
-		partLength++;
-	}
-
-	return true;
-}
-
 bool RelayList_IsRegion(const char *region)
 {
 	if (!region)
@@ -1280,7 +1183,7 @@ bool RelayList_IsRegion(const char *region)
 	return n >= 1;
 }
 
-RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer)
+RelayAddressRefusal RelayList_AddressRefusal(uint32_t address)
 {
 	// Whether address is in the block that starts at first and has its leading `prefix` bits in common with it
 	auto const in = [address](uint32_t first, int prefix)
@@ -1309,12 +1212,12 @@ RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer)
 		return kRelayAddressReserved;
 	}
 
-	if (!developer && in(0x7F000000u, 8))
+	if (in(0x7F000000u, 8))
 	{
 		return kRelayAddressLoopback;
 	}
 
-	if (!developer && (in(0x0A000000u, 8) || in(0xAC100000u, 12) || in(0xC0A80000u, 16) || in(0xA9FE0000u, 16) || in(0x64400000u, 10)))
+	if (in(0x0A000000u, 8) || in(0xAC100000u, 12) || in(0xC0A80000u, 16) || in(0xA9FE0000u, 16) || in(0x64400000u, 10))
 	{
 		return kRelayAddressPrivate;
 	}
@@ -1322,42 +1225,7 @@ RelayAddressRefusal RelayList_AddressRefusal(uint32_t address, bool developer)
 	return kRelayAddressUsable;
 }
 
-const char *RelayList_AddressWords(RelayAddressRefusal why)
-{
-	switch (why)
-	{
-		case kRelayAddressUsable: return "the relay's address can be used";
-		case kRelayAddressThisNetwork: return "the relay's name looked up to an address that means this network, not a machine";
-		case kRelayAddressBroadcast: return "the relay's name looked up to the address for everyone on this network";
-		case kRelayAddressMulticast: return "the relay's name looked up to an address for many machines at once";
-		case kRelayAddressReserved: return "the relay's name looked up to an address that's never used on the internet";
-		case kRelayAddressPrivate: return "the relay's name looked up to an address inside a private network, which only -dev allows";
-		case kRelayAddressLoopback: return "the relay's name looked up to this machine's own address, which only -dev allows";
-	}
-
-	return "the relay's address was refused for a reason with no words";
-}
-
-bool RelayList_IsRelayHost(const char *host)
-{
-	if (!host || strlen(host) > kRelayListHostLetters || !Relay_IsServerName(host))
-	{
-		return false;
-	}
-
-	// A name made of digits and dots alone is an address, such as 203.0.113.9, and the list never gives one
-	for (size_t i = 0; host[i]; i++)
-	{
-		if (host[i] != '.' && (host[i] < '0' || host[i] > '9'))
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-// Added 2026-11-09 by Melanikus for the AvP port: see relay_list_text.h, "Reaching a test server"
+// Added 2026-11-09 by Melanikus for the AvP port: see relay_list_text.h, "An address written plainly"
 RelayIPv4Refusal RelayList_IPv4Refusal(const char *text, uint32_t *hostOrder)
 {
 	if (!text || !hostOrder || !text[0])
@@ -1428,112 +1296,46 @@ bool RelayList_ReadIPv4(const char *text, uint32_t *hostOrder)
 	return RelayList_IPv4Refusal(text, hostOrder) == kRelayIPv4Read;
 }
 
-// A pin's hex digit, small letter or capital (the pass reader's HexValue, above, takes small letters, as the list writes them)
-static int PinDigitValue(char c)
+// ---- A servers.cfg line's address, as a person reads it. Added 2026-11-10 by Melanikus for the AvP port (#175's last part): see
+// relay_list_text.h.
+
+bool RelayList_ShownAddress(uint32_t address, int listPort, int relayPort, char *out, size_t room)
 {
-	if (c >= '0' && c <= '9')
-	{
-		return c - '0';
-	}
-
-	if (c >= 'a' && c <= 'f')
-	{
-		return c - 'a' + 10;
-	}
-
-	if (c >= 'A' && c <= 'F')
-	{
-		return c - 'A' + 10;
-	}
-
-	return -1;
-}
-
-RelayPinRefusal RelayList_PinRefusal(const char *text, uint8_t pin[kRelayListPinBytes])
-{
-	if (!text || !pin || !text[0])
-	{
-		return kRelayPinNoText;
-	}
-
-	if (strlen(text) != 2 * static_cast<size_t>(kRelayListPinBytes))
-	{
-		return kRelayPinWrongLength;
-	}
-
-	uint8_t read[kRelayListPinBytes];
-
-	for (int i = 0; i < kRelayListPinBytes; i++)
-	{
-		int const high = PinDigitValue(text[2 * i]);
-		int const low = PinDigitValue(text[2 * i + 1]);
-
-		if (high < 0 || low < 0)
-		{
-			return kRelayPinNotHex;
-		}
-
-		read[i] = static_cast<uint8_t>(high * 16 + low);
-	}
-
-	memcpy(pin, read, sizeof(read));
-	return kRelayPinRead;
-}
-
-bool RelayList_ReadPin(const char *text, uint8_t pin[kRelayListPinBytes])
-{
-	return RelayList_PinRefusal(text, pin) == kRelayPinRead;
-}
-
-bool RelayList_PinMatches(const uint8_t digest[kRelayListPinBytes], const uint8_t pin[kRelayListPinBytes])
-{
-	if (!digest || !pin)
+	if (!out || room == 0)
 	{
 		return false;
 	}
 
-	// Every byte is compared, whatever the first difference, so the time taken says nothing about where it was
-	uint8_t difference = 0;
+	out[0] = 0;
 
-	for (int i = 0; i < kRelayListPinBytes; i++)
+	if (listPort < 1 || listPort > 65535 || relayPort < 1 || relayPort > 65535)
 	{
-		difference = static_cast<uint8_t>(difference | (digest[i] ^ pin[i]));
+		return false;
 	}
 
-	return difference == 0;
-}
+	// Written here first, in room for the longest address there can be, so it's never cut on the way
+	char text[kRelayListShownAddressBytes];
+	unsigned int const a = address;
+	int written = 0;
 
-RelayShownNameRefusal RelayList_ShownNameRefusal(const char *name)
-{
-	if (!name || !name[0])
+	if (listPort == kServersCfgListPort && relayPort == kServersCfgRelayPort)
 	{
-		return kRelayShownNameNoText;
+		written = snprintf(text, sizeof(text), "%u.%u.%u.%u", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu);
+	}
+	else
+	{
+		written = snprintf(text, sizeof(text), "%u.%u.%u.%u:%d:%d", (a >> 24) & 0xFFu, (a >> 16) & 0xFFu, (a >> 8) & 0xFFu, a & 0xFFu,
+			listPort, relayPort);
 	}
 
-	size_t const length = strlen(name);
-
-	if (length > static_cast<size_t>(kRelayListShownNameLetters))
+	// snprintf says how long the whole text is, even when it didn't fit. The whole address, or none: never a part of one.
+	if (written < 0 || static_cast<size_t>(written) >= sizeof(text) || static_cast<size_t>(written) >= room)
 	{
-		return kRelayShownNameTooLong;
+		return false;
 	}
 
-	for (size_t i = 0; i < length; i++)
-	{
-		char const c = name[i];
-		bool const letterOrDigit = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-
-		if (!letterOrDigit && c != ' ' && c != '\'' && c != '(' && c != ')' && c != '-' && c != '.' && c != ',')
-		{
-			return kRelayShownNameBadCharacter;
-		}
-	}
-
-	return kRelayShownNameGood;
-}
-
-bool RelayList_IsShownName(const char *name)
-{
-	return RelayList_ShownNameRefusal(name) == kRelayShownNameGood;
+	memcpy(out, text, static_cast<size_t>(written) + 1);
+	return true;
 }
 
 // ---- Asking for online access (server #24). Added 2026-11-09 by Melanikus for the AvP port.
@@ -1593,10 +1395,23 @@ void RelayAccess_NameFromProfile(const char *profile, size_t profileBytes, char 
 	to[n] = '\0';
 }
 
+bool RelayAccess_NameLeftLettersOut(const char *profile, size_t profileBytes)
+{
+	for (size_t i = 0; profile && i < profileBytes && profile[i]; i++)
+	{
+		if (!IsAccessNameLetter(profile[i]))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void RelayAccess_Code(const uint8_t fingerprint[kNetIdentityFingerprintBytes], char out[kRelayAccessCodeTextBytes])
 {
 	static_assert(sizeof(kNetRelayCodeAlphabet) == 33, "32 code letters, so each is exactly 5 bits");
-	static_assert(kRelayAccessCodeLetters * 5 <= kNetIdentityFingerprintBytes * 8, "the code's 80 bits are all in the fingerprint");
+	static_assert(kRelayAccessCodeLetters * 5 <= kNetIdentityFingerprintBytes * 8, "the code's bits are all in the fingerprint");
 
 	size_t at = 0;
 
@@ -1761,7 +1576,8 @@ RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes
 	}
 
 	// The fingerprint the list worked out has to be this PC's own. That catches a list and a game that work it out differently. It's no
-	// defence against someone in the middle, who would change this as well: the access code on the player's screen is.
+	// defence against someone in the middle, who would change this as well: the list's key, checked before a byte is sent, is, with the
+	// access code on the player's screen (RelayAccess_Code, relay_list_text.h, says why the code alone isn't, since 2026-11-10).
 	if (status == 200 && (!ours || memcmp(fingerprint, ours, sizeof(fingerprint)) != 0))
 	{
 		return kRelayListNotOurKey;
@@ -1769,4 +1585,41 @@ RelayListRefusal RelayList_ReadAccess(int status, const char *body, size_t bytes
 
 	*answer = kAccessWords[found].answer;
 	return kRelayListAccepted;
+}
+
+// Added 2026-11-11 by Melanikus for the AvP port: see relay_list_text.h. A place is kept for the line in use until it's reached, so a ninth
+// agreed line before it can't push it out.
+int RelayList_ChooseVisits(const bool *agreed, int count, int inUse, int *visits, int *states)
+{
+	if (!agreed || !visits || !states || count < 0)
+	{
+		return 0;
+	}
+
+	int made = 0;
+	bool inUseToCome = inUse >= 0 && inUse < count;
+
+	for (int place = 0; place < count; place++)
+	{
+		if (place == inUse)
+		{
+			inUseToCome = false;
+		}
+
+		if (!agreed[place])
+		{
+			states[place] = kRelayLineNoYes;
+		}
+		else if (made >= kRelayListMostVisits - (inUseToCome ? 1 : 0))
+		{
+			states[place] = kRelayLineNotAsked;
+		}
+		else
+		{
+			visits[made++] = place;
+			states[place] = kRelayLineAsking;
+		}
+	}
+
+	return made;
 }

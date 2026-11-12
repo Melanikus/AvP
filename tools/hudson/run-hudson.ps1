@@ -30,9 +30,15 @@ every second and a half. -LampKind real makes it a real light with real shadows,
 -Flare has him throw a flare as each hold starts, on a run that looks round and doesn't compare what's on the screen. Give it a -HoldSeconds long enough for the flare to land. hudson-result.txt says how many really went.
 -Net host or -Net join makes this one of two games on this machine, on its own address only. tools\hudson\run-net-pair.ps1 runs both, and that's the way to use it. -NetPartner is the other game's folder: it's the only other game this will start alongside.
 
+Asking the relays' list for access, as a player does, in a run of its own with no -Net: it stays at the menus, presses the Online access page, saves a picture of it, and ends there. -Access request, -Access check (with -AccessWait, seconds to wait first, 61 or more) or -Access newid. It needs -Relay and -ServersLine for the server it asks, and -SecondCopy for the second copy's own identity. The host of a pair can answer a player asking to join with -Answer letin or no (-AnswerAfter, its seconds), and the joiner can find the host through Find Games with -FindGames; run-net-pair.ps1 passes those as -HostAnswer and -JoinFindGames:
+
+  powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level derelict -Frames 6000 -Relay -ServersLine "127.0.0.1:8443:27500 <fingerprint> Local" -Access request
+
 The window goes on the second screen, where it covers nothing anyone's using, and the game does that itself from the moment the window is made. -Screen main leaves it on the main screen, which is for comparing the two. With no second screen, it stays on the main one, and the log says so. The log's "the window is at" line says where it went. -WindowSlot and -WindowsTogether are for several games at once, and run-net-pair.ps1 sets them.
 
 A run with -WhileInUse makes a film of itself, an mp4 kept with the run's other files, and the film= line of hudson-result.txt says where. -Record pictures keeps a film as well. -NoFilm or -Record numbers stops it. A film's pictures slow the frames, so a run that measures time has none, and -Record video, which asks for one by name, needs -TimingsDontMatter and -WhileInUse. Nothing deletes a film: one left behind by a run that was cut short goes to runs\films-left-behind when the next run clears the way.
+
+-FilmMenus starts the film at the menus instead of the level, for showing them: it's cut into clips, each finished at a page the menus picture, or at the level's first frame, and named after it, like hudson-video-<when>-clip02-join-list.mp4 beside join-list.png. The last clip, to the run's end, has its number alone. -PageHold 4 holds each of those pages 4 seconds first, so the clip shows it (not the joiner's "let in", which the host is waiting on). Every clip goes in the run's folder with a video= line in run.txt.
 
 -WhileInUse is for runs that don't measure time, so it needs -TimingsDontMatter as well. It doesn't wait for the machine to be idle, and touching the machine doesn't end the run. The result line says machine=shared, and touched=yes if anyone did. Every other promise stands: the window doesn't take the focus, the mouse is left alone, there's no sound, and it only runs in a test copy.
 
@@ -88,6 +94,7 @@ The exit code here is the game's own, so another script can read it:
   35       strategies were asked for in a network game
   36       -Combat couldn't make its alien, or there was nowhere in sight of him to put it
   37       the game stopped before the run had finished: its window was closed, or the graphics card failed
+  38       stopped by hand: tools\hudson\stop-run.ps1 asked it to end (#198). It ended as at its time limit, so its result and film are whole
   0x3421   the level didn't load
   0xffff   an assert failed
   anything else is a crash, as Windows reports it, or from this script:
@@ -132,7 +139,8 @@ param(
     [ValidateSet('', 'side', 'eyes')][string]$WatchFrom = '', # where a watched fight is filmed from: side (beside the alien, as without it) or eyes (his own eyes, turned to the alien)
     [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it. Several, with / between them, are -Together's aliens
     [string]$StandAt = '', # x,y,z the same way: he stands there
-    [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
+    [switch]$AlienWays,    # lets the alien ways' developer switches below through. The ways themselves are on in every run since the flip (2026-11-11)
+    [switch]$FloorIsLavaOff, # the run plays 1999's aliens: floorislava=off, the console's FLOORISLAVA OFF, for the other side of a film
     [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
     [int]$AlienWaysAim = -1, # the game's -alienwaysaim=N, 0 to 10000 mm: how far along its way an alien aims, where that's in the build. Left out, the build's own. Needs -AlienWays
@@ -201,25 +209,40 @@ param(
     [switch]$CoopWalk,
     [switch]$Hostile,
     [string]$HostileKind = '',
-    [switch]$Typed,
     [int]$CoopEnd = 0,
-    [switch]$Relay,             # server #14: host or join through the relay on this machine (-relayhost or -relayjoin, by -Net)
-    [int]$RelayListPort = 8443, # and the relays' list's HTTPS port on this machine
-    [string]$RemoteRelay = '',  # server #14 beyond this machine: the one relay (with its list, at port 443) the run may use, by its server's name or one IPv4 address. Needs -Relay
-    [string]$RelayListPin = '', # the SHA-256 of -RemoteRelay's list's certificate, 64 hex digits: needed for an address, optional for a name (relay-words.ps1)
-    [string]$RelayServerName = '', # -RemoteRelay's server as the game shows it, such as "New York (Mel's server)"
-    # Added 2026-11-09 by Melanikus (Fifth) for the AvP port: a run on protocol version 2's draft, through the relay (relay-words.ps1)
-    [switch]$NetV2,               # -netv2: the run hosts or joins through the relay on v2, sealed. Needs -Relay and -RelayKey
-    [string]$RelayKey = '',       # the settings' RelayKey for that relay, "<region>:<the relay's id, 96 small hex digits>"
-    [string]$LocalRelayPin = '',  # with -Relay alone: the SHA-256 of the list on this machine's whole certificate (DER), 64 hex digits
+    [switch]$Relay,             # server #14: host or join through the relay server -ServersLine names (-relayhost or -relayjoin, by -Net)
+    # Modified 2026-11-10 by Melanikus for the AvP port (#175): the server is one servers.cfg line, which the run writes beside bin (relay-words.ps1)
+    [string]$ServersLine = '',  # that line, "<address>[:<list port>:<relay port>] <fingerprint> <name>": 127.0.0.1 for the server on this machine. Needs -Relay
+    [string]$RemoteRelay = '',  # server #14 beyond this machine: the line's address, one IPv4 address, given on purpose. Needs -Relay
+    # (The v2 draft's switch went on 2026-11-10, #175 PR 3a: every relay run is version 2, sealed)
     [switch]$SecondCopy,          # -secondcopy: the second copy of the game on this machine, with its own settings, log and online identity
     # Added 2026-11-10 by Melanikus for the AvP port, to see how the menus are drawn at a screen size (menu_shape.h):
-    [switch]$MenuPictures         # menus=pictures: a run with no -Net that stays at the menus, pictures main, Multiplayer, Online access and Options, and the intro's copyright screen and logo, and ends
+    [switch]$MenuPictures,        # menus=pictures: a run with no -Net that stays at the menus, pictures main, Multiplayer, Online access and Options, and the intro's copyright screen and logo, and ends
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port: the presses Hudson knows (hudson_plan.cpp's access=, accesswait=, answer=,
+    # answerafter= and findgames=), so a run can use them. Each is checked below to the shape and range Hudson itself takes
+    [string]$Access = '',         # request, check or newid: a run with no -Net that stays at the menus and presses the Online access page's Request access, Check again, or Make a new identity. Needs -Relay, for the list's lines
+    [int]$AccessWait = 0,         # with -Access check: seconds before Check again is pressed, 61 to 3600, past the list's minute between calls
+    [string]$Answer = '',         # letin or no: with -Net host, the host's answer to a player asking to join, pressed on the page's own rows
+    [int]$AnswerAfter = 0,        # with -Answer: seconds before the host answers, 1 to 15, well inside the joiner's 20 s wait. Left out, Hudson's own 3
+    [switch]$FindGames,           # with -Net join: the joiner finds the host through Find Games, as a player does
+    [switch]$FilmMenus,           # film=menus: the film starts at the menus, cut into a clip for each page they picture (added 2026-11-10 by Melanikus (Third))
+    [int]$PageHold = 0,           # with -FilmMenus: seconds each pictured page is held first, 1 to 10, so the film shows it
+    # Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's rehearsal of beta.2's screens (hudson_plan.h's yespage= and
+    # hostrow=)
+    [string]$YesPage = '',        # yes or no: with -Access request or check, the run sees the yes page the Online access row opens, as a player's first time does, and presses that row. The yes holds for the run alone
+    [string]$HostRow = '',        # online: with -Net host, the host hosts as a player does, through the Multiplayer page's Start game and Start, with the server's wait if it hasn't answered
+    # Added 2026-11-11 by Melanikus (Third) for the AvP port, for the owner's picture of a New York and a Frankfurt game (hudson_plan.h's
+    # hoston= and joinon=; relay-words.ps1's -ShippedServers)
+    [string]$HostOn = '',         # with -HostRow online: the server to choose on the Host on row, by its servers.cfg name ("New York"). Needed: nothing is chosen for a player
+    [string]$JoinOn = '',         # with -FindGames: press only a game that server listed, by its servers.cfg name
+    [switch]$ShippedServers,      # with -Relay: the copy keeps the build's own servers.cfg, every line it ships, in place of one -ServersLine
+    [string]$ServersSha = '',     # with -ShippedServers: the SHA-256 that servers.cfg must have (the build's own file's), or the run doesn't start
+    [int]$PortNumber = 0          # with -Net host: the port it hosts on (the settings' [Networking] PortNumber), 1024 to 65535, so two hosts can play on one PC. Left out: 23513
 )
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'clear-run-folder.ps1')
-# -RemoteRelay, -RelayListPin and -RelayServerName's own rule, the same in run-net-pair.ps1
+# -RemoteRelay's and -ServersLine's own rules, and the servers.cfg a run writes, the same in run-net-pair.ps1
 . (Join-Path $PSScriptRoot 'relay-words.ps1')
 
 function Stop-Here([string]$why)
@@ -240,24 +263,66 @@ if (-not (Test-Path -LiteralPath $settings)) { Stop-Here "there's no $settings" 
 if (-not (Test-Path -LiteralPath $exePath)) { Stop-Here "there's no $Exe in $folder" }
 
 if ($Net -and -not $WhileInUse) { Stop-Here "-Net is two games at once on one machine, so it needs -TimingsDontMatter and -WhileInUse" }
-if ($Relay -and $Net -ne 'host' -and $Net -ne 'join') { Stop-Here "-Relay is for a network run's host or joiner, so it needs -Net host or -Net join" }
-if ($RelayListPort -lt 1 -or $RelayListPort -gt 65535) { Stop-Here "-RelayListPort is a port, 1 to 65535" }
-# A server's name in small letters, as the game's own check of one wants (the game checks it again): parts of letters, digits and -, with dots between
+# Modified 2026-11-10 by Melanikus (Third): or an -Access run, which asks the relays' list alone (the presses, below)
+if ($Relay -and $Net -ne 'host' -and $Net -ne 'join' -and -not $Access) { Stop-Here "-Relay is for a network run's host or joiner, or an -Access run, so it needs -Net host, -Net join or -Access" }
 if ($RemoteRelay -and -not $Relay) { Stop-Here "-RemoteRelay says which relay -Relay goes through, so it needs -Relay" }
-$relayWordsRefusal = Get-HudsonRelayWordsRefusal $RemoteRelay $RelayListPin $RelayServerName
+$relayWordsRefusal = Get-HudsonRemoteRelayRefusal $RemoteRelay
 if ($relayWordsRefusal) { Stop-Here $relayWordsRefusal }
+# The relay server (modified 2026-11-10 by Melanikus for the AvP port, #175): one servers.cfg line, to its shape, on this machine unless
+# -RemoteRelay gives its address. The game reads it again by its own rules.
+if ($Relay -and -not $ServersLine -and -not $ShippedServers) { Stop-Here "-Relay needs -ServersLine or -ShippedServers: the game finds its server only in servers.cfg, and the run writes that one line there, or keeps the build's own" }
+if ($ServersLine -and -not $Relay) { Stop-Here "-ServersLine is the server -Relay goes through, so it needs -Relay" }
+$serversLineRefusal = if ($ServersLine) { Get-HudsonServersLineRefusal $ServersLine $RemoteRelay } else { '' }
+if ($serversLineRefusal) { Stop-Here $serversLineRefusal }
 # No hostile kind of run ever goes beyond this machine: the other end could be anybody's game (the game's plan reader refuses the same)
 if ($RemoteRelay -and ($Hostile -or $HostileKind)) { Stop-Here "-Hostile sends bad messages on purpose, so it never goes through -RemoteRelay, beyond this machine" }
 if ($NetPartner -and -not $Net) { Stop-Here "-NetPartner only means something with -Net" }
-# Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port): each word to its shape first
-$v2WordsRefusal = Get-HudsonV2WordsRefusal $RelayKey $LocalRelayPin
-if ($v2WordsRefusal) { Stop-Here $v2WordsRefusal }
-if ($NetV2 -and -not $Relay) { Stop-Here "-NetV2 goes through the relay, so it needs -Relay" }
-if ($NetV2 -and -not $RelayKey) { Stop-Here "-NetV2 needs -RelayKey: without the relay's key line, the game sends the relay nothing" }
-if ($RelayKey -and -not $NetV2) { Stop-Here "-RelayKey is the v2 relay's key line, so it needs -NetV2" }
-if ($LocalRelayPin -and (-not $Relay -or $RemoteRelay)) { Stop-Here "-LocalRelayPin is the pin of the list on this machine, so it needs -Relay without -RemoteRelay" }
-if ($SecondCopy -and $Net -ne 'join') { Stop-Here "-SecondCopy is the joiner of a pair on this machine, so it needs -Net join" }
-if ($MenuPictures -and $Net) { Stop-Here "-MenuPictures stays at the menus and pictures them, so it's a run with no -Net" }
+# Protocol version 2's draft through the relay (added 2026-11-09 by Melanikus (Fifth) for the AvP port; its key line went with #175, as the
+# servers.cfg line proves the relay's keys, and every relay run is version 2 since #175 PR 3a)
+if ($SecondCopy -and $Net -ne 'join' -and -not $Access) { Stop-Here "-SecondCopy is the joiner of a pair on this machine, or the second copy's own -Access run, so it needs -Net join or -Access" }
+# The presses (added 2026-11-10 by Melanikus (Third) for the AvP port): each to Hudson's own words and ranges (hudson_plan.cpp), and only
+# with the kind of run it belongs to. -cmatch, because Hudson's words are small letters and PowerShell's -match ignores case
+if ($Access -and $Access -cnotmatch '\A(request|check|newid)\z') { Stop-Here "-Access is request, check or newid" }
+if ($Access -and $Net) { Stop-Here "-Access stays at the menus to press the Online access page, so it's a run with no -Net" }
+if ($Access -and -not $Relay) { Stop-Here "-Access asks the relays' list, so it needs -Relay, for the list's lines in the run's settings" }
+if ($AccessWait -ne 0 -and $Access -cne 'check') { Stop-Here "-AccessWait says when Check again is pressed, so it needs -Access check" }
+if ($AccessWait -ne 0 -and ($AccessWait -lt 61 -or $AccessWait -gt 3600)) { Stop-Here "-AccessWait is from 61 seconds, past the list's minute between calls, to 3600" }
+if ($Answer -and $Answer -cnotmatch '\A(letin|no)\z') { Stop-Here "-Answer is letin or no" }
+if ($Answer -and $Net -ne 'host') { Stop-Here "-Answer is the host's answer to a player asking to join, so it needs -Net host" }
+if ($AnswerAfter -ne 0 -and -not $Answer) { Stop-Here "-AnswerAfter says when the host answers, so it needs -Answer" }
+if ($AnswerAfter -ne 0 -and ($AnswerAfter -lt 1 -or $AnswerAfter -gt 15)) { Stop-Here "-AnswerAfter is from 1 to 15 seconds, well inside the joiner's 20 s wait" }
+if ($FindGames -and $Net -ne 'join') { Stop-Here "-FindGames is a joiner's way in, through Find Games, so it needs -Net join" }
+# The showcase's film (added 2026-11-10 by Melanikus (Third) for the AvP port): Hudson's own rules for film=menus and pagehold=
+# (hudson_plan.cpp), checked here first so a run that would be refused never empties its folder
+if ($FilmMenus -and -not $WhileInUse) { Stop-Here "-FilmMenus starts the film at the menus, and only a run with -WhileInUse has a film" }
+if ($FilmMenus -and ($NoFilm -or $Record -eq 'numbers')) { Stop-Here "-FilmMenus asks for a film, and -NoFilm or -Record numbers says there's none" }
+if ($PageHold -ne 0 -and -not $FilmMenus) { Stop-Here "-PageHold holds the menus' pages for the film, so it needs -FilmMenus" }
+if ($PageHold -ne 0 -and ($PageHold -lt 1 -or $PageHold -gt 10)) { Stop-Here "-PageHold is from 1 to 10 seconds" }
+# The yes page and the Host row (added 2026-11-10 by Melanikus (Third) for the AvP port): Hudson's own rules for yespage= and hostrow=
+# (hudson_plan.cpp), and the Host row is on the page only when servers.cfg names a server
+if ($YesPage -and $YesPage -cnotmatch '\A(yes|no)\z') { Stop-Here "-YesPage is yes or no" }
+if ($YesPage -and $Access -cne 'request' -and $Access -cne 'check') { Stop-Here "-YesPage is the yes page the Online access row opens, so it needs -Access request or -Access check" }
+# Modified 2026-11-10 by Melanikus for the AvP port (the owner's ruling for beta.2: "Everything over nyc3"): online only, as the Host row
+# and the game at home are gone
+if ($HostRow -and $HostRow -cnotmatch '\A(online)\z') { Stop-Here "-HostRow is online: beta.2 hosts online only, through a server's relay" }
+if ($HostRow -and $Net -ne 'host') { Stop-Here "-HostRow is a host's way in, through the Multiplayer page's Start game, so it needs -Net host" }
+if ($HostRow -and -not $Relay) { Stop-Here "-HostRow hosts through the server servers.cfg names, so it needs -Relay and -ServersLine" }
+# hoston=, joinon=, the shipped servers.cfg and a host's port (added 2026-11-11 by Melanikus (Third) for the AvP port): Hudson's own rules
+# for hoston= and joinon= (hudson_plan.cpp, ReadServerName), checked here first so a run that would be refused never empties its folder.
+# A name here is as servers.cfg keeps it, with single spaces; the run writes each space as _ for Hudson.
+$serverNameRule = '\A[A-Za-z0-9.\-]+( [A-Za-z0-9.\-]+)*\z'
+if ($HostRow -and -not $HostOn) { Stop-Here "-HostRow needs -HostOn, the server to choose on the Host on row: nothing is chosen for a player, so a run names its own" }
+if ($HostOn -and -not $HostRow) { Stop-Here "-HostOn chooses on the Host on row, which only -HostRow online goes through, so it needs -HostRow online" }
+if ($HostOn -and ($HostOn.Length -gt 31 -or $HostOn -cnotmatch $serverNameRule)) { Stop-Here "-HostOn is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with single spaces between them" }
+if ($JoinOn -and -not $FindGames) { Stop-Here "-JoinOn chooses among Find games' games, so it needs -FindGames" }
+if ($JoinOn -and ($JoinOn.Length -gt 31 -or $JoinOn -cnotmatch $serverNameRule)) { Stop-Here "-JoinOn is a servers.cfg line's name: 1 to 31 letters, digits, - and ., with single spaces between them" }
+if ($ShippedServers -and -not $Relay) { Stop-Here "-ShippedServers is the servers -Relay goes through, so it needs -Relay" }
+if ($ShippedServers -and $ServersLine) { Stop-Here "-ShippedServers keeps the build's own servers.cfg, so it can't be given one -ServersLine too" }
+if ($ShippedServers -and $ServersSha -cnotmatch '\A[0-9a-f]{64}\z') { Stop-Here "-ShippedServers needs -ServersSha, the 64 small hex digits of the build's own servers.cfg's SHA-256" }
+if ($ServersSha -and -not $ShippedServers) { Stop-Here "-ServersSha is the shipped servers.cfg's SHA-256, so it needs -ShippedServers" }
+if ($ShippedServers -and $Net -and -not $RemoteRelay) { Stop-Here "-ShippedServers with -Net needs -RemoteRelay: a network run's game goes through one relay beyond this machine, one of the shipped lines' addresses" }
+if ($PortNumber -ne 0 -and ($PortNumber -lt 1024 -or $PortNumber -gt 65535)) { Stop-Here "-PortNumber is from 1024 to 65535" }
+if ($PortNumber -ne 0 -and $Net -ne 'host') { Stop-Here "-PortNumber is the port a host plays on, so it needs -Net host" }
 
 # Room on the run's disk, before anything there changes (Primary's read, 2026-11-09): a run keeps its pictures, maps, logs and film, and
 # nothing else watches the disk. The game's own film stops at 1 GB left (hudson_video.h, kHudsonVideoDiskToLeave) and is at most 2 GB
@@ -327,7 +392,8 @@ switch ($Static)
 # The game's own switches for trying out shadows, such as -shadowlights=8. Only those, because anything else could change what a run is without its result saying so. run.txt has them.
 if ($ShadowSwitches -and $ShadowSwitches -notmatch '^-shadow[a-z]+(=\d+)?( -shadow[a-z]+(=\d+)?)*$') { Stop-Here "-ShadowSwitches only takes the game's -shadow switches, and $ShadowSwitches isn't" }
 $tryingOut = if ($ShadowSwitches) { " $ShadowSwitches" } else { '' }
-$alienWaysSwitch = if ($AlienWays) { ' -alienways' } else { '' }
+# The ways are on in every run since the flip (2026-11-11), and the game has no -alienways any more: -AlienWays only lets these through
+$alienWaysSwitch = ''
 if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000)) { Stop-Here "-AlienWaysAim is 0 to 10000 mm, and it needs -AlienWays" }
 if ($AlienWaysAim -ge 0) { $alienWaysSwitch += " -alienwaysaim=$AlienWaysAim" }
 if ($AlienWaysWatch -ge 0 -and (-not $AlienWays -or $AlienWaysWatch -gt 63)) { Stop-Here "-AlienWaysWatch is 0 to 63, a place in the guide's list, and it needs -AlienWays" }
@@ -337,9 +403,14 @@ if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 
 # -Relay's word is one of the game's own switches, so it goes before -hudson: Hudson's own words (name=value) end at the next word that
 # starts with -, and one in among them would cut them short
-$relaySwitch = if (-not $Relay) { '' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
-# -netv2 and -secondcopy are the game's own switches too, so they go before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
-if ($NetV2) { $relaySwitch += ' -netv2' }
+# An -Access run has the list's lines in its settings and no game to host or join, so it gets neither switch.
+# A host with -Answer gets -askjoiners, which hosts as -relayhost does but asks about each joiner (relay_auto.h). -relayhost lets every
+# joiner in without asking (relay_auto.cpp), and the game would never show the page -Answer presses, nor its check code: the nyc3 pair of
+# 2026-11-10 had answer=letin and no host-asked.png for that reason (modified 2026-11-10 by Melanikus (Third) for the AvP port)
+# A host with -HostRow gets neither, as it hosts through the page's rows, not by itself as the menus start (added 2026-11-10 by Melanikus
+# (Third) for the AvP port). A joiner always joins through the relay: the typed address at home went with the game at home (2026-11-10)
+$relaySwitch = if (-not $Relay -or -not $Net) { '' } elseif ($Net -eq 'host' -and $HostRow) { '' } elseif ($Net -eq 'host' -and $Answer) { ' -askjoiners' } elseif ($Net -eq 'host') { ' -relayhost' } else { ' -relayjoin' }
+# -secondcopy is the game's own switch too, so it goes before -hudson as well (added 2026-11-09 by Melanikus (Fifth))
 if ($SecondCopy) { $relaySwitch += ' -secondcopy' }
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch$relaySwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($MenuPictures) { $arguments += ' menus=pictures' }
@@ -366,6 +437,8 @@ if ($Size) { $arguments += " size=$Size" }
 if ($Vision) { $arguments += " vision=$Vision" }
 if ($Break) { $arguments += " break=$Break" }
 if ($NoFilm) { $arguments += " film=no" }
+if ($FilmMenus) { $arguments += " film=menus" }
+if ($PageHold -ne 0) { $arguments += " pagehold=$PageHold" }
 if ($Net) { $arguments += " net=$Net" }
 if ($Lamp) { $arguments += " lamp=$Lamp" }
 if ($LampKind) { $arguments += " lampkind=$LampKind" }
@@ -402,9 +475,20 @@ if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { St
 if ($StepSeconds -ne 0 -and -not $Play) { Stop-Here "-StepSeconds is how long a step of -Play may take, so it needs -Play" }
 if ($StepSeconds -gt 0) { $arguments += " stepseconds=$StepSeconds" }
 if ($Coop) { $arguments += " coop=yes" }
+if ($Access) { $arguments += " access=$Access" }
+if ($AccessWait -ne 0) { $arguments += " accesswait=$AccessWait" }
+if ($Answer) { $arguments += " answer=$Answer" }
+if ($AnswerAfter -ne 0) { $arguments += " answerafter=$AnswerAfter" }
+if ($FindGames) { $arguments += " findgames=yes" }
+if ($YesPage) { $arguments += " yespage=$YesPage" }
+if ($HostRow) { $arguments += " hostrow=$HostRow" }
+if ($HostOn) { $arguments += " hoston=$($HostOn -replace ' ', '_')" }
+if ($JoinOn) { $arguments += " joinon=$($JoinOn -replace ' ', '_')" }
 if ($BotFight) { $arguments += " botfight=$BotFight" }
 if ($NoPictures) { $arguments += " pictures=no" }
-if ($RemoteRelay) { $arguments += " remoterelay=$RemoteRelay" }
+# remoterelay= keeps a network run's game traffic to that one relay, and Hudson takes it only with net=. An -Access run through a server
+# beyond this machine has no game traffic: it calls the list, at the address its settings name, so it gets the settings' lines alone
+if ($RemoteRelay -and $Net) { $arguments += " remoterelay=$RemoteRelay" }
 if ($KillKind) { $arguments += " killkind=$KillKind killat=$($KillAt -replace 'm', '-') killer=$Killer" }
 if ($BotStay) { $arguments += " botstay=yes" }
 if ($BotOwn) { $arguments += " botown=yes" }
@@ -417,10 +501,10 @@ if ($BotSingle) { $arguments += " botsingle=yes" }
 if ($Uncapped -and $PSBoundParameters.ContainsKey('Fps')) { Stop-Here "-Uncapped and -Fps ask for different things" }
 if ($Uncapped) { $arguments += " fps=uncapped" } else { $arguments += " fps=$Fps" }
 if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
+if ($FloorIsLavaOff) { $arguments += " floorislava=off" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }
 if ($HostileKind) { $arguments += " hostile=$HostileKind" }
-if ($Typed) { $arguments += " typed=yes" }
 if ($CoopEnd -gt 0) { $arguments += " coopend=$CoopEnd" }
 if ($GunMarine) { $arguments += " gunmarine=yes" }
 if ($Strategies) { $arguments += " strategies=$Strategies" }
@@ -452,26 +536,29 @@ $saves = Join-Path $folder $(if ($SecondCopy) { 'HudsonRun\My Games\Aliens versu
 New-Item -ItemType Directory -Force $saves | Out-Null
 Copy-Item -LiteralPath $settings -Destination (Join-Path $saves 'AliensVsPredator.cfg')
 
-# With -NetV2, the relay's key line goes in with the rest (added 2026-11-09 by Melanikus (Fifth) for the AvP port). All were checked to
-# their shapes above.
-$v2Words = @()
-if ($RelayKey) { $v2Words += "RelayKey = $RelayKey" }
+# -PortNumber (added 2026-11-11 by Melanikus (Third) for the AvP port): a second host on this PC plays on a port of its own, as two games
+# can't both hold 23513. The copied settings' one PortNumber line is changed, and nothing else, and run.txt's settings_sha256 is then that
+# copy's, as it's what the game reads.
+if ($PortNumber -ne 0)
+{
+    $copied = Join-Path $saves 'AliensVsPredator.cfg'
+    $text = [System.IO.File]::ReadAllText($copied, [System.Text.Encoding]::ASCII)
+    $portLines = [regex]::Matches($text, '(?m)^PortNumber = 23513(?=\r?$)')
+    if ($portLines.Count -ne 1) { Stop-Here "the settings file hasn't one line PortNumber = 23513, so -PortNumber can't be set" }
+    $text = $text.Substring(0, $portLines[0].Index) + "PortNumber = $PortNumber" + $text.Substring($portLines[0].Index + $portLines[0].Length)
+    [System.IO.File]::WriteAllText($copied, $text, [System.Text.Encoding]::ASCII)
+    $settingsFingerprint = (Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash
+}
 
-# -Relay: the relays' list on this machine, as the game reads it only with -dev, which a run always has. Added to this run's own copy, so
-# no other run has it. With -LocalRelayPin (modified 2026-11-09 by Melanikus (Fifth)): the list by its address, 127.0.0.1, and checked by
-# that pin before a byte is sent, as a list with a certificate Windows doesn't know needs; a name could also give ::1, where a list on
-# 127.0.0.1 alone isn't.
-$localWords = if ($LocalRelayPin) { @('RelayServer = 127.0.0.1', "RelayListPort = $RelayListPort", "RelayListPin = $LocalRelayPin") } else { @('RelayServer = localhost', "RelayListPort = $RelayListPort") }
-if ($Relay -and -not $RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]') + $localWords + $v2Words) }
-
-# -RemoteRelay: the one relay beyond this machine, whose list has the same name, at HTTPS's own port. The game is told the name with
-# remoterelay= too, and uses that relay alone, at the one address its name gives (networking.cpp, TheRemoteRelay). With an address
-# instead of a name, -RelayListPin goes in too, and the game checks the list's certificate against it before it sends a byte; with
-# -RelayServerName, the name the game shows for that server. Both were checked to their shapes above (relay-words.ps1).
-$relayListWords = @()
-if ($RelayListPin) { $relayListWords += "RelayListPin = $RelayListPin" }
-if ($RelayServerName) { $relayListWords += "RelayServerName = $RelayServerName" }
-if ($RemoteRelay) { Add-Content -LiteralPath (Join-Path $saves 'AliensVsPredator.cfg') -Encoding ASCII -Value (@('', '[Network]', "RelayServer = $RemoteRelay", 'RelayListPort = 443') + $relayListWords + $v2Words) }
+# -Relay's server (modified 2026-11-10 by Melanikus for the AvP port, #175, in place of the -dev settings RelayServer, RelayListPort,
+# RelayListPin, RelayServerName and RelayKey): the one servers.cfg line the game reads, beside bin\, written only into a copy made for
+# Hudson's runs (relay-words.ps1). A run without -Relay takes away the one a run left, so it reaches no server. The line was checked to its
+# shape above. With -RemoteRelay, the game is told the line's address with remoterelay= too, and uses that relay alone (networking.cpp,
+# TheRemoteRelay).
+# With -ShippedServers (added 2026-11-11 by Melanikus (Third)), the build's own servers.cfg stays as it is, checked to its SHA-256, and
+# nothing is written (relay-words.ps1, Get-HudsonShippedServersRefusal).
+$serversRefusal = if ($ShippedServers) { Get-HudsonShippedServersRefusal $folder $ServersSha $RemoteRelay } else { Set-HudsonServersFile $folder $ServersLine }
+if ($serversRefusal) { Stop-Here $serversRefusal }
 
 # Its own folder, because the game finds its data from the folder it starts in. The game's own limit should always come first: this one is for a game too stuck to end itself.
 $process = Start-Process -FilePath $exePath -ArgumentList $arguments -WorkingDirectory $folder -PassThru
@@ -528,7 +615,7 @@ $rateLines = @()
 $resultHere = Join-Path $saves 'hudson-result.txt'
 if (Test-Path -LiteralPath $resultHere) { $rateLines = @(Get-Content -LiteralPath $resultHere | Where-Object { $_ -like 'frames_each_second_asked=*' }) }
 
-Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "exit=$exitCode", "log_errors=$logErrors") + $rateLines + $pictureLines)
+Set-Content -LiteralPath (Join-Path $kept 'run.txt') -Encoding ASCII -Value (@("exe=$Exe", "sha256=$exeFingerprint", "settings_sha256=$settingsFingerprint", "arguments=$arguments", "servers_line=$ServersLine", "exit=$exitCode", "log_errors=$logErrors") + $(if ($ShippedServers) { @("servers_shipped_sha256=$ServersSha") } else { @() }) + $(if ($PortNumber -ne 0) { @("port=$PortNumber") } else { @() }) + $rateLines + $pictureLines)
 
 # What a walk keeps of its map and paths. Only a walk has them, so it isn't news if they're not there.
 foreach ($name in @('hudson-map.txt', 'hudson-ways.txt', 'hudson-trail.txt'))
