@@ -1586,7 +1586,7 @@ void Frame()
 {
 }
 '@ + "`n") }; Passes = 'None of the game''s network code is in this commit, so a player''s game can''t play online at all.' },
-    @{ What = 'the smallest game that plays online only the safe way is let through, and its servers are printed'; None = $false; Files = @{  }; Passes = 'The servers this release ships (servers.cfg): 1' },
+    @{ What = 'the smallest game that plays online only the safe way is let through, and its servers are printed'; None = $false; Files = @{  }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 1' },
     @{ What = 'and it names its one server, with its address and fingerprint'; None = $false; Files = @{  }; Passes = '  New York: 203.0.113.7, fingerprint bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e' },
     @{ What = 'network code with the list''s file missing is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = $null }; Reason = 'isn''t there, so this check can''t say how it plays online' },
     @{ What = 'D: DevMode named in networking.cpp is refused'; None = $false; Files = @{ '3dc/networking.cpp' = @{ Add = (@'
@@ -1695,7 +1695,7 @@ int ReadTheKey(void)
 '@ + "`n") }; Reason = 'F: servers.cfg line 2 has the address of line 1' },
     @{ What = 'F: notes alone are let through, and no server is printed'; None = $false; Files = @{ 'servers.cfg' = (@'
 # no server in this one
-'@ + "`n") }; Passes = 'The servers this release ships (servers.cfg): 0' },
+'@ + "`n") }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 0' },
     @{ What = 'F: a line with both ports and tabs is let through'; None = $false; Files = @{ 'servers.cfg' = (@'
 203.0.113.7:8443:27500	bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e	New York
 '@ + "`n") }; Passes = '  New York: 203.0.113.7:8443:27500, fingerprint bb0e2958dade79033a90f34811c84837b404708cc004c5b1d37d9a26f28d663e' },
@@ -1848,7 +1848,7 @@ void Sneak(void)
 	ServersTrust_Add(&yeses, anyHash);
 }
 '@ + "`n") } }; Reason = 'Y: 3dc/relay_list.cpp line 690 adds a yes: only the player''s own' },
-    @{ What = 'Y: a Hudson run''s yes page, with its guards, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList }; Passes = 'The servers this release ships (servers.cfg): 1' },
+    @{ What = 'Y: a Hudson run''s yes page, with its guards, is let through'; None = $false; Files = @{ '3dc/relay_list.cpp' = $yesPageList }; Passes = 'This release ships no servers.cfg, so it plays no online games. The servers in the repository''s servers.cfg, for the release that turns online play on: 1' },
     @{ What = 'Y: the yes page''s first line without its flags is refused'; None = $false; Files = @{ '3dc/relay_list.cpp' = @{ From = (@'
 			return true;
 		}
@@ -2597,7 +2597,7 @@ function Write-Sums
 function Make-GoodPackage
 {
     Clear-Work
-    foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'servers.cfg') { Write-File (Join-Path $package $name) $name }
+    foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
     Write-File (Join-Path $package 'BUILD.txt') "avpx_main $commit"
     Write-File (Join-Path $package 'shaders/reliefMain.psh') 'shader one'
     Write-File (Join-Path $package 'shaders/volume.vsh') 'shader two'
@@ -2674,13 +2674,25 @@ Write-Sums
 $result = Run-Script 'check-release-package.ps1' (Package-Arguments)
 Check ($result.Code -eq 0) "and with its source there, it passes. It said: $($result.Text)"
 
-foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'servers.cfg', 'BUILD.txt')
+foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
 {
     Make-GoodPackage
     Remove-Item -LiteralPath (Join-Path $package $name)
     Write-Sums
     Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$name is not in the package" "a package without $name is refused"
 }
+
+# This release plays no online games (the owner's ruling R-GOAL-8, 2026-11-11): a servers.cfg anywhere in the package is refused, whatever its
+# capitals (added 2026-11-11 by Melanikus for the AvP port)
+Make-GoodPackage
+Write-File (Join-Path $package 'servers.cfg') '203.0.113.7  0123  New York'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'servers.cfg is in the package, and this release plays no online games, so it ships no servers.cfg' 'a package with a servers.cfg beside bin is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/Servers.CFG') '203.0.113.7  0123  New York'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'bin/Servers.CFG is in the package, and this release plays no online games, so it ships no servers.cfg' 'and so is one in a folder, in other capitals'
 
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'SHA256SUMS.txt')

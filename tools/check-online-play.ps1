@@ -24,10 +24,12 @@ N. No name is looked up: no call that turns a name into an address, anywhere. We
    only to the list's server the list was started with.
 C. No server comes from the settings file: nothing is read from AliensVsPredator.cfg's [Network] section, nor any setting whose name
    has Relay, Server, Pin or Fingerprint in it.
-F. servers.cfg, at the repository's root and packaged beside bin, is the list of the servers the game ships with. It's held to the
-   game's own rules (3dc/servers_cfg.h) and stricter ones, since it's ours: plain line ends, no mark at the start, no empty line, no
-   space at a line's ends, and no server at a home network's, this machine's or a shared provider's address. The servers it ships are
-   printed, for the release's text: the owner's approval of the release is their review.
+F. servers.cfg, at the repository's root, is the list of the servers the game ships with when it plays online, packaged beside bin.
+   This release plays none and packages no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2";
+   tools/check-release-package.ps1 refuses one), but the file is still held to every rule, for the release that turns online play on.
+   It's held to the game's own rules (3dc/servers_cfg.h) and stricter ones, since it's ours: plain line ends, no mark at the start, no
+   empty line, no space at a line's ends, and no server at a home network's, this machine's or a shared provider's address. Its
+   servers are printed, for the release's text: the owner's approval of the release is their review.
 R. The route: only the list's file reads servers.cfg (besides the reader's own files); the list's server is written in one place, from
    the line's four numbers, so it's an address and never a name; the relay is at the line's address too; and the list starts only for a
    line, making nothing without one.
@@ -428,7 +430,7 @@ function Test-ServerAddress([string]$text)
 
 $shippedPath = Join-Path $Repository $shippedFile
 
-if (-not (Test-Path -LiteralPath $shippedPath -PathType Leaf)) { Stop-Check "F: $shippedFile isn't there: it's the list of the servers the game ships with, packaged beside bin" }
+if (-not (Test-Path -LiteralPath $shippedPath -PathType Leaf)) { Stop-Check "F: $shippedFile isn't there: it's the list of the servers the game ships with when it plays online" }
 
 $shippedBytes = [System.IO.File]::ReadAllBytes($shippedPath)
 
@@ -1566,7 +1568,10 @@ foreach ($pressed in @($choosers | Where-Object { $_.File -eq $hostPageFile }))
 }
 
 Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose."
-Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
+# This release ships no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2"): tools/build-and-package.ps1
+# leaves it out, and tools/check-release-package.ps1 refuses a package with one. The file at the repository's root is still held to every
+# rule above, for the release that turns online play on. Modified 2026-11-11 by Melanikus for the AvP port.
+Write-Host "This release ships no servers.cfg, so it plays no online games. The servers in the repository's $shippedFile, for the release that turns online play on: $($expected.Count)"
 
 foreach ($server in $expected)
 {
