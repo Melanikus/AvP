@@ -2339,6 +2339,36 @@
 					"to": "kAlienWaysFloorPrice, 1000000,"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the mover reads the far AI's places by the number of the module's first part again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tFARLOCATIONSHEADER const &places = FALLP_AuxLocs[strongestModule];\n",
+					"to": "\tFARLOCATIONSHEADER const &places = FALLP_AuxLocs[AIModuleArray[strongestModule].m_module_ptrs[0]->m_index];\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mover's number is never checked against the list's length",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (!FALLP_AuxLocs || strongestModule >= ModuleArraySize)",
+					"to": "if (!FALLP_AuxLocs)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mover uses a far place as if it were already in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tVECTORCH const &middle = AIModuleArray[strongestModule].m_world;\n",
+					"to": "\tVECTORCH const middle = { 0, 0, 0 };\n"
+				}
+			]
 		}
 	]
 }

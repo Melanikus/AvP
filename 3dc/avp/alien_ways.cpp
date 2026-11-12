@@ -1068,7 +1068,7 @@ static void MoverGoalAt(STRATEGYBLOCK *alien, AlienWaysXYZ point, AlienWaysAsk *
 }
 
 // A place on the floor of the AI module where the marines' scent is strongest in the level, if it's stronger there than in the alien's own
-// module: the first place the game's far AI keeps for that module's first part (FALLP_AuxLocs, pfarlocs.cpp), 10 mm above its floor. False
+// module: the first place the game's far AI keeps for that AI module (FALLP_AuxLocs, pfarlocs.cpp), on its floor, in the world. False
 // if there's none stronger, or that module has no such place. Each number is checked against the size of its list before it's used, as the
 // lists are made from the level file (AvP Tao #3).
 static bool StrongestScent(const STRATEGYBLOCK *alien, VECTORCH *out)
@@ -1102,22 +1102,37 @@ static bool StrongestScent(const STRATEGYBLOCK *alien, VECTORCH *out)
 		return false;
 	}
 
-	MODULE *const *const parts = AIModuleArray[strongestModule].m_module_ptrs;
-	MODULE const *const first = parts ? parts[0] : 0;
-
-	if (!first || !FALLP_AuxLocs || first->m_index < 0 || first->m_index >= ModuleArraySize)
+	// The far AI's places are listed by the AI module's own number, the number its scent has: pfarlocs.cpp fills FALLP_AuxLocs in for each
+	// of the AIModuleArraySize AI modules, in a list ModuleArraySize long, so only those entries are ever written. And it writes each place
+	// down from the AI module's middle (m_world), which bh_far.cpp adds back. Modified 2026-11-11 by Melanikus (Third) for the AvP port: this
+	// used the number of the AI module's first part, which read another module's list, or one never written, and the game crashed on the
+	// owner's first run with the mover; and it used the place as if it were already in the world.
+	if (!FALLP_AuxLocs || strongestModule >= ModuleArraySize)
 	{
 		return false;
 	}
 
-	FARLOCATIONSHEADER const &places = FALLP_AuxLocs[first->m_index];
+	FARLOCATIONSHEADER const &places = FALLP_AuxLocs[strongestModule];
 
 	if (places.numLocations <= 0 || !places.locationsList)
 	{
 		return false;
 	}
 
-	*out = places.locationsList[0];
+	// Back into the world from the AI module's middle, in 64 bits as a level's corners are, so no level's numbers can overflow it, and no
+	// place more than 64 km out is used
+	VECTORCH const &place = places.locationsList[0];
+	VECTORCH const &middle = AIModuleArray[strongestModule].m_world;
+	AlienWaysXYZ placed;
+
+	if (!AlienWays_PlaceCorner(AlienWaysXYZ{ place.vx, place.vy, place.vz }, nullptr, AlienWaysXYZ{ middle.vx, middle.vy, middle.vz }, &placed))
+	{
+		return false;
+	}
+
+	out->vx = placed.x;
+	out->vy = placed.y;
+	out->vz = placed.z;
 	return true;
 }
 

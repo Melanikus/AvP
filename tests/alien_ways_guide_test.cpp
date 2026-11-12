@@ -2378,6 +2378,18 @@ static void SourceOfTheGame()
 	// code, and the log says when one is handed over
 	Check(Has(ways, "if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who) || theGuide.HandedOver(ask.who))"),
 		"SOURCE: the mover leaves an alien handed over near its target to the game's own last stretch");
+
+	// THE MOVER'S SCENT GOAL (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): the far AI's places are listed by the AI
+	// module's own number and written down from its middle (pfarlocs.cpp, bh_far.cpp). Read by the number of the module's first part, it
+	// read another module's list, or one never written, and the owner's first mover run crashed (MoverGoal+0x26a, 2026-11-11).
+	std::string const scent = Between(ways, "static bool StrongestScent(const STRATEGYBLOCK *alien, VECTORCH *out)", "\n}\n");
+	Check(Has(scent, "\tFARLOCATIONSHEADER const &places = FALLP_AuxLocs[strongestModule];\n") && !Has(ways, "FALLP_AuxLocs[first->m_index]")
+		&& ways.find("FALLP_AuxLocs[") == ways.rfind("FALLP_AuxLocs["), "SOURCE: the mover reads the far AI's places by the AI module's own number, as the game writes them");
+	Check(Has(scent, "if (!FALLP_AuxLocs || strongestModule >= ModuleArraySize)") && Has(scent, "for (int m = 0; m < AIModuleArraySize; m++)"),
+		"SOURCE: and that number is within both the AI modules and the list's own length");
+	Check(Has(scent, "\tVECTORCH const &middle = AIModuleArray[strongestModule].m_world;\n")
+		&& Has(scent, "if (!AlienWays_PlaceCorner(AlienWaysXYZ{ place.vx, place.vy, place.vz }, nullptr, AlienWaysXYZ{ middle.vx, middle.vy, middle.vz }, &placed))"),
+		"SOURCE: and it puts the place back into the world from the AI module's middle, in 64 bits, refusing one past 64 km");
 	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s is %.1f m from its target at %s, in clear sight"),
 		"SOURCE: the log says when an alien is handed over, and how far from its target");
 	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
