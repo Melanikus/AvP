@@ -91,6 +91,17 @@ multiplayer games come back with online play, in a later beta.
 This build doesn't read one either: a `servers.cfg` added by hand changes nothing, whatever the command line.
 
 ## 4. What we'd like you to try
+- **Floor is lava: the aliens climb walls and ceilings to reach you.** It's on from the start, with no setting on any menu.
+  Please try aliens reaching you, then the same spot with 1999's aliens: open the console (the key under Esc, left of 1) and
+  type `FLOORISLAVA OFF`. `FLOORISLAVA ON` brings floor is lava back, and `FLOORISLAVA` on its own switches it. It counts from the
+  next level you start, a restart keeps what the level started with, and it's on again every time you start the game. Press F2
+  where an alien gets stuck or does something odd.
+- **The shoulder lamp's look, `LAMPLOOK 0` to `3`,** in the console, for this run only and in single player only:
+  - `0`: the real light;
+  - `1`: the real light and the painted spot, as built;
+  - `2`: the painted spot only;
+  - `3`: the real light and the painted lamp at full.
+  Please try the lamp in a dark room with each.
 - **Try the Custom maps** page, on the Single player page.
 - **Press F2 whenever something looks weird.** The screen says "Mark 1 saved" (then 2, 3 and so on). The game saves a picture of
   that moment as `mark-1.png` beside the log, and adds a line to the log: the time, the level, where you were and which way you
