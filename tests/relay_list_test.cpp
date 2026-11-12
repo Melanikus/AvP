@@ -855,6 +855,21 @@ static void TestTheCalls()
 	Check(Has(theServer, "theServer.opening = ServersCfg_ReadTheGames(&theFile);") &&
 		Has(theServer, "theServer.line = theFile.servers[theServer.inUse];") && !Has(theServer, ".name"),
 		"the server is a good line of servers.cfg, read from the game's folder, and the log never says its name");
+
+	// ONLINE PLAY IS A BUILD'S CHOICE (added 2026-11-11 by Melanikus for the AvP port: the owner's ruling R-GOAL-8, "Online off in
+	// beta.2", and PO's call that a servers.cfg alone mustn't turn it on). Read in the code, as Server() needs the whole game. Each way:
+	// with the define AVPX_ONLINE_PLAY the build reads servers.cfg; without it, it never opens the file, says so in one log line, and has
+	// no servers, as if there were no file. The read is the only one in the file.
+	std::string const choice = SourceSlice(source, "bool ThisBuildPlaysOnline(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(choice, "\n#if defined(AVPX_ONLINE_PLAY)\n\t\treturn true;\n#else") && CountOf(source, "#if defined(AVPX_ONLINE_PLAY)") == 1 &&
+		CountOf(source, "defined(AVPX_ONLINE_PLAY)") == 1, "WITH THE DEFINE AVPX_ONLINE_PLAY a build plays online, and that's the one place the define is asked about");
+	Check(Has(choice, "#else\n\t\treturn false;\n#endif"), "WITHOUT IT a build plays no online games");
+	size_t const notRead = theServer.find("\t\t\tif (!ThisBuildPlaysOnline())\n\t\t\t{\n");
+	size_t const read = theServer.find("\t\t\telse\n\t\t\t{\n\t\t\t\ttheServer.opening = ServersCfg_ReadTheGames(&theFile);\n");
+	Check(notRead != std::string::npos && read != std::string::npos && notRead < read && CountOf(source, "ServersCfg_ReadTheGames(") == 1 &&
+		Has(theServer.substr(notRead, read - notRead), "\t\t\t\ttheServer.opening = kServersCfgNotThere;\n\t\t\t\tLogString(\"Relay list: this build plays no online "
+			"games (it was made without AVPX_ONLINE_PLAY), so \" SERVERS_CFG_FILE_NAME\n\t\t\t\t\t\" isn't read, and there are no servers\");\n\t\t\t}\n"),
+		"and then servers.cfg is never opened: one log line says so, and there's no server, exactly as with no file; only a build that plays online reads it");
 	std::string const starting = SourceSlice(source, "bool Start(void)", "\n\t}\n", kSliceEndAfterTheStart, FailedSlice);
 	// (Modified 2026-11-11 by Melanikus for the AvP port: a server's state is made in one place, NewServer, for the line in use and for each
 	// visit alike, from its line alone)
@@ -1868,6 +1883,9 @@ static void TestTheServerLists()
 	Check(Has(fileWords, "return ServersCfg_OpeningWords(theServer.opening);") &&
 		Has(fileWords, "return theFile.fileRefusal == kServersCfgFileRead ? NULL : ServersCfg_FileWords(theFile.fileRefusal);"),
 		"and a file not used at all says why in the game's own words");
+	std::string const noFile = SourceSlice(source, "bool RelayList_HasNoServersFile(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(noFile, "\tServer();\n\treturn theServer.opening == kServersCfgNotThere;"),
+		"and there's no servers.cfg only when the game's folder has none, never for a file that's there but wrong (added 2026-11-11, R-GOAL-8)");
 
 	// Start gives back everything it made when it can't start the list, in one place (PO's ruling): the lock, both events and the memory
 	size_t const made = starting.find("Shared *made = NewServer(*line);");

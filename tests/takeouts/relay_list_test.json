@@ -2064,6 +2064,56 @@
 					"to": "\t\t\ttheServer.inUse = theFile.serverCount > 1 ? 1 : -1;\n"
 				}
 			]
+		},
+		{
+			"name": "there's said to be no servers.cfg for a file that's there but can't be read",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\treturn theServer.opening == kServersCfgNotThere;\n",
+					"to": "\treturn theServer.opening != kServersCfgOpened;\n"
+				}
+			]
+		},
+		{
+			"name": "a build without AVPX_ONLINE_PLAY plays online",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "#else\n\t\treturn false;\n#endif\n",
+					"to": "#else\n\t\treturn true;\n#endif\n"
+				}
+			]
+		},
+		{
+			"name": "a build with AVPX_ONLINE_PLAY plays no online games",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "#if defined(AVPX_ONLINE_PLAY)\n\t\treturn true;\n",
+					"to": "#if defined(AVPX_ONLINE_PLAY)\n\t\treturn false;\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games reads servers.cfg all the same",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\t\ttheServer.opening = kServersCfgNotThere;\n",
+					"to": "\t\t\t\ttheServer.opening = ServersCfg_ReadTheGames(&theFile);\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games doesn't say so in the log",
+			"changes": [
+				{
+					"file": "3dc/relay_list.cpp",
+					"from": "\t\t\t\tLogString(\"Relay list: this build plays no online games (it was made without AVPX_ONLINE_PLAY), so \" SERVERS_CFG_FILE_NAME\n\t\t\t\t\t\" isn't read, and there are no servers\");\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

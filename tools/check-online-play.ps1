@@ -24,10 +24,12 @@ N. No name is looked up: no call that turns a name into an address, anywhere. We
    only to the list's server the list was started with.
 C. No server comes from the settings file: nothing is read from AliensVsPredator.cfg's [Network] section, nor any setting whose name
    has Relay, Server, Pin or Fingerprint in it.
-F. servers.cfg, at the repository's root and packaged beside bin, is the list of the servers the game ships with. It's held to the
-   game's own rules (3dc/servers_cfg.h) and stricter ones, since it's ours: plain line ends, no mark at the start, no empty line, no
-   space at a line's ends, and no server at a home network's, this machine's or a shared provider's address. The servers it ships are
-   printed, for the release's text: the owner's approval of the release is their review.
+F. servers.cfg, at the repository's root, is the list of the servers the game ships with when it plays online, packaged beside bin.
+   This release plays none and packages no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2";
+   tools/check-release-package.ps1 refuses one), but the file is still held to every rule, for the release that turns online play on.
+   It's held to the game's own rules (3dc/servers_cfg.h) and stricter ones, since it's ours: plain line ends, no mark at the start, no
+   empty line, no space at a line's ends, and no server at a home network's, this machine's or a shared provider's address. Its
+   servers are printed, for the release's text: the owner's approval of the release is their review.
 R. The route: only the list's file reads servers.cfg (besides the reader's own files); the list's server is written in one place, from
    the line's four numbers, so it's an address and never a name; the relay is at the line's address too; and the list starts only for a
    line, making nothing without one.
@@ -54,6 +56,11 @@ J. A join goes through its game's own line (2026-11-11, the owner's "They don't 
 H. A host goes through the line the player chose, and only that (2026-11-11, the owner's "No auto choice, they choose"): the host's
    relay is the chosen line's, a host without a choice or without its line's yes is refused, and a line is chosen only by the host
    page's Enter on that line's row (or a -dev test run's own choice), never anywhere else.
+O. Online play is a build's choice (2026-11-11, the owner's ruling R-GOAL-8, "Online off in beta.2", and PO's call that a servers.cfg
+   alone mustn't turn it on): only a build made with the define AVPX_ONLINE_PLAY reads servers.cfg, and no build of this repository's
+   own is. The game's code asks about the define once, in the list's ThisBuildPlaysOnline; Server() reads the file only in the else of
+   that question; AvP.vcxproj makes the define only in its one group for the MSBuild property AvpxOnlinePlay=1; and no workflow, no tool
+   and no other MSBuild file names the property or the define in any capitals, nor sets CL or _CL_. -dev still decides nothing (D).
 WHAT IT CAN'T PROVE: how the code behaves, as opposed to how it's written. That's net_start_test's and relay_list_test's, with their
 take-out rows; the fingerprint's sum is proved by net_relay_keys_test.
 Anything this check can't place is refused with the file and the line, so a new way out is read by a person before it's let through.
@@ -428,7 +435,7 @@ function Test-ServerAddress([string]$text)
 
 $shippedPath = Join-Path $Repository $shippedFile
 
-if (-not (Test-Path -LiteralPath $shippedPath -PathType Leaf)) { Stop-Check "F: $shippedFile isn't there: it's the list of the servers the game ships with, packaged beside bin" }
+if (-not (Test-Path -LiteralPath $shippedPath -PathType Leaf)) { Stop-Check "F: $shippedFile isn't there: it's the list of the servers the game ships with when it plays online" }
 
 $shippedBytes = [System.IO.File]::ReadAllBytes($shippedPath)
 
@@ -1565,8 +1572,97 @@ foreach ($pressed in @($choosers | Where-Object { $_.File -eq $hostPageFile }))
     }
 }
 
-Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose."
-Write-Host "The servers this release ships ($shippedFile): $($expected.Count)"
+# ---- O. Only a build made to play online reads servers.cfg, and no published build is made so. Added 2026-11-11 by Melanikus for the AvP
+# port: the owner's ruling R-GOAL-8 ("Online off in beta.2"), and PO's call that a servers.cfg alone mustn't turn it on.
+
+# The game's code asks about the define AVPX_ONLINE_PLAY once, in the list's ThisBuildPlaysOnline, which says yes only with it. A
+# #define of it anywhere, or a second question, would turn online play on, or make the answer two things.
+$askers = @($code.Keys | Sort-Object | Where-Object { $code[$_] -cmatch '\bAVPX_ONLINE_PLAY\b' })
+
+if ($askers.Count -ne 1 -or $askers[0] -ne $listFile -or [regex]::Matches($code[$listFile], '\bAVPX_ONLINE_PLAY\b').Count -ne 1)
+{
+    Stop-Check "O: the game's code must name the define AVPX_ONLINE_PLAY once, in $listFile's ThisBuildPlaysOnline, and nowhere else; it's named in: $($askers -join ', ')"
+}
+
+$playsOnline = Get-OneDefinition 'ThisBuildPlaysOnline' 'O' $listFile 'whether this build reads servers.cfg at all'
+
+if ($playsOnline.Flat -cne '#if defined(AVPX_ONLINE_PLAY) return true; #else return false; #endif')
+{
+    Stop-Check "O: ThisBuildPlaysOnline ($listFile line $($playsOnline.Line)) must be: #if defined(AVPX_ONLINE_PLAY) return true; #else return false; #endif"
+}
+
+# servers.cfg is read in the list's file once, in Server(), and only in the else of its question: a build that plays no online games
+# never opens it
+$server = Get-OneDefinition 'Server' 'O' $listFile 'the one place servers.cfg is read'
+$offForm = 'if (!ThisBuildPlaysOnline()) {'
+$offBlock = Get-FormBlock $server.Flat $offForm
+$onBlock = $null
+
+if ($null -ne $offBlock)
+{
+    $offClose = $server.Flat.IndexOf($offForm, [System.StringComparison]::Ordinal) + $offForm.Length + $offBlock.Length
+    $afterOff = $server.Flat.Substring($offClose + 1).TrimStart()
+    if ($afterOff.StartsWith('else {')) { $onBlock = Get-Block $afterOff 5 }
+}
+
+$reads = (Get-Count $code[$listFile] 'ServersCfg_ReadTheGames(') + (Get-Count $code[$listFile] 'ServersCfg_ReadFolder(')
+
+if ($null -eq $offBlock -or $offBlock.Contains('ServersCfg_Read') -or $null -eq $onBlock -or (Get-Count $onBlock 'ServersCfg_ReadTheGames(') -ne 1 -or $reads -ne 1)
+{
+    Stop-Check "O: Server() ($listFile line $($server.Line)) must read servers.cfg once, and only in the else of: if (!ThisBuildPlaysOnline()) { ... } else { ... ServersCfg_ReadTheGames(...) ... }; that's the one read of it in $listFile"
+}
+
+# AvP.vcxproj makes the define in one group, only for the MSBuild property AvpxOnlinePlay=1, and names neither anywhere else
+$projectFile = 'win32/VS2026/AvP.vcxproj'
+$projectPath = Join-Path $Repository $projectFile
+if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) { Stop-Check "O: $projectFile isn't there, so this check can't see which builds play online" }
+$projectFlat = Get-Flat ([regex]::Replace(([System.IO.File]::ReadAllText($projectPath) -replace "`r", ''), '<!--[\s\S]*?-->', ' '))
+$onlineGroup = "<ItemDefinitionGroup Condition=""'`$(AvpxOnlinePlay)'=='1'""> <ClCompile> <PreprocessorDefinitions>AVPX_ONLINE_PLAY;%(PreprocessorDefinitions)</PreprocessorDefinitions> </ClCompile> </ItemDefinitionGroup>"
+
+if ((Get-Count $projectFlat $onlineGroup) -ne 1 -or [regex]::Matches($projectFlat, '(?i)AVPX_ONLINE_PLAY').Count -ne 1 -or [regex]::Matches($projectFlat, '(?i)AvpxOnlinePlay').Count -ne 1)
+{
+    Stop-Check "O: $projectFile must make AVPX_ONLINE_PLAY only in its one group for the property AvpxOnlinePlay=1, and name neither anywhere else: $onlineGroup"
+}
+
+# No workflow, no tool and no other MSBuild file names the property or the define, in any capitals (MSBuild takes an environment variable
+# as the property of the same name, whatever its capitals), and none sets CL or _CL_, which give the compiler options from outside a
+# project. So every build GitHub makes, released or not, plays no online games. Our own builds for online test runs are made by hand,
+# outside this repository, with /p:AvpxOnlinePlay=1. This file itself is left out, as it names them to look for them.
+$buildFiles = @()
+
+foreach ($folder in @('.github', 'tools'))
+{
+    $path = Join-Path $Repository $folder
+    if (Test-Path -LiteralPath $path) { $buildFiles += @(Get-ChildItem -LiteralPath $path -Recurse -File -Force) }
+}
+
+$buildFiles += @(Get-ChildItem -LiteralPath $Repository -Recurse -File -Force | Where-Object {
+    $_.FullName -notmatch '[\\/]\.git[\\/]' -and ($_.Name -match '(?i)\.(props|targets|rsp|vcxproj|sln)$|^Directory\.Build\.') })
+$leftOut = @('tools/check-online-play.ps1', $projectFile)
+$setsCl = '(?im)^\s*(CL|_CL_)\s*:|\$env:(CL|_CL_)\b|\bset\s+"?(CL|_CL_)=|\bexport\s+(CL|_CL_)=|(^|\s)(CL|_CL_)='
+
+foreach ($file in ($buildFiles | Sort-Object FullName -Unique))
+{
+    $relative = $file.FullName.Substring($Repository.Length).TrimStart('\', '/') -replace '\\', '/'
+    if ($leftOut -contains $relative) { continue }
+    $text = [System.IO.File]::ReadAllText($file.FullName)
+
+    if ($text -match '(?i)AvpxOnlinePlay|AVPX_ONLINE_PLAY')
+    {
+        Stop-Check "O: $relative names AvpxOnlinePlay or AVPX_ONLINE_PLAY: no build made by this repository may play online in this release"
+    }
+
+    if ($relative.StartsWith('.github/') -and $text -match $setsCl)
+    {
+        Stop-Check "O: $relative sets CL or _CL_, which give the compiler options from outside the project, so this check couldn't see what a build is made with"
+    }
+}
+
+Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose. And only a build made to play online reads servers.cfg, which no build of this repository's workflows is."
+# This release ships no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2"): tools/build-and-package.ps1
+# leaves it out, and tools/check-release-package.ps1 refuses a package with one. The file at the repository's root is still held to every
+# rule above, for the release that turns online play on. Modified 2026-11-11 by Melanikus for the AvP port.
+Write-Host "This release ships no servers.cfg, so it plays no online games. The servers in the repository's $shippedFile, for the release that turns online play on: $($expected.Count)"
 
 foreach ($server in $expected)
 {

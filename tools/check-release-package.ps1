@@ -11,6 +11,7 @@ The build has already passed if we get here, so this looks for what a build woul
 - A program in it that isn't the game.
 - One of our game files missing, or not the one this commit lists (package-files/SHA256SUMS.txt).
 - A program or library without its licence beside it (licences/README.txt says which is whose).
+- A servers.cfg, anywhere in it: this release plays no online games (added 2026-11-11, the owner's ruling R-GOAL-8).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package,
@@ -33,14 +34,24 @@ function Stop-Release([string]$why)
 }
 
 # The package is laid out as the game folder is: the game in bin as AvP_Classic.exe, the name Steam starts, with the libraries it needs
-# there too, and the notes and servers.cfg at the top (servers.cfg added 2026-11-10 by Melanikus for the AvP port, #175: the game looks
-# for it beside bin)
-foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'servers.cfg', 'BUILD.txt', 'SHA256SUMS.txt')
+# there too, and the notes at the top
+foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
 {
     if (-not (Test-Path -LiteralPath (Join-Path $Package $needed)))
     {
         Stop-Release "$needed is not in the package"
     }
+}
+
+# No servers.cfg, in any folder and with any capitals: this release plays no online games (the owner's ruling R-GOAL-8, 2026-11-11:
+# "Online off in beta.2"). The game looks for its servers beside bin, and with no servers.cfg there it reaches no server at all
+# (tools/build-and-package.ps1 says more). The release that turns online play on takes this out, and needs servers.cfg at the top
+# again, as it was from 2026-11-10 (#175). Modified 2026-11-11 by Melanikus for the AvP port.
+$serversFiles = @(Get-ChildItem -LiteralPath $Package -Recurse -Force | Where-Object { $_.Name -ieq 'servers.cfg' })
+
+if ($serversFiles.Count -gt 0)
+{
+    Stop-Release "$($serversFiles[0].FullName.Substring((Resolve-Path -LiteralPath $Package).Path.TrimEnd('\', '/').Length + 1) -replace '\\', '/') is in the package, and this release plays no online games, so it ships no servers.cfg"
 }
 
 # A build's symbols and map (.pdb, .map) name the place of a crash. They stay with the build, and a player never needs them.
