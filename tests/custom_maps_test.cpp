@@ -95,8 +95,11 @@ struct Picture
 static std::map<std::string, Picture> pictures;
 static std::map<texID_t, int> releases;
 
-texID_t Tex_CreateFromRIM(const std::string &name)
+// The same parameters as the game's own (TextureManager.h): a custom map's picture is a single picture, so edgeCell is 0, and unused here
+texID_t Tex_CreateFromRIM(const std::string &name, uint32_t edgeCell)
 {
+	(void)edgeCell;
+
 	std::map<std::string, Picture>::const_iterator found = pictures.find(name);
 
 	return found == pictures.end() ? MISSING_TEXTURE : found->second.id;
