@@ -106,7 +106,7 @@ namespace
 	int hostRoomLine = -1;
 
 	// ONLINE PLAY IS A BUILD'S CHOICE, never a file's or a switch's. Added 2026-11-11 by Melanikus for the AvP port: the owner's ruling
-	// R-GOAL-8 ("Online off in beta.2"), and PO's call that a file alone mustn't turn it on, as a servers.cfg posted anywhere would
+	// R-GOAL-9 ("Online off in beta.2"), and PO's call that a file alone mustn't turn it on, as a servers.cfg posted anywhere would
 	// otherwise switch on, in a published build, an online client whose open items are parked. Only a build made with the define
 	// AVPX_ONLINE_PLAY reads servers.cfg. AvP.vcxproj makes the define only for /p:AvpxOnlinePlay=1, which our own builds for online runs
 	// ask for, and no workflow or packaging script ever does (tools/check-online-play.ps1, rule O). Any other build never opens the file,

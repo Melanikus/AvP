@@ -481,7 +481,7 @@ void OnlineLines_DrawTop(int chosen)
 
 	if (fileWords)
 	{
-		// No servers.cfg at all: no online play, said plainly, as a release with online play off ships none (the owner's ruling R-GOAL-8,
+		// No servers.cfg at all: no online play, said plainly, as a release with online play off ships none (the owner's ruling R-GOAL-9,
 		// 2026-11-11). A file that's there but wrong keeps the game's own words for what's wrong. Added 2026-11-11 by Melanikus for the AvP
 		// port.
 		if (RelayList_HasNoServersFile())

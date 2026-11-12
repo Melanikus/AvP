@@ -147,7 +147,7 @@ do {
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
-# No servers.cfg goes in the package: this release plays no online games (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in
+# No servers.cfg goes in the package: this release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11: "Online off in
 # beta.2", "These are all MP which we already postponed"). The game looks for the file only beside bin (3dc/servers_cfg_file.h), and
 # with none it has no server, so it reaches none: its list starts only for a servers.cfg line (tools/check-online-play.ps1, rule R).
 # The servers.cfg at the repository's root stays there, still held to its rules, for the release that turns online play on: that

@@ -249,7 +249,7 @@
       <OutputFile>.\Release/AvP.bsc</OutputFile>
     </Bscmake>
   </ItemDefinitionGroup>
-  <!-- Online play is a build's choice (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-8, "Online off in
+  <!-- Online play is a build's choice (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-9, "Online off in
        beta.2"): only a build asked for with /p:AvpxOnlinePlay=1 gets AVPX_ONLINE_PLAY, and only such a build reads servers.cfg
        (3dc/relay_list.cpp, ThisBuildPlaysOnline). Our own builds for online test runs ask for it. No workflow and no packaging script
        ever does, so no published build plays online; tools/check-online-play.ps1, rule O, holds that. -->

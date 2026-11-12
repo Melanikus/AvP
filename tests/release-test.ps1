@@ -2541,7 +2541,7 @@ bool HostPage_PressedRow(int row)
 	}
 }
 '@ + "`n") }; Reason = 'H: HostPage_PressedRow (3dc/avp/win95/frontend/host_page.cpp line 1) must choose a line once, only in its kHostPageChooseIt case' },
-    # Rule O (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-8, "Online off in beta.2"): only a build made with
+    # Rule O (added 2026-11-11 by Melanikus for the AvP port; the owner's ruling R-GOAL-9, "Online off in beta.2"): only a build made with
     # AVPX_ONLINE_PLAY reads servers.cfg, and nothing of this repository's own makes one. The model above passes it; each case is one way
     # back to a build that plays online.
     @{ What = 'O: the define made in a header of its own is refused'; None = $false; Files = @{ '3dc/online.h' = "#define AVPX_ONLINE_PLAY 1`n" };
@@ -2734,7 +2734,7 @@ foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43
     Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$name is not in the package" "a package without $name is refused"
 }
 
-# This release plays no online games (the owner's ruling R-GOAL-8, 2026-11-11): a servers.cfg anywhere in the package is refused, whatever its
+# This release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11): a servers.cfg anywhere in the package is refused, whatever its
 # capitals (added 2026-11-11 by Melanikus for the AvP port)
 Make-GoodPackage
 Write-File (Join-Path $package 'servers.cfg') '203.0.113.7  0123  New York'

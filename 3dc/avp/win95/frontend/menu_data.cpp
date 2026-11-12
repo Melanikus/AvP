@@ -497,7 +497,7 @@ void MenuData_SetMultiplayerRows(void)
 
 	// Start game, Co-op campaign and Join game only when servers.cfg has a good line. Every game is played through a server (there's no
 	// plain game), so with none they'd lead only to pages with nothing in them. The Online page says why there's none. Added 2026-11-11
-	// by Melanikus for the AvP port: the owner's ruling R-GOAL-8 ("Online off in beta.2", so it ships no servers.cfg), and his pick of how
+	// by Melanikus for the AvP port: the owner's ruling R-GOAL-9 ("Online off in beta.2", so it ships no servers.cfg), and his pick of how
 	// the page shows it: "Hide them".
 	if (RelayList_LineCount() > 0)
 	{

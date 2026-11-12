@@ -25,7 +25,7 @@ N. No name is looked up: no call that turns a name into an address, anywhere. We
 C. No server comes from the settings file: nothing is read from AliensVsPredator.cfg's [Network] section, nor any setting whose name
    has Relay, Server, Pin or Fingerprint in it.
 F. servers.cfg, at the repository's root, is the list of the servers the game ships with when it plays online, packaged beside bin.
-   This release plays none and packages no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2";
+   This release plays none and packages no servers.cfg (the owner's ruling R-GOAL-9, 2026-11-11: "Online off in beta.2";
    tools/check-release-package.ps1 refuses one), but the file is still held to every rule, for the release that turns online play on.
    It's held to the game's own rules (3dc/servers_cfg.h) and stricter ones, since it's ours: plain line ends, no mark at the start, no
    empty line, no space at a line's ends, and no server at a home network's, this machine's or a shared provider's address. Its
@@ -56,7 +56,7 @@ J. A join goes through its game's own line (2026-11-11, the owner's "They don't 
 H. A host goes through the line the player chose, and only that (2026-11-11, the owner's "No auto choice, they choose"): the host's
    relay is the chosen line's, a host without a choice or without its line's yes is refused, and a line is chosen only by the host
    page's Enter on that line's row (or a -dev test run's own choice), never anywhere else.
-O. Online play is a build's choice (2026-11-11, the owner's ruling R-GOAL-8, "Online off in beta.2", and PO's call that a servers.cfg
+O. Online play is a build's choice (2026-11-11, the owner's ruling R-GOAL-9, "Online off in beta.2", and PO's call that a servers.cfg
    alone mustn't turn it on): only a build made with the define AVPX_ONLINE_PLAY reads servers.cfg, and no build of this repository's
    own is. The game's code asks about the define once, in the list's ThisBuildPlaysOnline; Server() reads the file only in the else of
    that question; AvP.vcxproj makes the define only in its one group for the MSBuild property AvpxOnlinePlay=1; and no workflow, no tool
@@ -1573,7 +1573,7 @@ foreach ($pressed in @($choosers | Where-Object { $_.File -eq $hostPageFile }))
 }
 
 # ---- O. Only a build made to play online reads servers.cfg, and no published build is made so. Added 2026-11-11 by Melanikus for the AvP
-# port: the owner's ruling R-GOAL-8 ("Online off in beta.2"), and PO's call that a servers.cfg alone mustn't turn it on.
+# port: the owner's ruling R-GOAL-9 ("Online off in beta.2"), and PO's call that a servers.cfg alone mustn't turn it on.
 
 # The game's code asks about the define AVPX_ONLINE_PLAY once, in the list's ThisBuildPlaysOnline, which says yes only with it. A
 # #define of it anywhere, or a second question, would turn online play on, or make the answer two things.
@@ -1659,7 +1659,7 @@ foreach ($file in ($buildFiles | Sort-Object FullName -Unique))
 }
 
 Write-Host "Online play is only the safe way: -dev decides nothing online, no name is looked up, no server comes from the settings file, the list and its relay go only to a servers.cfg line's address, only after the player's yes to it, and trust it by its fingerprint alone, every online game is version 2 and sealed or nothing, there's no plain game: nothing is hosted or joined but through a server's relay, and nothing on this network is asked or answered about games, a join goes through its game's own line, and a host through the line the player chose. And only a build made to play online reads servers.cfg, which no build of this repository's workflows is."
-# This release ships no servers.cfg (the owner's ruling R-GOAL-8, 2026-11-11: "Online off in beta.2"): tools/build-and-package.ps1
+# This release ships no servers.cfg (the owner's ruling R-GOAL-9, 2026-11-11: "Online off in beta.2"): tools/build-and-package.ps1
 # leaves it out, and tools/check-release-package.ps1 refuses a package with one. The file at the repository's root is still held to every
 # rule above, for the release that turns online play on. Modified 2026-11-11 by Melanikus for the AvP port.
 Write-Host "This release ships no servers.cfg, so it plays no online games. The servers in the repository's $shippedFile, for the release that turns online play on: $($expected.Count)"

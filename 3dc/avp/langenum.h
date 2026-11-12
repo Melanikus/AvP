@@ -1535,7 +1535,7 @@ enum TEXTSTRING_ID
 	TEXTSTRING_SERVERS_MORE_NOT_USED,        // before how many more refused lines there are
 	TEXTSTRING_SERVERS_NONE,
 	TEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)
-	TEXTSTRING_SERVERS_NO_FILE,              // the Online page with no servers.cfg at all (RelayList_HasNoServersFile; R-GOAL-8, 2026-11-11)
+	TEXTSTRING_SERVERS_NO_FILE,              // the Online page with no servers.cfg at all (RelayList_HasNoServersFile; online off in beta.2: R-GOAL-9)
 	TEXTSTRING_FINDGAMES_FROM,               // "Games from", before the server's name, on the games page
 	TEXTSTRING_FINDGAMES_AND,                // "and", before the last of the servers' names (2026-11-11)
 	TEXTSTRING_FINDGAMES_LINE_NOYES,         // the games page's words for a line, after its name: no yes yet (2026-11-11)

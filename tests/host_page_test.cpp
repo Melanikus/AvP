@@ -332,7 +332,7 @@ int main()
 	Check(nameRow != std::string::npos && onlineRow != std::string::npos && startRow != std::string::npos && nameRow < onlineRow && onlineRow < startRow &&
 		!Has(data, "HostOnRow") && !Has(data, "MP_HostOnChoice"), "the Multiplayer page goes from the player's name and the Online row to Start game, with no Host on row");
 
-	// WITH NO SERVERS.CFG LINE (added 2026-11-11, the owner's ruling R-GOAL-8, "Online off in beta.2", so it ships no servers.cfg, and his
+	// WITH NO SERVERS.CFG LINE (added 2026-11-11, the owner's ruling R-GOAL-9, "Online off in beta.2", so it ships no servers.cfg, and his
 	// "Hide them"): the page has only the player's name and the Online row, as Start game, Co-op campaign and Join game all need a server;
 	// and the Online page says there's no servers.cfg, in words of its own, right after the words it shows before a file's own words
 	Check(Has(setter, "\tAvPMenu_Multiplayer[row++] = OnlineRow;\n\n") && Has(setter, "\tif (RelayList_LineCount() > 0)\n\t{\n"

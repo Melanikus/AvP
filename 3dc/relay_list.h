@@ -86,7 +86,7 @@ bool RelayList_RefusedLineAt(int place, int *lineNumber, const char **words);
 const char *RelayList_FileWords(void);
 
 // Whether there's no servers.cfg in the game's folder at all: the one case the Online page says in words of its own, "There's no
-// servers.cfg in the game's folder, so there's no online play" (a release with online play off ships none: the owner's ruling R-GOAL-8,
+// servers.cfg in the game's folder, so there's no online play" (a release with online play off ships none: the owner's ruling R-GOAL-9,
 // 2026-11-11). False whenever there's a file, good or not. Added 2026-11-11 by Melanikus for the AvP port.
 bool RelayList_HasNoServersFile(void);
 

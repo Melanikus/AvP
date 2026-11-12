@@ -11,7 +11,7 @@ The build has already passed if we get here, so this looks for what a build woul
 - A program in it that isn't the game.
 - One of our game files missing, or not the one this commit lists (package-files/SHA256SUMS.txt).
 - A program or library without its licence beside it (licences/README.txt says which is whose).
-- A servers.cfg, anywhere in it: this release plays no online games (added 2026-11-11, the owner's ruling R-GOAL-8).
+- A servers.cfg, anywhere in it: this release plays no online games (added 2026-11-11, the owner's ruling R-GOAL-9).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package,
@@ -43,7 +43,7 @@ foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_
     }
 }
 
-# No servers.cfg, in any folder and with any capitals: this release plays no online games (the owner's ruling R-GOAL-8, 2026-11-11:
+# No servers.cfg, in any folder and with any capitals: this release plays no online games (the owner's ruling R-GOAL-9, 2026-11-11:
 # "Online off in beta.2"). The game looks for its servers beside bin, and with no servers.cfg there it reaches no server at all
 # (tools/build-and-package.ps1 says more). The release that turns online play on takes this out, and needs servers.cfg at the top
 # again, as it was from 2026-11-10 (#175). Modified 2026-11-11 by Melanikus for the AvP port.

@@ -856,7 +856,7 @@ static void TestTheCalls()
 		Has(theServer, "theServer.line = theFile.servers[theServer.inUse];") && !Has(theServer, ".name"),
 		"the server is a good line of servers.cfg, read from the game's folder, and the log never says its name");
 
-	// ONLINE PLAY IS A BUILD'S CHOICE (added 2026-11-11 by Melanikus for the AvP port: the owner's ruling R-GOAL-8, "Online off in
+	// ONLINE PLAY IS A BUILD'S CHOICE (added 2026-11-11 by Melanikus for the AvP port: the owner's ruling R-GOAL-9, "Online off in
 	// beta.2", and PO's call that a servers.cfg alone mustn't turn it on). Read in the code, as Server() needs the whole game. Each way:
 	// with the define AVPX_ONLINE_PLAY the build reads servers.cfg; without it, it never opens the file, says so in one log line, and has
 	// no servers, as if there were no file. The read is the only one in the file.
@@ -1885,7 +1885,7 @@ static void TestTheServerLists()
 		"and a file not used at all says why in the game's own words");
 	std::string const noFile = SourceSlice(source, "bool RelayList_HasNoServersFile(void)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(noFile, "\tServer();\n\treturn theServer.opening == kServersCfgNotThere;"),
-		"and there's no servers.cfg only when the game's folder has none, never for a file that's there but wrong (added 2026-11-11, R-GOAL-8)");
+		"and there's no servers.cfg only when the game's folder has none, never for a file that's there but wrong (added 2026-11-11: online off in beta.2, R-GOAL-9)");
 
 	// Start gives back everything it made when it can't start the list, in one place (PO's ruling): the lock, both events and the memory
 	size_t const made = starting.find("Shared *made = NewServer(*line);");
