@@ -1217,17 +1217,18 @@ static void HeldForTheSlide()
 	GuidedAlien(guide, Alien(1));
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 
-	// Held 900 mm from the wall's foot. From 400 ms its goal has moved 3.5 m, so it asks for a new way, and with 1 polygon a frame that
-	// search takes at least two frames. Its slide starts at 500 ms, the next frame, so the search ends while it slides. (Modified 2026-11-11 by
-	// Melanikus (Third): asked at 300 ms, run 43120129973's search ended before the slide began.)
+	// Held 900 mm from the wall's foot. From 400 ms its goal has moved 3.5 m, so it asks for a new way. A search across the corridor looks at
+	// about as many polygons as it has (13), so at 2 a frame it takes several frames, and its slide starts at 500 ms, the next frame, so the
+	// search ends while it slides. The loop runs as long as the slide may (kAlienWaysMostSlideMs). (Modified 2026-11-11 by Melanikus (Third):
+	// at 1 polygon a frame, and only till 1.4 s, the search hadn't ended in either GitHub run: "the new way at -1 ms".)
 	AlienWaysXYZ const near = Beside(900, 0, 500), movedGoal = { kGoal.x, kGoal.y, kGoal.z - 3500 };
 	bool slid = false, held = false, taken = false;
 	int slidAt = -1, foundAt = -1, foundFrames = -1;
 
-	for (int ms = 0; ms <= 1400 && !held; ms += 100)
+	for (int ms = 0; ms < 500 + kAlienWaysMostSlideMs && !held; ms += 100)
 	{
 		guide.Steer(&map, Ask(Alien(1), near, ms >= 400 ? movedGoal : kGoal, 13), &towards);
-		Frame(guide, map, 100, nullptr, ms >= 400 ? 1 : kAlienWaysLooksPerFrame);
+		Frame(guide, map, 100, nullptr, ms >= 400 ? 2 : kAlienWaysLooksPerFrame);
 		const AlienWaysReport *reports = nullptr;
 		size_t const count = ReportsOf(guide, &reports);
 
