@@ -256,6 +256,15 @@ static void TestEveryHostIsOnline()
 		!Has(data, "HostWhereRow") && !Has(menus, "HostWhereNames") && !Has(names, "HOSTWHERE") && !Has(menus, "Net_HostAtHome") && !Has(coop, "Net_HostAtHome"),
 		"the Host row is gone, with its choice, its words and the game at home");
 
+	// Added 2026-11-12 by Melanikus for the AvP port: and nothing keeps its choice either. A multiplayer setup, the player's profile and the
+	// settings file are the three places the game saves what a player chose; none holds the Host row's.
+	std::string const setups = ReadSource("3dc/avp/win95/frontend/mp_config.cpp");
+	std::string const profiles = ReadSource("3dc/avp/win95/frontend/user_profile.cpp");
+	std::string const settings = ReadSource("3dc/ConfigFile.cpp");
+	Check(setups.size() > 1000 && profiles.size() > 1000 && settings.size() > 1000, "the three saving files' sources were found and read");
+	Check(!Has(setups, "MP_HostWhere") && !Has(profiles, "MP_HostWhere") && !Has(settings, "MP_HostWhere"),
+		"and no multiplayer setup, profile or settings file keeps the Host row's choice");
+
 	// The Multiplayer page's rows and the server a game is hosted on: tests/host_page_test.cpp (moved there 2026-11-11 by Melanikus for the AvP
 	// port, hash 2: the Host on row is gone, and Start game and Co-op campaign open the host page)
 
