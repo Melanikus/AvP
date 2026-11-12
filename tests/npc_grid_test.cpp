@@ -1070,7 +1070,7 @@ static void Limits()
 	}
 }
 
-// HOSTILE MAPS A (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md). Whoever made a level
+// HOSTILE MAPS A (added 2026-11-11 by Melanikus (Third) for the AvP port, #109, what a made-up level can do). Whoever made a level
 // chose its numbers, and once floor is lava is on, every player's game builds the grid from any level it loads (Tao 3: input is hostile).
 // The map keeps no corner more than 64 km from the middle of the world (kAlienWaysMostCoordinate), so these levels are made up at that
 // edge, and just past it.
@@ -1302,7 +1302,7 @@ static void Again()
 }
 
 // THE KIND OF A JOIN (npc_grid.h). Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, corners repel). Secondary's read of the
-// owner's play (AvP-docs\engine\rehearsal\2026-11-11-owner-play\START-STUCKS-secondary.md): 12 of 14 aliens stuck at their way's start
+// owner's play (his log of 2026-11-11, on genshd1): 12 of 14 aliens stuck at their way's start
 // were heading across an OUTSIDE edge, and 2 onto a face hidden under another.
 
 // Three walls of a room and its floor, with no ceiling: the walls at x = 0 and x = 6000, facing in, and the one at z = 0 between them, 3 m

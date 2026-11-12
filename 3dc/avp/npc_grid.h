@@ -41,7 +41,7 @@
 //     the 3 x 3 is allowed: the surface carries on onto another sheet there, or it's an edge the alien can hold.
 // A door opens for whoever comes, so a door's polygons get no cells, but for its floor, and no part of a door is in anyone's way.
 //
-// WHAT IT DOESN'T DO YET (the plan's later steps, AvP-docs/engine/unified-npc-grid-plan.md): a room marked as an air duct, where a marine
+// WHAT IT DOESN'T DO YET (the later steps of the plan for one grid every NPC shares, #145): a room marked as an air duct, where a marine
 // crawls at 1200; lifts, which come from the game's modules; the two-layer search a big level needs; and spreading a search over frames.
 // Search here looks at a set number of cells in one go, to prove the cells join up, in tests and in the node copy.
 //
@@ -51,7 +51,7 @@
 // HOW MUCH THIS CAN TAKE. The polygons come from a level file, which comes from outside the game (AvP Tao #3). So every count has a limit, and
 // memory has two ceilings: what the grid keeps, which is the per-level cap the "advanced AI" setting raises, and what it holds while it's
 // building. Over any of them, Build gives back why, in words, and keeps no grid. Each limit is well above what the stock levels need,
-// measured with no game running on all 63 of them (AvP-docs, engine/pathfinding-study/npc-grid.js).
+// measured with no game running on all 63 of them, by a node.js copy of this build.
 #ifndef NPC_GRID_H
 #define NPC_GRID_H
 
@@ -96,7 +96,7 @@ int const kNpcGridSideSlack = 300;           // how far behind a sheet's plane a
 
 // THE KIND OF A JOIN, for an alien's search. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109, "corners repel").
 // The owner: "Can vertices/corners be repellers so it chooses a better path?" Secondary's read of the owner's own play
-// (AvP-docs\engine\rehearsal\2026-11-11-owner-play\START-STUCKS-secondary.md) found this. 14 aliens were stuck where their way started:
+// (his log of 2026-11-11, on genshd1) found this. 14 aliens were stuck where their way started:
 // - 12 of them heading across an OUTSIDE edge: a lip, a wall's top, an outside corner;
 // - 2 heading onto a face hidden under another;
 // - none at an inside corner.
@@ -148,7 +148,7 @@ struct NpcGridLimits
 	size_t mostSquareTests;         // 100,000,000: polygons tried against a marine's square, in all (1,214,323, on Genshd1)
 	size_t mostLinks;               // 20,000,000: each way of each link counts, before the ones found twice are taken out (932,556 after, on Derelict)
 	size_t mostFalls;               // 200,000 (4,526)
-	size_t mostBytesKept;           // the cap: everything the grid keeps. 64 MB, or 250 MB with "advanced AI" (17.3 MB, on Genshd1)
+	size_t mostBytesKept;           // the cap: everything the grid keeps. 64 MB, or 250 MB with "advanced AI" (47.1 MB on Genshd1, the most of the 43 levels the game can start, in the game, 2026-11-11)
 	size_t mostBytesBuilding;       // 128 MB: the lists it makes while building, which it lets go of when it's done (not yet measured in C++)
 };
 

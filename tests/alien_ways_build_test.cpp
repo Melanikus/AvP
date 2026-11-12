@@ -305,7 +305,7 @@ static void SourceOfTheGame()
 	Check(Has(level, "up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);"), "SOURCE: and every stored facing is turned in 64 bits");
 	Check(Has(level, "extern SCENE Global_Scene;"), "SOURCE: the listing says which scene is loaded the way the game's own files do (the Game build needs it)");
 
-	// HOSTILE MAPS D (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md): the listing's own
+	// HOSTILE MAPS D (added 2026-11-11 by Melanikus (Third) for the AvP port, #109, what a made-up level can do): the listing's own
 	// cap, kAlienWaysMostListed. It can't be run here, as it reads the game's own shapes, so it's read. Each of the three loops that add to
 	// the list (a shape's polygons, the level's modules, its still objects) stops once the list is past the cap, and the count is checked
 	// after every polygon added, one at a time. So the list never holds more than one polygon past the cap. A listing past it is let go of,

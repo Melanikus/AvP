@@ -101,7 +101,7 @@ int const kAlienWaysNoHeadwayFor = 900;           // ...and with none for this m
 int const kAlienWaysRestAfterStuck = 1000;        // ...and the game's own code steers it for this many ms before it asks again
 int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
 
-// Modified 2026-11-11 by Melanikus (Third) for the AvP port: THE CLOCK and THE WATCHDOG (#109; PO's ruling R-LAVA-P3, in AvP-docs\RULINGS.md).
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port: THE CLOCK and THE WATCHDOG (#109; PO's ruling R-LAVA-P3).
 //
 // THE CLOCK. Until now, every new way started the no-headway clock again. A way is searched for again whenever its goal moves 3 m, which is
 // every half second or so when the marine runs. So an alien stuck at one spot kept getting new ways, and was never found stuck. In the

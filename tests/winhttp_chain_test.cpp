@@ -16,7 +16,7 @@
 //   sent, and gives up the call, with its own words, when neither can be set.
 //
 // WHAT IT CAN'T SHOW: that a fetch named by a certificate really doesn't happen. That needs a TLS server whose certificate names an
-// address on this PC, and a count of what that address hears (AvP-docs\tools\secondary\f1-chain\, run in lane G by PO's word).
+// address on this PC, and a count of what that address hears (Secondary's own listener, run by hand on a PC set up for it).
 //
 // HOW IT RUNS: tests/build.ps1 compiles this with tests/winhttp_chain_test.args. It gives back a non-zero result if any check failed.
 

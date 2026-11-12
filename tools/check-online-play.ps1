@@ -17,8 +17,8 @@ that on every pull request and before every release, and refuses either if it is
 does, nothing here is loosened to let a change through.
 
 HOW IT KNOWS. The game's own code is 3dc and win32. It reads the code as text, with the comments taken out, and it's strict about forms:
-code written another way is refused, never guessed at. The forms are the ones the code has (AvP-docs' beta2-online-rule.md and
-issue-175-servers-cfg.md say why), and each refusal names its rule:
+code written another way is refused, never guessed at. The forms are the ones the code has, and each refusal
+names its rule, which says why it matters:
 D. -dev decides nothing online: DevMode isn't named in the network's own files (networking, relay_*, net_*, servers_cfg*).
 N. No name is looked up: no call that turns a name into an address, anywhere. Web calls are only in 3dc/relay_list.cpp, and they go
    only to the list's server the list was started with.

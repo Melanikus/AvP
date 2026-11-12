@@ -255,7 +255,7 @@ static void TestTheIds()
 		&& AlienWaysStuck_LeavesLine(1, NameOf(kName), -1) == "alien ways: alien 1 (id 0a1b2c3d4e5f6071) leaves the guide: an unknown reason",
 		"a reason that isn't one of them is said to be unknown, and nothing past the list is read");
 
-	// The forms Primary's count reads (AvP-docs\tools\primary\stuck\stuck-count.js), so a change here that it can't read fails here first
+	// The forms Primary's count reads (Primary's counting script for films, which reads these lines), so a change here that it can't read fails here first
 	std::regex const reached("^alien ways: alien (\\d+) \\(id [0-9a-f]{16}\\) reached its target, ([0-9.]+) s after its first way, at ([0-9.]+) m$");
 	std::regex const leaves("^alien ways: alien (\\d+) \\(id [0-9a-f]{16}\\) leaves the guide: (dead|gone|far|target gone)$");
 	Check(std::regex_match(AlienWaysStuck_ReachedLine(2, NameOf(kName), 3000, 2.0), reached) && std::regex_match(AlienWaysStuck_LeavesLine(2, NameOf(kName), kAlienWaysLeavesFar), leaves),

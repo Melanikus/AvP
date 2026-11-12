@@ -1,8 +1,8 @@
 // A grid on every surface of a level, for every kind of NPC: issue #145, step 1. What it is and why is in npc_grid.h.
 // Written 2026-11-08 by Melanikus for the AvP port.
 //
-// The build is the node copy's (AvP-docs, engine/pathfinding-study/npc-grid.js), step for step, in the game's numbers (y goes down), so the
-// numbers measured there on the 63 stock levels are this code's.
+// The build follows, step for step, a node.js copy that was written first to measure it with no game running, in the game's numbers (y
+// goes down), so the numbers measured with that copy on the 63 stock levels are this code's.
 #include "npc_grid.h"
 #include "npc_grid_smooth.h"
 

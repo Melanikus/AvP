@@ -884,7 +884,7 @@ static void RelayRandomBytes(uint8_t *bytes, size_t count)
 
 // ---- PROTOCOL VERSION 2'S CHANNEL TO THE RELAY: handshake A, then the sealed control channel (step 7; CRYPTO.md sections 6, 7 and 12.1,
 // net_relay_v2.h). Added 2026-11-09 by Melanikus for the AvP port. Every relay game since #175 PR 3a.
-// The rules (AvP-docs/engine/v2-step7-design.md, agreed with Primary):
+// The rules (step 7 of protocol version 2's design, agreed with Primary):
 //   - Keys before anything. A relay is used only once its keys have come from the list, proved by its server's servers.cfg line together
 //     with the list's own key (relay_list.h; modified 2026-11-10 by Melanikus for the AvP port, #175, in place of -dev's RelayKey). Until
 //     then nothing, not even the cookie round, is sent to it.

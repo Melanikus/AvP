@@ -1,7 +1,7 @@
 // The host page's rules, with nothing of the game's in them, so a test can try every case (host_page_test). Written 2026-11-11 by
 // Melanikus for the AvP port (beta.2). host_page.h says what the page is for.
 //
-// THE OWNER'S RULINGS IT CARRIES (AvP-docs RULINGS.md, his words):
+// THE OWNER'S RULINGS IT CARRIES (his own words, as PO keeps them):
 //   R-SRV-5 "Their friends will make servers and they will choose their friends' server", "Not 'least'" [ping]: the player chooses, and
 //           the rows are in servers.cfg's order, never sorted by ping.
 //   R-SRV-6 "No auto choice, they choose": the page opens with nothing chosen, its first row is the page's own question, which chooses

@@ -1990,7 +1990,7 @@ static void DoorRule()
 	Check(!AlienWays_DoorLetsAnAlienThrough(static_cast<AlienWaysDoorKind>(7), false, true), "a kind that isn't one of them is taken as shut");
 }
 
-// HOSTILE MAPS B (added 2026-11-11 by Melanikus (Third) for the AvP port, #109; AvP-docs\engine\plan-hostile-maps.md). On the grid, a search
+// HOSTILE MAPS B (added 2026-11-11 by Melanikus (Third) for the AvP port, #109, what a made-up level can do). On the grid, a search
 // that looks at kAlienWaysGridMostLooks cells without reaching its goal gives up and says so, and the same alien's next search goes to the
 // map at once (Primary's fallback). So a level made too big for the grid's search still has its ways. No other test here gives the guide
 // a grid at all.

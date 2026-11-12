@@ -3508,8 +3508,8 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: or the next level starts");
 }
 
-// Added 2026-11-09 by Melanikus for the AvP port: THE CHANNEL TO THE RELAY (protocol version 2's draft, step 7; AvP-docs/engine/
-// v2-step7-design.md, agreed with Primary). Since #175 PR 3a, in every game:
+// Added 2026-11-09 by Melanikus for the AvP port: THE CHANNEL TO THE RELAY (protocol version 2's draft, step 7, agreed
+// with Primary). Since #175 PR 3a, in every game:
 // - a relay is used only once its keys have come from the list, which hands over only keys the server's servers.cfg line has proved
 //   (modified 2026-11-10, #175), and until then it's sent nothing at all;
 // - every version 1 message to the relay goes sealed, through the session, and only messages the session opened are read;

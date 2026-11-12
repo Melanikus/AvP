@@ -448,7 +448,7 @@ Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-
 # --- Hudson, the team's test bot, has been in the game since 2026-11-09 (the owner: "Hudson goes into avpx_main"), and a player's game must
 # never run any of it. check-hudson-asleep.ps1 proves that. Each way it can be broken is refused, for its own reason, and each way Hudson's
 # code is written to stay asleep is let through. The smallest Hudson that passes: a run turned on only by both words and the folder check,
-# and one way in that starts asleep. The same cases were tried by hand with AvP-docs' hudson_asleep_cases.js on 2026-11-09: 28 right.
+# and one way in that starts asleep. The same cases were tried by hand with a separate script of the same cases on 2026-11-09: 28 right.
 # Modified 2026-11-10 by Melanikus for the AvP port (#212): eight more, marked (#212). Until then a line counted as a declaration by its
 # shape alone, so "return", "else" or "do" in front of a call or a write let it through, and a comment after a declaration made it a call.
 $hudsonGood = @{
