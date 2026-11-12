@@ -146,7 +146,8 @@ int const kAlienWaysReplansWithin = 60000;        // ms: a minute
 // THE POUNCE (the owner's R-LAVA-11, 2026-11-11, #109): "if I wanted to kill me, I would've pounced in range instead of following the
 // beautiful path", "Pounce from the wall when in range", "Maybe 4~5 meters", and "We still want it following paths". So a standard
 // alien with the alien ways on pounces at its target the moment it's between kAlienWaysPounceNearest (1999's own ALIEN_POUNCE_MINRANGE:
-// nearer, its attack has it) and kAlienWaysPounceRange, in 1999's own line of sight, from the floor or a wall, before its way and before
+// nearer, its attack has it) and kAlienWaysPounceRange, in 1999's own line of sight, from the floor or a wall (or a ceiling: THE CEILING
+// LEAP, below), before its way and before
 // 1999's own pounce. Further off, it follows its way. It's 1999's pounce (bh_near.cpp) without its 25% election and without its rule
 // that a pounce starts from a flat floor, and a new one waits kAlienWaysPounceCoolDown after the last began. In his own play (genshd1,
 // 2026-11-11), 9 of the 13 aliens handed over to 1999's code were on a wall or a ceiling, where 1999's pounce never starts.
@@ -155,10 +156,25 @@ int const kAlienWaysPounceNearest = 3000;         // mm, ALIEN_POUNCE_MINRANGE (
 int const kAlienWaysPounceRange = 4500;           // mm
 int const kAlienWaysPounceCoolDown = 2000;        // ms
 
-// Whether an alien pounces now, by THE POUNCE's rules: its distance from its target, in mm; its body's down, for what it's on (a floor
-// or a wall, not a ceiling); whether it's touching what it's on, or sliding; and the ms since its last such pounce began, or -1 for
+// Whether an alien pounces now, by THE POUNCE's rules: its distance from its target, in mm; its body's down, for what it's on (a floor,
+// a wall, or a ceiling, from which it's THE CEILING LEAP below); whether it's touching what it's on, or sliding; and the ms since its last such pounce began, or -1 for
 // none. The game asks 1999's other rules after: its line of sight, its legs, its wounds and the rest (bh_near.cpp).
 bool AlienWays_PouncesNow(int distanceMm, AlienWaysXYZ down, bool touching, long long msSinceLastPounce);
+
+// THE CEILING LEAP (the owner's pick, 2026-11-11, #109: "A new downward leap"). From a ceiling, 1999's pounce would jump at least a
+// little upwards (ApplyPounceImpulse: "Must jump at least a little bit upwards"), which is into the ceiling. So THE POUNCE from a ceiling
+// leaps at once, along the line to its target, with at least kAlienWaysCeilingLeapLeastDown of it going down and none of it up. Gravity
+// is back on, the body rights itself and turns to face its target in the air, and collisions stay on. 1999 never had it. Added
+// 2026-11-11 by Melanikus (Third) for the AvP port.
+int const kAlienWaysCeilingLeapLeastDown = 10000;  // in 65536ths of the leap's speed: at least this much of it goes down (+y)
+
+// The leap from a ceiling at a target: speed, in the game's units, along the line from from to to, with at least
+// kAlienWaysCeilingLeapLeastDown of it downwards and its way across kept. With no line to its target, or its target straight above,
+// straight down.
+AlienWaysXYZ AlienWays_CeilingLeap(AlienWaysXYZ from, AlienWaysXYZ to, int speed);
+
+// What surface a body's down says it's on (an AlienWaysKind), or -1 with no down: the guide's own reading of it, for the game's side
+int AlienWays_KindUnder(AlienWaysXYZ down);
 
 int const kAlienWaysHandOverRange = 8000;         // mm
 int const kAlienWaysTakeBackRange = 10000;        // mm

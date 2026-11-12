@@ -1082,9 +1082,44 @@ int AlienWays_FloorPriceFor(AlienWaysXYZ at, AlienWaysXYZ goal, bool goalIsTheTa
 bool AlienWays_PouncesNow(int distanceMm, AlienWaysXYZ down, bool touching, long long msSinceLastPounce)
 {
 	int const kind = KindUnder(down);
-	bool const onAFloorOrAWall = kind == kAlienWaysFloor || kind == kAlienWaysWall;
+	bool const onASurface = kind >= 0;   // a floor, a wall, or a ceiling (THE CEILING LEAP)
 	bool const rested = msSinceLastPounce < 0 || msSinceLastPounce >= kAlienWaysPounceCoolDown;
-	return distanceMm >= kAlienWaysPounceNearest && distanceMm <= kAlienWaysPounceRange && onAFloorOrAWall && touching && rested;
+	return distanceMm >= kAlienWaysPounceNearest && distanceMm <= kAlienWaysPounceRange && onASurface && touching && rested;
+}
+
+// THE CEILING LEAP (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+AlienWaysXYZ AlienWays_CeilingLeap(AlienWaysXYZ from, AlienWaysXYZ to, int speed)
+{
+	double x = static_cast<double>(to.x) - from.x, y = static_cast<double>(to.y) - from.y, z = static_cast<double>(to.z) - from.z;
+	double const length = sqrt(x * x + y * y + z * z);
+
+	if (!(length > 0.0))
+	{
+		return AlienWaysXYZ{ 0, speed, 0 };
+	}
+
+	x /= length;
+	y /= length;
+	z /= length;
+	double const leastDown = kAlienWaysCeilingLeapLeastDown / 65536.0;
+
+	// Never up, into the ceiling: at least so much of it down, with its way across kept, so it still goes at its target. A target straight
+	// above has no way across, so it's straight down.
+	if (y < leastDown)
+	{
+		double const across = sqrt(x * x + z * z);
+		double const keep = across > 0.0 ? sqrt(1.0 - leastDown * leastDown) / across : 0.0;
+		x *= keep;
+		z *= keep;
+		y = across > 0.0 ? leastDown : 1.0;
+	}
+
+	return AlienWaysXYZ{ static_cast<int>(lround(x * speed)), static_cast<int>(lround(y * speed)), static_cast<int>(lround(z * speed)) };
+}
+
+int AlienWays_KindUnder(AlienWaysXYZ down)
+{
+	return KindUnder(down);
 }
 
 void AlienWaysGuide::UseGrid(NpcGrid *to)

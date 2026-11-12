@@ -108,6 +108,7 @@ namespace
 
 		// THE POUNCE (alien_ways_guide.h): when its last pounce began, in the level's time; -1 for none
 		long long pouncedMs = -1;
+		bool ceilingLeap = false;   // and whether that pounce began on a ceiling (THE CEILING LEAP)
 	};
 
 	Watched watched[kAlienWaysMostFollowers];
@@ -1402,10 +1403,12 @@ void AlienWays_PounceStarts(STRATEGYBLOCK *alien, int distanceToTarget)
 	theGuide.Forget(who);      // nothing steers it in the air: the pounce is 1999's from here
 
 	Watched *const w = WatchedFor(who, true);
+	AlienWaysXYZ const down = { alien->DynPtr->OrientMat.mat21, alien->DynPtr->OrientMat.mat22, alien->DynPtr->OrientMat.mat23 };
 
 	if (w)
 	{
 		w->pouncedMs = clockMs;
+		w->ceilingLeap = AlienWays_KindUnder(down) == kAlienWaysCeiling;
 	}
 
 	if (pounceLines < kAlienWaysMostPounceLines)
@@ -1413,11 +1416,36 @@ void AlienWays_PounceStarts(STRATEGYBLOCK *alien, int distanceToTarget)
 		pounceLines++;
 		DYNAMICSBLOCK const *const d = alien->DynPtr;
 		char words[200];
-		snprintf(words, sizeof(words), " pounces at its target %.1f m away, from (%.1f, %.1f, %.1f), its body's down (%d, %d, %d)",
+		snprintf(words, sizeof(words), " pounces at its target %.1f m away, from (%.1f, %.1f, %.1f), its body's down (%d, %d, %d)%s",
 			distanceToTarget / 1000.0, d->Position.vx / 1000.0, d->Position.vy / 1000.0, d->Position.vz / 1000.0, d->OrientMat.mat21, d->OrientMat.mat22,
-			d->OrientMat.mat23);
+			d->OrientMat.mat23, w && w->ceilingLeap ? ": a leap down from a ceiling" : "");
 		LogString("alien ways: " + AlienWaysStuck_Who(SlotOf(who), who.name) + words);
 	}
+}
+
+// THE CEILING LEAP (alien_ways_guide.h). Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+bool AlienWays_LeapsFromTheCeiling(STRATEGYBLOCK *alien)
+{
+	if (!alien || !AlienWays_On())
+	{
+		return false;
+	}
+
+	Watched const *const w = WatchedFor(WhoIs(alien), false);
+	return w && w->ceilingLeap && w->pouncedMs >= 0 && clockMs - w->pouncedMs < kAlienWaysPounceCoolDown;
+}
+
+void AlienWays_CeilingLeapImpulse(const VECTORCH *from, const VECTORCH *to, int speed, VECTORCH *impulse)
+{
+	if (!from || !to || !impulse)
+	{
+		return;
+	}
+
+	AlienWaysXYZ const leap = AlienWays_CeilingLeap(AlienWaysXYZ{ from->vx, from->vy, from->vz }, AlienWaysXYZ{ to->vx, to->vy, to->vz }, speed);
+	impulse->vx = leap.x;
+	impulse->vy = leap.y;
+	impulse->vz = leap.z;
 }
 
 bool AlienWays_PounceIsOurs(STRATEGYBLOCK *alien)

@@ -2212,12 +2212,44 @@ static void ThePounce()
 	Check(AlienWays_PouncesNow(kAlienWaysPounceRange, onTheFloor, true, -1) && !AlienWays_PouncesNow(kAlienWaysPounceRange + 1, onTheFloor, true, -1),
 		"out to 4.5 m, and no further: past that it follows its way");
 	Check(AlienWays_PouncesNow(4000, onAWall, true, -1), "it pounces from a wall too");
-	Check(!AlienWays_PouncesNow(4000, onTheCeiling, true, -1), "but not from a ceiling");
+	Check(AlienWays_PouncesNow(4000, onTheCeiling, true, -1), "and from a ceiling, as a leap down (THE CEILING LEAP)");
 	Check(!AlienWays_PouncesNow(4000, onTheFloor, false, -1), "nor when it isn't touching what it's on (a sliding alien counts as touching)");
 	Check(!AlienWays_PouncesNow(4000, AlienWaysXYZ{ 0, 0, 0 }, true, -1), "nor with no down to say what it's on");
 	Check(!AlienWays_PouncesNow(4000, onTheFloor, true, kAlienWaysPounceCoolDown - 1) && AlienWays_PouncesNow(4000, onTheFloor, true, kAlienWaysPounceCoolDown),
 		"and a new pounce waits 2 s after the last one began");
 	Check(kAlienWaysPounceNearest == 3000 && kAlienWaysPounceRange == 4500 && kAlienWaysPounceCoolDown == 2000, "the owner's numbers: from 3 m to 4.5 m, 2 s apart");
+}
+
+// THE CEILING LEAP (alien_ways_guide.h; the owner's pick, 2026-11-11, #109: "A new downward leap"). Added 2026-11-11 by Melanikus (Third)
+// for the AvP port. From a ceiling, the pounce leaps down at its target, never up into the ceiling.
+static void TheCeilingLeap()
+{
+	printf("The ceiling leap: down at its target, never up into the ceiling\n");
+	int const speed = 25000;                          // 1999's ALIEN_JUMP_SPEED (bh_alien.h)
+	AlienWaysXYZ const onTheCeiling = { 0, -3000, 0 };
+	auto const size = [](AlienWaysXYZ v) { return sqrt(static_cast<double>(v.x) * v.x + static_cast<double>(v.y) * v.y + static_cast<double>(v.z) * v.z); };
+
+	// Its target 3 m across and 3 m below (y goes down): along the line, as much down as across, at the speed asked
+	AlienWaysXYZ const below = AlienWays_CeilingLeap(onTheCeiling, AlienWaysXYZ{ 3000, 0, 0 }, speed);
+	Check(below.y > 0 && below.x > 0 && below.z == 0 && Near(below.x, below.y, 2.0) && Near(size(below), speed, 2.0),
+		"a target 3 m across and 3 m below: the leap goes straight along the line to it, down and across (" + std::to_string(below.x) + ", "
+		+ std::to_string(below.y) + ")");
+
+	// Its target level with it: 1999's leap would go up, into the ceiling; this one goes down, the least it may, and still across at it
+	AlienWaysXYZ const level = AlienWays_CeilingLeap(onTheCeiling, AlienWaysXYZ{ 4000, -3000, 0 }, speed);
+	int const least = static_cast<int>(lround(speed * (kAlienWaysCeilingLeapLeastDown / 65536.0)));
+	Check(level.y >= least - 1 && level.y <= least + 1 && level.x > 0 && Near(size(level), speed, 2.0),
+		"a target level with it: still down, never up into the ceiling, and still across at it (" + std::to_string(level.x) + ", " + std::to_string(level.y) + ")");
+
+	// Above it, or no line at all: straight down
+	Check(AlienWays_CeilingLeap(onTheCeiling, AlienWaysXYZ{ 0, -6000, 0 }, speed).y == speed && AlienWays_CeilingLeap(onTheCeiling, onTheCeiling, speed).y == speed,
+		"a target straight above it, or no line at all: straight down");
+
+	// What a body's down says it's on, as the game's side reads it to tell a ceiling's pounce
+	Check(AlienWays_KindUnder(AlienWaysXYZ{ 0, -65536, 0 }) == kAlienWaysCeiling && AlienWays_KindUnder(AlienWaysXYZ{ 0, 65536, 0 }) == kAlienWaysFloor
+		&& AlienWays_KindUnder(AlienWaysXYZ{ 65536, 0, 0 }) == kAlienWaysWall && AlienWays_KindUnder(AlienWaysXYZ{ 0, 0, 0 }) == -1,
+		"a body's down says ceiling, floor or wall, or nothing with no down");
+	Check(kAlienWaysCeilingLeapLeastDown == 10000, "at least 10000 of 65536 of the leap goes down");
 }
 
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
@@ -2572,6 +2604,25 @@ static void SourceOfTheGame()
 		Check(minRange != std::string::npos && bhAlien.substr(minRange, bhAlien.find('\n', minRange) - minRange).find("(3000)") != std::string::npos,
 			"SOURCE: the pounce's nearest is 1999's own ALIEN_POUNCE_MINRANGE, 3 m");
 	}
+
+	// THE CEILING LEAP, the game's side (added 2026-11-11 by Melanikus (Third) for the AvP port, #109)
+	{
+		std::string const pounceState = Between(near, "static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+		Check(ComesBefore(pounceState, "\t\tif (alienStatusPointer->Target && alienStatusPointer->Target->SBdptr && AlienWays_LeapsFromTheCeiling(sbPtr)) {\n\t\t\tApplyCeilingLeapImpulse(sbPtr);\n",
+			"\t\t/* Still tweening? */\n"),
+			"SOURCE: a pounce from a ceiling leaps at once, before 1999's wait to face its target");
+		Check(ComesBefore(pounceState, "\t\tif (alienStatusPointer->Target && AlienWays_LeapsFromTheCeiling(sbPtr)) {\n",
+			"\t\t/* We must be in the pounce.  Can't break out of this until the anim finishes. */\n")
+			&& Has(pounceState, "\t\t\tNPCOrientateToVector(sbPtr, &towards, NPC_TURNRATE, NULL);\n"),
+			"SOURCE: and turns to face its target in the air");
+		std::string const leapImpulse = Between(near, "static void ApplyCeilingLeapImpulse(STRATEGYBLOCK *sbPtr) {", "\n}\n");
+		Check(Has(leapImpulse, "speed=MUL_FIXED(ALIEN_JUMP_SPEED,GetAlienSpeedFactor_ForSequence(sbPtr,HMSQT_AlienRun,(int)ARSS_Standard));")
+			&& Has(leapImpulse, "AlienWays_CeilingLeapImpulse(&dynPtr->Position, &targetPoint, speed, &dynPtr->LinImpulse);"),
+			"SOURCE: at 1999's own leap speed, by the leap's sums above");
+		Check(Has(ways, "\t\tw->ceilingLeap = AlienWays_KindUnder(down) == kAlienWaysCeiling;\n")
+			&& Has(ways, "return w && w->ceilingLeap && w->pouncedMs >= 0 && clockMs - w->pouncedMs < kAlienWaysPounceCoolDown;"),
+			"SOURCE: a pounce that began on a ceiling is a ceiling leap, for as long as the cool-down");
+	}
 	Check(Has(ways, "case kAlienWaysOutcomeHandedOver:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: %s at %s is %.1f m from its target at %s, in clear sight"),
 		"SOURCE: the log says when an alien is handed over, and how far from its target");
 	Check(Has(ways, "ask.targetInSight = IsThisObjectVisibleFromThisPosition_WithIgnore(alien->SBdptr, target->SBdptr, &targetPoint, NPC_MAX_VIEWRANGE) != 0;"),
@@ -2662,6 +2713,7 @@ int main()
 	TooFarOnTheGrid();
 	TheNearFloor();
 	ThePounce();
+	TheCeilingLeap();
 	StepsMade();
 	SourceOfTheGame();
 

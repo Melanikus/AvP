@@ -2515,8 +2515,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "distanceMm <= kAlienWaysPounceRange && onAFloorOrAWall",
-					"to": "distanceMm <= kAlienWaysPounceRange + 1000 && onAFloorOrAWall"
+					"from": "distanceMm <= kAlienWaysPounceRange && onASurface",
+					"to": "distanceMm <= kAlienWaysPounceRange + 1000 && onASurface"
 				}
 			]
 		},
@@ -2531,22 +2531,12 @@
 			]
 		},
 		{
-			"name": "the pounce comes from a ceiling too (THE POUNCE)",
-			"changes": [
-				{
-					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "bool const onAFloorOrAWall = kind == kAlienWaysFloor || kind == kAlienWaysWall;",
-					"to": "bool const onAFloorOrAWall = kind >= 0;"
-				}
-			]
-		},
-		{
 			"name": "the pounce comes without touching anything (THE POUNCE)",
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "onAFloorOrAWall && touching && rested;",
-					"to": "onAFloorOrAWall && rested;"
+					"from": "onASurface && touching && rested;",
+					"to": "onASurface && rested;"
 				}
 			]
 		},
@@ -2557,6 +2547,56 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "msSinceLastPounce >= kAlienWaysPounceCoolDown;",
 					"to": "msSinceLastPounce >= 0;"
+				}
+			]
+		},
+		{
+			"name": "the pounce comes with nothing under it (THE CEILING LEAP)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tbool const onASurface = kind >= 0;   // a floor, a wall, or a ceiling (THE CEILING LEAP)\n",
+					"to": "\tbool const onASurface = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ceiling leap waits to face its target first (THE CEILING LEAP)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (alienStatusPointer->Target && alienStatusPointer->Target->SBdptr && AlienWays_LeapsFromTheCeiling(sbPtr)) {\n",
+					"to": "\t\tif (false) {\n"
+				}
+			]
+		},
+		{
+			"name": "the ceiling leap may go up into the ceiling (THE CEILING LEAP)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (y < leastDown)\n\t{\n",
+					"to": "\tif (false)\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ceiling leap doesn't turn in the air (THE CEILING LEAP)",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (alienStatusPointer->Target && AlienWays_LeapsFromTheCeiling(sbPtr)) {\n",
+					"to": "\t\tif (false) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pounce from a ceiling isn't a ceiling leap (THE CEILING LEAP)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tw->ceilingLeap = AlienWays_KindUnder(down) == kAlienWaysCeiling;\n",
+					"to": "\t\tw->ceilingLeap = false;\n"
 				}
 			]
 		}

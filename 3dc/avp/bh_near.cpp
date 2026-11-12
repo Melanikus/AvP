@@ -877,7 +877,8 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 
 	// THE POUNCE (alien_ways.h; the owner's R-LAVA-11, 2026-11-11: "if I wanted to kill me, I would've pounced in range instead of
 	// following the beautiful path"). A standard alien with the alien ways on pounces at its target the moment it's close, in a clear line
-	// of sight, from the floor or a wall: before its way, and before 1999's own pounce below. Added 2026-11-11 by Melanikus (Third) for
+	// of sight, from the floor, a wall or a ceiling (a leap down: THE CEILING LEAP): before its way, and before 1999's own pounce below.
+	// Added 2026-11-11 by Melanikus (Third) for
 	// the AvP port, #109.
 	if ((alienStatusPointer->Type == AT_Standard) && AlienWays_PounceNow(sbPtr, distanceToPlayer) && StartAlienWaysPounce(sbPtr, distanceToPlayer)) {
 		return;
@@ -2742,6 +2743,21 @@ static void ApplyPounceImpulse(STRATEGYBLOCK *sbPtr) {
 
 }
 
+// THE CEILING LEAP's impulse (alien_ways.h): 1999's speed for a standard alien's leap, by how fast it can run (as ApplyPounceImpulse
+// has it), along the line to its target's middle, with none of it up (AlienWays_CeilingLeapImpulse). Added 2026-11-11 by Melanikus
+// (Third) for the AvP port, #109.
+static void ApplyCeilingLeapImpulse(STRATEGYBLOCK *sbPtr) {
+
+	ALIEN_STATUS_BLOCK *alienStatusPointer=(ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+	VECTORCH targetPoint;
+	int speed;
+
+	GetTargetingPointOfObject(alienStatusPointer->Target->SBdptr,&targetPoint);
+	speed=MUL_FIXED(ALIEN_JUMP_SPEED,GetAlienSpeedFactor_ForSequence(sbPtr,HMSQT_AlienRun,(int)ARSS_Standard));
+	AlienWays_CeilingLeapImpulse(&dynPtr->Position, &targetPoint, speed, &dynPtr->LinImpulse);
+}
+
 static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 {
 	ALIEN_STATUS_BLOCK *alienStatusPointer;
@@ -2760,6 +2776,15 @@ static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 	/* NearStateTimer is a status flag. */
 
 	if (alienStatusPointer->NearStateTimer==0) {
+		// THE CEILING LEAP (alien_ways.h): from a ceiling the alien ways' pounce leaps at once, down at its target, without waiting to face
+		// it, as 1999's leap would go up into the ceiling. Added 2026-11-11 by Melanikus (Third) for the AvP port, #109.
+		if (alienStatusPointer->Target && alienStatusPointer->Target->SBdptr && AlienWays_LeapsFromTheCeiling(sbPtr)) {
+			ApplyCeilingLeapImpulse(sbPtr);
+			alienStatusPointer->HModelController.Playing=1;
+			alienStatusPointer->NearStateTimer=1;
+			return;
+		}
+
 		/* Still tweening? */
 		if (alienStatusPointer->HModelController.Tweening==Controller_NoTweening) {
 			/* We've finished!  Are we facing right? */
@@ -2789,6 +2814,15 @@ static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)
 			CheckPounceIntegrity(sbPtr);
 		}
 	} else {
+		// THE CEILING LEAP turns to face its target in the air, as its body rights itself (added 2026-11-11 by Melanikus (Third), #109)
+		if (alienStatusPointer->Target && AlienWays_LeapsFromTheCeiling(sbPtr)) {
+			VECTORCH towards;
+			towards.vx = alienStatusPointer->Target->DynPtr->Position.vx - sbPtr->DynPtr->Position.vx;
+			towards.vy = 0;
+			towards.vz = alienStatusPointer->Target->DynPtr->Position.vz - sbPtr->DynPtr->Position.vz;
+			NPCOrientateToVector(sbPtr, &towards, NPC_TURNRATE, NULL);
+		}
+
 		/* We must be in the pounce.  Can't break out of this until the anim finishes. */
 
 		if ((alienStatusPointer->HModelController.Tweening==Controller_NoTweening)

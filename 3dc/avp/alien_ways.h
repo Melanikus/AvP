@@ -142,6 +142,12 @@ void AlienWays_PounceStarts(struct strategyblock *alien, int distanceToTarget);
 // (CheckPounceIntegrity, bh_near.cpp), as from a wall it often is
 bool AlienWays_PounceIsOurs(struct strategyblock *alien);
 
+// THE CEILING LEAP (alien_ways_guide.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109): whether this alien's pounce is
+// the alien ways' own and began on a ceiling, within kAlienWaysPounceCoolDown; and the leap's impulse at a target, speed along the line
+// from from to to, none of it up (AlienWays_CeilingLeap)
+bool AlienWays_LeapsFromTheCeiling(struct strategyblock *alien);
+void AlienWays_CeilingLeapImpulse(const struct vectorch *from, const struct vectorch *to, int speed, struct vectorch *impulse);
+
 // The guide's place for this alien: the N of the log's "alien N" lines, so another line can name the same alien. -1 when it has none, and
 // with the switch off. A place is given again once its alien is let go, so it names an alien only together with when. Added 2026-11-11 by
 // Melanikus (Third) for the AvP port, for Hudson's per-alien lines (#109).
