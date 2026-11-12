@@ -309,8 +309,38 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/online_page.cpp",
-					"from": "\tif (!RelayList_PlaysOnline())\n",
-					"to": "\tif (RelayList_PlaysOnline())\n"
+					"from": "\tif (!RelayList_PlaysOnline())\n\t{\n",
+					"to": "\tif (RelayList_PlaysOnline())\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games loads or makes this PC's identity all the same",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (!RelayList_PlaysOnline())\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n",
+					"to": "\t\tif (RelayList_PlaysOnline() && false)\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays online never loads this PC's identity",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\tif (!RelayList_PlaysOnline())\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a build that plays no online games makes a new identity when asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/online_page.cpp",
+					"from": "\t\t\tif (!RelayList_PlaysOnline())\n\t\t\t{\n\t\t\t\t*page = AVPMENU_ONLINE;\n\t\t\t\treturn true;\n\t\t\t}\n",
+					"to": ""
 				}
 			]
 		}

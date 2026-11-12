@@ -54,6 +54,16 @@ namespace
 	// couldn't be used waits for the player's yes on the question page: nothing here replaces it.
 	void TakeTheIdentity(void)
 	{
+		// A build that plays no online games never loads or makes this PC's identity: it's a private key on disk the game would never use
+		// (Tao 1). One kept by an earlier build stays as it is, unread. Added 2026-11-11 by Melanikus for the AvP port: online off in
+		// beta.2 (the owner's ruling R-GOAL-9), and PO's call.
+		if (!RelayList_PlaysOnline())
+		{
+			haveIdentity = false;
+			ourCode[0] = '\0';
+			return;
+		}
+
 		haveIdentity = Net_OurIdentity(ourStatics, ourFingerprint);
 
 		if (haveIdentity)
@@ -430,6 +440,13 @@ bool OnlineLines_Pressed(int row, enum AVPMENU_ID *page)
 
 		case kOnlineNewIdentityYes:
 		{
+			// Never in a build that plays no online games (TakeTheIdentity says why). Its row isn't there then, so this is a second lock.
+			if (!RelayList_PlaysOnline())
+			{
+				*page = AVPMENU_ONLINE;
+				return true;
+			}
+
 			// Every line's answer this run was about the old identity, so they're forgotten first, and every line is "not asked" again. While
 			// a request is still on its way, nothing is made: its answer would come back about an identity this PC no longer has.
 			if (!RelayList_ForgetAccess())

@@ -349,6 +349,16 @@ int main()
 	std::string const onlinePageOpened = Slice(online, "bool OnlineLines_Opened(AVPMENU_ELEMENT *rows, int room)\n{", "\n}\n");
 	Check(Has(onlinePageOpened, "\tif (lineCount > 0)\n\t{\n\t\trows[row++] = name;\n\t\trows[row++] = copy;\n\t\trows[row++] = newIdentity;\n\t}\n\n\trows[row++] = back;\n") &&
 		Count(onlinePageOpened, "rows[row++] =") == 5, "and its rows are only Back: the name to send, Copy access code and Make a new identity come only with a server");
+	// AND IT NEITHER LOADS NOR MAKES THIS PC'S IDENTITY (PO's call, 2026-11-11, Tao 1): a private key on disk it would never use. Every way
+	// the pages reach it asks first, and nothing else on them calls the identity's two doors. With online play the identity is loaded as before.
+	std::string const take = Slice(online, "\tvoid TakeTheIdentity(void)\n\t{", "\n\t}\n");
+	size_t const takeGate = take.find("\t\tif (!RelayList_PlaysOnline())\n\t\t{\n\t\t\thaveIdentity = false;\n\t\t\tourCode[0] = '\\0';\n\t\t\treturn;\n\t\t}\n");
+	Check(takeGate != std::string::npos && takeGate < take.find("\t\thaveIdentity = Net_OurIdentity(ourStatics, ourFingerprint);\n") && Count(online, "Net_OurIdentity(") == 1,
+		"WITHOUT ONLINE PLAY the pages never load or make this PC's identity; with it, they load it as before");
+	std::string const makeNew = Slice(online, "\t\tcase kOnlineNewIdentityYes:\n\t\t{", "\n\t\t}\n");
+	size_t const makeGate = makeNew.find("\t\t\tif (!RelayList_PlaysOnline())\n\t\t\t{\n\t\t\t\t*page = AVPMENU_ONLINE;\n\t\t\t\treturn true;\n\t\t\t}\n");
+	Check(makeGate != std::string::npos && makeGate < makeNew.find("Net_MakeNewIdentity()") && Count(online, "Net_MakeNewIdentity(") == 1,
+		"and a new identity is never made without online play, even if its question were reached");
 	Check(Has(FileText("3dc/avp/language.cpp"), "\t\"servers.cfg isn't used:\",\n\t\"This version of the game plays no online games: online play comes in a later beta.\",\n") &&
 		Has(FileText("3dc/avp/langenum.h"), "\tTEXTSTRING_SERVERS_FILE_NOT_USED,        // before the game's words for why no line is used (RelayList_FileWords)\n"
 		"\tTEXTSTRING_ONLINE_OFF,"), "and those words are \"This version of the game plays no online games: online play comes in a later beta.\", in their id's place");
