@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a link doesn't join the cells it's between",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "Unite(c, links[k]);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a fall doesn't join the cells it's between",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "Unite(c, falls[k]);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "where a fall lands isn't marked as a cell the body can be on",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "fallTarget[falls[k]] = 1;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a fall onto a cell past the grid is marked anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\t\tif (falls[k] < cells)\n\t\t\t{\n\t\t\t\tfallTarget[falls[k]] = 1;",
+					"to": "\t\t\t{\n\t\t\t\tfallTarget[falls[k]] = 1;"
+				}
+			]
+		},
+		{
+			"name": "a fall onto a cell past the grid joins anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\t\t\t\tif (falls[k] < cells)\n\t\t\t\t\t{\n\t\t\t\t\t\tUnite(c, falls[k]);",
+					"to": "\t\t\t\t\t{\n\t\t\t\t\t\tUnite(c, falls[k]);"
+				}
+			]
+		},
+		{
+			"name": "a step joins a cell the body can't be on",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "if (!(nHas || (cHas && CanBeOn(grid, n))))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a step is only joined from the cell it starts on, not back",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "if (!(nHas || (cHas && CanBeOn(grid, n))))",
+					"to": "if (!nHas)"
+				}
+			]
+		},
+		{
+			"name": "a corner doesn't join",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "int const offsets[4][2] = { { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };",
+					"to": "int const offsets[4][2] = { { 1, 0 }, { 1, 0 }, { 0, 1 }, { 0, 1 } };"
+				}
+			]
+		},
+		{
+			"name": "a piece's first cell points at a higher one",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\tif (ra < rb)\n\t\t{\n\t\t\tparent[rb] = ra;",
+					"to": "\t\tif (ra < rb)\n\t\t{\n\t\t\tparent[ra] = rb;"
+				}
+			]
+		},
+		{
+			"name": "a cell the body can't be on is numbered as a piece of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\tif (!CanBeOn(grid, c))\n\t\t{\n\t\t\tparent[c] = kNoPiece;\n\t\t}\n\t\telse if (parent[c] == c)",
+					"to": "\t\tif (parent[c] == c)"
+				}
+			]
+		},
+		{
+			"name": "the smallest pieces are numbered first",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "return size[a] != size[b] ? size[a] > size[b] : a < b;",
+					"to": "return size[a] != size[b] ? size[a] < size[b] : a < b;"
+				}
+			]
+		},
+		{
+			"name": "two pieces of the same size go the other way round",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "return size[a] != size[b] ? size[a] > size[b] : a < b;",
+					"to": "return size[a] != size[b] ? size[a] > size[b] : a > b;"
+				}
+			]
+		},
+		{
+			"name": "every piece is numbered, however many there are",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "size_t const known = std::min(mostKnown, pieces);",
+					"to": "size_t const known = pieces;"
+				}
+			]
+		},
+		{
+			"name": "a piece that isn't known can be called apart",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "return pa != kNpcGridPieceNotKnown && pb != kNpcGridPieceNotKnown && pa != pb;",
+					"to": "return pa != pb;"
+				}
+			]
+		},
+		{
+			"name": "the memory it's allowed isn't kept to",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "now + count * sizeof(T) > mostBytes",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a grid that changes while it works isn't noticed",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "if (grid.Cells() != cells)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a piece is known before it's done",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "return stage == kDone && cell < labels.size() ? labels[cell] : kNpcGridPieceNotKnown;",
+					"to": "return cell < labels.size() ? labels[cell] : kNpcGridPieceNotKnown;"
+				}
+			]
+		},
+		{
+			"name": "what it used on the way isn't let go of when it's done",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\t\tFree();\n\t\t\tstage = kDone;",
+					"to": "\t\t\tstage = kDone;"
+				}
+			]
+		},
+		{
+			"name": "no body isn't refused",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid_pieces.h",
+					"from": "\t\tif (bodyBit == 0)\n\t\t{\n\t\t\treturn GiveUp(\"no body was named\");\n\t\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

@@ -34,7 +34,23 @@ bool Save_TextureSequenceIsValid(const int *animationList, int sequence);
 bool Save_NumberIsInRange(int number, int lowest, int highest);
 
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
-void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
+// canHold says which of the level's walls and its gravity a save of this kind can hold off (THE WALLS AND GRAVITY A SAVE CAN HOLD, below).
+//
+// THE WALLS AND GRAVITY A SAVE CAN HOLD. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109 and SAVE-HOSTILE-1; Secondary's plan for
+// floor is lava, section 6, and Primary's row D1, as PO ruled). A dynamics block says whether the level's walls stop the object
+// (OnlyCollideWithObjects: 1 is "they don't") and whether gravity pulls it (GravityOn). A save that turns the walls off lets the object go
+// through the level for as long as it lives, out of every room, which nothing in the game expects of a body. One that turns the gravity
+// off leaves it hanging in the air. So a save may hold either one off only where the object's own kind turns it off while it plays:
+// - kSaveHoldsNeitherOff: its kind never turns either off, so a save of it can't either. An alien (only the alien ways' slide turns both
+//   off for a moment, and the slide isn't saved, so a save taken mid-slide would have brought it back through walls), a predator, a
+//   xenoborg, a sentry gun, a lift, a corpse, debris and the grappling hook.
+// - kSaveHoldsGravityOff: its kind turns its gravity off (a facehugger's leap, a flare, the player, a marine, an object the queen throws),
+//   so its save keeps the gravity it says, but never the walls off.
+// - kSaveHoldsWallsAndGravityOff: 1999's queen, who turns both off while she climbs out of her pit (bh_queen.cpp). Her save keeps both.
+// Whatever a save can't hold, the object keeps as it was made, and the save's value is counted as refused. A game saved while an alien slid
+// is counted so too: its slide can't go on after a load, as the alien ways keep nothing in a save.
+enum { kSaveHoldsNeitherOff = 0, kSaveHoldsGravityOff = 1, kSaveHoldsWallsAndGravityOff = 3 };
+void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved, int canHold);
 
 // A target a loader found by a name from the save: kept only if it has a place in the world (its dynamics), which the NPC or the disc
 // reads every frame it has a target. The name can be anything in the level's, such as a placed sound's, which has none. Nothing goes in,

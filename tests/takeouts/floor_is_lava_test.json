@@ -1,0 +1,118 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "nothing typed after it no longer switches it",
+			"changes": [
+				{
+					"file": "3dc/avp/floor_is_lava.h",
+					"from": "*on = *on ? 0 : 1;",
+					"to": "*on = 1;"
+				}
+			]
+		},
+		{
+			"name": "OFF turns it on",
+			"changes": [
+				{
+					"file": "3dc/avp/floor_is_lava.h",
+					"from": "\t\t*on = 0;\n\t}\n\telse if (SwitchWords_Are(start, length, \"1\")",
+					"to": "\t\t*on = 1;\n\t}\n\telse if (SwitchWords_Are(start, length, \"1\")"
+				}
+			]
+		},
+		{
+			"name": "words it doesn't know are taken as ON",
+			"changes": [
+				{
+					"file": "3dc/avp/floor_is_lava.h",
+					"from": "\telse\n\t{\n\t\treturn false;\n\t}",
+					"to": "\telse\n\t{\n\t\t*on = 1;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "the spaces round the words aren't left out",
+			"changes": [
+				{
+					"file": "3dc/avp/floor_is_lava.h",
+					"from": "\t\tSwitchWords_Trim(words, &start, &length);",
+					"to": "\t\tstart = words;\n\t\tfor (length = 0; words[length]; length++) {}"
+				}
+			]
+		},
+		{
+			"name": "the lines say the opposite of what it is",
+			"changes": [
+				{
+					"file": "3dc/avp/floor_is_lava.h",
+					"from": "return on ? \"FLOORISLAVA ON",
+					"to": "return !on ? \"FLOORISLAVA ON"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command takes any words without the rule",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "bool const took = FloorIsLava_FromWords(words, &FloorIsLavaAsked);",
+					"to": "bool const took = true; FloorIsLavaAsked = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in a level, the screen doesn't say it counts from the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "_snprintf(fromNext, sizeof(fromNext) - 1, \"%s\", kFloorIsLavaFromTheNextLevel);",
+					"to": "fromNext[0] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command is a cheat",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\t\tFloorIsLavaCommand\n\t);",
+					"to": "\t\tFloorIsLavaCommand,\n\t\ttrue\n\t);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's start doesn't take what was asked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tAlienWaysSwitchedOn = FloorIsLavaAsked ? 1 : 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what's asked starts on before the flip",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int FloorIsLavaAsked = 0;",
+					"to": "int FloorIsLavaAsked = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -dev -alienways no longer asks for the ways at a level's start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tFloorIsLavaAsked = 1;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

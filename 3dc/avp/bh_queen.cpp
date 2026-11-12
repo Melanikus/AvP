@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save keeps the queen's walls and gravity as it says, as she turns both off climbing out of her pit
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
 //   simply skipped;
@@ -5305,7 +5308,7 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsWallsAndGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

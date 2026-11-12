@@ -1,3 +1,6 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls off for the player; the gravity is as saved, as the player's moves turn it off
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a player dying when the game has no block left for a corpse still dies, and everyone hears of it
 // Modified 2026-11-05 by Melanikus for the AvP port:
@@ -2224,7 +2227,7 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	}
 
 	//strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

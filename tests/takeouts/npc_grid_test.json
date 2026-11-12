@@ -1,0 +1,723 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "with no map, a grid is built anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (!map.Ready())",
+					"to": "if (false && !map.Ready())"
+				}
+			]
+		},
+		{
+			"name": "a stop that was asked for is never seen",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\treturn stopAsked.load();\n}",
+					"to": "\treturn false;\n}"
+				}
+			]
+		},
+		{
+			"name": "a refused build keeps what it had made",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "const char *NpcGrid::Fail(const char *why)\n{\n\tLetGo();\n\treturn why;",
+					"to": "const char *NpcGrid::Fail(const char *why)\n{\n\treturn why;"
+				}
+			]
+		},
+		{
+			"name": "a byte past the ceiling while building is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "bytes > limits.mostBytesBuilding - bytesBuilding)",
+					"to": "bytes > limits.mostBytesBuilding - bytesBuilding + 1)"
+				}
+			]
+		},
+		{
+			"name": "a polygon with no area is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (g.area < 1.0)",
+					"to": "if (g.area < 0.0)"
+				}
+			]
+		},
+		{
+			"name": "a door's panel is in the way",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "g.blocks = p.door == 0;",
+					"to": "g.blocks = true;"
+				}
+			]
+		},
+		{
+			"name": "a door's panel gets cells",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "g.sheet = (p.door == 0 || map.KindOf(number) == kAlienWaysFloor) ? 0 : -1;",
+					"to": "g.sheet = 0;"
+				}
+			]
+		},
+		{
+			"name": "polygons facing the same way are never one sheet",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "Dot(P.n, Q.n) < kNpcGridSameFacing)",
+					"to": "Dot(P.n, Q.n) < 2.0)"
+				}
+			]
+		},
+		{
+			"name": "polygons in different planes are one sheet",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (fabs(Dot(P.n, Q.middle) - P.d) > kNpcGridSamePlane || fabs(Dot(Q.n, P.middle) - Q.d) > kNpcGridSamePlane)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "one sheet more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (members.size() >= limits.mostSheets)",
+					"to": "if (members.size() > limits.mostSheets)"
+				}
+			]
+		},
+		{
+			"name": "a floor's first axis is worked out as a wall's",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (fabs(n[1]) >= 0.5)",
+					"to": "if (fabs(n[1]) >= 2.0)"
+				}
+			]
+		},
+		{
+			"name": "a sheet one cell over its most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (w * h > static_cast<double>(limits.mostCellsInASheet))",
+					"to": "if (w * h > static_cast<double>(limits.mostCellsInASheet) + 1.0)"
+				}
+			]
+		},
+		{
+			"name": "one cell more than the most in all is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "> limits.mostCells - cells)",
+					"to": "> limits.mostCells - cells + 1)"
+				}
+			]
+		},
+		{
+			"name": "a byte over the cap for the cells is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (bytesKept > limits.mostBytesKept)\n\t{\n\t\treturn Fail(\"the grid would keep too much memory, for its cells\");",
+					"to": "if (bytesKept > limits.mostBytesKept + 1)\n\t{\n\t\treturn Fail(\"the grid would keep too much memory, for its cells\");"
+				}
+			]
+		},
+		{
+			"name": "a byte over the cap for the links is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (more > limits.mostBytesKept - std::min(limits.mostBytesKept, bytesKept) || bytesKept > limits.mostBytesKept)",
+					"to": "if (more > limits.mostBytesKept - std::min(limits.mostBytesKept, bytesKept) + 1 || bytesKept > limits.mostBytesKept)"
+				}
+			]
+		},
+		{
+			"name": "a floor's cell has to be wholly covered",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (fabs(twice) / 2.0 >= kNpcGridLeastCover)",
+					"to": "if (fabs(twice) / 2.0 >= kNpcGridCell * kNpcGridCell)"
+				}
+			]
+		},
+		{
+			"name": "a wall's cells are counted as covered too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (s.kind != kAlienWaysFloor || (flags[at] & kNpcGridCoveredOnly))",
+					"to": "if ((flags[at] & kNpcGridCoveredOnly))"
+				}
+			]
+		},
+		{
+			"name": "a covered cell keeps its mark when another polygon has its middle",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "flags[at] = static_cast<uint8_t>((flags[at] & ~kNpcGridCoveredOnly) | kNpcGridMiddleOn);",
+					"to": "flags[at] |= kNpcGridMiddleOn;"
+				}
+			]
+		},
+		{
+			"name": "room is rounded up",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "room[c] = static_cast<uint8_t>(std::min(255.0, floor(best / kNpcGridRoomStep)));",
+					"to": "room[c] = static_cast<uint8_t>(std::min(255.0, ceil(best / kNpcGridRoomStep)));"
+				}
+			]
+		},
+		{
+			"name": "a ray hits the plane it starts on",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (t <= 5.0 || t >= best)",
+					"to": "if (t <= -1.0 || t >= best)"
+				}
+			]
+		},
+		{
+			"name": "a ray's hit counts anywhere on a polygon's plane",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (Inside(corners, q.corners, 3, A, B, hit[A], hit[B]))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "one ray test more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (++rayTests > limits.mostRayTests)",
+					"to": "if (++rayTests > limits.mostRayTests + 1)"
+				}
+			]
+		},
+		{
+			"name": "no links along the joins",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (sa < 0 || sb < 0 || sa == sb || !map.Joined(static_cast<int>(a), b, &from, &to))",
+					"to": "if (true || sa < 0 || sb < 0 || sa == sb || !map.Joined(static_cast<int>(a), b, &from, &to))"
+				}
+			]
+		},
+		{
+			"name": "links past the most are let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (links->size() + 2 > most)",
+					"to": "if (links->size() + 2 > most + 1000000)"
+				}
+			]
+		},
+		{
+			"name": "a marine's square reaches down to his feet",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double const high[3] = { q[0] + half, q[1] - (kNpcGridStep + 1), q[2] + half };",
+					"to": "double const high[3] = { q[0] + half, q[1] + 1, q[2] + half };"
+				}
+			]
+		},
+		{
+			"name": "a marine is 200 shorter",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double const low[3] = { q[0] - half, q[1] - (kNpcGridStandHeight - 1), q[2] - half };",
+					"to": "double const low[3] = { q[0] - half, q[1] - (kNpcGridStandHeight - 201), q[2] - half };"
+				}
+			]
+		},
+		{
+			"name": "a marine's square is 300 across, not 900",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "int const half = kNpcGridStandHalf - 1;",
+					"to": "int const half = kNpcGridStandHalf - 301;"
+				}
+			]
+		},
+		{
+			"name": "a cell only covered is never stood on",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (!(flags[c] & (kNpcGridMiddleOn | kNpcGridCoveredOnly)))",
+					"to": "if (!(flags[c] & kNpcGridMiddleOn))"
+				}
+			]
+		},
+		{
+			"name": "no floor is steep",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "bool const steep = -s.n[1] < kNpcGridNearlyFlat;",
+					"to": "bool const steep = false;"
+				}
+			]
+		},
+		{
+			"name": "a marine walks up a steep floor",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (searchBody == kNpcGridMarine && ((flags[n] | flags[c]) & kNpcGridSteep) && b[1] < a[1])",
+					"to": "if (searchBody == kNpcGridMarine && ((flags[n] | flags[c]) & kNpcGridSteep) && b[1] < a[1] - 1e9)"
+				}
+			]
+		},
+		{
+			"name": "an alien needs 2 m of room",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (least * kNpcGridRoomStep >= kNpcGridClingRoom)",
+					"to": "if (least * kNpcGridRoomStep >= 2000)"
+				}
+			]
+		},
+		{
+			"name": "an alien clings to a cell that is only covered",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\t\tif (!(flags[c] & kNpcGridMiddleOn))\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n\n\t\t\t\tint least = 255;",
+					"to": "\t\t\t\tint least = 255;"
+				}
+			]
+		},
+		{
+			"name": "no steps between columns side by side",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "> 1.5 * kNpcGridCell || fabs(r[1] - q[1]) > kNpcGridStep)",
+					"to": "> 0.5 * kNpcGridCell || fabs(r[1] - q[1]) > kNpcGridStep)"
+				}
+			]
+		},
+		{
+			"name": "a step of up to 600 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "> 1.5 * kNpcGridCell || fabs(r[1] - q[1]) > kNpcGridStep)",
+					"to": "> 1.5 * kNpcGridCell || fabs(r[1] - q[1]) > 600)"
+				}
+			]
+		},
+		{
+			"name": "a fall lands one column out, not two",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double const x = q[0] + dx * 2, z = q[2] + dz * 2;",
+					"to": "double const x = q[0] + dx * 1, z = q[2] + dz * 1;"
+				}
+			]
+		},
+		{
+			"name": "a fall of more than 400 is too far",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "m[1] - y < kNpcGridMostFall",
+					"to": "m[1] - y < 400"
+				}
+			]
+		},
+		{
+			"name": "one fall more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (falls.size() >= limits.mostFalls || !CountBuilding(sizeof(Pair)))",
+					"to": "if (falls.size() > limits.mostFalls || !CountBuilding(sizeof(Pair)))"
+				}
+			]
+		},
+		{
+			"name": "one square test more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (++grid.squareTests > grid.limits.mostSquareTests)",
+					"to": "if (++grid.squareTests > grid.limits.mostSquareTests + 1)"
+				}
+			]
+		},
+		{
+			"name": "the columns of boxes aren't counted first",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (across > static_cast<double>(limits.mostBoxEntries - columns))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "one polygon in a box more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (count > limits.mostBoxEntries - entries)",
+					"to": "if (count > limits.mostBoxEntries - entries + 1)"
+				}
+			]
+		},
+		{
+			"name": "an alien's floor costs as much as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double price = searchBody == kNpcGridAlien && KindOf(cell) == kAlienWaysFloor ? searchPrice : 1.0;",
+					"to": "double price = 1.0;"
+				}
+			]
+		},
+		{
+			"name": "a search looks at one more cell than allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (searchLooks >= searchMostLooks)",
+					"to": "if (searchLooks > searchMostLooks)"
+				}
+			]
+		},
+		{
+			"name": "a marine never falls in a search",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (searchBody == kNpcGridMarine)\n\t\t{\n\t\t\tlist = FallsOf(c, &count);",
+					"to": "if (false)\n\t\t{\n\t\t\tlist = FallsOf(c, &count);"
+				}
+			]
+		},
+		{
+			"name": "a point well behind a surface still counts as on it",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (!(out >= -kNpcGridSideSlack && out <= bestFar))",
+					"to": "if (!(out >= -1e9 && out <= bestFar))"
+				}
+			]
+		},
+		{
+			"name": "a body only looks at the 3 x 3 round the cell under it",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "int const round = std::min(kNpcGridMostLookRound, std::max(1, static_cast<int>(ceil(bestFar / kNpcGridCell))));",
+					"to": "int const round = 1;"
+				}
+			]
+		},
+		{
+			"name": "a way is never pulled straight",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (keptCount >= 2)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a way's polygons leave out its middle points",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\twayPolygons.push_back(PolygonOf(path[k]));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Clear keeps the links",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tGiveBack(&linkTo);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Clear keeps the count of cells on the surface",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tsurfaceCells = steps = rayTests = squareTests = boxEntries = 0;",
+					"to": "\tsteps = rayTests = squareTests = boxEntries = 0;"
+				}
+			]
+		},
+		{
+			"name": "the usual cap is 250 MB without advanced AI too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "(advancedAI ? 250u : 64u)",
+					"to": "(advancedAI ? 250u : 250u)"
+				}
+			]
+		},
+		{
+			"name": "a search between pieces that don't join isn't refused",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (body == kNpcGridAlien && pieces.CertainlyApart(from, to))",
+					"to": "if (false && pieces.CertainlyApart(from, to))"
+				}
+			]
+		},
+		{
+			"name": "the pieces aren't counted in what the grid keeps",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tbytesKept += pieces.BytesKept();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an alien's way pays nothing more to cross an outside edge",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice :",
+					"to": "extra = join == kNpcGridJoinOutside ? 0.0 :"
+				}
+			]
+		},
+		{
+			"name": "an alien's way pays nothing more onto a hidden face",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "(join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0)",
+					"to": "(join == kNpcGridJoinThrough ? 0.0 : 0.0)"
+				}
+			]
+		},
+		{
+			"name": "an alien's search never looks at the kind of a join",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tif (searchBody == kNpcGridAlien)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);",
+					"to": "\t\t\tif (false)\n\t\t\t{\n\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);"
+				}
+			]
+		},
+		{
+			"name": "a hidden face is refused, not priced",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);\n",
+					"to": "\t\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[firstLink + k]);\n\n\t\t\t\tif (join == kNpcGridJoinThrough)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "sheets facing the same way are sorted too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (!(Dot(A.n, B.n) < kNpcGridJoinSameWay))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the slack is so wide that no join is sorted",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "double const slack = kNpcGridJoinSlack;",
+					"to": "double const slack = 100000.0;"
+				}
+			]
+		},
+		{
+			"name": "a join with a middle in front is taken as outside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tif (bSide >= 0 && aSide >= 0)\n\t{\n\t\treturn kNpcGridJoinInside;",
+					"to": "\tif (bSide >= 0 && aSide >= 0)\n\t{\n\t\treturn kNpcGridJoinOutside;"
+				}
+			]
+		},
+		{
+			"name": "a join with both middles behind is taken as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tif (bSide <= 0 && aSide <= 0)\n\t{\n\t\treturn kNpcGridJoinOutside;",
+					"to": "\tif (bSide <= 0 && aSide <= 0)\n\t{\n\t\treturn kNpcGridJoinInside;"
+				}
+			]
+		},
+		{
+			"name": "a join onto a hidden face is taken as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\treturn kNpcGridJoinOutside;\n\t}\n\n\treturn kNpcGridJoinThrough;\n}",
+					"to": "\t\treturn kNpcGridJoinOutside;\n\t}\n\n\treturn kNpcGridJoinInside;\n}"
+				}
+			]
+		},
+		{
+			"name": "the grid counts no outside joins",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "outsideJoins += join == kNpcGridJoinOutside ? 1 : 0;",
+					"to": "outsideJoins += 0;"
+				}
+			]
+		},
+		{
+			"name": "the grid counts no joins onto hidden faces",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "throughJoins += join == kNpcGridJoinThrough ? 1 : 0;",
+					"to": "throughJoins += 0;"
+				}
+			]
+		},
+		{
+			"name": "the grid counts each join twice, once each way",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\tif (linkFrom[k] < linkTo[k])\n",
+					"to": "\t\tif (linkFrom[k] != linkTo[k])\n"
+				}
+			]
+		},
+		{
+			"name": "a join's links take the sheet's nearest cell, not the joined polygon's own",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "(behind ? 2 : 0) + (grid.polygonOf[c] == polygon ? 0 : 1);",
+					"to": "(behind ? 2 : 0);"
+				}
+			]
+		},
+		{
+			"name": "at a point join, a cell behind the other polygon's face is taken as readily as one in front",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tconst Sheet *const facingA = atAPoint ? &sheets[static_cast<size_t>(sb)] : nullptr;\n",
+					"to": "\t\t\tconst Sheet *const facingA = nullptr;\n"
+				},
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tconst Sheet *const facingB = atAPoint ? &sheets[static_cast<size_t>(sa)] : nullptr;\n",
+					"to": "\t\t\tconst Sheet *const facingB = nullptr;\n"
+				}
+			]
+		},
+		{
+			"name": "a step carries its two cells' kind",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "!Add::Both(&links, limits.mostLinks, c, o, kNpcGridJoinPlain))",
+					"to": "!Add::Both(&links, limits.mostLinks, c, o, JoinOf(c, o)))"
+				}
+			]
+		},
+		{
+			"name": "a join's links carry no kind",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "!Add::Both(&links, limits.mostLinks, ca, cb, JoinOf(ca, cb)))",
+					"to": "!Add::Both(&links, limits.mostLinks, ca, cb, kNpcGridJoinPlain))"
+				}
+			]
+		},
+		{
+			"name": "the grid counts every link by its cells, steps too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tNpcGridJoin const join = static_cast<NpcGridJoin>(linkJoin[k]);\n",
+					"to": "\t\t\tNpcGridJoin const join = JoinOf(linkFrom[k], linkTo[k]);\n"
+				}
+			]
+		},
+		{
+			"name": "step 7 makes no links where two polygons only touch at a point",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\tbool const atAPoint = length < static_cast<double>(kAlienWaysTouch);\n",
+					"to": "\t\t\tbool const atAPoint = length < static_cast<double>(kAlienWaysTouch);\n\n\t\t\tif (atAPoint)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a cell behind the other face ranks with one in front",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\t\t\t\t\tint const rank = (behind ? 2 : 0) + (grid.polygonOf[c] == polygon ? 0 : 1);\n",
+					"to": "\t\t\t\t\tint const rank = (grid.polygonOf[c] == polygon ? 0 : 1);\n"
+				}
+			]
+		}
+	]
+}

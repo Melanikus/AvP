@@ -176,6 +176,7 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "pvisible.h"
 #include "pheromone.h"
 #include "pfarlocs.h"
+#include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -402,6 +403,11 @@ static bool watchHasLastPlace = false;
 static LONG watchMillimetres[3] = { 0, 0, 0 };   // how far it went on each kind of surface, by WatchSurface
 static LONG watchReachedMilliseconds = -1;       // how long after it was made its first blow landed, or -1
 static LONG watchRoomsSeeEachOther = -1;         // 1 if his room and the alien's are the same or either is visible from the other when it's made, 0 if not, -1 before
+static char watchAlienName[SB_NAME_LENGTH];      // the watched alien's own name, so only its own blows count as its (added 2026-11-11, Third)
+static bool watchAlienNamed = false;
+// The alien whose claw is landing right now (Hudson_AlienStrikes), or none: set just before its damage and cleared just after, on the game's
+// thread, so a blow is put down to the alien that struck it (added 2026-11-11 by Melanikus (Third) for the AvP port)
+static const STRATEGYBLOCK *strikingAlien = 0;
 
 static const char *const kWatchSurfaceWords[3] = { "floor", "wall", "ceiling" };
 static volatile LONG enemyState = kEnemyNotMade;
@@ -3622,6 +3628,8 @@ static void WatchTheAlienStarts(const STRATEGYBLOCK *marine, const STRATEGYBLOCK
 	watchStartedAt = GetTickCount();
 	watchFirstBlowAt = 0;
 	watchSecondsLogged = 0;
+	memcpy(watchAlienName, alien->SBname, sizeof(watchAlienName));
+	watchAlienNamed = true;
 	watchHasLastPlace = false;
 	InterlockedExchange(&watchMillimetres[kWatchFloor], 0);
 	InterlockedExchange(&watchMillimetres[kWatchWall], 0);
@@ -4225,6 +4233,25 @@ static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)
 	}
 }
 
+// An alien's own name, as the game keeps it (8 bytes), in hex, and the alien ways guide's place for it (the "alien N" of their lines), or -1
+static void AlienWords(const STRATEGYBLOCK *alien, char *out, size_t room)
+{
+	unsigned char const *const name = reinterpret_cast<unsigned char const *>(alien->SBname);
+	_snprintf(out, room - 1, "alien %02x%02x%02x%02x%02x%02x%02x%02x (alien ways' %d)", name[0], name[1], name[2], name[3], name[4], name[5], name[6], name[7],
+		AlienWays_PlaceOf(alien));
+	out[room - 1] = 0;
+}
+
+void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)
+{
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	strikingAlien = alien;
+}
+
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 {
 	if (!HudsonRunIsOn)
@@ -4247,7 +4274,11 @@ void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 	LONG const blows = InterlockedIncrement(&blowsOnHim);
 
 	// A watched alien has reached him. The run goes on for a few seconds, so that the film shows it, and then ends: see WatchTheAlien.
-	if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)
+	// Modified 2026-11-11 by Melanikus (Third) for the AvP port: only the watched alien's own claw counts (strikingAlien, by its name), never
+	// any blow after it was made: a level's own alien had clawed him 50 m from the watched one, and the watch took that as its first blow.
+	bool const theWatchedAliensOwn = strikingAlien && watchAlienNamed && NAME_ISEQUAL(strikingAlien->SBname, watchAlienName);
+
+	if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)
 	{
 		watchFirstBlowAt = GetTickCount();
 		InterlockedExchange(&watchReachedMilliseconds, (LONG)(watchFirstBlowAt - watchStartedAt));
@@ -4260,9 +4291,15 @@ void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 
 	if (blows <= kBlowsToLog)
 	{
-		char line[120] = { 0 };
+		char line[200] = { 0 };
+		char who[80] = "no alien's claw";
 
-		_snprintf(line, sizeof(line) - 1, "hudson: blow %ld landed on him at frame %ld, of kind %d. He has %d health", blows, framesDone, kind, block->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		if (strikingAlien)
+		{
+			AlienWords(strikingAlien, who, sizeof(who));
+		}
+
+		_snprintf(line, sizeof(line) - 1, "hudson: blow %ld landed on him at frame %ld, of kind %d, by %s. He has %d health", blows, framesDone, kind, who, block->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 		LogString(line);
 	}
 }
@@ -6529,12 +6566,219 @@ void Hudson_MoveHimOnFoot(const VECTORCH &place)
 	MoveThePlayerTo(place);
 }
 
+// ---- EVERY ALIEN THAT CAME FOR HIM, in a run where he plays a level himself (play=yes). Added 2026-11-11 by Melanikus (Third) for the
+// AvP port, for #109's proof (the owner: the level's own aliens, as they wake near him, floor is lava against 1999). Each alien that takes
+// him as its target gets lines of its own, by its own name (AlienWords), on the game's thread alone:
+//   "came": the frame it first took him as its target, whether it was near (drawn, bh_near) or far (bh_far) then, and how far from him;
+//   "first blow": its own first claw on him (Hudson_AlienStrikes says whose a claw is), seconds after "came", and its metres so far;
+//   "so far": every 30 seconds while it comes for him, its metres on floor, wall and ceiling (by where its gravity points, as the watch
+//   counts them), and its frames near and far;
+//   "gone": once it's no longer in the game (killed, or taken away), the same, for the last time.
+// A run can end between two lines; a reader takes each alien's last. The table holds the first kMostAliensComing; any after that are
+// counted, and the count is said.
+static int const kMostAliensComing = 64;
+static int const kAlienComingSecondsBetweenLines = 30;
+
+struct AlienComing
+{
+	char name[SB_NAME_LENGTH];    // its own name: the table never keeps a pointer to an alien, which may be gone by the next frame
+	LONG firstFrame;
+	DWORD firstTargeted;
+	DWORD firstBlow;              // 0 until its own first claw on him
+	DWORD lastLine;
+	bool nearAtFirst;
+	int metresApartAtFirst;
+	LONG nearFrames;
+	LONG farFrames;
+	LONG millimetres[3];          // by WatchSurface
+	VECTORCH last;
+	bool hasLast;
+	bool seen;                    // in the game's list this frame
+	bool gone;
+};
+
+static AlienComing aliensComing[kMostAliensComing];
+static int aliensComingCount = 0;
+static int aliensComingNotKept = 0;
+
+static AlienComing *AlienComingNamed(const char *name)
+{
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		if (NAME_ISEQUAL(aliensComing[i].name, name))
+		{
+			return &aliensComing[i];
+		}
+	}
+
+	return 0;
+}
+
+static void AlienComingLine(const AlienComing &coming, const STRATEGYBLOCK *alien, const char *what)
+{
+	char who[80] = "an alien";
+	char line[400] = { 0 };
+
+	if (alien)
+	{
+		AlienWords(alien, who, sizeof(who));
+	}
+	else
+	{
+		unsigned char const *const name = reinterpret_cast<unsigned char const *>(coming.name);
+		_snprintf(who, sizeof(who) - 1, "alien %02x%02x%02x%02x%02x%02x%02x%02x", name[0], name[1], name[2], name[3], name[4], name[5], name[6], name[7]);
+	}
+
+	char blow[64] = "no blow of its own yet";
+
+	if (coming.firstBlow)
+	{
+		_snprintf(blow, sizeof(blow) - 1, "its first blow %.1f s after it came", (coming.firstBlow - coming.firstTargeted) / 1000.0);
+		blow[sizeof(blow) - 1] = 0;
+	}
+
+	_snprintf(line, sizeof(line) - 1, "hudson: %s %s at frame %ld: came for him at frame %ld, %s, %d m from him; %s; floor %.1f m, wall %.1f m, ceiling %.1f m; frames near %ld, far %ld",
+		who, what, framesDone, coming.firstFrame, coming.nearAtFirst ? "near" : "far", coming.metresApartAtFirst, blow,
+		coming.millimetres[kWatchFloor] / 1000.0, coming.millimetres[kWatchWall] / 1000.0, coming.millimetres[kWatchCeiling] / 1000.0,
+		coming.nearFrames, coming.farFrames);
+	LogString(line);
+}
+
+// Once a frame of play=yes, on the game's thread: every alien in the game, and those that have him as their target
+static void TrackTheAliensComing(const STRATEGYBLOCK *him)
+{
+	if (!him)
+	{
+		return;
+	}
+
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		aliensComing[i].seen = false;
+	}
+
+	DWORD const now = GetTickCount();
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdataptr || !block->DynPtr)
+		{
+			continue;
+		}
+
+		ALIEN_STATUS_BLOCK const *const status = (const ALIEN_STATUS_BLOCK *)block->SBdataptr;
+		bool const forHim = status->Target == him;
+		AlienComing *coming = AlienComingNamed(block->SBname);
+
+		if (!coming && forHim)
+		{
+			if (aliensComingCount >= kMostAliensComing)
+			{
+				aliensComingNotKept++;
+				continue;
+			}
+
+			coming = &aliensComing[aliensComingCount++];
+			memset(coming, 0, sizeof(*coming));
+			memcpy(coming->name, block->SBname, sizeof(coming->name));
+			coming->firstFrame = framesDone;
+			coming->firstTargeted = now;
+			coming->lastLine = now;
+			coming->nearAtFirst = block->SBdptr != 0;
+			VECTORCH apart = { him->DynPtr->Position.vx - block->DynPtr->Position.vx, him->DynPtr->Position.vy - block->DynPtr->Position.vy,
+				him->DynPtr->Position.vz - block->DynPtr->Position.vz };
+			coming->metresApartAtFirst = Approximate3dMagnitude(&apart) / 1000;
+			AlienComingLine(*coming, block, "came");
+		}
+
+		if (!coming)
+		{
+			continue;
+		}
+
+		coming->seen = true;
+
+		if (!forHim)
+		{
+			coming->hasLast = false;
+			continue;
+		}
+
+		if (block->SBdptr)
+		{
+			coming->nearFrames++;
+		}
+		else
+		{
+			coming->farFrames++;
+		}
+
+		VECTORCH const here = block->DynPtr->Position;
+
+		if (coming->hasLast)
+		{
+			VECTORCH moved = { here.vx - coming->last.vx, here.vy - coming->last.vy, here.vz - coming->last.vz };
+			int const step = Approximate3dMagnitude(&moved);
+
+			if (step < kWatchMostInAFrame)
+			{
+				coming->millimetres[SurfaceItsOn(block->DynPtr)] += step;
+			}
+		}
+
+		coming->last = here;
+		coming->hasLast = true;
+
+		if (now - coming->lastLine >= (DWORD)kAlienComingSecondsBetweenLines * 1000u)
+		{
+			coming->lastLine = now;
+			AlienComingLine(*coming, block, "so far");
+		}
+	}
+
+	for (int i = 0; i < aliensComingCount; i++)
+	{
+		if (!aliensComing[i].seen && !aliensComing[i].gone)
+		{
+			aliensComing[i].gone = true;
+			AlienComingLine(aliensComing[i], 0, "gone");
+		}
+	}
+
+	static int notKeptSaid = 0;
+
+	if (aliensComingNotKept > notKeptSaid)
+	{
+		notKeptSaid = aliensComingNotKept;
+		char line[120] = { 0 };
+		_snprintf(line, sizeof(line) - 1, "hudson: %d aliens came for him after the first %d, and aren't followed one by one", aliensComingNotKept, kMostAliensComing);
+		LogString(line);
+	}
+}
+
+// A claw on him in play=yes (Hudson_NoteDamage): the alien that struck it has its first blow, if it's one being followed
+static void AlienComingStruck(const STRATEGYBLOCK *alien)
+{
+	AlienComing *const coming = AlienComingNamed(alien->SBname);
+
+	if (coming && !coming->firstBlow)
+	{
+		coming->firstBlow = GetTickCount();
+		AlienComingLine(*coming, alien, "first blow");
+	}
+}
+
 void Hudson_PlayInput(void *playerStatus)
 {
 	if (!HudsonRunIsOn || !plan.play || levelHasEnded)
 	{
 		return;
 	}
+
+	// Every alien that comes for him, one by one (added 2026-11-11 by Melanikus (Third) for the AvP port)
+	TrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);
 
 	static bool started = false;
 
@@ -10081,7 +10325,19 @@ static void Hudson_SiegeSayWhatWasTurnedAway()
 
 void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)
 {
-	if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target || (target->I_SBtype != I_BehaviourMarine && target->I_SBtype != I_BehaviourAutoGun))
+	if (!HudsonRunIsOn)
+	{
+		return;
+	}
+
+	// play=yes: a claw on him counts for the alien that struck it (Hudson_AlienStrikes), by its own name (added 2026-11-11 by Melanikus
+	// (Third) for the AvP port)
+	if (plan.play && strikingAlien && target && Player && target == Player->ObStrategyBlock)
+	{
+		AlienComingStruck(strikingAlien);
+	}
+
+	if (!plan.siegeRoom[0] || !target || (target->I_SBtype != I_BehaviourMarine && target->I_SBtype != I_BehaviourAutoGun))
 	{
 		return;
 	}

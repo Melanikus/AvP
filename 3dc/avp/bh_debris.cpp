@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for debris (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game, no debris is made once the blocks are down to what's kept back for this machine's own player
 //   a spent case thrown out of a gun, which is debris like any other
@@ -1725,7 +1727,7 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Bounce_Sound)
 
 	//copy strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -1898,7 +1900,7 @@ void LoadStrategy_Debris(/*SAVE_BLOCK_HEADER*/SAVE_BLOCK_STRATEGY_HEADER* header
 	}
 
 //strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 }

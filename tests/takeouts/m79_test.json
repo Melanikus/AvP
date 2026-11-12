@@ -409,7 +409,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/weapon_m79.cpp",
-					"from": "sbPtr->DynPtr->CollisionReportPtr = 0;\n",
+					"from": "\tSave_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);\n",
 					"to": ""
 				}
 			]

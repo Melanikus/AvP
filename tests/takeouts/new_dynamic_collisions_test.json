@@ -179,8 +179,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/game_commands.cpp",
-					"from": "\t\tNewOnScreenMessage(message);",
-					"to": "\t\t(void)message;"
+					"from": "started.\n\tif (AvP.MainLoopRunning)\n\t{\n\t\tNewOnScreenMessage(message);",
+					"to": "started.\n\tif (AvP.MainLoopRunning)\n\t{\n\t\t(void)message;"
 				}
 			]
 		},
@@ -189,8 +189,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/game_commands.cpp",
-					"from": "\tLogString(message);",
-					"to": "\t(void)message;"
+					"from": "\t\tNewOnScreenMessage(message);\n\t}\n\n\tLogString(message);",
+					"to": "\t\tNewOnScreenMessage(message);\n\t}\n\n\t(void)message;"
 				}
 			]
 		},

@@ -1566,7 +1566,7 @@ static void TestTheRealGame()
 		Check(Has(runPair, "if ($FilmMenus) { $words += '-FilmMenus' }") && Has(runPair, "if ($PageHold -ne 0) { $words += @('-PageHold', \"$PageHold\") }"),
 			"SOURCE: and the pair gives both games the same");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
-		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
+		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"), "SOURCE: its first blow on him is noted, its own alien's");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
 	}
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (aliensMade < plan.combatAliens)"), "the next alien comes until there have been as many as were asked for");
@@ -2090,7 +2090,8 @@ static void TestTourAndSharedMachine()
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($SiegeFar) { $words += @('-SiegeFar', $SiegeFar) }"), "and the pair passes it on");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "GLOBALASSERT(damage);\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "a blow on a whole thing is noted");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "frag=NULL;\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);"), "and so is a blow on a part of one");
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a siege");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;")
+		&& Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (!plan.siegeRoom[0] || !target ||"), "and the note does nothing outside a run, and its siege part nothing outside a siege");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_Hugger = TRUE;"), "a siege loads the facehugger's model");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "ForceLoad_SentryGun = TRUE;"), "and the sentry gun's");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "CreateSentrygun(&place, 0);"), "and the host makes the guns");
@@ -2741,11 +2742,38 @@ static void TestTheGridInTheGame()
 	Check(gridLevel.find("(module->m_flags & MODULEFLAG_AIRDUCT) != 0") != std::string::npos, "and a room marked as an air duct is where he crawls");
 }
 
+// Each alien's own blows (added 2026-11-11 by Melanikus (Third) for the AvP port, #109): a blow on him is put down to the alien whose claw it
+// is, by its name, and never to whichever alien a run watches; and in play=yes every alien that comes for him has lines of its own. Only the
+// game can show it works; these read the source for the lines it depends on.
+static void TestEachAliensOwnBlows()
+{
+	std::string const nearCode = ReadSourceFile("3dc/avp/bh_near.cpp");
+	std::string const hudson = ReadSourceFile("3dc/avp/hudson.cpp");
+	std::string const strikes = Between(hudson, "void Hudson_AlienStrikes(const STRATEGYBLOCK *alien)\n{", "\n}\n");
+	std::string const noted = Between(hudson, "void Hudson_NoteDamage(STRATEGYBLOCK *target, int ammunition)\n{", "\n}\n");
+	std::string const played = Between(hudson, "void Hudson_PlayInput(void *playerStatus)\n{", "static bool started = false;");
+
+	Check(Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);\n\n\t\t\t\t\tif (alienStatusPointer->Target->SBdptr->HModelControlBlock) {")
+		&& Has(nearCode, "\t\t\t\t\t}\n\n\t\t\t\t\tHudson_AlienStrikes(NULL);\n")
+		&& Has(nearCode, "\t\t\t\t\tHudson_AlienStrikes(sbPtr);   // Hudson's runs only, as above (added 2026-11-11 by Melanikus (Third))\n\t\t\t\t\tCauseDamageToObject(alienStatusPointer->Target,"),
+		"both of an alien's claws say which alien it is, just before the damage, and clear it just after");
+	Check(Has(strikes, "\n{\n\tif (!HudsonRunIsOn)\n\t{\n\t\treturn;\n\t}\n\n\tstrikingAlien = alien;"),
+		"which alien a claw is is kept only in a run, and nothing else is done with it there");
+	Check(Has(hudson, "bool const theWatchedAliensOwn = strikingAlien && watchAlienNamed && NAME_ISEQUAL(strikingAlien->SBname, watchAlienName);")
+		&& Has(hudson, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting && theWatchedAliensOwn)"),
+		"a watch's first blow is only its own alien's, by its name, never any blow after it was made");
+	Check(Has(noted, "if (plan.play && strikingAlien && target && Player && target == Player->ObStrategyBlock)\n\t{\n\t\tAlienComingStruck(strikingAlien);"),
+		"in play=yes, a claw on him is that alien's first blow, if it's its first");
+	Check(Has(played, "TrackTheAliensComing(Player ? Player->ObStrategyBlock : 0);"),
+		"and every alien that comes for him is followed, once a frame of play=yes");
+}
+
 int main()
 {
 	CheckBotFight();
 	CheckFriendlyFire();
 	TestTheGridInTheGame();
+	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");
 
 	TestWhoAsked();

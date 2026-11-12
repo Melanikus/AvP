@@ -1,0 +1,318 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: a hunting alien asks for a way to the wrong point, not the one the game picked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(dynPtr->Position), &velocityDirection))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien asks with no target, so its way never goes all the way to the target",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target,",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien of any kind asks, not only a standard alien",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance",
+					"to": "if (AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien that can't climb asks too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AT_Standard) && AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance",
+					"to": "AT_Standard)\n\t\t&& (VectorDistance"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien asks however close it is to the point",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien on a way keeps gravity on",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien's old steering always runs, over the way's direction",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien has gravity put back on after the call, in the same frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hunting alien has gravity put back on after the call, written with spaces",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien asks for a way to the wrong point, not the one the game picked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(dynPtr->Position), &velocityDirection))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien going back to Hunt asks with no target, so its two frames head for different places",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget,",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien of any kind asks, not only a standard alien",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)\n\t\t&& (alienStatusPointer->wanderData.currentModule",
+					"to": "if (AlienIsAbleToClimb(sbPtr)\n\t\t&& (alienStatusPointer->wanderData.currentModule"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien that can't climb asks too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "AT_Standard) && AlienIsAbleToClimb(sbPtr)\n\t\t&& (alienStatusPointer->wanderData.currentModule",
+					"to": "AT_Standard)\n\t\t&& (alienStatusPointer->wanderData.currentModule"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien asks however close it is to the point",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien on a way keeps gravity on",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien's old steering always runs, over the way's direction",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien has gravity put back on after the call, in the same frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien has gravity put back on after the call, written with spaces",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien asks when it has no wander point",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\t&& (alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien's crouching changes for every kind of alien",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))\n\t{\n\t\tint redo=0;",
+					"to": "\tif (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr))\n\t{\n\t\tint redo=0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien doesn't crawl when it should",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "if(AlienShouldBeCrawling(sbPtr))\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 1;",
+					"to": "if(0)\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien never stands up again",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "if(!AlienShouldBeCrawling(sbPtr))\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 0;",
+					"to": "if(0)\n\t\t\t{\n\t\t\t\talienStatusPointer->IAmCrouched = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien's pose isn't changed to match",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (redo) {\n\t\t\tStartAlienMovementSequence(sbPtr);\n\t\t}\n\t}\n\n\t/* Update sequence! */\n\tAlienHandleMovingAnimation(sbPtr);\n\n\t/* Do something else? */",
+					"to": "\t}\n\n\t/* Update sequence! */\n\tAlienHandleMovingAnimation(sbPtr);\n\n\t/* Do something else? */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien keeps its target only after it's let it go, so it's always none",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\thuntedTarget = alienStatusPointer->Target;\n\t}\n\n\t/* Try to reaquire target? */\n\talienStatusPointer->Target=NULL;\n",
+					"to": "\t}\n\n\t/* Try to reaquire target? */\n\talienStatusPointer->Target=NULL;\n\thuntedTarget = alienStatusPointer->Target;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every wandering alien gives its target, whether it knows where that is or not",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\thuntedTarget = alienStatusPointer->Target;\n\t}\n\n\t/* Try to reaquire target? */\n",
+					"to": "\t}\n\n\thuntedTarget = alienStatusPointer->Target;\n\n\t/* Try to reaquire target? */\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame its state didn't ask leaves it standing still",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepDriving(sbPtr, &keepGoing))",
+					"to": "if (false && AlienWays_KeepDriving(sbPtr, &keepGoing))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: kept driving, it lets go of what it's on",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\t\tsbPtr->DynPtr->UseStandardGravity = 0;\n\t\t\tNPCSetVelocity(sbPtr, &keepGoing, alienStatusPointer->MaxSpeed);",
+					"to": "\t\t\tsbPtr->DynPtr->UseStandardGravity = 1;\n\t\t\tNPCSetVelocity(sbPtr, &keepGoing, alienStatusPointer->MaxSpeed);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watch has no line at the frame's end",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tAlienWays_WatchLine(sbPtr, alienStatusPointer->Target != NULL, keptDriving);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watch isn't told Hunt found no next module",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\t\tAlienWays_WatchNote(sbPtr, \"Hunt found no next module by the marine scent, so it goes to Wander\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watch isn't told Wander sent it back to Hunt",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tAlienWays_WatchNote(sbPtr, \"Wander knows of its target, so it goes back to Hunt\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien's crouching changes for every standard alien, on a way or not",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (alienStatusPointer->Type == AT_Standard && (AlienWays_Following(sbPtr) || AlienWays_KeepsClinging(sbPtr)))\n\t{\n\t\tint redo=0;",
+					"to": "\tif (alienStatusPointer->Type == AT_Standard)\n\t{\n\t\tint redo=0;"
+				}
+			]
+		}
+	]
+}

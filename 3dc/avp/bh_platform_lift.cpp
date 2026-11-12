@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a lift (Save_RestoreDynamics, save_checks.h)
 /*------------------------------Patrick 14/3/97-----------------------------------
   Source for Platform lift behaviour functions
   --------------------------------------------------------------------------------*/
@@ -848,7 +850,7 @@ void LoadStrategy_PlatformLift(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Enabled)
 	COPYELEMENT_LOAD(OneUse)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 
 }
 

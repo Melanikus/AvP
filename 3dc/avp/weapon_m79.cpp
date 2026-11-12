@@ -1,5 +1,7 @@
 // The M79. The game takes this from MelPyth M5 by Mupp. Only how it behaves was read from that mod, and this is written new.
 // Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port: a saved grenade's dynamics block is put back through Save_RestoreDynamics
+// (save_checks.h), as every other object's is.
 //
 // The sums are in m79.h, which says what the gun does. This file joins them to the game: the gun in his hands, the list
 // of kinds on the screen, and the grenades once they've left the gun.
@@ -19,6 +21,7 @@
 #include "bh_types.h"
 #include "dynblock.h"
 #include "dynamics.h"
+#include "save_checks.h"
 #include "hmodel.h"
 #include "sequences.h"
 #include "weapons.h"
@@ -575,8 +578,9 @@ void LoadStrategy_M79Grenade(SAVE_BLOCK_STRATEGY_HEADER *header)
 	behaviour->counter = block->counter < 0 ? 0 : (block->counter > 2 * ONE_FIXED ? 2 * ONE_FIXED : block->counter);
 	behaviour->bouncelastframe = block->bouncelastframe ? 1 : 0;
 
-	*sbPtr->DynPtr = block->dynamics;
-	sbPtr->DynPtr->CollisionReportPtr = 0;
+	// The saved dynamics block goes through the checks every object's does (Save_RestoreDynamics, save_checks.h). An M79 grenade's own
+	// code never turns the level's walls or its gravity off. Modified 2026-11-11 by Melanikus (Third) for the AvP port (SAVE-HOSTILE-1).
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 }
 
 void SaveStrategy_M79Grenade(STRATEGYBLOCK *sbPtr)

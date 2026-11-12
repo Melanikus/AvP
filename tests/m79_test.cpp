@@ -242,7 +242,9 @@ static void TestWiring()
 
 	// A timer read from a save must be held in range, or a grenade could wait forever
 	Check(Has(gun, "block->counter > 2 * ONE_FIXED ? 2 * ONE_FIXED"), "a grenade's timer from a save is held in range");
-	Check(Has(gun, "sbPtr->DynPtr->CollisionReportPtr = 0;"), "a pointer from a save is never used");
+	// The saved dynamics block goes through the same checks as every object's (Save_RestoreDynamics, save_checks.h), which never let a
+	// pointer from a save in (modified 2026-11-11 by Melanikus (Third) for the AvP port, SAVE-HOSTILE-1)
+	Check(Has(gun, "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);"), "a saved grenade's dynamics block goes through the checks, so a pointer from a save is never used");
 }
 
 int main()

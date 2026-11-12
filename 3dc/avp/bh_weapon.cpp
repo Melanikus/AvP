@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls off for a thrown weapon; its gravity is as saved, as a flare turns it off
+//   (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the M79 fires its grenades through the same function as the grenade launcher, and sets their speed
 //   a grenade that bursts on contact bursts on a ghost of any NPC the host runs
@@ -4518,7 +4521,7 @@ void LoadStrategy_Grenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter);
 	COPYELEMENT_LOAD(bouncelastframe);
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_Grenade(STRATEGYBLOCK* sbPtr)
@@ -4571,7 +4574,7 @@ void LoadStrategy_ClusterGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter);
 	COPYELEMENT_LOAD(bouncelastframe);
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_ClusterGrenade(STRATEGYBLOCK* sbPtr)
@@ -4623,7 +4626,7 @@ void LoadStrategy_FlareGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(LifeTimeRemaining)
 	COPYELEMENT_LOAD(ParticleGenerationTimer)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 
 	Load_SoundState(&behav->SoundHandle);
 }
@@ -4678,7 +4681,7 @@ void LoadStrategy_ProxGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(LifeTimeRemaining)
 	COPYELEMENT_LOAD(SoundGenerationTimer)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 
 	Load_SoundState(&behav->SoundHandle);
 }
@@ -4733,7 +4736,7 @@ void LoadStrategy_Rocket(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_Rocket(STRATEGYBLOCK* sbPtr)
@@ -4785,7 +4788,7 @@ void LoadStrategy_PPPlasmaBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_PPPlasmaBolt(STRATEGYBLOCK* sbPtr)
@@ -4843,7 +4846,7 @@ void LoadStrategy_PredatorEnergyBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(damage)
 	COPYELEMENT_LOAD(blast_radius)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_PredatorEnergyBolt(STRATEGYBLOCK* sbPtr)
@@ -4899,7 +4902,7 @@ void LoadStrategy_PulseGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_PulseGrenade(STRATEGYBLOCK* sbPtr)
@@ -4951,7 +4954,7 @@ void LoadStrategy_Molotov(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//copy stuff over
 	COPYELEMENT_LOAD(counter)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 
 
 	//load the molotov hierarchy
@@ -5047,7 +5050,7 @@ void LoadStrategy_PredatorDisc(SAVE_BLOCK_STRATEGY_HEADER* header)
 	behav->Target = Save_TargetWithAPlace(behav->Target);
 
 //strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5154,7 +5157,7 @@ void LoadStrategy_SpearBolt(/*SAVE_BLOCK_HEADER*/SAVE_BLOCK_STRATEGY_HEADER* hea
 	COPYELEMENT_LOAD(SpearThroughFragment)
 	COPYELEMENT_LOAD(Stuck)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 
 	{
 		SAVE_BLOCK_HEADER* hier_header = GetNextBlockIfOfType(SaveBlock_Hierarchy);
@@ -5229,7 +5232,7 @@ void LoadStrategy_Frisbee(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(bounces)
 
 //strategy block stuff
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5494,7 +5497,7 @@ void LoadStrategy_FrisbeeEnergyBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(damage)
 	COPYELEMENT_LOAD(blast_radius)
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsGravityOff);
 }
 
 void SaveStrategy_FrisbeeEnergyBolt(STRATEGYBLOCK* sbPtr)

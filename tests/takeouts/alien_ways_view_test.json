@@ -1,0 +1,289 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a stretch takes the next point's kind, not its own",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "uint32_t const colour = (i + 1 == heading) ? kAlienWaysViewHere : AlienWaysView_ColourOf(point.kind);",
+					"to": "uint32_t const colour = (i + 1 == heading) ? kAlienWaysViewHere : AlienWaysView_ColourOf(next.kind);"
+				}
+			]
+		},
+		{
+			"name": "the stretch it's on is the one out of the point it's heading for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "uint32_t const colour = (i + 1 == heading) ? kAlienWaysViewHere",
+					"to": "uint32_t const colour = (i == heading) ? kAlienWaysViewHere"
+				}
+			]
+		},
+		{
+			"name": "up isn't turned over for the card",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "end.y = -(matrix[4] * x + matrix[5] * y + matrix[6] * z + matrix[7]);",
+					"to": "end.y = (matrix[4] * x + matrix[5] * y + matrix[6] * z + matrix[7]);"
+				}
+			]
+		},
+		{
+			"name": "the camera's place is left out of the view",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "end.x = matrix[0] * x + matrix[1] * y + matrix[2] * z + matrix[3];",
+					"to": "end.x = matrix[0] * x + matrix[1] * y + matrix[2] * z;"
+				}
+			]
+		},
+		{
+			"name": "the point it's heading for has a cross the usual size",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "float const arm = (float)(headingHere ? 2 * kAlienWaysViewCrossArm : kAlienWaysViewCrossArm);",
+					"to": "float const arm = (float)kAlienWaysViewCrossArm;"
+				}
+			]
+		},
+		{
+			"name": "the point it's heading for isn't white",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "uint32_t const colour = headingHere ? kAlienWaysViewHere : AlienWaysView_ColourOf(point.kind);",
+					"to": "uint32_t const colour = AlienWaysView_ColourOf(point.kind);"
+				}
+			]
+		},
+		{
+			"name": "a way longer than the map gives is drawn whole",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "int const drawn = count < (int)kAlienWaysMostWayPoints ? count : (int)kAlienWaysMostWayPoints;",
+					"to": "int const drawn = count;"
+				}
+			]
+		},
+		{
+			"name": "the frame's list has no ceiling",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (ends->size() + 2 > kAlienWaysViewMostEnds)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the ceiling lets half a line in",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (ends->size() + 2 > kAlienWaysViewMostEnds)",
+					"to": "if (ends->size() + 1 > kAlienWaysViewMostEnds)"
+				}
+			]
+		},
+		{
+			"name": "a cross has only two lines",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\t\t\t|| !AddLine(matrix, x, y, z - arm, x, y, z + arm, colour, ends))",
+					"to": "\t\t\t|| false)"
+				}
+			]
+		},
+		{
+			"name": "the wall is drawn in the floor's colour",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "case kAlienWaysWall:\n\t\treturn kAlienWaysViewWall;",
+					"to": "case kAlienWaysWall:\n\t\treturn kAlienWaysViewFloor;"
+				}
+			]
+		},
+		{
+			"name": "a kind that isn't one of the three is drawn as a ceiling",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "default:\n\t\treturn kAlienWaysViewUnknown;",
+					"to": "default:\n\t\treturn kAlienWaysViewCeiling;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways are drawn in a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)",
+					"to": "if (!AlienWaysViewSwitchedOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways are never drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && AlienWaysViewSwitchedOn)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways are drawn whenever they're on, with no view switch (every player would see them)",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && AlienWaysViewSwitchedOn)",
+					"to": "if (toyFinalFlush && AlienWaysSwitchedOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the drawing itself doesn't ask for the view's switch",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!AlienWaysViewSwitchedOn || AvP.Network != I_No_Network)",
+					"to": "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view's switch works without -alienways",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (AlienWaysSwitchedOn)",
+					"to": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view is on without its switch",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int AlienWaysViewSwitchedOn = 0;",
+					"to": "int AlienWaysViewSwitchedOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the point each alien is heading for is never marked",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "shown[i].count, shown[i].heading, &ends);",
+					"to": "shown[i].count, -1, &ends);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game doesn't say the ways aren't drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "LogString(\"alien ways view: this is a network game, so the aliens' ways aren't drawn\");",
+					"to": "/* nothing in the log */"
+				}
+			]
+		},
+		{
+			"name": "a kept way isn't dimmed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\t\t(*ends)[e].colour = AlienWaysView_Dimmed((*ends)[e].colour);\n",
+					"to": "\t\t(void)e;\n"
+				}
+			]
+		},
+		{
+			"name": "dimmed takes red to a half, not two fifths",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\tuint32_t const red = ((colour >> 16) & 0xffu) * 2 / 5;\n",
+					"to": "\tuint32_t const red = ((colour >> 16) & 0xffu) / 2;\n"
+				}
+			]
+		},
+		{
+			"name": "a kept way marks the point it was heading for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "\tsize_t const added = AlienWaysView_AddWay(matrix, points, count, -1, ends);\n",
+					"to": "\tsize_t const added = AlienWaysView_AddWay(matrix, points, count, 1, ends);\n"
+				}
+			]
+		},
+		{
+			"name": "the ways' lines aren't thickened",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tAlienWaysView_Thicken(&ends, kAlienWaysViewAside);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a thickened line's copies are moved to one side only",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "{ { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } }",
+					"to": "{ { 1.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f } }"
+				}
+			]
+		},
+		{
+			"name": "a thickened line's copies are moved by a set amount, not by their depth",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "moved.x += kMoves[m][0] * aside * moved.z;",
+					"to": "moved.x += kMoves[m][0] * aside * 1000.0f;"
+				}
+			]
+		},
+		{
+			"name": "thickening goes past the most a frame may hold",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (ends->size() + 2 > kAlienWaysViewMostThickEnds)",
+					"to": "if (ends->size() + 2 > kAlienWaysViewMostThickEnds + 100)"
+				}
+			]
+		},
+		{
+			"name": "any move is taken to thicken by, a whole depth or none",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_view.cpp",
+					"from": "if (!ends || !(aside > 0.0f && aside < 1.0f))",
+					"to": "if (!ends)"
+				}
+			]
+		}
+	]
+}

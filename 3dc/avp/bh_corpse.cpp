@@ -1,3 +1,5 @@
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   a save can't turn the level's walls or its gravity off for a corpse (Save_RestoreDynamics, save_checks.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine, predator or xenoborg dying on the host tells the other machines
 /* bh_corpse.c 19/8/98 */
@@ -986,7 +988,7 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 		return;
 	}
 
-	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics, kSaveHoldsNeitherOff);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
