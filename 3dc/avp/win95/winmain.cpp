@@ -469,8 +469,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 		// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): the developer's view of the aliens' ways,
 		// coloured lines through the level (alien_ways_view.h), drawn only when asked for, so it stays a filming tool now the ways are on for
-		// every player. It needs nothing else: it draws only the guide's ways, and with FLOORISLAVA OFF there are none. (It can't ask
-		// AlienWaysSwitchedOn here, as that's 0 until the first level starts: modified 2026-11-11 by Melanikus (Third), the flip.)
+		// every player. It needs nothing else: it draws only the guide's ways, and with FLOORISLAVA OFF there are none. (Whether this
+		// level has the ways can't be asked here, as it's only known once a level starts: modified 2026-11-11 by Melanikus (Third), the flip.)
 		if (devSwitch("-alienwaysview"))
 		{
 			AlienWaysViewSwitchedOn = 1;
