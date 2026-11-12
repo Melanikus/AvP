@@ -380,6 +380,15 @@ static void FloorIsLavaCommand(char *words)
 			fromNext[sizeof(fromNext) - 1] = 0;
 			NewOnScreenMessage(fromNext);
 		}
+
+		// A machine that joined a network game doesn't run the aliens, so what it asks counts for nothing there: only the host's does
+		if (AvP.Network != I_No_Network && !AvP.NetworkAIServer)
+		{
+			static char hostOnly[100];
+			_snprintf(hostOnly, sizeof(hostOnly) - 1, "%s", kFloorIsLavaOnlyTheHost);
+			hostOnly[sizeof(hostOnly) - 1] = 0;
+			NewOnScreenMessage(hostOnly);
+		}
 	}
 
 	LogString(message);

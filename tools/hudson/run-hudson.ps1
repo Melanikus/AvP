@@ -139,7 +139,8 @@ param(
     [ValidateSet('', 'side', 'eyes')][string]$WatchFrom = '', # where a watched fight is filmed from: side (beside the alien, as without it) or eyes (his own eyes, turned to the alien)
     [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it. Several, with / between them, are -Together's aliens
     [string]$StandAt = '', # x,y,z the same way: he stands there
-    [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
+    [switch]$AlienWays,    # lets the alien ways' developer switches below through. The ways themselves are on in every run since the flip (2026-11-11)
+    [switch]$FloorIsLavaOff, # the run plays 1999's aliens: floorislava=off, the console's FLOORISLAVA OFF, for the other side of a film
     [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
     [int]$AlienWaysAim = -1, # the game's -alienwaysaim=N, 0 to 10000 mm: how far along its way an alien aims, where that's in the build. Left out, the build's own. Needs -AlienWays
@@ -391,7 +392,8 @@ switch ($Static)
 # The game's own switches for trying out shadows, such as -shadowlights=8. Only those, because anything else could change what a run is without its result saying so. run.txt has them.
 if ($ShadowSwitches -and $ShadowSwitches -notmatch '^-shadow[a-z]+(=\d+)?( -shadow[a-z]+(=\d+)?)*$') { Stop-Here "-ShadowSwitches only takes the game's -shadow switches, and $ShadowSwitches isn't" }
 $tryingOut = if ($ShadowSwitches) { " $ShadowSwitches" } else { '' }
-$alienWaysSwitch = if ($AlienWays) { ' -alienways' } else { '' }
+# The ways are on in every run since the flip (2026-11-11), and the game has no -alienways any more: -AlienWays only lets these through
+$alienWaysSwitch = ''
 if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000)) { Stop-Here "-AlienWaysAim is 0 to 10000 mm, and it needs -AlienWays" }
 if ($AlienWaysAim -ge 0) { $alienWaysSwitch += " -alienwaysaim=$AlienWaysAim" }
 if ($AlienWaysWatch -ge 0 -and (-not $AlienWays -or $AlienWaysWatch -gt 63)) { Stop-Here "-AlienWaysWatch is 0 to 63, a place in the guide's list, and it needs -AlienWays" }
@@ -499,6 +501,7 @@ if ($BotSingle) { $arguments += " botsingle=yes" }
 if ($Uncapped -and $PSBoundParameters.ContainsKey('Fps')) { Stop-Here "-Uncapped and -Fps ask for different things" }
 if ($Uncapped) { $arguments += " fps=uncapped" } else { $arguments += " fps=$Fps" }
 if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
+if ($FloorIsLavaOff) { $arguments += " floorislava=off" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }
 if ($HostileKind) { $arguments += " hostile=$HostileKind" }

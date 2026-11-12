@@ -1185,7 +1185,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	// Modified 2026-11-11 by Melanikus (Third) for the AvP port (#109): resting after it was found stuck, or waiting for a re-plan's way, an
 	// alien is held back from avoiding as well, so 1999's Avoidance can't carry it off from its target in that rest (Primary's placed runs:
 	// from 19 m out to 37 m). The game's own code still moves it, and the guide ends the rest early when it doesn't get on (THE REST, HELD
-	// FROM AVOIDING, alien_ways_guide.h). Only with -alienways.
+	// FROM AVOIDING, alien_ways_guide.h). Only with the alien ways on.
 	// And it keeps clinging to what it's on then, as do an alien waiting for its next way and one handed over but not yet near its target, so
 	// 1999's far branch above can't drop it off a wall or a ceiling (Secondary's read: 7 of the owner's 16 stucks fell so). Only the game's
 	// own curve at its target, near it and in clear sight, decides its gravity, as in 1999 (KeepsClinging, alien_ways_guide.h; added
@@ -1205,7 +1205,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	//   one would have acted, the log says which (AlienWays_WouldHaveAvoided), so a film still shows whether it's real. An alien on a way that
 	//   really can't get on is handed back by the alien ways' own rule (no headway for 1.5 s, then 3 s of the game's own steering), and these
 	//   tests act again then. While on a way it also doesn't break a breakable thing it presses against, or give up its target for one; that's
-	//   only with -alienways. In the other avoidance, switched off in this game (ALL_NEW_AVOIDANCE_ALIEN is 0), the test isn't called at all
+	//   only with the alien ways on. In the other avoidance, switched off in this game (ALL_NEW_AVOIDANCE_ALIEN is 0), the test isn't called at all
 	//   while on a way, so its counts would stand still till the alien is off it: harmless while it's off, and worth knowing if it's ever on.
 	#if ALL_NEW_AVOIDANCE_ALIEN
 	if (!onAWay)

@@ -95,21 +95,51 @@
 			]
 		},
 		{
-			"name": "SOURCE: what's asked starts on before the flip",
+			"name": "SOURCE: what's asked starts off after the flip",
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "int FloorIsLavaAsked = 0;",
-					"to": "int FloorIsLavaAsked = 1;"
+					"from": "int FloorIsLavaAsked = 1;",
+					"to": "int FloorIsLavaAsked = 0;"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: -dev -alienways no longer asks for the ways at a level's start",
+			"name": "SOURCE: the aliens search the polygon map unless something asks for the grid",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int AlienWaysGridSwitchedOn = 1;",
+					"to": "int AlienWaysGridSwitchedOn = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a command-line switch changes what's asked again",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "\t\t\tFloorIsLavaAsked = 1;\n",
+					"from": "\t\tif (devSwitch(\"-alienwaysview\"))\n\t\t{\n",
+					"to": "\t\tif (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tFloorIsLavaAsked = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Hudson's floorislava=off does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tFloorIsLava_FromWords(\"OFF\", &FloorIsLavaAsked);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game's joiner isn't told only the host's counts",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\t\t\tNewOnScreenMessage(hostOnly);\n",
 					"to": ""
 				}
 			]

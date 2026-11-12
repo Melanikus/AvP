@@ -166,16 +166,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the view's switch works without -alienways",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (AlienWaysSwitchedOn)",
-					"to": "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (true)"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the view is on without its switch",
 			"changes": [
 				{
@@ -282,6 +272,16 @@
 					"file": "3dc/avp/alien_ways_view.cpp",
 					"from": "if (!ends || !(aside > 0.0f && aside < 1.0f))",
 					"to": "if (!ends)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view's switch works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-alienwaysview\"))",
+					"to": "if (CommandLineHasWord(command_line, \"-alienwaysview\"))"
 				}
 			]
 		}

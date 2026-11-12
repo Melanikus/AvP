@@ -22,6 +22,8 @@
 //   species=predator lets a gun= run play as a Predator, for trying the staff
 //   botfight= has the host make an NPC beside the joiner in a network test
 //   friendlyfire=off has the host of a network test turn friendly fire off
+// Modified 2026-11-11 by Melanikus (Third) for the AvP port:
+//   floorislava=off has the run play 1999's aliens, as the console's FLOORISLAVA OFF does, for the other side of a film (#109's flip)
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port. See hudson_plan.h.
 
 #include "hudson_plan.h"
@@ -111,6 +113,7 @@ const char *const kHudsonRefusedBotFightUnknown = "botfight= is alien, marine, f
 const char *const kHudsonRefusedBotFightWithoutCoop = "botfight= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be off";
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
+const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -1396,6 +1399,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->noFriendlyFire = true;
+		}
+		else if (WordIs(place, nameLength, "floorislava"))
+		{
+			// 1999's aliens, for the other side of a film, as the console's FLOORISLAVA OFF gives a player. Only off: the ways are on in every
+			// run without it. Added 2026-11-11 by Melanikus (Third) for the AvP port (#109's flip, F5).
+			if (plan->floorIsLavaOff)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "off"))
+			{
+				return kHudsonRefusedFloorIsLavaNotOff;
+			}
+
+			plan->floorIsLavaOff = true;
 		}
 		else if (WordIs(place, nameLength, "fps"))
 		{

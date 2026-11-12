@@ -6,8 +6,8 @@
 // The words after FLOORISLAVA come from whoever typed them, or from a file (AvP's third Tao: input is treated as hostile), so only the few
 // it knows count, and anything else is refused and changes nothing. And what it says fits the command's space and says which it is.
 // And from the game's own files, which can't be built on their own here: the console command is a player's, not a cheat, reads its words
-// with the rule here and says what it did; what it asks is read into the alien ways' switch at each level's start and nowhere else; and
-// -dev -alienways asks the same way, for films.
+// with the rule here and says what it did; what it asks is read into the alien ways' switch at each level's start and nowhere else. Since
+// the flip it starts on, and only the console changes it, and a Hudson run's floorislava=off, which types the console's own OFF.
 //
 // HOW IT RUNS
 //
@@ -135,7 +135,7 @@ static void TestTheWords()
 		Check(!tookItWhenOn && stayedOn && !tookItWhenOff && stayedOff, std::string("\"") + words + "\" is refused, and changes nothing either way");
 	}
 
-	std::string const said[] = { FloorIsLava_Words(1), FloorIsLava_Words(0), kFloorIsLavaRefused, kFloorIsLavaFromTheNextLevel };
+	std::string const said[] = { FloorIsLava_Words(1), FloorIsLava_Words(0), kFloorIsLavaRefused, kFloorIsLavaFromTheNextLevel, kFloorIsLavaOnlyTheHost };
 	bool fits = true;
 
 	for (std::string const &words : said)
@@ -156,13 +156,17 @@ static void TestTheGamesFiles()
 	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
 	std::string const ways = ReadSourceFile("3dc/avp/alien_ways.cpp");
 	std::string const winmain = ReadSourceFile("3dc/avp/win95/winmain.cpp");
+	std::string const hudson = ReadSourceFile("3dc/avp/hudson.cpp");
 
-	Check(!commands.empty() && !ways.empty() && !winmain.empty(), "the files are found");
+	Check(!commands.empty() && !ways.empty() && !winmain.empty() && !hudson.empty(), "the files are found");
 
 	std::string const command = Between(commands, "static void FloorIsLavaCommand(char *words)", "\n}");
 	Check(Has(command, "bool const took = FloorIsLava_FromWords(words, &FloorIsLavaAsked);"), "the command reads its words with the rule here");
 	Check(Has(command, "NewOnScreenMessage(message);") && Has(command, "LogString(message);"), "the command says what it did, on the screen and in the log");
 	Check(Has(command, "_snprintf(fromNext, sizeof(fromNext) - 1, \"%s\", kFloorIsLavaFromTheNextLevel);"), "and in a level, that it counts from the next level's start");
+	Check(Has(command, "\t\tif (AvP.Network != I_No_Network && !AvP.NetworkAIServer)\n\t\t{\n\t\t\tstatic char hostOnly[100];")
+		&& Has(command, "_snprintf(hostOnly, sizeof(hostOnly) - 1, \"%s\", kFloorIsLavaOnlyTheHost);") && Has(command, "\t\t\tNewOnScreenMessage(hostOnly);\n"),
+		"and on a machine that joined a network game, that only the host's counts (the flip's F7)");
 
 	std::string::size_type const made = commands.find("\"FLOORISLAVA\",");
 	std::string::size_type const debugOnly = commands.find("bool IsACheat = true;");
@@ -180,11 +184,14 @@ static void TestTheGamesFiles()
 		"before it asks whether the ways are on");
 	Check(Count(ways, "AlienWaysSwitchedOn = ") == 2 && Has(ways, "\nint AlienWaysSwitchedOn = 0;\n"), "and nothing else in the alien ways sets the switch");
 
-	// Until the flip, it starts off, and only -dev -alienways asks for the ways, as the console's ON does
-	Check(Has(ways, "\nint FloorIsLavaAsked = 0;\n"), "what's asked starts off, until the flip");
-	Check(Has(winmain, "if (devSwitch(\"-alienways\"))\n\t\t{\n\t\t\tAlienWaysSwitchedOn = 1;\n\t\t\tFloorIsLavaAsked = 1;"),
-		"-dev -alienways asks for the ways, as the console's ON does");
-	Check(Count(winmain, "FloorIsLavaAsked = ") == 1 && Count(commands, "FloorIsLavaAsked = ") == 0, "nothing else on the command line sets it");
+	// THE FLIP (2026-11-11, #109): it starts on, for every player, and the aliens search the grid, as the owner has always played them.
+	// Nothing on the command line changes either. A Hudson run's floorislava=off is the one other way in, and it types the console's own OFF.
+	Check(Has(ways, "\nint FloorIsLavaAsked = 1;\n"), "what's asked starts on: the alien ways are on for every player");
+	Check(Has(ways, "\nint AlienWaysGridSwitchedOn = 1;\n") && Count(winmain, "AlienWaysGridSwitchedOn") == 0, "and the aliens search the grid, with nothing to turn it off");
+	Check(Count(winmain, "FloorIsLavaAsked") == 0 && Count(commands, "FloorIsLavaAsked = ") == 0 && !Has(winmain, "devSwitch(\"-alienways\")")
+		&& !Has(winmain, "devSwitch(\"-alienwaysgrid\")"), "nothing on the command line sets either, and the old developer's switches are gone");
+	Check(Has(hudson, "\tif (plan.floorIsLavaOff)\n\t{\n\t\tFloorIsLava_FromWords(\"OFF\", &FloorIsLavaAsked);\n\t}\n") && Count(hudson, "FloorIsLavaAsked") == 1,
+		"a Hudson run's floorislava=off types the console's own OFF, through its own rule, and Hudson touches it nowhere else");
 }
 
 int main()

@@ -10806,6 +10806,26 @@
 					"to": "\t(void)0;"
 				}
 			]
+		},
+		{
+			"name": "floorislava=off asks for nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\tplan->floorIsLavaOff = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the run script can't ask for floorislava=off",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($FloorIsLavaOff) { $arguments += \" floorislava=off\" }\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

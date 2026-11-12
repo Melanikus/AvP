@@ -61,10 +61,15 @@ inline char const *FloorIsLava_Words(int on)
 // What the screen says to words it doesn't know
 char const kFloorIsLavaRefused[] = "FLOORISLAVA TAKES ON OR OFF, OR NOTHING TO SWITCH IT";
 
+// What the screen adds on a machine that joined a network game, which doesn't run the aliens: only the host's counts (added 2026-11-11
+// by Melanikus (Third) for the AvP port, the flip's F7)
+char const kFloorIsLavaOnlyTheHost[] = "FLOORISLAVA: IN A NETWORK GAME, ONLY THE HOST'S COUNTS";
+
 // What the screen adds when it's switched during a level: the map is built at a level's start
 char const kFloorIsLavaFromTheNextLevel[] = "FLOORISLAVA COUNTS FROM THE NEXT LEVEL'S START";
 
-// What the console asked, in alien_ways.cpp: 1 for the alien ways, 0 for 1999's aliens. AlienWays_LevelStart reads it into
+// What the console asked, in alien_ways.cpp: 1 for the alien ways, 0 for 1999's aliens. It starts at 1, since the flip (2026-11-11), and
+// only this command changes it, and a Hudson run's floorislava=off, which types its OFF (hudson_plan.h). AlienWays_LevelStart reads it into
 // AlienWaysSwitchedOn (alien_ways.h) at each level's start, so it never changes in the middle of a level.
 extern int FloorIsLavaAsked;
 

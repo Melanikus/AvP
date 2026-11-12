@@ -23,30 +23,37 @@ Later parts, each from a ruling of the user's:
 
 ## 2. Turning it on
 
-While it's being made and filmed, alien ways is a developer feature, on only with switches on the game's command line:
+**It's on, for every player, in every mode, with no setting on any menu:** the owner's ruling for #109, and the flip (2026-11-11). The
+aliens search the grid every NPC will share (npc_grid.h), with the polygon map as the fallback, as the owner has always played them.
+
+The developer's switches, each with `-dev` on the game's command line:
 
 | Switch | What it does |
 |---|---|
-| `-dev -alienways` | Builds the map at each level's start and guides the aliens. Without it, none of this runs. |
-| `-dev -alienways -alienwaysview` | Also draws the developer view (section 12), for films. Its own switch, so no player ever sees the lines once the ways are on for everyone. |
+| `-dev -alienwaysview` | Draws the developer view (section 12), for films. Its own switch, so no player ever sees the lines. |
 | `-dev -alienwaysaim=N` | How far ahead along its way an alien aims, in mm, 0 to 10000. The default is 1500. 0 aims at the next point of the way, as before the look-ahead was added, so a film can compare the two. |
 | `-dev -alienwayswatch=N` | One line in the log every frame for the alien in the guide's place N (0 to 63): what its state did, whether it was steered or kept driving, its grip and speed, its target and the marine scent near it. Off by default, and it stops after 6,000 lines a level. |
+| `-dev -alienwaysmover` | The mover (#149): it picks where each alien heads, whatever its state, and heads it straight there with no way. The owner has never played it, so it's off unless asked for. |
 
 A number outside its range is ignored, and the log says so. The command line comes from outside the game, so it's checked (AvP's third
 rule: input is hostile).
 
-**When it ships**, the user's ruling is that it's on, in every mode, with no setting on any menu. The way to put 1999's aliens back and
+`-alienways` and `-alienwaysgrid`, the switches it was made and filmed with, are gone: an old launch line with them is just words the
+game doesn't read.
+
+**To compare with 1999.** The way to put 1999's aliens back and
 compare is the console, as for NEWDYNAMICCOLLISIONS (#180): `FLOORISLAVA` switches it, `FLOORISLAVA ON` and `FLOORISLAVA OFF` say which
 (floor_is_lava.h). What it asks counts from the next level's start, because the map is built then: each level's start reads
-`FloorIsLavaAsked` into `AlienWaysSwitchedOn`, and the log says which it is. `-dev -alienways` asks the same way, for films. Until the
-flip, `FloorIsLavaAsked` starts at 0; the flip is that one value, after the films. (Modified 2026-11-11 by Melanikus (Third).)
+`FloorIsLavaAsked` into `AlienWaysSwitchedOn`, and the log says which it is. `FloorIsLavaAsked` starts at 1, and it isn't kept in the
+settings, so every run starts with the ways on. A Hudson run gets 1999's aliens with the plan word `floorislava=off` (run-hudson.ps1's
+`-FloorIsLavaOff`), which types the console's own OFF before any level starts. (Modified 2026-11-11 by Melanikus (Third), the flip.)
 
 **Where it runs:** only on the machine that runs the aliens. That's single player, or the host of a network game (`AvP.NetworkAIServer`).
 A machine that joined a network game only draws the aliens the host sends it, so it has no map.
 
-## 3. With the switch off
+## 3. With FLOORISLAVA OFF
 
-With `-alienways` off, the game plays exactly as in 1999:
+From the next level's start after `FLOORISLAVA OFF`, the game plays exactly as in 1999:
 - Nothing is listed or built, and no memory is set aside.
 - Every call from the aliens' code into alien ways gives back "no way", and the 1999 code steers the alien.
 - The avoidance tests that alien ways holds back while a way steers an alien act as they always did.
@@ -310,7 +317,7 @@ Each kind of line has a limit a level, so a long level can't fill the log.
 
 ## 12. The developer view
 
-With `-dev -alienways -alienwaysview`, each alien's way is drawn in the level as lines, coloured by what each stretch is on: gold for the floor, blue for a
+With `-dev -alienwaysview`, each alien's way is drawn in the level as lines, coloured by what each stretch is on: gold for the floor, blue for a
 wall, purple for a ceiling. A small cross marks each point. The stretch the alien is on and the point it's heading for are white. The lines go
 through the same sums as the level's own polygons, so a wall hides a way behind it. The view is never drawn in a network game, where seeing an
 alien's way through a wall would be cheating.
@@ -383,7 +390,8 @@ Gathered from every commit's own notes, as of 2026-11-08:
   AlienWays_HowMuchItFacesUp) was checked against the normals the stock levels store, but how many polygons that covered wasn't recorded.
 
 **Shipping**
-- It's still behind `-dev -alienways`. Shipping means turning it on in `AlienWays_On`, with the user's word.
+- Done: on for every player since the flip (2026-11-11), with `FLOORISLAVA OFF` to compare. The mover (`-alienwaysmover`) is still a
+  developer's switch.
 
 **What a map can't know**
 - The alien's width, jumps across air, and lifts.

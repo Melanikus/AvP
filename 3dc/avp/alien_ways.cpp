@@ -53,12 +53,15 @@ extern int AIModuleArraySize;
 extern int ModuleArraySize;
 
 int AlienWaysSwitchedOn = 0;
-int AlienWaysGridSwitchedOn = 0;
+// The grid is on since the flip (2026-11-11, #109): the aliens search it, as the owner has always played them, with the polygon map as
+// the fallback. Nothing turns it off.
+int AlienWaysGridSwitchedOn = 1;
 int AlienWaysMoverSwitchedOn = 0;
 int AlienWaysViewSwitchedOn = 0;
-// What the console's FLOORISLAVA asks (floor_is_lava.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109). 0 until the flip:
-// only -dev -alienways sets it then, for films
-int FloorIsLavaAsked = 0;
+// What the console's FLOORISLAVA asks (floor_is_lava.h; added 2026-11-11 by Melanikus (Third) for the AvP port, #109). On, for every
+// player in every mode: the owner's ruling, and the flip (2026-11-11). FLOORISLAVA OFF puts 1999's aliens back from the next level's
+// start. Like NEWDYNAMICCOLLISIONS, it isn't kept in the settings, so every run starts with it on.
+int FloorIsLavaAsked = 1;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 int AlienWaysWatchPlace = -1;
 
@@ -730,7 +733,8 @@ void AlienWays_LevelStart()
 		return;
 	}
 
-	// With -alienwaysgrid the build makes the grid right after the map, on the same thread. The map is the fallback if the grid is refused.
+	// The build makes the grid right after the map, on the same thread (AlienWaysGridSwitchedOn, on since the flip). The map is the
+	// fallback if the grid is refused.
 	theBuild.Start(std::move(polygons), AlienWaysGridSwitchedOn != 0);
 	told = false;
 
@@ -769,7 +773,7 @@ static void TellHowTheBuildWent()
 		LogErrorString("alien ways: no map, after " + std::to_string(theBuild.Milliseconds()) + " ms " + where + ": " + (why ? why : "no reason given"));
 	}
 
-	// The grid, when -alienwaysgrid asked for it: ready, with its size, or why not, and what the aliens search instead
+	// The grid, as asked for (always, since the flip): ready, with its size, or why not, and what the aliens search instead
 	if (theBuild.GridWanted())
 	{
 		NpcGrid *const grid = theBuild.Grid();
@@ -875,7 +879,7 @@ void AlienWays_Frame()
 	// Every alien that stopped being guided since the last frame gets its usual gravity back, before any alien moves this frame. The log says
 	// what state it left for, up to kAlienWaysMostLetGoLines times a level.
 	AlienWaysWho lapsed[kAlienWaysMostFollowers];
-	// The grid, once it's ready and was asked for; nothing means the map (-alienwaysgrid)
+	// The grid, once it's ready; nothing means the map, the fallback
 	theGuide.UseGrid(theBuild.Grid());
 	size_t const lapsedCount = theGuide.Frame(ReadyMap(), stepMs, kAlienWaysLooksPerFrame, lapsed, kAlienWaysMostFollowers);
 
@@ -1024,7 +1028,7 @@ static bool DirectionTo(AlienWaysXYZ from, AlienWaysXYZ to, VECTORCH *direction)
 	return true;
 }
 
-// Modified 2026-11-08 by Melanikus for the AvP port: THE MOVER (#149), an MVP, only with -alienwaysmover (which needs -alienwaysgrid).
+// Modified 2026-11-08 by Melanikus for the AvP port: THE MOVER (#149), an MVP, only with -dev -alienwaysmover.
 //
 // The user's rulings, through PO: the 1999 near AI's own movement is to be replaced by "pure pathfinding", and a hunting alien plans "a
 // way straight to the freshest, strongest scent it can reach", or to where the target was last seen, "whichever is fresher", rather than

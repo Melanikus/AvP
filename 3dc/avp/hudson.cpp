@@ -177,6 +177,7 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "pheromone.h"
 #include "pfarlocs.h"
 #include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
+#include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -907,6 +908,13 @@ int Hudson_CheckBeforeStarting()
 	{
 		WriteResult(refusalFromReading, kHudsonExitBadArguments);
 		return kHudsonExitBadArguments;
+	}
+
+	// floorislava=off: the run types the console's own FLOORISLAVA OFF, read by the console's own rule (floor_is_lava.h), before any level
+	// starts, as each level's start reads what was asked. The 1999 side of a film since the flip. Added 2026-11-11 by Melanikus (Third).
+	if (plan.floorIsLavaOff)
+	{
+		FloorIsLava_FromWords("OFF", &FloorIsLavaAsked);
 	}
 
 	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone

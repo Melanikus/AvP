@@ -76,16 +76,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: -alienways works without -dev",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "if (devSwitch(\"-alienways\"))",
-					"to": "if (CommandLineHasWord(command_line, \"-alienways\"))"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the map is built on a machine that doesn't run the aliens",
 			"changes": [
 				{
@@ -272,6 +262,16 @@
 					"file": "3dc/avp/alien_ways_level.cpp",
 					"from": "if (listing->polygons->size() > kAlienWaysMostListed)",
 					"to": "if (false && listing->polygons->size() > kAlienWaysMostListed)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a command-line switch turns the ways on again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\tif (devSwitch(\"-alienwaysview\"))\n\t\t{\n",
+					"to": "\t\tif (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tAlienWaysSwitchedOn = 1;\n"
 				}
 			]
 		}

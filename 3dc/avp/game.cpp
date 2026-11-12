@@ -261,7 +261,8 @@ void StartGame(void)
 	InitObjectVisibilities();
 	InitPheromoneSystem();
 	BuildFarModuleLocs();
-	// The map of walls and ceilings an alien can find its way along. Only with -alienways for now, and it's built on a thread of its own.
+	// The map of walls and ceilings an alien can find its way along, unless the console's FLOORISLAVA OFF asked for 1999's aliens. It's
+	// built on a thread of its own.
 	AlienWays_LevelStart();
 	InitHive();
 //	InitSquad();
@@ -369,7 +370,7 @@ void UpdateGame(void)
 	AiPheromoneSystem();
 
 	// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual
-	// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.
+	// gravity back, and the searches for ways carry on. It does nothing with FLOORISLAVA OFF.
 	AlienWays_Frame();
 
 	/*-------------- Patrick 11/1/97 ----------------

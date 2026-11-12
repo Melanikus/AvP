@@ -227,10 +227,10 @@ static void TestJoiningTheGame()
 
 	Check(!render.empty() && !ways.empty() && !winmain.empty(), "the game's files are there to read");
 
-	// The view has its own developer switch, -alienwaysview, which needs -alienways, and nothing else turns it on, so no player ever sees the
-	// lines once the ways are on for everyone (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109, PO's decision R-LAVA-P2)
-	Check(Has(winmain, "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tif (AlienWaysSwitchedOn)\n\t\t\t{\n\t\t\t\tAlienWaysViewSwitchedOn = 1;"),
-		"the view's own switch is a developer's, and it needs -alienways");
+	// The view has its own developer switch, -alienwaysview, and nothing else turns it on, so no player ever sees the lines now the ways are on
+	// for everyone. Since the flip it needs only -dev: AlienWaysSwitchedOn is 0 until the first level starts, so it can't be asked there
+	// (modified 2026-11-11 by Melanikus (Third) for the AvP port, #109, PO's decision R-LAVA-P2)
+	Check(Has(winmain, "if (devSwitch(\"-alienwaysview\"))\n\t\t{\n\t\t\tAlienWaysViewSwitchedOn = 1;"), "the view's own switch is a developer's");
 	Check(CountOf(winmain, "AlienWaysViewSwitchedOn = 1;") == 1 && !Has(render, "AlienWaysViewSwitchedOn = 1;"), "and nothing else turns the view on");
 	Check(Has(ReadSourceFile("3dc/avp/alien_ways.cpp"), "\nint AlienWaysViewSwitchedOn = 0;\n"), "and it starts off");
 

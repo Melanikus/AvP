@@ -3,8 +3,8 @@
 //
 // How all of this works, in plain words: ALIEN-WAYS.md, beside this file.
 //
-// WHILE IT'S BEING BUILT AND FILMED it's only on with the developer switch -alienways, which needs -dev (winmain.cpp). When it ships it's
-// always on, in every mode, with no setting for players: that's the user's ruling, and it's the one line in AlienWays_On to change.
+// ON FOR EVERY PLAYER, in every mode, with no setting on any menu: the owner's ruling for #109, and the flip (2026-11-11). The console's
+// FLOORISLAVA OFF puts 1999's aliens back from the next level's start (floor_is_lava.h), as each level's start reads what was asked.
 //
 // ONLY WHERE THE AI RUNS: in single player, and on the machine that runs the AI in a network game (AvP.NetworkAIServer). Another player's
 // machine only draws the aliens the host sends it, so it has no use for a map.
@@ -34,24 +34,25 @@
 #include "alien_ways_map.h"
 #include "alien_ways_lookahead.h"
 
-// 1 when -alienways was given with -dev. Set once, at start, by winmain.cpp.
+// 1 while this level has the alien ways. Each level's start sets it from what the console's FLOORISLAVA asked (FloorIsLavaAsked, on
+// unless a player turned it off), and nothing else does.
 extern int AlienWaysSwitchedOn;
 
-// 1 when -alienwaysgrid was given too (with -dev and -alienways). Then the aliens search the grid every NPC will share (npc_grid.h) instead
-// of the polygon map. The map is still built, first, and is what they search when the grid can't be had. Each level's build makes the grid
-// right after the map, on the same thread, and the guide is told each frame which one to search (alien_ways_guide.h, UseGrid). Set once,
-// at start, by winmain.cpp.
+// 1, since the flip (2026-11-11): the aliens search the grid every NPC will share (npc_grid.h) instead of the polygon map, as the owner
+// has always played them. The map is still built, first, and is what they search when the grid can't be had. Each level's build makes
+// the grid right after the map, on the same thread, and the guide is told each frame which one to search (alien_ways_guide.h, UseGrid).
+// Nothing changes it.
 extern int AlienWaysGridSwitchedOn;
 
 // Modified 2026-11-08 by Melanikus for the AvP port: the mover (#149).
-// 1 when -alienwaysmover was given too (with -dev, -alienways and -alienwaysgrid). Then where an alien heads is picked by alien ways itself,
+// 1 when -alienwaysmover was given with -dev. Then where an alien heads is picked by alien ways itself,
 // the same in Approach, Hunt and Wander (its target, where it last saw it, or the strongest scent of the marines), and with no way to follow
 // it heads straight for that goal instead of the game's own steering. How, in alien_ways.cpp above AlienWays_Steer. Its own switch, so one
 // exe can film the grid with the mover and without it. Set once, at start, by winmain.cpp.
 extern int AlienWaysMoverSwitchedOn;
 
-// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): 1 when -alienwaysview was given too (with -dev
-// and -alienways). Then each alien's way is drawn over the level as coloured lines (alien_ways_view.h, drawn by d3d_render.cpp), for films.
+// Added 2026-11-11 by Melanikus (Third) for the AvP port (#109; PO's decision R-LAVA-P2): 1 when -alienwaysview was given with -dev.
+// Then each alien's way is drawn over the level as coloured lines (alien_ways_view.h, drawn by d3d_render.cpp), for films.
 // Its own switch, so the lines stay a developer's tool when the ways are on for every player: no player ever sees them. Set once, at start,
 // by winmain.cpp.
 extern int AlienWaysViewSwitchedOn;

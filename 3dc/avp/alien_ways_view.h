@@ -7,7 +7,7 @@
 // set, because the game is dark), so a film and those pictures read the same. A small cross marks each point. The stretch the alien is
 // on now, and the point it's heading for, are white, and that point's cross is twice the size.
 //
-// WHO SEES IT: only a developer, with -dev and -alienways (DrawAlienWays, d3d_render.cpp), and never in a network game, where seeing an
+// WHO SEES IT: only a developer, with -dev -alienwaysview (DrawAlienWays, d3d_render.cpp), and never in a network game, where seeing an
 // alien's way through a wall would be cheating (KeepDeveloperToolsOutOfNetworkGames, d3d_render.cpp).
 //
 // This file needs nothing from the rest of the game, so tests/alien_ways_view_test.cpp can try every case.

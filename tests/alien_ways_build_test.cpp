@@ -276,13 +276,14 @@ static void SourceOfTheGame()
 	Check(Has(restarts, "\tstd::fill(std::begin(watched), std::end(watched), Watched());"), "SOURCE: and the stuck line's watch list, as a remade alien can have an old one's place and name");
 
 	Check(Has(game, "AiPheromoneSystem();\n\n\t// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual\n"
-		"\t// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.\n\tAlienWays_Frame();"),
+		"\t// gravity back, and the searches for ways carry on. It does nothing with FLOORISLAVA OFF.\n\tAlienWays_Frame();"),
 		"SOURCE: each frame, with the other AI systems and before any alien moves, the alien ways have their turn");
 
-	Check(Has(winmain, "if (devSwitch(\"-alienways\"))\n\t\t{\n\t\t\tAlienWaysSwitchedOn = 1;"), "SOURCE: -alienways needs -dev");
-	Check(!Has(winmain, "CommandLineHasWord(command_line, \"-alienways\")") && !Has(winmain, "CommandLineFindSwitch(command_line, \"-alienways\")"),
-		"SOURCE: and has no way round that");
-	Check(CountOf(winmain, "AlienWaysSwitchedOn = 1;") == 1 && !Has(ways, "AlienWaysSwitchedOn = 1;"), "SOURCE: nothing else turns it on");
+	// Since the flip (2026-11-11, #109) no command-line switch turns the ways on or off: each level's start does, from what the console asked
+	Check(!Has(winmain, "devSwitch(\"-alienways\")") && !Has(winmain, "devSwitch(\"-alienwaysgrid\")") && CountOf(winmain, "AlienWaysSwitchedOn") == 0,
+		"SOURCE: no command-line switch turns the ways on or off");
+	Check(CountOf(ways, "\tAlienWaysSwitchedOn = ") == 1 && Has(ways, "\tAlienWaysSwitchedOn = FloorIsLavaAsked ? 1 : 0;\n") && !Has(ways, "AlienWaysSwitchedOn = 1;"),
+		"SOURCE: only each level's start sets the switch, from what the console asked");
 
 	std::string const on = Between(ways, "static bool AlienWays_On()", "void AlienWays_LevelStart()");
 	Check(Has(on, "if (!AlienWaysSwitchedOn)\n\t{\n\t\treturn false;\n\t}"), "SOURCE: with the switch off there's no map");

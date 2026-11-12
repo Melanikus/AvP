@@ -7974,8 +7974,8 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 	}
 }
 
-// The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), whenever the developer
-// switch that makes the ways is on (-dev -alienways). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
+// The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), when the developer asks
+// for it (-dev -alienwaysview). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
 // frame of the game. The lines go through the same sums as the level's own polygons, by this frame's ViewMatrix, so a wall hides a way behind
 // it. Everything this changes on the card is put back afterwards, as DrawNormalLines does. Never in a network game: it would show where the
 // aliens are going, through the walls.

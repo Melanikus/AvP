@@ -3,7 +3,7 @@
 //
 // WHY. Aliens can run on walls and ceilings, but nothing in the 1999 game plans a way over them: there, an alien climbs only when it happens to
 // run into a wall while it's allowed to (AlienNearState_Approach, bh_near.cpp). This map lets an alien ask for a way that keeps off the floor
-// where it can. The game asks it through alien_ways.h, only while the -alienways switch is on.
+// where it can. The game asks it through alien_ways.h, unless the console's FLOORISLAVA OFF asked for 1999's aliens.
 //
 // WHAT THE MAP IS. Every polygon an alien could cling to is a place on the map. Each one is a FLOOR, a WALL or a CEILING, by which way it faces,
 // using the game's own floor angle (FLOOR_THRESHOLD in dynamics.cpp: facing up by at least 30000 of 65536). Two polygons are JOINED where they

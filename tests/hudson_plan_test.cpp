@@ -2653,6 +2653,21 @@ static void CheckFriendlyFire()
 	Check(Has(ReadSourceFile("tools/hudson/run-net-pair.ps1"), "if ($NoFriendlyFire) { $words += '-NoFriendlyFire' }"), "and so can the pair script");
 }
 
+// floorislava=off: 1999's aliens, for the other side of a film since the flip (#109, F5). Added 2026-11-11 by Melanikus (Third) for the AvP port.
+static void CheckFloorIsLavaWord()
+{
+	puts("floorislava=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5 floorislava=off", &plan) == 0 && plan.floorIsLavaOff, "a run can play 1999's aliens");
+	Check(HudsonPlan_Read("-hudson level=invasion frames=5", &plan) == 0 && !plan.floorIsLavaOff, "without the word, the alien ways are on, as for every player");
+	Refused("-hudson level=invasion frames=5 floorislava=on", kHudsonRefusedFloorIsLavaNotOff);
+	Refused("-hudson level=invasion frames=5 floorislava=", kHudsonRefusedFloorIsLavaNotOff);
+	Refused("-hudson level=invasion frames=5 floorislava=off floorislava=off", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($FloorIsLavaOff) { $arguments += \" floorislava=off\" }"), "the run script can ask for it");
+	Check(!Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "' -alienways'"), "and passes no -alienways, which the game no longer has");
+}
+
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
 static void SecondsAre(const char *text, long expected)
 {
@@ -2772,6 +2787,7 @@ int main()
 {
 	CheckBotFight();
 	CheckFriendlyFire();
+	CheckFloorIsLavaWord();
 	TestTheGridInTheGame();
 	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");
