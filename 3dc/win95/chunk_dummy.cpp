@@ -4,6 +4,7 @@
 //   a name is only read as far as the end of its chunk
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   a dummy object and its box have to be inside the level, as CheckPlace in chunk.hpp says
+//   a dummy object's turn has to fit, as CheckTurn in chunk.hpp says
 
 #include "chunk_dummy.hpp"
 
@@ -59,6 +60,7 @@ Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,con
 	CheckPlace(min_extents);
 	CheckPlace(max_extents);
 	CHUNK_EXTRACT(orientation,ChunkQuat)
+	CheckTurn(orientation);
 	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes)
 }
 

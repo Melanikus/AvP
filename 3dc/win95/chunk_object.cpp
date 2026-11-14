@@ -15,6 +15,7 @@
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   every place an object, a track, an alternative location or a module's entry point gives has to be inside the level, as CheckPlace in
 //   chunk.hpp says
+//   every turn an object, a track or an alternative location gives has to fit, as CheckTurn in chunk.hpp says
 
 #include <string>
 #include "chunk.hpp"
@@ -427,6 +428,7 @@ flags(0), version_no (0), associated_shape (0)
 	hdata+=sizeof(ChunkVectorInt);
 
 	parent_object->object_data_store->orientation = *((ChunkQuat *) hdata);
+	CheckTurn(parent_object->object_data_store->orientation);
 	hdata+=sizeof(ChunkQuat);
 
 	parent_object->object_data_store->index_num = *(int *) hdata;
@@ -1000,6 +1002,8 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 		CheckPlace(sections[i].pivot_start);
 		CheckPlace(sections[i].pivot_end);
 		CheckPlace(sections[i].object_offset);
+		CheckTurn(sections[i].quat_start);
+		CheckTurn(sections[i].quat_end);
 	}
 
 	if(timer_start<0 || timer_start>latest_start)
@@ -1132,6 +1136,7 @@ Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Ch
 	{
 		locations[i] = *(AltObjectLocation*) data;
 		CheckPlace(locations[i].position);
+		CheckTurn(locations[i].orientation);
 		data+=sizeof(AltObjectLocation);
 	}
 }

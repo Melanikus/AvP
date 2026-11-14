@@ -13,6 +13,7 @@
 //   every place a generator, the player's start, a power cable, a particle generator or a decal's corner gives has to be inside the
 //   level, as CheckPlace in chunk.hpp says
 //   a particle generator has to be one of the four kinds there are
+//   a particle generator's turn has to fit, as CheckTurn in chunk.hpp says
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -821,6 +822,7 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CheckPlace(location);
 	CHUNK_EXTRACT(orientation,ChunkQuat)
+	CheckTurn(orientation);
 	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }
 

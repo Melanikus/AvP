@@ -13,6 +13,7 @@
 //   removed CHUNK_EXTRACT_ARRAY, which sized a list from a count in the file with no check: only code in a comment used it
 //   added CheckPlace, which refuses a level that gives a place farther than 2^24 millimetres from its middle
 //   added CheckRadius, which refuses a shape's radius that isn't a real number from 0 to 2^24
+//   added CheckTurn, which refuses a turn with a part that isn't a real number from -2 to 2
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
@@ -518,6 +519,34 @@ inline void CheckRadius(float radius)
 	bool const notARealNumber = ((bits >> 23) & 0xFF) == 0xFF;
 
 	if (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
+// A turn, which is how something is turned from where it started, is kept as four fractions, x, y, z and w. Each part of a real turn is
+// from -1 to 1, and one saved by a tool can be a rounding step past that, so each part has to be a real number from -2 to 2. The game
+// makes a whole number of each part, so it has to stay one the game can hold. Every part of every turn in the game's own levels is from
+// -1 to 1. Whether a part is a real number is told from its bits, as for a radius. (Added 2026-11-14 by Melanikus for the AvP port.)
+inline bool TurnPartFits(float part)
+{
+	unsigned int bits;
+	memcpy(&bits, &part, sizeof(bits));
+
+	bool const notARealNumber = ((bits >> 23) & 0xFF) == 0xFF;
+
+	return !notARealNumber && part >= -2.0f && part <= 2.0f;
+}
+
+// Refuses the level unless each part of this turn fits. The compiler holds every caller to a turn kept as four floats.
+template <class Turn>
+inline void CheckTurn(Turn const & turn)
+{
+	static_assert(std::is_same<decltype(turn.x), float>::value && std::is_same<decltype(turn.y), float>::value &&
+		std::is_same<decltype(turn.z), float>::value && std::is_same<decltype(turn.w), float>::value,
+		"CheckTurn is for a turn kept as four floats");
+
+	if (!TurnPartFits(turn.x) || !TurnPartFits(turn.y) || !TurnPartFits(turn.z) || !TurnPartFits(turn.w))
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}

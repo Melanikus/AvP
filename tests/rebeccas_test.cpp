@@ -3768,8 +3768,9 @@ static void TestNumbersUsedAsPlaces()
 // it, right up to the wall, so a search that doesn't stop runs into the wall and ends the test. flagsAt is where to put a 1, for a chunk that only has a name if a flag says so.
 // Modified 2026-11-14 by Melanikus for the AvP port: a chunk whose other numbers are checked too gets ones it allows, so that it's refused for its name and nothing else.
 // placeAt is where its places start, "places" of them one after another, each put at x, y and z all -1, which is inside the level (CheckPlace) and has no zero byte; and
-// kindAt is where its kind goes, put at 0. Each comes before the name, where the search for the name's end never looks.
-static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt, int placeAt = -1, int places = 1, int kindAt = -1)
+// kindAt is where its kind goes, put at 0; and turnAt is where its turn goes, each of its four parts the bytes 0x3F808080, about 1.004, which fits (CheckTurn) and has no
+// zero byte. Each comes before the name, where the search for the name's end never looks.
+static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt, int placeAt = -1, int places = 1, int kindAt = -1, int turnAt = -1)
 {
 	File_Chunk file;
 	Parent_File = &file;
@@ -3791,6 +3792,11 @@ static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt
 	if (kindAt >= 0)
 	{
 		PutNumber(atTheWall, kindAt, 0);
+	}
+
+	for (int part = 0; turnAt >= 0 && part < 4; part++)
+	{
+		PutNumber(atTheWall, (size_t)turnAt + part * sizeof(int), 0x3F808080);
 	}
 
 	make(&file, atTheWall, size);
@@ -3896,13 +3902,13 @@ static void TestNamesStayInTheirChunks()
 	}
 
 	// placeAt, places and kindAt: see AcceptedWithNoZeroAnywhere (added 2026-11-14)
-	struct NameRow { MakesChunk make; int flagsAt; char const * what; int placeAt = -1; int places = 1; int kindAt = -1; };
+	struct NameRow { MakesChunk make; int flagsAt; char const * what; int placeAt = -1; int places = 1; int kindAt = -1; int turnAt = -1; };
 	NameRow const rows[] =
 	{
 		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused", 0 },
 		{ MakeChunk<AVP_Generator_Extra_Name_Chunk>,              -1, "a generator's other name" },
 		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name", 0 },
-		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name", 40, 1, 0 },
+		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name", 40, 1, 0, 52 },
 		{ MakeChunk<AVP_Path_Chunk>,                              -1, "a path's name" },
 		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name", 0 },
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,      -1, "an animation sequence's name" },
@@ -3931,13 +3937,13 @@ static void TestNamesStayInTheirChunks()
 		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>,  -1, "an alternate shape set's name" },
 		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,        -1, "a shape set collection's name" },
 		{ MakeChunk<RIF_Name_Chunk>,                              -1, "a level's name" },
-		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name", 0, 3 },
+		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name", 0, 3, -1, 36 },
 		{ MakeChunk<Dummy_Object_Text_Chunk>,                     -1, "a dummy object's text" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
 	{
-		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt, rows[i].placeAt, rows[i].places, rows[i].kindAt), rows[i].what);
+		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt, rows[i].placeAt, rows[i].places, rows[i].kindAt, rows[i].turnAt), rows[i].what);
 	}
 
 	// A list of bitmap names: how many, then four numbers and the name's place in the list, then the name
@@ -4670,6 +4676,161 @@ static void TestParticleKind()
 	Check(!ParticleKindAccepted((int)0x80000000), "and the most negative");
 }
 
+// 42. Turns. A turn is kept as four fractions, and each part has to be a real number from -2 to 2 (CheckTurn, in chunk.hpp): a real turn's
+// parts are from -1 to 1, a tool can save one a rounding step past that, and the game makes a whole number of each. Each kind of chunk that
+// keeps a turn is made here with that turn set and everything else as the game's own levels could have it. This test is built with the
+// ordinary arithmetic, under which a part that isn't a number never compares as in range, so it shows that the bit test on its own is what
+// refuses one. (Added 2026-11-14 by Melanikus for the AvP port.)
+static float FloatFromBits(unsigned int bits)
+{
+	float value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+}
+
+static ChunkQuat TurnOf(float x, float y, float z, float w)
+{
+	ChunkQuat const turn = { x, y, z, w };
+	return turn;
+}
+
+static void PutTurn(char * where, ChunkQuat const & turn)
+{
+	memcpy(where, &turn, sizeof(turn));
+}
+
+// A chunk of this kind and size, all zeros but for the turn at "at", and a count of 1 at "countAt" when the chunk holds a list.
+static bool TurnInChunkAccepted(MakesChunk make, size_t bytes, size_t at, ChunkQuat const & turn, int countAt = -1)
+{
+	alignas(int) static char data[256];
+
+	memset(data, 0, sizeof(data));
+	PutTurn(data + at, turn);
+
+	if (countAt >= 0)
+	{
+		PutNumber(data, (size_t)countAt, 1);
+	}
+
+	return ChunkAccepted(make, data, bytes);
+}
+
+// An object's header keeps its turn after its place, at byte 32.
+static bool ObjectTurnAccepted(ChunkQuat const & turn)
+{
+	TestFile file;
+	size_t const bytes = BuildObjectHeader("object", 7);
+
+	PutTurn(objectBytes + ChunkHeaderBytes + 32, turn);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+
+	return file.error_code == 0;
+}
+
+// A track with one section that takes a second, with one of its turns set.
+static bool TrackTurnAccepted(size_t turnAt, ChunkQuat const & turn)
+{
+	alignas(int) static char bytes[256];
+	size_t const sectionAt = sizeof(int);
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, sectionAt + offsetof(ChunkTrackSection, time_for_section), 65536);
+	PutTurn(bytes + sectionAt + turnAt, turn);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, sectionAt + sizeof(ChunkTrackSection) + 2 * sizeof(int));
+}
+
+static bool TrackStartTurnAccepted(ChunkQuat const & turn) { return TrackTurnAccepted(offsetof(ChunkTrackSection, quat_start), turn); }
+static bool TrackEndTurnAccepted(ChunkQuat const & turn) { return TrackTurnAccepted(offsetof(ChunkTrackSection, quat_end), turn); }
+
+static bool OtherTurnAccepted(ChunkQuat const & turn)
+{
+	return TurnInChunkAccepted(MakeChunk<Object_Alternate_Locations_Chunk>, 12 + sizeof(AltObjectLocation), 12 + offsetof(AltObjectLocation, orientation), turn, 8);
+}
+
+static bool ParticleTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, 72, 52, turn); }
+static bool DummyTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 36, turn); }
+static bool AnimationFrameTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Object_Animation_Sequence_Frame_Chunk>, 44, 0, turn); }
+
+// A hierarchy's list of sequences, with one sequence of one frame, whose turn is set
+static bool HierarchyFrameTurnAccepted(ChunkQuat const & turn)
+{
+	alignas(int) static char bytes[256];
+	size_t const frameAt = 4 + 16;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, 1);
+	PutTurn(bytes + frameAt + offsetof(Object_Animation_Frame, orientation), turn);
+
+	return ChunkAccepted(MakeChunk<Object_Animation_All_Sequence_Chunk>, bytes, frameAt + sizeof(Object_Animation_Frame));
+}
+
+typedef bool (*TurnAccepted)(ChunkQuat const & turn);
+
+static void TestTurns()
+{
+	puts("42. turns");
+
+	float const justPast = FloatFromBits(0x40000001);   // the next number a float can hold after 2
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const negativeNotANumber = FloatFromBits(0xFFC00000);
+	float const endless = std::numeric_limits<float>::infinity();
+
+	// Every way a part can be wrong, on one kind of chunk
+	Check(ObjectTurnAccepted(TurnOf(0.7071068f, 0.0f, 0.7071068f, 0.0f)), "an object turned a quarter of the way round is accepted");
+	Check(ObjectTurnAccepted(TurnOf(1.0f, -1.0f, 1.0f, -1.0f)), "and with every part at 1 or -1, as far as the game's own levels go");
+	char const * const parts[4] = { "x", "y", "z", "w" };
+
+	for (int part = 0; part < 4; part++)
+	{
+		float values[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		std::string const which = std::string("an object's turn with its ") + parts[part];
+
+		values[part] = justPast;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " just past 2 is refused: no turn is that far").c_str());
+		values[part] = -justPast;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " just past -2 is refused").c_str());
+		values[part] = notANumber;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " not a number is refused").c_str());
+	}
+
+	Check(!ObjectTurnAccepted(TurnOf(negativeNotANumber, 0.0f, 0.0f, 1.0f)), "and one with a part that isn't a number, with its sign bit set");
+	Check(!ObjectTurnAccepted(TurnOf(endless, 0.0f, 0.0f, 1.0f)), "and one with an endless part");
+	Check(!ObjectTurnAccepted(TurnOf(-endless, 0.0f, 0.0f, 1.0f)), "and one with an endlessly negative part");
+
+	// And every kind of chunk with a turn in it
+	struct TurnRow { TurnAccepted accepted; char const * what; };
+	TurnRow const rows[] =
+	{
+		{ ObjectTurnAccepted,          "an object's turn" },
+		{ TrackStartTurnAccepted,      "a track's first turn" },
+		{ TrackEndTurnAccepted,        "a track's last turn" },
+		{ OtherTurnAccepted,           "an object's other turn" },
+		{ ParticleTurnAccepted,        "a particle generator's turn" },
+		{ DummyTurnAccepted,           "a dummy object's turn" },
+		{ HierarchyFrameTurnAccepted,  "a hierarchy's frame's turn" },
+		{ AnimationFrameTurnAccepted,  "an animation frame's turn" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		std::string const what = rows[i].what;
+		float past[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		float broken[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		// The part that's wrong changes from row to row, and so does the way past
+		past[i % 4] = ((i / 4) % 2 == 0) ? justPast : -justPast;
+		broken[(i + 1) % 4] = notANumber;
+
+		Check(rows[i].accepted(TurnOf(0.0f, 0.0f, 0.0f, 1.0f)), (what + " of no turn at all is accepted").c_str());
+		Check(rows[i].accepted(TurnOf(2.0f, -2.0f, 2.0f, -2.0f)), (what + " with every part as far as it can be is accepted").c_str());
+		Check(!rows[i].accepted(TurnOf(past[0], past[1], past[2], past[3])), (what + " with a part just past 2 is refused: no turn is that far").c_str());
+		Check(!rows[i].accepted(TurnOf(broken[0], broken[1], broken[2], broken[3])), (what + " with a part that isn't a number is refused").c_str());
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4710,6 +4871,7 @@ int main()
 	TestPlaces();
 	TestShapeRadius();
 	TestParticleKind();
+	TestTurns();
 
 	if (checksFailed)
 	{
