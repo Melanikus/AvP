@@ -22,6 +22,8 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   a hierarchy the game couldn't build refuses the level
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a file that holds a hierarchy has to give its own name
 
 #include <string>
 #include "chunk.hpp"
@@ -305,6 +307,20 @@ File_Chunk::File_Chunk(const char * file_name)
 	if (!error_code)
 	{
 		post_input_processing();
+	}
+
+	// A file that holds a hierarchy is a model, and the game keeps each model it loads under the file's own name, which the file gives
+	// in its level environment (RIFFNAME). It reads that name straight away (Global_Hierarchy_Store, in projload.cpp), so a file with a
+	// hierarchy and no name is refused here, and load_rif stops with its error message. All 18 of the game's own files with a hierarchy
+	// give their name. Added 2026-11-14 by Melanikus for the AvP port.
+	if (!error_code && lookup_single_child ("OBJCHIER"))
+	{
+		Chunk * const environment = lookup_single_child ("REBENVDT");
+
+		if (!environment || environment->r_u_miscellaneous() || !((Chunk_With_Children *) environment)->lookup_single_child ("RIFFNAME"))
+		{
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
 	}
 }
 

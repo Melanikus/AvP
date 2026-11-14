@@ -16,6 +16,8 @@
 // - By reading the game's source: loading a level writes the line, once, after the level is in and before it's copied into the game,
 //   naming the path it was loaded from; the loader reads the size as a 64-bit number, and every read it makes has to get all it asked
 //   for and adds what it got to the sum; the custom maps list uses the loader's own largest size.
+// - A model's name: a file that holds a hierarchy has to give its own name in its level environment, and one with none is refused; a
+//   file with no hierarchy needs no name (added 2026-11-14 by Melanikus for the AvP port).
 //
 // WHAT IT CAN'T SHOW: a file of 4 GB or more, whose size's lower 32 bits look small. Making one would fill the disk of the computer
 // running the tests. The rule's own check below covers that size, and the source check shows the loader reads all 64 bits.
@@ -138,6 +140,12 @@ static Bytes Joined(const Bytes &first, const Bytes &second)
 static Bytes Environment()
 {
 	return MakeChunk("REBENVDT", Bytes());
+}
+
+// A model's level environment, which gives the file's own name (RIFFNAME: 5 letters and three 0s), as a model's has to
+static Bytes ModelEnvironment()
+{
+	return MakeChunk("REBENVDT", MakeChunk("RIFFNAME", BytesOf("model\0\0", 8)));
 }
 
 // A model's one hierarchy, the smallest a model file can hold: its outermost chunk, with one section inside, whose only chunk is
@@ -329,7 +337,7 @@ static void TestTheLoader(const std::string &folder)
 	printf("  (the level is packed: %u bytes)\n", (unsigned int)packed.size());
 	Bytes const tooShort = BytesOf("REBINFF2abc", 11);
 	Bytes const noEnvironment = MakeChunk("REBINFF2", MakeChunk("SUMTESTS", Bytes(40, 'x')));
-	Bytes const model = MakeChunk("REBINFF2", Joined(Environment(), OneHierarchy()));
+	Bytes const model = MakeChunk("REBINFF2", Joined(ModelEnvironment(), OneHierarchy()));
 	Bytes const modelNoEnvironment = MakeChunk("REBINFF2", OneHierarchy());
 
 	std::string const plainFile = folder + "Plain.rif";
@@ -390,6 +398,52 @@ static void TestTheLoader(const std::string &folder)
 	remove(noEnvironmentFile.c_str());
 	remove(modelFile.c_str());
 	remove(modelNoEnvironmentFile.c_str());
+}
+
+// A file that holds a hierarchy is a model, and has to give its own name in its level environment (RIFFNAME), as all 18 of the game's
+// own models do. A file with no hierarchy needs none. Added 2026-11-14 by Melanikus for the AvP port.
+static void TestAModelGivesItsName(const std::string &folder)
+{
+	printf("A model's name:\n");
+
+	// A model's one hierarchy, the smallest a model file can hold: its outermost chunk, with one section inside, whose only chunk is
+	// its name (a count of 0 extra numbers, then the 7 letters and their 0). A section with no animations is left out when the model is
+	// built, so it needs nothing more to load.
+	Bytes sectionName;
+	PutNumber(sectionName, 0);
+	Bytes const letters = BytesOf("section", 8);
+	sectionName.insert(sectionName.end(), letters.begin(), letters.end());
+	Bytes const hierarchy = MakeChunk("OBJCHIER", MakeChunk("OBJCHIER", MakeChunk("OBJHIERD", sectionName)));
+
+	// A level environment that gives the file's name (5 letters and three 0s), and one that gives none
+	Bytes const named = MakeChunk("REBENVDT", MakeChunk("RIFFNAME", BytesOf("model\0\0", 8)));
+	Bytes const unnamed = MakeChunk("REBENVDT", Bytes());
+
+	// A whole file: its heading, then these two parts, one after the other
+	auto const wholeFile = [](const Bytes &first, const Bytes &second)
+	{
+		Bytes inside(first);
+		inside.insert(inside.end(), second.begin(), second.end());
+		return MakeChunk("REBINFF2", inside);
+	};
+
+	std::string const namedFile = folder + "NamedModel.rif";
+	std::string const unnamedFile = folder + "UnnamedModel.rif";
+	std::string const levelFile = folder + "UnnamedLevel.rif";
+
+	Write(namedFile, wholeFile(named, hierarchy));
+	Write(unnamedFile, wholeFile(unnamed, hierarchy));
+	Write(levelFile, wholeFile(unnamed, MakeChunk("SUMTESTS", Bytes(40, 'x'))));
+
+	LevelFileSum got;
+
+	Check(Loads(namedFile, &got), "a model that gives its name loads");
+	Check(!Loads(unnamedFile, &got), "the same model with no name is refused");
+	Check(Loads(levelFile, &got), "and a file with no hierarchy loads with no name");
+
+	remove(namedFile.c_str());
+	remove(unnamedFile.c_str());
+	remove(levelFile.c_str());
 }
 
 static void TestTheGameUsesIt()
@@ -489,6 +543,7 @@ int main()
 
 	TestTheRule();
 	TestTheLoader(folder);
+	TestAModelGivesItsName(folder);
 	TestTheGameUsesIt();
 
 	RemoveDirectoryA(folder.c_str());
