@@ -2271,20 +2271,36 @@ bool InitialiseDirect3D()
 		return false;
 	}
 
-	// Get the number of devices/video cards in the system
-	d3d.NumDrivers = d3d.lpD3D->GetAdapterCount();
+	// The video cards in the system, each one's name, and its display modes and their formats, in lists that each have a most
+	// (d3_enumerate.cpp). (Modified 2026-11-14 by Melanikus (Dietrich), D3D-ENUM-1: this was read here, into lists with no bound.)
+	uint32_t numDisplayFormats = sizeof(DisplayFormats) / sizeof(DisplayFormats[0]);
+	D3DEnumeration enumeration;
+	bool const described = D3D_EnumerateAdapters(d3d.lpD3D, DisplayFormats, numDisplayFormats, d3d.Driver, &d3d.NumDrivers, &enumeration);
 
-	Con_PrintMessage("\t Found " + Util::IntToString(d3d.NumDrivers) + " video adapter(s)");
+	Con_PrintMessage("\t Found " + Util::IntToString(enumeration.adaptersFound) + " video adapter(s)");
 
-	// Get adapter information for all available devices (vid card name, etc)
-	for (uint32_t driverIndex = 0; driverIndex < d3d.NumDrivers; driverIndex++)
+	if (!described)
 	{
-		LastError = d3d.lpD3D->GetAdapterIdentifier(driverIndex, /*D3DENUM_WHQL_LEVEL*/0, &d3d.Driver[driverIndex].AdapterInfo);
-		if (FAILED(LastError))
-		{
-			LogDxError(LastError, __LINE__, kThisFile);
-			return false;
-		}
+		LastError = enumeration.failure;
+		LogDxError(LastError, __LINE__, kThisFile);
+		return false;
+	}
+
+	if (enumeration.adaptersFound > MAX_D3D_DRIVERS)
+	{
+		Con_PrintMessage("\t Keeping the first " + Util::IntToString(MAX_D3D_DRIVERS) + " of them, the most the list holds");
+	}
+
+	if (enumeration.modesLeftOut > 0)
+	{
+		Con_PrintMessage("\t " + Util::IntToString(enumeration.modesLeftOut) + " display mode(s) left out: each adapter's list holds " +
+			Util::IntToString(MAX_D3D_DISPLAY_MODES));
+	}
+
+	if (enumeration.formatsLeftOut > 0)
+	{
+		Con_PrintMessage("\t " + Util::IntToString(enumeration.formatsLeftOut) + " display format(s) left out: each adapter's list holds " +
+			Util::IntToString(MAX_D3D_FORMATS));
 	}
 
 	Con_PrintMessage("\t Using device: " + std::string(d3d.Driver[defaultDevice].AdapterInfo.Description) + " on display " + std::string(d3d.Driver[defaultDevice].AdapterInfo.DeviceName));
@@ -2309,74 +2325,6 @@ bool InitialiseDirect3D()
 	{
 		// i assume we shouldn't be guessing this?
 		SelectedAdapterFormat = D3DFMT_X8R8G8B8;
-	}
-
-	// count number of display formats in our array
-	uint32_t numDisplayFormats = sizeof(DisplayFormats) / sizeof(DisplayFormats[0]);
-	uint32_t numFomats = 0;
-
-	// loop through all the devices, getting the list of formats available for each
-	for (uint32_t thisDevice = 0; thisDevice < d3d.NumDrivers; thisDevice++)
-	{
-		d3d.Driver[thisDevice].NumModes = 0;
-
-		for (uint32_t displayFormatIndex = 0; displayFormatIndex < numDisplayFormats; displayFormatIndex++)
-		{
-			// get the number of display moves available on this adapter for this particular format
-			uint32_t numAdapterModes = d3d.lpD3D->GetAdapterModeCount(thisDevice, DisplayFormats[displayFormatIndex]);
-
-			for (uint32_t modeIndex = 0; modeIndex < numAdapterModes; modeIndex++)
-			{
-				D3DDISPLAYMODE DisplayMode;
-
-				// does this adapter support the requested format?
-				d3d.lpD3D->EnumAdapterModes(thisDevice, DisplayFormats[displayFormatIndex], modeIndex, &DisplayMode);
-
-				// Filter out low-resolution modes
-				if (DisplayMode.Width < 640 || DisplayMode.Height < 480)
-					continue;
-
-				uint32_t j = 0;
-
-				// Check if the mode already exists (to filter out refresh rates)
-				for (; j < d3d.Driver[thisDevice].NumModes; j++)
-				{
-					if ((d3d.Driver[thisDevice].DisplayMode[j].Width  == DisplayMode.Width) &&
-						(d3d.Driver[thisDevice].DisplayMode[j].Height == DisplayMode.Height) &&
-						(d3d.Driver[thisDevice].DisplayMode[j].Format == DisplayMode.Format))
-							break;
-				}
-
-				// If we found a new mode, add it to the list of modes
-				if (j == d3d.Driver[thisDevice].NumModes) // we made it all the way throught the list and didn't find a match
-				{
-					assert (DisplayMode.Width != 0);
-					assert (DisplayMode.Height != 0);
-
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Width       = DisplayMode.Width;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Height      = DisplayMode.Height;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Format      = DisplayMode.Format;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].RefreshRate = DisplayMode.RefreshRate;
-
-					d3d.Driver[thisDevice].NumModes++;
-
-					uint32_t f = 0;
-
-					// Check if the mode's format already exists
-					for (; f < numFomats; f++ )
-					{
-						if (DisplayMode.Format == d3d.Driver[thisDevice].Formats[f]) {
-							break;
-						}
-					}
-
-					// If the format is new, add it to the list
-					if (f == numFomats) {
-						d3d.Driver[thisDevice].Formats[numFomats++] = DisplayMode.Format;
-					}
-				}
-			}
-		}
 	}
 
 	// set CurrentVideoMode variable to index display mode that matches user requested settings

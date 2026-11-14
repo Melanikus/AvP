@@ -576,6 +576,7 @@
     <ClCompile Include="..\..\3dc\win95\plspecfn.cpp" />
     <ClCompile Include="..\..\3dc\win95\videomodes.cpp" />
     <ClCompile Include="..\..\3dc\win95\win_func.cpp" />
+    <ClCompile Include="..\d3_enumerate.cpp" />
     <ClCompile Include="..\d3_func.cpp" />
     <ClCompile Include="..\di_func.cpp" />
   </ItemGroup>
@@ -876,6 +877,7 @@
     <ClInclude Include="..\..\3dc\win95\plat_shp.h" />
     <ClInclude Include="..\..\3dc\win95\showcmds.h" />
     <ClInclude Include="..\..\3dc\win95\shpanim.h" />
+    <ClInclude Include="..\d3_enumerate.h" />
     <ClInclude Include="..\d3_func.h" />
     <ClInclude Include="..\shader_model.h" />
     <ClInclude Include="..\resource.h" />

@@ -48,6 +48,9 @@
     <ClCompile Include="..\..\3dc\video\SmackerPlayback.cpp">
       <Filter>Video</Filter>
     </ClCompile>
+    <ClCompile Include="..\d3_enumerate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\d3_func.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1872,6 +1875,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\os_header.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\d3_enumerate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\d3_func.h">
