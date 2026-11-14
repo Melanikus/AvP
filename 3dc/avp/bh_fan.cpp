@@ -1,5 +1,6 @@
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a saved fan's speed has to be from nothing to full
+//   a loaded fan's wind is worked out from its speed, as the game always does, not taken from the save
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -225,7 +226,10 @@ void LoadStrategy_Fan(SAVE_BLOCK_STRATEGY_HEADER* header)
 		COPYELEMENT_LOAD(speed_mult)
 	}
 
-	COPYELEMENT_LOAD(wind_speed)
+	// The fan's wind is always its full-speed wind times its speed (as the game works it out each time the speed changes, above), so it's
+	// worked out here the same way from the speed just loaded, rather than taken from the save. A real save holds this very number.
+	// (Added 2026-11-14 by Melanikus for the AvP port.)
+	f_bhv->wind_speed=MUL_FIXED(f_bhv->speed_mult,f_bhv->fan_wind_strength);
 
 	//load the track position
 	if(f_bhv->track)

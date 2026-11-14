@@ -1179,6 +1179,16 @@
 					"to": "if (true)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a fan's wind is taken from the save",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_fan.cpp",
+					"from": "\tf_bhv->wind_speed=MUL_FIXED(f_bhv->speed_mult,f_bhv->fan_wind_strength);\n\n\t//load the track position",
+					"to": "\tCOPYELEMENT_LOAD(wind_speed)\n\n\t//load the track position"
+				}
+			]
 		}
 	]
 }

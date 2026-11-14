@@ -616,6 +616,14 @@ static void TestTheLoadersAsk()
 	// Added 2026-11-14 by Melanikus for the AvP port: a saved fan's speed, and a saved track's timer and speed, have to be ones the game could reach
 	Check(Has(ReadSourceFile("3dc/avp/bh_fan.cpp"), "if(Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))"), "a fan's speed has to be from nothing to full");
 	{
+		std::string const fan = ReadSourceFile("3dc/avp/bh_fan.cpp");
+		std::string::size_type const loader = fan.find("void LoadStrategy_Fan(");
+		std::string::size_type const worked = fan.find("\tf_bhv->wind_speed=MUL_FIXED(f_bhv->speed_mult,f_bhv->fan_wind_strength);\n\n\t//load the track position");
+
+		Check(loader != std::string::npos && worked != std::string::npos && worked > loader && !Has(fan, "COPYELEMENT_LOAD(wind_speed)"),
+			"and its wind is worked out from that speed, never taken from the save");
+	}
+	{
 		std::string const track = ReadSourceFile("3dc/avp/track.cpp");
 		std::string::size_type const section = track.find("tc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);");
 		std::string::size_type const timer = track.find("if (Save_NumberIsInRange(block->timer, 0, longest_timer))");
