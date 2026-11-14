@@ -513,6 +513,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: an outside shape with no name is put on the list of named shapes",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "\t\tif (shape_name)\n\t\t{\n\t\t\trif_name = shape_name;\n\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));\n\t\t}\n",
+					"to": "\t\trif_name = shape_name;\n\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a skin with no name is put on the list of named shapes",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "\t\t\t\tif (shpname)\n\t\t\t\t{\n\t\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));\n\t\t\t\t}\n",
+					"to": "\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));\n"
+				}
+			]
 		}
 	]
 }

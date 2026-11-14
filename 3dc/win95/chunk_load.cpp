@@ -17,6 +17,7 @@
 //   texture_animation.h
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   an animated shape's radius is worked out from squares that are fractions, as whole numbers can't hold them
+//   an outside shape or a skin with no name isn't put on the list of named shapes
 
 #include <stdlib.h>
 #include <string>
@@ -898,8 +899,15 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 	if (pChunk)
 	{
 		seflc = (Shape_External_File_Chunk *)pChunk;
-		rif_name = seflc->get_shape_name();
-		msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		char const * const shape_name = seflc->get_shape_name();
+
+		// An outside shape keeps its name in an object name chunk or a level name chunk, and one with neither has no name to be found
+		// by, so it isn't put on the list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
+		if (shape_name)
+		{
+			rif_name = shape_name;
+			msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		}
 	}
 	else
 	{
@@ -952,9 +960,14 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 					CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
 				}
 
+				// A skin keeps its name in a shape name chunk, and one with none has no name to be found by, so it isn't put on the
+				// list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
 				const char *shpname = sssc->get_shape_name();
-				GLOBALASSERT(shpname);
-				msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+
+				if (shpname)
+				{
+					msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+				}
 				h->shape_nums.add_entry(list_pos);
 				post_process_shape(mainshapelist[list_pos]);
 			}

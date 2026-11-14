@@ -260,6 +260,14 @@ static void TestTheRealGame()
 	std::string const randomTextures = Between(levelLoad, "h->envd->lookup_child(\"RANTEXID\",rlist);", "double env_scale=local_scale;");
 	Check(ComesBefore(randomTextures, "if(!ran_chunk->name) continue;", "_stricmp(ran_chunk->name"),
 		"a set of random textures with no name is passed over before its name is compared");
+
+	// An outside shape and a skin can have no name chunk, and then their names are none (chunk_shape.cpp, get_shape_name), so the list of
+	// named shapes only takes one that has a name
+	std::string const shapes = ReadSourceFile("3dc/win95/chunk_load.cpp");
+	Check(Has(shapes, "\t\tif (shape_name)\n\t\t{\n\t\t\trif_name = shape_name;\n\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));")
+		&& !Has(shapes, "rif_name = seflc->get_shape_name();"), "an outside shape with no name isn't put on the list of named shapes");
+	Check(Has(shapes, "\t\t\t\tif (shpname)\n\t\t\t\t{\n\t\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));")
+		&& !Has(shapes, "GLOBALASSERT(shpname);"), "and neither is a skin with no name");
 }
 
 int main()

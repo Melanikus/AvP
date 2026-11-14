@@ -4849,6 +4849,35 @@ static void TestRandomTextureName()
 	Parent_File = 0;
 }
 
+// 44. A shape's name for the list of named shapes. An outside shape keeps it in an object name or a level name chunk, and a sub-shape (a
+// skin) in a shape name chunk, and each can have none. The level loader leaves a shape with no name off that list (chunk_load.cpp, which
+// level_file_name_test reads), and this shows the names really are none then. (Added 2026-11-14 by Melanikus for the AvP port.)
+static void TestShapesWithNoName()
+{
+	puts("44. shapes with no name");
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, 0));
+		Check(outside->get_shape_name() == 0, "an outside shape with no name chunk has no name, so the loader leaves it off the list of named shapes");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const skin(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
+		Check(file.error_code == 0 && skin->get_shape_name() == 0, "and a sub-shape with no shape name chunk has none either");
+
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4891,6 +4920,7 @@ int main()
 	TestParticleKind();
 	TestTurns();
 	TestRandomTextureName();
+	TestShapesWithNoName();
 
 	if (checksFailed)
 	{
