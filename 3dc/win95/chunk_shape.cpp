@@ -29,6 +29,7 @@
 //   a shape's radius, and its radius about its centre, have to be real numbers from 0 to 2^24, as CheckRadius in chunk.hpp says
 //   an animation frame's polygon normals have to pass the same rule as a shape's own
 //   a texture coordinate has to be a real number no further than an animated corner's can be
+//   an outside shape, and a skin in an animated shape's alternate textures, have to have a name
 
 #include <math.h>
 #include <vector>
@@ -1780,6 +1781,14 @@ CHUNK_WITH_CHILDREN_LOADER("SHPEXTFL",Shape_External_File_Chunk)
 void Shape_External_File_Chunk::post_input_processing()
 {
 	Chunk_With_Children::post_input_processing();
+
+	// An outside shape is found by its name, which it keeps in an object name chunk or a level name chunk, so one with neither is refused.
+	// It's asked only now, as an object name chunk makes its name in the step just above. Every one of the 1,160 in the game's own levels
+	// has one. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!get_shape_name())
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 const char* Shape_External_File_Chunk::get_shape_name()
@@ -2261,6 +2270,14 @@ Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 void Shape_Sub_Shape_Chunk::post_input_processing()
 {
 	if (!shape_numbers_are_valid (shape_data, this) || count_children ("TEXTANIM"))
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	// A skin, a sub-shape in an animated shape's alternate textures, is found by its name, which it keeps in a shape name chunk, so one
+	// with none is refused. No level of the game's own has a skin. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (parent && !strcmp(parent->identifier, "ASALTTEX") && !get_shape_name())
 	{
 		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		return;

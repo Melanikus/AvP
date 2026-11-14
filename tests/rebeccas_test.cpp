@@ -4858,8 +4858,9 @@ static void TestRandomTextureName()
 }
 
 // 44. A shape's name for the list of named shapes. An outside shape keeps it in an object name or a level name chunk, and a sub-shape (a
-// skin) in a shape name chunk, and each can have none. The level loader leaves a shape with no name off that list (chunk_load.cpp, which
-// level_file_name_test reads), and this shows the names really are none then. (Added 2026-11-14 by Melanikus for the AvP port.)
+// skin) in a shape name chunk, and each can have none. An outside shape with neither, and a skin in an animated shape's alternate textures
+// with none, are refused as the level is read; the level loader also leaves a shape with no name off that list (chunk_load.cpp, which
+// level_file_name_test reads). (Added 2026-11-14 by Melanikus for the AvP port; refused at reading since N2r.)
 static void TestShapesWithNoName()
 {
 	puts("44. shapes with no name");
@@ -4869,7 +4870,24 @@ static void TestShapesWithNoName()
 		Parent_File = &file;
 
 		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, 0));
-		Check(outside->get_shape_name() == 0, "an outside shape with no name chunk has no name, so the loader leaves it off the list of named shapes");
+		Check(outside->get_shape_name() == 0, "an outside shape with no name chunk has no name");
+		outside->post_input_processing();
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "so it's refused as the level is read: it couldn't be found by its name");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		// An object name chunk: a spare number, then the name
+		char * const named = PutChunk(wholeShape, "EXTOBJNM", 8);
+		memcpy(named + 4, "abc", 4);
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 8));
+		outside->post_input_processing();
+		Check(file.error_code == 0 && outside->get_shape_name() != 0, "an outside shape with an object name chunk is accepted, and has its name");
 
 		Parent_File = 0;
 	}
@@ -4879,8 +4897,39 @@ static void TestShapesWithNoName()
 		Parent_File = &file;
 
 		size_t const bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
-		std::unique_ptr<Shape_Sub_Shape_Chunk> const skin(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
-		Check(file.error_code == 0 && skin->get_shape_name() == 0, "and a sub-shape with no shape name chunk has none either");
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const loose(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
+		loose->post_input_processing();
+		Check(file.error_code == 0 && loose->get_shape_name() == 0, "a sub-shape with no shape name chunk has no name, and elsewhere that's allowed");
+
+		Parent_File = 0;
+	}
+
+	for (int named = 0; named < 2; named++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		std::unique_ptr<Anim_Shape_Alternate_Texturing_Chunk> const textures(new Anim_Shape_Alternate_Texturing_Chunk(&file, wholeShape, 0));
+		size_t bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+
+		if (named)
+		{
+			char * const name = PutChunk(wholeShape + bytes, "SHPFNAME", 4);
+			memcpy(name, "abc", 4);
+			bytes += ChunkHeaderBytes + 4;
+		}
+
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const skin(new Shape_Sub_Shape_Chunk(textures.get(), wholeShape, bytes));
+		skin->post_input_processing();
+
+		if (named)
+		{
+			Check(file.error_code == 0, "a skin in an animated shape's alternate textures with a shape name chunk is accepted");
+		}
+		else
+		{
+			Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "and one with none is refused: it couldn't be found by its name");
+		}
 
 		Parent_File = 0;
 	}
