@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   avp_try_load_rif: a level file the loader refuses comes back as INVALID_RIFFHANDLE, with nothing shown (chunk_load.cpp)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a handle can be asked for the size and MD5 sum of the file it was loaded from (level_file_sum.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
@@ -3172,6 +3174,11 @@ void avp_undo_rif_load(RIFFHANDLE h)
 RIFFHANDLE avp_load_rif(const char * fname)
 {
 	return load_rif(fname);
+}
+
+RIFFHANDLE avp_try_load_rif(const char * fname)
+{
+	return try_load_rif(fname);
 }
 
 LevelFileSum avp_rif_file_sum(RIFFHANDLE h)

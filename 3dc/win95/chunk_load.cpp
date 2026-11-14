@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a level file can be loaded on a "try" path (try_load_rif), which gives a refused file back as INVALID_RIFFHANDLE with nothing
+//   shown, for the map editor; load_rif, the game's, still shows its message and stops the game at the same place
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   can give a shape's name from its position, for the NORMAL LINES view's log
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -586,8 +589,10 @@ extern unsigned char *TextureLightingTable;
 // Functions which operate on RIFFHANDLEs
 /////////////////////////////////////////
 
-// load a rif file into memory
-RIFFHANDLE load_rif(const char *fname)
+// Loads a rif file into memory. A file the loader refuses is given back as INVALID_RIFFHANDLE, and nothing is shown: this is the
+// "try" path, for the map editor, which tells the mapper why itself. (Added 2026-11-14 by Melanikus for the AvP port: it's what
+// load_rif did, up to its message.)
+RIFFHANDLE try_load_rif(const char *fname)
 {
 	File_Chunk *fc = new File_Chunk(fname);
 
@@ -597,11 +602,6 @@ RIFFHANDLE load_rif(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		// fname can be a long custom level path: no fixed-size buffer
-		std::string message = std::string("Error loading ") + fname;
-		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
-		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
 
@@ -615,6 +615,24 @@ RIFFHANDLE load_rif(const char *fname)
 	if (pChunk)
 	{
 		h->envd = (Environment_Data_Chunk *)pChunk;
+	}
+
+	return h;
+}
+
+// The game's own way to load a rif file into memory: a file the loader refuses shows its message, and stops the game, as it always has
+RIFFHANDLE load_rif(const char *fname)
+{
+	RIFFHANDLE const h = try_load_rif(fname);
+
+	if (h == INVALID_RIFFHANDLE)
+	{
+		// fname can be a long custom level path: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
+		ChangeWindowsSize(1, 1);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
+		avp_exit(0x111);
+		return INVALID_RIFFHANDLE;
 	}
 
 	return h;

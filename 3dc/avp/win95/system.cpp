@@ -435,10 +435,9 @@ void UnloadRifFile()
 const char *GameDataDirName = "avp_rifs";
 const char *FileNameExtension = ".rif";
 
-// Loads the level the game is set to start (Env_List[AvP.CurrentEnv]). Gives back false if its file can't be loaded: the level's
-// log is written first, and nothing of the level is in. LoadRifFile, below, is what the game itself calls; it stops the game then.
-// The editor calls this one, so a refused level is reported to the mapper instead of ending the editor.
-bool TryLoadRifFile()
+// Loads the level the game is set to start (Env_List[AvP.CurrentEnv]), reading its file with "load", one of the two ways below. Gives
+// back false if its file can't be loaded: the level's log is written first, and nothing of the level is in.
+static bool LoadTheLevel(RIFFHANDLE (*load)(const char *))
 {
 	char file_and_path[MAX_PATH];
 	
@@ -468,7 +467,7 @@ bool TryLoadRifFile()
 	{
 		file_and_path[sizeof(file_and_path) - 1] = '\0';
 		pathMade = true;
-		env_rif = avp_load_rif((const char*)&file_and_path[0]);
+		env_rif = load((const char*)&file_and_path[0]);
 	}
 	Set_Progress_Bar_Position(PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4);
 
@@ -499,10 +498,19 @@ bool TryLoadRifFile()
 	return true;
 }
 
-// The game's own way to start a level: a level that can't be loaded stops the game, with the same exit code as it always has.
+// The editor's way to start a level: a file the loader refuses comes back as false, with nothing shown (avp_try_load_rif), so the
+// mapper is told why instead of the editor ending. (Changed 2026-11-14 by Melanikus for the AvP port: it used to read the file the
+// game's way, which shows a message and stops at a refused file before this could give anything back.)
+bool TryLoadRifFile()
+{
+	return LoadTheLevel(avp_try_load_rif);
+}
+
+// The game's own way to start a level. A file the loader refuses shows its message and stops the game inside avp_load_rif, exactly
+// as it always has; a level that can't be loaded otherwise stops the game here, with the same exit code as it always has.
 void LoadRifFile()
 {
-	if (!TryLoadRifFile())
+	if (!LoadTheLevel(avp_load_rif))
 	{
 		exit(0x3421);
 	}
