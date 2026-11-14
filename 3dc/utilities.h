@@ -1,3 +1,5 @@
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   SaveFolder_UseThisFolder: a folder of the caller's choosing for the game's files (SAVE-FOLDER-1)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   says what GetSaveFolderPath gives back when there's no save folder
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -62,6 +64,13 @@ char const *GetSaveFolderProblem();
 // copy), a fixed name, so two copies don't share a log, settings or saved games. It has to come before anything asks for the folder, the
 // log first of all, and gives back false, changing nothing, if it comes too late. (Added 2026-11-08 by Melanikus for the AvP port.)
 bool SaveFolder_UseTheSecondCopy();
+
+// The game's files go in folder instead of My Games: the map editor keeps them in a folder of its own beside it, so it never writes into
+// the player's. folder is checked by save_folder.h's SaveFolder_WhyNotUsable: a whole path from a drive letter, a plain folder that's
+// there (not a link), with no ".." part, and short enough for the game's longest file name. It has to come before anything asks for the
+// save folder, the log first of all. It gives back false, changing nothing, if it comes too late or the folder is refused, and then the
+// caller stops: nothing falls back to My Games. (Added 2026-11-14 by Melanikus for the AvP port, SAVE-FOLDER-1.)
+bool SaveFolder_UseThisFolder(const char *folder);
 
 // Whether this is that second copy, and whether this run is a Hudson run (-dev -hudson): for the kept online identity's file name, which
 // lives outside the save folder (net_identity_store.cpp). Added 2026-11-09 by Melanikus for the AvP port.
