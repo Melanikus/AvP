@@ -268,6 +268,16 @@ static void TestTheRealGame()
 		&& !Has(shapes, "rif_name = seflc->get_shape_name();"), "an outside shape with no name isn't put on the list of named shapes");
 	Check(Has(shapes, "\t\t\t\tif (shpname)\n\t\t\t\t{\n\t\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));")
 		&& !Has(shapes, "GLOBALASSERT(shpname);"), "and neither is a skin with no name");
+
+	// Added 2026-11-14 by Melanikus for the AvP port: a name from the level file goes to the log only as a safe copy, as a refused one does
+	// (LevelFileName_ForTheLog), as it can hold anything
+	std::string const setup = ReadSourceFile("3dc/avp/win95/object_setup.cpp");
+	Check(Has(setup, "LevelFileName_ForTheLog(wav_name, safeName, sizeof(safeName));\n\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);")
+		&& !Has(setup, "+ wav_name);"), "a placed sound's path that's too long goes to the log as a safe copy of its name");
+	Check(Has(levelLoad, "LevelFileName_ForTheLog(isc->wav_name, safeName, sizeof(safeName));\n\t\t\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);")
+		&& !Has(levelLoad, "+ isc->wav_name);"), "and so does a listed sound's");
+	Check(Has(levelLoad, "LevelFileName_ForTheLog(riffname, safeName, sizeof(safeName));\n\t\t\t\t\t\tLogErrorString(std::string(\"level file gives a shape set collection too many sets or shapes: \") + safeName);")
+		&& !Has(levelLoad, "too many sets or shapes: \") + riffname);"), "and the level's own name, when it gives too many shape sets");
 }
 
 int main()

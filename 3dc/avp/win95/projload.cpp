@@ -29,6 +29,7 @@
 //   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
 //   a model's name is copied with the 0 that ends it written on a line of its own
 //   a set of random textures with no name is passed over (2026-11-14)
+//   a sound's name and the level's name from the level file go to the log only as safe copies (2026-11-14)
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -534,7 +535,10 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 				// here, as it does when a sound is missing.
 				if (_snprintf(wavname, sizeof(wavname) - 1, "%s/%s", dir_chunk->directory, isc->wav_name) < 0)
 				{
-					LogErrorString(std::string("sound file path too long: ") + isc->wav_name);
+					// The name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+					char safeName[64];
+					LevelFileName_ForTheLog(isc->wav_name, safeName, sizeof(safeName));
+					LogErrorString(std::string("sound file path too long: ") + safeName);
 					continue;
 				}
 				wavname[sizeof(wavname) - 1] = '\0';
@@ -859,7 +863,10 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 					}
 					else
 					{
-						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + riffname);
+						// The level's name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+						char safeName[64];
+						LevelFileName_ForTheLog(riffname, safeName, sizeof(safeName));
+						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + safeName);
 					}
 					break;
 				}

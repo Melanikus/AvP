@@ -16,6 +16,8 @@
 //   removed the switched-off code for a lift in another level file
 //   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
 //   a module with more lights than can be shown is logged, where an assert stood before
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a sound's name from the level file goes to the log only as a safe copy
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   code that could never run is taken out (#135): the xenoborg morph room's two leftovers here, a template and a flag nothing used; a
 //   proximity door's "no lock" (the lock is gone); and a lift station's environment and facing, which only the lift's change of
@@ -83,6 +85,7 @@
 #include "shared_roll.h"
 #include "3dc.h"
 #include "logString.h"
+#include "level_file_name.h"
 
 extern MAPSETVDB chnk_playcam_vdb;
 extern int GlobalAmbience;
@@ -143,7 +146,10 @@ LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 		// it goes to the log, and the game carries on with no sound here, as it does when a sound is missing.
 		if (_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name) < 0)
 		{
-			LogErrorString(std::string("sound file path too long: ") + wav_name);
+			// The name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+			char safeName[64];
+			LevelFileName_ForTheLog(wav_name, safeName, sizeof(safeName));
+			LogErrorString(std::string("sound file path too long: ") + safeName);
 			return 0;
 		}
 		filename[sizeof(filename) - 1] = '\0';

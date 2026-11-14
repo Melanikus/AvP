@@ -533,6 +533,36 @@
 					"to": "\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a placed sound's name goes to the log as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "\t\t\tLevelFileName_ForTheLog(wav_name, safeName, sizeof(safeName));\n\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);\n",
+					"to": "\t\t\tLogErrorString(std::string(\"sound file path too long: \") + wav_name);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a listed sound's name goes to the log as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\t\t\t\t\tLevelFileName_ForTheLog(isc->wav_name, safeName, sizeof(safeName));\n\t\t\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);\n",
+					"to": "\t\t\t\t\tLogErrorString(std::string(\"sound file path too long: \") + isc->wav_name);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level's name goes to the log as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\t\t\t\t\t\tLevelFileName_ForTheLog(riffname, safeName, sizeof(safeName));\n\t\t\t\t\t\tLogErrorString(std::string(\"level file gives a shape set collection too many sets or shapes: \") + safeName);\n",
+					"to": "\t\t\t\t\t\tLogErrorString(std::string(\"level file gives a shape set collection too many sets or shapes: \") + riffname);\n"
+				}
+			]
 		}
 	]
 }
