@@ -116,3 +116,38 @@ bool D3D_EnumerateAdapters(IDirect3D9 *d3d9, const D3DFORMAT *displayFormats, ui
 
 	return true;
 }
+
+// #252. The count is at most MAX_D3D_DISPLAY_MODES, so count - 1 always fits in an int32_t.
+
+// The next place is the start, unless this one is on the list and isn't the last. With no modes, no place is on the list, so it's 0.
+int32_t D3D_NextVideoMode(int32_t place, uint32_t count)
+{
+	if (!D3D_VideoModeIsListed(place, count) || (uint32_t)place == count - 1)
+	{
+		return 0;
+	}
+
+	return place + 1;
+}
+
+// The place before is the end, unless this one is on the list and isn't the first. With no modes there's no end, so it's 0.
+int32_t D3D_PreviousVideoMode(int32_t place, uint32_t count)
+{
+	if (count == 0)
+	{
+		return 0;
+	}
+
+	if (!D3D_VideoModeIsListed(place, count) || place == 0)
+	{
+		return (int32_t)(count - 1);
+	}
+
+	return place - 1;
+}
+
+// A place below 0 turns into a huge number as a uint32_t, so this one comparison refuses it as well as a place past the end
+bool D3D_VideoModeIsListed(int32_t place, uint32_t count)
+{
+	return (uint32_t)place < count;
+}

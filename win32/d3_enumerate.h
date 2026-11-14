@@ -47,3 +47,13 @@ struct D3DEnumeration
 // report->failure saying why: the game can't go on then.
 bool D3D_EnumerateAdapters(IDirect3D9 *d3d9, const D3DFORMAT *displayFormats, uint32_t numDisplayFormats, D3DDRIVERINFO (&drivers)[MAX_D3D_DRIVERS],
 	uint32_t *numDrivers, D3DEnumeration *report);
+
+// The place of the video mode the options menu shows, on an adapter's list of count modes (#252, added 2026-11-14 by Melanikus
+// (Dietrich)). An adapter can have no mode at all of 640 by 480 or more, and then nothing may read its list: the place stays 0 and isn't
+// on the list. With modes, Next and Previous go round from the end to the start, and a place that isn't on the list (below 0, or past
+// the end) goes to the start or the end.
+int32_t D3D_NextVideoMode(int32_t place, uint32_t count);
+int32_t D3D_PreviousVideoMode(int32_t place, uint32_t count);
+
+// Whether a place is one of the list's modes, from 0 to count - 1: the only places the list may be read at
+bool D3D_VideoModeIsListed(int32_t place, uint32_t count);

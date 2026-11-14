@@ -574,28 +574,28 @@ uint32_t R_GetNumVideoModes()
 	return d3d.Driver[d3d.CurrentDriver].NumModes;
 }
 
+// The place on the mode list moves round it, and stays 0 when the adapter has no modes, so it's never below 0 or past the end
+// (d3_enumerate.cpp). (Modified 2026-11-14 by Melanikus (Dietrich), #252: with no modes, Previous used to make it -1, and the two
+// functions below then read the mode before the list.)
 void R_NextVideoMode()
 {
-	uint32_t numModes = R_GetNumVideoModes();
-
-	if (++d3d.CurrentVideoMode >= numModes)
-	{
-		d3d.CurrentVideoMode = 0;
-	}
+	d3d.CurrentVideoMode = D3D_NextVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());
 }
 
 void R_PreviousVideoMode()
 {
-	uint32_t numModes = R_GetNumVideoModes();
-
-	if (--d3d.CurrentVideoMode < 0)
-	{
-		d3d.CurrentVideoMode = numModes - 1;
-	}
+	d3d.CurrentVideoMode = D3D_PreviousVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());
 }
 
 std::string& R_GetVideoModeDescription()
 {
+	// The list is read only at a place on it (#252)
+	if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))
+	{
+		videoModeDescription = "no display mode";
+		return videoModeDescription;
+	}
+
 	videoModeDescription = Util::IntToString(d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Width)
 						   + "x" +
 						   Util::IntToString(d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Height);
@@ -610,6 +610,13 @@ char* R_GetDeviceName()
 
 void R_SetCurrentVideoMode()
 {
+	// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)
+	if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))
+	{
+		Con_PrintError("No display mode to change to: this adapter listed none of 640 by 480 or more");
+		return;
+	}
+
 	uint32_t currentWidth  = d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Width;
 	uint32_t currentHeight = d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Height;
 

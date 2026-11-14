@@ -10,8 +10,13 @@
 
 #include "d3_enumerate.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <string>
+
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -23,6 +28,40 @@ static void Check(bool passed, const char *what)
 	{
 		checksFailed++;
 	}
+}
+
+static void FailedSlice(const std::string &why)
+{
+	Check(false, why.c_str());
+}
+
+// A source file, as text, from the top of the repository, with its CRs taken out. The names are this file's own, never from outside.
+static std::string ReadSource(const char *name)
+{
+	FILE *file = fopen(name, "rb");
+	std::string text;
+
+	if (!file)
+	{
+		return text;
+	}
+
+	char block[4096];
+	size_t got = 0;
+
+	while ((got = fread(block, 1, sizeof(block), file)) > 0)
+	{
+		for (size_t i = 0; i < got; i++)
+		{
+			if (block[i] != '\r')
+			{
+				text += block[i];
+			}
+		}
+	}
+
+	fclose(file);
+	return text;
 }
 
 // A made-up Direct3D 9. It reports what the test sets, and remembers the highest adapter it was asked about.
@@ -342,6 +381,44 @@ static void TestFailure()
 	Check(noRubbish && list.drivers[0].NumFormats == 1 && GuardIsWhole(), "and nothing of what the failed call left behind is on the list");
 }
 
+static void TestVideoModePlace()
+{
+	puts("The place on the mode list (#252):");
+
+	Check(D3D_NextVideoMode(0, 0) == 0 && D3D_PreviousVideoMode(0, 0) == 0 && !D3D_VideoModeIsListed(0, 0),
+		"with no modes, Next and Previous stay at 0, and 0 isn't on the list, so nothing reads it");
+	Check(D3D_PreviousVideoMode(-1, 0) == 0 && D3D_NextVideoMode(INT32_MAX, 0) == 0, "and a place that was off the list comes back to 0");
+
+	Check(D3D_NextVideoMode(0, 3) == 1 && D3D_NextVideoMode(1, 3) == 2 && D3D_NextVideoMode(2, 3) == 0, "Next goes 0, 1, 2 and round to 0 on a list of 3");
+	Check(D3D_PreviousVideoMode(0, 3) == 2 && D3D_PreviousVideoMode(2, 3) == 1 && D3D_PreviousVideoMode(1, 3) == 0, "Previous goes 0, 2, 1 and round to 0");
+	Check(D3D_NextVideoMode(0, 1) == 0 && D3D_PreviousVideoMode(0, 1) == 0, "on a list of one, both stay on it");
+
+	Check(D3D_NextVideoMode(7, 3) == 0 && D3D_PreviousVideoMode(7, 3) == 2 && D3D_NextVideoMode(-1, 3) == 0 && D3D_PreviousVideoMode(-1, 3) == 2
+		&& D3D_PreviousVideoMode(INT32_MIN, 3) == 2 && D3D_NextVideoMode(INT32_MAX, 3) == 0,
+		"a place off the list, past the end or below 0, goes to the start (Next) or the end (Previous)");
+
+	Check(D3D_VideoModeIsListed(0, 3) && D3D_VideoModeIsListed(2, 3) && !D3D_VideoModeIsListed(3, 3) && !D3D_VideoModeIsListed(-1, 3)
+		&& !D3D_VideoModeIsListed(INT32_MIN, MAX_D3D_DISPLAY_MODES), "only 0 to count - 1 are on the list");
+	Check(D3D_PreviousVideoMode(0, MAX_D3D_DISPLAY_MODES) == MAX_D3D_DISPLAY_MODES - 1, "a full list's end is its 100th mode");
+
+	// Read, not run: the game's own functions read the list only at a place on it
+	std::string const device = ReadSource("win32/d3_func.cpp");
+	std::string const describe = SourceSlice(device, "std::string& R_GetVideoModeDescription()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const change = SourceSlice(device, "void R_SetCurrentVideoMode()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const next = SourceSlice(device, "void R_NextVideoMode()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const previous = SourceSlice(device, "void R_PreviousVideoMode()", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string::size_type const describeAsks = describe.find("if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))");
+	std::string::size_type const changeAsks = change.find("if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))");
+
+	Check(describeAsks != std::string::npos && describeAsks < describe.find("DisplayMode[d3d.CurrentVideoMode]"),
+		"SOURCE: the mode's description asks whether the place is on the list before reading it");
+	Check(changeAsks != std::string::npos && changeAsks < change.find("DisplayMode[d3d.CurrentVideoMode]"),
+		"SOURCE: changing to the chosen mode asks the same before reading it");
+	Check(next.find("D3D_NextVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes())") != std::string::npos
+		&& previous.find("D3D_PreviousVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes())") != std::string::npos,
+		"SOURCE: Next and Previous move the place with these functions");
+}
+
 int main()
 {
 	// Each line is written as it's printed, so none is lost if a check after it brings the program down
@@ -352,6 +429,7 @@ int main()
 	TestTooMany();
 	TestEachAdapterItsOwn();
 	TestFailure();
+	TestVideoModePlace();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;

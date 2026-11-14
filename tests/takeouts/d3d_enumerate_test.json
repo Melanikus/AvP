@@ -145,6 +145,96 @@
 			]
 		},
 		{
+			"name": "Next moves on from a place off the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || (uint32_t)place == count - 1)",
+					"to": "if ((uint32_t)place == count - 1)"
+				}
+			]
+		},
+		{
+			"name": "Next goes past the last mode",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || (uint32_t)place == count - 1)",
+					"to": "if (!D3D_VideoModeIsListed(place, count))"
+				}
+			]
+		},
+		{
+			"name": "Previous with no modes goes to the place before the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\tif (count == 0)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Previous moves back from a place off the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || place == 0)",
+					"to": "if (place == 0)"
+				}
+			]
+		},
+		{
+			"name": "Previous goes before the first mode",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || place == 0)",
+					"to": "if (!D3D_VideoModeIsListed(place, count))"
+				}
+			]
+		},
+		{
+			"name": "every place is said to be on the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "return (uint32_t)place < count;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mode's description reads the list without asking",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t// The list is read only at a place on it (#252)\n\tif (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))",
+					"to": "\t// The list is read only at a place on it (#252)\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: changing to the chosen mode reads the list without asking",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)\n\tif (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))",
+					"to": "\t// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Previous goes back to its old sums",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "d3d.CurrentVideoMode = D3D_PreviousVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());",
+					"to": "if (--d3d.CurrentVideoMode < 0) d3d.CurrentVideoMode = R_GetNumVideoModes() - 1;"
+				}
+			]
+		},
+		{
 			"name": "formats left out aren't counted",
 			"changes": [
 				{
