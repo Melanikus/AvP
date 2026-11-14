@@ -12,6 +12,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   every place a generator, the player's start, a power cable, a particle generator or a decal's corner gives has to be inside the
 //   level, as CheckPlace in chunk.hpp says
+//   a particle generator has to be one of the four kinds there are
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -797,6 +798,17 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	char const * const chunk_start = data;
 	
 	CHUNK_EXTRACT(type,int)
+
+	// A particle generator is one of four kinds, from 0 (sparks) to 3 (flames), as PARTICLE_GENERATOR_TYPE in bh_particle_generator.h
+	// lists them, and the game picks what to make by its kind, so a level that gives any other number is refused. All 570 in the game's
+	// own levels are one of the four. (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const kinds_of_particle_generator = 4;
+
+	if (type < 0 || type >= kinds_of_particle_generator)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	CHUNK_EXTRACT(flags,int)
 	CHUNK_EXTRACT(time,unsigned short)
 	CHUNK_EXTRACT(probability,unsigned short)

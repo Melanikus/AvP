@@ -4645,6 +4645,31 @@ static void TestShapeRadius()
 	Check(!ShapeRadiusAccepted(0, negativeNotANumber), "a shape's radius that isn't a number, with its sign bit set, is refused too");
 }
 
+// 41. A particle generator's kind. It's one of four, from 0 (sparks) to 3 (flames), and the game picks what to make by it, so any other
+// number is refused. Its kind is the first number in its data chunk. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool ParticleKindAccepted(int kind)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, kind);
+
+	return ChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, bytes, 72);
+}
+
+static void TestParticleKind()
+{
+	puts("41. a particle generator's kind");
+
+	Check(ParticleKindAccepted(0), "a particle generator of the first kind, sparks, is accepted");
+	Check(ParticleKindAccepted(1) && ParticleKindAccepted(2), "and the two kinds between, steam and black smoke");
+	Check(ParticleKindAccepted(3), "and the last kind, flames");
+	Check(!ParticleKindAccepted(4), "a kind past the last is refused: there are only four kinds");
+	Check(!ParticleKindAccepted(-1), "a negative kind is refused");
+	Check(!ParticleKindAccepted(0x7fffffff), "the largest number there is as a kind is refused");
+	Check(!ParticleKindAccepted((int)0x80000000), "and the most negative");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4684,6 +4709,7 @@ int main()
 	TestHierarchyAnimations();
 	TestPlaces();
 	TestShapeRadius();
+	TestParticleKind();
 
 	if (checksFailed)
 	{

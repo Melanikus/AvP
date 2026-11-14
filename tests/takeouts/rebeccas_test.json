@@ -621,6 +621,11 @@
 		{"name":"RADIUS: a bad radius doesn't refuse the level","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n","to":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n\t{\n"}]},
 		{"name":"RADIUS: a shape's radius isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tparent->shape_data_store->radius = *((float *) hdata);\n\tCheckRadius(parent->shape_data_store->radius);\n","to":"\tparent->shape_data_store->radius = *((float *) hdata);\n"}]},
 		{"name":"RADIUS: a sub-shape's radius isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tparent->shape_data_store->radius = *((float *) (hdata));\n\tCheckRadius(parent->shape_data_store->radius);\n","to":"\tparent->shape_data_store->radius = *((float *) (hdata));\n"}]},
-		{"name":"RADIUS: a shape's radius about its centre isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tCheckRadius(cs->radius_about_centre);\n","to":""}]}
+		{"name":"RADIUS: a shape's radius about its centre isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tCheckRadius(cs->radius_about_centre);\n","to":""}]},
+		{"name":"PARTICLES: a particle generator's kind isn't looked at","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tif (type < 0 || type >= kinds_of_particle_generator)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n","to":""}]},
+		{"name":"PARTICLES: a negative kind is let through","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tif (type < 0 || type >= kinds_of_particle_generator)\n","to":"\tif (type >= kinds_of_particle_generator)\n"}]},
+		{"name":"PARTICLES: a kind past the last is let through","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tif (type < 0 || type >= kinds_of_particle_generator)\n","to":"\tif (type < 0)\n"}]},
+		{"name":"PARTICLES: one kind too few","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tint const kinds_of_particle_generator = 4;\n","to":"\tint const kinds_of_particle_generator = 3;\n"}]},
+		{"name":"PARTICLES: one kind too many","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tint const kinds_of_particle_generator = 4;\n","to":"\tint const kinds_of_particle_generator = 5;\n"}]}
 	]
 }
