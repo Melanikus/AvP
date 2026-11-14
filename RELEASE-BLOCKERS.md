@@ -14,4 +14,4 @@ RELEASING.md says how a release is made.
 
 ## What's in the way
 
-Nothing.
+Some damaged level and model files aren't handled safely yet (#229). The fixes are being written and reviewed.
