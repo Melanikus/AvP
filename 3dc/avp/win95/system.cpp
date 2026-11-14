@@ -435,7 +435,10 @@ void UnloadRifFile()
 const char *GameDataDirName = "avp_rifs";
 const char *FileNameExtension = ".rif";
 
-void LoadRifFile()
+// Loads the level the game is set to start (Env_List[AvP.CurrentEnv]). Gives back false if its file can't be loaded: the level's
+// log is written first, and nothing of the level is in. LoadRifFile, below, is what the game itself calls; it stops the game then.
+// The editor calls this one, so a refused level is reported to the mapper instead of ending the editor.
+bool TryLoadRifFile()
 {
 	char file_and_path[MAX_PATH];
 	
@@ -471,11 +474,10 @@ void LoadRifFile()
 
 	if (INVALID_RIFFHANDLE == env_rif)
 	{
-		// The level can't be loaded, so its log is always written, before the game stops
+		// The level can't be loaded, so its log is always written, before the caller hears of it
 		LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : "", true);
-//		finiObjects();
-		exit(0x3421);
-	};
+		return false;
+	}
 
 	// Which level file this machine loaded, with its size and MD5 sum, as the loader worked them out from its own reads of it. Every
 	// machine in a network game should load the same file, and this line lets testers' logs be compared (level_file_sum.h).
@@ -494,6 +496,16 @@ void LoadRifFile()
 	LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);
 
 	textureRelief.LogWhatIsHeld();
+	return true;
+}
+
+// The game's own way to start a level: a level that can't be loaded stops the game, with the same exit code as it always has.
+void LoadRifFile()
+{
+	if (!TryLoadRifFile())
+	{
+		exit(0x3421);
+	}
 }
 
 int Destroy_CurrentEnvironment(void)
