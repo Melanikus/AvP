@@ -16,9 +16,11 @@
 //   every place an object, a track, an alternative location or a module's entry point gives has to be inside the level, as CheckPlace in
 //   chunk.hpp says
 //   every turn an object, a track or an alternative location gives has to fit, as CheckTurn in chunk.hpp says
+//   a module's amount of echo has to be a real number
 
 #include <string>
 #include "chunk.hpp"
+#include "real_numbers.h"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
 #include "chunk_object.hpp"
@@ -889,6 +891,13 @@ Module_Acoustics_Chunk::Module_Acoustics_Chunk(Chunk_With_Children* parent,const
 	reverb=*(float*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	// A module's amount of echo has to be a real number: the game compares it to choose what it means, so each answer has to be one
+	// the comparison can give. Told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!IsRealNumber(reverb))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Module_Acoustics_Chunk::fill_data_block(char* data_start)

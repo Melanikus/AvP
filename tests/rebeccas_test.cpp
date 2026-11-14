@@ -5008,6 +5008,42 @@ static void TestLightScale()
 	}
 }
 
+// 48. A level's and a module's amount of echo: a sound setting's number, then the amount as a fraction, then a spare number. The game compares
+// the amount to choose what it means (from 0 to 1 is how much, and anything else leaves it to distance), so it has to be a real number.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool EchoAccepted(bool module, float amount)
+{
+	alignas(int) static char bytes[16];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes + 4, &amount, sizeof(amount));
+
+	return module ? ChunkAccepted(MakeChunk<Module_Acoustics_Chunk>, bytes, 12) : ChunkAccepted(MakeChunk<Environment_Acoustics_Chunk>, bytes, 12);
+}
+
+static void TestEcho()
+{
+	puts("48. the amount of echo");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float negativeNotANumber;
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	for (int kind = 0; kind < 2; kind++)
+	{
+		bool const module = (kind == 1);
+		std::string const which = module ? "a module's amount of echo" : "a level's amount of echo";
+
+		Check(EchoAccepted(module, -1.0f) && EchoAccepted(module, 0.2f) && EchoAccepted(module, 2.0f), (which + " of -1, 0.2 or 2, as in the game's own levels, is accepted").c_str());
+		Check(EchoAccepted(module, 0.5f), (which + " of a half is accepted").c_str());
+		Check(!EchoAccepted(module, notANumber), (which + " that isn't a number is refused: no comparison can choose what it means").c_str());
+		Check(!EchoAccepted(module, negativeNotANumber), (which + " that isn't a number, with its sign bit set, is refused").c_str());
+		Check(!EchoAccepted(module, endless) && !EchoAccepted(module, -endless), (which + " that's endless either way is refused").c_str());
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5054,6 +5090,7 @@ int main()
 	TestFrameNormals();
 	TestTextureCoordinateNumbers();
 	TestLightScale();
+	TestEcho();
 
 	if (checksFailed)
 	{

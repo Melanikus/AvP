@@ -114,6 +114,26 @@
 					"to": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777215.0f))\n"
 				}
 			]
+		},
+		{
+			"name": "ECHO: a module's amount of echo isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "\tif (!IsRealNumber(reverb))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ECHO: a level's amount of echo isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "\tif (!IsRealNumber(reverb))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

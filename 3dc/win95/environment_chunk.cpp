@@ -10,9 +10,11 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a level's scale has to be from 0.5 to 1
+//   a level's amount of echo has to be a real number
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
+#include "real_numbers.h"
 #include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -202,6 +204,13 @@ Environment_Acoustics_Chunk::Environment_Acoustics_Chunk(Chunk_With_Children* pa
 	reverb=*(float*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	// The level's amount of echo has to be a real number: the game compares it to choose what it means, so each answer has to be one
+	// the comparison can give. Told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!IsRealNumber(reverb))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Environment_Acoustics_Chunk::fill_data_block(char* data_start)
