@@ -451,10 +451,10 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = Between(system, "void LoadRifFile()", "textureRelief.LogWhatIsHeld();");
+	std::string const loading = Between(system, "bool TryLoadRifFile()", "textureRelief.LogWhatIsHeld();");
 	char const *const line = "LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));";
 
-	Check(ComesBefore(loading, "env_rif = avp_load_rif((const char*)&file_and_path[0]);", "exit(0x3421);") && ComesBefore(loading, "exit(0x3421);", line) &&
+	Check(ComesBefore(loading, "env_rif = avp_load_rif((const char*)&file_and_path[0]);", "return false;") && ComesBefore(loading, "return false;", line) &&
 		ComesBefore(loading, line, "copy_rif_data(env_rif, CCF_ENVIRONMENT"),
 		"a level that loads says which file it was, by the path it was loaded from, before it's copied into the game");
 	Check(Count(system, "LevelFileSum_Line(") == 1, "once for each level");

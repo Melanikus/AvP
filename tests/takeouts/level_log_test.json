@@ -298,6 +298,27 @@
 					"to": "LevelLog_NoteLine(line, mustGoIn);"
 				}
 			]
+		},
+		{
+			"name": "the game no longer stops with 0x3421 on a level it can't load",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "exit(0x3421);",
+					"to": "exit(0);"
+				}
+			]
+		},
+		{
+			"name": "TryLoadRifFile ends the program itself, as LoadRifFile used to",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "return false;",
+					"to": "exit(0x3421);"
+				}
+			]
 		}
+
 	]
 }

@@ -345,10 +345,29 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = system.substr(system.find("void LoadRifFile()") == std::string::npos ? system.size() : system.find("void LoadRifFile()"));
+	std::string const loading = system.substr(system.find("bool TryLoadRifFile()") == std::string::npos ? system.size() : system.find("bool TryLoadRifFile()"));
 
 	Check(ComesBefore(loading, "LevelLog_StartGathering();", "avp_load_rif("), "loading a level starts gathering before it reads the file");
-	Check(ComesBefore(loading, "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);", "exit(0x3421);"), "a level that can't be loaded has its log written before the game stops");
+	Check(ComesBefore(loading, "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);", "return false;"), "a level that can't be loaded has its log written before loading gives up");
+
+	// The game itself still stops on such a level, with the same exit code as always: LoadRifFile is TryLoadRifFile and that one
+	// ending, and nothing else (2026-11-14, so the editor can report a refused level instead of ending). The game's own LoadRifFile is
+	// read from its first line to the "}" that ends it at the start of a line; its only statement is the exit.
+	size_t const gamesStart = system.find("void LoadRifFile()");
+	size_t const gamesEnd = gamesStart == std::string::npos ? std::string::npos : system.find("\n}", gamesStart);
+	std::string const theGames = gamesEnd == std::string::npos ? std::string() : system.substr(gamesStart, gamesEnd - gamesStart);
+	size_t statements = 0;
+	for (char const letter : theGames)
+	{
+		statements += letter == ';' ? 1 : 0;
+	}
+	size_t exits = 0;
+	for (size_t at = system.find("exit(0x3421);"); at != std::string::npos; at = system.find("exit(0x3421);", at + 1))
+	{
+		exits++;
+	}
+	Check(Has(theGames, "if (!TryLoadRifFile())") && Has(theGames, "exit(0x3421);") && statements == 1, "the game's own LoadRifFile is TryLoadRifFile, and stops with 0x3421 when that gives back false");
+	Check(exits == 1, "and that's the only place the game stops with that code");
 	Check(ComesBefore(loading, "copy_rif_data(", "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);"), "and one that loads, once all of it is in");
 
 	// The log's writer hands every line on once the player is left out of it (log_files.h), so the level's log never has them either

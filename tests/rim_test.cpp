@@ -937,7 +937,7 @@ static void CheckLevelAllowance()
 	Check(kMostRimBytesPerLevel >= everyPictureTheGameHas * 3, "the limit is over three times every picture the game has");
 
 	std::string const system = ReadSourceFile("3dc/avp/win95/system.cpp");
-	size_t const load = system.find("void LoadRifFile()");
+	size_t const load = system.find("bool TryLoadRifFile()");
 	size_t const start = (load == std::string::npos) ? load : system.find("RimLoader_NewLevel();", load);
 	size_t const env = (load == std::string::npos) ? load : system.find("avp_load_rif((const char*)&file_and_path[0])", load);
 	Check(start != std::string::npos && env != std::string::npos && start < env, "the game starts each level's allowance before it loads the level");
