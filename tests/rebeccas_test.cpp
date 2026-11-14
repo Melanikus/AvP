@@ -5101,6 +5101,43 @@ static void TestEcho()
 	}
 }
 
+// 49. A generator's weights. The game adds a generator's 15 weights up and divides by the total, so each has to be from 0 to 2^24. Its
+// extended settings: five numbers, then the block's size (64 here) and its 15 weights, from place 24. (Added 2026-11-14 by Melanikus for the
+// AvP port.)
+static bool GeneratorWeightAccepted(int which, int weight)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	int const blockSize = 64;
+	alignas(int) char bytes[84] = { 0 };
+	memcpy(bytes + 20, &blockSize, sizeof(int));
+	memcpy(bytes + 24 + which * sizeof(int), &weight, sizeof(int));
+
+	std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settings(new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes)));
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+static void TestGeneratorWeights()
+{
+	puts("49. a generator's weights");
+
+	Check(GeneratorWeightAccepted(0, 12), "a weight of 12, the largest in the game's own levels, is accepted");
+	Check(GeneratorWeightAccepted(14, 1 << 24), "and the largest a weight can be, 2^24, in the last place");
+	Check(!GeneratorWeightAccepted(0, (1 << 24) + 1), "a weight just past 2^24 is refused: the total couldn't be held");
+	Check(!GeneratorWeightAccepted(0, 0x7fffffff), "and the largest number there is");
+
+	for (int which = 0; which < 15; which++)
+	{
+		std::string const what = "a negative weight in place " + std::to_string(which + 1) + " of 15 is refused";
+		Check(!GeneratorWeightAccepted(which, -1), what.c_str());
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5148,6 +5185,7 @@ int main()
 	TestTextureCoordinateNumbers();
 	TestLightScale();
 	TestEcho();
+	TestGeneratorWeights();
 
 	if (checksFailed)
 	{

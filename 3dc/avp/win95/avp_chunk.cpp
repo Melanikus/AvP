@@ -14,6 +14,7 @@
 //   level, as CheckPlace in chunk.hpp says
 //   a particle generator has to be one of the four kinds there are
 //   a particle generator's turn has to fit, as CheckTurn in chunk.hpp says
+//   each of a generator's 15 weights has to be from 0 to 2^24
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -304,6 +305,19 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 	memcpy(weights,data,weight_bytes);
 
 	weights->data_size = max(weight_bytes,(int)sizeof(AVP_Generator_Weighting));
+
+	// Each of the 15 weights is a share of the NPCs a generator makes, and the game adds them up and divides by the total, so each has to
+	// be from 0 to 2^24, which keeps the total well inside what a whole number holds. The game's own are 0 to 12. They're 15 whole numbers
+	// in a row, from the pulse rifle marine's, as the game reads them too (object_setup.cpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const * const weight = &weights->PulseMarine_Wt;
+
+	for (int i = 0; i < 15; i++)
+	{
+		if (weight[i] < 0 || weight[i] > (1 << 24))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
 }
 
 AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent)
