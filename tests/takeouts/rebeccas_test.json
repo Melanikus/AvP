@@ -670,6 +670,12 @@
 		{"name":"AI MASTER: a master can be a slave itself","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"if(!chlist.size() || omdc->lookup_single_child(\"AIMODSLA\"))","to":"if(!chlist.size())"}]},
 		{"name":"AI FLAGS: a visibility item's flags aren't looked at","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"if (vmod_array[i].flags != 0)","to":"if (false)"}]},
 		{"name":"AI FLAGS: a module's running-state bits can come from a file","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;","to":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFFFFFFu;"}]},
-		{"name":"AI FLAGS: bits nobody names can come from a file","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;","to":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFFFF80u;"}]}
+		{"name":"AI FLAGS: bits nobody names can come from a file","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;","to":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFFFF80u;"}]},
+		{"name":"AI3 ROOM: a room of 0 on x is allowed","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"&& roomX != 0","to":"&& roomX == roomX"}]},
+		{"name":"AI3 ROOM: a room of 0 on y is allowed","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"&& roomY != 0","to":"&& roomY == roomY"}]},
+		{"name":"AI3 ROOM: a room of 0 on z is allowed","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"&& roomZ != 0","to":"&& roomZ == roomZ"}]},
+		{"name":"AI3 ROOM: the level's own scale isn't used","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"*scale = ((Environment_Scale_Chunk *) levelScale)->scale;","to":"*scale = 1.0;"}]},
+		{"name":"AI3 ROOM: no waypoint is looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<NumWaypoints;i++)","to":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<0;i++)"}]},
+		{"name":"AI3 ROOM: only the first waypoint is looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<NumWaypoints;i++)","to":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<1 && i<NumWaypoints;i++)"}]}
 	]
 }

@@ -43,6 +43,7 @@
 #include <malloc.h>
 #include <memory>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5334,6 +5335,162 @@ static void TestFlagsFromAFile()
 	Check(!VisibilityItemAccepted((int)0x80000000u), "even the top one");
 }
 
+// 52. A waypoint's room. An alien sent to a big waypoint aims for a random place inside it, and on each axis the room it has there is
+// worked out from the box's corners at the level's scale (waypoint_room.h). A box with a room of 0 on any axis refuses the level, and so
+// does a level scale that isn't a finite number, or a corner too big for the game's whole numbers at that scale. A room of -1, a box with
+// no size on an axis at its centre, is allowed: three of the game's own level files have one. waypoint_room_test checks the sums against a
+// copy of the game's own lines. (Added 2026-11-14 by Melanikus for the AvP port.)
+
+// One waypoint's box in a level file: its lowest corner, its highest and its centre, x, y and z
+struct WaypointBox { int lowest[3]; int highest[3]; int centre[3]; };
+
+// A box with room on every axis: 2,000 wide on x, 1,000 on y and 400 on z, around the middle of the level
+static WaypointBox const RoomyBox = { { -1000, -500, -200 }, { 1000, 500, 200 }, { 0, 0, 0 } };
+
+// The scale a test level gives in its environment: none at all, or this one
+enum LevelScaleGiven { NoScaleGiven, ScaleGiven };
+
+// A level with one module whose module data holds these waypoints, and an environment with the scale given or none, and whether it would
+// be accepted. Its module is the same one shape that fits its box as in section 39.
+static bool WaypointsAccepted(WaypointBox const * boxes, int howMany, LevelScaleGiven given, double scale)
+{
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const shapeNumber = 7;
+	int const firstPointX = 0;
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const shapeBytesUsed = BuildShapeData(wholeShape, false, 4, triangle);
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &firstPointX, sizeof(int));
+	std::unique_ptr<Shape_Chunk> const shape(new Shape_Chunk(&file, wholeShape, shapeBytesUsed));
+
+	// The level's environment, holding its scale if it gives one
+	alignas(double) char environmentBytes[ChunkHeaderBytes + sizeof(double)] = { 0 };
+	size_t environmentUsed = 0;
+
+	if (given == ScaleGiven)
+	{
+		char * const at = PutChunk(environmentBytes, "ENVSDSCL", sizeof(double));
+		memcpy(at, &scale, sizeof(scale));
+		environmentUsed = ChunkHeaderBytes + sizeof(double);
+	}
+
+	std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, environmentBytes, environmentUsed));
+
+	// The module, with its waypoints: their count, then for each its three corners, its flags and spare number, and no links of either kind
+	size_t used = BuildObject(5, shapeNumber);
+	size_t const oneWaypoint = 3 * 3 * sizeof(int) + 4 * sizeof(int);
+	size_t const waypointBytes = sizeof(int) + howMany * oneWaypoint;
+	char * at = PutChunk(objectBytes + used, "MODULEDT", ChunkHeaderBytes + waypointBytes);
+	at = PutChunk(at, "WAYPOINT", waypointBytes);
+	memcpy(at, &howMany, sizeof(int));
+	at += sizeof(int);
+
+	for (int i = 0; i < howMany; i++)
+	{
+		memcpy(at, boxes[i].lowest, sizeof(boxes[i].lowest));
+		memcpy(at + 3 * sizeof(int), boxes[i].highest, sizeof(boxes[i].highest));
+		memcpy(at + 6 * sizeof(int), boxes[i].centre, sizeof(boxes[i].centre));
+		memset(at + 9 * sizeof(int), 0, 4 * sizeof(int));
+		at += oneWaypoint;
+	}
+
+	used += ChunkHeaderBytes + ChunkHeaderBytes + waypointBytes;
+	std::unique_ptr<Object_Chunk> module(new Object_Chunk(&file, objectBytes, used));
+
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	module.reset();
+	environment.reset();
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// RoomyBox with one axis given its own three numbers
+static WaypointBox BoxWithAnAxis(int axis, int lowest, int highest, int centre)
+{
+	WaypointBox box = RoomyBox;
+	box.lowest[axis] = lowest;
+	box.highest[axis] = highest;
+	box.centre[axis] = centre;
+	return box;
+}
+
+// A double made from its bits, so the test can give a level a scale of infinity, or "not a number"
+static double DoubleFromBits(uint64_t bits)
+{
+	double number;
+	memcpy(&number, &bits, sizeof(number));
+	return number;
+}
+
+static void TestWaypointRooms()
+{
+	puts("52. a waypoint's room");
+
+	Check(WaypointsAccepted(&RoomyBox, 1, NoScaleGiven, 1.0), "a waypoint with room on every axis is accepted");
+	Check(WaypointsAccepted(&RoomyBox, 1, ScaleGiven, 0.8), "and at a level's own scale");
+
+	// No size on x and z, exactly at its centre, as in the game's own levels: a room of -1, allowed
+	{
+		WaypointBox flat = BoxWithAnAxis(0, 300, 300, 300);
+		flat.lowest[2] = flat.highest[2] = flat.centre[2] = -40;
+
+		Check(WaypointsAccepted(&flat, 1, NoScaleGiven, 1.0), "a box with no size on an axis, at its centre, as in three of the game's own level files, is accepted");
+		Check(WaypointsAccepted(&flat, 1, ScaleGiven, 0.9) && WaypointsAccepted(&flat, 1, ScaleGiven, 0.8), "and at the game's own other scales");
+	}
+
+	// No size on an axis, 1 above its centre: a room of 0
+	char const * const refusedOn[3] =
+	{
+		"a box with a room of 0 on x is refused",
+		"a box with a room of 0 on y is refused",
+		"a box with a room of 0 on z is refused",
+	};
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		WaypointBox const none = BoxWithAnAxis(axis, 1, 1, 0);
+		Check(!WaypointsAccepted(&none, 1, NoScaleGiven, 1.0), refusedOn[axis]);
+	}
+
+	{
+		WaypointBox const below = BoxWithAnAxis(1, -3, -3, 0);
+		Check(!WaypointsAccepted(&below, 1, NoScaleGiven, 1.0), "and one with no size 3 below its centre, which has a room of 0 too");
+	}
+
+	// The level's own scale, with what's after the point cut off, decides
+	{
+		WaypointBox const twoAbove = BoxWithAnAxis(0, 2, 2, 0);
+		Check(WaypointsAccepted(&twoAbove, 1, NoScaleGiven, 1.0) && !WaypointsAccepted(&twoAbove, 1, ScaleGiven, 0.8),
+			"a box with room at scale 1 and a room of 0 at the level's own scale of 0.8 is refused at that scale");
+
+		WaypointBox const oneAbove = BoxWithAnAxis(0, 1, 1, 0);
+		Check(WaypointsAccepted(&oneAbove, 1, ScaleGiven, 0.8), "and one with a room of 0 at scale 1 but room at 0.8 is accepted at 0.8");
+	}
+
+	// The bad one after good ones
+	{
+		WaypointBox const three[3] = { RoomyBox, RoomyBox, BoxWithAnAxis(2, 1, 1, 0) };
+		Check(WaypointsAccepted(three, 2, NoScaleGiven, 1.0) && !WaypointsAccepted(three, 3, NoScaleGiven, 1.0),
+			"a waypoint with no room after two with room still refuses the level");
+	}
+
+	// A scale the sums can't use, and a corner too big for the game's whole numbers at the level's scale
+	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF0000000000000ull)), "a level whose scale is infinity is refused, even with a roomy waypoint");
+	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF8000000000000ull)), "and one whose scale is 'not a number'");
+	{
+		WaypointBox const huge = BoxWithAnAxis(0, -10, 2000000000, 0);
+		Check(WaypointsAccepted(&huge, 1, NoScaleGiven, 1.0) && !WaypointsAccepted(&huge, 1, ScaleGiven, 1.5),
+			"a corner the level's scale makes too big for the game's whole numbers is refused");
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5384,6 +5541,7 @@ int main()
 	TestGeneratorWeights();
 	TestModuleMasters();
 	TestFlagsFromAFile();
+	TestWaypointRooms();
 
 	if (checksFailed)
 	{

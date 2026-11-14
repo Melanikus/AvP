@@ -2,6 +2,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a module link starts with no name, so one a broken list never reached is safe to free
 //   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a waypoint chunk checks its boxes once the whole file is read (post_input_processing)
 
 #ifndef wpchunk_hpp
 #define wpchunk_hpp 1
@@ -56,7 +58,10 @@ class Module_Waypoint_Chunk : public Chunk
 
 	virtual size_t size_chunk();
 	virtual void fill_data_block(char* data_start);
-	
+
+	// Each waypoint's box has to give an alien room on every axis at the level's scale, once the whole file is read (chunk_waypoint.cpp)
+	virtual void post_input_processing();
+
 	//Copies waypoint data and deletes the old waypoint_chunk
 	void TransferWaypointData(Module_Waypoint_Chunk*);
 
