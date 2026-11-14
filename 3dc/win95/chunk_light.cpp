@@ -4,6 +4,7 @@
 //   level file is checked against the size of its chunk
 //   counted lists are measured against their chunks before they're made
 //   a light's times have to be ones that don't wrap round
+//   a light has to reach somewhere: a range of 0 or less refuses the level
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "chunk.hpp"
@@ -108,6 +109,17 @@ void Light_Chunk::fill_data_block ( char * data_start)
 	
 }
 
+// A light's range is how far it reaches, in millimetres. The game lights only what's nearer than that, and divides the light's
+// brightness by it. A range of 0 or less would be a light that reaches nothing, so the level is refused instead. The shortest in the
+// game's own levels is 900 for one of a level's lights, and 100 for a placed light. (Added 2026-11-14 by Melanikus for the AvP port.)
+static void CheckLightRange(int range)
+{
+	if (range <= 0)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
 Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const /*size*/)
 : Chunk (parent, "STDLIGHT")
 {
@@ -126,6 +138,7 @@ Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t
 	data += 4;
 	light.range = *((int *) data);
 	data += 4;
+	CheckLightRange(light.range);
 
 	light.colour = *((int *) data);
 	data += 4;
@@ -356,6 +369,8 @@ Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * paren
 	char const * const start = data;
 	light=*(Placed_Object_Light_Data*) data;
 	data+=sizeof(Placed_Object_Light_Data);
+
+	CheckLightRange(light.range);
 
 	// A light's times are in thousandths of a second, and the game multiplies each one by 65536. A bigger number than this wraps round, and a light whose times
 	// all came to nothing would change state for ever, which would hang the game. The largest in the game's own levels is 10,000.

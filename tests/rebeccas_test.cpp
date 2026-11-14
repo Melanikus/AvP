@@ -2889,7 +2889,8 @@ static void TestCountedLists()
 
 	// where each count is, with any name before it empty, and what each item takes at the least
 	// bytesAfter is what the kind holds after its list. A whole chunk has it, and the bad counts are tried without it, so that only the check on the count can refuse them.
-	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; };
+	// goodAt and goodNumber: a number the kind refuses at 0, such as a light's range, which is put in first so only the count can refuse the chunk (goodNumber 0: none).
+	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; size_t goodAt; int goodNumber; };
 	CountedRow const rows[] =
 	{
 		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
@@ -2907,7 +2908,8 @@ static void TestCountedLists()
 		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted", 4 },
 		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
 		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8 },
-		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
+		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted", 0,
+			offsetof(Placed_Object_Light_Data, range), 10000 },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
 		{ MakeChunk<Preset_Palette_Chunk>,                    20, 24,                           "a list of palettes is accepted" },
 		{ MakeChunk<Preset_Palette_Store_Chunk>,              24, 24,                           "a store of palettes is accepted" },
@@ -2923,6 +2925,7 @@ static void TestCountedLists()
 		size_t const size = row.countAt + sizeof(int) + 2 * row.itemBytes;
 
 		memset(bytes, 0, sizeof(bytes));
+		if (row.goodNumber) PutNumber(bytes, row.goodAt, row.goodNumber);
 		PutNumber(bytes, row.countAt, 2);
 		Check(ChunkAccepted(row.make, bytes, size + row.bytesAfter), row.good);
 
@@ -3481,15 +3484,34 @@ static bool TrackAccepted(int count, int firstTime, int secondTime, int start)
 	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, flagsAt + 2 * sizeof(int));
 }
 
-// A placed light with one of its times set.
+// A placed light with one of its times set. Its range is 10 metres, as a light has to reach somewhere to be accepted at all (see LightRangeAccepted).
 static bool LightTimeAccepted(size_t at, int time)
 {
 	alignas(int) static char bytes[128];
 
 	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, offsetof(Placed_Object_Light_Data, range), 10000);
 	PutNumber(bytes, at, time);
 
 	return ChunkAccepted(MakeChunk<Placed_Object_Light_Chunk>, bytes, sizeof(Placed_Object_Light_Data) + sizeof(int));
+}
+
+// A light with this range, and every other number 0: a placed light (PLOBJLIT), or one of a level's lights (STDLIGHT). Each reads its
+// numbers in the order its class holds them, so a number's place in the chunk is its place in the class. (Added 2026-11-14.)
+static bool LightRangeAccepted(bool placed, int range)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+
+	if (placed)
+	{
+		PutNumber(bytes, offsetof(Placed_Object_Light_Data, range), range);
+		return ChunkAccepted(MakeChunk<Placed_Object_Light_Chunk>, bytes, sizeof(Placed_Object_Light_Data) + sizeof(int));
+	}
+
+	PutNumber(bytes, offsetof(Light_Data, range), range);
+	return ChunkAccepted(MakeChunk<Light_Chunk>, bytes, sizeof(Light_Data));
 }
 
 static void TestNumbersUsedAsPlaces()
@@ -3601,6 +3623,21 @@ static void TestNumbersUsedAsPlaces()
 			Check(!LightTimeAccepted(lightTimes[i], 32768), "a light time that wraps round is refused");
 			Check(!LightTimeAccepted(lightTimes[i], -1), "a negative light time is refused");
 		}
+	}
+
+	// A light has to reach somewhere: the game lights only what's nearer than its range, and divides its brightness by it. (Added 2026-11-14 by
+	// Melanikus for the AvP port.) The shortest ranges in the game's own levels are 100 for a placed light and 900 for one of a level's lights.
+	for (int kind = 0; kind < 2; kind++)
+	{
+		bool const placed = (kind == 0);
+		std::string const which = placed ? "a placed light" : "one of a level's lights";
+
+		Check(LightRangeAccepted(placed, 1), (which + " with the shortest range there is, a millimetre, is accepted").c_str());
+		Check(LightRangeAccepted(placed, placed ? 100 : 900), (which + " with the game's own shortest range is accepted").c_str());
+		Check(LightRangeAccepted(placed, 0x7fffffff), (which + " with the longest range a number holds is accepted").c_str());
+		Check(!LightRangeAccepted(placed, 0), (which + " with a range of nothing is refused: it would reach nowhere").c_str());
+		Check(!LightRangeAccepted(placed, -1), (which + " with a negative range is refused").c_str());
+		Check(!LightRangeAccepted(placed, (int)0x80000000), (which + " with the most negative range is refused").c_str());
 	}
 
 	Check(ImageIndexAccepted(0), "the first image's index is accepted");
