@@ -539,9 +539,12 @@
 		{"name":"ANIM: a compact list counts as nothing to build","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!Get_Object_Animation_All_Sequence_Chunk(first))","to":"if (true)"}]},
 		{"name":"ANIM: the level never asks about its hierarchies","changes":[{"file":"3dc/win95/mishchnk.cpp","from":"->can_be_built())\n","to":"->can_be_built() && false)\n"}]},
 		{"name":"ANIM: the rule runs even after a chunk has refused the level","changes":[{"file":"3dc/win95/mishchnk.cpp","from":"if (!error_code)\n\t{\n\t\tList<Chunk *> hierarchies;","to":"if (true)\n\t{\n\t\tList<Chunk *> hierarchies;"}]},
-		{"name":"LIGHT RANGE: a light with a range of nothing is let through","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0)\n","to":"\tif (range < 0)\n"}]},
-		{"name":"LIGHT RANGE: a light with a negative range is let through","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0)\n","to":"\tif (range == 0)\n"}]},
+		{"name":"LIGHT RANGE: a light with a range of nothing is let through","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0 || range > LongestLightRange)\n","to":"\tif (range < 0 || range > LongestLightRange)\n"}]},
+		{"name":"LIGHT RANGE: a light with a negative range is let through","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0 || range > LongestLightRange)\n","to":"\tif (range == 0 || range > LongestLightRange)\n"}]},
 		{"name":"LIGHT RANGE: a level's light's range isn't looked at","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tdata += 4;\n\tCheckLightRange(light.range);\n","to":"\tdata += 4;\n"}]},
-		{"name":"LIGHT RANGE: a placed light's range isn't looked at","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n\tCheckLightRange(light.range);\n","to":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n"}]}
+		{"name":"LIGHT RANGE: a placed light's range isn't looked at","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n\tCheckLightRange(light.range);\n","to":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n"}]},
+		{"name":"LIGHT RANGE: a light's range has no longest","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0 || range > LongestLightRange)\n","to":"\tif (range <= 0)\n"}]},
+		{"name":"LIGHT RANGE: the longest range is one too short","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"static int const LongestLightRange = 1 << 28;\n","to":"static int const LongestLightRange = (1 << 28) - 1;\n"}]},
+		{"name":"LIGHT RANGE: the longest range is one too long","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"static int const LongestLightRange = 1 << 28;\n","to":"static int const LongestLightRange = (1 << 28) + 1;\n"}]}
 	]
 }

@@ -3627,6 +3627,8 @@ static void TestNumbersUsedAsPlaces()
 
 	// A light has to reach somewhere: the game lights only what's nearer than its range, and divides its brightness by it. (Added 2026-11-14 by
 	// Melanikus for the AvP port.) The shortest ranges in the game's own levels are 100 for a placed light and 900 for one of a level's lights.
+	// And it can reach at most 2^28 millimetres, so the sums the game makes with it stay whole numbers it can hold; the game's own longest is
+	// 1,024,900 (Breakout's).
 	for (int kind = 0; kind < 2; kind++)
 	{
 		bool const placed = (kind == 0);
@@ -3634,7 +3636,10 @@ static void TestNumbersUsedAsPlaces()
 
 		Check(LightRangeAccepted(placed, 1), (which + " with the shortest range there is, a millimetre, is accepted").c_str());
 		Check(LightRangeAccepted(placed, placed ? 100 : 900), (which + " with the game's own shortest range is accepted").c_str());
-		Check(LightRangeAccepted(placed, 0x7fffffff), (which + " with the longest range a number holds is accepted").c_str());
+		Check(LightRangeAccepted(placed, 1024900), (which + " with the game's own longest range is accepted").c_str());
+		Check(LightRangeAccepted(placed, 1 << 28), (which + " with the longest range there is, 2^28 millimetres, is accepted").c_str());
+		Check(!LightRangeAccepted(placed, (1 << 28) + 1), (which + " with a range one past the longest is refused").c_str());
+		Check(!LightRangeAccepted(placed, 0x7fffffff), (which + " with the longest range a number holds is refused").c_str());
 		Check(!LightRangeAccepted(placed, 0), (which + " with a range of nothing is refused: it would reach nowhere").c_str());
 		Check(!LightRangeAccepted(placed, -1), (which + " with a negative range is refused").c_str());
 		Check(!LightRangeAccepted(placed, (int)0x80000000), (which + " with the most negative range is refused").c_str());

@@ -112,9 +112,13 @@ void Light_Chunk::fill_data_block ( char * data_start)
 // A light's range is how far it reaches, in millimetres. The game lights only what's nearer than that, and divides the light's
 // brightness by it. A range of 0 or less would be a light that reaches nothing, so the level is refused instead. The shortest in the
 // game's own levels is 900 for one of a level's lights, and 100 for a placed light. (Added 2026-11-14 by Melanikus for the AvP port.)
+// The longest a range may be is 2^28 millimetres, about 268 kilometres, so that the sums the game makes with it stay whole numbers it
+// can hold. The longest in the game's own levels is 1,024,900. (Added 2026-11-14.)
+static int const LongestLightRange = 1 << 28;
+
 static void CheckLightRange(int range)
 {
-	if (range <= 0)
+	if (range <= 0 || range > LongestLightRange)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
