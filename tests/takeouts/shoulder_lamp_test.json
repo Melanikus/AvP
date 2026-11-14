@@ -1791,7 +1791,7 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "if (NotANumberOrEndless(number) || number < least)",
+					"from": "if (IsNaNOrEndless(number) || number < least)",
 					"to": "if (number < least)"
 				}
 			]
@@ -1800,9 +1800,9 @@
 			"name": "a NaN or endless number is taken as a real one",
 			"changes": [
 				{
-					"file": "3dc/shoulder_lamp.cpp",
-					"from": "return ((bits >> 52) & 0x7FF) == 0x7FF;",
-					"to": "return false;"
+					"file": "3dc/real_numbers.h",
+					"from": "\treturn ((bits >> 52) & 0x7FF) == 0x7FF;\n",
+					"to": "\treturn false;\n"
 				}
 			]
 		},

@@ -30,6 +30,7 @@
 //   an animation frame's polygon normals have to pass the same rule as a shape's own
 //   a texture coordinate has to be a real number no further than an animated corner's can be
 //   an outside shape, and a skin in an animated shape's alternate textures, have to have a name
+//   whether a normal's number is a real one is asked of real_numbers.h, the game's one rule for it
 
 #include <math.h>
 #include <vector>
@@ -136,15 +137,12 @@ Shape_Header_Chunk * Shape_Chunk::get_header()
 // game's own levels is 1.09 long. Anything much bigger means nothing, and the game can't turn it into its whole-number form safely,
 // and neither can it turn infinity or "not a number". A normal of all zeros is allowed: the game's own levels have 8619 of them.
 // This reads the float's bits instead of comparing the float itself, because the Release build's fast floating point setting lets
-// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. With the sign
-// taken off, a float's bits count upwards in the same order as its size. 0x40000000 is 2, and infinity and "not a number" come
-// after every real number, so this one test catches all of them.
+// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. So whether it's a
+// real number is asked first, of its bits (real_numbers.h), and only then whether it's from -2 to 2. (Changed 2026-11-14 by Melanikus
+// for the AvP port, to the game's one rule for this; it was its own bit test, which allowed exactly the same numbers.)
 static bool normal_number_is_valid (float number)
 {
-	unsigned int bits;
-	memcpy (&bits, &number, sizeof(bits));
-
-	return (bits & 0x7fffffff) <= 0x40000000;
+	return IsRealNumberFrom(number, -2.0f, 2.0f);
 }
 
 // A shape's normals are in two lists: one for its points and one for its polygons, each read from a chunk with a count of its own.

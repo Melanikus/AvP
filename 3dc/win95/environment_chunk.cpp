@@ -12,6 +12,7 @@
 //   a level's scale has to be from 0.5 to 1
 //   a level's amount of echo has to be a real number
 //   a set of random textures has to have a name
+//   whether a level's scale is a real number is asked of real_numbers.h, the game's one rule for it
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -160,13 +161,9 @@ scale ( *((double *) sdata) )
 	double const smallest_scale = 0.5;
 	double const largest_scale = 1.0;
 
-	// The 11 bits after a double's sign are its power of two, and all 11 set means it's NaN or endless. They're looked at as bits, because the
-	// game is built with the compiler's fast rules for fractions (/fp:fast), under which a comparison isn't promised to treat NaN as it should.
-	unsigned long long bits = 0;
-	memcpy(&bits, &scale, sizeof(bits));
-	bool const not_a_number_or_endless = ((bits >> 52) & 0x7FF) == 0x7FF;
-
-	if (not_a_number_or_endless || scale < smallest_scale || scale > largest_scale)
+	// Whether it's NaN or endless is told from its bits (real_numbers.h), because the game is built with the compiler's fast rules for
+	// fractions (/fp:fast), under which a comparison isn't promised to treat NaN as it should. Only a real number is then compared.
+	if (!IsRealNumberFrom(scale, smallest_scale, largest_scale))
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
