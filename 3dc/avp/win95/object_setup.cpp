@@ -22,6 +22,9 @@
 //   code that could never run is taken out (#135): the xenoborg morph room's two leftovers here, a template and a flag nothing used; a
 //   proximity door's "no lock" (the lock is gone); and a lift station's environment and facing, which only the lift's change of
 //   environment read
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   three asserts on a level message's number are gone: they said under 450, but 450 is the last real message, so a Debug build
+//   stopped on a good level. The number is checked when the level is read (CheckMessageNumber, strategy_chunk.cpp)
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -1834,7 +1837,7 @@ static void add_selfdestruct(const char* name,AVP_Strategy_Chunk* asc,ObjectID I
 static void add_message_strategy(const char* name,AVP_Strategy_Chunk* asc,ObjectID ID)
 {
 	TextMessageStrategy* tms=(TextMessageStrategy*)asc->Strategy;
-	assert (tms->message_string>0 && tms->message_string<450);
+	// The number was already checked when the level was read: CheckMessageNumber, strategy_chunk.cpp. It's 0 to 450 here.
 
 	MESSAGE_TOOLS_TEMPLATE* mtt=(MESSAGE_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(MESSAGE_TOOLS_TEMPLATE));
 
@@ -3486,8 +3489,7 @@ void SetupMissionObjectives()
 	for(;!mlif.done();mlif.next())
 	{
 		MissionObjectiveStrategy * mos=(MissionObjectiveStrategy*) mlif()->asc->Strategy;
-		assert (mos->mission_description_string>=0 && mos->mission_description_string<450);
-		assert (mos->mission_complete_string>=0 && mos->mission_complete_string<450);
+		// Both numbers were already checked when the level was read: CheckMessageNumber, strategy_chunk.cpp. They're 0 to 450 here.
 	
 		TEXTSTRING_ID desc_string;
 		if(mos->mission_description_string==0)
