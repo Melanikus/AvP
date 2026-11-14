@@ -12,6 +12,7 @@
 //   added the "holding at least" registrations, so that a kind of chunk that always reads a fixed set of fields is never made from a chunk too small to hold them
 //   removed CHUNK_EXTRACT_ARRAY, which sized a list from a count in the file with no check: only code in a comment used it
 //   added CheckPlace, which refuses a level that gives a place farther than 2^24 millimetres from its middle
+//   added CheckRadius, which refuses a shape's radius that isn't a real number from 0 to 2^24
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
@@ -500,6 +501,23 @@ inline void CheckPlace(Place const & place)
 	if (place.x < -FarthestPlace || place.x > FarthestPlace ||
 		place.y < -FarthestPlace || place.y > FarthestPlace ||
 		place.z < -FarthestPlace || place.z > FarthestPlace)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
+// A shape's radius is how far its points reach from its middle. The file keeps it as a fraction, and the game makes a whole number of it
+// and adds it to other distances, so it has to be a real number from 0 up to FarthestPlace. The largest in the game's own levels is
+// 1,520,512.6. Whether it's a real number, and not endless or not a number at all, is told from its bits: the game is built for fast
+// arithmetic, which isn't promised to compare something that isn't a number properly. (Added 2026-11-14 by Melanikus for the AvP port.)
+inline void CheckRadius(float radius)
+{
+	unsigned int bits;
+	memcpy(&bits, &radius, sizeof(bits));
+
+	bool const notARealNumber = ((bits >> 23) & 0xFF) == 0xFF;
+
+	if (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}

@@ -4578,6 +4578,58 @@ static void TestPlaces()
 	}
 }
 
+// 40. A shape's radius. The file keeps it as a fraction, and the game makes a whole number of it and adds it to other distances, so it has
+// to be a real number from 0 up to 2^24 (CheckRadius, in chunk.hpp). Shapes and sub-shapes keep one in their headers, and a shape's centre
+// chunk keeps its radius about the centre. This test is built with the ordinary arithmetic, under which a value that isn't a number never
+// compares as in range, so it shows that the bit test on its own is what refuses one. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool ShapeRadiusAccepted(int kind, float radius)
+{
+	if (kind == 2)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+		char * const centre = PutChunk(wholeShape + bytes, "SHPCENTR", 16);
+
+		memcpy(centre + 12, &radius, sizeof(radius));
+		return ShapeIsAccepted(centre + 16);
+	}
+
+	bool const subShape = (kind == 1);
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+
+	memcpy(wholeShape + ChunkHeaderBytes + (subShape ? 16 : 32), &radius, sizeof(radius));
+	return subShape ? SubShapeIsAccepted(bytes) : ShapeIsAccepted(wholeShape + bytes);
+}
+
+static void TestShapeRadius()
+{
+	puts("40. a shape's radius");
+
+	float const farthest = 16777216.0f;
+	float const justPast = 16777218.0f;   // the next number a float can hold after 2^24
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	char const * const kinds[3] = { "a shape's radius", "a sub-shape's radius", "a shape's radius about its centre" };
+
+	for (int kind = 0; kind < 3; kind++)
+	{
+		std::string const what = kinds[kind];
+
+		Check(ShapeRadiusAccepted(kind, 0.0f), (what + " of nothing is accepted").c_str());
+		Check(ShapeRadiusAccepted(kind, 1520512.625f), (what + " the largest in the game's own levels, 1,520,512.6, is accepted").c_str());
+		Check(ShapeRadiusAccepted(kind, farthest), (what + " the largest there can be, 2^24, is accepted").c_str());
+		Check(!ShapeRadiusAccepted(kind, justPast), (what + " just past 2^24 is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, -1.0f), (what + " that's negative is refused: a distance can't be").c_str());
+		Check(!ShapeRadiusAccepted(kind, notANumber), (what + " that isn't a number is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, endless), (what + " that's endless is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, -endless), (what + " that's endlessly negative is refused").c_str());
+	}
+
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float negativeNotANumber;
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+	Check(!ShapeRadiusAccepted(0, negativeNotANumber), "a shape's radius that isn't a number, with its sign bit set, is refused too");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4616,6 +4668,7 @@ int main()
 	TestNumbersUsedAsPlaces();
 	TestHierarchyAnimations();
 	TestPlaces();
+	TestShapeRadius();
 
 	if (checksFailed)
 	{

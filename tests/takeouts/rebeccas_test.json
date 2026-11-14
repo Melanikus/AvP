@@ -613,6 +613,14 @@
 		{"name":"PLACES: the top corner of a waypoint's box isn't looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"\t\t\tCheckPlace(cw->max);\n","to":""}]},
 		{"name":"PLACES: a waypoint's centre isn't looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"\t\t\tCheckPlace(cw->centre);\n","to":""}]},
 		{"name":"PLACES: how far a hierarchy's frame moves its object isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\t\t\tCheckPlace(seq->frames[j].transform);\n","to":""}]},
-		{"name":"PLACES: how far an animation frame moves its object isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\tdata_start += 4;\n\tCheckPlace(transform);\n","to":"\tdata_start += 4;\n"}]}
+		{"name":"PLACES: how far an animation frame moves its object isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\tdata_start += 4;\n\tCheckPlace(transform);\n","to":"\tdata_start += 4;\n"}]},
+		{"name":"RADIUS: a radius past 2^24 is let through","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n","to":"\tif (notARealNumber || radius < 0.0f)\n"}]},
+		{"name":"RADIUS: a negative radius is let through","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n","to":"\tif (notARealNumber || radius > (float)FarthestPlace)\n"}]},
+		{"name":"RADIUS: a radius that isn't a number is let through","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n","to":"\tif (radius < 0.0f || radius > (float)FarthestPlace)\n"}]},
+		{"name":"RADIUS: a radius that isn't a number is looked for in the wrong bits","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tbool const notARealNumber = ((bits >> 23) & 0xFF) == 0xFF;\n","to":"\tbool const notARealNumber = ((bits >> 24) & 0xFF) == 0xFF;\n"}]},
+		{"name":"RADIUS: a bad radius doesn't refuse the level","changes":[{"file":"3dc/win95/chunk.hpp","from":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n","to":"\tif (notARealNumber || radius < 0.0f || radius > (float)FarthestPlace)\n\t{\n"}]},
+		{"name":"RADIUS: a shape's radius isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tparent->shape_data_store->radius = *((float *) hdata);\n\tCheckRadius(parent->shape_data_store->radius);\n","to":"\tparent->shape_data_store->radius = *((float *) hdata);\n"}]},
+		{"name":"RADIUS: a sub-shape's radius isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tparent->shape_data_store->radius = *((float *) (hdata));\n\tCheckRadius(parent->shape_data_store->radius);\n","to":"\tparent->shape_data_store->radius = *((float *) (hdata));\n"}]},
+		{"name":"RADIUS: a shape's radius about its centre isn't looked at","changes":[{"file":"3dc/win95/chunk_shape.cpp","from":"\tCheckRadius(cs->radius_about_centre);\n","to":""}]}
 	]
 }

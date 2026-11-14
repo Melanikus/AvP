@@ -26,6 +26,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   every point, box corner and centre a shape gives has to be inside the level, as CheckPlace in chunk.hpp says
+//   a shape's radius, and its radius about its centre, have to be real numbers from 0 to 2^24, as CheckRadius in chunk.hpp says
 
 #include <math.h>
 #include <vector>
@@ -1148,6 +1149,7 @@ Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* d
 	data+=sizeof(ChunkVectorInt);
 	
 	cs->radius_about_centre=*(float*)data;
+	CheckRadius(cs->radius_about_centre);
 }
 
 void Shape_Centre_Chunk::fill_data_block(char * data_start)
@@ -1492,6 +1494,7 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	hdata+=4;
 
 	parent->shape_data_store->radius = *((float *) hdata);
+	CheckRadius(parent->shape_data_store->radius);
 	hdata+=4;
 	
 	parent->shape_data_store->max.x = *((int *) hdata);
@@ -2288,6 +2291,7 @@ Shape_Sub_Shape_Header_Chunk::Shape_Sub_Shape_Header_Chunk (Shape_Sub_Shape_Chun
 	hdata += 4;
 
 	parent->shape_data_store->radius = *((float *) (hdata));
+	CheckRadius(parent->shape_data_store->radius);
 	hdata += 4;
 
 	parent->shape_data_store->max.x = *((int *) (hdata));
