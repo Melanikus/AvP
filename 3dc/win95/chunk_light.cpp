@@ -8,6 +8,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   one of a level's lights has to be inside the level, as CheckPlace in chunk.hpp says
 //   a light scale's six numbers have to be real numbers no bigger than 2^24 either way
+//   the two ways of applying a light scale, which nothing called, are gone (2026-11-14)
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -297,8 +298,9 @@ Light_Scale_Chunk::Light_Scale_Chunk(Chunk_With_Children* parent,const char* dat
 	data+=4;
 
 	// Six fractions follow: the prelight's multiplier, the level it starts above and what it adds, then the same three for the light at
-	// run time. Four of them are made whole numbers here, and the game multiplies and adds with them, so each has to be a real number no
-	// bigger than 2^24 either way, or the level is refused. One that isn't is kept as 0. No level of the game's own has a light scale.
+	// run time. Four of them are made whole numbers here, so each has to be a real number no bigger than 2^24 either way, or the level is
+	// refused. One that isn't is kept as 0. Nothing else in the game uses them: they're kept so that the chunk can be written back as it
+	// was. No level of the game's own has a light scale.
 	// Whether each is a real number is told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
 	float numbers[6];
 	memcpy(numbers, data, sizeof(numbers));
@@ -362,24 +364,6 @@ void Light_Scale_Chunk::fill_data_block(char* data_start)
 	data_start+=4;
 }
 
-int Light_Scale_Chunk::ApplyPrelightScale(int l)
-{
-	if(l<prelight_multiply_above)return l;
-	l+=(prelight_add-prelight_multiply_above);
-	l= (int)(l*prelight_multiply);
-	l+=prelight_multiply_above;
-	l=min(l,255);
-	return max(l,prelight_multiply_above);
-}
-int Light_Scale_Chunk::ApplyRuntimeScale(int l)
-{
-	if(l<runtime_multiply_above)return l;
-	l+=(runtime_add-runtime_multiply_above);
-	l=(int)( l*runtime_multiply);
-	l+=runtime_multiply_above;
-	l=min(l,255);
-	return max(l,runtime_multiply_above);
-}
 ////////////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PLOBJLIT",Placed_Object_Light_Chunk,60)
 

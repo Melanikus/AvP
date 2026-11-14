@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of code only the level editor used: the game itself never runs it; added the
 //   number of places a shape needs for its baked colours
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   the two ways of applying a light scale, which nothing called, are gone
 
 #ifndef _ltchunk_hpp
 #define _ltchunk_hpp 1
@@ -262,10 +264,6 @@ public :
 	float runtime_multiply;
 	int runtime_multiply_above;
 	int runtime_add;
-
-
-	int ApplyPrelightScale(int l);
-	int ApplyRuntimeScale(int l);
 
 	int spare1,spare2,spare3,spare4;	
 };
