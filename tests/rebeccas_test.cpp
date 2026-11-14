@@ -2499,6 +2499,10 @@ static void TestModuleBoxes()
 // wall, so if anything reads the chunk itself past its end, this stops.
 static size_t const StrategyNumbersBytes = 8;
 
+// Where a fan's times to speed up and slow down are in its strategy: after the kind, the type and the extra number, as FanStrategy reads them
+static size_t const FanSpeedUpAt = 12;
+static size_t const FanSlowDownAt = 16;
+
 static bool StrategyAccepted(char const * strategy, size_t strategyBytes)
 {
 	File_Chunk file;
@@ -2658,6 +2662,14 @@ static void TestStrategies()
 
 		memset(strategy, 0, sizeof(strategy));
 		memcpy(strategy, &kind, sizeof(kind));
+
+		// A fan needs some time to speed up and slow down (FanTimesAccepted), so it gets the game's own second for both, and only its size is tried here
+		if (kind == StratFan)
+		{
+			int const second = 65536;
+			memcpy(strategy + FanSpeedUpAt, &second, sizeof(second));
+			memcpy(strategy + FanSlowDownAt, &second, sizeof(second));
+		}
 
 		Check(StrategyAccepted(strategy, size), "a strategy of its own size is accepted");
 		Check(!StrategyAccepted(strategy, size - 1), "one byte short of its size is refused");
@@ -3420,6 +3432,20 @@ static bool StrategyNumberAccepted(int kind, size_t at, int number)
 	return StrategyAccepted(strategy, size);
 }
 
+// A fan with these times to speed up and slow down, in 65536ths of a second, and every other number zero. (Added 2026-11-14.)
+static bool FanTimesAccepted(int speedUp, int slowDown)
+{
+	alignas(int) static char strategy[64];
+	int const kind = StratFan;
+
+	memset(strategy, 0, sizeof(strategy));
+	memcpy(strategy, &kind, sizeof(kind));
+	memcpy(strategy + FanSpeedUpAt, &speedUp, sizeof(speedUp));
+	memcpy(strategy + FanSlowDownAt, &slowDown, sizeof(slowDown));
+
+	return StrategyAccepted(strategy, StrategySizeOfKind(StratFan));
+}
+
 static bool TrackSoundAccepted(int index)
 {
 	alignas(int) static char bytes[64];
@@ -3547,6 +3573,25 @@ static void TestNumbersUsedAsPlaces()
 	Check(StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 450), "a mission's end message in the last place is accepted");
 	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 451), "a mission's end message past the last place is refused");
 	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, -1), "a mission's negative end message is refused");
+
+	// A fan's times to speed up and slow down: the game divides one second by each, so each has to be at least a thousandth of a second, 65, or the
+	// speed the game works out from it isn't a sensible one. (Added 2026-11-14 by Melanikus for the AvP port.) The game's own fans take a second, 65536.
+	{
+		int const quickest = 65;
+		int const second = 65536;
+
+		Check(FanTimesAccepted(second, second), "a fan that takes a second to speed up and to slow down, as the game's own do, is accepted");
+		Check(FanTimesAccepted(quickest, quickest), "a fan with the shortest times, a thousandth of a second, is accepted");
+		Check(FanTimesAccepted(0x7fffffff, 0x7fffffff), "a fan with the longest times a number holds is accepted");
+		Check(!FanTimesAccepted(quickest - 1, second), "a fan that speeds up in less than a thousandth of a second is refused");
+		Check(!FanTimesAccepted(second, quickest - 1), "a fan that slows down in less than a thousandth of a second is refused");
+		Check(!FanTimesAccepted(0, second), "a fan that takes no time to speed up is refused");
+		Check(!FanTimesAccepted(second, 0), "a fan that takes no time to slow down is refused");
+		Check(!FanTimesAccepted(2, second), "a fan time of 2 is refused");
+		Check(!FanTimesAccepted(-1, second), "a negative time to speed up is refused");
+		Check(!FanTimesAccepted(second, -1), "a negative time to slow down is refused");
+		Check(!FanTimesAccepted((int)0x80000000, (int)0x80000000), "the most negative times are refused");
+	}
 
 	{
 		alignas(int) static char generator[28];

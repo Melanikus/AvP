@@ -545,6 +545,11 @@
 		{"name":"LIGHT RANGE: a placed light's range isn't looked at","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n\tCheckLightRange(light.range);\n","to":"\tdata+=sizeof(Placed_Object_Light_Data);\n\n"}]},
 		{"name":"LIGHT RANGE: a light's range has no longest","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"\tif (range <= 0 || range > LongestLightRange)\n","to":"\tif (range <= 0)\n"}]},
 		{"name":"LIGHT RANGE: the longest range is one too short","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"static int const LongestLightRange = 1 << 28;\n","to":"static int const LongestLightRange = (1 << 28) - 1;\n"}]},
-		{"name":"LIGHT RANGE: the longest range is one too long","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"static int const LongestLightRange = 1 << 28;\n","to":"static int const LongestLightRange = (1 << 28) + 1;\n"}]}
+		{"name":"LIGHT RANGE: the longest range is one too long","changes":[{"file":"3dc/win95/chunk_light.cpp","from":"static int const LongestLightRange = 1 << 28;\n","to":"static int const LongestLightRange = (1 << 28) + 1;\n"}]},
+		{"name":"FAN TIME: a fan that speeds up in less than a thousandth of a second is let through","changes":[{"file":"3dc/avp/win95/strategy_chunk.cpp","from":"\tif(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)\n","to":"\tif(slow_down_time<quickest_fan_time)\n"}]},
+		{"name":"FAN TIME: a fan that slows down in less than a thousandth of a second is let through","changes":[{"file":"3dc/avp/win95/strategy_chunk.cpp","from":"\tif(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)\n","to":"\tif(speed_up_time<quickest_fan_time)\n"}]},
+		{"name":"FAN TIME: a fan's shortest time is one too short","changes":[{"file":"3dc/avp/win95/strategy_chunk.cpp","from":"\tint const quickest_fan_time=65;\n","to":"\tint const quickest_fan_time=64;\n"}]},
+		{"name":"FAN TIME: a fan's shortest time is one too long","changes":[{"file":"3dc/avp/win95/strategy_chunk.cpp","from":"\tint const quickest_fan_time=65;\n","to":"\tint const quickest_fan_time=66;\n"}]},
+		{"name":"FAN TIME: a fan with a time of nothing doesn't refuse the level","changes":[{"file":"3dc/avp/win95/strategy_chunk.cpp","from":"\tif(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n","to":"\tif(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)\n\t{\n\t}\n"}]}
 	]
 }

@@ -3,6 +3,7 @@
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
 //   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
 //   a message's number has to be a place in the table of level messages
+//   a fan's times to speed up and slow down have to be at least a thousandth of a second
 //   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
 //   a name is only read as far as the end of its chunk
 //   memory made with new[] goes back with delete[], and a mission objective now gives back its two lists
@@ -1685,6 +1686,16 @@ FanStrategy::FanStrategy(const char* data_start,size_t /*size*/ )
 	data_start+=4;
 	pad2=*(int*)data_start;
 
+	// A fan takes these times to speed up and to slow down, in 65536ths of a second. The game divides one second by each, keeping only 32 bits of
+	// the answer, to find how much faster or slower the fan gets each second (add_fan, object_setup.cpp). Under 65 that answer isn't a sensible
+	// speed, so each time has to be at least 65, about a thousandth of a second: the shortest a track's section may take too
+	// (Object_Track_Chunk2). The shortest in the game's own levels is 65536, a second. (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const quickest_fan_time=65;
+
+	if(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 
