@@ -4496,6 +4496,9 @@ static bool DummyAccepted(ChunkVectorInt const & place) { return PlaceInChunkAcc
 static bool DummyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 12, place); }
 static bool DummyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 24, place); }
 
+// A placed hierarchy's data: an empty name in 4 bytes, which model it is, its place, its turn, its id and a count of 0 extra numbers.
+static bool PlacedHierarchyPlaceAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Placed_Hierarchy_Data_Chunk>, 48, 8, place); }
+
 // A hierarchy's box: its bottom corner and its top corner, and nothing else.
 static bool HierarchyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 0, place); }
 static bool HierarchyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 12, place); }
@@ -4616,6 +4619,7 @@ static void TestPlaces()
 		{ ChestCameraAccepted,          "a chest's camera" },
 		{ CameraZoneBottomAccepted,     "the bottom corner of a camera's zone" },
 		{ CameraZoneTopAccepted,        "the top corner of a camera's zone" },
+		{ PlacedHierarchyPlaceAccepted, "where a placed hierarchy stands" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -4785,6 +4789,7 @@ static bool OtherTurnAccepted(ChunkQuat const & turn)
 
 static bool ParticleTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, 72, 52, turn); }
 static bool DummyTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 36, turn); }
+static bool PlacedHierarchyTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Placed_Hierarchy_Data_Chunk>, 48, 20, turn); }
 static bool AnimationFrameTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Object_Animation_Sequence_Frame_Chunk>, 44, 0, turn); }
 
 // A hierarchy's list of sequences, with one sequence of one frame, whose turn is set
@@ -4846,6 +4851,7 @@ static void TestTurns()
 		{ DummyTurnAccepted,           "a dummy object's turn" },
 		{ HierarchyFrameTurnAccepted,  "a hierarchy's frame's turn" },
 		{ AnimationFrameTurnAccepted,  "an animation frame's turn" },
+		{ PlacedHierarchyTurnAccepted, "a placed hierarchy's turn" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)

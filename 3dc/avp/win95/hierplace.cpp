@@ -7,6 +7,7 @@
 //   a placed hierarchy's name is copied by the length measured from the chunk, and the way of making one in code, which nothing used, is gone
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a placed hierarchy with no data chunk refuses the level
+//   a placed hierarchy's place has to be inside the level, and its turn has to fit, as CheckPlace and CheckTurn in chunk.hpp say
 #include "hierplace.hpp"
 #include "strategy_chunk.hpp"
 
@@ -118,9 +119,11 @@ Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* pa
 
 	location = *(ChunkVectorInt*)data;
 	data += sizeof(ChunkVectorInt);
+	CheckPlace(location);
 
 	orientation = *(ChunkQuat*)data;
 	data += sizeof(ChunkQuat);
+	CheckTurn(orientation);
 
 	id = *(ObjectID*)data;
 	data += sizeof(ObjectID);

@@ -676,6 +676,8 @@
 		{"name":"AI3 ROOM: a room of 0 on z is allowed","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"&& roomZ != 0","to":"&& roomZ == roomZ"}]},
 		{"name":"AI3 ROOM: the level's own scale isn't used","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"*scale = ((Environment_Scale_Chunk *) levelScale)->scale;","to":"*scale = 1.0;"}]},
 		{"name":"AI3 ROOM: no waypoint is looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<NumWaypoints;i++)","to":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<0;i++)"}]},
-		{"name":"AI3 ROOM: only the first waypoint is looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<NumWaypoints;i++)","to":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<1 && i<NumWaypoints;i++)"}]}
+		{"name":"AI3 ROOM: only the first waypoint is looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<NumWaypoints;i++)","to":"bool const scaleKnown = LevelScale(GetRootChunk(), &scale);\n\n\tfor(int i=0;i<1 && i<NumWaypoints;i++)"}]},
+		{"name":"PLACES: a placed hierarchy's place isn't looked at","changes":[{"file":"3dc/avp/win95/hierplace.cpp","from":"\tdata += sizeof(ChunkVectorInt);\n\tCheckPlace(location);\n","to":"\tdata += sizeof(ChunkVectorInt);\n"}]},
+		{"name":"TURNS: a placed hierarchy's turn isn't looked at","changes":[{"file":"3dc/avp/win95/hierplace.cpp","from":"\tdata += sizeof(ChunkQuat);\n\tCheckTurn(orientation);\n","to":"\tdata += sizeof(ChunkQuat);\n"}]}
 	]
 }
