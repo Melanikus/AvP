@@ -4227,6 +4227,10 @@ static void TestHierarchyAnimations()
 		// The game leaves a hierarchy out altogether if its first section has no sequences, so nothing in that one is built, and it can't refuse the level. Two of the game's own are like this.
 		{ [](char * at) { return PutSectionName(at); }, true },
 		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true },
+
+		// The game reads the times in the first section's long list even when it has a compact list too, so each sequence there needs its header (added 2026-11-14 by Melanikus)
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutGoodCompact(at), true, 1, frames); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutGoodCompact(at), false, 1, frames); }, false },
 	};
 
 	// What each row above checks, in the same order
@@ -4260,6 +4264,8 @@ static void TestHierarchyAnimations()
 		"a section inside with no name chunk is refused",
 		"a first section with no sequences at all is left alone",
 		"and so is whatever's inside it",
+		"a first section with a compact list and a long one, whose sequence has its header, is accepted",
+		"but a sequence with no header in that long list is refused, though the compact list is the one built from",
 	};
 
 	static_assert(sizeof(rowWords) / sizeof(rowWords[0]) == sizeof(rows) / sizeof(rows[0]), "every row has its words");

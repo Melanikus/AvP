@@ -8,6 +8,8 @@
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a hierarchy the game couldn't build refuses the level
 //   a hierarchy's box has to be inside the level, as CheckPlace in chunk.hpp says
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   every sequence in a hierarchy's first section's long list has to have its header, even beside a compact list
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -132,6 +134,23 @@ bool Object_Hierarchy_Chunk::can_be_built()
 		if (sequences.size() == 0)
 		{
 			return true;
+		}
+	}
+
+	// Before it builds the model, the game reads the header of every sequence in the first section's long list, for its time
+	// (build_time_list in projload.cpp). It does that even when the section has a compact list, which it builds from instead, and
+	// which is all section_can_be_built looks at then. So each sequence in that long list has to have its header. None of the game's
+	// own first sections has both lists. Added 2026-11-14 by Melanikus for the AvP port.
+	{
+		List <Object_Animation_Sequence_Chunk *> sequences;
+		ListLongSequences(first, &sequences);
+
+		for (LIF<Object_Animation_Sequence_Chunk *> sequence(&sequences); !sequence.done(); sequence.next())
+		{
+			if (!sequence()->get_header())
+			{
+				return false;
+			}
 		}
 	}
 

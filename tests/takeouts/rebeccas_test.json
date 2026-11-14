@@ -664,6 +664,7 @@
 					"to": "if (!get_data_chunk() && Parent_File->error_code)"
 				}
 			]
-		}
+		},
+		{"name":"FIRST SECTION: a long sequence with no header beside a compact list is accepted","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!sequence()->get_header())","to":"if (!sequence()->get_header() && sequences.size() > 1)"}]}
 	]
 }
