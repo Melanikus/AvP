@@ -130,12 +130,40 @@ static void TestTheFunction()
 	Check(Has(afterDraw, "orthoList->Reset();") && Has(afterDraw, "orthoVBOffset = 0;"), "and the list is the game's again, empty, as its next frame expects");
 }
 
+// THE CHAIN'S OWN PIXELS (R-DRAW-CHAIN-1 D2). WPos2DC and HPos2DC turn a flat place (a letter, a box) into the screen's own numbers.
+// Outside a running level they read it as a point on the menus' 640 by 480 grid, stretched over the whole screen. The editor's panels
+// are laid out in their chain's own pixels, so while fill() adds them, both have to count pixels instead. Without that, on a chain 1024
+// wide, everything the panels drew came out 1.6 times as far from the corner as the clicks were tested (Melanikus, 2026-11-14).
+static void TestTheChainsOwnPixels()
+{
+	puts("WPos2DC and HPos2DC while the chain is filled, read:");
+
+	std::string const source = ReadSource("3dc/d3d_render.cpp");
+
+	// The switch starts off, so the game itself, which never draws into a chain, always gets the menus' grid as before
+	Check(Has(source, "static bool drawingToChain = false;"), "the switch starts off");
+
+	// Both conversions ask it before they use the menus' grid
+	std::string const widths = SourceSlice(source, "inline float WPos2DC(int32_t pos)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const heights = SourceSlice(source, "inline float HPos2DC(int32_t pos)", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	char const *const asked = "if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {";
+	Check(Has(widths, asked), "WPos2DC counts pixels while the chain is filled");
+	Check(Has(heights, asked), "HPos2DC counts pixels while the chain is filled");
+
+	// It's on only around fill(), and only there: on just before, off straight after, and nowhere else in the file
+	std::string const function = SourceSlice(source, "bool R_DrawScreenToChain(", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	Check(Has(function, "drawingToChain = true;\n\t\t\t\tfill(context);\n\t\t\t\tdrawingToChain = false;\n"),
+		"the switch is on just before fill() and off straight after it");
+	Check(Count(source, "drawingToChain = true;") == 1, "and nothing else in the file turns it on");
+}
+
 int main()
 {
 	// Print each line straight away
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	TestTheFunction();
+	TestTheChainsOwnPixels();
 
 	if (checksFailed)
 	{

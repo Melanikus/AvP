@@ -87,6 +87,42 @@
 			"changes": [
 				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\td3d.orthoVB->Unlock();\n", "to": "" }
 			]
+		},
+		{
+			"name": "the chain's-pixels switch starts on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "static bool drawingToChain = false;", "to": "static bool drawingToChain = true;" }
+			]
+		},
+		{
+			"name": "WPos2DC uses the menus' grid while the chain is filled",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640)", "to": "\tif ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640)" }
+			]
+		},
+		{
+			"name": "HPos2DC uses the menus' grid while the chain is filled",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480)", "to": "\tif ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480)" }
+			]
+		},
+		{
+			"name": "the switch is never turned on around fill()",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\tdrawingToChain = true;\n", "to": "" }
+			]
+		},
+		{
+			"name": "the switch stays on after fill()",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\tdrawingToChain = false;\n", "to": "" }
+			]
+		},
+		{
+			"name": "something else in the file turns the switch on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "static bool drawingToChain = false;\n", "to": "static bool drawingToChain = false;\nstatic void AlsoOn() { drawingToChain = true; }\n" }
+			]
 		}
 	]
 }
