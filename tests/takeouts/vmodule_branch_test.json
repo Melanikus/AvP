@@ -74,6 +74,51 @@
 					"to": "static VMODULE *NextItemOfAList(VMODULE *vptr)\n{\n\tswitch(vptr->vmod_instr)\n\t{\n\t\tcase vmodi_bra_vc: return vptr->vmod_data.vmodidata_ptr;\n\t\tdefault: return vptr + 1;\n\t}\n}\n\nint IsModuleVisibleFromModule(MODULE *source, MODULE *target) {"
 				}
 			]
+		},
+		{
+			"name": "the visible walk stays on a branch item with no module",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "end);\n\t\t\t\t}\n\t\t\t\telse vptr++;\n",
+					"to": "end);\n\t\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "the can-it-be-seen walk stays on a branch item with no module",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "\t\t\t\telse vPtr++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the can-a-module-see-another walk stays on a branch item with no module",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "end);\n\t\t\t\t\t}\n\t\t\t\telse vptr++;\n",
+					"to": "end);\n\t\t\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "the can-a-module-see-another walk keeps one module for its whole list, so an item can take an earlier item's",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "\tVMODULE *vptr;\n\tint gotit;\n",
+					"to": "\tVMODULE *vptr;\n\tMODULE *mptr = 0;\n\tint gotit;\n"
+				},
+				{
+					"file": "3dc/module.cpp",
+					"from": "\t\t/* This item's own module, or none: never the module of an item before it */\n\t\tMODULE *mptr = 0;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

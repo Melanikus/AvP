@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/module.cpp",
-					"from": "\tMODULE *mptr = 0;\n\tint gotit;\n\n\tif ((source==NULL)",
-					"to": "\tMODULE *mptr = 0;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
+					"from": "\tVMODULE *vptr;\n\tint gotit;\n\n\tif ((source==NULL)",
+					"to": "\tVMODULE *vptr;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
 				}
 			]
 		},

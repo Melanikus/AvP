@@ -16,6 +16,7 @@
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a door's branch in a module's visibility list is only taken if it lands later in the same list (vmodule_branch.h)
+//   an item of a visibility list that branches but has no module of its own is skipped, in each of the three walks of the list
 
 #include "3dc.h"
 #include "inline.h"
@@ -243,12 +244,13 @@ void FindVisibleModules(VMODULE *vptr,int flag)
 			case vmodi_bra_vc:
 				/* If the door/viewport is closed... */
 				/* Branch to this vptr */
-				/* else vptr++; */
+				/* An item with no module of its own is skipped, so the walk always moves on */
 				if(mptr)
 				{
 					if(mptr->m_flags & m_flag_open) vptr++;
 					else vptr = VModuleBranchTarget(vptr, vptr->vmod_data.vmodidata_ptr, end);
 				}
+				else vptr++;
 				break;
 		}
 	}
@@ -302,12 +304,13 @@ int ThisObjectIsInAModuleVisibleFromCurrentlyVisibleModules(STRATEGYBLOCK *sbPtr
 			case vmodi_bra_vc:
 				/* If the door/viewport is closed... */
 				/* Branch to this vPtr */
-				/* else vPtr++; */
+				/* An item with no module of its own is skipped, so the walk always moves on */
 				if(mptr)
 				{
 					if(mptr->m_flags & m_flag_open) vPtr++;
 					else vPtr = VModuleBranchTarget(vPtr, vPtr->vmod_data.vmodidata_ptr, end);
 				}
+				else vPtr++;
 				break;
 		}
 	}
@@ -1045,7 +1048,6 @@ void PrintName(char *name)
 int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 
 	VMODULE *vptr;
-	MODULE *mptr = 0;
 	int gotit;
 
 	if ((source==NULL)||(target==NULL)) return(0);
@@ -1058,6 +1060,9 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 	VMODULE *const end = EndOfVisibilityList(vptr);
 
 	while(! ((vptr->vmod_type == vmtype_term)||(gotit)) ) {
+
+		/* This item's own module, or none: never the module of an item before it */
+		MODULE *mptr = 0;
 
 		/* Add this module to the visible array */
 
@@ -1087,6 +1092,8 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 
 				/* Branch to this vptr */
 
+				/* An item with no module of its own is skipped, so the walk always moves on */
+
 				if(mptr)
 					{
 						if(mptr->m_flags & m_flag_open)
@@ -1094,10 +1101,7 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 						else
 							vptr = VModuleBranchTarget(vptr, vptr->vmod_data.vmodidata_ptr, end);
 					}
-
-
-
-				/* else vptr++; */
+				else vptr++;
 
 				break;
 

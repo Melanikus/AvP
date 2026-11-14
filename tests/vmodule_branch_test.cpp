@@ -7,8 +7,8 @@
 //
 // WHAT: the rule itself, on a list of plain numbers standing in for the game's items, with every kind of place a jump could be given;
 // and, by reading module.cpp's source (it needs the whole game to run), that all three walks of the list go through the rule, each with
-// its list's own end, and that module.cpp reads where a branch goes nowhere else. tests/takeouts/vmodule_branch_test.json proves each
-// check can fail.
+// its list's own end, and that module.cpp reads where a branch goes nowhere else; and that each walk skips a branch item with no module
+// of its own. tests/takeouts/vmodule_branch_test.json proves each check can fail.
 
 #include "vmodule_branch.h"
 
@@ -88,6 +88,15 @@ static std::string FunctionText(const std::string &source, const char *firstLine
 	return close == std::string::npos ? std::string() : source.substr(start, close + 3 - start);
 }
 
+// Is this line in the walk exactly once, and inside its loop, after the walk's "while("? Then it's done again for every item.
+static bool OnceForEachItem(const std::string &walk, const char *line)
+{
+	std::string::size_type const loop = walk.find("while(");
+	std::string::size_type const at = walk.find(line);
+
+	return Times(walk, line) == 1 && loop != std::string::npos && at != std::string::npos && at > loop;
+}
+
 // A stand-in for the game's VMODULE: big enough that a place halfway into one can be told from the start of one
 struct Item
 {
@@ -151,6 +160,18 @@ int main()
 	Check(readsThroughTheRule == reads, "and none of them follows it without the rule");
 	Check(Times(module, "case vmodi_bra_vc:") == 4,
 		"and handles a branch in 4: the three walks, and the setup that turns its number into a place");
+
+	puts("A branch item with no module of its own, in each walk:");
+
+	// Each walk starts every item with no module, then takes the item's own if it has one, so a branch item with none never uses the
+	// module of an item before it, whether it's the first item of its list or a later one. And it skips that item, so the walk always
+	// moves on.
+	Check(OnceForEachItem(visible, "MODULE *mptr = 0;") && OnceForEachItem(visible, "else vptr++;"),
+		"the walk that finds what's visible starts each item with no module, and skips a branch item that has none");
+	Check(OnceForEachItem(objectSeen, "MODULE *mptr = NULL;") && OnceForEachItem(objectSeen, "else vPtr++;"),
+		"and so does the walk that asks whether an object can be seen");
+	Check(OnceForEachItem(moduleSeen, "MODULE *mptr = 0;") && Times(moduleSeen, "MODULE *mptr") == 1 && OnceForEachItem(moduleSeen, "else vptr++;"),
+		"and so does the walk that asks whether one module can see another: its first item or any later one, never with an earlier item's module");
 
 	printf("%s: %d checks, %d failed\n", failures ? "SOME CHECKS FAILED" : "All checks passed", checks, failures);
 	return failures ? 1 : 0;
