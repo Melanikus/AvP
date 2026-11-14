@@ -4878,6 +4878,41 @@ static void TestShapesWithNoName()
 	}
 }
 
+// 45. An animation frame's polygon normals have to be sensible numbers by the same rule as a shape's own (normals_are_valid, in
+// chunk_shape.cpp): each a real number no bigger than 2 either way. The frame's normal comes after the sequence's header and data, the
+// frame's header and data, and its points (see PutAnimation). (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool FrameNormalAccepted(float x, float y, float z)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const end = PutAnimation(wholeShape + bytes, 0, true, 0, 4, 1, 0);
+	size_t const normalAt = ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes + (ChunkHeaderBytes + 24) + (ChunkHeaderBytes + 12 * 4) + ChunkHeaderBytes;
+	float const normal[3] = { x, y, z };
+
+	memcpy(wholeShape + bytes + normalAt, normal, sizeof(normal));
+	return ShapeIsAccepted(end);
+}
+
+static void TestFrameNormals()
+{
+	puts("45. an animation frame's normals");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastTwoBits = 0x40000001u;
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float justPastTwo;
+	float negativeNotANumber;
+	memcpy(&justPastTwo, &justPastTwoBits, sizeof(justPastTwo));
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	Check(FrameNormalAccepted(0.0f, 0.0f, 1.0f), "an animation frame whose normal points straight up is accepted");
+	Check(FrameNormalAccepted(2.0f, -2.0f, 2.0f), "and one with each number as far as the rule allows, 2 either way");
+	Check(!FrameNormalAccepted(justPastTwo, 0.0f, 0.0f), "a frame's normal with a number just past 2 is refused, as a shape's would be");
+	Check(!FrameNormalAccepted(0.0f, notANumber, 0.0f), "and one with a number that isn't a number");
+	Check(!FrameNormalAccepted(0.0f, 0.0f, negativeNotANumber), "and one that isn't a number with its sign bit set");
+	Check(!FrameNormalAccepted(endless, 0.0f, 0.0f), "and one with an endless number");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4921,6 +4956,7 @@ int main()
 	TestTurns();
 	TestRandomTextureName();
 	TestShapesWithNoName();
+	TestFrameNormals();
 
 	if (checksFailed)
 	{

@@ -27,6 +27,7 @@
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   every point, box corner and centre a shape gives has to be inside the level, as CheckPlace in chunk.hpp says
 //   a shape's radius, and its radius about its centre, have to be real numbers from 0 to 2^24, as CheckRadius in chunk.hpp says
+//   an animation frame's polygon normals have to pass the same rule as a shape's own
 
 #include <math.h>
 #include <vector>
@@ -958,6 +959,13 @@ Shape_Polygon_Normal_Chunk::Shape_Polygon_Normal_Chunk(Anim_Shape_Frame_Chunk * 
 	{
 		p_normal_list[i] = *((ChunkVectorFloat *) pndata);
 		pndata+=sizeof(ChunkVectorFloat);
+	}
+
+	// An animation frame's polygon normals have to be sensible numbers by the same rule as a shape's own (normals_are_valid, above),
+	// as the game makes whole numbers of them too. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!normals_are_valid (p_normal_list, num_polys, num_polys))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
 }
 

@@ -1,0 +1,29 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "NORMALS: an animation frame's normals aren't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "NORMALS: a bad animation frame normal doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n"
+				}
+			]
+		}
+	]
+}
