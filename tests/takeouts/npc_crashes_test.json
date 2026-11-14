@@ -768,6 +768,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a zone alert writes the module's name into its line with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t_snprintf(tempstring,sizeof(tempstring)-1,\"NEW ZONE ALERT IN %d, '%s'\\n\",target->m_index,target->name);\n\ttempstring[sizeof(tempstring)-1]=0;\n",
+					"to": "\tsprintf(tempstring,\"NEW ZONE ALERT IN %d, '%s'\\n\",target->m_index,target->name);\n"
+				}
+			]
 		}
 	]
 }
