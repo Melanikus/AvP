@@ -14,10 +14,13 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a door's branch in a module's visibility list is only taken if it lands later in the same list (vmodule_branch.h)
 
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
+#include "vmodule_branch.h"
 #include "strategy_def.h"
 #include "bh_types.h"
 #include "pvisible.h"
@@ -202,8 +205,23 @@ void AllNewModuleHandler(void)
 }
 
 
+// The end marker of the visibility list that starts at first. A branch may go as far as here and no further (vmodule_branch.h).
+static VMODULE *EndOfVisibilityList(VMODULE *first)
+{
+	VMODULE *end = first;
+
+	while(end->vmod_type != vmtype_term)
+	{
+		end++;
+	}
+
+	return end;
+}
+
 void FindVisibleModules(VMODULE *vptr,int flag)
 {
+	VMODULE *const end = EndOfVisibilityList(vptr);
+
 	while(vptr->vmod_type != vmtype_term)
 	{
 		MODULE *mptr = 0;
@@ -229,7 +247,7 @@ void FindVisibleModules(VMODULE *vptr,int flag)
 				if(mptr)
 				{
 					if(mptr->m_flags & m_flag_open) vptr++;
-					else vptr = vptr->vmod_data.vmodidata_ptr;
+					else vptr = VModuleBranchTarget(vptr, vptr->vmod_data.vmodidata_ptr, end);
 				}
 				break;
 		}
@@ -246,6 +264,7 @@ int ThisObjectIsInAModuleVisibleFromCurrentlyVisibleModules(STRATEGYBLOCK *sbPtr
 
 	vPtr = sbPtr->containingModule->m_vmptr;
 	GLOBALASSERT(vPtr);
+	VMODULE *const end = EndOfVisibilityList(vPtr);
 
 	if(ModuleCurrVisArray[sbPtr->containingModule->m_index] == 2)
 	{
@@ -287,7 +306,7 @@ int ThisObjectIsInAModuleVisibleFromCurrentlyVisibleModules(STRATEGYBLOCK *sbPtr
 				if(mptr)
 				{
 					if(mptr->m_flags & m_flag_open) vPtr++;
-					else vPtr = vPtr->vmod_data.vmodidata_ptr;
+					else vPtr = VModuleBranchTarget(vPtr, vPtr->vmod_data.vmodidata_ptr, end);
 				}
 				break;
 		}
@@ -1036,6 +1055,8 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 
 	if (source==target) return(1);
 
+	VMODULE *const end = EndOfVisibilityList(vptr);
+
 	while(! ((vptr->vmod_type == vmtype_term)||(gotit)) ) {
 
 		/* Add this module to the visible array */
@@ -1071,7 +1092,7 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 						if(mptr->m_flags & m_flag_open)
 							vptr++;
 						else
-							vptr = vptr->vmod_data.vmodidata_ptr;
+							vptr = VModuleBranchTarget(vptr, vptr->vmod_data.vmodidata_ptr, end);
 					}
 
 

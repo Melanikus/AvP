@@ -667,6 +667,9 @@
 		},
 		{"name":"FIRST SECTION: a long sequence with no header beside a compact list is accepted","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!sequence()->get_header())","to":"if (!sequence()->get_header() && sequences.size() > 1)"}]},
 		{"name":"AI MASTER: a slave's master isn't looked at","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"if(!chlist.size() || omdc->lookup_single_child(\"AIMODSLA\"))","to":"if(false)"}]},
-		{"name":"AI MASTER: a master can be a slave itself","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"if(!chlist.size() || omdc->lookup_single_child(\"AIMODSLA\"))","to":"if(!chlist.size())"}]}
+		{"name":"AI MASTER: a master can be a slave itself","changes":[{"file":"3dc/win95/chunk_waypoint.cpp","from":"if(!chlist.size() || omdc->lookup_single_child(\"AIMODSLA\"))","to":"if(!chlist.size())"}]},
+		{"name":"AI FLAGS: a visibility item's flags aren't looked at","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"if (vmod_array[i].flags != 0)","to":"if (false)"}]},
+		{"name":"AI FLAGS: a module's running-state bits can come from a file","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;","to":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFFFFFFu;"}]},
+		{"name":"AI FLAGS: bits nobody names can come from a file","changes":[{"file":"3dc/win95/chunk_object.cpp","from":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;","to":"static unsigned int const FlagsALevelMayGiveAModule = 0xFFFFFF80u;"}]}
 	]
 }

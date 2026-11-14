@@ -17,6 +17,8 @@
 //   chunk.hpp says
 //   every turn an object, a track or an alternative location gives has to fit, as CheckTurn in chunk.hpp says
 //   a module's amount of echo has to be a real number
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an item in a module's list of what it can see may have no flags, and a module only the flags a level maker can set
 
 #include <string>
 #include "chunk.hpp"
@@ -725,6 +727,14 @@ VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const ch
 		vmod_array[i].flags = *((int *) vmdata);
 		vmdata += 4;
 
+		// An item's flags belong to the game while it runs: whether it has already turned the branch's number into a place in the list
+		// (module.h). A file has no business setting them, and none of the 299,874 items in the game's own levels sets any, so any flag
+		// at all refuses the level. Added 2026-11-14 by Melanikus for the AvP port.
+		if (vmod_array[i].flags != 0)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
 		vmod_array[i].spare = *((int *) vmdata);
 		vmdata += 4;
 			
@@ -815,12 +825,24 @@ Module_Flag_Chunk::Module_Flag_Chunk(Object_Module_Data_Chunk* parent)
 	Flags=spare=0;
 }
 
+// The flags a module may have in a level file: the ones a level maker can set in the editor (fields-spec.md, MODFLAGS): air duct
+// 0x80000000, stairs 0x40000000, sky 0x20000000, fog 0x10000000, a message number 0x0FE00000, not passable 0x00100000, not a doorway
+// 0x00080000, a doorway 0x00040000, sneaky 0x00020000, victory zone 0x00010000, and exclude from the map 0x00000200. The low bits are
+// the game's own state while it runs, such as "already turned its lists' numbers into places" (m_flag_gotptrs, module.h), and a file
+// has no business setting them. All 478 in the game's own levels keep to this. Added 2026-11-14 by Melanikus for the AvP port.
+static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;
+
 Module_Flag_Chunk::Module_Flag_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"MODFLAGS")
 {
 	Flags=*(int*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	if ((unsigned int)Flags & ~FlagsALevelMayGiveAModule)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Module_Flag_Chunk::fill_data_block(char* data_start)

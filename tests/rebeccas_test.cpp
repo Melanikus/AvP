@@ -5271,6 +5271,69 @@ static void TestModuleMasters()
 	}
 }
 
+// 51. Flags a file may and may not give. A module's flags (MODFLAGS) may hold only what a level maker can set in the editor, and an item in
+// a module's visibility list (VMDARRAY) no flags at all: the rest is the game's own state while it runs, such as "this list's branches are
+// already places", which a file could otherwise use to have a number taken as a place. (Added 2026-11-14 by Melanikus for the AvP port.)
+
+// A module's flags chunk holding these flags, and nothing in its spare number
+static bool ModuleFlagsAccepted(unsigned int flags)
+{
+	alignas(int) char bytes[8] = { 0 };
+	memcpy(bytes, &flags, sizeof(flags));
+
+	return ChunkAccepted(MakeChunk<Module_Flag_Chunk>, bytes, sizeof(bytes));
+}
+
+// A visibility list of one item, seeing object 0, with no branch, and these flags
+static bool VisibilityItemAccepted(int flags)
+{
+	alignas(int) char bytes[4 + 4 * sizeof(int)] = { 0 };
+	int const items = 1;
+	memcpy(bytes, &items, sizeof(items));
+	memcpy(bytes + 4 + 2 * sizeof(int), &flags, sizeof(flags));
+
+	return ChunkAccepted(MakeChunk<VModule_Array_Chunk>, bytes, sizeof(bytes));
+}
+
+static void TestFlagsFromAFile()
+{
+	puts("51. flags a file may give");
+
+	// Everything a level maker can set, all at once, and each part of it
+	Check(ModuleFlagsAccepted(0xFFFF0200u), "a module with every flag the editor sets is accepted");
+	Check(ModuleFlagsAccepted(0), "and one with none");
+	Check(ModuleFlagsAccepted(0x20000000u), "and the sky alone, as most of the game's own have");
+	Check(ModuleFlagsAccepted(127u << 21), "and a message number, the highest");
+
+	// The game's own state while it runs: none of it may come from a file
+	struct FlagRow { unsigned int flag; char const * what; };
+	FlagRow const running[] =
+	{
+		{ 0x00000001u, "a module's 'no extent test' from a file is refused" },
+		{ 0x00000002u, "a module's 'lists already turned into places' from a file is refused" },
+		{ 0x00000004u, "a module's 'door open' from a file is refused" },
+		{ 0x00000008u, "a module's 'not active' from a file is refused" },
+		{ 0x00000010u, "a module's 'got its matrix' from a file is refused" },
+		{ 0x00000020u, "a module's 'seen on the map' from a file is refused" },
+		{ 0x00000040u, "a module's 'slipped inside' from a file is refused" },
+		{ 0x00000100u, "a bit nobody names, below 'exclude from the map', is refused" },
+		{ 0x00008000u, "and one just under 'victory zone'" },
+	};
+
+	for (size_t i = 0; i < sizeof(running) / sizeof(running[0]); i++)
+	{
+		Check(!ModuleFlagsAccepted(running[i].flag), running[i].what);
+	}
+
+	Check(!ModuleFlagsAccepted(0x20000002u), "and a running-state bit beside an editor's one is still refused");
+
+	// An item in a visibility list has no flags a file may set
+	Check(VisibilityItemAccepted(0), "a visibility list's item with no flags is accepted");
+	Check(!VisibilityItemAccepted(1), "an item's 'branch already a place' from a file is refused");
+	Check(!VisibilityItemAccepted(2), "and so is any other flag");
+	Check(!VisibilityItemAccepted((int)0x80000000u), "even the top one");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5320,6 +5383,7 @@ int main()
 	TestEcho();
 	TestGeneratorWeights();
 	TestModuleMasters();
+	TestFlagsFromAFile();
 
 	if (checksFailed)
 	{
