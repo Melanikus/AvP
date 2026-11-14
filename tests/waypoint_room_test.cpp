@@ -11,7 +11,7 @@
 // - that a scale or a corner the sums can't use is refused, and that "can't use" is asked of the number's bits;
 // - the place in the room, for rooms of 1 and more as before, and for rooms under 1, where it never divides;
 // - by reading the source, that the game's lines are still the ones copied here, and that the game takes the place through the rule.
-// The level reader's refusal itself is tested in rebeccas_test, section 41. tests/takeouts/waypoint_room_test.json proves each check can
+// The level reader's refusal itself is tested in rebeccas_test, section 52. tests/takeouts/waypoint_room_test.json proves each check can
 // fail.
 
 #include "waypoint_room.h"

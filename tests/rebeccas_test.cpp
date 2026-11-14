@@ -5379,7 +5379,7 @@ static WaypointBox const RoomyBox = { { -1000, -500, -200 }, { 1000, 500, 200 },
 enum LevelScaleGiven { NoScaleGiven, ScaleGiven };
 
 // A level with one module whose module data holds these waypoints, and an environment with the scale given or none, and whether it would
-// be accepted. Its module is the same one shape that fits its box as in section 39.
+// be accepted. Its module is the same one shape that fits its box as in section 50.
 static bool WaypointsAccepted(WaypointBox const * boxes, int howMany, LevelScaleGiven given, double scale)
 {
 	int const triangle[5] = { 0, 1, 2, -1, -1 };

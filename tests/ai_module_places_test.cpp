@@ -4,7 +4,7 @@
 // WHY: when the loader sets up the AI (projload.cpp), each module gets a place in AIModuleArray, kept in aimodule_indeces. A module it
 // gives no place keeps -1. Used as a place, -1 is the memory just before the array: before AIModuleArray, and before the list of ways
 // into each module that's made beside it, which would write there. The level reader refuses the levels known to leave a module at -1
-// (a slave module whose master isn't a master: rebeccas_test, section 39). This checks the other half, so that no way to -1, known or
+// (a slave module whose master isn't a master: rebeccas_test, section 50). This checks the other half, so that no way to -1, known or
 // not, can reach the arrays: every number read from aimodule_indeces is checked by IsARealAIModule before it's used.
 //
 // HOW: projload.cpp needs the whole game, so this reads its source, as several of these tests do. It finds every place aimodule_indeces
