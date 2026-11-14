@@ -15,6 +15,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a shape stays still if a frame of its texture animation has a place on its picture too far out to work out in 16.16 (#97). See
 //   texture_animation.h
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an animated shape's radius is worked out from squares that are fractions, as whole numbers can't hold them
 
 #include <stdlib.h>
 #include <string>
@@ -2442,7 +2444,10 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 		//      double square_root = x*x+y*y+z*z;
 		//      square_root = sqrt(square_root);
 		//      sas->radius = (int)square_root;
-		sas->radius = (int)sqrt((double)(x * x + y * y + z * z));
+		// Each of x, y and z is at most 2^25: an end of the sequence's box and its centre are each within 2^24 of the level's middle
+		// (CheckPlace, in chunk.hpp), and the scale is at most 1. So the squares are worked out as fractions, where they fit, and the
+		// radius, at most the square root of 3 times 2^25, about 58 million, fits a whole number. (Added 2026-11-14 by Melanikus for the AvP port.)
+		sas->radius = (int)sqrt((double)x * x + (double)y * y + (double)z * z);
 		sas->vertex_normals = (int *)PoolAllocateMem(sizeof(VECTORCH) * cas->num_verts);
 
 		for (int i = 0; i < cas->num_verts; i++)
