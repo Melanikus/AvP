@@ -4831,6 +4831,24 @@ static void TestTurns()
 	}
 }
 
+// 43. A set of random textures can leave its name out. The level loader passes such a set over (projload.cpp, which level_file_name_test
+// reads), and this shows that the reader really gives it no name: an empty name, a count of 0 and two spare numbers. (Added 2026-11-14 by
+// Melanikus for the AvP port.)
+static void TestRandomTextureName()
+{
+	puts("43. a set of random textures with no name");
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	alignas(int) char bytes[16] = { 0 };
+	std::unique_ptr<Random_Texture_ID_Chunk> const set(new Random_Texture_ID_Chunk(&file, bytes, sizeof(bytes)));
+
+	Check(file.error_code == 0 && set->name == 0, "a set of random textures with an empty name is read with no name at all, so the loader has to pass it over");
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4872,6 +4890,7 @@ int main()
 	TestShapeRadius();
 	TestParticleKind();
 	TestTurns();
+	TestRandomTextureName();
 
 	if (checksFailed)
 	{

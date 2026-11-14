@@ -254,6 +254,12 @@ static void TestTheRealGame()
 
 	Check(!Has(npc, "RIF_Child_Chunk") && !Has(npc, "rcc->"), "a name in a level's RIFCHILD chunk has no way to a file");
 	Check(Has(ReadSourceFile("3dc/avp/win95/projload.cpp"), "if(phdc->hierarchy_index<0 || phdc->hierarchy_index>=NumPlacedHierarchy) continue;"), "and a placed hierarchy is only a number, into the game's own short list");
+
+	// Added 2026-11-14 by Melanikus for the AvP port: a name a level can leave out has to be there before the loader compares it. A set of
+	// random textures keeps its name as one a chunk can do without (environment_chunk.cpp, CHUNK_EXTRACT_STRING), so it can have none.
+	std::string const randomTextures = Between(levelLoad, "h->envd->lookup_child(\"RANTEXID\",rlist);", "double env_scale=local_scale;");
+	Check(ComesBefore(randomTextures, "if(!ran_chunk->name) continue;", "_stricmp(ran_chunk->name"),
+		"a set of random textures with no name is passed over before its name is compared");
 }
 
 int main()

@@ -503,6 +503,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a set of random textures with no name is compared",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\t\t\tif(!ran_chunk->name) continue;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

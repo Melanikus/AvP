@@ -28,6 +28,7 @@
 //   debug decal save writes it, and a decal whose offset isn't one of its kind's pictures is left out (decal_offset.h).
 //   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
 //   a model's name is copied with the 0 that ends it written on a line of its own
+//   a set of random textures with no name is passed over (2026-11-14)
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -2805,6 +2806,10 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 		for(LIF<Chunk*> rlif(&rlist);!rlif.done();rlif.next())
 		{
 			Random_Texture_ID_Chunk* ran_chunk=(Random_Texture_ID_Chunk*)rlif();
+
+			// A set of random textures with no name names neither kind of NPC, so it's passed over. (Added 2026-11-14 by Melanikus for the AvP port.)
+			if(!ran_chunk->name) continue;
+
 			if(!_stricmp(ran_chunk->name,"hnpcmarine"))
 			{
 				random_marine_texturings=ran_chunk->random_types;
