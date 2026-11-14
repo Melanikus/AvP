@@ -96,7 +96,10 @@ static void TestTheFunction()
 	// From saving the game's settings to putting them back, there's one way out, at the end
 	std::string const between = SourceSlice(function, "// What's put back.", "// Putting back, on every path", kSliceEndAfterTheStart, FailedSlice);
 	Check(!between.empty() && !Has(between, "return"), "nothing gives back between saving the game's settings and putting them back");
-	Check(Count(function, "return") == 2 && Has(function, "\treturn presented;\n}"), "it gives back only from the refusal, and at the very end");
+	// (The slice stops just before the function's closing brace, so its last words are its last line.)
+	std::string::size_type const lastReturn = function.rfind("\treturn presented;");
+	Check(Count(function, "return") == 2 && lastReturn != std::string::npos && lastReturn + strlen("\treturn presented;") == function.size(),
+		"it gives back only from the refusal, and at the very end");
 
 	// Each saved before it's changed
 	std::string::size_type const screenSaved = function.find("SCREENDESCRIPTORBLOCK const gameScreen = ScreenDescriptorBlock;");
