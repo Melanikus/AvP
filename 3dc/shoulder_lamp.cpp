@@ -2,6 +2,7 @@
 #include "shoulder_lamp.h"
 
 #include <math.h>
+#include <string.h>
 
 static bool lampIsOn = false;
 static bool lampIsAskedFor = false;
@@ -314,11 +315,23 @@ bool ShoulderLamp_IntensityFromWords(const char *words, unsigned int length, dou
 
 // The lamp's look, R-LAMP-1 (shoulder_lamp.h). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
 
-// A number brought inside its limits. A number that isn't a number at all (one that compares false with everything) comes out as the
-// least, so even that can't reach a shader.
+// Whether a number isn't a number at all (NaN) or is endless, told by its bits, as environment_chunk.cpp tells a level's scale: the 11 bits
+// after a double's sign are its power of two, and all 11 set means NaN or endless. They're looked at as bits, because the game is built
+// with the compiler's fast rules for fractions (/fp:fast), under which a comparison isn't promised to treat NaN as it should.
+// (Modified 2026-11-14 by Melanikus (Dietrich): Within used to count on such a comparison.)
+static bool NotANumberOrEndless(double number)
+{
+	unsigned long long bits = 0;
+
+	memcpy(&bits, &number, sizeof(bits));
+	return ((bits >> 52) & 0x7FF) == 0x7FF;
+}
+
+// A number brought inside its limits. One that isn't a number, or is endless either way, comes out as the least, so neither can reach a
+// shader.
 static double Within(double number, double least, double most)
 {
-	if (!(number >= least))
+	if (NotANumberOrEndless(number) || number < least)
 	{
 		return least;
 	}
@@ -399,9 +412,14 @@ double ShoulderLamp_SpotHalfDistance()
 }
 
 // 0 is its own choice, no fall at all. Anything else is brought inside the limits, so a number between 0 and the least becomes the least.
+// NaN is asked about first, by its bits, so it can never pass for 0 under /fp:fast and turn the fall off by chance. There's no take-out row
+// for that part: whether this compiler lets a NaN pass for 0 isn't something a test can be sure to see, and the check is here because
+// /fp:fast doesn't promise it won't.
 void ShoulderLamp_SetSpotHalfDistance(double millimetres)
 {
-	spotHalfDistance = millimetres == 0.0 ? 0.0 : Within(millimetres, kShoulderLampFewestSpotHalfDistance, kShoulderLampMostSpotHalfDistance);
+	bool const none = !NotANumberOrEndless(millimetres) && millimetres == 0.0;
+
+	spotHalfDistance = none ? 0.0 : Within(millimetres, kShoulderLampFewestSpotHalfDistance, kShoulderLampMostSpotHalfDistance);
 }
 
 bool ReadSignedNumber(const char *words, unsigned int length, double *out, unsigned int longest)

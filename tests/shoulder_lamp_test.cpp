@@ -871,6 +871,32 @@ static const char *const kNeverANumber[][2] =
 	{ "1,5", "a comma for the dot, as a Portuguese or German keyboard would type it" },
 };
 
+// A double made from eight bytes, as one from outside the game would be. The bits pass through a volatile, so the compiler can't know them
+// and fold a check away, which it may do under the game's /fp:fast. (Added 2026-11-14 by Melanikus (Dietrich).)
+static double FromBits(unsigned long long bits)
+{
+	volatile unsigned long long fromOutside = bits;
+	unsigned long long const read = fromOutside;
+	double value = 0.0;
+
+	memcpy(&value, &read, sizeof(value));
+	return value;
+}
+
+// NaNs and endless values, by their bits, each with what it is
+static const struct
+{
+	unsigned long long bits;
+	const char *what;
+} kNotRealNumbers[] =
+{
+	{ 0x7FF8000000000000ull, "the usual NaN" },
+	{ 0xFFF8000000000000ull, "a NaN with its sign bit set" },
+	{ 0x7FF0000000000001ull, "a NaN with only its lowest fraction bit set" },
+	{ 0x7FF0000000000000ull, "endless" },
+	{ 0xFFF0000000000000ull, "endless below 0" },
+};
+
 static void TestTheLampsLook()
 {
 	// As built: ce293c81's, the owner's "DEfaults from 7th"
@@ -1023,6 +1049,31 @@ static void TestTheLampsLook()
 	Check(alwaysSafe && ConeIsSafe(), "whatever cone it's given, numbers that aren't numbers too, inside stays the gap above outside and well above the spill's edge");
 	ShoulderLamp_SetCone(0.995, 0.99);
 	Check(ShoulderLamp_ConeInside() == 0.995 && fabs(ShoulderLamp_ConeOutside() - 0.985) < 0.0000001, "an outside too close to inside is brought down to the gap below it");
+
+	// Every setter given a NaN or an endless value made from its bits, as the game is built: each comes to its least, never to 0 by chance
+	// (added 2026-11-14 by Melanikus (Dietrich), for /fp:fast)
+	for (size_t i = 0; i < sizeof(kNotRealNumbers) / sizeof(kNotRealNumbers[0]); i++)
+	{
+		double const value = FromBits(kNotRealNumbers[i].bits);
+
+		ShoulderLamp_SetStrength(value);
+		ShoulderLamp_SetHalfDistance(value);
+		ShoulderLamp_SetSpill(value);
+		ShoulderLamp_SetShoulder(value, value);
+		ShoulderLamp_SetSpotHalfDistance(value);
+		ShoulderLamp_SetCone(value, value);
+
+		bool const allLeast = ShoulderLamp_Strength() == kShoulderLampFewestStrength && ShoulderLamp_HalfDistance() == kShoulderLampFewestHalfDistance
+			&& ShoulderLamp_Spill() == 0.0 && ShoulderLamp_ShoulderAcross() == kShoulderLampFewestShoulder && ShoulderLamp_ShoulderDown() == kShoulderLampFewestShoulder
+			&& ShoulderLamp_SpotHalfDistance() == kShoulderLampFewestSpotHalfDistance && ShoulderLamp_ConeInside() == kShoulderLampFewestConeInside
+			&& ShoulderLamp_ConeOutside() == kShoulderLampFewestConeOutside && ConeIsSafe();
+
+		ShoulderLamp_SetCone(0.90, value);
+
+		bool const outsideLeast = ShoulderLamp_ConeInside() == 0.90 && ShoulderLamp_ConeOutside() == kShoulderLampFewestConeOutside && ConeIsSafe();
+
+		Check(allLeast && outsideLeast, std::string("every setter given ") + kNotRealNumbers[i].what + ", from its bits, keeps its least, and the cone stays safe");
+	}
 
 	// What the shaders are told follows
 	ShoulderLamp_SetStrength(3.0);
