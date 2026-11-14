@@ -3287,8 +3287,19 @@ bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t he
 	{
 		D3DVIEWPORT9 const screen = { 0, 0, width, height, 0.0f, 1.0f };
 
+		// The whole screen block at the chain's size, as R_ChangeResolution sets it (d3_func.cpp), since the text and menu calls may read
+		// any of it. At the most, 16384 by 16384, the size fits in an int.
 		ScreenDescriptorBlock.SDB_Width = (int)width;
 		ScreenDescriptorBlock.SDB_Height = (int)height;
+		ScreenDescriptorBlock.SDB_Size = (int)(width * height);
+		ScreenDescriptorBlock.SDB_CentreX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_CentreY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ProjX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_ProjY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ClipLeft = 0;
+		ScreenDescriptorBlock.SDB_ClipRight = (int)width;
+		ScreenDescriptorBlock.SDB_ClipUp = 0;
+		ScreenDescriptorBlock.SDB_ClipDown = (int)height;
 
 		if (SUCCEEDED(d3d.lpD3DDevice->SetViewport(&screen)) && SUCCEEDED(d3d.lpD3DDevice->BeginScene()))
 		{
