@@ -142,6 +142,7 @@ static void TestDoubles()
 
 	Check(IsRealNumberFrom(one, 0.5, 1.0) && IsRealNumberFrom(DoubleOf(0x3FE0000000000000ull), 0.5, 1.0), "1 and 0.5 are from 0.5 to 1");
 	Check(!IsRealNumberFrom(DoubleOf(0x3FF0000000000001ull), 0.5, 1.0), "the next double past 1 isn't");
+	Check(!IsRealNumberFrom(DoubleOf(0x3FDFFFFFFFFFFFFFull), 0.5, 1.0), "and nor is the next double below 0.5");
 	Check(!IsRealNumberFrom(quietNaN, 0.5, 1.0) && !IsRealNumberFrom(negativeNaN, 0.5, 1.0), "NaN is in no range, built the way the game ships");
 	Check(!IsRealNumberFrom(endless, 0.0, largest), "and nor is endless, even up to the largest double");
 }

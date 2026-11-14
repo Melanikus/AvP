@@ -4900,7 +4900,8 @@ static void TestRandomTextureName()
 // 44. A shape's name for the list of named shapes. An outside shape keeps it in an object name or a level name chunk, and a sub-shape (a
 // skin) in a shape name chunk, and each can have none. An outside shape with neither, and a skin in an animated shape's alternate textures
 // with none, are refused as the level is read; the level loader also leaves a shape with no name off that list (chunk_load.cpp, which
-// level_file_name_test reads). (Added 2026-11-14 by Melanikus for the AvP port; refused at reading since N2r.)
+// level_file_name_test reads). (Added 2026-11-14 by Melanikus for the AvP port; such a shape is refused while the level is read,
+// since later the same day.)
 static void TestShapesWithNoName()
 {
 	puts("44. shapes with no name");
@@ -4928,6 +4929,23 @@ static void TestShapesWithNoName()
 		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 8));
 		outside->post_input_processing();
 		Check(file.error_code == 0 && outside->get_shape_name() != 0, "an outside shape with an object name chunk is accepted, and has its name");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		// A level name chunk, the other place an outside shape keeps its name (chunk_shape.cpp's get_shape_name): just the name, from
+		// its first byte (mishchnk.cpp's RIF_Name_Chunk). (Added 2026-11-14 by Melanikus (Hicks).)
+		char * const named = PutChunk(wholeShape, "RIFFNAME", 4);
+		memcpy(named, "abc", 4);
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 4));
+		outside->post_input_processing();
+		char const *const name = outside->get_shape_name();
+		Check(file.error_code == 0 && name && strcmp(name, "abc") == 0, "and so is one named only by a level name chunk, with that name");
 
 		Parent_File = 0;
 	}
