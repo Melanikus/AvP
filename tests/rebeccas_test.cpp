@@ -5364,6 +5364,10 @@ static void TestFlagsFromAFile()
 // does a level scale that isn't a finite number, or a corner too big for the game's whole numbers at that scale. A room of -1, a box with
 // no size on an axis at its centre, is allowed: three of the game's own level files have one. waypoint_room_test checks the sums against a
 // copy of the game's own lines. (Added 2026-11-14 by Melanikus for the AvP port.)
+// A corner too big at the level's scale can't come from a file any more: every corner has to be within 2^24 of the level's middle
+// (section 39), and the scale no more than 1 (section 37), so a corner at the level's scale is within 2^24 too. So the last checks here
+// are that those two rules refuse such a corner and such a scale, and that the farthest box they allow, at the largest scale, still has
+// room. waypoint_room_test checks that the sums refuse a corner too big on their own. (Changed 2026-11-14 by Melanikus for the AvP port.)
 
 // One waypoint's box in a level file: its lowest corner, its highest and its centre, x, y and z
 struct WaypointBox { int lowest[3]; int highest[3]; int centre[3]; };
@@ -5505,13 +5509,27 @@ static void TestWaypointRooms()
 			"a waypoint with no room after two with room still refuses the level");
 	}
 
-	// A scale the sums can't use, and a corner too big for the game's whole numbers at the level's scale
+	// A scale the sums can't use
 	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF0000000000000ull)), "a level whose scale is infinity is refused, even with a roomy waypoint");
 	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF8000000000000ull)), "and one whose scale is 'not a number'");
+
+	// A corner too big for the game's whole numbers, and a scale that could make one, are refused before the room is worked out (see the top)
 	{
 		WaypointBox const huge = BoxWithAnAxis(0, -10, 2000000000, 0);
-		Check(WaypointsAccepted(&huge, 1, NoScaleGiven, 1.0) && !WaypointsAccepted(&huge, 1, ScaleGiven, 1.5),
-			"a corner the level's scale makes too big for the game's whole numbers is refused");
+		Check(!WaypointsAccepted(&huge, 1, NoScaleGiven, 1.0), "a corner too big for the game's whole numbers is refused, at scale 1");
+		Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, 1.5), "and a level scale over 1, which could make one too big, is refused, even with a roomy waypoint");
+	}
+
+	// From one far corner of the level to the other, with its centre at its lowest corner, so its top corner is as far from its centre as a
+	// file can put it
+	{
+		WaypointBox const farthest =
+		{
+			{ -TestFarthestPlace, -TestFarthestPlace, -TestFarthestPlace },
+			{ TestFarthestPlace, TestFarthestPlace, TestFarthestPlace },
+			{ -TestFarthestPlace, -TestFarthestPlace, -TestFarthestPlace },
+		};
+		Check(WaypointsAccepted(&farthest, 1, ScaleGiven, 1.0), "the farthest box a level can give, at the largest scale, still has room and is accepted");
 	}
 }
 
