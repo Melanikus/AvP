@@ -837,12 +837,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the beam does not swing",
+			"name": "the beam does not swing",
 			"changes": [
 				{
-					"file": "shaders/shoulderLamp.psh",
-					"from": "float2 beam = aim - start;",
-					"to": "float2 beam = kAim * wide - start;"
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const aimX = (kShoulderLampPaintedAim + aimAcross * kShoulderLampPaintedFollowing) * wide;",
+					"to": "double const aimX = kShoulderLampPaintedAim * wide;"
 				}
 			]
 		},
@@ -861,8 +861,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f",
-					"to": "0.0f, 0.0f, 0.0f"
+					"from": "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f,\n",
+					"to": "0.0f, 0.0f,\n"
 				}
 			]
 		},
@@ -1271,8 +1271,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
-					"to": "bool const wasChanged = spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;"
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt ||",
+					"to": "bool const wasChanged = spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt ||"
 				}
 			]
 		},
@@ -1281,8 +1281,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
-					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || lampLook != kShoulderLampLookAsBuilt;"
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt ||",
+					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || lampLook != kShoulderLampLookAsBuilt ||"
 				}
 			]
 		},
@@ -1681,8 +1681,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;",
-					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;"
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt ||",
+					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity ||"
 				}
 			]
 		},
@@ -1693,6 +1693,221 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "(!isARealLight || fullOver) && surfacePicturesAreFromThisFrame",
 					"to": "!isARealLight && surfacePicturesAreFromThisFrame"
+				}
+			]
+		},
+		{
+			"name": "LAMPSTRENGTH takes more than its most",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "kShoulderLampFewestStrength, kShoulderLampMostStrength, strength);",
+					"to": "kShoulderLampFewestStrength, 100.0, strength);"
+				}
+			]
+		},
+		{
+			"name": "LAMPSTRENGTH takes less than its least",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "kShoulderLampFewestStrength, kShoulderLampMostStrength, strength);",
+					"to": "0.0, kShoulderLampMostStrength, strength);"
+				}
+			]
+		},
+		{
+			"name": "LAMPHALFDISTANCE takes nearer than its least, and 0",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "kShoulderLampFewestHalfDistance, kShoulderLampMostHalfDistance, millimetres);",
+					"to": "0.0, kShoulderLampMostHalfDistance, millimetres);"
+				}
+			]
+		},
+		{
+			"name": "LAMPCONE takes an outside too close to inside",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (in - out < kShoulderLampConeGap - 0.0000001)",
+					"to": "if (in - out < -1.0)"
+				}
+			]
+		},
+		{
+			"name": "LAMPCONE takes an inside below the spill's edge",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "kShoulderLampFewestConeInside, kShoulderLampMostConeInside, &in)",
+					"to": "0.0, kShoulderLampMostConeInside, &in)"
+				}
+			]
+		},
+		{
+			"name": "a cone set outside its limits can divide by nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const mostOutside = coneInside - kShoulderLampConeGap < kShoulderLampMostConeOutside ? coneInside - kShoulderLampConeGap : kShoulderLampMostConeOutside;",
+					"to": "double const mostOutside = kShoulderLampMostConeOutside;"
+				}
+			]
+		},
+		{
+			"name": "LAMPSHOULDER reads no minus",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (words && length > 1 && words[0] == '-')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LAMPSHOULDER takes a place too far off the screen",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "x < kShoulderLampFewestShoulder || x > kShoulderLampMostShoulder || y",
+					"to": "y"
+				}
+			]
+		},
+		{
+			"name": "LAMPSPOTHALFDISTANCE takes a fall nearer than its least",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (number != 0.0 && (number < kShoulderLampFewestSpotHalfDistance || number > kShoulderLampMostSpotHalfDistance))",
+					"to": "if (number > kShoulderLampMostSpotHalfDistance)"
+				}
+			]
+		},
+		{
+			"name": "a number that isn't one reaches the shaders",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (!(number >= least))",
+					"to": "if (number < least)"
+				}
+			]
+		},
+		{
+			"name": "putting back misses the lamp's strength",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\tlampStrength = kShoulderLampStrength;\n\tlampHalfDistance = kShoulderLampHalfDistance;",
+					"to": "\tlampHalfDistance = kShoulderLampHalfDistance;"
+				}
+			]
+		},
+		{
+			"name": "putting back doesn't count a changed spot fall",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "shoulderDown != kShoulderLampShoulderDown || spotHalfDistance != kShoulderLampSpotHalfDistance;",
+					"to": "shoulderDown != kShoulderLampShoulderDown;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game takes a lamp's look",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return !LampStaysAsBuiltHere(why, *length);",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in a network game the shoulder's place is sent before it's put back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())\n\t{\n\t\tLogString(\"lamp: this is a network game, so its size and strength are back as they were built\");\n\t}\n\n\t// Where the lamp is aimed, as a place on the screen: half",
+					"to": "\t// Where the lamp is aimed, as a place on the screen: half"
+				},
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tdevice->SetPixelShaderConstantF(1, aim, 1);\n",
+					"to": "\tdevice->SetPixelShaderConstantF(1, aim, 1);\n\n\tif (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())\n\t{\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the painted cone starts at a fixed place",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float2 start = Swing.zw;",
+					"to": "float2 start = float2(1.05f, 0.25f) * wide;"
+				}
+			]
+		},
+		{
+			"name": "a shoulder on the aim makes the shader divide by nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "four[2] = (float)(1.0 / (lengthSquared > kShoulderLampShortestBeam ? lengthSquared : kShoulderLampShortestBeam));",
+					"to": "four[2] = (float)(1.0 / lengthSquared);"
+				}
+			]
+		},
+		{
+			"name": "the game's cone line follows another aim than the shader's spot",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.h",
+					"from": "double const kShoulderLampPaintedFollowing = 1.0;",
+					"to": "double const kShoulderLampPaintedFollowing = 0.5;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the light's fall is read from a register the game doesn't fill",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "float4 LampFall : register(c27);",
+					"to": "float4 LampFall : register(c28);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one light shader isn't sent the lamp's look",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "SetActive(d3d.lightShareEffect);\n\tSetScreenConstant(device);\n\tSetLampLookConstants(device);",
+					"to": "SetActive(d3d.lightShareEffect);\n\tSetScreenConstant(device);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: LAMPSHOULDER says other limits than it has",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "EACH FROM -0.5 TO 1.5, LIKE 1 -0.1",
+					"to": "EACH FROM -1 TO 2, LIKE 1 -0.1"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the glint doesn't fall with its spot",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "spot[0], spot[1], spot[2], spot[3],",
+					"to": "spot[0], spot[1], spot[2], 0.0f,"
 				}
 			]
 		}

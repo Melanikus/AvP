@@ -22,6 +22,16 @@ static double followSeconds = kShoulderLampFollowSeconds;
 static double spotSize = kShoulderLampSpotSize;
 static double spotIntensity = kShoulderLampIntensity;
 static int lampLook = kShoulderLampLookAsBuilt;   // LAMPLOOK (shoulder_lamp.h; added 2026-11-11 by Melanikus (Third))
+
+// The lamp's look, R-LAMP-1 (shoulder_lamp.h). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+static double lampStrength = kShoulderLampStrength;
+static double lampHalfDistance = kShoulderLampHalfDistance;
+static double coneInside = kShoulderLampConeInside;
+static double coneOutside = kShoulderLampConeOutside;
+static double lampSpill = kShoulderLampSpill;
+static double shoulderAcross = kShoulderLampShoulderAcross;
+static double shoulderDown = kShoulderLampShoulderDown;
+static double spotHalfDistance = kShoulderLampSpotHalfDistance;
 static float placeFromEyes[3] = { (float)kShoulderLampAcross, (float)kShoulderLampUp, (float)kShoulderLampAhead };
 
 void ShoulderLamp_Toggle()
@@ -299,13 +309,289 @@ bool ShoulderLamp_IntensityFromWords(const char *words, unsigned int length, dou
 	return true;
 }
 
+// The lamp's look, R-LAMP-1 (shoulder_lamp.h). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+
+// A number brought inside its limits. A number that isn't a number at all (one that compares false with everything) comes out as the
+// least, so even that can't reach a shader.
+static double Within(double number, double least, double most)
+{
+	if (!(number >= least))
+	{
+		return least;
+	}
+
+	return number > most ? most : number;
+}
+
+double ShoulderLamp_Strength()
+{
+	return lampStrength;
+}
+
+void ShoulderLamp_SetStrength(double strength)
+{
+	lampStrength = Within(strength, kShoulderLampFewestStrength, kShoulderLampMostStrength);
+}
+
+double ShoulderLamp_HalfDistance()
+{
+	return lampHalfDistance;
+}
+
+void ShoulderLamp_SetHalfDistance(double millimetres)
+{
+	lampHalfDistance = Within(millimetres, kShoulderLampFewestHalfDistance, kShoulderLampMostHalfDistance);
+}
+
+double ShoulderLamp_ConeInside()
+{
+	return coneInside;
+}
+
+double ShoulderLamp_ConeOutside()
+{
+	return coneOutside;
+}
+
+// The two together, because each one's limit depends on the other: outside has to stay at least kShoulderLampConeGap below inside, or
+// the shader would divide by nothing. Inside comes first, and outside is then brought under it.
+void ShoulderLamp_SetCone(double inside, double outside)
+{
+	coneInside = Within(inside, kShoulderLampFewestConeInside, kShoulderLampMostConeInside);
+
+	double const mostOutside = coneInside - kShoulderLampConeGap < kShoulderLampMostConeOutside ? coneInside - kShoulderLampConeGap : kShoulderLampMostConeOutside;
+
+	coneOutside = Within(outside, kShoulderLampFewestConeOutside, mostOutside);
+}
+
+double ShoulderLamp_Spill()
+{
+	return lampSpill;
+}
+
+void ShoulderLamp_SetSpill(double spill)
+{
+	lampSpill = Within(spill, 0.0, kShoulderLampMostSpill);
+}
+
+double ShoulderLamp_ShoulderAcross()
+{
+	return shoulderAcross;
+}
+
+double ShoulderLamp_ShoulderDown()
+{
+	return shoulderDown;
+}
+
+void ShoulderLamp_SetShoulder(double across, double down)
+{
+	shoulderAcross = Within(across, kShoulderLampFewestShoulder, kShoulderLampMostShoulder);
+	shoulderDown = Within(down, kShoulderLampFewestShoulder, kShoulderLampMostShoulder);
+}
+
+double ShoulderLamp_SpotHalfDistance()
+{
+	return spotHalfDistance;
+}
+
+// 0 is its own choice, no fall at all. Anything else is brought inside the limits, so a number between 0 and the least becomes the least.
+void ShoulderLamp_SetSpotHalfDistance(double millimetres)
+{
+	spotHalfDistance = millimetres == 0.0 ? 0.0 : Within(millimetres, kShoulderLampFewestSpotHalfDistance, kShoulderLampMostSpotHalfDistance);
+}
+
+bool ReadSignedNumber(const char *words, unsigned int length, double *out)
+{
+	if (words && length > 1 && words[0] == '-')
+	{
+		double number = 0.0;
+
+		if (!ReadPlainNumber(words + 1, length - 1, &number))
+		{
+			return false;
+		}
+
+		*out = -number;
+		return true;
+	}
+
+	return ReadPlainNumber(words, length, out);
+}
+
+// Splits what was typed in two at its first spaces: the first word, and everything after the spaces. There must be something on each side.
+// The second part isn't searched for more spaces, because the number readers refuse a space anyway, so three words, or a space at the end,
+// are refused when the second part is read. Anything else gives back false.
+static bool TwoWords(const char *words, unsigned int length, unsigned int *firstLength, const char **second, unsigned int *secondLength)
+{
+	if (!words)
+	{
+		return false;
+	}
+
+	unsigned int first = 0;
+
+	while (first < length && words[first] != ' ')
+	{
+		first++;
+	}
+
+	unsigned int gapEnd = first;
+
+	while (gapEnd < length && words[gapEnd] == ' ')
+	{
+		gapEnd++;
+	}
+
+	if (first == 0 || gapEnd == first || gapEnd == length)
+	{
+		return false;
+	}
+
+	*firstLength = first;
+	*second = words + gapEnd;
+	*secondLength = length - gapEnd;
+	return true;
+}
+
+// One plain number inside its limits, as LAMPSPOTSIZE's is read
+static bool PlainNumberWithin(const char *words, unsigned int length, double least, double most, double *out)
+{
+	double number = 0.0;
+
+	if (!ReadPlainNumber(words, length, &number) || number < least || number > most)
+	{
+		return false;
+	}
+
+	*out = number;
+	return true;
+}
+
+bool ShoulderLamp_StrengthFromWords(const char *words, unsigned int length, double *strength)
+{
+	return PlainNumberWithin(words, length, kShoulderLampFewestStrength, kShoulderLampMostStrength, strength);
+}
+
+bool ShoulderLamp_HalfDistanceFromWords(const char *words, unsigned int length, double *millimetres)
+{
+	return PlainNumberWithin(words, length, kShoulderLampFewestHalfDistance, kShoulderLampMostHalfDistance, millimetres);
+}
+
+bool ShoulderLamp_ConeFromWords(const char *words, unsigned int length, double *inside, double *outside)
+{
+	unsigned int firstLength = 0;
+	const char *second = 0;
+	unsigned int secondLength = 0;
+	double in = 0.0;
+	double out = 0.0;
+
+	if (!TwoWords(words, length, &firstLength, &second, &secondLength) ||
+		!PlainNumberWithin(words, firstLength, kShoulderLampFewestConeInside, kShoulderLampMostConeInside, &in) ||
+		!PlainNumberWithin(second, secondLength, kShoulderLampFewestConeOutside, kShoulderLampMostConeOutside, &out))
+	{
+		return false;
+	}
+
+	// Outside has to be at least the gap below inside. The sum is done on the numbers as read, so 0.90 and 0.89 are just far enough apart.
+	if (in - out < kShoulderLampConeGap - 0.0000001)
+	{
+		return false;
+	}
+
+	*inside = in;
+	*outside = out;
+	return true;
+}
+
+bool ShoulderLamp_SpillFromWords(const char *words, unsigned int length, double *spill)
+{
+	return PlainNumberWithin(words, length, 0.0, kShoulderLampMostSpill, spill);
+}
+
+bool ShoulderLamp_ShoulderFromWords(const char *words, unsigned int length, double *across, double *down)
+{
+	unsigned int firstLength = 0;
+	const char *second = 0;
+	unsigned int secondLength = 0;
+	double x = 0.0;
+	double y = 0.0;
+
+	if (!TwoWords(words, length, &firstLength, &second, &secondLength) ||
+		!ReadSignedNumber(words, firstLength, &x) || !ReadSignedNumber(second, secondLength, &y) ||
+		x < kShoulderLampFewestShoulder || x > kShoulderLampMostShoulder || y < kShoulderLampFewestShoulder || y > kShoulderLampMostShoulder)
+	{
+		return false;
+	}
+
+	*across = x;
+	*down = y;
+	return true;
+}
+
+bool ShoulderLamp_SpotHalfDistanceFromWords(const char *words, unsigned int length, double *millimetres)
+{
+	double number = 0.0;
+
+	if (!ReadPlainNumber(words, length, &number))
+	{
+		return false;
+	}
+
+	if (number != 0.0 && (number < kShoulderLampFewestSpotHalfDistance || number > kShoulderLampMostSpotHalfDistance))
+	{
+		return false;
+	}
+
+	*millimetres = number;
+	return true;
+}
+
+void ShoulderLamp_PaintedBeam(float aimAcross, float aimDown, float wide, float *four)
+{
+	// The same sums the shader does for the spot: where it's aimed, measured across in screen heights. Then the line from the shoulder to there.
+	double const aimX = (kShoulderLampPaintedAim + aimAcross * kShoulderLampPaintedFollowing) * wide;
+	double const aimY = kShoulderLampPaintedAim + aimDown * kShoulderLampPaintedFollowing;
+	double const beamX = aimX - shoulderAcross * wide;
+	double const beamY = aimY - shoulderDown;
+	double const lengthSquared = beamX * beamX + beamY * beamY;
+
+	four[0] = (float)beamX;
+	four[1] = (float)beamY;
+	four[2] = (float)(1.0 / (lengthSquared > kShoulderLampShortestBeam ? lengthSquared : kShoulderLampShortestBeam));
+	four[3] = 0.0f;
+}
+
+void ShoulderLamp_LightNumbers(float *eight)
+{
+	eight[0] = (float)coneInside;
+	eight[1] = (float)coneOutside;
+	eight[2] = (float)lampSpill;
+	eight[3] = (float)lampStrength;
+	eight[4] = (float)(1.0 / (lampHalfDistance * lampHalfDistance));
+	eight[5] = 0.0f;
+	eight[6] = 0.0f;
+	eight[7] = 0.0f;
+}
+
 bool ShoulderLamp_PutSpotBack()
 {
-	bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt;
+	bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity || lampLook != kShoulderLampLookAsBuilt ||
+		lampStrength != kShoulderLampStrength || lampHalfDistance != kShoulderLampHalfDistance || coneInside != kShoulderLampConeInside ||
+		coneOutside != kShoulderLampConeOutside || lampSpill != kShoulderLampSpill || shoulderAcross != kShoulderLampShoulderAcross ||
+		shoulderDown != kShoulderLampShoulderDown || spotHalfDistance != kShoulderLampSpotHalfDistance;
 
 	spotSize = kShoulderLampSpotSize;
 	spotIntensity = kShoulderLampIntensity;
 	lampLook = kShoulderLampLookAsBuilt;
+	lampStrength = kShoulderLampStrength;
+	lampHalfDistance = kShoulderLampHalfDistance;
+	coneInside = kShoulderLampConeInside;
+	coneOutside = kShoulderLampConeOutside;
+	lampSpill = kShoulderLampSpill;
+	shoulderAcross = kShoulderLampShoulderAcross;
+	shoulderDown = kShoulderLampShoulderDown;
+	spotHalfDistance = kShoulderLampSpotHalfDistance;
 
 	return wasChanged;
 }
@@ -340,7 +626,7 @@ void ShoulderLamp_SpotNumbers(float *four)
 	four[0] = (float)spotSize;
 	four[1] = (float)(kShoulderLampSpotSize / spotSize);
 	four[2] = (float)spotIntensity;
-	four[3] = 0.0f;
+	four[3] = spotHalfDistance == 0.0 ? 0.0f : (float)(1.0 / spotHalfDistance);   // R-LAMP-1 (modified 2026-11-14 by Melanikus (Dietrich))
 }
 
 float ShoulderLamp_AimAcross()

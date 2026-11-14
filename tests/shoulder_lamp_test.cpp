@@ -7,7 +7,10 @@
 //   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "shoulder_lamp.h"
 
+#include <cmath>
+#include <filesystem>
 #include <fstream>
+#include <limits>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
@@ -595,8 +598,10 @@ static void TestTheSpot()
 	Check(Has(shader, "kLightInTheMiddle) * Spot.z;"), "how strong it is goes on the spot");
 	Check(!Has(shader, "cone * Spot") && !Has(shader, "haze * Spot"), "and not on the haze, or the cone could turn into night vision");
 
-	// There's no number in the shader for whether there are pictures any more: an empty stage reads as black
-	Check(!Has(shader, "Swing.z"), "the shader has nothing left that asks if there are pictures");
+	// There's no number in the shader for whether there are pictures any more: an empty stage reads as black. Swing.zw is where the cone starts now
+	// (LAMPSHOULDER, R-LAMP-1), and that's the only thing it's used for. (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port.)
+	Check(CountOf(shader, "Swing.z") == CountOf(shader, "Swing.zw") && CountOf(shader, "= Swing.zw;") == 1 && Has(shader, "float2 start = Swing.zw;"),
+		"the shader has nothing left that asks if there are pictures: Swing's last two are only where the cone starts");
 	Check(Has(drawing, "else\n\t{\n\t\t// An empty stage reads as black") && Has(drawing, "device->SetTexture(3, NULL);\n\t\tdevice->SetTexture(4, NULL);\n\t}\n\n\tChangeTranslucencyMode(TRANSLUCENCY_GLOWING);"), "so with none from this frame, the stages are made empty before it draws");
 
 	ShoulderLamp_PutSpotBack();
@@ -765,9 +770,11 @@ static void TestJoiningTheGame()
 	std::string const shapesOfLight = ReadSourceFile("shaders/lightShapes.fxh");
 
 	Check(Has(painted, "float2 aim = (kAim + Swing.xy * kFollowing) * wide;"), "the spot goes where the lamp is aimed");
-	Check(Has(painted, "float2 beam = aim - start;"), "and the cone still starts at his shoulder and ends there, so the beam swings like an arm");
+	// The line from the shoulder to the aim is worked out by the game now, from the same aim (R-LAMP-1; modified 2026-11-14 by Melanikus (Dietrich))
+	Check(Has(painted, "float2 beam = Beam.xy;") && Has(render, "ShoulderLamp_PaintedBeam(aim[0], aim[1], wide, beam);"), "and the cone still starts at his shoulder and ends there, so the beam swings like an arm");
 	Check(Has(shapesOfLight, "normalize(lerp(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz, LampAim.xyz, LampAim.w))"), "and the real light aims the same way, or another marine's lamp its own way");
-	Check(Has(render, "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f"), "and the painted lamp is told where, as a place on the screen");
+	Check(Has(render, "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f,\n\t\t(float)ShoulderLamp_ShoulderAcross() * wide, (float)ShoulderLamp_ShoulderDown()"),
+		"and the painted lamp is told where, as a place on the screen, and where its cone starts (modified 2026-11-14 by Melanikus (Dietrich), R-LAMP-1)");
 	Check(Has(shapes, "out[kToyLightAim] = ShoulderLamp_AimAcross();\n\t\t\t\tout[kToyLightAim + 1] = ShoulderLamp_AimDown();"), "and so is the real one, in its place on the light list");
 	Check(Has(ReadSourceFile("3dc/pixel_lights.cpp"), "device->SetPixelShaderConstantF(25, &light[kToyLightAim], 1);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "if (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "SetLampAimConstant(device, light);\n\n\tReadPicture"), "and each lamp's own aim goes to both shaders, as each is drawn");
 	Check(!Has(painted, "kSway") && !Has(shapesOfLight, "Sway") && !Has(ReadSourceFile("3dc/shoulder_lamp.h"), "Sway") && !Has(render, "ShoulderLamp_Sway"), "and the wiggle has gone altogether");
@@ -801,6 +808,378 @@ static void TestJoiningTheGame()
 	Check(ComesBefore(shapes, "\tshoulderLampIsChosen = false;\n", "shoulderLampIsChosen = true;") && Has(Between(shapes, "void ToyShadows_ChooseLights()", "ToyFoundLight steady[kLightChoiceMostCandidates];"), "shoulderLampIsChosen = false;"), "and whether it was is worked out again every frame, not kept from the first");
 }
 
+// THE LAMP'S LOOK, R-LAMP-1 (shoulder_lamp.h). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port. The owner, 2026-11-11: "everything that
+// changed between nov 7 and now is a variable yes? all of them" and "DEfaults from 7th, but all tunable". Each number the console takes comes from
+// someone typing it, so it's hostile (Tao 3): every reader is tried at its limits and one step past them, and with words that aren't numbers, and each
+// refusal says why it has to be refused.
+
+typedef bool (*OneNumberReader)(const char *, unsigned int, double *);
+typedef bool (*TwoNumberReader)(const char *, unsigned int, double *, double *);
+
+static bool OneReads(OneNumberReader read, const char *words, double wanted)
+{
+	double number = -12345.0;
+
+	return read(words, (unsigned int)strlen(words), &number) && fabs(number - wanted) < 0.0000001;
+}
+
+static bool OneRefuses(OneNumberReader read, const char *words)
+{
+	double number = -12345.0;
+
+	return !read(words, (unsigned int)strlen(words), &number) && number == -12345.0;
+}
+
+static bool TwoRead(TwoNumberReader read, const char *words, double first, double second)
+{
+	double a = -12345.0;
+	double b = -12345.0;
+
+	return read(words, (unsigned int)strlen(words), &a, &b) && fabs(a - first) < 0.0000001 && fabs(b - second) < 0.0000001;
+}
+
+static bool TwoRefuse(TwoNumberReader read, const char *words)
+{
+	double a = -12345.0;
+	double b = -12345.0;
+
+	return !read(words, (unsigned int)strlen(words), &a, &b) && a == -12345.0 && b == -12345.0;
+}
+
+// The cone as it is now keeps both of the shader's divisions away from nothing
+static bool ConeIsSafe()
+{
+	return ShoulderLamp_ConeInside() - ShoulderLamp_ConeOutside() >= kShoulderLampConeGap - 0.0000001
+		&& ShoulderLamp_ConeInside() - kShoulderLampSpillEdge >= kShoulderLampConeGap
+		&& ShoulderLamp_ConeInside() <= kShoulderLampMostConeInside && ShoulderLamp_ConeOutside() >= kShoulderLampFewestConeOutside;
+}
+
+// Words that are never a number for any of these, each with why
+static const char *const kNeverANumber[][2] =
+{
+	{ "", "nothing at all" },
+	{ "abc", "letters" },
+	{ "1e1", "the library's way of writing ten, which the strict reader doesn't take" },
+	{ "inf", "infinity, which would reach the shader as a number that isn't one" },
+	{ "nan", "not a number" },
+	{ "+1", "a plus sign" },
+	{ "1.2.3", "two dots" },
+	{ " 1", "a space in front, which the console takes off first" },
+	{ "1 ", "a space after" },
+	{ "123456789", "nine digits, longer than any of these needs, so the sum can't grow large" },
+	{ "0x1", "a number written in hexadecimal" },
+	{ "1,5", "a comma for the dot, as a Portuguese or German keyboard would type it" },
+};
+
+static void TestTheLampsLook()
+{
+	// As built: ce293c81's, the owner's "DEfaults from 7th"
+	Check(ShoulderLamp_Strength() == 2.2 && ShoulderLamp_HalfDistance() == 9000.0 && ShoulderLamp_ConeInside() == 0.90 && ShoulderLamp_ConeOutside() == 0.86
+		&& ShoulderLamp_Spill() == 0.0 && ShoulderLamp_ShoulderAcross() == 1.00 && ShoulderLamp_ShoulderDown() == -0.10 && ShoulderLamp_SpotHalfDistance() == 0.0,
+		"R-LAMP-1: as built, the lamp's look is the owner's from 2026-11-05 (ce293c81): 2.2, 9000 mm, 0.90 and 0.86, no spill, the shoulder at (1.00, -0.10), and no fall on the spot");
+
+	float light[8];
+
+	ShoulderLamp_LightNumbers(light);
+	Check(light[0] == 0.90f && light[1] == 0.86f && light[2] == 0.0f && light[3] == 2.2f, "the light shaders are told the cone, no spill and the strength, in that order");
+	Check(fabs(light[4] * 9000.0f * 9000.0f - 1.0f) < 0.0001f && light[5] == 0.0f && light[6] == 0.0f && light[7] == 0.0f, "and one over the half-distance squared, with three spare 0s");
+
+	float spot[4];
+
+	ShoulderLamp_SpotNumbers(spot);
+	Check(spot[3] == 0.0f, "and the painted spot is told it doesn't fall away, as on 2026-11-05");
+
+	// LAMPSTRENGTH
+	Check(OneReads(ShoulderLamp_StrengthFromWords, "0.1", 0.1) && OneReads(ShoulderLamp_StrengthFromWords, "4", 4.0) && OneReads(ShoulderLamp_StrengthFromWords, "2.2", 2.2), "LAMPSTRENGTH reads its least, its most and between");
+	Check(OneRefuses(ShoulderLamp_StrengthFromWords, "0.09"), "LAMPSTRENGTH refuses 0.09: below its least, the lamp would hardly be there");
+	Check(OneRefuses(ShoulderLamp_StrengthFromWords, "4.01"), "and 4.01: above its most it would be a floodlight, not a lamp");
+	Check(OneRefuses(ShoulderLamp_StrengthFromWords, "-1"), "and -1: it reads no minus, and a light can't take light away");
+
+	// LAMPHALFDISTANCE
+	Check(OneReads(ShoulderLamp_HalfDistanceFromWords, "1000", 1000.0) && OneReads(ShoulderLamp_HalfDistanceFromWords, "20000", 20000.0) && OneReads(ShoulderLamp_HalfDistanceFromWords, "9000", 9000.0), "LAMPHALFDISTANCE reads its least, its most and between");
+	Check(OneRefuses(ShoulderLamp_HalfDistanceFromWords, "999"), "LAMPHALFDISTANCE refuses 999: nearer than a metre the light would be gone at once");
+	Check(OneRefuses(ShoulderLamp_HalfDistanceFromWords, "20001"), "and 20001: the lamp reaches no further than 20000 (kShoulderLampRange)");
+	Check(OneRefuses(ShoulderLamp_HalfDistanceFromWords, "0"), "and 0, which the shader would take one over");
+	Check(kShoulderLampMostHalfDistance == (double)kShoulderLampRange, "and its most is the lamp's reach");
+
+	// LAMPCONE
+	Check(TwoRead(ShoulderLamp_ConeFromWords, "0.90 0.86", 0.90, 0.86) && TwoRead(ShoulderLamp_ConeFromWords, "0.80 0.79", 0.80, 0.79) && TwoRead(ShoulderLamp_ConeFromWords, "0.995 0.985", 0.995, 0.985),
+		"LAMPCONE reads inside then outside, at its limits and as built");
+	Check(TwoRead(ShoulderLamp_ConeFromWords, "0.90   0.86", 0.90, 0.86), "with any number of spaces between them");
+	Check(TwoRead(ShoulderLamp_ConeFromWords, "0.90 0.89", 0.90, 0.89), "and outside exactly the gap below inside");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90 0.895"), "LAMPCONE refuses an outside less than 0.01 below inside: the shader divides by their difference");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90 0.90"), "and the same two, where that difference is nothing");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.86 0.90"), "and the two the wrong way round, where the edge would be inside out");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.79 0.70"), "and an inside below 0.80: it has to stay well above the spill's edge, which the shader divides by too");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.996 0.9"), "and an inside above 0.995, a cone so narrow it's a needle");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90 0.69"), "and an outside below 0.70, a cone too wide to be a lamp");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.995 0.991"), "and an outside above 0.99");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90"), "and one number, as both are needed together: each one's limit is the other");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90 0.86 0.5"), "and three");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90 0.86 "), "and a space after, which the console takes off first");
+	Check(TwoRefuse(ShoulderLamp_ConeFromWords, "0.90\t0.86") && TwoRefuse(ShoulderLamp_ConeFromWords, "0.90,0.86"), "and a tab or a comma between them");
+	Check(kShoulderLampFewestConeInside - kShoulderLampSpillEdge >= kShoulderLampConeGap, "the least inside is far enough above the spill's edge");
+
+	// LAMPSPILL
+	Check(OneReads(ShoulderLamp_SpillFromWords, "0", 0.0) && OneReads(ShoulderLamp_SpillFromWords, "0.5", 0.5) && OneReads(ShoulderLamp_SpillFromWords, "0.12", 0.12), "LAMPSPILL reads none, its most and 2026-11-07's");
+	Check(OneRefuses(ShoulderLamp_SpillFromWords, "0.51"), "LAMPSPILL refuses 0.51: a spill as strong as half the beam isn't faint any more");
+	Check(OneRefuses(ShoulderLamp_SpillFromWords, "-0.1"), "and -0.1: it reads no minus, and a spill can't take light away");
+
+	// LAMPSHOULDER
+	Check(TwoRead(ShoulderLamp_ShoulderFromWords, "1 -0.1", 1.0, -0.1) && TwoRead(ShoulderLamp_ShoulderFromWords, "-0.5 1.5", -0.5, 1.5) && TwoRead(ShoulderLamp_ShoulderFromWords, "1.05 0.25", 1.05, 0.25),
+		"LAMPSHOULDER reads across then down, with a minus, at its limits and 2026-11-07's place");
+	Check(TwoRead(ShoulderLamp_ShoulderFromWords, "0.5 0.5", 0.5, 0.5), "and the middle of the screen, which the shader takes safely: see the beam's length below");
+	Check(TwoRefuse(ShoulderLamp_ShoulderFromWords, "-0.51 0"), "LAMPSHOULDER refuses -0.51: more than half a screen off the edge the cone would never reach the picture");
+	Check(TwoRefuse(ShoulderLamp_ShoulderFromWords, "0 1.51"), "and 1.51, on the other side");
+	Check(TwoRefuse(ShoulderLamp_ShoulderFromWords, "1"), "and one number");
+	Check(TwoRefuse(ShoulderLamp_ShoulderFromWords, "1 -0.1 0"), "and three");
+	Check(TwoRefuse(ShoulderLamp_ShoulderFromWords, "--1 0") && TwoRefuse(ShoulderLamp_ShoulderFromWords, "- 0") && TwoRefuse(ShoulderLamp_ShoulderFromWords, "1 -"), "and a minus twice, or on its own");
+
+	// LAMPSPOTHALFDISTANCE
+	Check(OneReads(ShoulderLamp_SpotHalfDistanceFromWords, "0", 0.0) && OneReads(ShoulderLamp_SpotHalfDistanceFromWords, "0.0", 0.0), "LAMPSPOTHALFDISTANCE reads 0, no fall at all, as built");
+	Check(OneReads(ShoulderLamp_SpotHalfDistanceFromWords, "1000", 1000.0) && OneReads(ShoulderLamp_SpotHalfDistanceFromWords, "20000", 20000.0) && OneReads(ShoulderLamp_SpotHalfDistanceFromWords, "7000", 7000.0), "and its least, its most and 2026-11-07's");
+	Check(OneRefuses(ShoulderLamp_SpotHalfDistanceFromWords, "999") && OneRefuses(ShoulderLamp_SpotHalfDistanceFromWords, "1"), "LAMPSPOTHALFDISTANCE refuses anything between 0 and 1000: a spot whose light is gone at once isn't one");
+	Check(OneRefuses(ShoulderLamp_SpotHalfDistanceFromWords, "20001"), "and 20001, past the lamp's reach");
+	Check(OneRefuses(ShoulderLamp_SpotHalfDistanceFromWords, "-7000"), "and a minus");
+
+	// Words that aren't a number, for every reader
+	for (size_t i = 0; i < sizeof(kNeverANumber) / sizeof(kNeverANumber[0]); i++)
+	{
+		char const *const words = kNeverANumber[i][0];
+		bool const refused = OneRefuses(ShoulderLamp_StrengthFromWords, words) && OneRefuses(ShoulderLamp_HalfDistanceFromWords, words) && OneRefuses(ShoulderLamp_SpillFromWords, words)
+			&& OneRefuses(ShoulderLamp_SpotHalfDistanceFromWords, words) && TwoRefuse(ShoulderLamp_ConeFromWords, words) && TwoRefuse(ShoulderLamp_ShoulderFromWords, words);
+
+		Check(refused, std::string("every R-LAMP-1 reader refuses [") + words + "]: " + kNeverANumber[i][1]);
+	}
+
+	double untouched = -12345.0;
+	double alsoUntouched = -12345.0;
+
+	Check(!ShoulderLamp_StrengthFromWords(0, 3, &untouched) && !ShoulderLamp_ConeFromWords(0, 3, &untouched, &alsoUntouched) && !ShoulderLamp_ShoulderFromWords(0, 3, &untouched, &alsoUntouched)
+		&& untouched == -12345.0 && alsoUntouched == -12345.0, "and no words at all, where there's nothing to read");
+
+	// The minus
+	double signedNumber = 0.0;
+
+	Check(ReadSignedNumber("-0.1", 4, &signedNumber) && signedNumber == -0.1 && ReadSignedNumber("0.1", 3, &signedNumber) && signedNumber == 0.1, "the signed reader reads a minus in front, and a number without");
+	Check(!ReadSignedNumber("-", 1, &signedNumber) && !ReadSignedNumber("--0.1", 5, &signedNumber) && !ReadSignedNumber("-+1", 3, &signedNumber) && !ReadSignedNumber("0.1-", 4, &signedNumber), "and refuses a minus alone, twice, with a plus, or after");
+
+	// The setters bring anything to the nearest limit, a number that isn't one too, so the shaders only ever get numbers inside them
+	double const notANumber = std::numeric_limits<double>::quiet_NaN();
+
+	ShoulderLamp_SetStrength(100.0);
+	Check(ShoulderLamp_Strength() == kShoulderLampMostStrength, "a huge strength comes back to the most");
+	ShoulderLamp_SetStrength(notANumber);
+	Check(ShoulderLamp_Strength() == kShoulderLampFewestStrength, "and one that isn't a number to the least, so it can't reach a shader");
+	ShoulderLamp_SetHalfDistance(1.0);
+	Check(ShoulderLamp_HalfDistance() == kShoulderLampFewestHalfDistance, "a half-distance too near comes back to the least, so one over it is never huge");
+	ShoulderLamp_SetHalfDistance(notANumber);
+	Check(ShoulderLamp_HalfDistance() == kShoulderLampFewestHalfDistance, "and one that isn't a number too");
+	ShoulderLamp_SetSpill(-1.0);
+	Check(ShoulderLamp_Spill() == 0.0, "a spill below nothing is none");
+	ShoulderLamp_SetSpill(1.0);
+	Check(ShoulderLamp_Spill() == kShoulderLampMostSpill, "and a huge one the most");
+	ShoulderLamp_SetShoulder(-9.0, 9.0);
+	Check(ShoulderLamp_ShoulderAcross() == kShoulderLampFewestShoulder && ShoulderLamp_ShoulderDown() == kShoulderLampMostShoulder, "a shoulder far off the screen comes back to half a screen off");
+	ShoulderLamp_SetShoulder(notANumber, notANumber);
+	Check(ShoulderLamp_ShoulderAcross() == kShoulderLampFewestShoulder && ShoulderLamp_ShoulderDown() == kShoulderLampFewestShoulder, "and one that isn't a number too");
+	ShoulderLamp_SetSpotHalfDistance(500.0);
+	Check(ShoulderLamp_SpotHalfDistance() == kShoulderLampFewestSpotHalfDistance, "a spot's half-distance between 0 and the least comes to the least");
+	ShoulderLamp_SetSpotHalfDistance(0.0);
+	Check(ShoulderLamp_SpotHalfDistance() == 0.0, "and 0 stays 0, its own choice");
+	ShoulderLamp_SetSpotHalfDistance(notANumber);
+	Check(ShoulderLamp_SpotHalfDistance() == kShoulderLampFewestSpotHalfDistance, "and one that isn't a number is the least, never no fall by chance");
+
+	// The cone, whatever it's given, keeps both divisions safe
+	double const tries[][2] = { { 2.0, -1.0 }, { 0.80, 0.80 }, { 0.995, 0.99 }, { 0.0, 1.0 }, { 0.90, 0.86 } };
+	bool alwaysSafe = true;
+
+	for (size_t i = 0; i < sizeof(tries) / sizeof(tries[0]); i++)
+	{
+		ShoulderLamp_SetCone(tries[i][0], tries[i][1]);
+		alwaysSafe = alwaysSafe && ConeIsSafe();
+	}
+
+	ShoulderLamp_SetCone(notANumber, notANumber);
+	Check(alwaysSafe && ConeIsSafe(), "whatever cone it's given, numbers that aren't numbers too, inside stays the gap above outside and well above the spill's edge");
+	ShoulderLamp_SetCone(0.995, 0.99);
+	Check(ShoulderLamp_ConeInside() == 0.995 && fabs(ShoulderLamp_ConeOutside() - 0.985) < 0.0000001, "an outside too close to inside is brought down to the gap below it");
+
+	// What the shaders are told follows
+	ShoulderLamp_SetStrength(3.0);
+	ShoulderLamp_SetHalfDistance(2000.0);
+	ShoulderLamp_SetCone(0.95, 0.90);
+	ShoulderLamp_SetSpill(0.2);
+	ShoulderLamp_LightNumbers(light);
+	Check(light[0] == 0.95f && light[1] == 0.90f && light[2] == 0.2f && light[3] == 3.0f && fabs(light[4] * 2000.0f * 2000.0f - 1.0f) < 0.0001f, "the light shaders are told what was set");
+	ShoulderLamp_SetSpotHalfDistance(7000.0);
+	ShoulderLamp_SpotNumbers(spot);
+	Check(fabs(spot[3] * 7000.0f - 1.0f) < 0.0001f, "and the painted spot is told one over its half-distance, so the shader multiplies, and never divides");
+
+	// The painted cone's line. As built, on a screen 1.6 times as wide as it's high, it goes from (1.6, -0.1) to the middle, (0.8, 0.5): (-0.8, 0.6), 1 long.
+	ShoulderLamp_PutSpotBack();
+
+	float beam[4];
+
+	ShoulderLamp_PaintedBeam(0.0f, 0.0f, 1.6f, beam);
+	Check(fabs(beam[0] + 0.8f) < 0.00001f && fabs(beam[1] - 0.6f) < 0.00001f && fabs(beam[2] - 1.0f) < 0.0001f && beam[3] == 0.0f, "the painted cone's line goes from the shoulder to the aim, and the shader is told one over its length squared");
+	ShoulderLamp_PaintedBeam(0.1f, -0.2f, 1.6f, beam);
+	Check(fabs(beam[0] - ((0.5f + 0.1f) * 1.6f - 1.6f)) < 0.00001f && fabs(beam[1] - (0.5f - 0.2f + 0.1f)) < 0.00001f, "and it follows the aim as the robot arm moves it");
+	ShoulderLamp_SetShoulder(0.5, 0.5);
+	ShoulderLamp_PaintedBeam(0.0f, 0.0f, 1.6f, beam);
+	Check(beam[0] == 0.0f && beam[1] == 0.0f && std::isfinite(beam[2]) && fabs(beam[2] * (float)kShoulderLampShortestBeam - 1.0f) < 0.001f,
+		"a shoulder put where the aim is makes a line of no length: it's taken as the shortest there can be, or the shader would divide by nothing");
+	ShoulderLamp_PutSpotBack();
+
+	// Putting it back
+	ShoulderLamp_SetStrength(3.0);
+	ShoulderLamp_SetHalfDistance(2000.0);
+	ShoulderLamp_SetCone(0.95, 0.90);
+	ShoulderLamp_SetSpill(0.2);
+	ShoulderLamp_SetSpotHalfDistance(7000.0);
+	Check(ShoulderLamp_PutSpotBack(), "putting the lamp back says something had changed");
+	Check(ShoulderLamp_Strength() == kShoulderLampStrength && ShoulderLamp_HalfDistance() == kShoulderLampHalfDistance && ShoulderLamp_ConeInside() == kShoulderLampConeInside
+		&& ShoulderLamp_ConeOutside() == kShoulderLampConeOutside && ShoulderLamp_Spill() == kShoulderLampSpill && ShoulderLamp_ShoulderAcross() == kShoulderLampShoulderAcross
+		&& ShoulderLamp_ShoulderDown() == kShoulderLampShoulderDown && ShoulderLamp_SpotHalfDistance() == kShoulderLampSpotHalfDistance, "and every number of the lamp's look is as built");
+	Check(!ShoulderLamp_PutSpotBack(), "and as built, nothing has changed");
+
+	ShoulderLamp_SetStrength(3.0);
+	bool const strengthCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetHalfDistance(2000.0);
+	bool const halfDistanceCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetCone(0.95, 0.86);
+	bool const insideCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetCone(0.90, 0.80);
+	bool const outsideCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetSpill(0.2);
+	bool const spillCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetShoulder(1.05, -0.10);
+	bool const acrossCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetShoulder(1.00, 0.25);
+	bool const downCounts = ShoulderLamp_PutSpotBack();
+	ShoulderLamp_SetSpotHalfDistance(7000.0);
+	bool const spotCounts = ShoulderLamp_PutSpotBack();
+
+	Check(strengthCounts && halfDistanceCounts && insideCounts && outsideCounts && spillCounts && acrossCounts && downCounts && spotCounts,
+		"each number alone counts as a change, so a network game puts back every one of them");
+
+	// THE SHADERS. The real light's cone, from the game.
+	std::string const shapes = ReadSourceFile("shaders/lightShapes.fxh");
+	std::string const painted = ReadSourceFile("shaders/shoulderLamp.psh");
+	std::string const glint = ReadSourceFile("shaders/lightLampShine.psh");
+
+	Check(Has(shapes, "float4 LampCone : register(c26);") && Has(shapes, "float4 LampFall : register(c27);"), "SOURCE: the light shaders read the lamp's look from c26 and c27");
+	Check(!Has(shapes, "kLampStrength") && !Has(shapes, "kLampHalfDistance") && !Has(shapes, "kLampFullInside") && !Has(shapes, "kLampNothingOutside") && !Has(shapes, "kLampSpillStrength"),
+		"SOURCE: and none of the numbers it used to fix is left there to drift from the game's");
+	Check(Has(shapes, "float inCone = smoothstep(kLampSpillOutside, LampCone.x, along) * LampCone.z + smoothstep(LampCone.y, LampCone.x, along);"), "SOURCE: the cone and the spill are the game's");
+	Check(Has(shapes, "return LampCone.w * inCone * facing * (1.0f - reach * reach) / (1.0f + howFar * howFar * LampFall.x);"), "SOURCE: and so are the strength and the fall, by a multiplication");
+	Check(Has(shapes, "static const float kLampSpillOutside = 0.77f;") && kShoulderLampSpillEdge == 0.77, "SOURCE: the spill's edge is the same number in the shader and in the limits that keep the cone above it");
+
+	// Nothing else uses those two registers
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+	int c26 = 0;
+	int c27 = 0;
+	int shaders = 0;
+
+	if (tests != std::string::npos)
+	{
+		for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(path.substr(0, tests) + "shaders"))
+		{
+			std::string const name = entry.path().filename().string();
+			std::string const text = ReadSourceFile(("shaders/" + name).c_str());
+
+			shaders++;
+			c26 += CountOf(text, "register(c26)");
+			c27 += CountOf(text, "register(c27)");
+		}
+	}
+
+	Check(shaders > 0 && c26 == 1 && c27 == 1, "SOURCE: of every shader, only lightShapes.fxh names c26 or c27");
+
+	std::string const pixelLights = ReadSourceFile("3dc/pixel_lights.cpp");
+
+	Check(CountOf(pixelLights, "SetPixelShaderConstantF(26, look, 2);") == 1 && CountOf(pixelLights, "SetPixelShaderConstantF(26") == 1 && CountOf(pixelLights, "SetPixelShaderConstantF(27") == 0,
+		"SOURCE: the game fills them in one place");
+	Check(Has(pixelLights, "SetActive(d3d.lightTotalEffect);\n\tSetScreenConstant(device);\n\tSetLampLookConstants(device);")
+		&& Has(pixelLights, "SetActive(d3d.lightShareEffect);\n\tSetScreenConstant(device);\n\tSetLampLookConstants(device);")
+		&& Has(pixelLights, "SetActive(d3d.lightOneEffect);\n\tSetScreenConstant(device);\n\tSetLampLookConstants(device);"),
+		"SOURCE: for each of the three light shaders that draws a lamp's cone, as it's made ready");
+	Check(!Has(ReadSourceFile("3dc/d3d_render.cpp"), "SetPixelShaderConstantF(26") && !Has(ReadSourceFile("3dc/d3d_render.cpp"), "SetPixelShaderConstantF(27")
+		&& !Has(ReadSourceFile("3dc/surface_pictures.cpp"), "SetPixelShaderConstantF(26"), "SOURCE: and nowhere else");
+
+	// The painted lamp
+	Check(!Has(painted, "kShoulder =") && !Has(painted, "kShoulder *") && Has(painted, "float2 start = Swing.zw;"), "SOURCE: the painted cone starts where the game says, with no fixed place left");
+	Check(Has(painted, "float4 Beam : register(c3);") && Has(painted, "float2 beam = Beam.xy;") && Has(painted, "float along = saturate(dot(here - start, beam) * Beam.z);"),
+		"SOURCE: the cone's line comes from the game, with one over its length squared, so the full shader doesn't divide at all");
+	Check(Has(painted, "static const float2 kAim = float2(0.50f, 0.50f);") && kShoulderLampPaintedAim == 0.5 && Has(painted, "static const float kFollowing = 1.0f;") && kShoulderLampPaintedFollowing == 1.0,
+		"SOURCE: and the game works out the line from the same aim the shader puts the spot at, so the cone ends at the spot");
+	Check(Has(Between(ReadSourceFile("3dc/d3d_render.cpp"), "static void DrawShoulderLamp()\n{", "template <class T> static void ToyRelease"), "ShoulderLamp_PaintedBeam(aim[0], aim[1], wide, beam);\n\tdevice->SetPixelShaderConstantF(3, beam, 1);"),
+		"SOURCE: and the drawing sends it, from the same aim and shoulder it sends in Swing");
+	Check(!Has(painted, "kHalfDistance") && Has(painted, "float howFar = tex2D(SurfaceDistance, In.Place).r * Spot.w;"), "SOURCE: the spot's fall is the game's, by a multiplication, and 0 is none");
+	Check(!Has(glint, "kLampHalfDistance") && Has(glint, "float  away    = howFar * Spot.w;"), "SOURCE: and the glint falls away as its spot does");
+
+	// The drawing
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const drawing = Between(render, "static void DrawShoulderLamp()\n{", "template <class T> static void ToyRelease");
+	std::string const glinting = Between(render, "static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot)\n{", "\n}\n");
+
+	Check(ComesBefore(drawing, "ShoulderLamp_PutSpotBack()", "device->SetPixelShaderConstantF(1, aim, 1);"), "SOURCE: in a network game everything is put back before the shoulder's place is sent");
+	Check(Has(glinting, "spot[0], spot[1], spot[2], spot[3],"), "SOURCE: and the glint is sent its spot's fall");
+
+	// The commands: the console knows each, with the player's settings, a network game refuses a number, the words go through the strict reader, and the limits
+	// each one says are the limits there are
+	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
+	std::string const declared = ReadSourceFile("3dc/view_switches.h");
+	std::string const opening = Between(render, "static bool LampLookWords(char *words, const char *name, char const **start, size_t *length)\n{", "\n}");
+
+	Check(Has(opening, "return !LampStaysAsBuiltHere(why, *length);") && Has(opening, "\"%s IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT\", name"), "SOURCE: every one of them refuses a number in a network game, and says why");
+
+	struct LampCommand
+	{
+		const char *name;
+		const char *function;
+		const char *reading;
+		const char *setting;
+		const char *limits;
+		bool limitsAreTheLimits;
+	};
+
+	LampCommand const lampCommands[] =
+	{
+		{ "LAMPSTRENGTH", "LampStrengthCommand", "!ShoulderLamp_StrengthFromWords(start, (unsigned int)length, &strength)", "ShoulderLamp_SetStrength(strength);",
+			"FROM 0.1 TO 4", kShoulderLampFewestStrength == 0.1 && kShoulderLampMostStrength == 4.0 },
+		{ "LAMPHALFDISTANCE", "LampHalfDistanceCommand", "!ShoulderLamp_HalfDistanceFromWords(start, (unsigned int)length, &millimetres)", "ShoulderLamp_SetHalfDistance(millimetres);",
+			"FROM 1000 TO 20000", kShoulderLampFewestHalfDistance == 1000.0 && kShoulderLampMostHalfDistance == 20000.0 },
+		{ "LAMPCONE", "LampConeCommand", "!ShoulderLamp_ConeFromWords(start, (unsigned int)length, &inside, &outside)", "ShoulderLamp_SetCone(inside, outside);",
+			"INSIDE FROM 0.80 TO 0.995, OUTSIDE FROM 0.70 TO 0.99 AND 0.01 OR MORE BELOW INSIDE", kShoulderLampFewestConeInside == 0.80 && kShoulderLampMostConeInside == 0.995
+			&& kShoulderLampFewestConeOutside == 0.70 && kShoulderLampMostConeOutside == 0.99 && kShoulderLampConeGap == 0.01 },
+		{ "LAMPSPILL", "LampSpillCommand", "!ShoulderLamp_SpillFromWords(start, (unsigned int)length, &spill)", "ShoulderLamp_SetSpill(spill);",
+			"FROM 0 TO 0.5", kShoulderLampMostSpill == 0.5 },
+		{ "LAMPSHOULDER", "LampShoulderCommand", "!ShoulderLamp_ShoulderFromWords(start, (unsigned int)length, &across, &down)", "ShoulderLamp_SetShoulder(across, down);",
+			"EACH FROM -0.5 TO 1.5", kShoulderLampFewestShoulder == -0.5 && kShoulderLampMostShoulder == 1.5 },
+		{ "LAMPSPOTHALFDISTANCE", "LampSpotHalfDistanceCommand", "!ShoulderLamp_SpotHalfDistanceFromWords(start, (unsigned int)length, &millimetres)", "ShoulderLamp_SetSpotHalfDistance(millimetres);",
+			"0 FOR NO FALL, OR MILLIMETRES FROM 1000 TO 20000", kShoulderLampFewestSpotHalfDistance == 1000.0 && kShoulderLampMostSpotHalfDistance == 20000.0 },
+	};
+
+	for (size_t i = 0; i < sizeof(lampCommands) / sizeof(lampCommands[0]); i++)
+	{
+		LampCommand const &command = lampCommands[i];
+		std::string const body = Between(render, (std::string("void ") + command.function + "(char *words)\n{").c_str(), "\n}");
+		std::string const named = std::string("\"") + command.name + "\",";
+		std::string const called = std::string(command.function) + "\n\t);";
+
+		Check(Has(commands, named.c_str()) && Has(commands, called.c_str()) && ComesBefore(commands, named.c_str(), "bool IsACheat = true;"),
+			std::string("SOURCE: the console knows ") + command.name + ", with the player's settings, not the cheats");
+		Check(Has(declared, (std::string("void ") + command.function + "(char *words);").c_str()), std::string("SOURCE: and ") + command.function + " is declared for it");
+		Check(ComesBefore(body, (std::string("LampLookWords(words, \"") + command.name + "\"").c_str(), command.setting), std::string("SOURCE: ") + command.name + " is refused in a network game before anything changes");
+		Check(Has(body, command.reading) && Has(body, "\");\n\t\treturn;"), std::string("SOURCE: ") + command.name + "'s words go through the strict reader, and anything else is refused, not used");
+		Check(Has(body, command.limits) && command.limitsAreTheLimits, std::string("SOURCE: the limits ") + command.name + " says are the limits there are");
+	}
+
+	ShoulderLamp_PutSpotBack();
+}
+
 int main()
 {
 	TestSwitching();
@@ -813,6 +1192,7 @@ int main()
 	TestTheSpot();
 	TestTheLook();
 	TestNetworkKeepsTheSpot();
+	TestTheLampsLook();
 	TestJoiningTheGame();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");

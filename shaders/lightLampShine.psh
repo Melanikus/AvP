@@ -9,7 +9,7 @@ struct PS_INPUT
 // Global variables. c0 is Screen: see lightShapes.fxh
 float4 Lamp      : register(c1);    // .x is how strong the lamp is at this moment, which is where the flicker comes in. .w is how wide the screen is for its height
 float4 Swing     : register(c2);    // .xy is how far the lamp's aim is from the middle of the screen, as a place on the screen
-float4 Spot      : register(c3);    // .x is how far the spot reaches from its middle. .z is how strong it is, where 1 is as built. See shaders/shoulderLamp.psh
+float4 Spot      : register(c3);    // .x is how far the spot reaches from its middle. .z is how strong it is, where 1 is as built. .w is one over the spot's half-distance, or 0 for no fall (LAMPSPOTHALFDISTANCE). See shaders/shoulderLamp.psh
 float4 LampPlace : register(c4);    // .xyz is where the lamp is, in the same space as the light list
 
 // Where the spot's aimed, and its colour. These match shaders/shoulderLamp.psh, which is full, and that's why this is a shader of its own.
@@ -38,7 +38,8 @@ float4 ps_main(in PS_INPUT In) : COLOR0
     float2 wide    = float2(Lamp.w, 1.0f);
     float  fromAim = distance(place.xy * wide, (kAim + Swing.xy) * wide);
     float  inSpot  = smoothstep(0.0f, 1.0f, saturate((Spot.x - fromAim) / (Spot.x * kGlintEdge)));
-    float  away    = howFar / kLampHalfDistance;
+    // It falls away with distance the same way as its spot does (Modified 2026-11-14 by Melanikus (Dietrich): it used the real light's half-distance, which is the game's now)
+    float  away    = howFar * Spot.w;
     float  shine   = ShineHere(LampPlace.xyz - position, position, normal);
 
     return float4(kLampGlint * shine * kShineStrength * inSpot * Lamp.x * Spot.z / (1.0f + away * away), 0.0f);

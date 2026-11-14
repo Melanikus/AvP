@@ -19,9 +19,10 @@
 
 #include <math.h>
 
-// The beam's edge, as the cosine of the angle from its middle: the same as kLampNothingOutside in shaders/lightShapes.fxh, so the beam drawn here
-// is as wide as the light it stands for.
-static const float kLampVolumeConeCos = 0.93f;
+// The beam's edge, as the cosine of the angle from its middle: the same as the real light's cone as built, kShoulderLampConeOutside in shoulder_lamp.h,
+// so the beam drawn here is as wide as the light it stands for. (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: the lamp's look is the
+// owner's from 2026-11-05 again (R-LAMP-1), so this is 0.86, where it was 0.93. The LAMPCONE command changes the light, not this beam.)
+static const float kLampVolumeConeCos = 0.86f;
 
 // How far a beam reaches at most, in millimetres
 static const float kLampVolumeReach = 12000.0f;
@@ -37,8 +38,9 @@ static const float kLampVolumeNearestHit = 10.0f;
 static const float kLampVolumeHaze = 0.12f;
 
 // Inside this, as the cosine of the angle from the beam's middle, the pool on the wall has all its light, and it fades out to nothing at the edge
-// (kLampVolumeConeCos). The same as kLampFullInside in shaders/lightShapes.fxh, so the pool fades the way the real light's spot does.
-static const float kLampVolumeFullInside = 0.99f;
+// (kLampVolumeConeCos). The same as kShoulderLampConeInside in shoulder_lamp.h, so the pool fades the way the real light's spot does as built.
+// (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port, R-LAMP-1: 0.90, where it was 0.99.)
+static const float kLampVolumeFullInside = 0.90f;
 
 // The beam rises from nothing at the lamp to all its light this far out, in millimetres, so it doesn't start as a hard bright point
 static const float kLampVolumeFadeInTo = 250.0f;

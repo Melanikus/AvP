@@ -44,6 +44,10 @@
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   the LAMPLOOK command says how the player's own lamp looks when it could be a real light: the real light, the real light with the
 //   painted spot over it, or painted only. A network game keeps it as built
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1):
+//   the LAMPSTRENGTH, LAMPHALFDISTANCE, LAMPCONE, LAMPSPILL, LAMPSHOULDER and LAMPSPOTHALFDISTANCE commands change the lamp's look, playing
+//   alone. A network game keeps them as built, and they're put back before the painted lamp sends any of them
+//   the glint where the painted lamp lands falls away with distance as its spot does
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the shoulder lamp is drawn before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
@@ -5585,16 +5589,29 @@ static void DrawShoulderLamp()
 	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
 	bool const onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
 
-	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
-	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
-
-	device->SetPixelShaderConstantF(1, aim, 1);
-
 	// A network game keeps these as built. KeepDeveloperToolsOutOfNetworkGames sees to that, but ToyShadows_Draw leaves before it on a card with no stencil, so it's asked again here, where the numbers are used.
+	// It comes before any of them is sent, the shoulder's place included. (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: it was after the aim, which
+	// held nothing a command could change until R-LAMP-1.)
 	if (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())
 	{
 		LogString("lamp: this is a network game, so its size and strength are back as they were built");
 	}
+
+	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1. Then where
+	// the cone starts (LAMPSHOULDER, R-LAMP-1), measured across in screen heights the way the shader measures every place, so it costs the full shader nothing.
+	float const aim[4] =
+	{
+		ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f,
+		(float)ShoulderLamp_ShoulderAcross() * wide, (float)ShoulderLamp_ShoulderDown()
+	};
+
+	device->SetPixelShaderConstantF(1, aim, 1);
+
+	// The cone's line from the shoulder to the aim, and one over its length squared, which the shader has no room left to work out (shoulder_lamp.h)
+	float beam[4];
+
+	ShoulderLamp_PaintedBeam(aim[0], aim[1], wide, beam);
+	device->SetPixelShaderConstantF(3, beam, 1);
 
 	// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.
 	float spot[4];
@@ -6417,7 +6434,7 @@ static void DrawLampGlint(float strength, float wide, const float *aim, const fl
 	{
 		strength, 0.0f, 0.0f, wide,
 		aim[0], aim[1], 0.0f, 0.0f,
-		spot[0], spot[1], spot[2], 0.0f,
+		spot[0], spot[1], spot[2], spot[3],   // .w: the spot's half-distance, so the glint falls away as its spot does (R-LAMP-1, modified 2026-11-14 by Melanikus (Dietrich))
 		from[0], -from[1], from[2], 0.0f,
 	};
 
@@ -8525,6 +8542,191 @@ void LampIntensityCommand(char *words)
 	char said[60] = { 0 };
 
 	_snprintf(said, sizeof(said) - 1, "LAMP INTENSITY IS %.2f", intensity);
+	SaySwitch(said);
+}
+
+// THE LAMP'S LOOK, R-LAMP-1 (shoulder_lamp.h): LAMPSTRENGTH, LAMPHALFDISTANCE, LAMPCONE, LAMPSPILL, LAMPSHOULDER and LAMPSPOTHALFDISTANCE, for this run of the
+// game, playing alone. On its own, each says what it is now. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+
+// What every one of them does first: the words, trimmed, and in a network game a number is refused and says why. Gives back false when that's all there is to do.
+// name is one of the commands' own names, written in the code, never anything typed.
+static bool LampLookWords(char *words, const char *name, char const **start, size_t *length)
+{
+	*start = "";
+	*length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, start, length);
+	}
+
+	char why[80] = { 0 };
+
+	_snprintf(why, sizeof(why) - 1, "%s IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT", name);
+	return !LampStaysAsBuiltHere(why, *length);
+}
+
+void LampStrengthCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSTRENGTH", &start, &length))
+	{
+		return;
+	}
+
+	double strength = ShoulderLamp_Strength();
+
+	if (length > 0 && !ShoulderLamp_StrengthFromWords(start, (unsigned int)length, &strength))
+	{
+		SaySwitch("LAMPSTRENGTH TAKES A NUMBER FROM 0.1 TO 4, LIKE 2.2");
+		return;
+	}
+
+	ShoulderLamp_SetStrength(strength);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP STRENGTH IS %.2f", ShoulderLamp_Strength());
+	SaySwitch(said);
+}
+
+void LampHalfDistanceCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPHALFDISTANCE", &start, &length))
+	{
+		return;
+	}
+
+	double millimetres = ShoulderLamp_HalfDistance();
+
+	if (length > 0 && !ShoulderLamp_HalfDistanceFromWords(start, (unsigned int)length, &millimetres))
+	{
+		SaySwitch("LAMPHALFDISTANCE TAKES MILLIMETRES FROM 1000 TO 20000, LIKE 9000");
+		return;
+	}
+
+	ShoulderLamp_SetHalfDistance(millimetres);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP HALF-DISTANCE IS %.0f MM", ShoulderLamp_HalfDistance());
+	SaySwitch(said);
+}
+
+void LampConeCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPCONE", &start, &length))
+	{
+		return;
+	}
+
+	double inside = ShoulderLamp_ConeInside();
+	double outside = ShoulderLamp_ConeOutside();
+
+	if (length > 0 && !ShoulderLamp_ConeFromWords(start, (unsigned int)length, &inside, &outside))
+	{
+		SaySwitch("LAMPCONE TAKES INSIDE THEN OUTSIDE: INSIDE FROM 0.80 TO 0.995, OUTSIDE FROM 0.70 TO 0.99 AND 0.01 OR MORE BELOW INSIDE, LIKE 0.90 0.86");
+		return;
+	}
+
+	ShoulderLamp_SetCone(inside, outside);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP CONE IS %.3f %.3f", ShoulderLamp_ConeInside(), ShoulderLamp_ConeOutside());
+	SaySwitch(said);
+}
+
+void LampSpillCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSPILL", &start, &length))
+	{
+		return;
+	}
+
+	double spill = ShoulderLamp_Spill();
+
+	if (length > 0 && !ShoulderLamp_SpillFromWords(start, (unsigned int)length, &spill))
+	{
+		SaySwitch("LAMPSPILL TAKES A NUMBER FROM 0 TO 0.5, LIKE 0.12. 0 IS NO SPILL");
+		return;
+	}
+
+	ShoulderLamp_SetSpill(spill);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SPILL IS %.2f", ShoulderLamp_Spill());
+	SaySwitch(said);
+}
+
+void LampShoulderCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSHOULDER", &start, &length))
+	{
+		return;
+	}
+
+	double across = ShoulderLamp_ShoulderAcross();
+	double down = ShoulderLamp_ShoulderDown();
+
+	if (length > 0 && !ShoulderLamp_ShoulderFromWords(start, (unsigned int)length, &across, &down))
+	{
+		SaySwitch("LAMPSHOULDER TAKES ACROSS THEN DOWN, EACH FROM -0.5 TO 1.5, LIKE 1 -0.1");
+		return;
+	}
+
+	ShoulderLamp_SetShoulder(across, down);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SHOULDER IS %.2f %.2f", ShoulderLamp_ShoulderAcross(), ShoulderLamp_ShoulderDown());
+	SaySwitch(said);
+}
+
+void LampSpotHalfDistanceCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSPOTHALFDISTANCE", &start, &length))
+	{
+		return;
+	}
+
+	double millimetres = ShoulderLamp_SpotHalfDistance();
+
+	if (length > 0 && !ShoulderLamp_SpotHalfDistanceFromWords(start, (unsigned int)length, &millimetres))
+	{
+		SaySwitch("LAMPSPOTHALFDISTANCE TAKES 0 FOR NO FALL, OR MILLIMETRES FROM 1000 TO 20000, LIKE 7000");
+		return;
+	}
+
+	ShoulderLamp_SetSpotHalfDistance(millimetres);
+
+	if (ShoulderLamp_SpotHalfDistance() == 0.0)
+	{
+		SaySwitch("LAMP SPOT HALF-DISTANCE IS 0: ITS LIGHT DOESN'T FALL AWAY");
+		return;
+	}
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SPOT HALF-DISTANCE IS %.0f MM", ShoulderLamp_SpotHalfDistance());
 	SaySwitch(said);
 }
 

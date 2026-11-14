@@ -10,10 +10,15 @@
 // it's running. Building the game fetches it, and so does tests.yml, and this has to run from the top of the repository.
 //
 // A .fxh file isn't a shader. It's included by others, so it's checked as part of each one that includes it.
+//
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1): each shader's size is printed against what its shader model
+// allows, read from the same library's own listing of the code, so a shader near its limit (shoulderLamp.psh) can be measured before and
+// after a change. One over the limit fails here, as it would fail to compile in the game.
 
 #include <windows.h>
 #include <unknwn.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <filesystem>
 #include <string>
@@ -36,6 +41,33 @@ struct CompilerBuffer : public IUnknown
 typedef HRESULT (WINAPI *CompileFromFile)(char const *file, void const *macros, void *includes, char const *function, char const *profile,
 	DWORD flags, CompilerBuffer **code, CompilerBuffer **messages, IUnknown **constants);
 
+// D3DXDisassembleShader, which writes compiled shader code out as text. Its last line says how big the shader is.
+typedef HRESULT (WINAPI *Disassemble)(DWORD const *code, BOOL colours, char const *comments, CompilerBuffer **text);
+
+// How big a shader is, from the line the listing ends with: "// approximately 63 instruction slots used (4 texture, 59 arithmetic)". A shader
+// model 3 listing may give the total alone, and a shader of one sum says "1 instruction slot used", with no parts. With no parts given, every
+// slot counts as a sum, which is the most it could be. Gives back false when there's no such line.
+static bool ShaderSize(char const *listing, int *slots, int *texture, int *arithmetic)
+{
+	char const *const line = strstr(listing, "// approximately ");
+
+	if (!line || sscanf_s(line, "// approximately %d instruction slot", slots) != 1)
+	{
+		return false;
+	}
+
+	char const *const lineEnd = strchr(line, '\n');
+	char const *const parts = strchr(line, '(');
+
+	if (!parts || (lineEnd && parts > lineEnd) || sscanf_s(parts, "(%d texture, %d arithmetic)", texture, arithmetic) != 2)
+	{
+		*texture = 0;
+		*arithmetic = *slots;
+	}
+
+	return true;
+}
+
 static HMODULE LoadFromBuild(char const *name)
 {
 	std::string const path = std::filesystem::absolute(std::filesystem::path(LibraryFolder) / name).string();
@@ -43,8 +75,49 @@ static HMODULE LoadFromBuild(char const *name)
 	return LoadLibraryExA(path.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
 }
 
+// Prints how big a compiled shader is against what its shader model allows, and says whether it fits. Shader model 2 counts its sums and its
+// texture reads apart: 64 and 32 for a pixel shader, 256 in all for a vertex shader. Shader model 3 allows at least 512 of either.
+static bool PrintsItsSize(Disassemble disassemble, CompilerBuffer *code, std::string const &profile)
+{
+	CompilerBuffer *listing = 0;
+
+	if (!disassemble || FAILED(disassemble((DWORD const *)code->GetBufferPointer(), FALSE, NULL, &listing)) || !listing)
+	{
+		printf("      its size couldn't be listed\n");
+		return true;
+	}
+
+	// The listing is the library's own text. It's copied by its size, so a missing end can't be read past.
+	std::string const text((char const *)listing->GetBufferPointer(), listing->GetBufferSize());
+	listing->Release();
+
+	int slots = 0;
+	int texture = 0;
+	int arithmetic = 0;
+
+	if (!ShaderSize(text.c_str(), &slots, &texture, &arithmetic))
+	{
+		printf("      its size isn't in its listing\n");
+		return true;
+	}
+
+	bool const modelTwoPixels = profile == "ps_2_0";
+	bool const fits = modelTwoPixels ? (arithmetic >= 0 && arithmetic <= 64 && texture <= 32) : slots <= (profile == "vs_2_0" ? 256 : 512);
+
+	if (modelTwoPixels)
+	{
+		printf("      %s %d sums of 64 and %d texture reads of 32 (%d slots in all)\n", fits ? "size:" : "TOO BIG:", arithmetic, texture, slots);
+	}
+	else
+	{
+		printf("      %s %d slots of %d\n", fits ? "size:" : "TOO BIG:", slots, profile == "vs_2_0" ? 256 : 512);
+	}
+
+	return fits;
+}
+
 // Compiles one file, and says whether it went through with nothing to report.
-static bool CompilesCleanly(CompileFromFile compile, std::filesystem::path const &file)
+static bool CompilesCleanly(CompileFromFile compile, Disassemble disassemble, std::filesystem::path const &file)
 {
 	std::string const name = file.filename().string();
 	bool const vertexShader = file.extension() == ".vsh";
@@ -57,9 +130,14 @@ static bool CompilesCleanly(CompileFromFile compile, std::filesystem::path const
 	IUnknown *constants = 0;
 
 	HRESULT const result = compile(file.string().c_str(), NULL, NULL, function.c_str(), profile.c_str(), 0, &code, &messages, &constants);
-	bool const clean = SUCCEEDED(result) && code && !messages;
+	bool clean = SUCCEEDED(result) && code && !messages;
 
 	printf("  %s  %s as %s\n", clean ? "ok" : "FAILED", name.c_str(), profile.c_str());
+
+	if (clean)
+	{
+		clean = PrintsItsSize(disassemble, code, profile);
+	}
 
 	if (messages)
 	{
@@ -104,6 +182,9 @@ int main()
 		return 1;
 	}
 
+	// The same library's listing of compiled code, for each shader's size. Without it the sizes aren't printed, and the compile alone decides.
+	Disassemble const disassemble = (Disassemble)GetProcAddress(d3dx, "D3DXDisassembleShader");
+
 	int shaders = 0;
 	int failed = 0;
 
@@ -118,7 +199,7 @@ int main()
 
 		shaders++;
 
-		if (!CompilesCleanly(compile, entry.path()))
+		if (!CompilesCleanly(compile, disassemble, entry.path()))
 		{
 			failed++;
 		}

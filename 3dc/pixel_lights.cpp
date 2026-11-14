@@ -1,5 +1,7 @@
 // Lighting each pixel from the surface pictures. Written 2026-11-04 by Melanikus for the AvP port.
 // Modified 2026-11-07 by Melanikus for the AvP port: each lamp is aimed its own way, from its place on the light list.
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: every light pass is sent the lamp's look, its strength, half-distance, cone
+// and spill, which the console can change playing alone (R-LAMP-1, shoulder_lamp.h).
 //
 // surface_pictures.cpp draws the frame's solid polygons once, so three pictures say how far away each pixel is, which way it faces and what
 // colour its texture is. Everything here reads those. No light draws a polygon: each one is a rectangle on the screen, and the pictures say
@@ -275,6 +277,17 @@ static void SetLampAimConstant(LPDIRECT3DDEVICE9 device, const float *light)
 	device->SetPixelShaderConstantF(25, &light[kToyLightAim], 1);
 }
 
+// The lamp's look, for every lamp drawn as a real light: LampCone and LampFall in lightShapes.fxh, the two registers after the aim's. Each of the three light shaders
+// that draws a lamp's cone is sent them as it's made ready, so none can be drawn with numbers left from something else. They come from shoulder_lamp.cpp, which keeps
+// every one inside its limits. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1).
+static void SetLampLookConstants(LPDIRECT3DDEVICE9 device)
+{
+	float look[8];
+
+	ShoulderLamp_LightNumbers(look);
+	device->SetPixelShaderConstantF(26, look, 2);
+}
+
 float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, const RECT *reach, const bool *reachesScreen, IDirect3DTexture9 *depth)
 {
 	device->SetRenderTarget(0, totalSurface);
@@ -285,6 +298,7 @@ float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int n
 
 	d3d.effectSystem->SetActive(d3d.lightTotalEffect);
 	SetScreenConstant(device);
+	SetLampLookConstants(device);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
@@ -348,6 +362,7 @@ HRESULT PixelLights_AddShareToMask(LPDIRECT3DDEVICE9 device, const float *light,
 
 	d3d.effectSystem->SetActive(d3d.lightShareEffect);
 	SetScreenConstant(device);
+	SetLampLookConstants(device);
 	device->SetPixelShaderConstantF(1, constants, 2);
 
 	ReadPicture(device, kSamplerDepth, depth);
@@ -385,6 +400,7 @@ void PixelLights_AddLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3
 
 	d3d.effectSystem->SetActive(d3d.lightOneEffect);
 	SetScreenConstant(device);
+	SetLampLookConstants(device);
 	device->SetPixelShaderConstantF(1, constants, 5);
 	SetLampAimConstant(device, light);
 

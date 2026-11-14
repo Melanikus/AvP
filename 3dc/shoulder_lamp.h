@@ -68,7 +68,7 @@ bool ShoulderLamp_FollowSecondsFromWords(const char *words, unsigned int length,
 
 // THE SPOT. How big and how strong the painted lamp's spot is, for this run of the game: nothing keeps them for the next one. The LAMPSPOTSIZE and LAMPINTENSITY commands say.
 // A bigger or brighter lamp than the other players have would be cheating, so a network game keeps both as built. Both have limits that keep it a lamp, even playing alone. Setting one outside
-// its limits brings it to the nearest limit. These don't reach the lamp as a real light, which isn't what a player has yet: that's at the top of shaders/lightShapes.fxh.
+// its limits brings it to the nearest limit. These don't reach the lamp as a real light: its own look is THE LAMP'S LOOK, below. (Modified 2026-11-14 by Melanikus (Dietrich).)
 double ShoulderLamp_SpotSize();
 void ShoulderLamp_SetSpotSize(double size);
 double ShoulderLamp_Intensity();
@@ -107,15 +107,80 @@ void ShoulderLamp_SetLook(int look);
 // Reads the number typed after LAMPLOOK: only "0", "1", "2" or "3". Anything else gives back false, and leaves look alone.
 bool ShoulderLamp_LookFromWords(const char *words, unsigned int length, int *look);
 
-// Puts the spot's size, its strength and LAMPLOOK back as built. It says whether any had been changed, so that the log can say so once and
-// not every frame. (Modified 2026-11-11 by Melanikus (Third): LAMPLOOK too.)
+// THE LAMP'S LOOK, R-LAMP-1. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port. The owner, 2026-11-11: "We cut too much from
+// range so we no longer see the nice spot in low ligth", then "everything that changed between nov 7 and now is a variable yes? all
+// of them", and "DEfaults from 7th, but all tunable, thats what I want". So every number of the lamp's look that the co-op work of
+// 2026-11-07 (67ae4b50) changed is now one the game sends to the shaders, and a console command changes it, playing alone. The
+// numbers as built are the ones from before it (ce293c81, 2026-11-05). For this run of the game only: nothing keeps them for the next.
+// A network game keeps every one as built, like the spot's size: a stronger or wider lamp than the other players have would be
+// cheating. Each command refuses a number outside its limits, and says the limits. Each setter below brings a number outside them to
+// the nearest limit, so whatever comes in, the shaders only ever get numbers inside them.
+//
+// The real light (shaders/lightShapes.fxh, the lamp's cone). These are shared by every lamp drawn as a real light, so playing alone
+// they change the NPC marines' and friends' lamps too:
+// - LAMPSTRENGTH: how strong it is. At 1 a wall right in front of it shows its own colour.
+// - LAMPHALFDISTANCE: how far away, in millimetres, its light has fallen to half.
+// - LAMPCONE: how wide the cone is, as two cosines of the angle from its middle: inside the first it's strongest, outside the second
+//   there's nothing. Smaller numbers are wider: 0.90 is 26 degrees, 0.86 is 31.
+// - LAMPSPILL: how strong the faint wide spill around the beam is, where the beam is 1. 0 is no spill. How far the spill reaches is
+//   fixed: kShoulderLampSpillEdge.
+// The painted lamp (shaders/shoulderLamp.psh):
+// - LAMPSHOULDER: where its cone starts on the screen, across and down, in parts of the screen: (0, 0) is the top left and (1, 1) the
+//   bottom right. Built, it's (1.00, -0.10), just above the top right corner.
+// - LAMPSPOTHALFDISTANCE: how far away, in millimetres, the spot's light on a wall has fallen to half. 0, as built, means it doesn't
+//   fall away at all: on 2026-11-05 it didn't, and that fall was added on 2026-11-06 (a318951a). Otherwise from 1000 to 20000.
+double ShoulderLamp_Strength();
+void ShoulderLamp_SetStrength(double strength);
+double ShoulderLamp_HalfDistance();
+void ShoulderLamp_SetHalfDistance(double millimetres);
+double ShoulderLamp_ConeInside();
+double ShoulderLamp_ConeOutside();
+void ShoulderLamp_SetCone(double inside, double outside);
+double ShoulderLamp_Spill();
+void ShoulderLamp_SetSpill(double spill);
+double ShoulderLamp_ShoulderAcross();
+double ShoulderLamp_ShoulderDown();
+void ShoulderLamp_SetShoulder(double across, double down);
+double ShoulderLamp_SpotHalfDistance();
+void ShoulderLamp_SetSpotHalfDistance(double millimetres);
+
+// Read the words typed after each command, the same way as LAMPFOLLOW's. LAMPCONE and LAMPSHOULDER take two numbers with spaces
+// between them, and LAMPSHOULDER's can start with a minus. Anything outside the limits, or anything else at all, gives back false and
+// leaves the numbers alone.
+bool ShoulderLamp_StrengthFromWords(const char *words, unsigned int length, double *strength);
+bool ShoulderLamp_HalfDistanceFromWords(const char *words, unsigned int length, double *millimetres);
+bool ShoulderLamp_ConeFromWords(const char *words, unsigned int length, double *inside, double *outside);
+bool ShoulderLamp_SpillFromWords(const char *words, unsigned int length, double *spill);
+bool ShoulderLamp_ShoulderFromWords(const char *words, unsigned int length, double *across, double *down);
+bool ShoulderLamp_SpotHalfDistanceFromWords(const char *words, unsigned int length, double *millimetres);
+
+// Puts the spot's size, its strength, LAMPLOOK and every number of the lamp's look above back as built. It says whether any had been
+// changed, so that the log can say so once and not every frame. (Modified 2026-11-11 by Melanikus (Third): LAMPLOOK too. Modified
+// 2026-11-14 by Melanikus (Dietrich): the lamp's look, R-LAMP-1.)
 bool ShoulderLamp_PutSpotBack();
 
-// What shaders/shoulderLamp.psh reads as Spot: the size, the size as built over the size, the strength, and a spare 0.
+// What shaders/shoulderLamp.psh reads as Spot: the size, the size as built over the size, the strength, and one over the spot's
+// half-distance, which is 0 when it doesn't fall away (LAMPSPOTHALFDISTANCE 0). (Modified 2026-11-14 by Melanikus (Dietrich): .w was
+// a spare 0.)
 void ShoulderLamp_SpotNumbers(float *four);
+
+// What shaders/shoulderLamp.psh reads as Beam: the painted cone's line, from where it starts (LAMPSHOULDER) to where it's aimed, and one over that
+// line's length squared. aimAcross and aimDown are how far the aim is from the middle of the screen, as the shader is sent them in Swing.xy, and wide
+// is how wide the screen is for its height. The shader has no room left for these sums (it's at 62 of shader model 2's 64), so they're done here,
+// once a frame. The length is never taken as shorter than kShoulderLampShortestBeam allows, so a shoulder put where the aim is can't make the
+// shader divide by nothing. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1).
+void ShoulderLamp_PaintedBeam(float aimAcross, float aimDown, float wide, float *four);
+
+// What the light shaders read in their two registers for the lamp's look (shaders/lightShapes.fxh: LampCone at c26, LampFall at c27):
+// the cone's inside and outside, the spill's strength and the lamp's strength; then one over its half-distance squared, and three
+// spare 0s. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+void ShoulderLamp_LightNumbers(float *eight);
 
 // A plain number, typed by a person: only digits, with one dot at most. pixel_look.cpp uses it too.
 bool ReadPlainNumber(const char *words, unsigned int length, double *out);
+
+// The same, with a minus allowed in front, as in "-0.1". Only LAMPSHOULDER takes one. Added 2026-11-14 by Melanikus (Dietrich).
+bool ReadSignedNumber(const char *words, unsigned int length, double *out);
 
 // How far its aim is from where he's looking, across to the right and down, for each unit ahead. Both are 0 when he's been still for a moment.
 float ShoulderLamp_AimAcross();
@@ -141,8 +206,44 @@ double const kShoulderLampIntensity = 1.0;
 double const kShoulderLampFewestIntensity = 0.25;
 double const kShoulderLampMostIntensity = 2.0;
 
+// THE LAMP'S LOOK: AS BUILT, AND ITS LIMITS (R-LAMP-1, above). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port. As built is
+// ce293c81's, the owner's "DEfaults from 7th". The limits keep it a lamp, and they keep every sum in the shaders safe:
+// - The cone's edges are worked out by dividing by inside minus outside, and by inside minus the spill's edge. So inside has to be
+//   kShoulderLampConeGap or more above outside, and its least is well above the spill's edge. Neither difference can be 0.
+// - A half-distance goes in as one over itself, so it's never 0. LAMPSPOTHALFDISTANCE's 0 means no fall at all, and goes in as 0.
+// - The shoulder can be up to half a screen off any edge. Anywhere nearer the middle the cone would come from inside the picture.
+double const kShoulderLampStrength = 2.2;
+double const kShoulderLampFewestStrength = 0.1;
+double const kShoulderLampMostStrength = 4.0;
+double const kShoulderLampHalfDistance = 9000.0;
+double const kShoulderLampFewestHalfDistance = 1000.0;
+double const kShoulderLampMostHalfDistance = 20000.0;           // as far as the lamp reaches: kShoulderLampRange
+double const kShoulderLampConeInside = 0.90;
+double const kShoulderLampConeOutside = 0.86;
+double const kShoulderLampFewestConeInside = 0.80;
+double const kShoulderLampMostConeInside = 0.995;
+double const kShoulderLampFewestConeOutside = 0.70;
+double const kShoulderLampMostConeOutside = 0.99;
+double const kShoulderLampConeGap = 0.01;                       // the least inside can be above outside
+double const kShoulderLampSpillEdge = 0.77;                     // how far the spill reaches: it has to be kLampSpillOutside in shaders/lightShapes.fxh
+double const kShoulderLampSpill = 0.0;
+double const kShoulderLampMostSpill = 0.5;
+double const kShoulderLampShoulderAcross = 1.00;
+double const kShoulderLampShoulderDown = -0.10;
+double const kShoulderLampFewestShoulder = -0.5;
+double const kShoulderLampMostShoulder = 1.5;
+double const kShoulderLampSpotHalfDistance = 0.0;               // 0: the spot's light doesn't fall away
+double const kShoulderLampFewestSpotHalfDistance = 1000.0;
+double const kShoulderLampMostSpotHalfDistance = 20000.0;
+
+// THE PAINTED CONE'S LINE (ShoulderLamp_PaintedBeam). The first two have to be kAim and kFollowing in shaders/shoulderLamp.psh, which works out where
+// the spot is from the same two: if they differed, the cone wouldn't end at the spot.
+double const kShoulderLampPaintedAim = 0.5;                     // where it's aimed, across and down: the middle of the screen
+double const kShoulderLampPaintedFollowing = 1.0;               // how much of the robot arm's following shows
+double const kShoulderLampShortestBeam = 0.00000001;            // the least the line's length squared is taken as: a ten-thousandth of the screen, squared
+
 // WHERE THE REAL LAMP SITS. A light right at the eye throws every shadow straight away from the eye, where it can't be seen, so the further out this is, the more of its shadows show. A real shoulder is about this far from the eye.
-// How strong it is, and how wide, are at the top of shaders/lightShapes.fxh, where changing them needs no rebuild.
+// How strong it is, and how wide, are THE LAMP'S LOOK, above: the game sends them to shaders/lightShapes.fxh. (Modified 2026-11-14 by Melanikus (Dietrich).)
 enum
 {
 	kShoulderLampAcross = 300,
