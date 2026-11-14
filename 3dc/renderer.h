@@ -130,6 +130,13 @@ void DrawSmallMenuCharacter (uint32_t topX, uint32_t topY, uint32_t texU, uint32
 void DrawQuad				(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
 void DrawFmvFrame			(uint32_t frameWidth, uint32_t frameHeight, const std::vector<texID_t> &textureIDs);
 void DrawFontQuad			(uint32_t x, uint32_t y, uint32_t charWidth, uint32_t charHeight, texID_t textureID, float *uvArray, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
+
+// A screen of text and menu pictures drawn into another swap chain, between the game's own frames: the chain's back buffer cleared to
+// background (an ARGB colour), then everything fill(context) draws with Font_DrawText and the other screen-list calls, at width by height
+// pixels, then the chain presented. The game never calls it; AVP_OpenInteng's panels do (R-DRAW-CHAIN-1, d3d_render.cpp says the rules).
+// Gives back true when the chain was presented. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+struct IDirect3DSwapChain9;
+bool R_DrawScreenToChain	(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context);
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);
 void SetTransforms();
