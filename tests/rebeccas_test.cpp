@@ -3766,7 +3766,10 @@ static void TestNumbersUsedAsPlaces()
 
 // 33b. A name in a level file ends at a zero byte, and the search for it must stop at the end of its chunk. Here there's no zero byte in the chunk or in anything after
 // it, right up to the wall, so a search that doesn't stop runs into the wall and ends the test. flagsAt is where to put a 1, for a chunk that only has a name if a flag says so.
-static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt)
+// Modified 2026-11-14 by Melanikus for the AvP port: a chunk whose other numbers are checked too gets ones it allows, so that it's refused for its name and nothing else.
+// placeAt is where its places start, "places" of them one after another, each put at x, y and z all -1, which is inside the level (CheckPlace) and has no zero byte; and
+// kindAt is where its kind goes, put at 0. Each comes before the name, where the search for the name's end never looks.
+static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt, int placeAt = -1, int places = 1, int kindAt = -1)
 {
 	File_Chunk file;
 	Parent_File = &file;
@@ -3777,6 +3780,17 @@ static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt
 	if (flagsAt >= 0)
 	{
 		PutNumber(atTheWall, flagsAt, 1);
+	}
+
+	for (int i = 0; placeAt >= 0 && i < places; i++)
+	{
+		ChunkVectorInt const insideTheLevel = { -1, -1, -1 };
+		memcpy(atTheWall + placeAt + i * sizeof(insideTheLevel), &insideTheLevel, sizeof(insideTheLevel));
+	}
+
+	if (kindAt >= 0)
+	{
+		PutNumber(atTheWall, kindAt, 0);
 	}
 
 	make(&file, atTheWall, size);
@@ -3881,20 +3895,21 @@ static void TestNamesStayInTheirChunks()
 		Parent_File = 0;
 	}
 
-	struct NameRow { MakesChunk make; int flagsAt; char const * what; };
+	// placeAt, places and kindAt: see AcceptedWithNoZeroAnywhere (added 2026-11-14)
+	struct NameRow { MakesChunk make; int flagsAt; char const * what; int placeAt = -1; int places = 1; int kindAt = -1; };
 	NameRow const rows[] =
 	{
-		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused" },
+		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused", 0 },
 		{ MakeChunk<AVP_Generator_Extra_Name_Chunk>,              -1, "a generator's other name" },
-		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name" },
-		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name" },
+		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name", 0 },
+		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name", 40, 1, 0 },
 		{ MakeChunk<AVP_Path_Chunk>,                              -1, "a path's name" },
-		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name" },
+		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name", 0 },
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,      -1, "an animation sequence's name" },
 		{ MakeChunk<External_Shape_BMPs_Store_Chunk>,             -1, "an outside shape's list of bitmaps" },
 		{ MakeChunk<Bitmap_MD5_Chunk>,                            -1, "a bitmap's check sum names" },
 		{ MakeChunk<Fragment_Type_Data_Chunk>,                    -1, "a fragment type's name" },
-		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name" },
+		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name", 8 },
 		{ MakeChunk<Fragment_Type_Sound_Chunk>,                   -1, "a fragment sound's name" },
 		{ MakeChunk<Object_Track_Sound_Chunk>,                    -1, "a track sound's name" },
 		{ MakeChunk<Environment_TLT_Chunk>,                       28, "a lighting table's outside file" },
@@ -3905,7 +3920,7 @@ static void TestNamesStayInTheirChunks()
 		{ MakeChunk<Shape_External_Object_Name_Chunk>,            -1, "an outside shape's object name" },
 		{ MakeChunk<Shape_Name_Chunk>,                            -1, "a shape's name" },
 		{ MakeChunk<Shape_Fragment_Type_Chunk>,                   -1, "a shape's fragment type" },
-		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name" },
+		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name", 0 },
 		{ MakeChunk<Sound_Object_Extra_Name_Chunk>,               -1, "a sound's other name" },
 		{ MakeChunk<Indexed_Sound_Chunk>,                         -1, "an indexed sound's file name" },
 		{ MakeChunk<BMP_Enums_Chunk>,                             -1, "a list of enums' type name" },
@@ -3916,13 +3931,13 @@ static void TestNamesStayInTheirChunks()
 		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>,  -1, "an alternate shape set's name" },
 		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,        -1, "a shape set collection's name" },
 		{ MakeChunk<RIF_Name_Chunk>,                              -1, "a level's name" },
-		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name" },
+		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name", 0, 3 },
 		{ MakeChunk<Dummy_Object_Text_Chunk>,                     -1, "a dummy object's text" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
 	{
-		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt), rows[i].what);
+		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt, rows[i].placeAt, rows[i].places, rows[i].kindAt), rows[i].what);
 	}
 
 	// A list of bitmap names: how many, then four numbers and the name's place in the list, then the name
