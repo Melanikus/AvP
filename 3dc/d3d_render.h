@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (see d3d_render.cpp)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   each light on the list carries a lamp's own aim, so other marines' lamps can point their own way
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -78,6 +80,10 @@ inline bool LightOnListIsDark(const float *light)
 {
 	return light[4] <= 0.0f && light[5] <= 0.0f && light[6] <= 0.0f;
 }
+
+// The level editor's Filled polyline switch: 1 draws each solid polygon's outline over it, 0 (the game's own way) draws each polygon
+// once. Only the editor sets it.
+extern int DrawFilledOutlines;
 
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();

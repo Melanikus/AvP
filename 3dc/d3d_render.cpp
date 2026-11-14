@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
+//   game always has it, changes nothing
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
 //   away (#176, particle_depth.h)
@@ -185,6 +188,15 @@ VECTORCH MeshWorldVertex[256];
 uint32_t MeshVertexColour[256];
 
 int WireFrameMode;
+
+// The level editor's Filled polyline switch (AVP_OpenInteng's View menu). At 0, the game's own way, each polygon is drawn once. At 1,
+// each solid polygon's outline is drawn over it as well (DrawOutlinesOverTheSolids), so the person making a level sees every polygon's
+// edges on the filled level. Only the editor sets it: the game never does, and nothing saves it or reads it from a file, the console or
+// another player.
+int DrawFilledOutlines = 0;
+
+// The outlines' one colour, as the card takes it (alpha, red, green, blue): white
+static DWORD const kFilledOutlineColour = 0xFFFFFFFF;
 
 uint32_t FMVParticleColour;
 
@@ -622,6 +634,7 @@ bool ToyShadows_ShoulderLampIsChosen();
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
+static void DrawOutlinesOverTheSolids();
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
@@ -748,6 +761,14 @@ static bool ExecuteBuffer()
 		// draw our main list (level geometry, player weapon etc)
 		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
 		}
+	}
+
+	// The level editor's Filled polyline: each solid polygon's outline over it, for every drawing of the list, so a frame that fills its
+	// list early still gets them all. The walls from the fixed buffer stand aside on such a frame (static_scene.cpp), so every wall is
+	// in this list.
+	if (DrawFilledOutlines && mainList->GetSize())
+	{
+		DrawOutlinesOverTheSolids();
 	}
 
 	if (wallsAreDue)
@@ -5700,6 +5721,60 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 	DWORD asBits;
 	memcpy(&asBits, &value, sizeof(asBits));
 	device->SetRenderState(state, asBits);
+}
+
+// The level editor's Filled polyline (DrawFilledOutlines): each solid polygon's outline, drawn over it in kFilledOutlineColour. Added
+// 2026-11-14 by Melanikus for the AvP port.
+// - It draws the list's solid polygons a second time, through the same sums, as the surface pictures do (RenderList::DrawOpaqueAgain),
+//   so each line lands exactly on its own polygon's edge. The card draws them as lines (its wireframe fill), in one colour with no
+//   texture and no light: no pixel shader, and the colour straight from the card's texture factor, as Hudson's ribbon takes its own
+//   colour (DrawHudsonPlayRibbon).
+// - A line is pulled a little nearer than its polygon, as the normal lines are, so the two don't fight over the same depth. A nearer
+//   wall still hides it, and it writes no depth of its own.
+// - See-through polygons get no outline: DrawOpaqueAgain draws only the solid ones. On a frame without shadows, the list draws its
+//   solid and see-through polygons together, so an outline can show over glass that doesn't write depth. It's the editor's view only,
+//   so that's left as it is.
+// - Everything it changes on the card is put back at the end (a state block, as Hudson's ribbon does), so the game's own record of the
+//   card's settings stays true.
+static void DrawOutlinesOverTheSolids()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	device->SetPixelShader(NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, kFilledOutlineColour);
+
+	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00001f);
+
+	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false);
+
+	asItWas->Apply();
+	asItWas->Release();
 }
 
 static inline void ToyPutScreenCorner(D3DLVERTEX &vertex, float x, float y, float u, float v)
