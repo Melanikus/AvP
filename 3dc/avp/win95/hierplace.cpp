@@ -5,6 +5,8 @@
 //   a placed hierarchy's name and lists are checked against the size of their chunk before they're read
 //   a placed hierarchy checks what kind of strategy it holds
 //   a placed hierarchy's name is copied by the length measured from the chunk, and the way of making one in code, which nothing used, is gone
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a placed hierarchy with no data chunk refuses the level
 #include "hierplace.hpp"
 #include "strategy_chunk.hpp"
 
@@ -23,6 +25,14 @@ CHUNK_WITH_CHILDREN_LOADER("PLACHIER",Placed_Hierarchy_Chunk)
 // they'd be used as a list of pointers, straight from the file. So any other kind refuses the level.
 void Placed_Hierarchy_Chunk::post_input_processing()
 {
+	// A placed hierarchy's data chunk (PLACHIDT) says which model it is, where it stands and its name, and the game reads it as soon as
+	// it sets the level up (setup_placed_hierarchies in projload.cpp, add_placed_hierarchy in object_setup.cpp). So a placed hierarchy
+	// without one refuses the level. All 3 in the game's own levels have exactly one. Added 2026-11-14 by Melanikus for the AvP port.
+	if (!get_data_chunk())
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	Chunk * const strategy = lookup_single_child ("AVPSTRAT");
 
 	if (strategy && !strategy->r_u_miscellaneous())

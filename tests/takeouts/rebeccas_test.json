@@ -654,6 +654,16 @@
 		{"name":"WEIGHTS: a negative weight is let through","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\t\tif (weight[i] < 0 || weight[i] > (1 << 24))\n","to":"\t\tif (weight[i] > (1 << 24))\n"}]},
 		{"name":"WEIGHTS: a weight past 2^24 is let through","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\t\tif (weight[i] < 0 || weight[i] > (1 << 24))\n","to":"\t\tif (weight[i] < 0)\n"}]},
 		{"name":"WEIGHTS: the largest weight is one too small","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\t\tif (weight[i] < 0 || weight[i] > (1 << 24))\n","to":"\t\tif (weight[i] < 0 || weight[i] > (1 << 24) - 1)\n"}]},
-		{"name":"WEIGHTS: the last weight isn't looked at","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tint const * const weight = &weights->PulseMarine_Wt;\n\n\tfor (int i = 0; i < 15; i++)\n","to":"\tint const * const weight = &weights->PulseMarine_Wt;\n\n\tfor (int i = 0; i < 14; i++)\n"}]}
+		{"name":"WEIGHTS: the last weight isn't looked at","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tint const * const weight = &weights->PulseMarine_Wt;\n\n\tfor (int i = 0; i < 15; i++)\n","to":"\tint const * const weight = &weights->PulseMarine_Wt;\n\n\tfor (int i = 0; i < 14; i++)\n"}]},
+		{
+			"name": "PLACED DATA: a placed hierarchy with no data chunk is accepted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "if (!get_data_chunk())",
+					"to": "if (!get_data_chunk() && Parent_File->error_code)"
+				}
+			]
+		}
 	]
 }

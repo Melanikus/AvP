@@ -2294,6 +2294,34 @@ static bool ConstructedAtTheWall(char const * bytes, size_t size, int kind)
 	return accepted;
 }
 
+// A placed hierarchy's data chunk that's fine: a name of 3 letters in 4 bytes, then 40 bytes of numbers, all zero, and a count of 0
+// extra numbers. Gives back where the next chunk goes.
+static char * PutGoodPlacedData(char * where)
+{
+	size_t const dataBytes = 4 + (4 + 12 + 16 + 8) + 4;
+	char * const data = PutChunk(where, "PLACHIDT", dataBytes);
+
+	memcpy(data, "abc", 3);
+
+	return data + dataBytes;
+}
+
+// A placed hierarchy holding the chunks from start up to end, and whether the level would be accepted
+static bool PlacedHierarchyAccepted(char const * start, char const * end)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Placed_Hierarchy_Chunk> const made(new Placed_Hierarchy_Chunk(&file, start, (size_t)(end - start)));
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
 static void TestPlacedHierarchies()
 {
 	puts("33. placed hierarchies, and Rainbow 6 generators");
@@ -2448,6 +2476,14 @@ static void TestPlacedHierarchies()
 
 		Check(ConstructedAtTheWall(bytes, generatorRows[i].size, 2) == generatorRows[i].accepted, generatorRows[i].what);
 	}
+
+	// A placed hierarchy has to hold its data chunk: the game reads it as soon as it sets the level up, for which model it is, where it
+	// stands and its name. One without it refuses the level, whatever else it holds. (Added 2026-11-14 by Melanikus for the AvP port.)
+	alignas(int) static char placed[256];
+
+	Check(PlacedHierarchyAccepted(placed, PutGoodPlacedData(placed)), "a placed hierarchy with its data chunk is accepted");
+	Check(!PlacedHierarchyAccepted(placed, placed), "a placed hierarchy with nothing in it is refused");
+	Check(!PlacedHierarchyAccepted(placed, PutChunk(placed, "NOTADATA", 4) + 4), "and so is one holding only a chunk of another kind, with no data chunk");
 }
 
 // 34. A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape. So a module's points have to
@@ -3400,24 +3436,15 @@ static bool FramePlacesAccepted(int const * places, int frames)
 	return accepted;
 }
 
-// A placed hierarchy holding a strategy of this kind, with every number in it zero.
+// A placed hierarchy holding a strategy of this kind, with every number in it zero. It holds its data chunk first, as it has to, so the
+// strategy is all that's being tried.
 static bool PlacedStrategyAccepted(int kind)
 {
 	size_t const strategyBytes = StrategySizeOfKind(kind);
-	char * data = PutChunk(wholeShape, "AVPSTRAT", StrategyNumbersBytes + strategyBytes);
+	char * data = PutChunk(PutGoodPlacedData(wholeShape), "AVPSTRAT", StrategyNumbersBytes + strategyBytes);
 	memcpy(data + StrategyNumbersBytes, &kind, sizeof(kind));
 
-	File_Chunk file;
-	Parent_File = &file;
-
-	std::unique_ptr<Placed_Hierarchy_Chunk> const made(new Placed_Hierarchy_Chunk(&file, wholeShape, ChunkHeaderBytes + StrategyNumbersBytes + strategyBytes));
-	file.post_input_processing();
-
-	bool const accepted = (file.error_code == 0);
-
-	Parent_File = 0;
-
-	return accepted;
+	return PlacedHierarchyAccepted(wholeShape, data + StrategyNumbersBytes + strategyBytes);
 }
 
 // A strategy of this kind, with one number set, and every other number zero.
