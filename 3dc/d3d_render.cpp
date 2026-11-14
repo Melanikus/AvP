@@ -348,11 +348,18 @@ static float MenuWidthShare(void)
 	return MenuShape_WidthShare(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, MenuBackdropFullWidth);
 }
 
+// True only while R_DrawScreenToChain fills a swap chain of its own, such as the map editor's panels. That screen is laid out in its own
+// pixels whatever the game's menus are doing, so WPos2DC and HPos2DC below read each place as one of its pixels, as they do while a level
+// is running. Without it, outside a running level, they read a place as a point on the menus' 640 by 480 grid stretched over the whole
+// chain: on one 1024 wide, everything the editor's panels drew came out 1.6 times as far from the corner as it was placed, so a click on
+// the right of its first menu's title opened the second (Melanikus, 2026-11-14). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+static bool drawingToChain = false;
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
-	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
+	if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
 		return ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();
 	}
 	else {
@@ -364,7 +371,7 @@ inline float WPos2DC(int32_t pos)
 inline float HPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
-	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
+	if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
 		return (float(pos / (float)480) * 2) - 1;
 	}
 	else {
@@ -3254,8 +3261,9 @@ void ThisFramesRenderingHasFinished()
 // - Everything it changes is put back before it gives back, on every path, whether the drawing started or not: the render target, the
 //   depth buffer (the chain is the editor's whole window, larger than the view's, and Direct3D 9 draws into nothing larger than the depth
 //   buffer bound), the viewport, ScreenDescriptorBlock and matOrtho. The surfaces it asked the device for are let go of after.
-// - The screen's places are in pixels of width by height, while the game is in a level (GetAvPMenuState is MENUSSTATE_STARTGAME), as
-//   WPos2DC and HPos2DC count them then, and the editor always is. In the game's menus those count a 640 by 480 grid instead.
+// - The screen's places are in pixels of width by height, always: while fill runs, WPos2DC and HPos2DC count pixels of the chain
+//   (drawingToChain), as they do while the game is in a level. (Until 2026-11-14 this said the editor was always in a level as the
+//   game counts it, MENUSSTATE_STARTGAME. It never is, so they counted the menus' 640 by 480 grid, and the panels came out stretched.)
 // It gives back true when the chain was presented. A lost device makes it false, and the editor's keeper sees that on its next frame.
 bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context)
 {
@@ -3317,7 +3325,9 @@ bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t he
 			{
 				orthoList->Reset();
 				orthoVBOffset = 0;
+				drawingToChain = true;
 				fill(context);
+				drawingToChain = false;
 			}
 
 			if (vertices)
