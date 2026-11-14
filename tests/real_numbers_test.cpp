@@ -13,6 +13,7 @@
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It needs no game files.
 
 #include "real_numbers.h"
+#include "console_value.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -145,6 +146,21 @@ static void TestDoubles()
 	Check(!IsRealNumberFrom(endless, 0.0, largest), "and nor is endless, even up to the largest double");
 }
 
+// 3. The console's decimal (console_value.h), which uses IsNaN, here built the way the game ships. tests/debug_commands_test.cpp tries the
+// same with the ordinary rules. (Added 2026-11-14 by Melanikus for the AvP port.)
+static void TestTheConsolesDecimal()
+{
+	puts("3. a decimal typed at the console, built the way the game ships");
+
+	int value = 12345;
+	Check(!ConsoleValue_FromDecimal(DoubleOf(0x7FF8000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 12345, "not a number is refused, and the value stays as it was");
+	Check(!ConsoleValue_FromDecimal(DoubleOf(0xFFF8000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 12345, "and so is one with its sign bit set");
+	Check(!ConsoleValue_FromDecimal(DoubleOf(0x7FF0000000000001ull), 1.0, 0, 255, &value) && value == 12345, "and a signalling one");
+	Check(ConsoleValue_FromDecimal(DoubleOf(0x7FF0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 65536 * 4, "an endless number is the largest value");
+	Check(ConsoleValue_FromDecimal(DoubleOf(0xFFF0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 655, "and an endlessly small one the smallest");
+	Check(ConsoleValue_FromDecimal(DoubleOf(0x3FE0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 32768, "0.5 is half speed");
+}
+
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -152,6 +168,7 @@ int main()
 	TestEveryKind();
 	TestFloats();
 	TestDoubles();
+	TestTheConsolesDecimal();
 
 	if (checksFailed)
 	{

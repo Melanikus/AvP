@@ -103,6 +103,16 @@
 					"to": "inline bool IsRealNumberFrom(double value, double lowest, double highest)\n{\n\treturn IsRealNumber(value) && value <= highest;"
 				}
 			]
+		},
+		{
+			"name": "CONSOLE: a typed decimal that isn't a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "\tif (IsNaN(typed))\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
