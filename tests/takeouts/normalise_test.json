@@ -59,7 +59,7 @@
 			"changes": [
 				{
 					"file": "3dc/win95/normalise.h",
-					"from": "return length > 0.0f && length <= FLT_MAX;",
+					"from": "return IsRealNumber(length) && length > 0.0f;",
 					"to": "return length > 0.0f;"
 				}
 			]
