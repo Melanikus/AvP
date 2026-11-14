@@ -47,7 +47,12 @@ bool D3D_EnumerateAdapters(IDirect3D9 *d3d9, const D3DFORMAT *displayFormats, ui
 			{
 				D3DDISPLAYMODE mode;
 
-				d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode);
+				// A mode Direct3D couldn't give is skipped: what's in mode then is whatever was there before, not a mode
+				// (Modified 2026-11-14 by Melanikus (Dietrich), D3D-ENUM-1 B4: the answer used to be ignored.)
+				if (FAILED(d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode)))
+				{
+					continue;
+				}
 
 				// Low-resolution modes are left out
 				if (mode.Width < 640 || mode.Height < 480)

@@ -42,8 +42,8 @@ struct D3DEnumeration
 };
 
 // Reads the adapters Direct3D reports into drivers, up to MAX_D3D_DRIVERS, and how many it kept into *numDrivers. For each, it reads
-// the modes of every format in displayFormats (numDisplayFormats of them), leaves out those below 640 by 480 and the same mode at
-// another refresh rate, and lists each mode's format once. Gives back false when Direct3D couldn't describe an adapter, with
+// the modes of every format in displayFormats (numDisplayFormats of them), leaves out those below 640 by 480, the same mode at
+// another refresh rate, and any mode Direct3D fails to give, and lists each mode's format once. Gives back false when Direct3D couldn't describe an adapter, with
 // report->failure saying why: the game can't go on then.
 bool D3D_EnumerateAdapters(IDirect3D9 *d3d9, const D3DFORMAT *displayFormats, uint32_t numDisplayFormats, D3DDRIVERINFO (&drivers)[MAX_D3D_DRIVERS],
 	uint32_t *numDrivers, D3DEnumeration *report);

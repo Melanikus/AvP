@@ -75,6 +75,16 @@
 			]
 		},
 		{
+			"name": "a mode Direct3D failed to give is kept, rubbish and all",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (FAILED(d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode)))",
+					"to": "if (FAILED(d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode)) && false)"
+				}
+			]
+		},
+		{
 			"name": "low-resolution modes are kept",
 			"changes": [
 				{

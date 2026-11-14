@@ -35,6 +35,7 @@ public:
 	bool everyModeItsOwnFormat = false;
 	UINT formatsPerAdapter = 0;     // when set, mode i's format is one of this many, different for each adapter
 	UINT failIdentifierAt = ~0u;
+	UINT failModeAt = ~0u;          // this mode of every format fails, leaving rubbish where the mode would be
 	UINT highestAsked = 0;
 	bool askedAtAll = false;
 
@@ -69,6 +70,14 @@ public:
 	STDMETHOD(EnumAdapterModes)(UINT adapter, D3DFORMAT format, UINT mode, D3DDISPLAYMODE *out)
 	{
 		Asked(adapter);
+
+		// A failed call, as a driver can make one: what's left in the mode is rubbish, and large enough to pass the size filter
+		if (mode == failModeAt)
+		{
+			memset(out, 0xCD, sizeof(*out));
+			return E_FAIL;
+		}
+
 		out->Width = 640 + mode;
 		out->Height = 480;
 		out->RefreshRate = 60;
@@ -314,6 +323,23 @@ static void TestFailure()
 	d3d9.failIdentifierAt = 2;
 	Check(!Enumerate(d3d9, 1, &numDrivers, &report) && report.failure == E_FAIL && report.adaptersFound == 4 && d3d9.highestAsked == 2,
 		"the reading stops at the adapter that failed, and says why, so the game stops as it did before");
+
+	// A mode Direct3D fails to give (D3D-ENUM-1 B4)
+	Clear();
+	d3d9 = FakeD3D();
+	d3d9.modesPerFormat = 10;
+	d3d9.failModeAt = 3;
+
+	bool noRubbish = true;
+
+	Check(Enumerate(d3d9, 1, &numDrivers, &report) && list.drivers[0].NumModes == 9, "a mode Direct3D fails to give is skipped, and the other 9 are kept");
+
+	for (uint32_t i = 0; i < list.drivers[0].NumModes; i++)
+	{
+		noRubbish = noRubbish && list.drivers[0].DisplayMode[i].Width < 0xCDCDCDCDu && list.drivers[0].DisplayMode[i].Format == D3DFMT_X8R8G8B8;
+	}
+
+	Check(noRubbish && list.drivers[0].NumFormats == 1 && GuardIsWhole(), "and nothing of what the failed call left behind is on the list");
 }
 
 int main()
