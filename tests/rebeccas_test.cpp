@@ -5171,6 +5171,106 @@ static void TestGeneratorWeights()
 	}
 }
 
+// 50. A module's master and slave chunks. A slave module shares its master's room in the AI, and the game gives it a place there only
+// through its master. A module left with no place would still be linked to by the modules beside it, so a slave has to name a module that
+// is a master and isn't a slave itself, or the level is refused. projload.cpp's own check that no such place is used is in
+// ai_module_places_test. (Added 2026-11-14 by Melanikus for the AvP port.)
+
+// One module of a test level: its object number, whether it has module data at all, and in it a master chunk, a slave chunk naming
+// another module by its number (or -1 for none), or both
+struct ModuleRole { int number; bool hasModuleData; bool master; int slaveOf; };
+
+// Gives a level these modules, all of one shape that fits its box (as in section 34), and says whether the level would be accepted
+static bool ModulesAccepted(ModuleRole const * roles, size_t howMany)
+{
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const shapeNumber = 7;
+	int const firstPointX = 0;
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const shapeBytesUsed = BuildShapeData(wholeShape, false, 4, triangle);
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &firstPointX, sizeof(int));
+	std::unique_ptr<Shape_Chunk> const shape(new Shape_Chunk(&file, wholeShape, shapeBytesUsed));
+
+	std::unique_ptr<Object_Chunk> modules[4];
+
+	for (size_t i = 0; i < howMany && i < sizeof(modules) / sizeof(modules[0]); i++)
+	{
+		ModuleRole const &role = roles[i];
+		size_t used = BuildObject(role.number, shapeNumber);
+
+		if (role.hasModuleData)
+		{
+			size_t const inside = (role.master ? ChunkHeaderBytes : 0) + (role.slaveOf >= 0 ? ChunkHeaderBytes + sizeof(int) : 0);
+			char * at = PutChunk(objectBytes + used, "MODULEDT", inside);
+
+			if (role.master)
+			{
+				at = PutChunk(at, "AIMODMAS", 0);
+			}
+
+			if (role.slaveOf >= 0)
+			{
+				at = PutChunk(at, "AIMODSLA", sizeof(int));
+				memcpy(at, &role.slaveOf, sizeof(int));
+			}
+
+			used += ChunkHeaderBytes + inside;
+		}
+
+		modules[i].reset(new Object_Chunk(&file, objectBytes, used));
+	}
+
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++)
+	{
+		modules[i].reset();
+	}
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestModuleMasters()
+{
+	puts("50. a module's master and slaves");
+
+	// A master, and two slaves that name it. The game's own levels are all like this.
+	{
+		ModuleRole const roles[] = { { 5, true, true, -1 }, { 6, true, false, 5 }, { 8, true, false, 5 } };
+		Check(ModulesAccepted(roles, 3), "a master and the slaves that name it are accepted");
+	}
+
+	// Modules that are neither, and a master with no slaves, are as they always were
+	{
+		ModuleRole const roles[] = { { 5, true, false, -1 }, { 6, false, false, -1 }, { 8, true, true, -1 } };
+		Check(ModulesAccepted(roles, 3), "a module that is neither, one with no module data, and a master with no slaves are accepted");
+	}
+
+	struct BadRow { ModuleRole roles[3]; size_t howMany; char const * what; };
+	BadRow const rows[] =
+	{
+		{ { { 5, true, true, -1 }, { 6, true, false, 9 } }, 2, "a slave naming no object at all is refused" },
+		{ { { 5, false, false, -1 }, { 6, true, false, 5 } }, 2, "a slave naming an object that isn't a module is refused" },
+		{ { { 5, true, false, -1 }, { 6, true, false, 5 } }, 2, "a slave naming a module that isn't a master is refused" },
+		{ { { 7, true, true, -1 }, { 5, true, true, 7 }, { 6, true, false, 5 } }, 3, "a slave naming a master that is a slave itself is refused" },
+		{ { { 6, true, true, 6 } }, 1, "a module that is its own master and its own slave is refused" },
+		{ { { 6, true, false, 6 } }, 1, "a slave naming itself is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		Check(!ModulesAccepted(rows[i].roles, rows[i].howMany), rows[i].what);
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5219,6 +5319,7 @@ int main()
 	TestLightScale();
 	TestEcho();
 	TestGeneratorWeights();
+	TestModuleMasters();
 
 	if (checksFailed)
 	{

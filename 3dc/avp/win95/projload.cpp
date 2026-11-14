@@ -30,6 +30,8 @@
 //   a model's name is copied with the 0 that ends it written on a line of its own
 //   a set of random textures with no name is passed over (2026-11-14)
 //   a sound's name and the level's name from the level file go to the log only as safe copies (2026-11-14)
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   no number from the AI module setup is used as a place in its arrays unless it's a real place (IsARealAIModule)
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -125,6 +127,16 @@ static char *light_set_name = "NORMALLT";
 
 static Object_Chunk **o_chunk_array;
 static int *aimodule_indeces; //array parallel to o_chunk_array
+
+// Is this number a real place in AIModuleArray? Place 0 is kept empty, so real places go from 1 up to the array's size. A module the
+// setup below gives no place keeps -1, so every number taken from aimodule_indeces is asked about here before it's used as a place in
+// AIModuleArray or in the list of ways in beside it. The reader already refuses a level that would leave a module at -1 (a slave whose
+// master isn't a master: AI_Module_Slave_Chunk, chunk_waypoint.cpp). This is so that no other way to -1 can ever reach those arrays.
+// Added 2026-11-14 by Melanikus for the AvP port.
+static bool IsARealAIModule(int index)
+{
+	return index >= 1 && index < AIModuleArraySize;
+}
 
 
 void setup_preplaced_decals(File_Chunk *fc, Environment_Data_Chunk *edc);
@@ -227,7 +239,9 @@ void setup_paths(RIFFHANDLE h)
 			Object_Chunk* path_object=h->fc->get_object_by_index(apc->Path[i].module_index);
 			if(!path_object)continue;
 			if(path_object->program_object_index==-1) continue;
-			AIMODULE* path_module=&AIModuleArray[aimodule_indeces[path_object->program_object_index]];				
+			int const path_ai_module=aimodule_indeces[path_object->program_object_index];
+			if(!IsARealAIModule(path_ai_module)) continue;
+			AIMODULE* path_module=&AIModuleArray[path_ai_module];
 			
 			//if this ai module is the same as the previous one in the path , ignore it
 			if(path->path_length)
@@ -306,6 +320,10 @@ int ConvertObjectIndexToPathIndex(int path_index,int object_index)
 		return -1; //object isn't a module
 	}
 	int aimodule_index=aimodule_indeces[module_index];
+	if(!IsARealAIModule(aimodule_index))
+	{
+		return -1; //module isn't in any AI module, so it isn't in the path
+	}
 
 	PATHHEADER* path=&PathArray[path_index];
 	
@@ -2476,6 +2494,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 			}
 
 			int this_ai_module_index=aimodule_indeces[i];
+			if(!IsARealAIModule(this_ai_module_index))continue;
 			AIMODULE* aim=&AIModuleArray[this_ai_module_index];
 
 			//build list of adjacent ai_modules
@@ -2491,7 +2510,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 					if (adjacent_module && adjacent_module->program_object_index!=-1)
 					{
 						int adj_ai_module=aimodule_indeces[adjacent_module->program_object_index];
-						if(adj_ai_module!=this_ai_module_index)
+						if(IsARealAIModule(adj_ai_module) && adj_ai_module!=this_ai_module_index)
 						{
 							//make sure not already in list
 							LIF<int> adjlif(&adjacent_aimodule_list);
@@ -2538,7 +2557,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 							if (adjacent_module && adjacent_module->program_object_index!=-1)
 							{
 								int adj_ai_module=aimodule_indeces[adjacent_module->program_object_index];
-								if(adj_ai_module!=this_ai_module_index)
+								if(IsARealAIModule(adj_ai_module) && adj_ai_module!=this_ai_module_index)
 								{
 									//make sure not already in list
 									LIF<int> adjlif(&adjacent_aimodule_list);
