@@ -3239,6 +3239,138 @@ void ThisFramesRenderingHasFinished()
 	LightBlockDeallocation();
 }
 
+// A screen of text and menu pictures drawn into another swap chain, between the game's own frames (R-DRAW-CHAIN-1, renderer.h). Added
+// 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+//
+// WHO CALLS IT: never the game. AVP_OpenInteng, the map editor, does: its panels are drawn with the game's own text and menu drawing
+// (Font_DrawText and the rest), as the owner's ruling for the editor says (R-INT-6), on a swap chain of their own over the editor's
+// window, beside the window the game draws its view into. Those drawing calls only add to the screen list (orthoList), which the game
+// draws at the end of its own frame, along with everything else in that frame. This draws that list alone, into the other chain.
+//
+// THE RULES:
+// - Only between the game's frames: with a frame open, or anything already on the screen list, it draws nothing and gives back false,
+//   so it never takes or wipes the game's own quads.
+// - width and height are 1 to 16384, the most the editor's window keeper makes a chain, or it draws nothing.
+// - Everything it changes is put back before it gives back, on every path, whether the drawing started or not: the render target, the
+//   depth buffer (the chain is the editor's whole window, larger than the view's, and Direct3D 9 draws into nothing larger than the depth
+//   buffer bound), the viewport, ScreenDescriptorBlock and matOrtho. The surfaces it asked the device for are let go of after.
+// - The screen's places are in pixels of width by height, while the game is in a level (GetAvPMenuState is MENUSSTATE_STARTGAME), as
+//   WPos2DC and HPos2DC count them then, and the editor always is. In the game's menus those count a 640 by 480 grid instead.
+// It gives back true when the chain was presented. A lost device makes it false, and the editor's keeper sees that on its next frame.
+bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context)
+{
+	uint32_t const mostSide = 16384;
+
+	// The renderer's own start makes the screen list and the effects (d3d_render.cpp's list setup, d3_func.cpp), so before it, or after its
+	// end, there's nothing to draw with
+	if (!chain || !fill || !d3d.lpD3DDevice || !d3d.orthoVB || !d3d.orthoIB || !d3d.effectSystem || !orthoList || frameIsOpen
+		|| orthoList->GetSize() != 0 || width < 1 || width > mostSide || height < 1 || height > mostSide)
+	{
+		return false;
+	}
+
+	// What's put back. From here on there's one way out, at the end, past the putting back.
+	IDirect3DSurface9 *gameTarget = 0;
+	IDirect3DSurface9 *gameDepth = 0;
+	IDirect3DSurface9 *chainBuffer = 0;
+	D3DVIEWPORT9 gameViewport;
+	SCREENDESCRIPTORBLOCK const gameScreen = ScreenDescriptorBlock;
+	D3DXMATRIX const gameOrtho = d3d.matOrtho;
+	bool presented = false;
+
+	bool const saved = SUCCEEDED(d3d.lpD3DDevice->GetViewport(&gameViewport)) && SUCCEEDED(d3d.lpD3DDevice->GetRenderTarget(0, &gameTarget));
+
+	// The depth buffer may be none at all: then there's nothing to put back, and nothing larger to worry about
+	if (saved && FAILED(d3d.lpD3DDevice->GetDepthStencilSurface(&gameDepth)))
+	{
+		gameDepth = 0;
+	}
+
+	if (saved && SUCCEEDED(chain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &chainBuffer)) && SUCCEEDED(d3d.lpD3DDevice->SetRenderTarget(0, chainBuffer))
+		&& SUCCEEDED(d3d.lpD3DDevice->SetDepthStencilSurface(0)))
+	{
+		D3DVIEWPORT9 const screen = { 0, 0, width, height, 0.0f, 1.0f };
+
+		// The whole screen block at the chain's size, as R_ChangeResolution sets it (d3_func.cpp), since the text and menu calls may read
+		// any of it. At the most, 16384 by 16384, the size fits in an int.
+		ScreenDescriptorBlock.SDB_Width = (int)width;
+		ScreenDescriptorBlock.SDB_Height = (int)height;
+		ScreenDescriptorBlock.SDB_Size = (int)(width * height);
+		ScreenDescriptorBlock.SDB_CentreX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_CentreY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ProjX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_ProjY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ClipLeft = 0;
+		ScreenDescriptorBlock.SDB_ClipRight = (int)width;
+		ScreenDescriptorBlock.SDB_ClipUp = 0;
+		ScreenDescriptorBlock.SDB_ClipDown = (int)height;
+
+		if (SUCCEEDED(d3d.lpD3DDevice->SetViewport(&screen)) && SUCCEEDED(d3d.lpD3DDevice->BeginScene()))
+		{
+			d3d.lpD3DDevice->Clear(0, NULL, D3DCLEAR_TARGET, background, 1.0f, 0);
+
+			// The screen list's buffers, as the game's frame locks them (LockExecuteBuffer), only for as long as fill() adds to them
+			bool const vertices = d3d.orthoVB->Lock((void **)&orthoVertex);
+			bool const indices = vertices && d3d.orthoIB->Lock(&orthoIndex);
+
+			if (vertices && indices)
+			{
+				orthoList->Reset();
+				orthoVBOffset = 0;
+				fill(context);
+			}
+
+			if (vertices)
+			{
+				d3d.orthoVB->Unlock();
+			}
+
+			if (indices)
+			{
+				d3d.orthoIB->Unlock();
+			}
+
+			if (vertices && indices && orthoList->GetSize())
+			{
+				d3d.effectSystem->SetActive(d3d.orthoEffect);
+				d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);
+				orthoList->Draw();
+			}
+
+			// The list is the game's again, empty, as its next frame expects
+			orthoList->Reset();
+			orthoVBOffset = 0;
+
+			d3d.lpD3DDevice->EndScene();
+			presented = SUCCEEDED(chain->Present(NULL, NULL, NULL, NULL, 0));
+		}
+	}
+
+	// Putting back, on every path
+	ScreenDescriptorBlock = gameScreen;
+	d3d.matOrtho = gameOrtho;
+
+	if (gameTarget)
+	{
+		d3d.lpD3DDevice->SetRenderTarget(0, gameTarget);
+		d3d.lpD3DDevice->SetDepthStencilSurface(gameDepth);
+		d3d.lpD3DDevice->SetViewport(&gameViewport);
+		gameTarget->Release();
+	}
+
+	if (gameDepth)
+	{
+		gameDepth->Release();
+	}
+
+	if (chainBuffer)
+	{
+		chainBuffer->Release();
+	}
+
+	return presented;
+}
+
 extern void D3D_DrawSliderBar(int x, int y, int alpha)
 {
 	VertexTag quadVertices[4];
