@@ -243,6 +243,26 @@
 					"to": ";"
 				}
 			]
+		},
+		{
+			"name": "the mode list holds only 100 again, too few for a screen of today",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.h",
+					"from": "#define MAX_D3D_DISPLAY_MODES 512",
+					"to": "#define MAX_D3D_DISPLAY_MODES 100"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the chosen adapter isn't stored before its modes and depth formats are asked about",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\td3d.CurrentDriver = defaultDevice;\n",
+					"to": "\n"
+				}
+			]
 		}
 	]
 }

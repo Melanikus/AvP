@@ -48,6 +48,9 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   with -dev -windowed, a test copy draws at the largest of the screen's modes that fits its half of the screen (window_slot.h),
 //   not at the settings' size, which stays as it is
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   the chosen video adapter is stored before the video mode and the depth formats are looked up on it, so they're asked of that
+//   adapter and not of adapter 0
 #include "d3_func.h"
 #include "hudson.h"
 #include "window_slot.h"
@@ -2312,6 +2315,11 @@ bool InitialiseDirect3D()
 
 	Con_PrintMessage("\t Using device: " + std::string(d3d.Driver[defaultDevice].AdapterInfo.Description) + " on display " + std::string(d3d.Driver[defaultDevice].AdapterInfo.DeviceName));
 
+	// store the index of the driver we want to use, before anything below asks about "the" adapter: the video mode's place is looked up
+	// on its list, and its depth formats are checked on it. (Modified 2026-11-14 by Melanikus (Apone) for the AvP port, D3D-ENUM-1: this
+	// was set only after those, so on a PC whose chosen adapter isn't adapter 0 they asked adapter 0.)
+	d3d.CurrentDriver = defaultDevice;
+
 	// chose an adapter format. take from desktop if windowed.
 	if (windowed)
 	{
@@ -2474,9 +2482,6 @@ bool InitialiseDirect3D()
 	}
 
 	d3dpp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
-
-	// store the index of the driver we want to use
-	d3d.CurrentDriver = defaultDevice;
 
 #if 0 // NVidia PerfHUD
 	UINT adapter_to_use;

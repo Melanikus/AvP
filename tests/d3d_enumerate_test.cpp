@@ -281,14 +281,16 @@ static void TestTooMany()
 	Clear();
 	d3d9.modesPerFormat = MAX_D3D_DISPLAY_MODES + 1;
 	Check(Enumerate(d3d9, 1, &numDrivers, &report) && list.drivers[0].NumModes == MAX_D3D_DISPLAY_MODES && report.modesLeftOut == 1,
-		"101 different modes: 100 kept, 1 left out and counted");
+		"one more mode than the list holds: all but 1 kept, 1 left out and counted");
 	Check(list.drivers[0].DisplayMode[MAX_D3D_DISPLAY_MODES - 1].Width == 640 + MAX_D3D_DISPLAY_MODES - 1 && list.drivers[0].NumFormats == 1 && GuardIsWhole(),
-		"the first 100 are the ones kept, the count of formats is whole, and nothing is written past");
+		"the first ones are the ones kept, the count of formats is whole, and nothing is written past");
 
+	// More modes than the list holds, spread over 3 formats (modified 2026-11-14 by Melanikus (Apone): this used to write 100 out)
 	Clear();
-	d3d9.modesPerFormat = 150;
-	Check(Enumerate(d3d9, kFormatCount, &numDrivers, &report) && list.drivers[0].NumModes == MAX_D3D_DISPLAY_MODES && report.modesLeftOut == 3 * 150 - 100
-		&& NamesAreWhole(1) && GuardIsWhole(), "150 modes in each of 3 formats, as a screen of today can have: 100 kept, the other 350 counted");
+	d3d9.modesPerFormat = MAX_D3D_DISPLAY_MODES / 2 + 50;
+	Check(Enumerate(d3d9, kFormatCount, &numDrivers, &report) && list.drivers[0].NumModes == MAX_D3D_DISPLAY_MODES
+		&& report.modesLeftOut == kFormatCount * (MAX_D3D_DISPLAY_MODES / 2 + 50) - MAX_D3D_DISPLAY_MODES
+		&& NamesAreWhole(1) && GuardIsWhole(), "more modes than the list holds, over 3 formats: the list is full, the rest counted, nothing written past");
 
 	// One more format than the list holds, so a write past it would land on the adapter's name, right behind the formats
 	Clear();
@@ -313,6 +315,35 @@ static void TestTooMany()
 	d3d9.adapters = 0xFFFFFFFFu;
 	Check(Enumerate(d3d9, 1, &numDrivers, &report) && numDrivers == MAX_D3D_DRIVERS && d3d9.highestAsked == MAX_D3D_DRIVERS - 1 && GuardIsWhole(),
 		"and the largest count an adapter could say is kept to 5 too");
+}
+
+// A screen of today: 150 different modes in each of 3 formats, 450 in all, which is what the list has to hold. Every one is kept, so the
+// largest of each format, often the player's own screen size, is never the one left out. The numbers are a screen's, not the list's, so
+// this fails if the list is made smaller than a screen needs. (Added 2026-11-14 by Melanikus (Apone) for the AvP port, D3D-ENUM-1.)
+static void TestATodaysScreen()
+{
+	puts("A screen of today:");
+
+	FakeD3D d3d9;
+	uint32_t numDrivers = 0;
+	D3DEnumeration report;
+	UINT const each = 150;
+
+	Clear();
+	d3d9.modesPerFormat = each;
+	Check(Enumerate(d3d9, kFormatCount, &numDrivers, &report) && list.drivers[0].NumModes == kFormatCount * each && report.modesLeftOut == 0,
+		"150 modes in each of 3 formats: every one is kept");
+
+	bool largestKept = true;
+
+	for (UINT f = 0; f < kFormatCount; f++)
+	{
+		D3DDISPLAYMODE const &last = list.drivers[0].DisplayMode[(f + 1) * each - 1];
+		largestKept = largestKept && last.Width == 640 + each - 1 && last.Format == kFormats[f];
+	}
+
+	Check(largestKept, "the largest mode of each format is in the list");
+	Check(GuardIsWhole(), "and nothing is written past the list");
 }
 
 static void TestEachAdapterItsOwn()
@@ -399,7 +430,7 @@ static void TestVideoModePlace()
 
 	Check(D3D_VideoModeIsListed(0, 3) && D3D_VideoModeIsListed(2, 3) && !D3D_VideoModeIsListed(3, 3) && !D3D_VideoModeIsListed(-1, 3)
 		&& !D3D_VideoModeIsListed(INT32_MIN, MAX_D3D_DISPLAY_MODES), "only 0 to count - 1 are on the list");
-	Check(D3D_PreviousVideoMode(0, MAX_D3D_DISPLAY_MODES) == MAX_D3D_DISPLAY_MODES - 1, "a full list's end is its 100th mode");
+	Check(D3D_PreviousVideoMode(0, MAX_D3D_DISPLAY_MODES) == MAX_D3D_DISPLAY_MODES - 1, "a full list's end is its last mode");
 
 	// Read, not run: the game's own functions read the list only at a place on it
 	std::string const device = ReadSource("win32/d3_func.cpp");
@@ -419,6 +450,24 @@ static void TestVideoModePlace()
 		"SOURCE: Next and Previous move the place with these functions");
 }
 
+// Read, not run: the chosen adapter is stored before the video mode's place is looked up on its list and before its depth formats are
+// checked, so on a PC whose chosen adapter isn't adapter 0 they're asked of the chosen one. (Added 2026-11-14 by Melanikus (Apone) for the
+// AvP port, D3D-ENUM-1.)
+static void TestChosenAdapterFirst()
+{
+	puts("The chosen adapter, first:");
+
+	std::string const device = ReadSource("win32/d3_func.cpp");
+	std::string::size_type const stored = device.find("d3d.CurrentDriver = defaultDevice;");
+	std::string::size_type const search = device.find("for (uint32_t i = 0; i < d3d.Driver[d3d.CurrentDriver].NumModes; i++)");
+	std::string::size_type const depth = device.find("d3d.lpD3D->CheckDeviceFormat( d3d.CurrentDriver,");
+
+	Check(stored != std::string::npos && search != std::string::npos && depth != std::string::npos && stored < search && stored < depth,
+		"SOURCE: the chosen adapter is stored before its mode list is searched and its depth formats are checked");
+	Check(stored == std::string::npos || device.find("d3d.CurrentDriver = defaultDevice;", stored + 1) == std::string::npos,
+		"SOURCE: and it's stored once, so nothing sets it back later");
+}
+
 int main()
 {
 	// Each line is written as it's printed, so none is lost if a check after it brings the program down
@@ -427,9 +476,11 @@ int main()
 	TestAsBefore();
 	TestWhatsLeftOut();
 	TestTooMany();
+	TestATodaysScreen();
 	TestEachAdapterItsOwn();
 	TestFailure();
 	TestVideoModePlace();
+	TestChosenAdapterFirst();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;

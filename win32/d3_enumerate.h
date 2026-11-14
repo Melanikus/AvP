@@ -18,8 +18,10 @@
 // The most video adapters the game keeps
 #define MAX_D3D_DRIVERS 5
 
-// The most display modes and formats it keeps for each one
-#define MAX_D3D_DISPLAY_MODES 100
+// The most display modes and formats it keeps for each one. A screen of today lists far more than 100 modes, and the modes come in
+// growing sizes, so with room for only 100 the largest ones, often the player's own screen size, were the ones left out. 512 modes
+// is 8 KB for each adapter. (Modified 2026-11-14 by Melanikus (Apone) for the AvP port, D3D-ENUM-1: it was 100.)
+#define MAX_D3D_DISPLAY_MODES 512
 #define MAX_D3D_FORMATS 20
 
 // What the game knows about one video adapter
