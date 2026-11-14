@@ -966,7 +966,8 @@ Shape_Polygon_Normal_Chunk::Shape_Polygon_Normal_Chunk(Anim_Shape_Frame_Chunk * 
 	}
 
 	// An animation frame's polygon normals have to be sensible numbers by the same rule as a shape's own (normals_are_valid, above),
-	// as the game makes whole numbers of them too. (Added 2026-11-14 by Melanikus for the AvP port.)
+	// as the game makes whole numbers of them too. (Added 2026-11-14 by Melanikus for the AvP port.) Here the list is held to its own
+	// count; that the count is the shape's own number of polygons is checked once the whole file is read, in animation_matches_shape.
 	if (!normals_are_valid (p_normal_list, num_polys, num_polys))
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
