@@ -645,6 +645,7 @@
 		{"name":"TURNS: a particle generator's turn isn't looked at","changes":[{"file":"3dc/avp/win95/avp_chunk.cpp","from":"\tCheckTurn(orientation);\n","to":""}]},
 		{"name":"TURNS: a dummy object's turn isn't looked at","changes":[{"file":"3dc/win95/chunk_dummy.cpp","from":"\tCheckTurn(orientation);\n","to":""}]},
 		{"name":"TURNS: a hierarchy frame's turn isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\t\t\tCheckTurn(seq->frames[j].orientation);\n","to":""}]},
-		{"name":"TURNS: an animation frame's turn isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\tCheckPlace(transform);\n\tCheckTurn(orientation);\n","to":"\tCheckPlace(transform);\n"}]}
+		{"name":"TURNS: an animation frame's turn isn't looked at","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"\tCheckPlace(transform);\n\tCheckTurn(orientation);\n","to":"\tCheckPlace(transform);\n"}]},
+		{"name":"NAMES: a set of random textures with no name is let through","changes":[{"file":"3dc/win95/environment_chunk.cpp","from":"\tif (!name)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n","to":""}]}
 	]
 }

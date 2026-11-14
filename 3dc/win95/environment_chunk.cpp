@@ -11,6 +11,7 @@
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a level's scale has to be from 0.5 to 1
 //   a level's amount of echo has to be a real number
+//   a set of random textures has to have a name
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -280,6 +281,13 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 {
 	char const * const start = data;
 	CHUNK_EXTRACT_STRING(name,start,size);
+
+	// A set of random textures is found by its name, the kind of NPC it's for, so one with no name is refused. Every one in the game's own
+	// levels has a name. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!name)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 	
 	int type;
 	int const num_types=ReadListCount(start,data,size,sizeof(int));

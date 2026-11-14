@@ -2920,7 +2920,7 @@ static void TestCountedLists()
 		{ MakeChunk<Sprite_Bitmap_Scale_Chunk>,               0,  sizeof(float),                "a sprite's scales are accepted" },
 		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted", 4 },
 		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
-		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8 },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8, 0, 0x00636261 },   // named "abc", as a set needs a name
 		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted", 0,
 			offsetof(Placed_Object_Light_Data, range), 10000 },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
@@ -4831,22 +4831,30 @@ static void TestTurns()
 	}
 }
 
-// 43. A set of random textures can leave its name out. The level loader passes such a set over (projload.cpp, which level_file_name_test
-// reads), and this shows that the reader really gives it no name: an empty name, a count of 0 and two spare numbers. (Added 2026-11-14 by
-// Melanikus for the AvP port.)
-static void TestRandomTextureName()
+// 43. A set of random textures is found by its name, so one with no name is refused as it's read, and the level loader passes such a set
+// over as well (projload.cpp, which level_file_name_test reads). A set: its name, a count of 0 here, and two spare numbers. (Added
+// 2026-11-14 by Melanikus for the AvP port; a set with no name was read and passed over, and is now refused.)
+static bool RandomTexturesAccepted(char const * name)
 {
-	puts("43. a set of random textures with no name");
-
 	File_Chunk file;
 	Parent_File = &file;
 
 	alignas(int) char bytes[16] = { 0 };
+	memcpy(bytes, name, strlen(name));
 	std::unique_ptr<Random_Texture_ID_Chunk> const set(new Random_Texture_ID_Chunk(&file, bytes, sizeof(bytes)));
 
-	Check(file.error_code == 0 && set->name == 0, "a set of random textures with an empty name is read with no name at all, so the loader has to pass it over");
+	bool const accepted = (file.error_code == 0);
 
 	Parent_File = 0;
+	return accepted;
+}
+
+static void TestRandomTextureName()
+{
+	puts("43. a set of random textures with no name");
+
+	Check(RandomTexturesAccepted("abc"), "a set of random textures with a name is accepted");
+	Check(!RandomTexturesAccepted(""), "a set of random textures with an empty name is refused: it couldn't be found by its name");
 }
 
 // 44. A shape's name for the list of named shapes. An outside shape keeps it in an object name or a level name chunk, and a sub-shape (a
