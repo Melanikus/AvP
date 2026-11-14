@@ -1,0 +1,51 @@
+{
+	"copy": [
+		"tests",
+		"3dc",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the switch starts on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "int DrawFilledOutlines = 0;", "to": "int DrawFilledOutlines = 1;" }
+			]
+		},
+		{
+			"name": "the outline pass runs whatever the switch says",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (DrawFilledOutlines && mainList->GetSize())\n", "to": "\tif (mainList->GetSize())\n" }
+			]
+		},
+		{
+			"name": "the static scene's route doesn't ask the switch",
+			"changes": [
+				{ "file": "3dc/static_scene.cpp", "from": "WireFrameMode || DrawFilledOutlines || !StaticScene_ViewAllows()", "to": "WireFrameMode || !StaticScene_ViewAllows()" }
+			]
+		},
+		{
+			"name": "the outline pass doesn't put the card's settings back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tmainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false);\n\n\tasItWas->Apply();\n", "to": "\tmainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false);\n\n" }
+			]
+		},
+		{
+			"name": "the outline pass writes depth",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "D3DRS_ZWRITEENABLE, FALSE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);", "to": "D3DRS_ZWRITEENABLE, TRUE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);" }
+			]
+		},
+		{
+			"name": "the game turns the switch on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "int DrawFilledOutlines = 0;\n", "to": "int DrawFilledOutlines = 0;\nstatic int const turnedOn = (DrawFilledOutlines = 1);\n" }
+			]
+		},
+		{
+			"name": "a console word reaches the switch",
+			"changes": [
+				{ "file": "3dc/d3d_render.h", "from": "extern int DrawFilledOutlines;", "to": "extern int DrawFilledOutlines;\nstatic int *const consoleWord = &DrawFilledOutlines;" }
+			]
+		}
+	]
+}
