@@ -74,6 +74,46 @@
 					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n"
 				}
 			]
+		},
+		{
+			"name": "LIGHT SCALE: a light scale's numbers aren't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tnumbers[i] = 0;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: a bad number doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tnumbers[i] = 0;\n",
+					"to": "\t\t\tnumbers[i] = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: the last number isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\tfloat numbers[6];\n\tmemcpy(numbers, data, sizeof(numbers));\n\tdata+=sizeof(numbers);\n\n\tfor (int i = 0; i < 6; i++)\n",
+					"to": "\tfloat numbers[6];\n\tmemcpy(numbers, data, sizeof(numbers));\n\tdata+=sizeof(numbers);\n\n\tfor (int i = 0; i < 5; i++)\n"
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: the biggest a number can be is a little too small",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))\n",
+					"to": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777215.0f))\n"
+				}
+			]
 		}
 	]
 }

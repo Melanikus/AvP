@@ -4961,6 +4961,53 @@ static void TestTextureCoordinateNumbers()
 	Check(!TextureCoordinateAccepted(true, notANumber, 0.0f), "and one that isn't a number is refused");
 }
 
+// 47. A light scale: its mode, then six fractions (the prelight's multiplier, the level it starts above and what it adds, then the same three
+// for the light at run time), then three spare numbers. Four of the fractions are made whole numbers as it's read, so each has to be a real
+// number no bigger than 2^24 either way. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool LightScaleAccepted(float const numbers[6])
+{
+	alignas(int) static char bytes[64];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes + 4, numbers, 6 * sizeof(float));
+
+	return ChunkAccepted(MakeChunk<Light_Scale_Chunk>, bytes, 40);
+}
+
+static void TestLightScale()
+{
+	puts("47. a light scale");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastBits = 0x4B800001u;   // the next float after 2^24
+	float justPast;
+	memcpy(&justPast, &justPastBits, sizeof(justPast));
+
+	float const nothing[6] = { 0, 0, 0, 0, 0, 0 };
+	float const plain[6] = { 1.0f, 0, 0, 1.0f, 0, 0 };
+	float const largest[6] = { 16777216.0f, -16777216.0f, 16777216.0f, -16777216.0f, 16777216.0f, -16777216.0f };
+
+	Check(LightScaleAccepted(nothing), "a light scale of nothing is accepted");
+	Check(LightScaleAccepted(plain), "and one that changes nothing, a multiplier of 1 and nothing added");
+	Check(LightScaleAccepted(largest), "and one with every number as big as it can be, 2^24 either way");
+
+	char const * const names[6] = { "prelight multiplier", "prelight's level to start above", "prelight's addition", "run-time multiplier", "run-time level to start above", "run-time addition" };
+
+	for (int i = 0; i < 6; i++)
+	{
+		std::string const which = std::string("a light scale whose ") + names[i];
+		float numbers[6] = { 1.0f, 0, 0, 1.0f, 0, 0 };
+
+		numbers[i] = notANumber;
+		Check(!LightScaleAccepted(numbers), (which + " isn't a number is refused").c_str());
+		numbers[i] = (i % 2 == 0) ? justPast : -justPast;
+		Check(!LightScaleAccepted(numbers), (which + " is just past 2^24 is refused: it couldn't be a whole number the game holds").c_str());
+		numbers[i] = endless;
+		Check(!LightScaleAccepted(numbers), (which + " is endless is refused").c_str());
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5006,6 +5053,7 @@ int main()
 	TestShapesWithNoName();
 	TestFrameNormals();
 	TestTextureCoordinateNumbers();
+	TestLightScale();
 
 	if (checksFailed)
 	{

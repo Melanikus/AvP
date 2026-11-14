@@ -7,9 +7,11 @@
 //   a light has to reach somewhere: a range of 0 or less refuses the level
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   one of a level's lights has to be inside the level, as CheckPlace in chunk.hpp says
+//   a light scale's six numbers have to be real numbers no bigger than 2^24 either way
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
+#include "real_numbers.h"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(chunk_light)
@@ -293,19 +295,31 @@ Light_Scale_Chunk::Light_Scale_Chunk(Chunk_With_Children* parent,const char* dat
 {
 	LightMode=*(int*)data;
 	data+=4;
-	prelight_multiply=*(float*)data;
-	data+=4;
-	prelight_multiply_above= (int) *(float*)data;
-	data+=4;
-	prelight_add= (int) *(float*)data;
-	data+=4;
-	
-	runtime_multiply=*(float*)data;
-	data+=4;
-	runtime_multiply_above= (int) *(float*)data;
-	data+=4;
-	runtime_add= (int) *(float*)data;
-	data+=4;
+
+	// Six fractions follow: the prelight's multiplier, the level it starts above and what it adds, then the same three for the light at
+	// run time. Four of them are made whole numbers here, and the game multiplies and adds with them, so each has to be a real number no
+	// bigger than 2^24 either way, or the level is refused. One that isn't is kept as 0. No level of the game's own has a light scale.
+	// Whether each is a real number is told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	float numbers[6];
+	memcpy(numbers, data, sizeof(numbers));
+	data+=sizeof(numbers);
+
+	for (int i = 0; i < 6; i++)
+	{
+		if (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			numbers[i] = 0;
+		}
+	}
+
+	prelight_multiply=numbers[0];
+	prelight_multiply_above= (int) numbers[1];
+	prelight_add= (int) numbers[2];
+
+	runtime_multiply=numbers[3];
+	runtime_multiply_above= (int) numbers[4];
+	runtime_add= (int) numbers[5];
 
 	spare1=*(int*)data;
 	data+=4;
