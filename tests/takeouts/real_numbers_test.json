@@ -113,6 +113,27 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "an endless decimal at the console takes the wrong end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "*value = (bits >> 63) ? minVal : maxVal;",
+					"to": "*value = (bits >> 63) ? maxVal : minVal;"
+				}
+			]
+		},
+		{
+			"name": "a length is only asked whether it's above nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "return IsRealNumber(length) && length > 0.0f;",
+					"to": "return length > 0.0f;"
+				}
+			]
 		}
+
 	]
 }

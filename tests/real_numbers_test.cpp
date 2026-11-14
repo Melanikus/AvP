@@ -14,6 +14,7 @@
 
 #include "real_numbers.h"
 #include "console_value.h"
+#include "normalise.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -159,7 +160,23 @@ static void TestTheConsolesDecimal()
 	Check(!ConsoleValue_FromDecimal(DoubleOf(0x7FF0000000000001ull), 1.0, 0, 255, &value) && value == 12345, "and a signalling one");
 	Check(ConsoleValue_FromDecimal(DoubleOf(0x7FF0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 65536 * 4, "an endless number is the largest value");
 	Check(ConsoleValue_FromDecimal(DoubleOf(0xFFF0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 655, "and an endlessly small one the smallest");
+	Check(ConsoleValue_FromDecimal(DoubleOf(0x7FEFFFFFFFFFFFFFull), 65536.0, 655, 65536 * 4, &value) && value == 65536 * 4, "the largest real number, which the scale makes endless, is the largest value");
+	Check(ConsoleValue_FromDecimal(DoubleOf(0xFFEFFFFFFFFFFFFFull), 65536.0, 655, 65536 * 4, &value) && value == 655, "and the most negative one the smallest");
 	Check(ConsoleValue_FromDecimal(DoubleOf(0x3FE0000000000000ull), 65536.0, 655, 65536 * 4, &value) && value == 32768, "0.5 is half speed");
+}
+
+// 4. A length that a vector is divided by (normalise.h), here built the way the game ships: NaN, either way round and signalling, and
+// endless either way are never a length, whatever the compiler does with comparisons. tests/normalise_test.cpp tries the same with the
+// ordinary rules. (Added 2026-11-14 by Melanikus (Hicks).)
+static void TestTheNormalisersLength()
+{
+	puts("4. a length to divide a vector by, built the way the game ships");
+
+	Check(!Normalise_LengthIsReal(FloatOf(0x7FC00000u)) && !Normalise_LengthIsReal(FloatOf(0xFFC00000u)), "not a number is never a length, nor with its sign bit set");
+	Check(!Normalise_LengthIsReal(FloatOf(0x7F800001u)), "nor is a signalling one");
+	Check(!Normalise_LengthIsReal(FloatOf(0x7F800000u)) && !Normalise_LengthIsReal(FloatOf(0xFF800000u)), "nor is endless, either way");
+	Check(!Normalise_LengthIsReal(FloatOf(0x00000000u)) && !Normalise_LengthIsReal(FloatOf(0x80000000u)), "nor is nothing, either way");
+	Check(Normalise_LengthIsReal(FloatOf(0x00000001u)) && Normalise_LengthIsReal(FloatOf(0x7F7FFFFFu)), "but the smallest and the largest real lengths are");
 }
 
 int main()
@@ -170,6 +187,7 @@ int main()
 	TestFloats();
 	TestDoubles();
 	TestTheConsolesDecimal();
+	TestTheNormalisersLength();
 
 	if (checksFailed)
 	{
