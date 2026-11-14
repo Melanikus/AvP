@@ -10,6 +10,8 @@
 //   a name is only read as far as the end of its chunk
 //   the environment settings are always one block of bytes, made and given back the same way
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   every place a generator, the player's start, a power cable, a particle generator or a decal's corner gives has to be inside the
+//   level, as CheckPlace in chunk.hpp says
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -72,6 +74,7 @@ AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const ch
 {
 	char const * const chunk_start = data;
 	location = *((ChunkVectorInt*) data);
+	CheckPlace(location);
 	data += sizeof(ChunkVectorInt);
 		
 	orientation = *((int *) data);
@@ -433,6 +436,7 @@ AVP_Player_Start_Chunk::AVP_Player_Start_Chunk(Chunk_With_Children* parent,const
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkMatrix)
 	CHUNK_EXTRACT(moduleID,ObjectID)
+	CheckPlace(location);
 }
 
 void AVP_Player_Start_Chunk::fill_data_block (char * data)
@@ -459,6 +463,7 @@ AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const c
 {
 	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
+	CheckPlace(location);
 	data+=sizeof(ChunkVectorInt);
 
 	id=*(ObjectID*)data;
@@ -684,6 +689,16 @@ AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,si
 	if (loaded_decal_size <= (int)sizeof(AVP_Decal))
 	{
 		decals = (AVP_Decal*)decal_buffer;
+
+		// Each corner of each decal the game uses has to be inside the level (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for
+		// the AvP port.)
+		for (int i = 0; i < num_decals; i++)
+		{
+			for (int corner = 0; corner < 4; corner++)
+			{
+				CheckPlace(decals[i].Vertices[corner]);
+			}
+		}
 	}
 	else
 	{
@@ -792,6 +807,7 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(id,ObjectID)
 	CHUNK_EXTRACT(parent_id,ObjectID)
 	CHUNK_EXTRACT(location,ChunkVectorInt)
+	CheckPlace(location);
 	CHUNK_EXTRACT(orientation,ChunkQuat)
 	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }

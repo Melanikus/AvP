@@ -8,6 +8,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
+//   a waypoint's box and centre have to be inside the level, as CheckPlace in chunk.hpp says (2026-11-14)
 
 #include "chunk_waypoint.hpp"
 
@@ -75,6 +76,9 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			cw->max=*(ChunkVectorInt*)data;
 			data+=sizeof(ChunkVectorInt);	
 			cw->centre=*(ChunkVectorInt*)data;
+			CheckPlace(cw->min);
+			CheckPlace(cw->max);
+			CheckPlace(cw->centre);
 			data+=sizeof(ChunkVectorInt);	
 			
 			cw->flags=*(int*)data;

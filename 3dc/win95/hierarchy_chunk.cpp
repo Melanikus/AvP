@@ -7,6 +7,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a hierarchy the game couldn't build refuses the level
+//   a hierarchy's box has to be inside the level, as CheckPlace in chunk.hpp says
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -654,6 +655,8 @@ Hierarchy_Bounding_Box_Chunk::Hierarchy_Bounding_Box_Chunk(Chunk_With_Children* 
 	min=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 	max=*(ChunkVectorInt*)data;
+	CheckPlace(min);
+	CheckPlace(max);
 }
 
 void Hierarchy_Bounding_Box_Chunk::fill_data_block(char* data_start)

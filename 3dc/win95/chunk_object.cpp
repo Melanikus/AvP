@@ -13,6 +13,8 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every place an object, a track, an alternative location or a module's entry point gives has to be inside the level, as CheckPlace in
+//   chunk.hpp says
 
 #include <string>
 #include "chunk.hpp"
@@ -421,6 +423,7 @@ flags(0), version_no (0), associated_shape (0)
 	hdata+=20;
 
 	parent_object->object_data_store->location = *(ChunkVectorInt*) hdata;
+	CheckPlace(parent_object->object_data_store->location);
 	hdata+=sizeof(ChunkVectorInt);
 
 	parent_object->object_data_store->orientation = *((ChunkQuat *) hdata);
@@ -789,6 +792,7 @@ Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_Wi
 		data += 4;
 
 		am.entry_point = *((ChunkVectorInt *) data);
+		CheckPlace(am.entry_point);
 		data += sizeof(ChunkVectorInt);
 
 		
@@ -990,6 +994,12 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		}
+
+		// A section's pivots and the object's offset from them are places too, so they have to be inside the level (CheckPlace, in
+		// chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+		CheckPlace(sections[i].pivot_start);
+		CheckPlace(sections[i].pivot_end);
+		CheckPlace(sections[i].object_offset);
 	}
 
 	if(timer_start<0 || timer_start>latest_start)
@@ -1121,6 +1131,7 @@ Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Ch
 	for(int i=0;i<num_locations;i++)
 	{
 		locations[i] = *(AltObjectLocation*) data;
+		CheckPlace(locations[i].position);
 		data+=sizeof(AltObjectLocation);
 	}
 }

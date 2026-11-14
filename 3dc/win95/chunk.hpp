@@ -11,11 +11,13 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   added the "holding at least" registrations, so that a kind of chunk that always reads a fixed set of fields is never made from a chunk too small to hold them
 //   removed CHUNK_EXTRACT_ARRAY, which sized a list from a count in the file with no check: only code in a comment used it
+//   added CheckPlace, which refuses a level that gives a place farther than 2^24 millimetres from its middle
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
 	#include <string.h>
+	#include <type_traits>
 	#include "3dc.h"
 	#include "mem3dc.h" // for debug new and delete
 	#include "inline.h"
@@ -477,6 +479,30 @@ inline char * CopyOptionalNameFromChunk(char const * start, size_t size, char co
 	}
 
 	return copy;
+}
+
+// The farthest a place in a level can be from the level's middle, along each of x, y and z: 2^24 millimetres, about 16.8 kilometres.
+// Every place a level file gives, and every corner of a box it gives, has to be within this, so that the sums and differences the
+// game makes with places stay whole numbers it can hold. The farthest in the game's own levels is 1,855,168, a light in Breakout.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static int const FarthestPlace = 1 << 24;
+
+// Refuses the level if this place is farther out than FarthestPlace along any of x, y and z. A place is anything with an x, a y and a z
+// that are whole numbers, as each kind of chunk keeps its own. The compiler holds every caller to whole numbers: a place kept as a
+// fraction could be something that isn't a number, which the game's fast arithmetic isn't promised to compare properly, so it would
+// need a check of its own.
+template <class Place>
+inline void CheckPlace(Place const & place)
+{
+	static_assert(std::is_integral<decltype(place.x)>::value && std::is_integral<decltype(place.y)>::value && std::is_integral<decltype(place.z)>::value,
+		"CheckPlace is for whole-number places; a place kept as a fraction needs a check for NaN too");
+
+	if (place.x < -FarthestPlace || place.x > FarthestPlace ||
+		place.y < -FarthestPlace || place.y > FarthestPlace ||
+		place.z < -FarthestPlace || place.z > FarthestPlace)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 ///////////////////////////////////////////////

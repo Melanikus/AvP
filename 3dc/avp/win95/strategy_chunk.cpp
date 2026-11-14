@@ -9,6 +9,7 @@
 //   memory made with new[] goes back with delete[], and a mission objective now gives back its two lists
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every place an object's properties or a strategy's box or camera gives has to be inside the level, as CheckPlace in chunk.hpp says
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -302,6 +303,7 @@ Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Chil
 {
 	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
+	CheckPlace(location);
 	data+=sizeof(ChunkVectorInt);
 	size=*(int*)data;
 	data+=sizeof(int);
@@ -1061,6 +1063,8 @@ AreaSwitchStrategy::AreaSwitchStrategy(const char* data_start,size_t size)
 	data_start+=sizeof(ChunkVectorInt);	
 	trigger_max=*(ChunkVectorInt*)data_start;
 	data_start+=sizeof(ChunkVectorInt);	
+	CheckPlace(trigger_min);
+	CheckPlace(trigger_max);
 	
 	area_pad1=*(int*)data_start;
 	data_start+=4;
@@ -1730,6 +1734,8 @@ DeathVolumeStrategy::DeathVolumeStrategy(const char* data_start,size_t /*size*/ 
 	data_start+=sizeof(ChunkVectorInt);
 	volume_max=*(ChunkVectorInt*)data_start;
 	data_start+=sizeof(ChunkVectorInt);
+	CheckPlace(volume_min);
+	CheckPlace(volume_max);
 
 	flags=*(int*)data_start;
 	data_start+=4;
@@ -2050,6 +2056,8 @@ MummyTriggerVolumeStrategy::MummyTriggerVolumeStrategy(const char* data,size_t)
 	
 	CHUNK_EXTRACT(trigger_min,ChunkVectorInt);
 	CHUNK_EXTRACT(trigger_max,ChunkVectorInt);
+	CheckPlace(trigger_min);
+	CheckPlace(trigger_max);
 	CHUNK_EXTRACT(targetID,ObjectID);
 
 	CHUNK_EXTRACT(spare1,int);
@@ -2107,6 +2115,8 @@ MummyPivotObjectStrategy::MummyPivotObjectStrategy(const char* data,size_t)
 	{
 		CHUNK_EXTRACT(trigger_min,ChunkVectorInt);
 		CHUNK_EXTRACT(trigger_max,ChunkVectorInt);
+		CheckPlace(trigger_min);
+		CheckPlace(trigger_max);
 	}
 }
 
@@ -2143,6 +2153,7 @@ MummyChestStrategy::MummyChestStrategy(const char* data,size_t)
 	CHUNK_EXTRACT(objectives[3],unsigned char);
 
 	CHUNK_EXTRACT(camera_location,ChunkVectorInt);
+	CheckPlace(camera_location);
 	CHUNK_EXTRACT(spare,int);
 }
 
@@ -2173,6 +2184,8 @@ MummyAlterCameraRangeStrategy::MummyAlterCameraRangeStrategy(const char* data,si
 
 	CHUNK_EXTRACT(zone_min,ChunkVectorInt)	
 	CHUNK_EXTRACT(zone_max,ChunkVectorInt)	
+	CheckPlace(zone_min);
+	CheckPlace(zone_max);
 	
 	CHUNK_EXTRACT(enter_range,int)	
 	CHUNK_EXTRACT(exit_range,int)	

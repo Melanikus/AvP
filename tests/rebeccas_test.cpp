@@ -4236,6 +4236,348 @@ static void TestHierarchyAnimations()
 	}
 }
 
+// 39. Places. Every place a level gives, a point, a box's corner, a centre, where something stands or how far a frame moves it, has to be
+// within 2^24 millimetres of the level's middle along each of x, y and z, so that the sums the game makes with places stay whole numbers it
+// can hold (CheckPlace, in chunk.hpp). Each kind of chunk that gives a place is made here with that one place set, and everything else as
+// the game's own levels could have it. This test keeps its own copy of the limit, so a change to the game's limit shows here.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static int const TestFarthestPlace = 1 << 24;
+
+static ChunkVectorInt PlaceAt(int x, int y, int z)
+{
+	ChunkVectorInt const place = { x, y, z };
+	return place;
+}
+
+static void PutPlace(char * where, ChunkVectorInt const & place)
+{
+	memcpy(where, &place, sizeof(place));
+}
+
+// A chunk of this kind and size, all zeros but for the place at "at", and a count of 1 at "countAt" when the chunk holds a list.
+static bool PlaceInChunkAccepted(MakesChunk make, size_t bytes, size_t at, ChunkVectorInt const & place, int countAt = -1)
+{
+	alignas(int) static char data[256];
+
+	memset(data, 0, sizeof(data));
+	PutPlace(data + at, place);
+
+	if (countAt >= 0)
+	{
+		PutNumber(data, (size_t)countAt, 1);
+	}
+
+	return ChunkAccepted(make, data, bytes);
+}
+
+// A strategy of this kind, at its own size, all zeros but for its kind and the place at "at", counted from its kind.
+static bool PlaceInStrategyAccepted(int kind, size_t at, ChunkVectorInt const & place)
+{
+	alignas(int) static char strategy[256];
+
+	memset(strategy, 0, sizeof(strategy));
+	memcpy(strategy, &kind, sizeof(kind));
+	PutPlace(strategy + at, place);
+
+	return StrategyAccepted(strategy, StrategySizeOfKind(kind));
+}
+
+// Loads the sub-shape in wholeShape, this many bytes long, and says whether the level would be accepted.
+static bool SubShapeIsAccepted(size_t bytes)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+static int const PlaceTriangle[5] = { 0, 1, 2, -1, -1 };
+
+// Where a shape's first point is: after the shape's header chunk and the points chunk's own header. A sub-shape's header holds 44 bytes.
+static bool ShapePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	PutPlace(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, place);
+	return ShapeIsAccepted(wholeShape + bytes);
+}
+
+static bool SubShapePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+	PutPlace(wholeShape + ChunkHeaderBytes + 44 + ChunkHeaderBytes, place);
+	return SubShapeIsAccepted(bytes);
+}
+
+// An animation frame's first point comes after the sequence's header, its data chunk (a header and 24 bytes), the frame's header, the
+// frame's data chunk (a header and 24 bytes), and the frame's points chunk's own header (see PutAnimation).
+static bool FramePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const end = PutAnimation(wholeShape + bytes, 0, true, 0, 4, 1, 0);
+	size_t const firstPointAt = ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes;
+
+	PutPlace(wholeShape + bytes + firstPointAt, place);
+	return ShapeIsAccepted(end);
+}
+
+// A shape's header keeps its box as max x, min x, max y, min y, max z, min z, from byte 36; a sub-shape's from byte 20.
+static bool ShapeBoxAccepted(bool subShape, bool top, ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+	char * const box = wholeShape + ChunkHeaderBytes + (subShape ? 20 : 36) + (top ? 0 : 4);
+
+	memcpy(box, &place.x, sizeof(int));
+	memcpy(box + 8, &place.y, sizeof(int));
+	memcpy(box + 16, &place.z, sizeof(int));
+
+	return subShape ? SubShapeIsAccepted(bytes) : ShapeIsAccepted(wholeShape + bytes);
+}
+
+static bool ShapeBoxTopAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(false, true, place); }
+static bool ShapeBoxBottomAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(false, false, place); }
+static bool SubShapeBoxTopAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(true, true, place); }
+static bool SubShapeBoxBottomAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(true, false, place); }
+
+// A shape's centre chunk holds the centre and then the radius about it.
+static bool ShapeCentreAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const centre = PutChunk(wholeShape + bytes, "SHPCENTR", 16);
+
+	PutPlace(centre, place);
+	return ShapeIsAccepted(centre + 16);
+}
+
+static bool AnimatedShapeCentreAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Anim_Shape_Centre_Chunk>, 20, 0, place); }
+static bool PieceAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Shape_Fragment_Location_Chunk>, 28, 0, place); }
+
+// An object's header keeps its place after its flags and the 16 bytes of its lock's user.
+static bool ObjectPlaceAccepted(ChunkVectorInt const & place)
+{
+	TestFile file;
+	size_t const bytes = BuildObjectHeader("object", 7);
+
+	PutPlace(objectBytes + ChunkHeaderBytes + 20, place);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+
+	return file.error_code == 0;
+}
+
+// A track with one section that takes a second, with one of its places set.
+static bool TrackPlaceAccepted(size_t placeAt, ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+	size_t const sectionAt = sizeof(int);
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, sectionAt + offsetof(ChunkTrackSection, time_for_section), 65536);
+	PutPlace(bytes + sectionAt + placeAt, place);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, sectionAt + sizeof(ChunkTrackSection) + 2 * sizeof(int));
+}
+
+static bool TrackStartAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, pivot_start), place); }
+static bool TrackEndAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, pivot_end), place); }
+static bool TrackOffsetAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, object_offset), place); }
+
+// An object's other places: a group, a spare number, a count, and then the places.
+static bool OtherPlaceAccepted(ChunkVectorInt const & place)
+{
+	return PlaceInChunkAccepted(MakeChunk<Object_Alternate_Locations_Chunk>, 12 + sizeof(AltObjectLocation), 12 + offsetof(AltObjectLocation, position), place, 8);
+}
+
+// A module's ways in: a count, and then for each an object's number, its flags and the place.
+static bool WayInAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Adjacent_Module_Entry_Points_Chunk>, 24, 12, place, 0); }
+
+// One of a level's lights, with a range of 10 metres, as a light has to reach somewhere to be accepted at all (see LightRangeAccepted).
+static bool LevelLightAccepted(ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, offsetof(Light_Data, range), 10000);
+	PutPlace(bytes + offsetof(Light_Data, location), place);
+
+	return ChunkAccepted(MakeChunk<Light_Chunk>, bytes, sizeof(Light_Data));
+}
+
+// These keep their place first, and end with an empty name, so their size is their numbers and a zero byte, rounded up to whole numbers.
+static bool SoundAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Sound_Object_Chunk>, 44, 0, place); }
+static bool GeneratorAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Generator_Chunk>, 32, 0, place); }
+static bool PlayerStartAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Player_Start_Chunk>, 56, 0, place); }
+static bool CableAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Power_Cable_Chunk>, 48, 0, place); }
+static bool VirtualObjectAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Virtual_Object_Properties_Chunk>, 36, 0, place); }
+
+// A particle generator keeps its place after 40 bytes of other numbers.
+static bool ParticleGeneratorAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, 72, 40, place); }
+
+// A level's decals: a count, how big each is, and then the decals, each with its number and then its four corners.
+static bool DecalCornerAccepted(int corner, ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, (int)sizeof(AVP_Decal));
+	PutPlace(bytes + 8 + offsetof(AVP_Decal, Vertices) + corner * sizeof(ChunkVectorInt), place);
+
+	return ChunkAccepted(MakeChunk<AVP_Decal_Chunk>, bytes, 8 + sizeof(AVP_Decal));
+}
+
+static bool DecalFirstCornerAccepted(ChunkVectorInt const & place) { return DecalCornerAccepted(0, place); }
+static bool DecalLastCornerAccepted(ChunkVectorInt const & place) { return DecalCornerAccepted(3, place); }
+
+// Where a breaking shape's pieces start: an empty name in 4 bytes, the number of pieces, and then the place.
+static bool PiecesAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Fragment_Type_Shape_Chunk>, 32, 8, place); }
+
+// A dummy object: its place, the bottom and top corners of its box, its turn and an empty name.
+static bool DummyAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 0, place); }
+static bool DummyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 12, place); }
+static bool DummyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 24, place); }
+
+// A hierarchy's box: its bottom corner and its top corner, and nothing else.
+static bool HierarchyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 0, place); }
+static bool HierarchyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 12, place); }
+
+// A path: an empty name in 4 bytes, its number, its flags, a spare number, a count, and then its points.
+static bool PathPointAccepted(ChunkVectorInt const & place)
+{
+	return PlaceInChunkAccepted(MakeChunk<AVP_Path_Chunk>, 20 + sizeof(ChunkPathPoint), 20 + offsetof(ChunkPathPoint, location), place, 16);
+}
+
+// A waypoint: a count, and then for each its box's bottom and top corners (from its centre) and its centre, its flags, a spare number, and
+// two empty lists of links.
+static bool WaypointAccepted(size_t placeAt, ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Module_Waypoint_Chunk>, 56, 4 + placeAt, place, 0); }
+static bool WaypointBottomAccepted(ChunkVectorInt const & place) { return WaypointAccepted(0, place); }
+static bool WaypointTopAccepted(ChunkVectorInt const & place) { return WaypointAccepted(12, place); }
+static bool WaypointCentreAccepted(ChunkVectorInt const & place) { return WaypointAccepted(24, place); }
+
+// A hierarchy's list of sequences: a count, and then for each its number of frames and three more numbers, and then its frames.
+static bool HierarchyFrameMoveAccepted(ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+	size_t const frameAt = 4 + 16;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, 1);
+	PutPlace(bytes + frameAt + offsetof(Object_Animation_Frame, transform), place);
+
+	return ChunkAccepted(MakeChunk<Object_Animation_All_Sequence_Chunk>, bytes, frameAt + sizeof(Object_Animation_Frame));
+}
+
+// An animation frame: its turn, then how far it moves the object, then three numbers and an empty list.
+static bool AnimationFrameMoveAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Object_Animation_Sequence_Frame_Chunk>, 44, 16, place); }
+
+// The strategies that keep a box or a place. An area switch keeps its box after its multi-switch numbers, here with no targets and no links.
+static bool AreaSwitchBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratAreaSwitch, 44, place); }
+static bool AreaSwitchTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratAreaSwitch, 56, place); }
+static bool DeathVolumeBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratDeathVolume, 12, place); }
+static bool DeathVolumeTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratDeathVolume, 24, place); }
+static bool TriggerVolumeBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyTriggerVolume, 12, place); }
+static bool TriggerVolumeTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyTriggerVolume, 24, place); }
+static bool PivotObjectBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyPivotObject, 36, place); }
+static bool PivotObjectTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyPivotObject, 48, place); }
+static bool ChestCameraAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyChest, 16, place); }
+static bool CameraZoneBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyAlterCameraRange, 12, place); }
+static bool CameraZoneTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyAlterCameraRange, 24, place); }
+
+typedef bool (*PlaceAccepted)(ChunkVectorInt const & place);
+
+static void TestPlaces()
+{
+	puts("39. places");
+
+	int const farthest = TestFarthestPlace;
+
+	// Every way past the farthest, on one kind of chunk: each of x, y and z, each way
+	Check(ObjectPlaceAccepted(PlaceAt(farthest, farthest, farthest)), "an object at the farthest corner there is, every way positive, is accepted");
+	Check(ObjectPlaceAccepted(PlaceAt(-farthest, -farthest, -farthest)), "and at the farthest corner every way negative");
+	Check(!ObjectPlaceAccepted(PlaceAt(farthest + 1, 0, 0)), "an object a millimetre past the farthest along x is refused: it would be outside the level");
+	Check(!ObjectPlaceAccepted(PlaceAt(-farthest - 1, 0, 0)), "and the other way along x");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, farthest + 1, 0)), "and along y");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, -farthest - 1, 0)), "and the other way along y");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, 0, farthest + 1)), "and along z");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, 0, -farthest - 1)), "and the other way along z");
+	Check(!ObjectPlaceAccepted(PlaceAt(0x7fffffff, 0, 0)), "and an object at the largest number there is");
+	Check(ObjectPlaceAccepted(PlaceAt(1627790, -1627790, 1627790)), "the farthest an object is in the game's own levels, 1,627,790, is accepted");
+	Check(LevelLightAccepted(PlaceAt(1855168, -1855168, 1855168)), "and the farthest place of all in them, a light at 1,855,168");
+
+	// And every kind of chunk with a place in it: at the middle, at the farthest corner, and a millimetre past it one way or another
+	struct PlaceRow { PlaceAccepted accepted; char const * what; };
+	PlaceRow const rows[] =
+	{
+		{ ShapePointAccepted,           "a shape's point" },
+		{ SubShapePointAccepted,        "a sub-shape's point" },
+		{ FramePointAccepted,           "an animation frame's point" },
+		{ ShapeBoxTopAccepted,          "the top corner of a shape's box" },
+		{ ShapeBoxBottomAccepted,       "the bottom corner of a shape's box" },
+		{ SubShapeBoxTopAccepted,       "the top corner of a sub-shape's box" },
+		{ SubShapeBoxBottomAccepted,    "the bottom corner of a sub-shape's box" },
+		{ ShapeCentreAccepted,          "a shape's centre" },
+		{ AnimatedShapeCentreAccepted,  "an animated shape's centre" },
+		{ PieceAccepted,                "where a shape's piece goes" },
+		{ ObjectPlaceAccepted,          "an object" },
+		{ TrackStartAccepted,           "a track's first pivot" },
+		{ TrackEndAccepted,             "a track's last pivot" },
+		{ TrackOffsetAccepted,          "an object's place on its track" },
+		{ OtherPlaceAccepted,           "an object's other place" },
+		{ WayInAccepted,                "a way into a module" },
+		{ LevelLightAccepted,           "one of a level's lights" },
+		{ SoundAccepted,                "a sound" },
+		{ GeneratorAccepted,            "a generator" },
+		{ PlayerStartAccepted,          "the player's start" },
+		{ CableAccepted,                "a power cable" },
+		{ ParticleGeneratorAccepted,    "a particle generator" },
+		{ DecalFirstCornerAccepted,     "a decal's first corner" },
+		{ DecalLastCornerAccepted,      "a decal's last corner" },
+		{ VirtualObjectAccepted,        "a virtual object" },
+		{ PiecesAccepted,               "where a breaking shape's pieces start" },
+		{ DummyAccepted,                "a dummy object" },
+		{ DummyBoxBottomAccepted,       "the bottom corner of a dummy object's box" },
+		{ DummyBoxTopAccepted,          "the top corner of a dummy object's box" },
+		{ HierarchyBoxBottomAccepted,   "the bottom corner of a hierarchy's box" },
+		{ HierarchyBoxTopAccepted,      "the top corner of a hierarchy's box" },
+		{ PathPointAccepted,            "a point on a path" },
+		{ WaypointBottomAccepted,       "the bottom corner of a waypoint's box" },
+		{ WaypointTopAccepted,          "the top corner of a waypoint's box" },
+		{ WaypointCentreAccepted,       "a waypoint's centre" },
+		{ HierarchyFrameMoveAccepted,   "how far a hierarchy's frame moves its object" },
+		{ AnimationFrameMoveAccepted,   "how far an animation frame moves its object" },
+		{ AreaSwitchBottomAccepted,     "the bottom corner of an area switch's box" },
+		{ AreaSwitchTopAccepted,        "the top corner of an area switch's box" },
+		{ DeathVolumeBottomAccepted,    "the bottom corner of a death volume" },
+		{ DeathVolumeTopAccepted,       "the top corner of a death volume" },
+		{ TriggerVolumeBottomAccepted,  "the bottom corner of a trigger volume" },
+		{ TriggerVolumeTopAccepted,     "the top corner of a trigger volume" },
+		{ PivotObjectBottomAccepted,    "the bottom corner of a pivoting object's trigger" },
+		{ PivotObjectTopAccepted,       "the top corner of a pivoting object's trigger" },
+		{ ChestCameraAccepted,          "a chest's camera" },
+		{ CameraZoneBottomAccepted,     "the bottom corner of a camera's zone" },
+		{ CameraZoneTopAccepted,        "the top corner of a camera's zone" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		std::string const what = rows[i].what;
+
+		// The way past changes from row to row, so that between them every one of x, y and z is tried both ways
+		int const past[3] = { (i % 3 == 0) ? farthest + 1 : 0, (i % 3 == 1) ? farthest + 1 : 0, (i % 3 == 2) ? farthest + 1 : 0 };
+		int const sign = ((i / 3) % 2 == 0) ? 1 : -1;
+
+		Check(rows[i].accepted(PlaceAt(0, 0, 0)), (what + " at the level's middle is accepted").c_str());
+		Check(rows[i].accepted(PlaceAt(farthest, -farthest, farthest)), (what + " at the farthest a place can be is accepted").c_str());
+		Check(!rows[i].accepted(PlaceAt(sign * past[0], sign * past[1], sign * past[2])),
+			(what + " a millimetre past the farthest is refused: it would be outside the level").c_str());
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4273,6 +4615,7 @@ int main()
 	TestCountedLists();
 	TestNumbersUsedAsPlaces();
 	TestHierarchyAnimations();
+	TestPlaces();
 
 	if (checksFailed)
 	{

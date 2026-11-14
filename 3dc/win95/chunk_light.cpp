@@ -6,6 +6,7 @@
 //   a light's times have to be ones that don't wrap round
 //   a light has to reach somewhere: a range of 0 or less refuses the level
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   one of a level's lights has to be inside the level, as CheckPlace in chunk.hpp says
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -131,6 +132,7 @@ Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t
 	data += 4;
 
 	light.location = *((ChunkVectorInt *) data);
+	CheckPlace(light.location);
 	data += sizeof(ChunkVectorInt);
 	
 	light.orientation = *((ChunkMatrix *) data);

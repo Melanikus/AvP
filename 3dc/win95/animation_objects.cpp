@@ -6,6 +6,7 @@
 //   a name is only read as far as the end of its chunk
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   a sequence the game couldn't play refuses the level: see StartTimeFits
+//   how far a frame moves an object has to stay inside the level, as CheckPlace in chunk.hpp says (2026-11-14)
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -81,6 +82,7 @@ Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Ch
 	data_start += 4;
 	transform.z = *((int *) data_start);
 	data_start += 4;
+	CheckPlace(transform);
 
 	at_frame_no = *((int *) data_start);
 	data_start += 4;
@@ -517,6 +519,7 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 		for(unsigned j=0;j<seq->num_frames;j++)
 		{
 			seq->frames[j]=*(Object_Animation_Frame*)data;
+			CheckPlace(seq->frames[j].transform);
 			data+=sizeof(Object_Animation_Frame);
 		}
 	}

@@ -25,6 +25,7 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every point, box corner and centre a shape gives has to be inside the level, as CheckPlace in chunk.hpp says
 
 #include <math.h>
 #include <vector>
@@ -743,9 +744,12 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Shape_Chunk * parent, const char * vtdata
 
 	*((ChunkVectorInt**) &vert_data) = parent->shape_data_store->v_list;
 
+	// Each point has to be inside the level: CheckPlace, in chunk.hpp, says how far out that is, and why. The same goes for a sub-shape's
+	// points and an animation frame's, below. (Added 2026-11-14 by Melanikus for the AvP port.)
 	for (i=0;i<num_verts;i++)
 	{
 		parent->shape_data_store->v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(parent->shape_data_store->v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -765,6 +769,7 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Shape_Sub_Shape_Chunk * parent, const cha
 	for (i=0;i<num_verts;i++)
 	{
 		parent->shape_data_store->v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(parent->shape_data_store->v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -782,6 +787,7 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Anim_Shape_Frame_Chunk * parent, const ch
 	for (i=0;i<num_verts;i++)
 	{
 		v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -1138,6 +1144,7 @@ Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* d
 
 	//fill in the appropriate entries
 	cs->centre=*(ChunkVectorInt*)data;
+	CheckPlace(cs->centre);
 	data+=sizeof(ChunkVectorInt);
 	
 	cs->radius_about_centre=*(float*)data;
@@ -1501,6 +1508,10 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	hdata+=4;
 	parent->shape_data_store->min.z = *((int *) hdata);
 	hdata+=4;
+
+	// The shape's box has to be inside the level, as its points do (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	CheckPlace(parent->shape_data_store->max);
+	CheckPlace(parent->shape_data_store->min);
 
 	version_no = *((int *) hdata);
 	hdata+=4;
@@ -2292,6 +2303,10 @@ Shape_Sub_Shape_Header_Chunk::Shape_Sub_Shape_Header_Chunk (Shape_Sub_Shape_Chun
 	parent->shape_data_store->max.z = *((int *) (hdata));
 	hdata += 4;
 	parent->shape_data_store->min.z = *((int *) (hdata));
+
+	// The sub-shape's box has to be inside the level, as its points do (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	CheckPlace(parent->shape_data_store->max);
+	CheckPlace(parent->shape_data_store->min);
 }
 
 Shape_Sub_Shape_Header_Chunk::~Shape_Sub_Shape_Header_Chunk()
@@ -2552,6 +2567,7 @@ Shape_Fragment_Location_Chunk::Shape_Fragment_Location_Chunk (Chunk_With_Childre
 : Chunk (parent, "FRAGLOCN")
 {
 	frag_loc = *((ChunkVectorInt *) sdata);
+	CheckPlace(frag_loc);
 
 	sdata += sizeof(ChunkVectorInt);
 
@@ -2983,6 +2999,7 @@ Anim_Shape_Centre_Chunk::Anim_Shape_Centre_Chunk(Chunk_With_Children* const pare
 :Chunk(parent,"ANSHCEN2")
 {
 	Centre=*(ChunkVectorInt*)data;
+	CheckPlace(Centre);
 	data+=sizeof(ChunkVectorInt);
 	flags=*(int*)data;
 	data+=4;
