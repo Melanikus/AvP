@@ -951,8 +951,8 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "if (!words || length == 0 || length > 8)",
-					"to": "if (length == 0 || length > 8)"
+					"from": "if (!words || length == 0 || length > most)",
+					"to": "if (length == 0 || length > most)"
 				}
 			]
 		},
@@ -961,7 +961,7 @@
 			"changes": [
 				{
 					"file": "3dc/shoulder_lamp.cpp",
-					"from": "if (!words || length == 0 || length > 8)",
+					"from": "if (!words || length == 0 || length > most)",
 					"to": "if (!words || length == 0)"
 				}
 			]
@@ -1908,6 +1908,36 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "spot[0], spot[1], spot[2], spot[3],",
 					"to": "spot[0], spot[1], spot[2], 0.0f,"
+				}
+			]
+		},
+		{
+			"name": "a longest above the most is used as it is",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "unsigned int const most = longest < kReadNumberMostLongest ? longest : kReadNumberMostLongest;",
+					"to": "unsigned int const most = longest;"
+				}
+			]
+		},
+		{
+			"name": "the signed reader drops its longest",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (!ReadPlainNumber(words + 1, length - 1, &number, longest))",
+					"to": "if (!ReadPlainNumber(words + 1, length - 1, &number))"
+				}
+			]
+		},
+		{
+			"name": "the console's commands take 9 characters",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.h",
+					"from": "unsigned int const kReadNumberConsoleLongest = 8;",
+					"to": "unsigned int const kReadNumberConsoleLongest = 9;"
 				}
 			]
 		}

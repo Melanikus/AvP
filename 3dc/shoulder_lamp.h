@@ -176,11 +176,21 @@ void ShoulderLamp_PaintedBeam(float aimAcross, float aimDown, float wide, float 
 // spare 0s. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
 void ShoulderLamp_LightNumbers(float *eight);
 
-// A plain number, typed by a person: only digits, with one dot at most. pixel_look.cpp uses it too.
-bool ReadPlainNumber(const char *words, unsigned int length, double *out);
+// HOW LONG A TYPED NUMBER CAN BE. Text longer than its longest is refused before any of it is read. The console's commands take 8, longer
+// than any of their settings needs, and they use it by leaving longest out. AVP_OpenInteng, the map editor, reads its fields with this
+// same reader and gives each one the longest its range can need: "16777216" is 8, and "32767.99998" is 11. Nobody can ask for more than
+// kReadNumberMostLongest: with that many digits the sum below stays a number a double holds. (Modified 2026-11-14 by Melanikus
+// (Dietrich) for the AvP port: the longest was always 8.)
+unsigned int const kReadNumberConsoleLongest = 8;
+unsigned int const kReadNumberMostLongest = 24;
 
-// The same, with a minus allowed in front, as in "-0.1". Only LAMPSHOULDER takes one. Added 2026-11-14 by Melanikus (Dietrich).
-bool ReadSignedNumber(const char *words, unsigned int length, double *out);
+// A plain number, typed by a person: only digits, with one dot at most, and no longer than longest (at most kReadNumberMostLongest).
+// pixel_look.cpp uses it too.
+bool ReadPlainNumber(const char *words, unsigned int length, double *out, unsigned int longest = kReadNumberConsoleLongest);
+
+// The same, with a minus allowed in front, as in "-0.1". The longest is the number's after the minus, so "-16777216" needs a longest of 8.
+// Only LAMPSHOULDER takes one in the game. Added 2026-11-14 by Melanikus (Dietrich).
+bool ReadSignedNumber(const char *words, unsigned int length, double *out, unsigned int longest = kReadNumberConsoleLongest);
 
 // How far its aim is from where he's looking, across to the right and down, for each unit ahead. Both are 0 when he's been still for a moment.
 float ShoulderLamp_AimAcross();

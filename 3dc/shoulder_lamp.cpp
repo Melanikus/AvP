@@ -203,10 +203,13 @@ void ShoulderLamp_SetFollowSeconds(double seconds)
 }
 
 // A plain number, typed by a person. Only digits, with one dot at most. See ShoulderLamp_FollowSecondsFromWords in the header for why it's read by hand.
-bool ReadPlainNumber(const char *words, unsigned int length, double *out)
+bool ReadPlainNumber(const char *words, unsigned int length, double *out, unsigned int longest)
 {
-	// Longer than anyone needs for any of these, and it means the sum below can't get large
-	if (!words || length == 0 || length > 8)
+	// Text longer than its longest is refused before any of it is read. Nobody gets more than kReadNumberMostLongest, so the sum below
+	// can't get large (modified 2026-11-14 by Melanikus (Dietrich): it was always 8, which the console's commands still get)
+	unsigned int const most = longest < kReadNumberMostLongest ? longest : kReadNumberMostLongest;
+
+	if (!words || length == 0 || length > most)
 	{
 		return false;
 	}
@@ -401,13 +404,14 @@ void ShoulderLamp_SetSpotHalfDistance(double millimetres)
 	spotHalfDistance = millimetres == 0.0 ? 0.0 : Within(millimetres, kShoulderLampFewestSpotHalfDistance, kShoulderLampMostSpotHalfDistance);
 }
 
-bool ReadSignedNumber(const char *words, unsigned int length, double *out)
+bool ReadSignedNumber(const char *words, unsigned int length, double *out, unsigned int longest)
 {
+	// The longest is the number's after its minus, as it was before there was a longest, so LAMPSHOULDER takes exactly what it took
 	if (words && length > 1 && words[0] == '-')
 	{
 		double number = 0.0;
 
-		if (!ReadPlainNumber(words + 1, length - 1, &number))
+		if (!ReadPlainNumber(words + 1, length - 1, &number, longest))
 		{
 			return false;
 		}
@@ -416,7 +420,7 @@ bool ReadSignedNumber(const char *words, unsigned int length, double *out)
 		return true;
 	}
 
-	return ReadPlainNumber(words, length, out);
+	return ReadPlainNumber(words, length, out, longest);
 }
 
 // Splits what was typed in two at its first spaces: the first word, and everything after the spaces. There must be something on each side.

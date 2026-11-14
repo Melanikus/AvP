@@ -964,6 +964,25 @@ static void TestTheLampsLook()
 	Check(ReadSignedNumber("-0.1", 4, &signedNumber) && signedNumber == -0.1 && ReadSignedNumber("0.1", 3, &signedNumber) && signedNumber == 0.1, "the signed reader reads a minus in front, and a number without");
 	Check(!ReadSignedNumber("-", 1, &signedNumber) && !ReadSignedNumber("--0.1", 5, &signedNumber) && !ReadSignedNumber("-+1", 3, &signedNumber) && !ReadSignedNumber("0.1-", 4, &signedNumber), "and refuses a minus alone, twice, with a plus, or after");
 
+	// How long a typed number can be (modified 2026-11-14 by Melanikus (Dietrich): the reader takes a longest, for the map editor; the
+	// console's commands keep 8, so what they take doesn't change)
+	double longNumber = 0.0;
+	double unchanged = 0.0;
+	double across = 0.0;
+
+	Check(OneReads(ShoulderLamp_HalfDistanceFromWords, "00001000", 1000.0) && OneRefuses(ShoulderLamp_HalfDistanceFromWords, "000001000") && !ReadPlainNumber("123456789", 9, &longNumber),
+		"the console's commands still refuse 9 characters or more, as before: their longest is 8");
+	Check(ShoulderLamp_ShoulderFromWords("-0.123456 0", 11, &across, &unchanged) && fabs(across + 0.123456) < 0.0000001,
+		"and LAMPSHOULDER still takes 8 after its minus, as it did before there was a longest");
+	Check(ReadPlainNumber("32767.99998", 11, &longNumber, 11) && fabs(longNumber - 32767.99998) < 0.0000001, "a reader given 11 reads \"32767.99998\", as the editor's seconds need");
+	Check(!ReadPlainNumber("32767.99998", 11, &longNumber, 10), "and one given 10 refuses it");
+	Check(!ReadPlainNumber("123456789012", 12, &longNumber, 11) && ReadPlainNumber("123456789012", 11, &longNumber, 11) && longNumber == 12345678901.0,
+		"text one character past its longest is refused before any of it is read, and the same text at its longest is read");
+	Check(ReadPlainNumber("123456789012345678901234", 24, &longNumber, 100) && !ReadPlainNumber("1234567890123456789012345", 25, &longNumber, 100),
+		"nobody gets a longest above kReadNumberMostLongest (24), however much is asked for, so the sum stays one a double holds");
+	Check(ReadSignedNumber("-123456789.5", 12, &longNumber, 11) && longNumber == -123456789.5 && !ReadSignedNumber("-123456789.5", 12, &longNumber),
+		"the signed reader passes its longest on, for the number after the minus");
+
 	// The setters bring anything to the nearest limit, a number that isn't one too, so the shaders only ever get numbers inside them
 	double const notANumber = std::numeric_limits<double>::quiet_NaN();
 
