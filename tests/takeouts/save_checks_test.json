@@ -1124,6 +1124,61 @@
 					"to": "\tlive->CollisionReportPtr = 0;\n\t// *live = block->dynamics;\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a fan's speed is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_fan.cpp",
+					"from": "if(Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a track's timer is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/track.cpp",
+					"from": "if (Save_NumberIsInRange(block->timer, 0, longest_timer))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a track's timer may run past its section and its start",
+			"changes": [
+				{
+					"file": "3dc/avp/track.cpp",
+					"from": "int const longest_timer = (section_time > latest_start) ? section_time : latest_start;",
+					"to": "int const longest_timer = 0x7fffffff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a track's timer is measured before its section is settled",
+			"changes": [
+				{
+					"file": "3dc/avp/track.cpp",
+					"from": "\t//this picks an entry in the track's list of sections, so a number that isn't one of them goes back to the first\n\ttc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);\n\tif (tc->current_section < 0) tc->current_section = 0;\n\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/avp/track.cpp",
+					"from": "\t\tCOPYELEMENT_LOAD(speed_mult)\n\t}\n",
+					"to": "\t\tCOPYELEMENT_LOAD(speed_mult)\n\t}\n\ttc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);\n\tif (tc->current_section < 0) tc->current_section = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a track's speed is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/track.cpp",
+					"from": "if (Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))",
+					"to": "if (true)"
+				}
+			]
 		}
 	]
 }

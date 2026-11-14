@@ -4,6 +4,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved track has to be on one of its own sections
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a saved track's timer has to be inside its section, or its start, and its speed from nothing to full
 #define DB_LEVEL 1
 #include "3dc.h"
 #include "inline.h"
@@ -883,11 +885,27 @@ void LoadTrackPosition(SAVE_BLOCK_HEADER* header,TRACK_CONTROLLER* tc)
 
 	//start copying stuff
 
-	COPYELEMENT_LOAD(timer)
-	COPYELEMENT_LOAD(speed_mult)
 	//this picks an entry in the track's list of sections, so a number that isn't one of them goes back to the first
 	tc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);
 	if (tc->current_section < 0) tc->current_section = 0;
+
+	// A track's timer is how far it is into its section, so a save's has to be from 0 to that section's length, or to the latest a level's
+	// track can start (1 << 24, as the level reader holds it), as a save made before the track first moves still has its start. Every track
+	// has a section (object_setup.cpp makes none without one). The speed a track is played at goes from nothing to full, ONE_FIXED, as the
+	// fans that set it keep it. A number past either is left as the track had it. (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const latest_start = 1 << 24;
+	int const section_time = tc->sections[tc->current_section].time_for_section;
+	int const longest_timer = (section_time > latest_start) ? section_time : latest_start;
+
+	if (Save_NumberIsInRange(block->timer, 0, longest_timer))
+	{
+		COPYELEMENT_LOAD(timer)
+	}
+
+	if (Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))
+	{
+		COPYELEMENT_LOAD(speed_mult)
+	}
 
 	COPYELEMENT_LOAD(playing)
 	COPYELEMENT_LOAD(reverse)
