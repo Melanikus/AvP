@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a file with no level environment is refused, a level or a model alike
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a level file's size is read as a 64-bit number, and a file too short to hold a level's heading, or larger than any level the
 //   game can use, is refused before any memory is set aside for it, and the log says why; every read has to get all the bytes it
@@ -287,6 +289,16 @@ File_Chunk::File_Chunk(const char * file_name)
 	}
 
 	CloseHandle (rif_file);
+
+	// Every file the game loads, a level or a model, has to hold a level environment (REBENVDT). Both loaders keep it for the
+	// game (load_rif and load_rif_non_env, in chunk_load.cpp), and copying the file into the game reads it straight away
+	// (copy_rif_data, in projload.cpp, for a level and for a model alike). So a file with none is refused here, the one place both
+	// loaders pass through, and load_rif stops with its error message. All 86 of the game's own files, 63 levels and 23 models,
+	// hold exactly one. Added 2026-11-14 by Melanikus for the AvP port.
+	if (!error_code && !lookup_single_child ("REBENVDT"))
+	{
+		error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 
 	// After a failed load the tree is only part of a level, and this step relies on all of it being there. load_rif
 	// sees error_code and stops the level with its error message.

@@ -10,7 +10,9 @@
 //   - a plain level and a packed level both load, and the size and sum each one gives are those of the file as it is on disk;
 //   - a copy with one byte changed gives another sum;
 //   - a file too short to hold a level's heading is refused, and so is a file larger than any level the game can use, even though
-//     everything in it adds up; neither gives a size or a sum, and the log says why each was refused.
+//     everything in it adds up; neither gives a size or a sum, and the log says why each was refused;
+//   - a file with no level environment (REBENVDT) is refused, a level or a model alike, and the same model with one loads (added
+//     2026-11-14 by Melanikus for the AvP port).
 // - By reading the game's source: loading a level writes the line, once, after the level is in and before it's copied into the game,
 //   naming the path it was loaded from; the loader reads the size as a 64-bit number, and every read it makes has to get all it asked
 //   for and adds what it got to the sum; the custom maps list uses the loader's own largest size.
@@ -120,6 +122,36 @@ static Bytes MakeChunk(const char *name, const Bytes &body)
 	out.insert(out.end(), body.begin(), body.end());
 
 	return out;
+}
+
+// Two parts of a file, one after the other
+static Bytes Joined(const Bytes &first, const Bytes &second)
+{
+	Bytes out(first);
+
+	out.insert(out.end(), second.begin(), second.end());
+
+	return out;
+}
+
+// A level environment (REBENVDT) with nothing in it. Every file the game loads has to hold one.
+static Bytes Environment()
+{
+	return MakeChunk("REBENVDT", Bytes());
+}
+
+// A model's one hierarchy, the smallest a model file can hold: its outermost chunk, with one section inside, whose only chunk is
+// its name (a count of 0 extra numbers, then the 7 letters and their 0). A section with no animations is left out when the model is
+// built, so it needs nothing more to load.
+static Bytes OneHierarchy()
+{
+	Bytes name;
+
+	PutNumber(name, 0);
+	Bytes const letters = BytesOf("section", 8);
+	name.insert(name.end(), letters.begin(), letters.end());
+
+	return MakeChunk("OBJCHIER", MakeChunk("OBJCHIER", MakeChunk("OBJHIERD", name)));
 }
 
 // The level, packed the way the game packs its levels, as one file: the package and what follows it
@@ -289,24 +321,34 @@ static void TestTheLoader(const std::string &folder)
 {
 	printf("The game's level loader, on real files:\n");
 
-	Bytes const level = MakeChunk("REBINFF2", MakeChunk("SUMTESTS", Bytes(40, 'x')));
+	// The last chunk is the one the test's own bytes are in, so that changing the file's last byte changes one of them
+	Bytes const level = MakeChunk("REBINFF2", Joined(Environment(), MakeChunk("SUMTESTS", Bytes(40, 'x'))));
 	Bytes changed = level;
 	changed.back() = 'y';
 	Bytes const packed = Packed(level);
 	printf("  (the level is packed: %u bytes)\n", (unsigned int)packed.size());
 	Bytes const tooShort = BytesOf("REBINFF2abc", 11);
+	Bytes const noEnvironment = MakeChunk("REBINFF2", MakeChunk("SUMTESTS", Bytes(40, 'x')));
+	Bytes const model = MakeChunk("REBINFF2", Joined(Environment(), OneHierarchy()));
+	Bytes const modelNoEnvironment = MakeChunk("REBINFF2", OneHierarchy());
 
 	std::string const plainFile = folder + "Plain.rif";
 	std::string const changedFile = folder + "Changed.rif";
 	std::string const packedFile = folder + "Packed.rif";
 	std::string const shortFile = folder + "Short.rif";
 	std::string const longFile = folder + "Long.rif";
+	std::string const noEnvironmentFile = folder + "NoEnvironment.rif";
+	std::string const modelFile = folder + "Model.rif";
+	std::string const modelNoEnvironmentFile = folder + "ModelNoEnvironment.rif";
 
 	Write(plainFile, level);
 	Write(changedFile, changed);
 	Write(packedFile, packed);
 	Write(shortFile, tooShort);
 	WriteLongLevel(longFile, (unsigned int)kLevelFileMostBytes + 1);
+	Write(noEnvironmentFile, noEnvironment);
+	Write(modelFile, model);
+	Write(modelNoEnvironmentFile, modelNoEnvironment);
 	printf("  (the test's files are written, in %s)\n", folder.c_str());
 
 	LevelFileSum got;
@@ -334,11 +376,20 @@ static void TestTheLoader(const std::string &folder)
 	got.bytes = 1;
 	Check(!Loads(folder + "Missing.rif", &got) && got.bytes == 0, "a file that isn't there is refused, and has no size or sum");
 
+	// Every file the game loads has to hold a level environment. A level and a model go through this same loader (load_rif and
+	// load_rif_non_env), so the rule is the same for both. The model that loads shows the refusal is for the missing environment alone.
+	Check(!Loads(noEnvironmentFile, &got), "a level file with no level environment is refused");
+	Check(Loads(modelFile, &got), "a model file with a hierarchy and a level environment loads");
+	Check(!Loads(modelNoEnvironmentFile, &got), "and the same model with no level environment is refused, as a level would be");
+
 	remove(plainFile.c_str());
 	remove(changedFile.c_str());
 	remove(packedFile.c_str());
 	remove(shortFile.c_str());
 	remove(longFile.c_str());
+	remove(noEnvironmentFile.c_str());
+	remove(modelFile.c_str());
+	remove(modelNoEnvironmentFile.c_str());
 }
 
 static void TestTheGameUsesIt()
@@ -365,6 +416,11 @@ static void TestTheGameUsesIt()
 	Check(Count(loader, "ReadFile(") == 4 && Count(loader, ", &bytes_read, 0) || bytes_read != ") == 4,
 		"each of the loader's four reads has to get every byte it asked for");
 	Check(Count(loader, "MD5Update(&sum_so_far, ") == 4, "and each one adds what it read to the sum");
+
+	std::string const loaders = ReadWholeFile("3dc/win95/chunk_load.cpp");
+	Check(Count(Between(loaders, "RIFFHANDLE load_rif(const char *fname)", "RIFFHANDLE load_rif_non_env("), "new File_Chunk(fname);") == 1 &&
+		Count(Between(loaders, "RIFFHANDLE load_rif_non_env(const char *fname)", "void undo_rif_load("), "new File_Chunk(fname);") == 1,
+		"a level's loader and a model's both read their file through that loader, so a model with no level environment is refused too");
 
 	std::string const customMaps = ReadWholeFile("3dc/avp/win95/frontend/custom_maps.cpp");
 	Check(Has(customMaps, "static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;"),

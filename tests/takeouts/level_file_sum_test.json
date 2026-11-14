@@ -254,6 +254,26 @@
 					"to": "static const long long kCustomMapMostFileBytes = 33LL << 20;"
 				}
 			]
+		},
+		{
+			"name": "a file with no level environment is loaded",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!error_code && !lookup_single_child (\"REBENVDT\"))",
+					"to": "if (!error_code && lookup_single_child (\"NOSUCHCH\"))"
+				}
+			]
+		},
+		{
+			"name": "a model with no level environment is loaded, though a level isn't",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!error_code && !lookup_single_child (\"REBENVDT\"))",
+					"to": "if (!error_code && !lookup_single_child (\"REBENVDT\") && !lookup_single_child (\"OBJCHIER\"))"
+				}
+			]
 		}
 	]
 }
