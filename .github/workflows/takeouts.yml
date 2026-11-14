@@ -76,10 +76,28 @@ jobs:
             $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' -or $_.StartsWith('tests/every_test/') }).Count -gt 0
 
             $chosen = if ($checkerChanged) { $all } else { @(foreach ($name in $all) {
-              # The list, the test and its settings, its stand-ins, every source file its settings name, and every file its rows break
+              # The list, the test and its settings, its stand-ins, every source file its settings name, every .cpp file it takes in whole,
+              # and every file its rows break
               $files = @("tests/takeouts/$name.json", "tests/$name.cpp", "tests/$name.args")
               if (Test-Path "tests/$name.args") {
                 $files += @(Get-Content "tests/$name.args" | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ -match '^[\w./-]+\.(c|cpp|h|hpp)$' })
+              }
+              # A test can take a whole .cpp file in with #include "x.cpp" (rebeccas_fast_test takes in rebeccas_test.cpp, to be the same
+              # test built with the game's fast rules for fractions), so a change to that file changes the test too. It's looked for the
+              # way the compiler looks for it: beside the test, then in each folder the test's settings give with /I, in their order. A
+              # name or a folder with ".." in it is passed over, so the search stays inside the repository.
+              if (Test-Path "tests/$name.cpp") {
+                $folders = @('tests')
+                if (Test-Path "tests/$name.args") {
+                  $folders += @(Get-Content "tests/$name.args" | ForEach-Object { $_ -split '\s+' } | ForEach-Object { if ($_ -cmatch '^/I([\w./-]+)$' -and $Matches[1] -notmatch '\.\.') { $Matches[1] } })
+                }
+                foreach ($line in Get-Content "tests/$name.cpp") {
+                  if ($line -cmatch '^\s*#\s*include\s+"([\w./-]+\.(c|cpp))"' -and $Matches[1] -notmatch '\.\.') {
+                    $included = $Matches[1]
+                    $found = @($folders | Where-Object { Test-Path -PathType Leaf "$_/$included" } | Select-Object -First 1)
+                    if ($found.Count) { $files += "$($found[0])/$included" }
+                  }
+                }
               }
               $list = Get-Content "tests/takeouts/$name.json" -Raw | ConvertFrom-Json
               $files += @($list.rows | ForEach-Object { $_.changes } | ForEach-Object { $_.file })
