@@ -3133,6 +3133,22 @@ $listInBuild = [regex]::Match($buildWorkflow, '\$required = (.*)').Groups[1].Val
 $listInCheck = [regex]::Match($checkScript, '\$requiredChecks = (.*)').Groups[1].Value.Trim()
 Check ($listInBuild.Length -gt 0 -and $listInBuild -ceq $listInCheck) 'a release asks for the same checks as a test build'
 
+# --- The checks that run only before a release: the owner's rulings R-BLD-11 (take-outs) and R-BLD-12 (the full library scan),
+# 2026-11-14. Neither runs on every pull request and merge any more, so the release is where they're held to. Added 2026-11-14 by
+# Melanikus for the AvP port.
+$takeoutsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/takeouts.yml')) -replace "`r", ''
+$snykWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/snyk.yml')) -replace "`r", ''
+$listBeforeRelease = [regex]::Match($checkScript, '\$beforeReleaseChecks = (.*)').Groups[1].Value.Trim()
+Check ($listBeforeRelease -ceq "'Take-outs (all lists)', 'Build the vcpkg libraries'") 'a release also asks for every take-out list and for a full library scan'
+Check ($checkScript -match 'foreach \(\$check in \$beforeReleaseChecks\)') 'and reads each of them'
+Check ($checkScript -match 'Stop-Release "''\$check'' has never run in full on this commit') 'a release whose commit has had neither in full is refused'
+Check ($takeoutsWorkflow -match '(?m)^on:\n  workflow_dispatch:\n' -and $takeoutsWorkflow -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):') 'the take-outs run only by hand'
+Check ($takeoutsWorkflow.Contains('name: ${{ needs.choose.outputs.all == ''yes'' && ''Take-outs (all lists)'' || ''Take-outs'' }}')) 'and their last job is called "Take-outs (all lists)" only when every list ran'
+Check ($snykWorkflow -match '(?m)^  vcpkg-sources:\n    name: Build the vcpkg libraries\n    needs: vcpkg-changes\n') 'the library build waits for the answer to whether the libraries changed'
+Check ($snykWorkflow -match '(?m)^    if: needs\.vcpkg-changes\.outputs\.full == ''yes''$') 'and runs only when they are scanned in full'
+Check ($snykWorkflow -match '(?m)^            workflow_dispatch\) answer yes ') 'a library scan run by hand is always in full'
+Check ($snykWorkflow -match 'if \[ "\$CHANGES" != "success" \]; then') 'and when whether the libraries changed cannot be worked out, the library scan fails rather than passing'
+
 # --- The test build, read as text. What it makes is recorded by a job that builds nothing, and only once that job has checked it, so the
 # owner can ask GitHub to vouch for a test build as for a release. Added 2026-11-09 by Melanikus for the AvP port.
 $buildWithoutComments = ((($buildWorkflow -replace "`r", '') -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"

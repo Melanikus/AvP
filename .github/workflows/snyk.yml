@@ -6,7 +6,9 @@
 #   - Snyk Open Source (SCA) recognises vendored open-source code by file hashes and reports known vulnerabilities. It
 #     also fails if precompiled code (DLLs, libraries, executables) is in the repository.
 #   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
-#     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
+#     on the patched source that was really compiled. On a pull request or a push it does that whenever a library file changed,
+#     and otherwise passes at once, saying so; run by hand it always does; and a release asks for a full scan of its own commit
+#     (the owner's ruling R-BLD-12, below). Microsoft's D3DX is a binary package with no source to read, so
 #     it is not scanned. For the libraries Snyk can't recognise (the two post-quantum ones, #174), known vulnerabilities
 #     come from their projects' own GitHub security advisories, checked by machine (tools/check-advisories.ps1).
 # ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
@@ -21,8 +23,8 @@ on:
   pull_request:
     branches: [avpx_main]
   workflow_dispatch:
-  # Every night, so a vulnerability published today in a library we already pin is noticed by morning, even when nobody is
-  # committing. Scheduled runs use this file on the default branch. A failure here blocks nothing by itself, but the next
+  # Every night, so a vulnerability published today in our own code's view is noticed by morning, even when nobody is committing.
+  # The vcpkg libraries aren't scanned on the nightly run (R-BLD-12): the release scans them. Scheduled runs use this file on the default branch. A failure here blocks nothing by itself, but the next
   # pull request scans the same libraries and is blocked until it's dealt with, and GitHub emails the owner.
   schedule:
     - cron: "23 6 * * *"
@@ -199,11 +201,67 @@ jobs:
           sarif_file: snyk-open-source.sarif
           category: snyk-open-source
 
+  # The owner's ruling R-BLD-12 (2026-11-14): "the lib is very unlikely to change in the next 24 hours and the release is where all is
+  # gated". So the two library jobs below scan in full only when they're needed: when anything they scan or rely on has changed, when
+  # they're run by hand, and before a release (tools/check-release.ps1 refuses a release whose commit has no passing "Build the vcpkg
+  # libraries", which only a full scan runs). A library change never reaches avpx_main unscanned (Tao 1). The nightly run doesn't
+  # scan the libraries, by the owner's choice, so a new advisory against a library we already pin is caught at the next release.
+  vcpkg-changes:
+    name: Did the libraries change?
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    outputs:
+      full: ${{ steps.decide.outputs.full }}
+      why: ${{ steps.decide.outputs.why }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0   # the whole history, so what a pull request or a push changes can be seen
+
+      # The commits to compare come in as plain text in the environment, never pasted into the script. When in doubt, it scans.
+      - name: Decide whether the libraries are scanned in full
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          # Every file the two library jobs read, or that says which libraries the game is built from. A change to any of them scans the
+          # libraries in full. It's written out here so anyone can see the whole list: add to it whenever those jobs read a new file.
+          library_files='^(vcpkg\.json|vcpkg-configuration\.json|vcpkg-overlay-ports/|vcpkg-overlay-triplets/|dependencies/|\.github/workflows/snyk\.yml|\.github/snyk-accepted\.json|\.github/advisories-read\.json|tools/check-advisories\.ps1|tests/advisories-test\.ps1)'
+          answer() { echo "full=$1" >> "$GITHUB_OUTPUT"; echo "why=$2" >> "$GITHUB_OUTPUT"; echo "Scan the libraries in full: $1 ($2)"; exit 0; }
+          case "$EVENT" in
+            workflow_dispatch) answer yes "it was run by hand" ;;
+            schedule) answer no "the nightly run doesn't scan the libraries (R-BLD-12); the release does" ;;
+            pull_request) from="$BASE" ;;
+            push) from="$BEFORE" ;;
+            *) answer yes "it's an event this check doesn't know: $EVENT" ;;
+          esac
+          # A push that starts a branch has no commit before it (all zeros), and an id that isn't one can't be compared: both scan in full.
+          if ! [[ "$from" =~ ^[0-9a-f]{40}$ ]] || [ "$from" = "0000000000000000000000000000000000000000" ]; then
+            answer yes "there's no earlier commit to compare with"
+          fi
+          if ! changed=$(git diff --name-only "$from...HEAD"); then
+            answer yes "git couldn't say what changed"
+          fi
+          hits=$(printf '%s\n' "$changed" | grep -E "$library_files" || true)
+          if [ -n "$hits" ]; then
+            printf '%s\n' "$hits"
+            answer yes "the library files above changed"
+          fi
+          answer no "no library file changed; the libraries are scanned in full before a release"
+
   # The two jobs below scan what the game is really built from: vcpkg fetches each library (every download is checked
   # against the SHA512 in its port), applies its patches and ours, and compiles it. That needs Windows, so Windows
   # collects the patched sources and Linux scans them with the same pinned Snyk setup as above.
   vcpkg-sources:
     name: Build the vcpkg libraries
+    needs: vcpkg-changes
+    # Only when the libraries are scanned in full (above). Skipped otherwise, which a release refuses: tools/check-release.ps1 asks for
+    # this job to have passed on the release's commit, so a release always has a full library scan behind it.
+    if: needs.vcpkg-changes.outputs.full == 'yes'
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
       - name: Check out the repository
@@ -318,25 +376,44 @@ jobs:
 
   vcpkg-scan:
     name: Snyk on the vcpkg libraries
-    needs: vcpkg-sources
+    needs: [vcpkg-changes, vcpkg-sources]
     # GitHub counts a skipped job as a passing check, so without this a failed library build would skip this job and
     # let the pull request through unscanned. always() makes it run anyway: with no sources to download, it fails.
+    # It always gives an answer, so the required check never waits: it passes at once, saying why, when no library changed, and
+    # it fails if whether they changed couldn't be worked out.
     if: ${{ always() }}
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     steps:
+      - name: Say whether this run scans the libraries
+        id: decide
+        env:
+          CHANGES: ${{ needs.vcpkg-changes.result }}
+          FULL: ${{ needs.vcpkg-changes.outputs.full }}
+          WHY: ${{ needs.vcpkg-changes.outputs.why }}
+        run: |
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error::Whether the libraries changed couldn't be worked out, so nothing is let through unscanned"
+            exit 1
+          fi
+          echo "Scanning the libraries in full: $FULL ($WHY)"
+          echo "scan=$FULL" >> "$GITHUB_OUTPUT"
+
       - name: Check out the accepted-reports list
+        if: steps.decide.outputs.scan == 'yes'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo
           persist-credentials: false
 
       - name: Download the collected sources
+        if: steps.decide.outputs.scan == 'yes'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vcpkg-library-sources
           path: libsrc
 
       - name: Install the pinned Snyk CLI
+        if: steps.decide.outputs.scan == 'yes'
         run: |
           curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
           echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
@@ -350,10 +427,12 @@ jobs:
       # it passes, written to a file, are the only ones the scan below lets through as "not recognised", and only in this run. Added
       # 2026-11-09 by Melanikus for the AvP port.
       - name: Test the advisories check
+        if: steps.decide.outputs.scan == 'yes'
         shell: pwsh
         run: ./repo/tests/advisories-test.ps1
 
       - name: Known vulnerabilities from the projects' own advisories, for the libraries Snyk can't recognise
+        if: steps.decide.outputs.scan == 'yes'
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -365,7 +444,7 @@ jobs:
       # a settings file that tells a scanner to look away. It runs even if the advisories check failed, so the run still shows every
       # scan; then nothing is let through as "not recognised".
       - name: SAST and SCA on each library's source
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.decide.outputs.scan == 'yes' }}
         shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -450,7 +529,7 @@ jobs:
           exit $failed
 
       - name: Keep the reports
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.decide.outputs.scan == 'yes' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vcpkg-scan-results

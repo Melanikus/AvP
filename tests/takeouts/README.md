@@ -18,7 +18,7 @@ Visual Studio with the C++ tools, and PowerShell.
 ## When the Take-outs check fails
 
 A row that can't run fails the check, the same as one that isn't noticed. That's on purpose: if the code a row breaks has moved, the check it guards may be untested now, and nobody would know.
-The log names the list, the row (counted from 0), the file and the text, and says what to do. Fix it in the same pull request as the change that moved the code:
+The log names the list, the row (counted from 0), the file and the text, and says what to do. Fix it before the release, with a commit of its own that names the change that moved the code:
 
 - **The code is still there, in different words** (a renamed variable, a new argument): change the row's `"from"` to the code as it is now, and check its `"to"` still breaks it the way the
   row's name says. This finds the places most like the old text, and with `--write` puts the best one in the row:
@@ -32,11 +32,13 @@ The log names the list, the row (counted from 0), the file and the text, and say
 - **NOT NOTICED:** the test still passes with that broken. Make the test notice it, or, if it truly doesn't matter any more, remove the row and say why.
 - **It didn't build:** a row's `"to"` has to leave code that builds, so the only thing broken is what the row is about.
 
-On GitHub the same words are in the job's log (Take-outs for `<list>`, Run the list), and each failed row is a note on the pull request's page.
+On GitHub the same words are in the job's log (Take-outs for `<list>`, Run the list), and each failed row is a note on the run's page.
 
-**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs the lists a pull request can affect, each on a clean machine, and fails if
-any row isn't noticed or can't be run. A pull request that changes the check or `run.ps1` runs every list. Anyone who can run workflows can run any of them, or
-all, by hand: Actions, Take-outs, Run workflow.
+**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs only by hand (Actions, Take-outs, Run workflow), the lists named or all of
+them, each on a clean machine, and fails if any row isn't noticed or can't be run. It doesn't run on pull requests or merges. The owner's ruling R-BLD-11
+(2026-11-14): "take outs don't need to run all the fucking time, it's a hardening thing we need to do like once and get everyone to fix". So the whole set
+runs on a release candidate, the team fixes what it finds, and a release is refused unless "Take-outs (all lists)" passed on its own commit
+(`RELEASING.md`, "Before you start"). Locally, run the lists your change can reach before you hand it over: it's quicker to find a moved row then.
 
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
