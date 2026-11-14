@@ -24,6 +24,56 @@
 					"to": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n"
 				}
 			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n\t\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\t\treturn;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate's u isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate's v isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest))\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: the furthest a texture coordinate can be is a texel short",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tfloat const furthest = (float)kTextureAnimationFurthestTexel;\n",
+					"to": "\t\t\tfloat const furthest = (float)(kTextureAnimationFurthestTexel - 1);\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a bad texture coordinate doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n\t\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n"
+				}
+			]
 		}
 	]
 }

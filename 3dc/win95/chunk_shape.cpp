@@ -28,11 +28,14 @@
 //   every point, box corner and centre a shape gives has to be inside the level, as CheckPlace in chunk.hpp says
 //   a shape's radius, and its radius about its centre, have to be real numbers from 0 to 2^24, as CheckRadius in chunk.hpp says
 //   an animation frame's polygon normals have to pass the same rule as a shape's own
+//   a texture coordinate has to be a real number no further than an animated corner's can be
 
 #include <math.h>
 #include <vector>
 
 #include "chunk.hpp"
+#include "real_numbers.h"
+#include "texture_animation.h"
 #include "chunk_type.hpp"
 #include "chunk_shape.hpp"
 #include "chunk_object.hpp"
@@ -1265,6 +1268,17 @@ static void read_uv_lists (ChunkUV_List * lists, int count, const char * uvdata,
 		{
 			lists[i].vert[j] = *((ChunkUV *) uvdata);
 			uvdata += sizeof(ChunkUV);
+
+			// A corner's place on its picture is in texels, and the game makes a whole number of it, so each of u and v has to be a real
+			// number no further either way than an animated corner's can be (texture_animation.h). The furthest in the game's own levels
+			// is 4,715. Whether it's a real number is told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+			float const furthest = (float)kTextureAnimationFurthestTexel;
+
+			if (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))
+			{
+				Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				return;
+			}
 		}
 	}
 }

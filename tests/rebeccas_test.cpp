@@ -4913,6 +4913,54 @@ static void TestFrameNormals()
 	Check(!FrameNormalAccepted(endless, 0.0f, 0.0f), "and one with an endless number");
 }
 
+// 46. A texture coordinate, u or v, is a place on a picture in texels, and the game makes a whole number of it, so it has to be a real
+// number no further either way than an animated corner's can be (kTextureAnimationFurthestTexel, texture_animation.h). A shape's or a
+// sub-shape's list of them: how many lists, then each list's number of corners and u and v for each. (Added 2026-11-14 by Melanikus for
+// the AvP port.)
+static bool TextureCoordinateAccepted(bool subShape, float u, float v)
+{
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+	char * const data = PutChunk(wholeShape + bytes, "SHPUVCRD", 2 * sizeof(int) + 3 * 2 * sizeof(float));
+	int const lists = 1;
+	int const corners = 3;
+	float const place[2] = { u, v };
+
+	memcpy(data, &lists, sizeof(lists));
+	memcpy(data + sizeof(int), &corners, sizeof(corners));
+	memcpy(data + 2 * sizeof(int) + 2 * sizeof(float), place, sizeof(place));
+
+	char * const end = data + 2 * sizeof(int) + 3 * 2 * sizeof(float);
+	return subShape ? SubShapeIsAccepted(end - wholeShape) : ShapeIsAccepted(end);
+}
+
+static void TestTextureCoordinateNumbers()
+{
+	puts("46. a texture coordinate's numbers");
+
+	float const furthest = 16383.0f;
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastBits = 0x467FFC01u;   // the next float after 16383
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float justPast;
+	float negativeNotANumber;
+	memcpy(&justPast, &justPastBits, sizeof(justPast));
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	Check(TextureCoordinateAccepted(false, 127.0f, 127.0f), "a corner at 127, 127, as most in the game's own levels are, is accepted");
+	Check(TextureCoordinateAccepted(false, -1800.0f, -4715.0f) && TextureCoordinateAccepted(false, 3857.0f, 3081.0f), "and so are the furthest in them, either way");
+	Check(TextureCoordinateAccepted(false, 0.5f, 63.25f), "and a place between whole texels");
+	Check(TextureCoordinateAccepted(false, furthest, -furthest), "and the furthest a corner can be, 16383 texels either way");
+	Check(!TextureCoordinateAccepted(false, justPast, 0.0f), "a u just past 16383 is refused: no corner can be that far");
+	Check(!TextureCoordinateAccepted(false, 0.0f, -justPast), "and a v just past it the other way");
+	Check(!TextureCoordinateAccepted(false, notANumber, 0.0f), "a u that isn't a number is refused");
+	Check(!TextureCoordinateAccepted(false, 0.0f, notANumber), "and a v");
+	Check(!TextureCoordinateAccepted(false, negativeNotANumber, 0.0f), "and one that isn't a number with its sign bit set");
+	Check(!TextureCoordinateAccepted(false, endless, 0.0f) && !TextureCoordinateAccepted(false, 0.0f, -endless), "and endless either way");
+	Check(TextureCoordinateAccepted(true, 127.0f, 127.0f), "a sub-shape's corner at 127, 127 is accepted");
+	Check(!TextureCoordinateAccepted(true, notANumber, 0.0f), "and one that isn't a number is refused");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -4957,6 +5005,7 @@ int main()
 	TestRandomTextureName();
 	TestShapesWithNoName();
 	TestFrameNormals();
+	TestTextureCoordinateNumbers();
 
 	if (checksFailed)
 	{
