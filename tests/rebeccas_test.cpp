@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <limits>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -3540,6 +3541,17 @@ static bool LightRangeAccepted(bool placed, int range)
 	return ChunkAccepted(MakeChunk<Light_Chunk>, bytes, sizeof(Light_Data));
 }
 
+// A level's scale, the one number its ENVSDSCL chunk holds. (Added 2026-11-14.)
+static bool ScaleAccepted(double scale)
+{
+	alignas(double) static char bytes[16];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes, &scale, sizeof(scale));
+
+	return ChunkAccepted(MakeChunk<Environment_Scale_Chunk>, bytes, sizeof(scale));
+}
+
 static void TestNumbersUsedAsPlaces()
 {
 	puts("37. numbers used as places");
@@ -3688,6 +3700,26 @@ static void TestNumbersUsedAsPlaces()
 		Check(!LightRangeAccepted(placed, 0), (which + " with a range of nothing is refused: it would reach nowhere").c_str());
 		Check(!LightRangeAccepted(placed, -1), (which + " with a negative range is refused").c_str());
 		Check(!LightRangeAccepted(placed, (int)0x80000000), (which + " with the most negative range is refused").c_str());
+	}
+
+	// A level's scale multiplies every place and distance in it, and each answer is turned back into a whole number, so it has to keep every
+	// whole number a whole number: from 0.5 to 1. The game's own levels use 0.8 and 0.9, or none. (Added 2026-11-14 by Melanikus for the AvP port.)
+	{
+		double const notANumber = std::numeric_limits<double>::quiet_NaN();
+		double const endless = std::numeric_limits<double>::infinity();
+
+		Check(ScaleAccepted(1.0), "a level at its own size is accepted");
+		Check(ScaleAccepted(0.8) && ScaleAccepted(0.9), "the scales the game's own levels use are accepted");
+		Check(ScaleAccepted(0.5), "a level at half its size, the smallest scale, is accepted");
+		Check(!ScaleAccepted(0.4999), "a scale under a half is refused");
+		Check(!ScaleAccepted(1.0001), "a scale over 1 is refused");
+		Check(!ScaleAccepted(2.0), "a level at twice its size is refused");
+		Check(!ScaleAccepted(0.0), "a scale of nothing is refused");
+		Check(!ScaleAccepted(-1.0), "a negative scale is refused");
+		Check(!ScaleAccepted(notANumber), "a scale that isn't a number is refused");
+		Check(!ScaleAccepted(endless), "an endless scale is refused");
+		Check(!ScaleAccepted(-endless), "an endlessly negative scale is refused");
+		Check(!ScaleAccepted(1e300), "a huge scale is refused");
 	}
 
 	Check(ImageIndexAccepted(0), "the first image's index is accepted");

@@ -3,6 +3,7 @@
 //   removed code and declarations only the level editor used: the game itself never runs them
 //   a level's paths each need a number of their own
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a level's scale is read in environment_chunk.cpp, where it's checked
 
 #ifndef _envchunk_hpp
 #define _envchunk_hpp 1
@@ -88,11 +89,8 @@ public:
 	scale (_scale)
 	{}
 	
-	// constructor from buffer
-	Environment_Scale_Chunk (Chunk_With_Children * parent, const char * sdata, size_t /*ssize*/)
-	: Chunk (parent, "ENVSDSCL"),
-	scale ( *((double *) sdata) )
-	{}
+	// constructor from buffer: the scale is checked there (environment_chunk.cpp)
+	Environment_Scale_Chunk (Chunk_With_Children * parent, const char * sdata, size_t ssize);
 	
 	virtual size_t size_chunk ()
 	{

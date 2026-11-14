@@ -9,6 +9,7 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   a level's scale has to be from 0.5 to 1
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -141,6 +142,32 @@ void Environment_Data_Header_Chunk::prepare_for_output()
 
 // Class Environment_Scale_Chunk functions
 RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVSDSCL",Environment_Scale_Chunk,8)
+
+// A level's scale is a number from the file, with a fraction, that the game multiplies every place, size and distance in the level by as it
+// loads it, turning each answer back into a whole number (projload.cpp's set_local_scale, then object_setup.cpp and chunk_load.cpp).
+// It has to be from 0.5 to 1, or the level is refused:
+// - at 1 or less, any whole number the game multiplies by it is still a whole number it can hold;
+// - the game's own levels that have a scale use 0.8 or 0.9, and the rest have none, which is 1, so half leaves room below them;
+// - a number that isn't a number (NaN), or is endless, is refused too.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+Environment_Scale_Chunk::Environment_Scale_Chunk (Chunk_With_Children * parent, const char * sdata, size_t /*ssize*/)
+: Chunk (parent, "ENVSDSCL"),
+scale ( *((double *) sdata) )
+{
+	double const smallest_scale = 0.5;
+	double const largest_scale = 1.0;
+
+	// The 11 bits after a double's sign are its power of two, and all 11 set means it's NaN or endless. They're looked at as bits, because the
+	// game is built with the compiler's fast rules for fractions (/fp:fast), under which a comparison isn't promised to treat NaN as it should.
+	unsigned long long bits = 0;
+	memcpy(&bits, &scale, sizeof(bits));
+	bool const not_a_number_or_endless = ((bits >> 52) & 0x7FF) == 0x7FF;
+
+	if (not_a_number_or_endless || scale < smallest_scale || scale > largest_scale)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
 
 void Environment_Scale_Chunk::fill_data_block ( char * data_start)
 {
