@@ -9,7 +9,7 @@
 // Nothing here touches the game, so tests/debug_commands_test.cpp can try any number.
 //
 // Modified 2026-11-14 by Melanikus for the AvP port: "not a number" is told from its bits, so it's caught under the game's fast rules for
-// fractions too (tests/real_numbers_test.cpp tries it built that way).
+// fractions too (tests/real_numbers_test.cpp tries it built that way), and so is an endless number, before it's compared or made whole.
 #ifndef CONSOLE_VALUE_H
 #define CONSOLE_VALUE_H
 
@@ -71,6 +71,19 @@ inline bool ConsoleValue_FromDecimal(double typed, double scale, int minVal, int
 	// scale is 1 or 65536, so an ordinary or endless number times it is never "not a number"
 	double scaled = typed * scale;
 
+	// An endless number, typed as one or so big that it's endless once it's times scale, is told from its bits too, before anything
+	// compares it or makes a whole number of it: under the fast rules a comparison isn't promised to work on one. It's the largest value
+	// if it's above 0 and the smallest if it's below, which its sign bit, the double's top bit, says. (Added 2026-11-14 by Melanikus for
+	// the AvP port.)
+	if (IsNaNOrEndless(scaled))
+	{
+		uint64_t bits;
+		memcpy(&bits, &scaled, sizeof(bits));
+		*value = (bits >> 63) ? minVal : maxVal;
+		return true;
+	}
+
+	// Now scaled is a real number, so comparing it is safe
 	if (scaled > (double)maxVal)
 	{
 		scaled = (double)maxVal;
