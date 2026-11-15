@@ -5809,7 +5809,21 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 // More than one object can be selected (inteng's Shift+click): up to kEditorMostSelected of them, in EditorSelectedBlocks.
 #define kEditorMostSelected 256
 DISPLAYBLOCK *EditorSelectedBlocks[kEditorMostSelected];
+unsigned int EditorSelectedColours[kEditorMostSelected];   // ARGB of each: the selected objects' green, or a colour the editor gave (R_SetEditorTintedBlocks)
 int EditorSelectedCount = 0;
+
+bool EditorBlockIsTinted(const DISPLAYBLOCK *block)
+{
+	for (int i = 0; block && i < EditorSelectedCount; i++)
+	{
+		if (EditorSelectedBlocks[i] == block)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
 
 int R_EditorSelectedItemsDrawn()
 {
@@ -5817,7 +5831,7 @@ int R_EditorSelectedItemsDrawn()
 	return RenderListTintedDrawn;
 }
 
-void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int count)
+void R_SetEditorTintedBlocks(const struct displayblock *const *blocks, const unsigned int *colours, int count)
 {
 	EditorSelectedCount = 0;
 
@@ -5825,9 +5839,15 @@ void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int cou
 	{
 		if (blocks[i])
 		{
+			EditorSelectedColours[EditorSelectedCount] = colours ? colours[i] : 0xFF00FF00u;
 			EditorSelectedBlocks[EditorSelectedCount++] = (DISPLAYBLOCK *)blocks[i];
 		}
 	}
+}
+
+void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int count)
+{
+	R_SetEditorTintedBlocks(blocks, 0, count);
 }
 
 static void DrawTheSelectedInGreen()
@@ -5869,8 +5889,10 @@ static void DrawTheSelectedInGreen()
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00002f);
 
 	extern int RenderListTintedDrawn;
+	extern bool RenderListTintLines;
 
 	RenderListTintedDrawn = 0;
+	RenderListTintLines = lines;
 	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false, true);
 
 	asItWas->Apply();

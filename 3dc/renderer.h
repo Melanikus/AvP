@@ -185,7 +185,9 @@ void R_SetEditorMainViewport	(bool on, int x, int y, int width, int height);
 // The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
 bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;
-void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);   // up to 256 objects, all drawn in green
+void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);
+// The same with a colour for each (ARGB; null colours: green): the editor's link colours of Module Linking, a module drawn in one, its linked modules in another
+void R_SetEditorTintedBlocks	(const struct displayblock *const *blocks, const unsigned int *colours, int count);   // up to 256 objects, all drawn in green
 int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);

@@ -417,7 +417,13 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 
 	for (int offered = 0; offered < numVisMods; offered++)
 	{
-		StaticScene_OfferModule(SortedModules[offered].DispPtr);
+		// a module the level editor tints is drawn the old way, so its items can be marked (d3d_render.cpp)
+		extern bool EditorBlockIsTinted(const DISPLAYBLOCK *block);
+
+		if (!EditorBlockIsTinted(SortedModules[offered].DispPtr))
+		{
+			StaticScene_OfferModule(SortedModules[offered].DispPtr);
+		}
 	}
 
 	StaticScene_FinishChoosing();

@@ -324,6 +324,7 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 
 	Items[listIndex].sortKey = 0; // zero it out
 	Items[listIndex].tinted = RenderListTintNow;
+	Items[listIndex].tintColour = RenderListTintNow ? RenderListTintColour : 0;
 
 	set_layerID        (Items[listIndex].sortKey, layer);
 	set_texID          (Items[listIndex].sortKey, textureID);
@@ -336,7 +337,8 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	// with the neighbour's mark, so the selected object would show no green when the object beside it uses the same texture and states)
 	if ((listIndex != 0) &&		// only do this check if we're not adding the first item
 		(Items[listIndex-1].sortKey == Items[listIndex].sortKey) &&
-		(Items[listIndex-1].tinted == Items[listIndex].tinted))
+		(Items[listIndex-1].tinted == Items[listIndex].tinted) &&
+		(Items[listIndex-1].tintColour == Items[listIndex].tintColour))
 	{
 		// our new item uses the same states as previous item.
 		listIndex--;
@@ -422,6 +424,8 @@ void RenderList::Reset()
 // backwards draws every polygon in the opposite order, for the check in static_frame.cpp that finds where two polygons tie. It's only for that: the
 // polygons of one item normally go to the card in one draw, and here each goes in a draw of its own, because the order inside an item matters as well.
 bool RenderListTintNow = false;
+uint32_t RenderListTintColour = 0xFF00FF00u;
+bool RenderListTintLines = false;
 int RenderListTintedDrawn = 0;   // how many tinted items the last editor green pass drew (for the editor's report)
 
 // onlyTinted: only the items added for the editor's selected object (the editor's green pass; nothing is tinted in the game)
@@ -447,6 +451,14 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 		if (onlyTinted)
 		{
 			RenderListTintedDrawn++;
+		}
+
+		// the editor's tint pass: each item in its own colour, a solid half see-through, a line as it is
+		if (onlyTinted)
+		{
+			DWORD const colour = RenderListTintLines ? it->tintColour : ((it->tintColour & 0x00FFFFFFu) | 0x80000000u);
+
+			d3d.lpD3DDevice->SetRenderState(D3DRS_TEXTUREFACTOR, colour);
 		}
 
 		DWORD const addressing = (get_texAddressType(it->sortKey) == TEXTURE_WRAP) ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;

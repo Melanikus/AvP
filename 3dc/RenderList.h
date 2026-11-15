@@ -65,12 +65,18 @@ struct RenderItem
 	// the selected object again in green. Always false in the game. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
 	bool tinted;
 
+	// The colour the editor draws that object in (ARGB; 0 when not tinted): the selected objects' green, a module's link colour. Added 2026-11-15 by
+	// Melanikus (Dietrich) for the AvP port.
+	uint32_t tintColour;
+
 	// for std::sort - sort on the above sortKey value to allow sorting render states
 	bool operator < (const RenderItem& rhs) const {return sortKey < rhs.sortKey;}
 };
 
 // True only while AddShape adds the object the level editor has selected (R_SetEditorSelectedBlock): every item added then is tinted.
 extern bool RenderListTintNow;
+extern uint32_t RenderListTintColour;   // the colour of what is added while RenderListTintNow is true
+extern bool RenderListTintLines;        // the editor's tint pass draws lines (in the colour as it is) rather than see-through solids (half see-through)
 
 class RenderList
 {

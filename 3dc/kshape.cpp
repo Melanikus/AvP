@@ -2904,6 +2904,8 @@ void ShapeSpritePointsInstr(SHAPEINSTR *shapeinstrptr)
 //bool IsSphereInFrustum(Sphere_t &sphere);
 
 extern bool RenderListTintNow;               // RenderList.cpp
+extern unsigned int RenderListTintColour;
+extern unsigned int EditorSelectedColours[];  // d3d_render.cpp: the colour of each tinted block
 extern DISPLAYBLOCK *EditorSelectedBlocks[];   // d3d_render.cpp: the objects the level editor has selected (always none in the game)
 extern int EditorSelectedCount;
 
@@ -2921,6 +2923,7 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 				if (EditorSelectedBlocks[i] == block)
 				{
 					RenderListTintNow = true;
+					RenderListTintColour = EditorSelectedColours[i];
 					break;
 				}
 			}
