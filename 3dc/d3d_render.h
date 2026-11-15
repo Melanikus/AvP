@@ -91,6 +91,9 @@ extern int DrawFilledOutlinesColour;
 // 1: the outlines' colour in the level's own light (times each corner's light); 0, the default: the colour as it is
 extern int DrawFilledOutlinesLit;
 
+// The outlines' depth bias (D3DRS_DEPTHBIAS), negative toward the camera. Default -0.00001f: the outlines as they always were. Only the editor sets it.
+extern float DrawFilledOutlinesDepthBias;
+
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();
 extern void D3D_DrawWaterTest(MODULE *testModulePtr);

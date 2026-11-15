@@ -565,6 +565,10 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 {
 	uint32_t baseIndexValue = 0;
 
+	// The level editor's Untextured: the picture the game had set on stage 0 before the plain one was bound over it, and whether the plain one was bound at all
+	texID_t plainOverPicture = NO_TEXTURE;
+	bool plainWasBound = false;
+
 	if (!BuffersExist() || !*decl)
 	{
 		return;
@@ -654,6 +658,8 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 				// only the level's own list: the text, the HUD and the panels are drawn from other lists and keep their pictures
 				if (EditorUntextured && listName == "mainList")
 				{
+					plainOverPicture = get_texID(it->sortKey);
+					plainWasBound = true;
 					BindThePlainTexture();
 				}
 
@@ -684,5 +690,22 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 	{
 		d3d.lpD3DDevice->SetTexture(2, NULL);
 		R_ForgetTexture(2);
+	}
+
+	// The level editor's Untextured bound its one plain picture over this list's items. What is drawn next, such as the editor's panels' boxes (a plain colour, no picture of their own),
+	// must not be left holding it: with a black plain colour they would come out black. So the stage goes back to what the game's own record says it holds, the last picture the list set,
+	// and the game then changes it the way it always does (R_SetTexture only acts when the picture is not the one it remembers).
+	if (plainWasBound)
+	{
+		R_ForgetTexture(0);
+
+		if (plainOverPicture != NO_TEXTURE)
+		{
+			R_SetTexture(0, plainOverPicture);
+		}
+		else
+		{
+			d3d.lpD3DDevice->SetTexture(0, NULL);
+		}
 	}
 }

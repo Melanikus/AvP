@@ -205,6 +205,10 @@ int DrawFilledOutlinesColour = 0xFFFFFF;
 // wireframe) or as it is (0, the default: one hard colour everywhere). Only the editor sets it; anything but 0 counts as 1.
 int DrawFilledOutlinesLit = 0;
 
+// How far toward the camera the outlines are pulled (D3DRS_DEPTHBIAS), so they win the depth test against the faces they lie on. The default is what the outlines always had;
+// only the editor changes it, for the hidden-line look, where a faint fight with the black faces shows as a dashed edge.
+float DrawFilledOutlinesDepthBias = -0.00001f;
+
 uint32_t FMVParticleColour;
 
 const int kNumMeshVerts = 256;
@@ -6418,7 +6422,7 @@ static void DrawOutlinesOverTheSolids()
 	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
 	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00001f);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, DrawFilledOutlinesDepthBias);
 
 	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false);
 

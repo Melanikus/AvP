@@ -216,6 +216,8 @@ void ChangeZWriteEnable(enum ZWRITE_ENABLE setting)
 	depthWritesNow = setting;
 }
 
+texID_t NO_TEXTURE = 0;   // the game's "no picture" (d3_func.cpp); RenderList.cpp compares with it when it puts the stage back after the editor's plain picture
+
 bool R_SetTexture(uint32_t stage, texID_t picture)
 {
 	if (stage == 0)
