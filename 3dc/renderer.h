@@ -198,6 +198,7 @@ bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;
 void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);
 // The same with a colour for each (ARGB; null colours: green): the editor's link colours of Module Linking, a module drawn in one, its linked modules in another
+void R_SetEditorHighlightedPolygons	(const struct displayblock *const *blocks, const int *items, int count, unsigned int argb);   // polygon items[i] of blocks[i], each drawn in argb over the level (editor only)
 void R_SetEditorTintedBlocks	(const struct displayblock *const *blocks, const unsigned int *colours, int count);   // up to 256 objects, all drawn in green
 int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report
 void CreateScreenShotImage  ();

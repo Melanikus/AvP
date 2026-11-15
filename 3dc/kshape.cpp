@@ -47,6 +47,7 @@
 #include "texture_animation.h"
 #include <math.h>
 #include <vector>
+#include <algorithm>
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -372,6 +373,13 @@ void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
 * ShapePipeline() - this function processes a shape for rendering by considering each *
 * polygon (item) in turn.                                                             *
 **********************************************************************************KJL*/
+// The level editor's highlighted polygons (d3d_render.cpp, RenderList.cpp): always none in the game
+extern bool RenderListTintNow;
+extern unsigned int RenderListTintColour;
+extern unsigned int EditorHighlightColour;
+extern int EditorHighlightedCount;
+extern bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int *count);
+
 void ShapePipeline(SHAPEHEADER *shapePtr)
 {
 	ProcessorStageClock clock(kProcessorShapes);
@@ -684,9 +692,37 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 		}
 	}
 
+	// The level editor's highlighted polygons of this block: each is marked as it is added, so the editor's green pass draws it again in its own colour. Nothing here runs in the game.
+	int const itemsInTheShape = numitems;
+	const int *highlightedItems = 0;
+	int highlightedCount = 0;
+	bool const markedAsAWhole = RenderListTintNow;
+	unsigned int const wholeColour = RenderListTintColour;
+
+	if (EditorHighlightedCount && !EditorHighlightedItemsOf(Global_ODB_Ptr, &highlightedItems, &highlightedCount))
+	{
+		highlightedCount = 0;
+	}
+
+	struct PutTheMarkBack
+	{
+		bool was;
+		unsigned int colour;
+		~PutTheMarkBack() { if (EditorHighlightedCount) { RenderListTintNow = was; RenderListTintColour = colour; } }
+	} putTheMarkBack = { markedAsAWhole, wholeColour };
+
 	do {
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 		int pif = PolygonWithinFrustum(polyPtr);
+
+		if (highlightedCount)
+		{
+			int const thisItem = itemsInTheShape - numitems;
+			bool const highlighted = std::binary_search(highlightedItems, highlightedItems + highlightedCount, thisItem);
+
+			RenderListTintNow = highlighted || markedAsAWhole;
+			RenderListTintColour = highlighted ? EditorHighlightColour : wholeColour;
+		}
 
 		if (pif) {
 			switch (polyPtr->PolyItemType) {

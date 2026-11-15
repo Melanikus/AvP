@@ -659,6 +659,7 @@ static void ToyShadows_Draw();
 static void DrawOutlinesOverTheSolids();
 static void DrawTheSelectedInGreen();
 extern int EditorSelectedCount;
+extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
@@ -833,7 +834,7 @@ static bool ExecuteBuffer()
 	}
 
 	// The editor's selected object, in green over the level
-	if (EditorSelectedCount && mainList->GetSize())
+	if ((EditorSelectedCount || EditorHighlightedCount) && mainList->GetSize())
 	{
 		DrawTheSelectedInGreen();
 	}
@@ -5816,11 +5817,84 @@ DISPLAYBLOCK *EditorSelectedBlocks[kEditorMostSelected];
 unsigned int EditorSelectedColours[kEditorMostSelected];   // ARGB of each: the selected objects' green, or a colour the editor gave (R_SetEditorTintedBlocks)
 int EditorSelectedCount = 0;
 
+// The level editor's highlighted polygons (R_SetEditorHighlightedPolygons, renderer.h): a few polygons of a few blocks, each drawn again over the level in one colour (the editor's
+// Texture Map selection). Kept as, per block, its item numbers in order; kshape.cpp's ShapePipeline marks exactly those items as it adds them, the same way the selected object
+// is marked, so the green pass draws them. Always empty in the game: the game never calls the setter.
+static std::vector<std::pair<const DISPLAYBLOCK *, std::vector<int>>> editorHighlighted;
+unsigned int EditorHighlightColour = 0xFFFFFF00u;
+int EditorHighlightedCount = 0;
+
+void R_SetEditorHighlightedPolygons(const struct displayblock *const *blocks, const int *items, int count, unsigned int argb)
+{
+	editorHighlighted.clear();
+	EditorHighlightedCount = 0;
+	EditorHighlightColour = argb;
+
+	for (int i = 0; blocks && items && i < count && i < 100000; i++)
+	{
+		if (!blocks[i] || items[i] < 0)
+		{
+			continue;
+		}
+
+		std::vector<int> *mine = 0;
+
+		for (auto &entry : editorHighlighted)
+		{
+			if (entry.first == (const DISPLAYBLOCK *)blocks[i])
+			{
+				mine = &entry.second;
+				break;
+			}
+		}
+
+		if (!mine)
+		{
+			editorHighlighted.push_back(std::make_pair((const DISPLAYBLOCK *)blocks[i], std::vector<int>()));
+			mine = &editorHighlighted.back().second;
+		}
+
+		mine->push_back(items[i]);
+		EditorHighlightedCount++;
+	}
+
+	for (auto &entry : editorHighlighted)
+	{
+		std::sort(entry.second.begin(), entry.second.end());
+		entry.second.erase(std::unique(entry.second.begin(), entry.second.end()), entry.second.end());
+	}
+}
+
+// The highlighted items of one block, in order, for ShapePipeline: false when it has none
+bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int *count)
+{
+	for (const auto &entry : editorHighlighted)
+	{
+		if (entry.first == block)
+		{
+			*items = entry.second.data();
+			*count = (int)entry.second.size();
+			return !entry.second.empty();
+		}
+	}
+
+	return false;
+}
+
 bool EditorBlockIsTinted(const DISPLAYBLOCK *block)
 {
 	for (int i = 0; block && i < EditorSelectedCount; i++)
 	{
 		if (EditorSelectedBlocks[i] == block)
+		{
+			return true;
+		}
+	}
+
+	// a block with highlighted polygons is drawn the old way too, so those items can be marked
+	for (const auto &entry : editorHighlighted)
+	{
+		if (block && entry.first == block)
 		{
 			return true;
 		}
