@@ -1345,15 +1345,22 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 
 		if (EditorTurretSection != NULL && this_section_data == EditorTurretSection && EditorTurretElevation != 0)
 		{
-			// inteng turns the turret section by the elevation, a rotation about its own x axis (the sine table at 0x1000 - degrees x 4096 / 360); the axis and the order of the product are ASSUMED
+			// READ from inteng (FUN_0047ef70 0x47f176-0x47f1d8, dump-all-2.txt): index = 0x1000 - (elevation << 12) / 360; the matrix (in memory order m0..m8, the game's mat11..mat33) is
+			// { cos, 0, -sin,  0, 65536, 0,  sin, 0, cos } (cos = the table at 0x5f51b0, sin = the table at 0x5f11b0: their first words are 65536 and 0), a turn about the section's Y axis, and the section's own
+			// absolute matrix becomes rotation x SecMat by FUN_004b34b0(rotation, SecMat, SecMat), which is exactly the game's MatrixMultiply(rotation, SecMat, out). Done after the section's place is worked out, before its children.
 			int const at = (0x1000 - (EditorTurretElevation * 4096) / 360) & 0xfff;
-			MATRIXCH rotation = Identity_RotMat, turned;
+			MATRIXCH rotation, turned;
 
-			rotation.mat22 = cosine[at];
-			rotation.mat23 = -sine[at];
-			rotation.mat32 = sine[at];
+			rotation.mat11 = cosine[at];
+			rotation.mat12 = 0;
+			rotation.mat13 = -sine[at];
+			rotation.mat21 = 0;
+			rotation.mat22 = 65536;
+			rotation.mat23 = 0;
+			rotation.mat31 = sine[at];
+			rotation.mat32 = 0;
 			rotation.mat33 = cosine[at];
-			MatrixMultiply(&(this_section_data->SecMat), &rotation, &turned);
+			MatrixMultiply(&rotation, &(this_section_data->SecMat), &turned);
 			this_section_data->SecMat = turned;
 		}
 		/* Set the initialised flag... */
