@@ -5917,6 +5917,17 @@ extern void AccessNextPolygon(void);
 extern void GetPolygonVertices(struct ColPolyTag *polyPtr);
 
 static EditorOrtho editorOrtho;
+static std::vector<EditorOrthoLine> editorOrthoLines;
+
+void R_SetEditorOrthoLines(const EditorOrthoLine *lines, int count)
+{
+	editorOrthoLines.clear();
+
+	if (lines && count > 0)
+	{
+		editorOrthoLines.assign(lines, lines + (count < 4096 ? count : 4096));
+	}
+}
 
 namespace
 {
@@ -6201,7 +6212,7 @@ static void DrawEditorOrthoViews()
 
 	unsigned long long const signature = OrthoSignatureNow();
 
-	if (signature != orthoSignature || (!orthoBuffer && orthoVerts.empty() && !orthoHasBounds))
+	if (editorOrtho.showLevel && (signature != orthoSignature || (!orthoBuffer && orthoVerts.empty() && !orthoHasBounds)))
 	{
 		orthoSignature = signature;
 		OrthoRebuild();
@@ -6275,12 +6286,26 @@ static void DrawEditorOrthoViews()
 		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, ground, sizeof(D3DLVERTEX));
 
 		// the level's lines: modules grey, objects blue, the selected objects green
-		if (orthoBuffer && orthoBufferSize)
-		{
-			D3DXMATRIX matrix;
+		D3DXMATRIX matrix;
 
-			OrthoMatrix(view, &matrix);
-			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matrix);
+		OrthoMatrix(view, &matrix);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matrix);
+
+		// the lines the editor gave (the track), each in its colour, in the same places as the level
+		for (size_t l = 0; l < editorOrthoLines.size(); l++)
+		{
+			EditorOrthoLine const &line = editorOrthoLines[l];
+			D3DLVERTEX ends[2];
+
+			memset(ends, 0, sizeof(ends));
+			ends[0].x = (float)line.x0; ends[0].y = (float)line.y0; ends[0].z = (float)line.z0;
+			ends[1].x = (float)line.x1; ends[1].y = (float)line.y1; ends[1].z = (float)line.z1;
+			OrthoFlat(line.colour);
+			device->DrawPrimitiveUP(D3DPT_LINELIST, 1, ends, sizeof(D3DLVERTEX));
+		}
+
+		if (editorOrtho.showLevel && orthoBuffer && orthoBufferSize)
+		{
 			device->SetStreamSource(0, orthoBuffer, 0, sizeof(D3DLVERTEX));
 
 			if (orthoModuleVerts >= 2)
