@@ -332,8 +332,11 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	set_texAddressType (Items[listIndex].sortKey, textureAddress);
 
 	// lets see if we can merge this item with the previous item
+	// (a tinted item, the editor's selected object, never joins an untinted one, or the other way round: joined, its polygons would be drawn
+	// with the neighbour's mark, so the selected object would show no green when the object beside it uses the same texture and states)
 	if ((listIndex != 0) &&		// only do this check if we're not adding the first item
-		(Items[listIndex-1].sortKey == Items[listIndex].sortKey))
+		(Items[listIndex-1].sortKey == Items[listIndex].sortKey) &&
+		(Items[listIndex-1].tinted == Items[listIndex].tinted))
 	{
 		// our new item uses the same states as previous item.
 		listIndex--;
@@ -433,7 +436,10 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 		RenderItem *it = &Items[backwards ? listIndex - 1 - i : i];
 		uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
 
-		if (get_command(it->sortKey) || !numPrimitives || get_transType(it->sortKey) != TRANSLUCENCY_OFF || (onlyTinted && !it->tinted))
+		// the editor's green pass draws the selected object whatever its see-through mode, so a glass or cut-out object is green too
+		bool const wrongKind = onlyTinted ? !it->tinted : get_transType(it->sortKey) != TRANSLUCENCY_OFF;
+
+		if (get_command(it->sortKey) || !numPrimitives || wrongKind)
 		{
 			continue;
 		}
