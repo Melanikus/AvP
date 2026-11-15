@@ -88,6 +88,9 @@ extern int DrawFilledOutlines;
 // The outlines' colour, 0xRRGGBB: white unless the editor asks for another. Only the low 24 bits are read.
 extern int DrawFilledOutlinesColour;
 
+// 1: the outlines' colour in the level's own light (times each corner's light); 0, the default: the colour as it is
+extern int DrawFilledOutlinesLit;
+
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();
 extern void D3D_DrawWaterTest(MODULE *testModulePtr);

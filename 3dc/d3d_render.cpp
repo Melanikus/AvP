@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
-//   game always has it, changes nothing; and DrawFilledOutlinesColour, their colour, white unless the editor asks for another
+//   game always has it, changes nothing; DrawFilledOutlinesColour, their colour, white unless the editor asks for another; and
+//   DrawFilledOutlinesLit, whether that colour is shown in the level's own light
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
 //   away (#176, particle_depth.h)
@@ -199,6 +200,10 @@ int DrawFilledOutlines = 0;
 // unlit wireframe is green). Only the editor sets it, like DrawFilledOutlines. Only the low 24 bits are read, so any number at all is a
 // colour, and the outlines are always fully opaque. (Modified 2026-11-14 by Melanikus for the AvP port: the colour can be chosen.)
 int DrawFilledOutlinesColour = 0xFFFFFF;
+
+// Whether the outlines' colour is shown in the level's own light (1: the colour times each corner's light, the editor's lit green
+// wireframe) or as it is (0, the default: one hard colour everywhere). Only the editor sets it; anything but 0 counts as 1.
+int DrawFilledOutlinesLit = 0;
 
 uint32_t FMVParticleColour;
 
@@ -5753,8 +5758,22 @@ static void DrawOutlinesOverTheSolids()
 	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
 	device->SetPixelShader(NULL);
-	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+
+	// The colour alone, or (DrawFilledOutlinesLit) the colour times each corner's light: the list's corners carry the light the game
+	// worked out for them as their colour (the main shader hands it on as COLOR0), so multiplying by it puts the colour in the level's
+	// own light, with no texture either way
+	if (DrawFilledOutlinesLit)
+	{
+		device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+		device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	}
+	else
+	{
+		device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	}
+
 	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
 	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
 	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
