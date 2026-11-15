@@ -261,7 +261,7 @@ void RestartLevel()
 		//   the aliens' ways go with the aliens; the alien ways map stays, as the level's shape does (alien_ways.h)
 		AlienWays_LevelRestarts();
 
-		i = maxobjects;
+		i = maxdisplayblocks;
 		InitialiseObjectBlocks();
 		while (i --)
 		{
@@ -543,7 +543,7 @@ int Destroy_CurrentEnvironment(void)
 			ActiveStBlockList[i] = NULL;
 		}
 
-		i = maxobjects;
+		i = maxdisplayblocks;
 		InitialiseObjectBlocks();
 		while (i --)
 		{

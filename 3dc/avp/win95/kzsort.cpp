@@ -29,11 +29,21 @@ extern DISPLAYBLOCK *Player;
 
 struct KItem KItemList[maxpolyptrs];
 
-// one entry more than MAX_NUMBER_OF_VISIBLE_MODULES: KRenderItems draws up to MAX + 1 modules (see its limit test)
-static struct KObject VisibleModules[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
-static struct KObject VisibleModules2[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
+// The room for the editor, which shows a whole level at once: the biggest stock level has 608 modules (Nost03_M), so 1024 is room for any of
+// them. The game draws at most MAX_NUMBER_OF_VISIBLE_MODULES, as always, unless the editor asks for more (KRender_AllowManyModules).
+#define EDITOR_MOST_VISIBLE_MODULES 1024
+static int mostVisibleModules = MAX_NUMBER_OF_VISIBLE_MODULES;
+
+void KRender_AllowManyModules(bool on)
+{
+	mostVisibleModules = on ? EDITOR_MOST_VISIBLE_MODULES : MAX_NUMBER_OF_VISIBLE_MODULES;
+}
+
+// one entry more than the most: KRenderItems draws up to the most + 1 modules (see its limit test)
+static struct KObject VisibleModules[EDITOR_MOST_VISIBLE_MODULES + 1];
+static struct KObject VisibleModules2[EDITOR_MOST_VISIBLE_MODULES + 1];
 static struct KObject *SortedModules;
-static struct KObject VisibleObjects[maxobjects];
+static struct KObject VisibleObjects[maxdisplayblocks];
 
 void SetFogDistance(int fogDistance);
 void ReflectObject(DISPLAYBLOCK *dPtr);
@@ -230,7 +240,7 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 		{
 			/* the original test (numVisMods > MAX), checked before VisibleModules[numVisMods] is written: MAX + 1 modules
 			are drawn as they always were, the arrays have MAX + 1 entries for them, and the MAX + 2nd returns */
-			if (numVisMods > MAX_NUMBER_OF_VISIBLE_MODULES)
+			if (numVisMods > mostVisibleModules)
 			{
 				/* outside the environment! */
 				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);

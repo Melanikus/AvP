@@ -1032,6 +1032,10 @@ SHAPEHEADER* GetShapeData(int shapenum);
 
 void InitialiseObjectBlocks(void);
 
+/* The level editor asks for room for more display blocks than the game's maxobjects, before it loads a level (object.cpp). The game never calls this. */
+void Objects_AllowManyDisplayBlocks(bool on);
+extern int DisplayBlocksMost;
+
 DISPLAYBLOCK* AllocateObjectBlock(void);
 void DeallocateObjectBlock(DISPLAYBLOCK *dblockptr);
 

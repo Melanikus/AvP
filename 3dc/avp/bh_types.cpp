@@ -2776,7 +2776,7 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
   MODULE m_temp;
   //TXACTRLBLK *taPtr;
 
-  if (NumActiveBlocks >= maxobjects) return (DISPLAYBLOCK *)NULL;
+  if (NumActiveBlocks >= DisplayBlocksMost) return (DISPLAYBLOCK *)NULL;
   if (NumActiveStBlocks >= maxstblocks) return (DISPLAYBLOCK *)NULL;
 
   // 1. Set up shape data BEFORE making the displayblock,
