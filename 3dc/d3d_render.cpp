@@ -5885,6 +5885,12 @@ bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int 
 // module (the objects the level file places). Always none in the game: the game never calls the setter, so nothing here runs.
 static std::vector<const DISPLAYBLOCK *> editorHiddenBlocks;
 static bool editorHideEveryPlacedObject = false;
+static bool editorMixed = false;   // R_SetEditorMixed: the tint pass draws solid even when the game draws lines
+
+void R_SetEditorMixed(bool on)
+{
+	editorMixed = on;
+}
 static bool editorHideEveryModule = false;
 int EditorHiddenCount = 0;   // 0 in the game
 
@@ -5989,7 +5995,7 @@ static void DrawTheSelectedInGreen()
 		return;
 	}
 
-	bool const lines = WireFrameMode != 0;
+	bool const lines = WireFrameMode != 0 && !editorMixed;
 
 	d3d.effectSystem->SetActive(d3d.mainEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);

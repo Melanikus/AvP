@@ -198,6 +198,7 @@ bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;
 void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);
 // The same with a colour for each (ARGB; null colours: green): the editor's link colours of Module Linking, a module drawn in one, its linked modules in another
+void R_SetEditorMixed				(bool on);   // the editor's tinted blocks are drawn SOLID even in a wire draw mode (inteng's Mixed: wire modules, painted linked ones; editor only)
 void R_SetEditorHiddenBlocks		(const struct displayblock *const *blocks, int count, bool everyPlacedObject, bool everyModule);   // these blocks (and, when asked, every placed object, every module) are not drawn at all (editor only)
 void R_SetEditorHighlightedPolygons	(const struct displayblock *const *blocks, const int *items, int count, unsigned int argb);   // polygon items[i] of blocks[i], each drawn in argb over the level (editor only)
 void R_SetEditorTintedBlocks	(const struct displayblock *const *blocks, const unsigned int *colours, int count);   // up to 256 objects, all drawn in green
