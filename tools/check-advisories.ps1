@@ -29,7 +29,8 @@ version doesn't count. An advisory that does affect the version is never written
 patch the port, and then the new version's advisories are read again. Nothing here can make an affected version pass: rule 3's machine
 reading stops it whatever "read" says.
 
-It runs in snyk.yml's library job on every pull request and every night, and tests/advisories-test.ps1 tries every way it can refuse.
+It runs in snyk.yml's library job whenever the libraries are scanned in full: on a pull request or a merge that changes a library file,
+when that workflow is run by hand, and so before every release (R-BLD-12). tests/advisories-test.ps1 tries every way it can refuse.
 It needs the network (GitHub's API), so it doesn't run on the team's own machines. -Answers is for that test alone: a folder of saved
 answers, named <owner>_<repository>.json, in place of GitHub's.
 #>
