@@ -155,6 +155,31 @@ void R_SetScreenPlacesInPixels	(bool inPixels);
 // the screen lists after it are solid. Without it the last drawing of a frame took the fill the HUD's adds had left, so the nearest polygons were solid
 // in a wire mode. Only the editor sets it; the game never does. (d3d_render.cpp)
 void R_SetEditorFillFollowsWire	(bool on);
+
+// THE LEVEL EDITOR'S THREE ORTHOGRAPHIC VIEWS (inteng's track and point screens: top left the x/y view, top right the z/y view, bottom left the x/z view;
+// bottom right is left to the 3D view). A drawing of its own over the level, in inteng's 640 by 480 screen laid over the box of the window the editor gives:
+// every polygon edge of every module and object in play, as lines, with a black ground behind each quarter, a crosshair at the 3D cursor, and the
+// selected objects in green. Only the editor turns it on; the game never does. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+// A view's numbers are inteng's own view record (FUN_004f3e30): a place on the 640 by 480 screen (origin), world units a pixel stands for (scale), and the
+// world place that origin shows (world); a world place maps to the screen as (world - worldOffset) / scale + origin, x across for the x/y and x/z views, z
+// across and FLIPPED for the z/y view, y down, and z down FLIPPED for the x/z view.
+struct EditorOrthoView
+{
+	int originX, originY;
+	int scaleX, scaleY;
+	int worldX, worldY, worldZ;
+};
+struct EditorOrtho
+{
+	bool on;
+	EditorOrthoView views[3];            // 0: x across, y down; 1: z across (flipped), y down; 2: x across, z down (flipped)
+	int boxLeft, boxTop, boxWidth, boxHeight;   // the window's pixels the 640 by 480 screen is laid over
+	bool crossShown[3];                  // a crosshair in each view, at the screen place given (FUN_00553ab0's own drawing is not read: a small cross, ours)
+	int crossX[3], crossY[3];
+};
+void R_SetEditorOrtho			(const EditorOrtho *settings);
+// The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
+bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;
 void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);   // up to 256 objects, all drawn in green
 int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report

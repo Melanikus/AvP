@@ -641,6 +641,8 @@ static bool surfacePicturesAreFromThisFrame = false;
 
 static void DrawShoulderLamp();
 static void DrawLampBeams();
+static void DrawEditorOrthoViews();
+static bool editorOrthoOn = false;
 void LampBeams_Forget();
 static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
@@ -952,6 +954,12 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush)
 	{
 		DrawLampBeams();
+
+		// The level editor's three orthographic views, over the level and under the weapon, the HUD and the panels (renderer.h)
+		if (editorOrthoOn)
+		{
+			DrawEditorOrthoViews();
+		}
 	}
 
 	// draw player weapon
@@ -5842,6 +5850,411 @@ static void DrawTheSelectedInGreen()
 
 	RenderListTintedDrawn = 0;
 	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false, true);
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
+// ---- THE LEVEL EDITOR'S THREE ORTHOGRAPHIC VIEWS (renderer.h) ----
+// Every polygon edge of the blocks in play, in world places, kept in one vertex buffer (the game's own walk through a shape's polygons, as the click-picking
+// uses it), rebuilt when the set of blocks or where they are changes. Each view draws that buffer with its own matrix, which turns a world place straight
+// into a place on inteng's 640 by 480 screen and then into the card's; a view is cut to its quarter by the scissor. Lines are drawn through the main
+// vertex shader as the ribbon is, with a plain colour (the texture factor), no depth, nothing else changed on the card (a state block puts it back).
+// the game's own walk through a shape's polygons (avp/dynamics.h, win95/plat_shp.h), as the editor's click-picking uses it
+struct ColPolyTag
+{
+	int NumberOfVertices;
+	VECTORCH PolyPoint[4];
+	VECTORCH PolyNormal;
+	DISPLAYBLOCK *ParentObject;
+};
+extern int SetupPolygonAccess(DISPLAYBLOCK *objectPtr);
+extern void AccessNextPolygon(void);
+extern void GetPolygonVertices(struct ColPolyTag *polyPtr);
+
+static EditorOrtho editorOrtho;
+
+namespace
+{
+	struct OrthoRange { const DISPLAYBLOCK *block; unsigned first; unsigned count; };
+
+	std::vector<D3DLVERTEX> orthoVerts;
+	std::vector<OrthoRange> orthoObjects;   // each object's lines, for the selected ones in green
+	unsigned orthoModuleVerts = 0;          // the first verts are every module's, the rest every object's
+	IDirect3DVertexBuffer9 *orthoBuffer = 0;
+	unsigned orthoBufferSize = 0;
+	unsigned long long orthoSignature = 0;
+	bool orthoHasBounds = false;
+	int orthoMins[3], orthoMaxs[3];
+	unsigned const kOrthoMostVerts = 3000000;
+
+	unsigned long long OrthoSignatureNow()
+	{
+		unsigned long long sum = (unsigned long long)NumActiveBlocks * 1000003ull;
+
+		for (int i = 0; i < NumActiveBlocks; i++)
+		{
+			DISPLAYBLOCK const *const b = ActiveBlockList[i];
+
+			if (b)
+			{
+				sum = sum * 31ull + (unsigned long long)(size_t)b + (unsigned long long)(unsigned)b->ObShape * 7ull + (unsigned long long)(unsigned)b->ObWorld.vx * 13ull
+					+ (unsigned long long)(unsigned)b->ObWorld.vy * 17ull + (unsigned long long)(unsigned)b->ObWorld.vz * 19ull;
+			}
+		}
+
+		return sum;
+	}
+
+	void OrthoAddBlock(DISPLAYBLOCK *block, bool module)
+	{
+		unsigned const first = (unsigned)orthoVerts.size();
+		int const polygons = SetupPolygonAccess(block);
+
+		for (int p = 0; p < polygons && orthoVerts.size() + 8 < kOrthoMostVerts; p++)
+		{
+			ColPolyTag poly;
+
+			AccessNextPolygon();
+			memset(&poly, 0, sizeof(poly));
+			GetPolygonVertices(&poly);
+
+			if (poly.NumberOfVertices < 2 || poly.NumberOfVertices > 4)
+			{
+				continue;
+			}
+
+			VECTORCH world[4];
+
+			for (int v = 0; v < poly.NumberOfVertices; v++)
+			{
+				world[v] = poly.PolyPoint[v];
+
+				if (!block->ObMyModule)
+				{
+					MATRIXCH matrix = block->ObMat;
+					RotateVector(&world[v], &matrix);
+				}
+
+				world[v].vx += block->ObWorld.vx;
+				world[v].vy += block->ObWorld.vy;
+				world[v].vz += block->ObWorld.vz;
+			}
+
+			for (int e = 0; e < poly.NumberOfVertices; e++)
+			{
+				VECTORCH const &a = world[e];
+				VECTORCH const &b = world[(e + 1) % poly.NumberOfVertices];
+
+				for (int end = 0; end < 2; end++)
+				{
+					VECTORCH const &w = end ? b : a;
+					D3DLVERTEX vertex;
+
+					memset(&vertex, 0, sizeof(vertex));
+					vertex.x = (float)w.vx;
+					vertex.y = (float)w.vy;
+					vertex.z = (float)w.vz;
+					vertex.color = 0xFFFFFFFF;
+					orthoVerts.push_back(vertex);
+
+					int const at[3] = { w.vx, w.vy, w.vz };
+
+					for (int axis = 0; axis < 3; axis++)
+					{
+						if (!orthoHasBounds)
+						{
+							orthoMins[0] = orthoMaxs[0] = at[0];
+							orthoMins[1] = orthoMaxs[1] = at[1];
+							orthoMins[2] = orthoMaxs[2] = at[2];
+							orthoHasBounds = true;
+						}
+
+						orthoMins[axis] = at[axis] < orthoMins[axis] ? at[axis] : orthoMins[axis];
+						orthoMaxs[axis] = at[axis] > orthoMaxs[axis] ? at[axis] : orthoMaxs[axis];
+					}
+				}
+			}
+		}
+
+		if (!module)
+		{
+			OrthoRange const range = { block, first, (unsigned)orthoVerts.size() - first };
+			orthoObjects.push_back(range);
+		}
+	}
+
+	void OrthoRebuild()
+	{
+		orthoVerts.clear();
+		orthoObjects.clear();
+		orthoHasBounds = false;
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			for (int i = 0; i < NumActiveBlocks; i++)
+			{
+				DISPLAYBLOCK *const block = ActiveBlockList[i];
+
+				if (!block || block == Player || block->HModelControlBlock || !block->ObShapeData || (block->ObFlags & ObFlag_NotVis)
+					|| (!block->ObShape && block->SfxPtr) || ((block->ObMyModule != 0) != (pass == 0)))
+				{
+					continue;
+				}
+
+				OrthoAddBlock(block, pass == 0);
+			}
+
+			if (pass == 0)
+			{
+				orthoModuleVerts = (unsigned)orthoVerts.size();
+			}
+		}
+
+		if (orthoBuffer)
+		{
+			orthoBuffer->Release();
+			orthoBuffer = 0;
+			orthoBufferSize = 0;
+		}
+
+		if (!orthoVerts.empty() && SUCCEEDED(d3d.lpD3DDevice->CreateVertexBuffer((UINT)(orthoVerts.size() * sizeof(D3DLVERTEX)), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &orthoBuffer, NULL)))
+		{
+			void *data = 0;
+
+			if (SUCCEEDED(orthoBuffer->Lock(0, 0, &data, 0)))
+			{
+				memcpy(data, &orthoVerts[0], orthoVerts.size() * sizeof(D3DLVERTEX));
+				orthoBuffer->Unlock();
+				orthoBufferSize = (unsigned)orthoVerts.size();
+			}
+			else
+			{
+				orthoBuffer->Release();
+				orthoBuffer = 0;
+			}
+		}
+	}
+
+	// The matrix of one view: a world place to the card's clip space, through inteng's 640 by 480 screen. (D3DX's row vectors: x' = x * m11 + ... + m41.)
+	void OrthoMatrix(int view, D3DXMATRIX *out)
+	{
+		EditorOrthoView const &v = editorOrtho.views[view];
+		double const sx = v.scaleX ? 1.0 / v.scaleX : 0.0;
+		double const sy = v.scaleY ? 1.0 / v.scaleY : 0.0;
+		double across[4] = { 0, 0, 0, 0 };   // the screen's x as a sum of x, y, z and a constant
+		double down[4] = { 0, 0, 0, 0 };
+
+		if (view == 0)
+		{
+			across[0] = sx;  across[3] = v.originX - v.worldX * sx;
+			down[1] = sy;    down[3] = v.originY - v.worldY * sy;
+		}
+		else if (view == 1)
+		{
+			across[2] = -sx; across[3] = v.originX + v.worldZ * sx;
+			down[1] = sy;    down[3] = v.originY - v.worldY * sy;
+		}
+		else
+		{
+			across[0] = sx;  across[3] = v.originX - v.worldX * sx;
+			down[2] = -sy;   down[3] = v.originY + v.worldZ * sy;
+		}
+
+		ZeroMemory(out, sizeof(*out));
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			out->m[axis][0] = (float)(across[axis] * 2.0 / 640.0);
+			out->m[axis][1] = (float)(-down[axis] * 2.0 / 480.0);
+		}
+
+		out->m[3][0] = (float)(across[3] * 2.0 / 640.0 - 1.0);
+		out->m[3][1] = (float)(1.0 - down[3] * 2.0 / 480.0);
+		out->m[3][2] = 0.5f;
+		out->m[3][3] = 1.0f;
+	}
+
+	// The matrix that takes a place on the 640 by 480 screen as it is
+	void OrthoScreenMatrix(D3DXMATRIX *out)
+	{
+		ZeroMemory(out, sizeof(*out));
+		out->m[0][0] = (float)(2.0 / 640.0);
+		out->m[1][1] = (float)(-2.0 / 480.0);
+		out->m[3][0] = -1.0f;
+		out->m[3][1] = 1.0f;
+		out->m[3][2] = 0.5f;
+		out->m[3][3] = 1.0f;
+	}
+
+	void OrthoFlat(DWORD colour)
+	{
+		d3d.lpD3DDevice->SetRenderState(D3DRS_TEXTUREFACTOR, colour);
+	}
+}
+
+void R_SetEditorOrtho(const EditorOrtho *settings)
+{
+	editorOrthoOn = settings && settings->on;
+
+	if (settings)
+	{
+		editorOrtho = *settings;
+	}
+}
+
+bool R_EditorOrthoBounds(int mins[3], int maxs[3])
+{
+	if (!orthoHasBounds)
+	{
+		return false;
+	}
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		mins[axis] = orthoMins[axis];
+		maxs[axis] = orthoMaxs[axis];
+	}
+
+	return true;
+}
+
+static void DrawEditorOrthoViews()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || editorOrtho.boxWidth < 64 || editorOrtho.boxHeight < 48 || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	unsigned long long const signature = OrthoSignatureNow();
+
+	if (signature != orthoSignature || (!orthoBuffer && orthoVerts.empty() && !orthoHasBounds))
+	{
+		orthoSignature = signature;
+		OrthoRebuild();
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+
+	D3DVIEWPORT9 viewport;
+
+	viewport.X = (DWORD)editorOrtho.boxLeft;
+	viewport.Y = (DWORD)editorOrtho.boxTop;
+	viewport.Width = (DWORD)editorOrtho.boxWidth;
+	viewport.Height = (DWORD)editorOrtho.boxHeight;
+	viewport.MinZ = 0.0f;
+	viewport.MaxZ = 1.0f;
+	device->SetViewport(&viewport);
+
+	// the three quarters of the 640 by 480 screen: top left, top right, bottom left
+	int const quarterLeft[3] = { 0, 320, 0 };
+	int const quarterTop[3] = { 0, 0, 240 };
+	D3DXMATRIX screenMatrix;
+
+	OrthoScreenMatrix(&screenMatrix);
+
+	for (int view = 0; view < 3; view++)
+	{
+		RECT scissor;
+
+		scissor.left = editorOrtho.boxLeft + quarterLeft[view] * editorOrtho.boxWidth / 640;
+		scissor.top = editorOrtho.boxTop + quarterTop[view] * editorOrtho.boxHeight / 480;
+		scissor.right = editorOrtho.boxLeft + (quarterLeft[view] + 320) * editorOrtho.boxWidth / 640;
+		scissor.bottom = editorOrtho.boxTop + (quarterTop[view] + 240) * editorOrtho.boxHeight / 480;
+		device->SetScissorRect(&scissor);
+
+		// the ground: black, over the level, drawn as two triangles in screen places
+		D3DLVERTEX ground[6];
+		float const left = (float)quarterLeft[view], top = (float)quarterTop[view], right = left + 320.0f, bottom = top + 240.0f;
+		float const corners[6][2] = { { left, top }, { right, top }, { left, bottom }, { right, top }, { right, bottom }, { left, bottom } };
+
+		memset(ground, 0, sizeof(ground));
+
+		for (int i = 0; i < 6; i++)
+		{
+			ground[i].x = corners[i][0];
+			ground[i].y = corners[i][1];
+			ground[i].z = 0.0f;
+		}
+
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &screenMatrix);
+		OrthoFlat(0xFF000000);
+		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, ground, sizeof(D3DLVERTEX));
+
+		// the level's lines: modules grey, objects blue, the selected objects green
+		if (orthoBuffer && orthoBufferSize)
+		{
+			D3DXMATRIX matrix;
+
+			OrthoMatrix(view, &matrix);
+			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matrix);
+			device->SetStreamSource(0, orthoBuffer, 0, sizeof(D3DLVERTEX));
+
+			if (orthoModuleVerts >= 2)
+			{
+				OrthoFlat(0xFF808080);
+				device->DrawPrimitive(D3DPT_LINELIST, 0, orthoModuleVerts / 2);
+			}
+
+			if (orthoBufferSize > orthoModuleVerts + 1)
+			{
+				OrthoFlat(0xFF4090FF);
+				device->DrawPrimitive(D3DPT_LINELIST, orthoModuleVerts, (orthoBufferSize - orthoModuleVerts) / 2);
+			}
+
+			OrthoFlat(0xFF00FF00);
+
+			for (size_t r = 0; r < orthoObjects.size(); r++)
+			{
+				for (int s = 0; s < EditorSelectedCount; s++)
+				{
+					if (EditorSelectedBlocks[s] == orthoObjects[r].block && orthoObjects[r].count >= 2)
+					{
+						device->DrawPrimitive(D3DPT_LINELIST, orthoObjects[r].first, orthoObjects[r].count / 2);
+					}
+				}
+			}
+		}
+
+		// the crosshair at the 3D cursor: a small cross, in screen places (its own drawing is not read: ours)
+		if (editorOrtho.crossShown[view])
+		{
+			float const cx = (float)editorOrtho.crossX[view], cy = (float)editorOrtho.crossY[view];
+			D3DLVERTEX cross[4];
+
+			memset(cross, 0, sizeof(cross));
+			cross[0].x = cx - 12.0f; cross[0].y = cy;
+			cross[1].x = cx + 12.0f; cross[1].y = cy;
+			cross[2].x = cx;         cross[2].y = cy - 12.0f;
+			cross[3].x = cx;         cross[3].y = cy + 12.0f;
+			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &screenMatrix);
+			OrthoFlat(0xFFFFFF00);
+			device->DrawPrimitiveUP(D3DPT_LINELIST, 2, cross, sizeof(D3DLVERTEX));
+		}
+	}
 
 	asItWas->Apply();
 	asItWas->Release();
