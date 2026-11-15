@@ -178,6 +178,10 @@ struct EditorOrtho
 	int crossX[3], crossY[3];
 };
 void R_SetEditorOrtho			(const EditorOrtho *settings);
+// The level editor's 3D view in a box of the window, not the whole of it (the bottom right quarter of the three-view layout): the world's drawings go into
+// that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
+// window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+void R_SetEditorMainViewport	(bool on, int x, int y, int width, int height);
 // The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
 bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;

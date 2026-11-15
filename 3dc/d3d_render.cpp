@@ -643,6 +643,8 @@ static void DrawShoulderLamp();
 static void DrawLampBeams();
 static void DrawEditorOrthoViews();
 static bool editorOrthoOn = false;
+static bool editorMainBoxOn = false;   // R_SetEditorMainViewport: the world is drawn into a box of the window
+static int editorMainBox[4] = { 0, 0, 0, 0 };
 void LampBeams_Forget();
 static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
@@ -781,6 +783,21 @@ static bool ExecuteBuffer()
 	bool const solidsUseHeights = MainDrawUsesHeights();
 
 	EditorFillForTheWorld(true);
+
+	// The editor's 3D view in a box of the window: the world's drawings go there, and the whole window comes back before the weapon's and the screen lists
+	D3DVIEWPORT9 wholeViewport;
+	bool const inABox = editorMainBoxOn && d3d.lpD3DDevice && SUCCEEDED(d3d.lpD3DDevice->GetViewport(&wholeViewport));
+
+	if (inABox)
+	{
+		D3DVIEWPORT9 box = wholeViewport;
+
+		box.X = (DWORD)editorMainBox[0];
+		box.Y = (DWORD)editorMainBox[1];
+		box.Width = (DWORD)editorMainBox[2];
+		box.Height = (DWORD)editorMainBox[3];
+		d3d.lpD3DDevice->SetViewport(&box);
+	}
 
 	if (mainList->GetSize())
 	{
@@ -984,6 +1001,11 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		weaponList->Draw();
+	}
+
+	if (inABox)
+	{
+		d3d.lpD3DDevice->SetViewport(&wholeViewport);
 	}
 
 	if (compareTheLamp)
@@ -6090,6 +6112,32 @@ namespace
 	void OrthoFlat(DWORD colour)
 	{
 		d3d.lpD3DDevice->SetRenderState(D3DRS_TEXTUREFACTOR, colour);
+	}
+}
+
+void R_SetEditorMainViewport(bool on, int x, int y, int width, int height)
+{
+	bool const was = editorMainBoxOn;
+
+	if (on && width >= 16 && height >= 12)
+	{
+		editorMainBoxOn = true;
+		editorMainBox[0] = x;
+		editorMainBox[1] = y;
+		editorMainBox[2] = width;
+		editorMainBox[3] = height;
+
+		// the projection's aspect is the box's own: its across scale is its down scale over the box's width to height
+		d3d.matProjection._11 = d3d.matProjection._22 / ((float)width / (float)height);
+	}
+	else
+	{
+		editorMainBoxOn = false;
+
+		if (was)
+		{
+			SetTransforms();   // the game's own projection again, from its field of view and the whole window
+		}
 	}
 }
 
