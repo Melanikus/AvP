@@ -148,6 +148,12 @@ bool R_ChainPictureSaved		();
 // Off again when it's done. R_DrawScreenToChain sets the same switch for its own list. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port
 // (R-DRAW-CHAIN-1 D4).
 void R_SetScreenPlacesInPixels	(bool inPixels);
+// The object the level editor has selected, as the game's display block, or 0 for none: it is drawn again in green over the level, a pass of
+// its own (a see-through green over the solid modes, green lines in the wire modes), and nothing else changes. Only the editor sets it. Added
+// 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+struct displayblock;
+void R_SetEditorSelectedBlock	(const struct displayblock *block);
+int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);
 void SetTransforms();

@@ -61,9 +61,16 @@ struct RenderItem
 	 */
 	uint32_t sortKey;
 
+	// Whether this item was added while the level editor's selected object was being added (RenderListTintNow below), so the editor can draw
+	// the selected object again in green. Always false in the game. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+	bool tinted;
+
 	// for std::sort - sort on the above sortKey value to allow sorting render states
 	bool operator < (const RenderItem& rhs) const {return sortKey < rhs.sortKey;}
 };
+
+// True only while AddShape adds the object the level editor has selected (R_SetEditorSelectedBlock): every item added then is tinted.
+extern bool RenderListTintNow;
 
 class RenderList
 {
@@ -106,7 +113,7 @@ class RenderList
 
 		void Reset();
 		void Init(size_t size);
-		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false, bool backwards = false);
+		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false, bool backwards = false, bool onlyTinted = false);
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }

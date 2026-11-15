@@ -2903,8 +2903,18 @@ void ShapeSpritePointsInstr(SHAPEINSTR *shapeinstrptr)
 // FIXME
 //bool IsSphereInFrustum(Sphere_t &sphere);
 
+extern bool RenderListTintNow;               // RenderList.cpp
+extern DISPLAYBLOCK *EditorSelectedBlock;   // d3d_render.cpp: the object the level editor has selected, or 0 (always 0 in the game)
+
 void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 {
+	// Everything added for the editor's selected object is marked, so it can be drawn again in green. The mark is let go of on every way out.
+	struct TintForTheSelected
+	{
+		explicit TintForTheSelected(const DISPLAYBLOCK *block) { RenderListTintNow = block && block == EditorSelectedBlock; }
+		~TintForTheSelected() { RenderListTintNow = false; }
+	} tintForTheSelected(dptr);
+
 	SHAPEHEADER *shapeheaderptr;
 
 	if (!dptr->ObShape && dptr->SfxPtr) {

@@ -649,6 +649,8 @@ static int toyEarlyFlushes = 0;     // how often the lists were drawn before the
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
 static void DrawOutlinesOverTheSolids();
+static void DrawTheSelectedInGreen();
+extern DISPLAYBLOCK *EditorSelectedBlock;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
@@ -783,6 +785,12 @@ static bool ExecuteBuffer()
 	if (DrawFilledOutlines && mainList->GetSize())
 	{
 		DrawOutlinesOverTheSolids();
+	}
+
+	// The editor's selected object, in green over the level
+	if (EditorSelectedBlock && mainList->GetSize())
+	{
+		DrawTheSelectedInGreen();
 	}
 
 	if (wallsAreDue)
@@ -5735,6 +5743,70 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 	DWORD asBits;
 	memcpy(&asBits, &value, sizeof(asBits));
 	device->SetRenderState(state, asBits);
+}
+
+// The level editor's selection (R_SetEditorSelectedBlock, renderer.h): the object it has selected, drawn again in green. kshape.cpp's AddShape marks
+// every list item it adds for that object; this draws those items once more over the level. Over the solid modes the green is see-through (half),
+// so the object's own texture and light show through it; in the game's wireframe mode (the editor's Polyline) the object's lines are green, and
+// opaque. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+DISPLAYBLOCK *EditorSelectedBlock = 0;
+
+int R_EditorSelectedItemsDrawn()
+{
+	extern int RenderListTintedDrawn;
+	return RenderListTintedDrawn;
+}
+
+void R_SetEditorSelectedBlock(const struct displayblock *block)
+{
+	EditorSelectedBlock = (DISPLAYBLOCK *)block;
+}
+
+static void DrawTheSelectedInGreen()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	bool const lines = WireFrameMode != 0;
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	device->SetPixelShader(NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, lines ? 0xFF00FF00u : 0x8000FF00u);
+	device->SetRenderState(D3DRS_FILLMODE, lines ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, lines ? FALSE : TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00002f);
+
+	extern int RenderListTintedDrawn;
+
+	RenderListTintedDrawn = 0;
+	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false, true);
+
+	asItWas->Apply();
+	asItWas->Release();
 }
 
 // The level editor's Filled polyline (DrawFilledOutlines): each solid polygon's outline, drawn over it in DrawFilledOutlinesColour. Added
