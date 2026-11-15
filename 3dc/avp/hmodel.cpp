@@ -85,6 +85,44 @@ void R_SetEditorSelectedSection(const SECTION_DATA *section)
 {
 	EditorSelectedSection = section;
 }
+
+// Editor only (the game never sets it): inteng's TURRET sequence in the Hierarchy view. The sections UNDER the "dum turret" section play another sequence (type, sub, at a position of its own) while the rest play the
+// controller's, and the "dum turret" section itself is turned by an elevation (degrees). Process_Section reads these two lines of globals where it works out a section's pose.
+SECTION_DATA *EditorTurretSection = NULL;
+int EditorTurretSequenceType = 0, EditorTurretSubSequence = 0, EditorTurretTimer = 0, EditorTurretElevation = 0;
+void Init_Sequence_Recursion(SECTION_DATA *this_section_data, int sequence_type, int subsequence, int seconds_for_sequence);
+
+// turret: the "dum turret" section (null: no turret sequence); type and sub: the turret sequence; timer: its position (0 to 65535); elevation: degrees
+void R_SetEditorTurret(SECTION_DATA *turret, int type, int sub, int timer, int elevation)
+{
+	bool const changed = turret != EditorTurretSection || (turret && (type != EditorTurretSequenceType || sub != EditorTurretSubSequence));
+
+	if (changed)
+	{
+		// the sections under the old turret go back to the controller's sequence, those under the new one start the turret sequence (the game's own per-section start, Init_Sequence_Recursion)
+		if (EditorTurretSection && EditorTurretSection->my_controller)
+		{
+			for (SECTION_DATA *child = EditorTurretSection->First_Child; child; child = child->Next_Sibling)
+			{
+				Init_Sequence_Recursion(child, EditorTurretSection->my_controller->Sequence_Type, EditorTurretSection->my_controller->Sub_Sequence, EditorTurretSection->my_controller->Seconds_For_Sequence);
+			}
+		}
+
+		if (turret)
+		{
+			for (SECTION_DATA *child = turret->First_Child; child; child = child->Next_Sibling)
+			{
+				Init_Sequence_Recursion(child, type, sub, ONE_FIXED);
+			}
+		}
+	}
+
+	EditorTurretSection = turret;
+	EditorTurretSequenceType = type;
+	EditorTurretSubSequence = sub;
+	EditorTurretTimer = timer;
+	EditorTurretElevation = elevation;
+}
 int incIDnum; /* Has to be global. */
 int GlobalLevelOfDetail_Hierarchical;
 
@@ -1304,6 +1342,20 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		AddVector(parent_position, &(this_section_data->World_Offset));
 		/* Create the absolute rotation matrix for this section. */
 		MatrixMultiply(parent_orientation, &(this_section_data->RelSecMat), &(this_section_data->SecMat));
+
+		if (EditorTurretSection != NULL && this_section_data == EditorTurretSection && EditorTurretElevation != 0)
+		{
+			// inteng turns the turret section by the elevation, a rotation about its own x axis (the sine table at 0x1000 - degrees x 4096 / 360); the axis and the order of the product are ASSUMED
+			int const at = (0x1000 - (EditorTurretElevation * 4096) / 360) & 0xfff;
+			MATRIXCH rotation = Identity_RotMat, turned;
+
+			rotation.mat22 = cosine[at];
+			rotation.mat23 = -sine[at];
+			rotation.mat32 = sine[at];
+			rotation.mat33 = cosine[at];
+			MatrixMultiply(&(this_section_data->SecMat), &rotation, &turned);
+			this_section_data->SecMat = turned;
+		}
 		/* Set the initialised flag... */
 		this_section_data->flags |= section_data_initialised;
 	}
@@ -1356,7 +1408,14 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		while (child_ptr != NULL)
 		{
 			LOCALASSERT(child_ptr->My_Parent == this_section_data);
-			Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), frame_timer, sequence_type, subsequence, render);
+			if (EditorTurretSection != NULL && this_section_data == EditorTurretSection)
+			{
+				Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), EditorTurretTimer, EditorTurretSequenceType, EditorTurretSubSequence, render);
+			}
+			else
+			{
+				Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), frame_timer, sequence_type, subsequence, render);
+			}
 			child_ptr = child_ptr->Next_Sibling;
 		}
 	}
