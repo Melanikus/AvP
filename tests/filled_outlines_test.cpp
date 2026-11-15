@@ -106,11 +106,47 @@ static void TestTheSwitchAndThePass()
 		"its only early way out comes before anything is changed");
 	Check(pass.find("DrawOpaqueAgain(") != std::string::npos && pass.find("D3DRS_ZWRITEENABLE, FALSE") != std::string::npos,
 		"it draws only the solid polygons again, and writes no depth");
+
+	// The outlines' colour and light (Frost's ac74358c and 915cdfa3, for the four wireframe kinds Melanikus asked for, 2026-11-14 21:30).
+	// (Added 2026-11-14 by Melanikus (Apone).)
+	puts("The outlines' colour and light:");
+
+	Check(Count(render, "int DrawFilledOutlinesColour = 0xFFFFFF;") == 1, "the colour is defined once, white unless the editor asks, as Filled polyline has always been");
+	Check(Count(render, "int DrawFilledOutlinesLit = 0;") == 1, "the light switch is defined once, off unless the editor asks");
+	std::string const header = ReadSource("3dc/d3d_render.h");
+	Check(Count(header, "extern int DrawFilledOutlinesColour;") == 1 && Count(header, "extern int DrawFilledOutlinesLit;") == 1,
+		"both are named in d3d_render.h, for the editor to set");
+
+	// Only the colour's low 24 bits reach the card, under a full alpha, so any number at all is a colour and nothing else
+	std::string const factor = "SetRenderState(D3DRS_TEXTUREFACTOR, 0xFF000000u | ((DWORD)DrawFilledOutlinesColour & 0x00FFFFFFu));";
+	std::string::size_type const factorAt = pass.find(factor);
+	Check(Count(pass, "D3DRS_TEXTUREFACTOR") == 1 && factorAt != std::string::npos,
+		"the colour is given to the card once, its low 24 bits only, with alpha full");
+
+	// Lit: the colour times each corner's own light; unlit: the colour alone. Neither takes the texture.
+	std::string const lit = "\tif (DrawFilledOutlinesLit)\n\t{\n\t\tdevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);\n"
+		"\t\tdevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);\n\t\tdevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);\n\t}\n";
+	std::string const unlit = "\telse\n\t{\n\t\tdevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);\n"
+		"\t\tdevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);\n\t}\n";
+	std::string::size_type const litAt = pass.find(lit);
+	Check(litAt != std::string::npos && pass.find(unlit, litAt) == litAt + lit.size(),
+		"lit, it's the colour times each corner's light (MODULATE of TFACTOR and DIFFUSE); unlit, the colour alone (SELECTARG1 of TFACTOR)");
+	Check(pass.find("D3DTA_TEXTURE") == std::string::npos, "and neither ever takes the texture: the lines are the colour, never the picture");
+	Check(factorAt != std::string::npos && litAt != std::string::npos && saved < factorAt && saved < litAt && factorAt < applied && litAt < applied,
+		"both are set after the card's settings are saved and before they're put back");
 }
 
-static void TestNothingSetsIt()
+// A letter that can be part of a name, so DrawFilledOutlines isn't found inside DrawFilledOutlinesColour
+static bool NameLetter(char c)
 {
-	puts("Nothing in the game sets the switch:");
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+// Nothing in the game's own code sets name, or takes its address: only its one definition, which must read definition, holds a value.
+// (Changed 2026-11-14 by Melanikus (Apone): it was for DrawFilledOutlines alone; the colour and light switches are tried the same way.)
+static void TestNothingSetsIt(const std::string &name, const std::string &definition)
+{
+	printf("Nothing in the game sets %s:\n", name.c_str());
 
 	size_t files = 0;
 	size_t definitions = 0;
@@ -130,10 +166,15 @@ static void TestNothingSetsIt()
 
 			files++;
 			std::string const text = ReadSource(walk->path().string());
-			std::string const name = "DrawFilledOutlines";
 
 			for (std::string::size_type at = text.find(name); at != std::string::npos; at = text.find(name, at + 1))
 			{
+				// Only the whole name: not a longer one that starts with it, nor one that ends with it
+				if ((at + name.size() < text.size() && NameLetter(text[at + name.size()])) || (at > 0 && NameLetter(text[at - 1])))
+				{
+					continue;
+				}
+
 				std::string::size_type after = at + name.size();
 
 				while (after < text.size() && (text[after] == ' ' || text[after] == '\t'))
@@ -146,7 +187,7 @@ static void TestNothingSetsIt()
 						|| text.compare(after, 2, "+=") == 0 || text.compare(after, 2, "-=") == 0 || text.compare(after, 2, "|=") == 0
 						|| text.compare(after, 2, "^=") == 0 || text.compare(after, 2, "&=") == 0)));
 				bool const addressed = at > 0 && text[at - 1] == '&';
-				bool const isTheDefinition = text.compare(at > 4 ? at - 4 : 0, 4, "int ") == 0 && text.compare(at, name.size() + 5, name + " = 0;") == 0;
+				bool const isTheDefinition = at >= 4 && text.compare(at - 4, definition.size(), definition) == 0;
 
 				if (isTheDefinition)
 				{
@@ -154,7 +195,7 @@ static void TestNothingSetsIt()
 				}
 				else if (assigned || addressed)
 				{
-					printf("        %s sets DrawFilledOutlines or takes its address\n", walk->path().string().c_str());
+					printf("        %s sets %s or takes its address\n", walk->path().string().c_str(), name.c_str());
 					neverSet = false;
 				}
 			}
@@ -162,7 +203,7 @@ static void TestNothingSetsIt()
 	}
 
 	Check(!missing && files > 100, "SOURCE: the game's 3dc and win32 folders are read");
-	Check(neverSet && definitions == 1, "nothing in them sets the switch or takes its address: no console word, saved setting or file can turn it on");
+	Check(neverSet && definitions == 1, ("nothing in them sets " + name + " or takes its address: no console word, saved setting or file can change it").c_str());
 }
 
 int main()
@@ -171,7 +212,9 @@ int main()
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	TestTheSwitchAndThePass();
-	TestNothingSetsIt();
+	TestNothingSetsIt("DrawFilledOutlines", "int DrawFilledOutlines = 0;");
+	TestNothingSetsIt("DrawFilledOutlinesColour", "int DrawFilledOutlinesColour = 0xFFFFFF;");
+	TestNothingSetsIt("DrawFilledOutlinesLit", "int DrawFilledOutlinesLit = 0;");
 
 	if (checksFailed)
 	{

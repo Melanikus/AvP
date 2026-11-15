@@ -46,6 +46,48 @@
 			"changes": [
 				{ "file": "3dc/d3d_render.h", "from": "extern int DrawFilledOutlines;", "to": "extern int DrawFilledOutlines;\nstatic int *const consoleWord = &DrawFilledOutlines;" }
 			]
+		},
+		{
+			"name": "the outlines start green, not white",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "int DrawFilledOutlinesColour = 0xFFFFFF;", "to": "int DrawFilledOutlinesColour = 0x00FF00;" }
+			]
+		},
+		{
+			"name": "the colour's every bit reaches the card, its alpha too",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "0xFF000000u | ((DWORD)DrawFilledOutlinesColour & 0x00FFFFFFu)", "to": "(DWORD)DrawFilledOutlinesColour" }
+			]
+		},
+		{
+			"name": "the outlines start lit",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "int DrawFilledOutlinesLit = 0;", "to": "int DrawFilledOutlinesLit = 1;" }
+			]
+		},
+		{
+			"name": "the lit outlines take the texture instead of the corners' light",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "D3DTSS_COLORARG2, D3DTA_DIFFUSE);", "to": "D3DTSS_COLORARG2, D3DTA_TEXTURE);" }
+			]
+		},
+		{
+			"name": "lit and unlit are the wrong way round",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (DrawFilledOutlinesLit)\n", "to": "\tif (!DrawFilledOutlinesLit)\n" }
+			]
+		},
+		{
+			"name": "a console word reaches the outlines' colour",
+			"changes": [
+				{ "file": "3dc/d3d_render.h", "from": "extern int DrawFilledOutlinesColour;", "to": "extern int DrawFilledOutlinesColour;\nstatic int *const colourWord = &DrawFilledOutlinesColour;" }
+			]
+		},
+		{
+			"name": "the game turns the outlines' light on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "int DrawFilledOutlinesLit = 0;\n", "to": "int DrawFilledOutlinesLit = 0;\nstatic int const litOn = (DrawFilledOutlinesLit = 1);\n" }
+			]
 		}
 	]
 }
