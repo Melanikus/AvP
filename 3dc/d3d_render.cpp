@@ -6287,21 +6287,23 @@ static void DrawEditorOrthoViews()
 			}
 		}
 
-		// the crosshair at the 3D cursor: a small cross, in screen places (its own drawing is not read: ours)
+		// The marker at the 3D cursor. inteng blits a 9 by 9 picture from its marker sheet, (px - 4, py - 4) to (px + 5, py + 5) (FUN_00553ab0, run 18, menu-reads-18.txt:330-451);
+		// the sheet's picture isn't available, so a hollow square of that size stands in, in yellow (ours)
 		if (editorOrtho.crossShown[view])
 		{
-			float const cx = (float)editorOrtho.crossX[view], cy = (float)editorOrtho.crossY[view];
-			D3DLVERTEX cross[4];
+			float const left9 = (float)editorOrtho.crossX[view] - 4.0f, top9 = (float)editorOrtho.crossY[view] - 4.0f, right9 = left9 + 9.0f, bottom9 = top9 + 9.0f;
+			D3DLVERTEX marker[8];
 
-			memset(cross, 0, sizeof(cross));
-			cross[0].x = cx - 12.0f; cross[0].y = cy;
-			cross[1].x = cx + 12.0f; cross[1].y = cy;
-			cross[2].x = cx;         cross[2].y = cy - 12.0f;
-			cross[3].x = cx;         cross[3].y = cy + 12.0f;
+			memset(marker, 0, sizeof(marker));
+			marker[0].x = left9;  marker[0].y = top9;    marker[1].x = right9; marker[1].y = top9;
+			marker[2].x = right9; marker[2].y = top9;    marker[3].x = right9; marker[3].y = bottom9;
+			marker[4].x = right9; marker[4].y = bottom9; marker[5].x = left9;  marker[5].y = bottom9;
+			marker[6].x = left9;  marker[6].y = bottom9; marker[7].x = left9;  marker[7].y = top9;
 			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &screenMatrix);
 			OrthoFlat(0xFFFFFF00);
-			device->DrawPrimitiveUP(D3DPT_LINELIST, 2, cross, sizeof(D3DLVERTEX));
+			device->DrawPrimitiveUP(D3DPT_LINELIST, 4, marker, sizeof(D3DLVERTEX));
 		}
+
 	}
 
 	asItWas->Apply();
