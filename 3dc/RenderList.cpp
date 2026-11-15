@@ -424,6 +424,49 @@ void RenderList::Reset()
 // backwards draws every polygon in the opposite order, for the check in static_frame.cpp that finds where two polygons tie. It's only for that: the
 // polygons of one item normally go to the card in one draw, and here each goes in a draw of its own, because the order inside an item matters as well.
 bool RenderListTintNow = false;
+
+// The level editor's Untextured (R_SetEditorUntextured, renderer.h): the main draw binds a 1 by 1 texture of one plain colour in place of each polygon's texture
+bool EditorUntextured = false;
+static unsigned int editorUntexturedColour = 0xFFFFFFFFu;
+static IDirect3DTexture9 *editorPlainTexture = 0;
+static unsigned int editorPlainTextureColour = 0;
+
+void R_SetEditorUntextured(bool on, unsigned int colour)
+{
+	EditorUntextured = on;
+	editorUntexturedColour = colour;
+}
+
+static void BindThePlainTexture()
+{
+	if (!editorPlainTexture || editorPlainTextureColour != editorUntexturedColour)
+	{
+		if (editorPlainTexture)
+		{
+			editorPlainTexture->Release();
+			editorPlainTexture = 0;
+		}
+
+		if (FAILED(d3d.lpD3DDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &editorPlainTexture, NULL)))
+		{
+			editorPlainTexture = 0;
+			return;
+		}
+
+		D3DLOCKED_RECT rect;
+
+		if (SUCCEEDED(editorPlainTexture->LockRect(0, &rect, NULL, 0)))
+		{
+			*(unsigned int *)rect.pBits = editorUntexturedColour;
+			editorPlainTexture->UnlockRect(0);
+		}
+
+		editorPlainTextureColour = editorUntexturedColour;
+	}
+
+	d3d.lpD3DDevice->SetTexture(0, editorPlainTexture);
+	R_ForgetTexture(0);   // what R_SetTexture remembers about this stage is no longer so
+}
 uint32_t RenderListTintColour = 0xFF00FF00u;
 bool RenderListTintLines = false;
 int RenderListTintedDrawn = 0;   // how many tinted items the last editor green pass drew (for the editor's report)
@@ -607,6 +650,13 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 
 				// set texture
 				R_SetTexture(0, get_texID(it->sortKey));
+
+				// only the level's own list: the text, the HUD and the panels are drawn from other lists and keep their pictures
+				if (EditorUntextured && listName == "mainList")
+				{
+					BindThePlainTexture();
+				}
+
 				ChangeTranslucencyMode((enum TRANSLUCENCY_TYPE)			get_transType(it->sortKey));
 				ChangeFilteringMode(0, (enum FILTERING_MODE_ID)			get_filterType(it->sortKey));
 				ChangeTextureAddressMode(0, (enum TEXTURE_ADDRESS_MODE) get_texAddressType(it->sortKey));

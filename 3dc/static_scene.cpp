@@ -41,6 +41,7 @@
 #include <vector>
 
 extern int WireFrameMode;
+extern bool EditorUntextured;   // RenderList.cpp: the level editor's Untextured
 extern int DrawFullBright;
 extern int DrawFilledOutlines;      // d3d_render.cpp: the level editor's Filled polyline switch
 extern bool MirroringActive;
@@ -131,7 +132,7 @@ static bool FrameCanUseThisRoute()
 		return false;
 	}
 
-	if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || DrawFilledOutlines || !StaticScene_ViewAllows())
+	if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || DrawFilledOutlines || EditorUntextured || !StaticScene_ViewAllows())
 	{
 		return false;
 	}
