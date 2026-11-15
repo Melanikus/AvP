@@ -5885,12 +5885,14 @@ bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int 
 // module (the objects the level file places). Always none in the game: the game never calls the setter, so nothing here runs.
 static std::vector<const DISPLAYBLOCK *> editorHiddenBlocks;
 static bool editorHideEveryPlacedObject = false;
+static bool editorHideEveryModule = false;
 int EditorHiddenCount = 0;   // 0 in the game
 
-void R_SetEditorHiddenBlocks(const struct displayblock *const *blocks, int count, bool everyPlacedObject)
+void R_SetEditorHiddenBlocks(const struct displayblock *const *blocks, int count, bool everyPlacedObject, bool everyModule)
 {
 	editorHiddenBlocks.clear();
 	editorHideEveryPlacedObject = everyPlacedObject;
+	editorHideEveryModule = everyModule;
 
 	for (int i = 0; blocks && i < count && i < 100000; i++)
 	{
@@ -5901,7 +5903,7 @@ void R_SetEditorHiddenBlocks(const struct displayblock *const *blocks, int count
 	}
 
 	std::sort(editorHiddenBlocks.begin(), editorHiddenBlocks.end());
-	EditorHiddenCount = (int)editorHiddenBlocks.size() + (everyPlacedObject ? 1 : 0);
+	EditorHiddenCount = (int)editorHiddenBlocks.size() + (everyPlacedObject ? 1 : 0) + (everyModule ? 1 : 0);
 }
 
 bool EditorBlockIsHidden(const DISPLAYBLOCK *block)
@@ -5912,6 +5914,11 @@ bool EditorBlockIsHidden(const DISPLAYBLOCK *block)
 	}
 
 	if (editorHideEveryPlacedObject && block->ObStrategyBlock && !block->ObMyModule)
+	{
+		return true;
+	}
+
+	if (editorHideEveryModule && block->ObMyModule)
 	{
 		return true;
 	}
@@ -5927,6 +5934,12 @@ bool EditorBlockIsTinted(const DISPLAYBLOCK *block)
 		{
 			return true;
 		}
+	}
+
+	// a hidden module is not drawn from the fixed buffer either
+	if (EditorHiddenCount && EditorBlockIsHidden(block))
+	{
+		return true;
 	}
 
 	// a block with highlighted polygons is drawn the old way too, so those items can be marked
