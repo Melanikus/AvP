@@ -395,6 +395,13 @@ bool R_ChainPictureSaved()
 	return chainPictureSaved;
 }
 
+// R-DRAW-CHAIN-1 D4 (renderer.h): the editor adds its panels to the game's own frame, so it asks for places in pixels for as long as it does
+// (drawingToChain above says what that changes). Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+void R_SetScreenPlacesInPixels(bool inPixels)
+{
+	drawingToChain = inPixels;
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {

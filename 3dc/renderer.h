@@ -143,6 +143,11 @@ bool R_DrawScreenToChain	(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t h
 // (R-DRAW-CHAIN-1 D3).
 void R_SaveNextChainPicture	(const char *path);
 bool R_ChainPictureSaved		();
+// While the level editor adds its panels to the game's own frame (after the level, before the frame is shown), its text and menu calls ask for
+// places in pixels, as they are while a level runs, and not on the menus' 640 by 480 grid, which is what they read outside a running level.
+// Off again when it's done. R_DrawScreenToChain sets the same switch for its own list. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port
+// (R-DRAW-CHAIN-1 D4).
+void R_SetScreenPlacesInPixels	(bool inPixels);
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);
 void SetTransforms();
