@@ -49,6 +49,14 @@ void FindVisibleModules(VMODULE *vptr,int flag);
 
 static MODULE **Global_ModuleArrayPtr;
 
+// The level editor's switch (Module_ShowEveryModule, module.h): false in the game, always
+static bool everyModuleIsShown = false;
+
+void Module_ShowEveryModule(bool on)
+{
+	everyModuleIsShown = on;
+}
+
 void AllNewModuleHandler(void)
 {
 	{
@@ -157,6 +165,15 @@ void AllNewModuleHandler(void)
 		}
 	}
 
+
+	/* The editor looks at the whole level, not at what a player in one room could see: every module is as visible as the camera's own. */
+	if (everyModuleIsShown)
+	{
+		for (int i = 0; i < ModuleArraySize; i++)
+		{
+			ModuleCurrVisArray[i] = 2;
+		}
+	}
 
 	/* handle AIMODULE visibility stuff */
 	{
