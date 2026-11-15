@@ -5881,6 +5881,44 @@ bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int 
 	return false;
 }
 
+// The level editor's hidden objects (R_SetEditorHiddenBlocks, renderer.h): blocks AddShape does not draw at all, and with everyPlacedObject every block that has a strategy of its own and is not a
+// module (the objects the level file places). Always none in the game: the game never calls the setter, so nothing here runs.
+static std::vector<const DISPLAYBLOCK *> editorHiddenBlocks;
+static bool editorHideEveryPlacedObject = false;
+int EditorHiddenCount = 0;   // 0 in the game
+
+void R_SetEditorHiddenBlocks(const struct displayblock *const *blocks, int count, bool everyPlacedObject)
+{
+	editorHiddenBlocks.clear();
+	editorHideEveryPlacedObject = everyPlacedObject;
+
+	for (int i = 0; blocks && i < count && i < 100000; i++)
+	{
+		if (blocks[i])
+		{
+			editorHiddenBlocks.push_back((const DISPLAYBLOCK *)blocks[i]);
+		}
+	}
+
+	std::sort(editorHiddenBlocks.begin(), editorHiddenBlocks.end());
+	EditorHiddenCount = (int)editorHiddenBlocks.size() + (everyPlacedObject ? 1 : 0);
+}
+
+bool EditorBlockIsHidden(const DISPLAYBLOCK *block)
+{
+	if (!block)
+	{
+		return false;
+	}
+
+	if (editorHideEveryPlacedObject && block->ObStrategyBlock && !block->ObMyModule)
+	{
+		return true;
+	}
+
+	return std::binary_search(editorHiddenBlocks.begin(), editorHiddenBlocks.end(), block);
+}
+
 bool EditorBlockIsTinted(const DISPLAYBLOCK *block)
 {
 	for (int i = 0; block && i < EditorSelectedCount; i++)

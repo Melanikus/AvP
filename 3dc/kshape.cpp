@@ -2944,9 +2944,18 @@ extern unsigned int RenderListTintColour;
 extern unsigned int EditorSelectedColours[];  // d3d_render.cpp: the colour of each tinted block
 extern DISPLAYBLOCK *EditorSelectedBlocks[];   // d3d_render.cpp: the objects the level editor has selected (always none in the game)
 extern int EditorSelectedCount;
+extern int EditorHiddenCount;                   // d3d_render.cpp: the level editor's hidden objects (always none in the game)
+extern bool EditorBlockIsHidden(const DISPLAYBLOCK *block);
 
 void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 {
+	// An object the level editor has hidden is not drawn at all. Nothing here runs in the game.
+	if (EditorHiddenCount && EditorBlockIsHidden(dptr))
+	{
+		return;
+	}
+
+
 	// Everything added for the editor's selected object is marked, so it can be drawn again in green. The mark is let go of on every way out.
 	struct TintForTheSelected
 	{
