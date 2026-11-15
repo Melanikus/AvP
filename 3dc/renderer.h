@@ -151,6 +151,10 @@ void R_SetScreenPlacesInPixels	(bool inPixels);
 // The object the level editor has selected, as the game's display block, or 0 for none: it is drawn again in green over the level, a pass of
 // its own (a see-through green over the solid modes, green lines in the wire modes), and nothing else changes. Only the editor sets it. Added
 // 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+// The level editor's switch for the draw mode's fill: each drawing of the world lists sets the card's fill (lines or solid) from WireFrameMode itself, and
+// the screen lists after it are solid. Without it the last drawing of a frame took the fill the HUD's adds had left, so the nearest polygons were solid
+// in a wire mode. Only the editor sets it; the game never does. (d3d_render.cpp)
+void R_SetEditorFillFollowsWire	(bool on);
 struct displayblock;
 void R_SetEditorSelectedBlock	(const struct displayblock *block);
 int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report

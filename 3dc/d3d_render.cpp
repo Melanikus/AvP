@@ -736,6 +736,26 @@ static void DrawHudsonPlayRibbon()
 	asItWas->Release();
 }
 
+// The level editor's switch for the fill mode (R_SetEditorFillFollowsWire, renderer.h). The game sets the card's fill mode (CheckWireFrameMode) as it ADDS
+// polygons to the lists, and the lists are drawn later, often in several goes in one frame (a go each time the buffer fills, then the last one), each with
+// whatever the last add left. The frame's last adds are the HUD's, which the game draws solid, so the last go, the nearest polygons, came out solid and
+// textured while the earlier goes, the far ones, were lines. With this on, every go sets the fill from WireFrameMode itself before it draws the world, and puts
+// it back to solid before the screen lists (HUD, panels). Only the editor sets it: the game's own way is exactly what it was.
+static bool EditorFillFollowsWire = false;
+
+void R_SetEditorFillFollowsWire(bool on)
+{
+	EditorFillFollowsWire = on;
+}
+
+static void EditorFillForTheWorld(bool world)
+{
+	if (EditorFillFollowsWire)
+	{
+		CheckWireFrameMode(world ? WireFrameMode : 0);
+	}
+}
+
 static bool ExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorDrawing);
@@ -757,6 +777,8 @@ static bool ExecuteBuffer()
 
 	// Relief map's way of drawing the solid polygons. Nothing below changes without it.
 	bool const solidsUseHeights = MainDrawUsesHeights();
+
+	EditorFillForTheWorld(true);
 
 	if (mainList->GetSize())
 	{
@@ -847,11 +869,16 @@ static bool ExecuteBuffer()
 
 	if (seeThroughLast && mainList->GetSize())
 	{
+		EditorFillForTheWorld(true);
+
 		d3d.effectSystem->SetActive(d3d.mainEffect);
 		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
 		mainList->Draw(RenderList::kSeeThrough);
 	}
+
+	// The world is drawn: what follows (particles, coronas, the weapon, the HUD, the editor's panels) is drawn solid, as the game draws it
+	EditorFillForTheWorld(false);
 
 	// The developer's view of the normals. Only in a frame's last drawing, when the whole level is in the depth buffer, which is what lets a wall hide them, and ahead of the weapon, which clears it.
 	if (toyFinalFlush && NormalLinesOn)
