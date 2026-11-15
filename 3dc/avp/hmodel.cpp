@@ -76,6 +76,15 @@ extern int GlobalFrameCounter;
 extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;
 
 int GlobalGoreRate = NORMAL_GORE_RATE;
+
+// Editor only (the game never sets it): the hierarchy section the level editor has selected is drawn again over the model in one colour (kshape.cpp / RenderList.cpp's tint, d3d_render.cpp's tint pass)
+const SECTION_DATA *EditorSelectedSection = NULL;
+extern bool RenderListTintNow;               // RenderList.cpp
+extern unsigned int RenderListTintColour;
+void R_SetEditorSelectedSection(const SECTION_DATA *section)
+{
+	EditorSelectedSection = section;
+}
 int incIDnum; /* Has to be global. */
 int GlobalLevelOfDetail_Hierarchical;
 
@@ -1460,7 +1469,20 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 						D3D_DecalSystem_End();
 					}
 
+		bool const editorSelected = EditorSelectedSection != NULL && this_section_data == EditorSelectedSection;
+
+		if (editorSelected)
+		{
+			RenderListTintNow = true;
+			RenderListTintColour = 0xFFFFFF00u;
+		}
+
 		RenderThisHierarchicalDisplayblock(&dummy_displayblock);
+
+		if (editorSelected)
+		{
+			RenderListTintNow = false;
+		}
 	}
 	else if (controller->View_FrameStamp != GlobalFrameCounter)
 	{

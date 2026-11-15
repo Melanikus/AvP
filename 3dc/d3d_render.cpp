@@ -659,6 +659,7 @@ static void ToyShadows_Draw();
 static void DrawOutlinesOverTheSolids();
 static void DrawTheSelectedInGreen();
 extern int EditorSelectedCount;
+extern const struct section_data *EditorSelectedSection;   // hmodel.cpp: the selected hierarchy section (editor only)
 extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
@@ -834,7 +835,7 @@ static bool ExecuteBuffer()
 	}
 
 	// The editor's selected object, in green over the level
-	if ((EditorSelectedCount || EditorHighlightedCount) && mainList->GetSize())
+	if ((EditorSelectedCount || EditorHighlightedCount || EditorSelectedSection) && mainList->GetSize())
 	{
 		DrawTheSelectedInGreen();
 	}
