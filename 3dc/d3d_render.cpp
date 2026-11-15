@@ -5812,7 +5812,7 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 // so the object's own texture and light show through it; in the game's wireframe mode (the editor's Polyline) the object's lines are green, and
 // opaque. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
 // More than one object can be selected (inteng's Shift+click): up to kEditorMostSelected of them, in EditorSelectedBlocks.
-#define kEditorMostSelected 256
+#define kEditorMostSelected 1024
 DISPLAYBLOCK *EditorSelectedBlocks[kEditorMostSelected];
 unsigned int EditorSelectedColours[kEditorMostSelected];   // ARGB of each: the selected objects' green, or a colour the editor gave (R_SetEditorTintedBlocks)
 int EditorSelectedCount = 0;
