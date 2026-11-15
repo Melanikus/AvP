@@ -137,6 +137,12 @@ void DrawFontQuad			(uint32_t x, uint32_t y, uint32_t charWidth, uint32_t charHe
 // Gives back true when the chain was presented. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
 struct IDirect3DSwapChain9;
 bool R_DrawScreenToChain	(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context);
+// The next R_DrawScreenToChain also saves its chain's picture as drawn, before it's shown, as a PNG at path, for a proof run, which has
+// nothing on the screen to capture. A path of 260 letters or more, or none, asks for nothing, and so cancels one asked for. Afterwards
+// R_ChainPictureSaved says whether the last picture asked for was saved. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port
+// (R-DRAW-CHAIN-1 D3).
+void R_SaveNextChainPicture	(const char *path);
+bool R_ChainPictureSaved		();
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);
 void SetTransforms();

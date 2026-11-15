@@ -355,6 +355,27 @@ static float MenuWidthShare(void)
 // the right of its first menu's title opened the second (Melanikus, 2026-11-14). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
 static bool drawingToChain = false;
 
+// R-DRAW-CHAIN-1 D3 (renderer.h): where the next R_DrawScreenToChain saves its chain's picture before it's shown, empty for nowhere,
+// and whether the last picture asked for was saved. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+static char chainPicturePath[260] = "";
+static bool chainPictureSaved = false;
+
+void R_SaveNextChainPicture(const char *path)
+{
+	chainPictureSaved = false;
+	chainPicturePath[0] = '\0';
+
+	if (path && strlen(path) < sizeof(chainPicturePath))
+	{
+		strcpy_s(chainPicturePath, sizeof(chainPicturePath), path);
+	}
+}
+
+bool R_ChainPictureSaved()
+{
+	return chainPictureSaved;
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
@@ -3352,6 +3373,27 @@ bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t he
 			orthoVBOffset = 0;
 
 			d3d.lpD3DDevice->EndScene();
+
+			// The chain's picture as drawn, if one was asked for (R_SaveNextChainPicture): copied off the card now, because once it's shown a
+			// discarded back buffer holds nothing certain. Asked for once, saved once.
+			if (chainPicturePath[0])
+			{
+				IDirect3DSurface9 *copy = 0;
+				D3DSURFACE_DESC size;
+
+				chainPictureSaved = SUCCEEDED(chainBuffer->GetDesc(&size))
+					&& SUCCEEDED(d3d.lpD3DDevice->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL))
+					&& SUCCEEDED(d3d.lpD3DDevice->GetRenderTargetData(chainBuffer, copy))
+					&& SUCCEEDED(D3DXSaveSurfaceToFileA(chainPicturePath, D3DXIFF_PNG, copy, NULL, NULL));
+
+				if (copy)
+				{
+					copy->Release();
+				}
+
+				chainPicturePath[0] = '\0';
+			}
+
 			presented = SUCCEEDED(chain->Present(NULL, NULL, NULL, NULL, 0));
 		}
 	}
