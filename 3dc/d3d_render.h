@@ -85,6 +85,9 @@ inline bool LightOnListIsDark(const float *light)
 // once. Only the editor sets it.
 extern int DrawFilledOutlines;
 
+// The outlines' colour, 0xRRGGBB: white unless the editor asks for another. Only the low 24 bits are read.
+extern int DrawFilledOutlinesColour;
+
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();
 extern void D3D_DrawWaterTest(MODULE *testModulePtr);

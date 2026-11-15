@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
-//   game always has it, changes nothing
+//   game always has it, changes nothing; and DrawFilledOutlinesColour, their colour, white unless the editor asks for another
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
 //   away (#176, particle_depth.h)
@@ -195,8 +195,10 @@ int WireFrameMode;
 // another player.
 int DrawFilledOutlines = 0;
 
-// The outlines' one colour, as the card takes it (alpha, red, green, blue): white
-static DWORD const kFilledOutlineColour = 0xFFFFFFFF;
+// The outlines' one colour, 0xRRGGBB (red in the high byte, blue in the low one): white, unless the level editor asks for another (its
+// unlit wireframe is green). Only the editor sets it, like DrawFilledOutlines. Only the low 24 bits are read, so any number at all is a
+// colour, and the outlines are always fully opaque. (Modified 2026-11-14 by Melanikus for the AvP port: the colour can be chosen.)
+int DrawFilledOutlinesColour = 0xFFFFFF;
 
 uint32_t FMVParticleColour;
 
@@ -5723,8 +5725,9 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 	device->SetRenderState(state, asBits);
 }
 
-// The level editor's Filled polyline (DrawFilledOutlines): each solid polygon's outline, drawn over it in kFilledOutlineColour. Added
-// 2026-11-14 by Melanikus for the AvP port.
+// The level editor's Filled polyline (DrawFilledOutlines): each solid polygon's outline, drawn over it in DrawFilledOutlinesColour. Added
+// 2026-11-14 by Melanikus for the AvP port. With the game's WireFrameMode on as well, the polygons themselves are lines too, and these
+// lie on exactly the same edges, so every line shows in the outlines' one colour: the editor's unlit wireframe.
 // - It draws the list's solid polygons a second time, through the same sums, as the surface pictures do (RenderList::DrawOpaqueAgain),
 //   so each line lands exactly on its own polygon's edge. The card draws them as lines (its wireframe fill), in one colour with no
 //   texture and no light: no pixel shader, and the colour straight from the card's texture factor, as Hudson's ribbon takes its own
@@ -5755,7 +5758,7 @@ static void DrawOutlinesOverTheSolids()
 	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
 	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
 	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	device->SetRenderState(D3DRS_TEXTUREFACTOR, kFilledOutlineColour);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, 0xFF000000u | ((DWORD)DrawFilledOutlinesColour & 0x00FFFFFFu));
 
 	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 	device->SetRenderState(D3DRS_LIGHTING, FALSE);
