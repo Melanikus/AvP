@@ -156,7 +156,7 @@ void R_SetScreenPlacesInPixels	(bool inPixels);
 // in a wire mode. Only the editor sets it; the game never does. (d3d_render.cpp)
 void R_SetEditorFillFollowsWire	(bool on);
 struct displayblock;
-void R_SetEditorSelectedBlock	(const struct displayblock *block);
+void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);   // up to 256 objects, all drawn in green
 int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);

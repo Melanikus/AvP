@@ -650,7 +650,7 @@ static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
 static void DrawOutlinesOverTheSolids();
 static void DrawTheSelectedInGreen();
-extern DISPLAYBLOCK *EditorSelectedBlock;
+extern int EditorSelectedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
@@ -810,7 +810,7 @@ static bool ExecuteBuffer()
 	}
 
 	// The editor's selected object, in green over the level
-	if (EditorSelectedBlock && mainList->GetSize())
+	if (EditorSelectedCount && mainList->GetSize())
 	{
 		DrawTheSelectedInGreen();
 	}
@@ -5776,7 +5776,10 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 // every list item it adds for that object; this draws those items once more over the level. Over the solid modes the green is see-through (half),
 // so the object's own texture and light show through it; in the game's wireframe mode (the editor's Polyline) the object's lines are green, and
 // opaque. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
-DISPLAYBLOCK *EditorSelectedBlock = 0;
+// More than one object can be selected (inteng's Shift+click): up to kEditorMostSelected of them, in EditorSelectedBlocks.
+#define kEditorMostSelected 256
+DISPLAYBLOCK *EditorSelectedBlocks[kEditorMostSelected];
+int EditorSelectedCount = 0;
 
 int R_EditorSelectedItemsDrawn()
 {
@@ -5784,9 +5787,17 @@ int R_EditorSelectedItemsDrawn()
 	return RenderListTintedDrawn;
 }
 
-void R_SetEditorSelectedBlock(const struct displayblock *block)
+void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int count)
 {
-	EditorSelectedBlock = (DISPLAYBLOCK *)block;
+	EditorSelectedCount = 0;
+
+	for (int i = 0; blocks && i < count && i < kEditorMostSelected; i++)
+	{
+		if (blocks[i])
+		{
+			EditorSelectedBlocks[EditorSelectedCount++] = (DISPLAYBLOCK *)blocks[i];
+		}
+	}
 }
 
 static void DrawTheSelectedInGreen()
