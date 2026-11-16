@@ -579,8 +579,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
-					"to": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n"
+					"from": "\t// This is what makes a wall hide them. Turning it off would paint them over the wall. They start on a surface, so they go a hair nearer, or the surface would hide their first few pixels and a whole outline.\n\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
+					"to": "\t// This is what makes a wall hide them. Turning it off would paint them over the wall. They start on a surface, so they go a hair nearer, or the surface would hide their first few pixels and a whole outline.\n\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n"
 				}
 			]
 		},
@@ -589,8 +589,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
-					"to": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);\n"
+					"from": "\t// This is what makes a wall hide them. Turning it off would paint them over the wall. They start on a surface, so they go a hair nearer, or the surface would hide their first few pixels and a whole outline.\n\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
+					"to": "\t// This is what makes a wall hide them. Turning it off would paint them over the wall. They start on a surface, so they go a hair nearer, or the surface would hide their first few pixels and a whole outline.\n\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);\n"
 				}
 			]
 		},

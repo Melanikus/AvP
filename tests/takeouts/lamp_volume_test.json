@@ -230,8 +230,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tif (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n\t}\n\n\t// draw player weapon",
-					"to": "\t// draw player weapon"
+					"from": "\tif (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n",
+					"to": "\tif (toyFinalFlush)\n\t{\n"
 				}
 			]
 		},

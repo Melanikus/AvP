@@ -521,7 +521,8 @@ static void TestTheGamesSide()
 
 	Check(Has(drawsBeams, "device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);") && Has(drawsBeams, "device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);"), "SOURCE: a beam is added onto the picture and writes no depth");
 	Check(Has(render, "\tsavedCardSettings->Apply();\n}\n\n// The mask is added to many times"), "SOURCE: and every card setting it changed is put back");
-	Check(Has(render, "if (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n\t}\n\n\t// draw player weapon"), "SOURCE: beams are drawn once a frame, before the gun");
+	// (since a95de16c the level editor's orthographic views are drawn after the beams, in the same block)
+	Check(Has(render, "if (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n") && render.find("\t\tDrawLampBeams();\n") < render.find("\t// draw player weapon"), "SOURCE: beams are drawn once a frame, before the gun");
 	Check(Has(render, "LampBeams_Forget();\n\n\t// The game goes on whether or not this frame could be drawn"), "SOURCE: and they end with their frame, so the menus after a level don't draw them");
 	Check(Has(shapes, "static void LampBeams_ForThisFrame()\n{\n\tLampBeams_Forget();"), "SOURCE: and each frame starts with none");
 	Check(Has(shapes, "int const wallsNear = LampVolume_KeepNear(lampBeamWalls, numLampBeamWalls, beam.from, beam.aim, kLampVolumeReach, lampBeamWallsNearOne, kLampBeamMostWalls);\n\tint const triangles = LampVolume_Build(beam.from, beam.aim, beam.strength, lampBeamWallsNearOne, wallsNear, vertices, indices);"), "SOURCE: a beam's rays test only the walls near it");

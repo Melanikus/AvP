@@ -83,7 +83,7 @@ static void TestTheSwitchAndThePass()
 
 	std::string const scene = ReadSource("3dc/static_scene.cpp");
 	char const *const before = "if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || !StaticScene_ViewAllows())";
-	char const *const after = "if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || DrawFilledOutlines || !StaticScene_ViewAllows())";
+	char const *const after = "if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || DrawFilledOutlines || EditorUntextured || !StaticScene_ViewAllows())";   // EditorUntextured: R_SetEditorUntextured (9a91e9e9)
 	Check(Count(scene, after) == 1 && Count(scene, before) == 0, "the static scene's route is refused as before, and also while the switch is on");
 
 	puts("The outline pass puts the card back:");
