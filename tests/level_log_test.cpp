@@ -131,6 +131,16 @@ static void TestNames()
 	Check(!LevelLog_SplitName("Custom/sub/mymap", &folder, &file) && !LevelLog_SplitName("Custom/", &folder, &file), "and a folder inside Custom, or Custom with no name");
 	Check(!LevelLog_SplitName("C:/mymap", &folder, &file) && !LevelLog_SplitName("\\\\server\\share\\map", &folder, &file), "and a drive, or another machine");
 
+	// A file AVP_OpenInteng opens from outside is copied into avp_rifs/OpenedByEditor and loaded as OpenedByEditor/<name> (its open_with.cpp): its log goes beside it there,
+	// named after the name's last part. The rest of the rule stays: no other folder, no folder inside it, no way out of it. (Added 2026-11-16 by Melanikus (Vasquez): every
+	// level opened that way logged "one whose name can't be used as a file name", and its log went to the game's folder as level_errorlog.txt.)
+	Check(LevelLog_SplitName("OpenedByEditor/Genshd1", &folder, &file) && folder == "OpenedByEditor/" && file == "Genshd1", "a level the editor opened from outside is in OpenedByEditor/");
+	Check(LevelLog_SplitName("openedbyeditor/Genshd1", &folder, &file) && folder == "OpenedByEditor/" && file == "Genshd1", "however its capitals were written");
+	Check(!LevelLog_SplitName("OpenedByEditor/../../windows/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/sub/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/", &folder, &file), "but not a way out of it, a folder inside it, or no name");
+	Check(!LevelLog_SplitName("OpenedByEditor/NUL", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/a:b", &folder, &file) && !LevelLog_SplitName("Custom/OpenedByEditor/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/Custom/x", &folder, &file), "nor a device, a stream, or one of the two folders inside the other");
+	Check(LevelLog_PathBesideTheLevel("avp_rifs", "OpenedByEditor/Genshd1") == "avp_rifs/OpenedByEditor/Genshd1_errorlog.txt", "its log goes beside it in OpenedByEditor");
+	Check(LevelLog_PathInTheGamesFolder("C:/Games/AvP/", "OpenedByEditor/Genshd1") == "C:/Games/AvP/Genshd1_errorlog.txt", "and in the game's folder it keeps the level's name");
+
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "invasion_a") == "avp_rifs/invasion_a_errorlog.txt", "a stock level's log goes beside it");
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "Custom/mymap") == "avp_rifs/Custom/mymap_errorlog.txt", "and a custom one's beside it in Custom");
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "Custom/../x").empty() && LevelLog_PathBesideTheLevel(NULL, "mymap").empty(), "a name that can't be used goes nowhere beside the level");
@@ -327,6 +337,21 @@ static void TestFinishing()
 	LevelLog_Finish(levels.c_str(), "Custom/../../x", "", true);
 	std::string const fixed = ReadWholeFile(games + kLevelLogFallbackName);
 	Check(Has(fixed, "one whose name can't be used") && !Has(fixed, ".."), "a name that can't be used is never written into a path or the log");
+
+	// A level the editor opened from outside: loaded as OpenedByEditor/<name> from avp_rifs/OpenedByEditor, its log goes beside it there, under the level's own name
+	std::string const opened = levels + "/OpenedByEditor";
+	::CreateDirectoryA(opened.c_str(), NULL);
+	std::string const openedFile = opened + "/mymap.rif";
+	WriteWholeFile(openedFile, "abc");
+	LevelLog_StartGathering();
+	LevelLog_Finish(levels.c_str(), "OpenedByEditor/mymap", openedFile.c_str(), true);
+	std::string const openedLog = ReadWholeFile(opened + "/mymap_errorlog.txt");
+	Check(Has(openedLog, "Level: OpenedByEditor/mymap\r\n") && Has(openedLog, "couldn't be loaded"), "a level the editor opened from outside has its log beside it, under its own name");
+	Check(!logged.empty() && Has(logged.back(), "written beside the level"), "and the game's log says it went beside the level");
+	::DeleteFileA((opened + "/mymap_errorlog.txt").c_str());
+	::DeleteFileA(openedFile.c_str());
+	::DeleteFileA((games + "mymap_errorlog.txt").c_str());
+	::RemoveDirectoryA(opened.c_str());
 
 	::DeleteFileA((games + kLevelLogFallbackName).c_str());
 	::DeleteFileA((games + "othermap_errorlog.txt").c_str());
