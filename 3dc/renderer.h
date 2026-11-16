@@ -204,7 +204,7 @@ struct EditorWorldTriangle
 {
 	int x0, y0, z0, x1, y1, z1, x2, y2, z2;
 	unsigned int colour;
-	int group;   // -1: none. A group of triangles that follow one another with the same number (0 or more) is drawn inside an occlusion query (R_EditorTriangleGroupPixels says how many of its pixels were seen)
+	int group = -1;   // -1: none (the default, so a builder that forgets it never makes a group). A group of triangles that follow one another with the same number (0 or more) is drawn inside an occlusion query (R_EditorTriangleGroupPixels says how many of its pixels were seen)
 };
 void R_SetEditorWorldTriangles	(const EditorWorldTriangle *triangles, int count);
 // How many pixels of the triangle group with this number were drawn (passed the depth test) in the last frame whose answer has come back: 0 is "hidden" (by the level, or off the screen), -1 is "not known (yet)".

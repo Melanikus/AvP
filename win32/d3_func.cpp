@@ -227,6 +227,8 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	extern void ReleaseEditorGroupQueries();
+	ReleaseEditorGroupQueries();   // the editor's occlusion queries (R_SetEditorWorldTriangles groups): default-pool, outstanding between frames
 	FrameTiming_Release();
 	ShadowCapture_GiveUp();
 	extern void ToyShadows_ReleaseTargets();

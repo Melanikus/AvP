@@ -9103,6 +9103,18 @@ static void CollectEditorGroupQueries()
 	editorGroupQueries.clear();
 }
 
+// The queries are default-pool objects that stay outstanding between frames: they are let go before the device is Reset or lost (ReleaseVolatileResources, d3_func.cpp), and what they said with them
+void ReleaseEditorGroupQueries()
+{
+	for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+	{
+		one.second->Release();
+	}
+
+	editorGroupQueries.clear();
+	editorGroupPixels.clear();
+}
+
 int R_EditorTriangleGroupPixels(int group)
 {
 	std::map<int, int>::const_iterator const found = editorGroupPixels.find(group);
