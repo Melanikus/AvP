@@ -577,6 +577,30 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 		}
 //	 			OutputTranslucentPolyList();
 
+		/* The level editor only (R_SetEditorDrawObjectsOutsideModules): an object that no module holds has kept the sort key that means "not drawn" (a grenade behind a closed door, in the game). A file of models has no module at all,
+		so the editor draws those after the modules; the game never turns it on. A drawn one's key is changed so the scan below does not run its timer a second time. */
+		{
+			extern bool EditorDrawsObjectsOutsideModules();
+
+			if (EditorDrawsObjectsOutsideModules())
+			{
+				int o = numVisObjs;
+
+				CheckWireFrameMode(WireFrameMode&2);
+
+				while (o)
+				{
+					o--;
+
+					if (VisibleObjects[o].SortKey == 0x7fffffff && !VisibleObjects[o].DrawBeforeEnvironment)
+					{
+						AddShape(VisibleObjects[o].DispPtr, VDBPtr);
+						VisibleObjects[o].SortKey = 0x7ffffffe;
+					}
+				}
+			}
+		}
+
 		/* KJL 12:51:00 13/08/98 - scan for hierarchical objects which aren't going to be drawn,
 		and update their timers */
 		{

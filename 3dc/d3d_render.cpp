@@ -5890,6 +5890,20 @@ bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int 
 	return false;
 }
 
+// The level editor's objects outside every module (R_SetEditorDrawObjectsOutsideModules, renderer.h): KRenderItems draws an object with the module that holds it, so a file with no module draws none; with this on they are drawn
+// after the modules. Off in the game: the game never calls the setter.
+static bool editorDrawObjectsOutsideModules = false;
+
+void R_SetEditorDrawObjectsOutsideModules(bool on)
+{
+	editorDrawObjectsOutsideModules = on;
+}
+
+bool EditorDrawsObjectsOutsideModules()
+{
+	return editorDrawObjectsOutsideModules;
+}
+
 // The level editor's hidden objects (R_SetEditorHiddenBlocks, renderer.h): blocks AddShape does not draw at all, and with everyPlacedObject every block that has a strategy of its own and is not a
 // module (the objects the level file places). Always none in the game: the game never calls the setter, so nothing here runs.
 static std::vector<const DISPLAYBLOCK *> editorHiddenBlocks;
