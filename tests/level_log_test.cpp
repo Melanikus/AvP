@@ -131,6 +131,16 @@ static void TestNames()
 	Check(!LevelLog_SplitName("Custom/sub/mymap", &folder, &file) && !LevelLog_SplitName("Custom/", &folder, &file), "and a folder inside Custom, or Custom with no name");
 	Check(!LevelLog_SplitName("C:/mymap", &folder, &file) && !LevelLog_SplitName("\\\\server\\share\\map", &folder, &file), "and a drive, or another machine");
 
+	// A file AVP_OpenInteng opens from outside is copied into avp_rifs/OpenedByEditor and loaded as OpenedByEditor/<name> (its open_with.cpp): its log goes beside it there,
+	// named after the name's last part. The rest of the rule stays: no other folder, no folder inside it, no way out of it. (Added 2026-11-16 by Melanikus (Vasquez): every
+	// level opened that way logged "one whose name can't be used as a file name", and its log went to the game's folder as level_errorlog.txt.)
+	Check(LevelLog_SplitName("OpenedByEditor/Genshd1", &folder, &file) && folder == "OpenedByEditor/" && file == "Genshd1", "a level the editor opened from outside is in OpenedByEditor/");
+	Check(LevelLog_SplitName("openedbyeditor/Genshd1", &folder, &file) && folder == "OpenedByEditor/" && file == "Genshd1", "however its capitals were written");
+	Check(!LevelLog_SplitName("OpenedByEditor/../../windows/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/sub/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/", &folder, &file), "but not a way out of it, a folder inside it, or no name");
+	Check(!LevelLog_SplitName("OpenedByEditor/NUL", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/a:b", &folder, &file) && !LevelLog_SplitName("Custom/OpenedByEditor/x", &folder, &file) && !LevelLog_SplitName("OpenedByEditor/Custom/x", &folder, &file), "nor a device, a stream, or one of the two folders inside the other");
+	Check(LevelLog_PathBesideTheLevel("avp_rifs", "OpenedByEditor/Genshd1") == "avp_rifs/OpenedByEditor/Genshd1_errorlog.txt", "its log goes beside it in OpenedByEditor");
+	Check(LevelLog_PathInTheGamesFolder("C:/Games/AvP/", "OpenedByEditor/Genshd1") == "C:/Games/AvP/Genshd1_errorlog.txt", "and in the game's folder it keeps the level's name");
+
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "invasion_a") == "avp_rifs/invasion_a_errorlog.txt", "a stock level's log goes beside it");
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "Custom/mymap") == "avp_rifs/Custom/mymap_errorlog.txt", "and a custom one's beside it in Custom");
 	Check(LevelLog_PathBesideTheLevel("avp_rifs", "Custom/../x").empty() && LevelLog_PathBesideTheLevel(NULL, "mymap").empty(), "a name that can't be used goes nowhere beside the level");
@@ -328,6 +338,21 @@ static void TestFinishing()
 	std::string const fixed = ReadWholeFile(games + kLevelLogFallbackName);
 	Check(Has(fixed, "one whose name can't be used") && !Has(fixed, ".."), "a name that can't be used is never written into a path or the log");
 
+	// A level the editor opened from outside: loaded as OpenedByEditor/<name> from avp_rifs/OpenedByEditor, its log goes beside it there, under the level's own name
+	std::string const opened = levels + "/OpenedByEditor";
+	::CreateDirectoryA(opened.c_str(), NULL);
+	std::string const openedFile = opened + "/mymap.rif";
+	WriteWholeFile(openedFile, "abc");
+	LevelLog_StartGathering();
+	LevelLog_Finish(levels.c_str(), "OpenedByEditor/mymap", openedFile.c_str(), true);
+	std::string const openedLog = ReadWholeFile(opened + "/mymap_errorlog.txt");
+	Check(Has(openedLog, "Level: OpenedByEditor/mymap\r\n") && Has(openedLog, "couldn't be loaded"), "a level the editor opened from outside has its log beside it, under its own name");
+	Check(!logged.empty() && Has(logged.back(), "written beside the level"), "and the game's log says it went beside the level");
+	::DeleteFileA((opened + "/mymap_errorlog.txt").c_str());
+	::DeleteFileA(openedFile.c_str());
+	::DeleteFileA((games + "mymap_errorlog.txt").c_str());
+	::RemoveDirectoryA(opened.c_str());
+
 	::DeleteFileA((games + kLevelLogFallbackName).c_str());
 	::DeleteFileA((games + "othermap_errorlog.txt").c_str());
 	::DeleteFileA(theirs.c_str());
@@ -345,13 +370,14 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = system.substr(system.find("bool TryLoadRifFile()") == std::string::npos ? system.size() : system.find("bool TryLoadRifFile()"));
+	// The loading is LoadTheLevel, which both TryLoadRifFile (the editor's) and LoadRifFile (the game's) call with their own way of reading the file (0f00fd2d)
+	std::string const loading = system.substr(system.find("static bool LoadTheLevel(") == std::string::npos ? system.size() : system.find("static bool LoadTheLevel("));
 
-	Check(ComesBefore(loading, "LevelLog_StartGathering();", "avp_load_rif("), "loading a level starts gathering before it reads the file");
+	Check(ComesBefore(loading, "LevelLog_StartGathering();", "env_rif = load("), "loading a level starts gathering before it reads the file");
 	Check(ComesBefore(loading, "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);", "return false;"), "a level that can't be loaded has its log written before loading gives up");
 
 	// The game itself still stops on such a level, with the same exit code as always: LoadRifFile is TryLoadRifFile and that one
-	// ending, and nothing else (2026-11-14, so the editor can report a refused level instead of ending). The game's own LoadRifFile is
+	// ending, and nothing else (2026-11-14, so the editor can report a refused level instead of ending; since 0f00fd2d both are LoadTheLevel, the game's with avp_load_rif). The game's own LoadRifFile is
 	// read from its first line to the "}" that ends it at the start of a line; its only statement is the exit.
 	size_t const gamesStart = system.find("void LoadRifFile()");
 	size_t const gamesEnd = gamesStart == std::string::npos ? std::string::npos : system.find("\n}", gamesStart);
@@ -366,7 +392,8 @@ static void TestTheGameUsesIt()
 	{
 		exits++;
 	}
-	Check(Has(theGames, "if (!TryLoadRifFile())") && Has(theGames, "exit(0x3421);") && statements == 1, "the game's own LoadRifFile is TryLoadRifFile, and stops with 0x3421 when that gives back false");
+	Check(Has(theGames, "if (!LoadTheLevel(avp_load_rif))") && Has(theGames, "exit(0x3421);") && statements == 1, "the game's own LoadRifFile is LoadTheLevel with the game's reading, and stops with 0x3421 when that gives back false");
+	Check(Has(system, "return LoadTheLevel(avp_try_load_rif);"), "and the editor's TryLoadRifFile is the same loading, with the reading that gives a refused file back");
 	Check(exits == 1, "and that's the only place the game stops with that code");
 	Check(ComesBefore(loading, "copy_rif_data(", "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);"), "and one that loads, once all of it is in");
 
