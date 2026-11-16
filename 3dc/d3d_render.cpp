@@ -458,6 +458,8 @@ static std::vector<float> normalLinesCorners;
 static int normalLinesNotNoted = 0;
 static void DrawNormalLines();
 static void DrawAlienWays();
+static void DrawEditorWorldLines();
+static std::vector<EditorWorldLine> editorWorldLines;   // R_SetEditorWorldLines: the level editor's lines in the 3D view (empty in the game)
 extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
 char const *GetLoadedShapeName(int position);
@@ -916,6 +918,12 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && AlienWaysViewSwitchedOn)
 	{
 		DrawAlienWays();
+	}
+
+	// The level editor's own lines in the world (R_SetEditorWorldLines): the same way, in the frame's last drawing. Empty in the game, so nothing here runs there.
+	if (toyFinalFlush && !editorWorldLines.empty())
+	{
+		DrawEditorWorldLines();
 	}
 
 	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
@@ -9038,6 +9046,109 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 			}
 		}
 	}
+}
+
+// The level editor's lines in the 3D view (R_SetEditorWorldLines): the same sums and the same card settings as DrawAlienWays, which this is made from, for lines the editor gave in the level's places.
+void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
+{
+	editorWorldLines.clear();
+
+	if (lines && count > 0)
+	{
+		editorWorldLines.assign(lines, lines + (count < 4096 ? count : 4096));
+	}
+}
+
+static void DrawEditorWorldLines()
+{
+	static std::vector<AlienWaysViewEnd> ends;
+	ends.clear();
+
+	for (size_t i = 0; i < editorWorldLines.size(); i++)
+	{
+		EditorWorldLine const &line = editorWorldLines[i];
+		int const at[2][3] = { { line.x0, line.y0, line.z0 }, { line.x1, line.y1, line.z1 } };
+
+		for (int end = 0; end < 2; end++)
+		{
+			float const x = (float)at[end][0], y = (float)at[end][1], z = (float)at[end][2];
+			AlienWaysViewEnd made;
+
+			// the camera's view by the game's ViewMatrix, then up turned over, as the game's own polygons are (alien_ways_view.cpp IntoView)
+			made.x = ViewMatrix[0] * x + ViewMatrix[1] * y + ViewMatrix[2] * z + ViewMatrix[3];
+			made.y = -(ViewMatrix[4] * x + ViewMatrix[5] * y + ViewMatrix[6] * z + ViewMatrix[7]);
+			made.z = ViewMatrix[8] * x + ViewMatrix[9] * y + ViewMatrix[10] * z + ViewMatrix[11];
+			made.colour = line.colour;
+			ends.push_back(made);
+		}
+	}
+
+	if (ends.empty())
+	{
+		return;
+	}
+
+	AlienWaysView_Thicken(&ends, kAlienWaysViewAside);
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// compared with the level's depth, so a wall hides a line behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostLinesInOneDraw = 16000;
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.resize(ends.size());
+
+	for (size_t i = 0; i < ends.size(); i++)
+	{
+		vertices[i].x = ends[i].x;
+		vertices[i].y = ends[i].y;
+		vertices[i].z = ends[i].z;
+		vertices[i].color = ends[i].colour;
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+	{
+		size_t const left = ends.size() / 2 - line;
+
+		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
 }
 
 // The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), when the developer asks

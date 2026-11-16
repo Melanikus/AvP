@@ -186,6 +186,16 @@ struct EditorOrthoLine
 	unsigned int colour;
 };
 void R_SetEditorOrthoLines		(const EditorOrthoLine *lines, int count);
+// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to 4096; count 0 none. They are
+// drawn in the last drawing of a frame, after the whole level is in the depth buffer, so a wall hides a line behind it, about three pixels wide, and everything the drawing changes on the card is
+// put back. EDITOR ONLY: the game never calls this, and with no lines set no game draw path does anything different. Added 2026-11-15 by Melanikus (Drake) for the AvP port (the waypoint boxes and the
+// entry-point markers of the level editor's Waypoint mode).
+struct EditorWorldLine
+{
+	int x0, y0, z0, x1, y1, z1;
+	unsigned int colour;
+};
+void R_SetEditorWorldLines		(const EditorWorldLine *lines, int count);
 // The level editor's 3D view in a box of the window, not the whole of it (the bottom right quarter of the three-view layout): the world's drawings go into
 // that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
 // window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
