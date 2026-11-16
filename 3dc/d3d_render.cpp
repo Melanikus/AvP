@@ -9087,7 +9087,8 @@ void R_SetEditorWorldTriangles(const EditorWorldTriangle *triangles, int count)
 
 	if (triangles && count > 0)
 	{
-		editorWorldTriangles.assign(triangles, triangles + (count < 4096 ? count : 4096));
+		// up to 65536 (it was 4096): a full level's editor objects (Invasion has 500 with 100 triangles each) all draw; the draw below is already chunked at kMostTrianglesInOneDraw
+		editorWorldTriangles.assign(triangles, triangles + (count < 65536 ? count : 65536));
 	}
 }
 
