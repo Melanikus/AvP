@@ -128,6 +128,9 @@ void DrawCloudTable			(uint32_t topX, uint32_t topY, uint32_t wordLength, uint32
 void DrawFadeQuad			(uint32_t topX, uint32_t topY, uint32_t alpha);
 void DrawSmallMenuCharacter (uint32_t topX, uint32_t topY, uint32_t texU, uint32_t texV, uint32_t red, uint32_t green, uint32_t blue, uint32_t alpha);
 void DrawQuad				(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
+// DrawQuad with no filtering: every texel of the texture lands on one pixel when the quad is the texture's size. The game never calls it; the editor draws inteng's
+// own menu font with it, one letter a texture (white where a bit is set, see-through elsewhere), in the letter's colour. (Added 2026-11-16 by Melanikus for the AvP port.)
+void DrawQuadSharp			(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
 void DrawFmvFrame			(uint32_t frameWidth, uint32_t frameHeight, const std::vector<texID_t> &textureIDs);
 void DrawFontQuad			(uint32_t x, uint32_t y, uint32_t charWidth, uint32_t charHeight, texID_t textureID, float *uvArray, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
 

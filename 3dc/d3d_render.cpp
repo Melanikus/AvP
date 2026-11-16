@@ -1586,6 +1586,43 @@ void DrawQuad(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t t
 	orthoList->CreateOrthoIndices(orthoIndex);
 }
 
+// See renderer.h: DrawQuad, with filtering off. (Added 2026-11-16 by Melanikus for the AvP port.)
+void DrawQuadSharp(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType)
+{
+	float x1 = WPos2DC(x);
+	float y1 = HPos2DC(y);
+
+	float x2 = WPos2DC(x + width);
+	float y2 = HPos2DC(y + height);
+
+	Texture tempTexture = Tex_GetTextureDetails(textureID);
+
+	if (!orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_OFF, TEXTURE_CLAMP)) {
+		return;
+	}
+
+	float const u = (1.0f / tempTexture.realWidth) * tempTexture.width;
+	float const v = (1.0f / tempTexture.realHeight) * tempTexture.height;
+	float const xs[4] = { x1, x1, x2, x2 };
+	float const ys[4] = { y2, y1, y2, y1 };
+	float const us[4] = { 0.0f, 0.0f, u, u };
+	float const vs[4] = { v, 0.0f, v, 0.0f };
+
+	// bottom left, top left, bottom right, top right: as DrawQuad
+	for (int corner = 0; corner < 4; corner++)
+	{
+		orthoVertex[orthoVBOffset].x = xs[corner];
+		orthoVertex[orthoVBOffset].y = ys[corner];
+		orthoVertex[orthoVBOffset].z = 1.0f;
+		orthoVertex[orthoVBOffset].colour = colour;
+		orthoVertex[orthoVBOffset].u = us[corner];
+		orthoVertex[orthoVBOffset].v = vs[corner];
+		orthoVBOffset++;
+	}
+
+	orthoList->CreateOrthoIndices(orthoIndex);
+}
+
 void DrawAlphaMenuQuad(uint32_t topX, uint32_t topY, texID_t textureID, uint32_t alpha)
 {
 	// textures actual height/width (whether it's non power of two or not)
