@@ -20,7 +20,7 @@
 		{
 			"name": "the static scene's route doesn't ask the switch",
 			"changes": [
-				{ "file": "3dc/static_scene.cpp", "from": "WireFrameMode || DrawFilledOutlines || !StaticScene_ViewAllows()", "to": "WireFrameMode || !StaticScene_ViewAllows()" }
+				{ "file": "3dc/static_scene.cpp", "from": "WireFrameMode || DrawFilledOutlines || EditorUntextured || !StaticScene_ViewAllows()", "to": "WireFrameMode || EditorUntextured || !StaticScene_ViewAllows()" }
 			]
 		},
 		{
@@ -32,7 +32,7 @@
 		{
 			"name": "the outline pass writes depth",
 			"changes": [
-				{ "file": "3dc/d3d_render.cpp", "from": "D3DRS_ZWRITEENABLE, FALSE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);", "to": "D3DRS_ZWRITEENABLE, TRUE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);" }
+				{ "file": "3dc/d3d_render.cpp", "from": "D3DRS_ZWRITEENABLE, FALSE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);\n\tToySetFloatState(device, D3DRS_DEPTHBIAS, DrawFilledOutlinesDepthBias);", "to": "D3DRS_ZWRITEENABLE, TRUE);\n\tdevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);\n\tToySetFloatState(device, D3DRS_DEPTHBIAS, DrawFilledOutlinesDepthBias);" }
 			]
 		},
 		{
