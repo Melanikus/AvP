@@ -345,13 +345,14 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = system.substr(system.find("bool TryLoadRifFile()") == std::string::npos ? system.size() : system.find("bool TryLoadRifFile()"));
+	// The loading is LoadTheLevel, which both TryLoadRifFile (the editor's) and LoadRifFile (the game's) call with their own way of reading the file (0f00fd2d)
+	std::string const loading = system.substr(system.find("static bool LoadTheLevel(") == std::string::npos ? system.size() : system.find("static bool LoadTheLevel("));
 
-	Check(ComesBefore(loading, "LevelLog_StartGathering();", "avp_load_rif("), "loading a level starts gathering before it reads the file");
+	Check(ComesBefore(loading, "LevelLog_StartGathering();", "env_rif = load("), "loading a level starts gathering before it reads the file");
 	Check(ComesBefore(loading, "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);", "return false;"), "a level that can't be loaded has its log written before loading gives up");
 
 	// The game itself still stops on such a level, with the same exit code as always: LoadRifFile is TryLoadRifFile and that one
-	// ending, and nothing else (2026-11-14, so the editor can report a refused level instead of ending). The game's own LoadRifFile is
+	// ending, and nothing else (2026-11-14, so the editor can report a refused level instead of ending; since 0f00fd2d both are LoadTheLevel, the game's with avp_load_rif). The game's own LoadRifFile is
 	// read from its first line to the "}" that ends it at the start of a line; its only statement is the exit.
 	size_t const gamesStart = system.find("void LoadRifFile()");
 	size_t const gamesEnd = gamesStart == std::string::npos ? std::string::npos : system.find("\n}", gamesStart);
@@ -366,7 +367,8 @@ static void TestTheGameUsesIt()
 	{
 		exits++;
 	}
-	Check(Has(theGames, "if (!TryLoadRifFile())") && Has(theGames, "exit(0x3421);") && statements == 1, "the game's own LoadRifFile is TryLoadRifFile, and stops with 0x3421 when that gives back false");
+	Check(Has(theGames, "if (!LoadTheLevel(avp_load_rif))") && Has(theGames, "exit(0x3421);") && statements == 1, "the game's own LoadRifFile is LoadTheLevel with the game's reading, and stops with 0x3421 when that gives back false");
+	Check(Has(system, "return LoadTheLevel(avp_try_load_rif);"), "and the editor's TryLoadRifFile is the same loading, with the reading that gives a refused file back");
 	Check(exits == 1, "and that's the only place the game stops with that code");
 	Check(ComesBefore(loading, "copy_rif_data(", "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);"), "and one that loads, once all of it is in");
 
