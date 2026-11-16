@@ -204,8 +204,12 @@ struct EditorWorldTriangle
 {
 	int x0, y0, z0, x1, y1, z1, x2, y2, z2;
 	unsigned int colour;
+	int group;   // -1: none. A group of triangles that follow one another with the same number (0 or more) is drawn inside an occlusion query (R_EditorTriangleGroupPixels says how many of its pixels were seen)
 };
 void R_SetEditorWorldTriangles	(const EditorWorldTriangle *triangles, int count);
+// How many pixels of the triangle group with this number were drawn (passed the depth test) in the last frame whose answer has come back: 0 is "hidden" (by the level, or off the screen), -1 is "not known (yet)".
+// One frame late. Editor only: the game never sets a group, so it never asks.
+int R_EditorTriangleGroupPixels(int group);
 // The level editor's 3D view in a box of the window, not the whole of it (the bottom right quarter of the three-view layout): the world's drawings go into
 // that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
 // window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.

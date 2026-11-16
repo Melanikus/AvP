@@ -90,6 +90,7 @@
 #include "r2base.h"
 #include "Fonts.h"
 #include <vector>
+#include <map>
 #include <algorithm>
 #include "logString.h"
 #include "input.h"
@@ -9081,9 +9082,49 @@ void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
 	}
 }
 
+// The occlusion queries of the editor's triangle groups (R_SetEditorWorldTriangles): the answers of the frame before are collected at the start of the next draw, then each group gets a query of its own
+static std::vector<std::pair<int, IDirect3DQuery9 *>> editorGroupQueries;
+static std::map<int, int> editorGroupPixels;
+
+static void CollectEditorGroupQueries()
+{
+	for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+	{
+		DWORD pixels = 0;
+
+		if (one.second->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH) == S_OK)
+		{
+			editorGroupPixels[one.first] = (int)pixels;
+		}
+
+		one.second->Release();
+	}
+
+	editorGroupQueries.clear();
+}
+
+int R_EditorTriangleGroupPixels(int group)
+{
+	std::map<int, int>::const_iterator const found = editorGroupPixels.find(group);
+
+	return found == editorGroupPixels.end() ? -1 : found->second;
+}
+
 void R_SetEditorWorldTriangles(const EditorWorldTriangle *triangles, int count)
 {
 	editorWorldTriangles.clear();
+
+	if (!triangles || count <= 0)
+	{
+		// nothing to draw: the queries and what they said are let go
+		for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+		{
+			one.second->Release();
+		}
+
+		editorGroupQueries.clear();
+		editorGroupPixels.clear();
+	}
 
 	if (triangles && count > 0)
 	{
@@ -9097,6 +9138,8 @@ static void DrawEditorWorldTriangles()
 {
 	static std::vector<D3DLVERTEX> vertices;
 	vertices.clear();
+
+	CollectEditorGroupQueries();
 
 	for (size_t i = 0; i < editorWorldTriangles.size(); i++)
 	{
@@ -9162,11 +9205,40 @@ static void DrawEditorWorldTriangles()
 
 	static const size_t kMostTrianglesInOneDraw = 16000;
 
-	for (size_t triangle = 0; triangle < vertices.size() / 3; triangle += kMostTrianglesInOneDraw)
-	{
-		size_t const left = vertices.size() / 3 - triangle;
+	// runs of triangles: the ones of one group (0 or more) together, in a query of their own; the ones with no group in as few draws as possible
+	size_t const total = vertices.size() / 3;
 
-		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(left < kMostTrianglesInOneDraw ? left : kMostTrianglesInOneDraw), &vertices[triangle * 3], sizeof(D3DLVERTEX));
+	for (size_t first = 0; first < total; )
+	{
+		int const group = editorWorldTriangles[first].group;
+		size_t last = first + 1;
+
+		while (last < total && (group < 0 ? editorWorldTriangles[last].group < 0 : editorWorldTriangles[last].group == group))
+		{
+			last++;
+		}
+
+		IDirect3DQuery9 *query = 0;
+
+		if (group >= 0 && SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+		{
+			query->Issue(D3DISSUE_BEGIN);
+		}
+
+		for (size_t triangle = first; triangle < last; triangle += kMostTrianglesInOneDraw)
+		{
+			size_t const left = last - triangle;
+
+			device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(left < kMostTrianglesInOneDraw ? left : kMostTrianglesInOneDraw), &vertices[triangle * 3], sizeof(D3DLVERTEX));
+		}
+
+		if (query)
+		{
+			query->Issue(D3DISSUE_END);
+			editorGroupQueries.push_back(std::make_pair(group, query));
+		}
+
+		first = last;
 	}
 
 	asItWas->Apply();
