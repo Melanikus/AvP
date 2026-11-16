@@ -196,6 +196,16 @@ struct EditorWorldLine
 	unsigned int colour;
 };
 void R_SetEditorWorldLines		(const EditorWorldLine *lines, int count);
+// Flat filled triangles drawn in the level editor's 3D view, in the level's own world places (millimetres), each in its own ARGB colour (the alpha is ignored: opaque): up to 4096; count 0 none. Drawn
+// in the same last drawing of a frame as the lines (R_SetEditorWorldLines), a little before them, compared with the level's depth (a wall hides one behind it) and not written into it, with the same
+// small pull toward the camera so a triangle lying in a wall's own plane shows over it. EDITOR ONLY: the game never calls this, and with no triangles set no game draw path does anything different.
+// Added 2026-11-16 by Melanikus (Drake) for the AvP port (the level editor's light markers and Stability faces, which inteng draws as filled flat polygons).
+struct EditorWorldTriangle
+{
+	int x0, y0, z0, x1, y1, z1, x2, y2, z2;
+	unsigned int colour;
+};
+void R_SetEditorWorldTriangles	(const EditorWorldTriangle *triangles, int count);
 // The level editor's 3D view in a box of the window, not the whole of it (the bottom right quarter of the three-view layout): the world's drawings go into
 // that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
 // window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.

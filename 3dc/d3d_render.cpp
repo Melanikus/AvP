@@ -459,6 +459,8 @@ static int normalLinesNotNoted = 0;
 static void DrawNormalLines();
 static void DrawAlienWays();
 static void DrawEditorWorldLines();
+static void DrawEditorWorldTriangles();
+static std::vector<EditorWorldTriangle> editorWorldTriangles;   // R_SetEditorWorldTriangles: the level editor's filled flat triangles in the 3D view (empty in the game)
 static std::vector<EditorWorldLine> editorWorldLines;   // R_SetEditorWorldLines: the level editor's lines in the 3D view (empty in the game)
 extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
@@ -918,6 +920,12 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && AlienWaysViewSwitchedOn)
 	{
 		DrawAlienWays();
+	}
+
+	// The level editor's filled triangles in the world (R_SetEditorWorldTriangles): in the frame's last drawing too, before its lines. Empty in the game, so nothing here runs there.
+	if (toyFinalFlush && !editorWorldTriangles.empty())
+	{
+		DrawEditorWorldTriangles();
 	}
 
 	// The level editor's own lines in the world (R_SetEditorWorldLines): the same way, in the frame's last drawing. Empty in the game, so nothing here runs there.
@@ -9071,6 +9079,97 @@ void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
 	{
 		editorWorldLines.assign(lines, lines + (count < 4096 ? count : 4096));
 	}
+}
+
+void R_SetEditorWorldTriangles(const EditorWorldTriangle *triangles, int count)
+{
+	editorWorldTriangles.clear();
+
+	if (triangles && count > 0)
+	{
+		editorWorldTriangles.assign(triangles, triangles + (count < 4096 ? count : 4096));
+	}
+}
+
+// The level editor's filled triangles (R_SetEditorWorldTriangles): the same sums and the same card settings as DrawEditorWorldLines, with a triangle list in place of the line list
+static void DrawEditorWorldTriangles()
+{
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.clear();
+
+	for (size_t i = 0; i < editorWorldTriangles.size(); i++)
+	{
+		EditorWorldTriangle const &triangle = editorWorldTriangles[i];
+		int const at[3][3] = { { triangle.x0, triangle.y0, triangle.z0 }, { triangle.x1, triangle.y1, triangle.z1 }, { triangle.x2, triangle.y2, triangle.z2 } };
+
+		for (int corner = 0; corner < 3; corner++)
+		{
+			float const x = (float)at[corner][0], y = (float)at[corner][1], z = (float)at[corner][2];
+			D3DLVERTEX made;
+
+			// the camera's view by the game's ViewMatrix, then up turned over, as the game's own polygons are
+			made.x = ViewMatrix[0] * x + ViewMatrix[1] * y + ViewMatrix[2] * z + ViewMatrix[3];
+			made.y = -(ViewMatrix[4] * x + ViewMatrix[5] * y + ViewMatrix[6] * z + ViewMatrix[7]);
+			made.z = ViewMatrix[8] * x + ViewMatrix[9] * y + ViewMatrix[10] * z + ViewMatrix[11];
+			made.color = triangle.colour | 0xFF000000u;
+			made.specular = RGBA_MAKE(0, 0, 0, 0);
+			made.u = 0.0f;
+			made.v = 0.0f;
+			vertices.push_back(made);
+		}
+	}
+
+	if (vertices.empty())
+	{
+		return;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// compared with the level's depth, so a wall hides a triangle behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostTrianglesInOneDraw = 16000;
+
+	for (size_t triangle = 0; triangle < vertices.size() / 3; triangle += kMostTrianglesInOneDraw)
+	{
+		size_t const left = vertices.size() / 3 - triangle;
+
+		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(left < kMostTrianglesInOneDraw ? left : kMostTrianglesInOneDraw), &vertices[triangle * 3], sizeof(D3DLVERTEX));
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
 }
 
 static void DrawEditorWorldLines()
