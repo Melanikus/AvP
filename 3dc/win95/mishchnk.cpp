@@ -494,6 +494,12 @@ void File_Chunk::post_input_processing()
 			return;
 		}
 
+		// a module's box with an axis the wrong way round, as inteng's save writes after turning a module, is read the right way round first (put_box_right_way_round)
+		if (ol()->lookup_single_child ("MODULEDT"))
+		{
+			shape_array[object_header->shape_id_no]->put_box_right_way_round();
+		}
+
 		if (ol()->lookup_single_child ("MODULEDT") && !shape_array[object_header->shape_id_no]->points_fit_box())
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
