@@ -530,6 +530,7 @@ void File_Chunk::post_input_processing()
 
 		if (ol()->lookup_single_child ("MODULEDT") && !shape_array[object_header->shape_id_no]->points_fit_box())
 		{
+			LogErrorStringC(shape_array[object_header->shape_id_no]->box_refusal_line(object_header->shape_id_no).c_str());   // the level's log says why (it was silent)
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			delete[] shape_array;
 			return;

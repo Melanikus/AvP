@@ -32,6 +32,7 @@
 //   an outside shape, and a skin in an animated shape's alternate textures, have to have a name
 //   whether a normal's number is a real one is asked of real_numbers.h, the game's one rule for it
 
+#include <stdio.h>
 #include <math.h>
 #include <vector>
 
@@ -557,6 +558,35 @@ int Shape_Chunk::put_box_right_way_round()
 	}
 
 	return turned;
+}
+
+// Says which point and axis break points_fit_box, for the level's log: the level is refused there, and before this nothing said why (Bishop 2026-11-16, after
+// Genshd1 saved by inteng was refused with "0 errors"). (Added 2026-11-16 by Melanikus (Vasquez) for AVP_OpenInteng.)
+std::string Shape_Chunk::box_refusal_line(int shape_number)
+{
+	char const * const axis_names[3] = { "x", "y", "z" };
+
+	for (int i = 0; i < shape_data.num_verts; i++)
+	{
+		ChunkVectorInt const & point = shape_data.v_list[i];
+		int const at[3] = { point.x, point.y, point.z };
+		int const smallest[3] = { shape_data.min.x, shape_data.min.y, shape_data.min.z };
+		int const largest[3] = { shape_data.max.x, shape_data.max.y, shape_data.max.z };
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			if (at[axis] < smallest[axis] || at[axis] > largest[axis])
+			{
+				char line[320];
+
+				_snprintf_s(line, sizeof(line), _TRUNCATE, "the level was refused: module shape %d has point %d with %s %d outside its box (%s smallest %d, largest %d, SHPHEAD1); "
+					"a module's points must lie in its box (mishchnk.cpp points_fit_box)", shape_number, i, axis_names[axis], at[axis], axis_names[axis], smallest[axis], largest[axis]);
+				return line;
+			}
+		}
+	}
+
+	return std::string();
 }
 
 bool Shape_Chunk::points_fit_box()
