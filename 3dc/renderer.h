@@ -190,6 +190,9 @@ void R_SetEditorOrthoLines		(const EditorOrthoLine *lines, int count);
 // that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
 // window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
 void R_SetEditorMainViewport	(bool on, int x, int y, int width, int height);
+// Editor-only: draws everything waiting in the lists NOW, into the box set by R_SetEditorMainViewport, and starts them again (the frame stays open). The editor's split screen draws each extra
+// camera's world this way inside one frame, then the main view as usual. Does nothing when no frame is open.
+void R_EditorFlushWorld			(void);
 // The level editor's Untextured: every polygon of the level is drawn with one plain texel of the colour given (ARGB), so it is as the level's light makes it,
 // whatever the draw mode. Off (false) draws the textures as the game does. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
 void R_SetEditorUntextured		(bool on, unsigned int colour);

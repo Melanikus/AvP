@@ -6310,6 +6310,11 @@ void R_SetEditorMainViewport(bool on, int x, int y, int width, int height)
 	}
 }
 
+void R_EditorFlushWorld()
+{
+	FlushLists();
+}
+
 void R_SetEditorOrtho(const EditorOrtho *settings)
 {
 	editorOrthoOn = settings && settings->on;
