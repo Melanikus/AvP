@@ -565,7 +565,7 @@ void AVP_Power_Cable_Chunk::fill_data_block(char* data)
 
 size_t AVP_Power_Cable_Chunk::size_chunk()
 {
-	chunk_size=(strlen(name)+4)&~3;
+	chunk_size=((name ? strlen(name) : 0)+4)&~3;   // (no name is 0 bytes of it, as the particle generator's data chunk)
 	chunk_size+=12+sizeof(ChunkVectorInt)+sizeof(ObjectID)+28;
 	return chunk_size;
 }
@@ -868,7 +868,8 @@ size_t AVP_Particle_Generator_Data_Chunk::size_chunk()
 {
 	chunk_size=12+6*sizeof(int)+sizeof(ObjectID)*2;
 	chunk_size+=sizeof(ChunkVectorInt)+sizeof(ChunkQuat);
-	chunk_size+=(strlen(name)+4)&~3;
+	// (an empty name is read as no name at all, CopyOptionalNameFromChunk: 0 bytes of it, not strlen of a null pointer. Fixed 2026-11-16 for the AvP port: a particle generator, a dummy object or a power cable with no name stopped the program.)
+	chunk_size+=((name ? strlen(name) : 0)+4)&~3;
 	return chunk_size;
 }
 

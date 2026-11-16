@@ -87,7 +87,7 @@ void Dummy_Object_Data_Chunk::fill_data_block(char* data)
 size_t Dummy_Object_Data_Chunk::size_chunk()
 {
 	chunk_size=12+3*sizeof(ChunkVectorInt)+sizeof(ChunkQuat);
-	chunk_size+=(strlen(name)+4)&~3;
+	chunk_size+=((name ? strlen(name) : 0)+4)&~3;   // (no name is 0 bytes of it: an empty name is read as none, CopyOptionalNameFromChunk)
 	return chunk_size;
 }
 
