@@ -1,0 +1,58 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a countdown over 32767 seconds is not held",
+			"changes": [
+				{
+					"file": "3dc/self_destruct_time.h",
+					"from": "\tif (seconds > kSelfDestructMostSeconds)\n\t{\n\t\tseconds = kSelfDestructMostSeconds;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a negative countdown is not held",
+			"changes": [
+				{
+					"file": "3dc/self_destruct_time.h",
+					"from": "\tif (seconds < 0)\n\t{\n\t\tseconds = 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every countdown counts as fitting",
+			"changes": [
+				{
+					"file": "3dc/self_destruct_time.h",
+					"from": "\treturn seconds >= 0 && seconds <= kSelfDestructMostSeconds;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "the game shifts the file's number as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "\tsdtt->timer=SelfDestruct_FixedTimer(sds->timer);",
+					"to": "\tsdtt->timer=sds->timer<<16;"
+				}
+			]
+		},
+		{
+			"name": "a held countdown isn't written in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "\tif (!SelfDestruct_SecondsFit(sds->timer))\n\t{\n\t\tLogErrorString(\"level file gives a self destruct a countdown outside 0 to 32767 seconds, held to that: \" + Util::IntToString(sds->timer));\n\t}\n\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

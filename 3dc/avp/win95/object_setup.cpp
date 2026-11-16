@@ -75,6 +75,7 @@
 #include "bh_cable.h"
 #include "bh_death_volume.h"
 #include "bh_self_destruct.h"
+#include "self_destruct_time.h"
 #include "bh_particle_generator.h"
 #include "bh_videoscreen.h"
 
@@ -1826,7 +1827,14 @@ static void add_selfdestruct(const char* name,AVP_Strategy_Chunk* asc,ObjectID I
 	
 	SELF_DESTRUCT_TOOLS_TEMPLATE* sdtt=(SELF_DESTRUCT_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(SELF_DESTRUCT_TOOLS_TEMPLATE));
 
-	sdtt->timer=sds->timer<<16;
+	// The countdown is whole seconds in the file and 16.16 fixed point in the game. The file's number is held to 0 to 32767 seconds before it's turned, as a larger one
+	// would overflow the signed int and a negative one would be undefined (self_destruct_time.h; modified 2026-11-16 by Melanikus for the AvP port).
+	if (!SelfDestruct_SecondsFit(sds->timer))
+	{
+		LogErrorString("level file gives a self destruct a countdown outside 0 to 32767 seconds, held to that: " + Util::IntToString(sds->timer));
+	}
+
+	sdtt->timer=SelfDestruct_FixedTimer(sds->timer);
 
 	*(ObjectID*)&sdtt->nameID[0]=ID;
 	
