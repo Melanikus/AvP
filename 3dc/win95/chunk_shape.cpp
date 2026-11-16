@@ -532,6 +532,33 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 // A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape, not from its points. In all
 // 12813 module shapes in the game's own levels the box is exact. Other shapes can't be held to this: 655 others have points outside
 // their box, by up to 5845, so only a module's shape is asked.
+// inteng's own save can write a shape's box with one axis the wrong way round: Genshd1 saved by inteng on 2026-11-16 holds module shape 958 (a
+// module turned a quarter about the up axis) with x largest -5845 and x smallest 5845, while its points go from -5845 to 5845. The two numbers
+// are right, only their order is swapped, and inteng and the game both read the file. So such an axis is read the right way round, here, before
+// a module's points are held to its box: the box then holds the points exactly, as every module's in the game's own levels does, and the
+// game's module extents and the shadow pass (which trust the box) get a box whose largest number is not below its smallest. (Added 2026-11-16
+// by Melanikus (Vasquez) for AVP_OpenInteng.)
+int Shape_Chunk::put_box_right_way_round()
+{
+	int turned = 0;
+	int * const largest[3] = { &shape_data_store->max.x, &shape_data_store->max.y, &shape_data_store->max.z };   // shape_data is the same store, read-only
+	int * const smallest[3] = { &shape_data_store->min.x, &shape_data_store->min.y, &shape_data_store->min.z };
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		if (*largest[axis] < *smallest[axis])
+		{
+			int const was = *largest[axis];
+
+			*largest[axis] = *smallest[axis];
+			*smallest[axis] = was;
+			turned++;
+		}
+	}
+
+	return turned;
+}
+
 bool Shape_Chunk::points_fit_box()
 {
 	for (int i = 0; i < shape_data.num_verts; i++)
