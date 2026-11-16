@@ -26,6 +26,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 
+#include <stdio.h>
 #include <math.h>
 #include <vector>
 
@@ -527,6 +528,62 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 // A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape, not from its points. In all
 // 12813 module shapes in the game's own levels the box is exact. Other shapes can't be held to this: 655 others have points outside
 // their box, by up to 5845, so only a module's shape is asked.
+// inteng's own save can write a shape's box with one axis the wrong way round: Genshd1 saved by inteng on 2026-11-16 holds module shape 958 (a
+// module turned a quarter about the up axis) with x largest -5845 and x smallest 5845, while its points go from -5845 to 5845. The two numbers
+// are right, only their order is swapped, and inteng and the game both read the file. So such an axis is read the right way round, here, before
+// a module's points are held to its box: the box then holds the points exactly, as every module's in the game's own levels does, and the
+// game's module extents and the shadow pass (which trust the box) get a box whose largest number is not below its smallest. (Added 2026-11-16
+// by Melanikus (Vasquez) for AVP_OpenInteng.)
+int Shape_Chunk::put_box_right_way_round()
+{
+	int turned = 0;
+	int * const largest[3] = { &shape_data_store->max.x, &shape_data_store->max.y, &shape_data_store->max.z };   // shape_data is the same store, read-only
+	int * const smallest[3] = { &shape_data_store->min.x, &shape_data_store->min.y, &shape_data_store->min.z };
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		if (*largest[axis] < *smallest[axis])
+		{
+			int const was = *largest[axis];
+
+			*largest[axis] = *smallest[axis];
+			*smallest[axis] = was;
+			turned++;
+		}
+	}
+
+	return turned;
+}
+
+// Says which point and axis break points_fit_box, for the level's log: the level is refused there, and before this nothing said why (Bishop 2026-11-16, after
+// Genshd1 saved by inteng was refused with "0 errors"). (Added 2026-11-16 by Melanikus (Vasquez) for AVP_OpenInteng.)
+std::string Shape_Chunk::box_refusal_line(int shape_number)
+{
+	char const * const axis_names[3] = { "x", "y", "z" };
+
+	for (int i = 0; i < shape_data.num_verts; i++)
+	{
+		ChunkVectorInt const & point = shape_data.v_list[i];
+		int const at[3] = { point.x, point.y, point.z };
+		int const smallest[3] = { shape_data.min.x, shape_data.min.y, shape_data.min.z };
+		int const largest[3] = { shape_data.max.x, shape_data.max.y, shape_data.max.z };
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			if (at[axis] < smallest[axis] || at[axis] > largest[axis])
+			{
+				char line[320];
+
+				_snprintf_s(line, sizeof(line), _TRUNCATE, "the level was refused: module shape %d has point %d with %s %d outside its box (%s smallest %d, largest %d, SHPHEAD1); "
+					"a module's points must lie in its box (mishchnk.cpp points_fit_box)", shape_number, i, axis_names[axis], at[axis], axis_names[axis], smallest[axis], largest[axis]);
+				return line;
+			}
+		}
+	}
+
+	return std::string();
+}
+
 bool Shape_Chunk::points_fit_box()
 {
 	for (int i = 0; i < shape_data.num_verts; i++)
