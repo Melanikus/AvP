@@ -14,6 +14,17 @@ A release is different from a test build. A test build is kept for 30 days for p
 
 Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refuse, and it's right to: fix those things first.
 
+Then run the two checks that only run before a release, on the commit you'll release: the tip of `avpx_main`. The release refuses
+without a pass of each on that exact commit (`tools/check-release.ps1`):
+- **Every take-out list:** Actions, **Take-outs**, Run workflow, on `avpx_main`, leaving the lists at `all`. Its last job has to be called
+  **Take-outs (all lists)** and pass. The owner's ruling R-BLD-11 (2026-11-14): take-outs run "like once" before a release, and "get
+  everyone to fix" what they find. So run them early on a release candidate, fix what fails, and run them again on the final commit.
+  If a list fails for a reason that isn't the code (a runner dropped out), use **Re-run failed jobs** on the same run.
+- **A full scan of the vcpkg libraries:** Actions, **Snyk**, Run workflow, on `avpx_main`. Run by hand, it always builds and scans the
+  libraries in full; its "Build the vcpkg libraries" job has to pass. The owner's ruling R-BLD-12 (2026-11-14): "the release is where
+  all is gated". A pull request or a merge scans the libraries in full only when a library file changed, so this is where a new
+  advisory against a library we already pin is caught.
+
 ## Making one
 
 1. On GitHub, go to **Actions**, then **Release**, then **Run workflow**. Leave the branch on `avpx_main`, and type a version: three plain

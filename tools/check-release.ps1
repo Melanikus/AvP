@@ -11,6 +11,8 @@ It refuses unless all of these are true:
 - Shadows & Shaders is really here, so that an old commit can't be released by mistake.
 - It's running from avpx_main, on the very tip of it.
 - Every required check passed on this exact commit. A check that was skipped, or never ran, counts as a failure.
+- The two checks that run only before a release passed on this exact commit, the newest run of each: every take-out list
+  ("Take-outs (all lists)", R-BLD-11), and a full build and scan of the vcpkg libraries ("Build the vcpkg libraries", R-BLD-12).
 - No code scanning alert is open.
 - The version hasn't been used.
 - A beta's number is the next one: one more than the highest beta of that version, or 0 for its first. A number is never used twice,
@@ -45,9 +47,16 @@ if (-not $Repository)
 }
 
 # The checks this commit has to have passed, by the names branch protection and build.yml use. Add a new required check here as well.
-# Take-outs is the one required check that isn't here: it runs only on pull requests, never on a push to avpx_main, so this commit has
-# no Take-outs run of its own to look at. Its result counted when each pull request merged.
 $requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu', 'Tests under the address sanitizer'
+
+# The checks a release asks for on top of those, because they no longer run on every pull request and merge, only before a release.
+# - "Take-outs (all lists)" is a by-hand run of every take-out list. The owner's ruling R-BLD-11 (2026-11-14): "I rather the team focus on
+#   fixing takeouts before releases". takeouts.yml gives its last job this name only when every list ran, so a partial run can't stand in.
+# - "Build the vcpkg libraries" runs only when the libraries are scanned in full, which a pull request or a push does only when a library
+#   file changed. The owner's ruling R-BLD-12 (2026-11-14): "the release is where all is gated". Asking for it means a full library scan
+#   is behind every release.
+# RELEASING.md says how to run both on the release's commit. tests/release-test.ps1 proves both are asked for.
+$beforeReleaseChecks = 'Take-outs (all lists)', 'Build the vcpkg libraries'
 
 # What Shadows & Shaders is made of: the shadows, the per-pixel lighting, the relief mapping and the rendering menu. A file being here
 # isn't enough for code, because a file can be left behind and not built, so each .cpp has to be in the game's project too.
@@ -345,6 +354,41 @@ foreach ($check in $requiredChecks)
     if ($notPassed.Count -gt 0)
     {
         Stop-Release "'$check' did not pass on this commit: $($notPassed[0])"
+    }
+}
+
+# The checks that run only before a release are read differently. Each run of a workflow is its own set of answers, so this commit can
+# also carry answers from runs that didn't need the check: a pull request or a push with no library change skips "Build the vcpkg
+# libraries". A skipped answer says nothing either way, so it's left out. A run still going refuses the release. Of the rest, the newest
+# has to be a pass, and there has to be at least one. The time GitHub gives is written the same way for every answer (ISO 8601), so
+# sorting the text sorts by time.
+$timed = @(gh api --paginate "repos/$repositoryName/commits/$commit/check-runs?filter=latest&per_page=100" --jq '.check_runs[] | (.completed_at // "") + "|" + .name + "=" + (.conclusion // "")')
+
+if ($LASTEXITCODE -ne 0)
+{
+    Stop-Release 'GitHub would not give the check results of this commit'
+}
+
+foreach ($check in $beforeReleaseChecks)
+{
+    $answers = @($timed | Where-Object { $_.Split('|', 2)[1].StartsWith("$check=", [System.StringComparison]::Ordinal) })
+    $stillRunning = @($answers | Where-Object { $_.Split('|', 2)[1] -ceq "$check=" })
+
+    if ($stillRunning.Count -gt 0)
+    {
+        Stop-Release "'$check' is still running on this commit. Wait for it to finish"
+    }
+
+    $counted = @($answers | Where-Object { -not $_.EndsWith("$check=skipped", [System.StringComparison]::Ordinal) } | Sort-Object)
+
+    if ($counted.Count -eq 0)
+    {
+        Stop-Release "'$check' has never run in full on this commit. RELEASING.md says how to run it before a release"
+    }
+
+    if (-not $counted[-1].EndsWith("|$check=success", [System.StringComparison]::Ordinal))
+    {
+        Stop-Release "the newest run of '$check' on this commit did not pass: $($counted[-1])"
     }
 }
 

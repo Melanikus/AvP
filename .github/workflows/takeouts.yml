@@ -4,17 +4,19 @@
 # (tests/takeouts/run.ps1) builds the test against that broken copy and runs it, and the test has to fail. A row the test still passes on,
 # or one that can't be run any more because the code has moved on, fails this check. tests/takeouts/README.md says more.
 #
-# On a pull request this runs the lists the pull request can affect: those whose list, test, settings or stand-ins it changes, or which
-# break a file it changes. A pull request that changes this file, the runner, or tests/every_test/ runs every list. By hand (Actions, Take-outs, Run workflow)
-# it runs the lists named, or all of them. Each list runs on its own machine, at the same time as the others, because a list can take an hour.
+# It runs only by hand (Actions, Take-outs, Run workflow), on the lists named or on all of them, and never on a pull request or a merge.
+# The owner's ruling R-BLD-11 (2026-11-14): "take outs don't need to run all the fucking time, it's a hardening thing we need to do like
+# once and get everyone to fix", and "I rather the team focus on fixing takeouts before releases". So the team runs every list once on a
+# release candidate and fixes what it finds, and a release can't be made without that: tools/check-release.ps1 refuses a release whose
+# commit has no passing "Take-outs (all lists)" run. Each list runs on its own machine, at the same time as the others, because a list can
+# take an hour.
 #
-# The job that decides whether this passes is the last one, "Take-outs": it fails if choosing the lists failed, or any list did.
+# The job that decides whether this passes is the last one. It fails if choosing the lists failed, or any list did. Its name is
+# "Take-outs (all lists)" when every list ran, and "Take-outs" when only some did, so a release can tell a full run from a partial one.
 
 name: Take-outs
 
 on:
-  pull_request:
-    branches: [avpx_main]
   workflow_dispatch:
     inputs:
       lists:
@@ -32,21 +34,20 @@ jobs:
     outputs:
       lists: ${{ steps.choose.outputs.lists }}
       count: ${{ steps.choose.outputs.count }}
+      all: ${{ steps.choose.outputs.all }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0   # the whole history, so that what the pull request changes can be seen
 
-      # What was typed by hand, and the commit a pull request goes into, come in as plain text in the environment. They're never
-      # pasted into the script itself, so nothing typed can become part of it.
+      # What was typed by hand comes in as plain text in the environment. It's never pasted into the script itself, so nothing typed can
+      # become part of it.
       - name: Choose the lists
         id: choose
         shell: pwsh
         env:
           ASKED: ${{ github.event.inputs.lists }}
-          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           # A list's name is only letters, digits and underscores, the way every test here is named. Anything else is refused.
           $all = @(Get-ChildItem tests/takeouts -Filter *.json | ForEach-Object { $_.BaseName } | Sort-Object)
@@ -54,64 +55,28 @@ jobs:
             if ($name -cnotmatch '^[A-Za-z0-9_]+$') { throw "tests/takeouts/$name.json isn't named the way a test is" }
           }
 
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
-            $asked = "$env:ASKED".Trim()
-            if ($asked -eq 'all') {
-              $chosen = $all
-            }
-            else {
-              $chosen = @($asked -split '[\s,]+' | Where-Object { $_ })
-              foreach ($name in $chosen) {
-                if ($all -cnotcontains $name) { throw "There's no take-out list called $name" }
-              }
-            }
+          $asked = "$env:ASKED".Trim()
+          if ($asked -eq 'all') {
+            $chosen = $all
           }
           else {
-            if ($env:BASE -cnotmatch '^[0-9a-f]{40}$') { throw 'This pull request has no commit to compare with' }
-            $changed = @(git diff --name-only "$($env:BASE)...HEAD")
-            if ($LASTEXITCODE -ne 0) { throw "Couldn't see what this pull request changes" }
-
-            # A change to this check, to the runner, or to the guard every test reads first (tests/every_test/, #140) is tried on every
-            # list, so none of them is ever changed untested. (The rule for tests/every_test/ is from the unmerged branch stl-harden, 28767cc3.)
-            $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' -or $_.StartsWith('tests/every_test/') }).Count -gt 0
-
-            $chosen = if ($checkerChanged) { $all } else { @(foreach ($name in $all) {
-              # The list, the test and its settings, its stand-ins, every source file its settings name, every .cpp file it takes in whole,
-              # and every file its rows break
-              $files = @("tests/takeouts/$name.json", "tests/$name.cpp", "tests/$name.args")
-              if (Test-Path "tests/$name.args") {
-                $files += @(Get-Content "tests/$name.args" | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ -match '^[\w./-]+\.(c|cpp|h|hpp)$' })
-              }
-              # A test can take a whole .cpp file in with #include "x.cpp" (rebeccas_fast_test takes in rebeccas_test.cpp, to be the same
-              # test built with the game's fast rules for fractions), so a change to that file changes the test too. It's looked for the
-              # way the compiler looks for it: beside the test, then in each folder the test's settings give with /I, in their order. A
-              # name or a folder with ".." in it is passed over, so the search stays inside the repository.
-              if (Test-Path "tests/$name.cpp") {
-                $folders = @('tests')
-                if (Test-Path "tests/$name.args") {
-                  $folders += @(Get-Content "tests/$name.args" | ForEach-Object { $_ -split '\s+' } | ForEach-Object { if ($_ -cmatch '^/I([\w./-]+)$' -and $Matches[1] -notmatch '\.\.') { $Matches[1] } })
-                }
-                foreach ($line in Get-Content "tests/$name.cpp") {
-                  if ($line -cmatch '^\s*#\s*include\s+"([\w./-]+\.(c|cpp))"' -and $Matches[1] -notmatch '\.\.') {
-                    $included = $Matches[1]
-                    $found = @($folders | Where-Object { Test-Path -PathType Leaf "$_/$included" } | Select-Object -First 1)
-                    if ($found.Count) { $files += "$($found[0])/$included" }
-                  }
-                }
-              }
-              $list = Get-Content "tests/takeouts/$name.json" -Raw | ConvertFrom-Json
-              $files += @($list.rows | ForEach-Object { $_.changes } | ForEach-Object { $_.file })
-
-              $touched = @($changed | Where-Object { ($files -ccontains $_) -or $_.StartsWith("tests/$($name)_stubs/") })
-              if ($touched.Count -gt 0) { $name }
-            }) }
+            $chosen = @($asked -split '[\s,]+' | Where-Object { $_ })
+            foreach ($name in $chosen) {
+              if ($all -cnotcontains $name) { throw "There's no take-out list called $name" }
+            }
           }
+          if ($chosen.Count -eq 0) { throw 'No list was named' }
 
-          "These lists run: $(if ($chosen.Count) { $chosen -join ', ' } else { 'none, because nothing they cover has changed' })"
+          # "All" means every list there is, each once. A release asks for a run of all of them (R-BLD-11), so this is worked out from
+          # the lists themselves, not from what was typed.
+          $everyList = @($all | Where-Object { $chosen -ccontains $_ }).Count -eq $all.Count
+
+          "These lists run: $($chosen -join ', ')$(if ($everyList) { ' (all of them)' })"
           # Written out by hand, because ConvertTo-Json writes a list of one or none differently in different versions. Every name is
           # letters, digits and underscores, checked above, so nothing in one needs escaping.
           "lists=[$(($chosen | ForEach-Object { '"' + $_ + '"' }) -join ',')]" >> $env:GITHUB_OUTPUT
           "count=$($chosen.Count)" >> $env:GITHUB_OUTPUT
+          "all=$(if ($everyList) { 'yes' } else { 'no' })" >> $env:GITHUB_OUTPUT
 
   run:
     name: Take-outs for ${{ matrix.list }}
@@ -165,10 +130,10 @@ jobs:
           ./tests/takeouts/run.ps1 $env:LIST
           exit $LASTEXITCODE
 
-  # One job with one name, to make a required check of. It passes only if the lists were chosen, and every list that ran passed.
-  # When nothing a list covers has changed, no list runs, and that passes.
+  # One job that says how the run went. It passes only if the lists were chosen, and every list that ran passed. Its name says whether
+  # every list ran: tools/check-release.ps1 refuses a release unless "Take-outs (all lists)" passed on the release's commit (R-BLD-11).
   result:
-    name: Take-outs
+    name: ${{ needs.choose.outputs.all == 'yes' && 'Take-outs (all lists)' || 'Take-outs' }}
     needs: [choose, run]
     if: always()
     runs-on: ubuntu-24.04
