@@ -451,11 +451,12 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = Between(system, "bool TryLoadRifFile()", "textureRelief.LogWhatIsHeld();");
+	// every level comes through LoadTheLevel with the loader it is given: the game's LoadRifFile with avp_load_rif, the editor's TryLoadRifFile with avp_try_load_rif
+	std::string const loading = Between(system, "static bool LoadTheLevel(RIFFHANDLE (*load)(const char *))", "textureRelief.LogWhatIsHeld();");
 	char const *const line = "LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));";
 
-	Check(ComesBefore(loading, "env_rif = avp_load_rif((const char*)&file_and_path[0]);", "return false;") && ComesBefore(loading, "return false;", line) &&
-		ComesBefore(loading, line, "copy_rif_data(env_rif, CCF_ENVIRONMENT"),
+	Check(ComesBefore(loading, "env_rif = load((const char*)&file_and_path[0]);", "return false;") && ComesBefore(loading, "return false;", line) &&
+		ComesBefore(loading, line, "copy_rif_data(env_rif, CCF_ENVIRONMENT") && Has(system, "if (!LoadTheLevel(avp_load_rif))"),
 		"a level that loads says which file it was, by the path it was loaded from, before it's copied into the game");
 	Check(Count(system, "LevelFileSum_Line(") == 1, "once for each level");
 
@@ -472,7 +473,11 @@ static void TestTheGameUsesIt()
 	Check(Count(loader, "MD5Update(&sum_so_far, ") == 4, "and each one adds what it read to the sum");
 
 	std::string const loaders = ReadWholeFile("3dc/win95/chunk_load.cpp");
-	Check(Count(Between(loaders, "RIFFHANDLE load_rif(const char *fname)", "RIFFHANDLE load_rif_non_env("), "new File_Chunk(fname);") == 1 &&
+	// the level's: load_rif reads through try_load_rif (the editor's, which shows nothing on a refusal), and only that one makes the file's chunk
+	std::string const levelLoad = Between(loaders, "RIFFHANDLE load_rif(const char *fname)", "RIFFHANDLE load_rif_non_env(");
+
+	Check(Count(Between(loaders, "RIFFHANDLE try_load_rif(const char *fname)", "RIFFHANDLE load_rif(const char *fname)"), "new File_Chunk(fname);") == 1 &&
+		Has(levelLoad, "RIFFHANDLE const h = try_load_rif(fname);") && Count(levelLoad, "File_Chunk") == 0 &&
 		Count(Between(loaders, "RIFFHANDLE load_rif_non_env(const char *fname)", "void undo_rif_load("), "new File_Chunk(fname);") == 1,
 		"a level's loader and a model's both read their file through that loader, so a model with no level environment is refused too");
 

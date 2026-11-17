@@ -937,10 +937,12 @@ static void CheckLevelAllowance()
 	Check(kMostRimBytesPerLevel >= everyPictureTheGameHas * 3, "the limit is over three times every picture the game has");
 
 	std::string const system = ReadSourceFile("3dc/avp/win95/system.cpp");
-	size_t const load = system.find("bool TryLoadRifFile()");
+	// Every level comes through LoadTheLevel, with the loader it is given: the game's LoadRifFile with avp_load_rif, the editor's TryLoadRifFile with avp_try_load_rif
+	size_t const load = system.find("static bool LoadTheLevel(RIFFHANDLE (*load)(const char *))");
 	size_t const start = (load == std::string::npos) ? load : system.find("RimLoader_NewLevel();", load);
-	size_t const env = (load == std::string::npos) ? load : system.find("avp_load_rif((const char*)&file_and_path[0])", load);
-	Check(start != std::string::npos && env != std::string::npos && start < env, "the game starts each level's allowance before it loads the level");
+	size_t const env = (load == std::string::npos) ? load : system.find("env_rif = load((const char*)&file_and_path[0]);", load);
+	size_t const game = system.find("if (!LoadTheLevel(avp_load_rif))");
+	Check(start != std::string::npos && env != std::string::npos && start < env && game != std::string::npos, "the game starts each level's allowance before it loads the level");
 
 	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menu_gfx.cpp");
 	size_t const menusLoad = menus.find("extern void LoadAllAvPMenuGfx(void)");
