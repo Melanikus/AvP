@@ -223,6 +223,12 @@ void R_EditorFlushWorld			(void);
 // The level editor's Untextured: every polygon of the level is drawn with one plain texel of the colour given (ARGB), so it is as the level's light makes it,
 // whatever the draw mode. Off (false) draws the textures as the game does. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
 void R_SetEditorUntextured		(bool on, unsigned int colour);
+// The level editor's No Textures (inteng's Strategy Data entered with load flag 0x80: FUN_00522ab0 -> FUN_0046e700(0x93)): while the card draws lines, the level's UNTEXTURED polygons (the
+// game's items with no texture of their own; inteng leaves its kinds 2 / 3 as they are) are drawn FILLED, as the level's light makes them, and every other polygon of the level is drawn
+// again as a line in lineColour (ARGB), unlit, over its lit line (inteng makes each textured polygon a line, kind 0xe, with flag 2: its colour as it is). An untextured polygon of a block
+// the editor tints is filled in its tint, in the light (inteng paints the block's shape that colour). Off (false): as the game draws. Only the editor sets it. Added 2026-11-17 by
+// Melanikus (Frost) for the AvP port.
+void R_SetEditorFillUntextured	(bool on, unsigned int lineColour);
 // The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
 bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;

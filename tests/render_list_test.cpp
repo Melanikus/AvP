@@ -217,6 +217,7 @@ void ChangeZWriteEnable(enum ZWRITE_ENABLE setting)
 }
 
 texID_t NO_TEXTURE = 0;   // the game's "no picture" (d3_func.cpp); RenderList.cpp compares with it when it puts the stage back after the editor's plain picture
+RENDERSTATES CurrentRenderStates = {};   // the game's record of the card's settings (d3_func.cpp); RenderList.cpp reads its fill only for the editor's No Textures fill, which this test never turns on
 
 bool R_SetTexture(uint32_t stage, texID_t picture)
 {
