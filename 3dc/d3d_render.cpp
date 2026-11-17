@@ -9154,7 +9154,7 @@ void ReleaseEditorGroupQueries()
 
 int R_EditorTriangleGroupPixels(int group)
 {
-	std::map<int, int>::const_iterator const found = editorGroupPixels.find(group);
+	const auto found = editorGroupPixels.find(group);
 
 	return found == editorGroupPixels.end() ? -1 : found->second;
 }
