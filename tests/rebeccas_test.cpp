@@ -4945,7 +4945,8 @@ static void TestShapesWithNoName()
 		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 4));
 		outside->post_input_processing();
 		char const *const name = outside->get_shape_name();
-		Check(file.error_code == 0 && name && strcmp(name, "abc") == 0, "and so is one named only by a level name chunk, with that name");
+		// bounded: the four bytes "abc" and its end, so a name with no end is never read past them
+		Check(file.error_code == 0 && name && strncmp(name, "abc", sizeof("abc")) == 0, "and so is one named only by a level name chunk, with that name");
 
 		Parent_File = 0;
 	}
