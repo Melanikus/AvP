@@ -216,6 +216,8 @@ void ChangeZWriteEnable(enum ZWRITE_ENABLE setting)
 	depthWritesNow = setting;
 }
 
+texID_t NO_TEXTURE = 0;   // the game's "no picture" (d3_func.cpp); RenderList.cpp compares with it when it puts the stage back after the editor's plain picture
+
 bool R_SetTexture(uint32_t stage, texID_t picture)
 {
 	if (stage == 0)
@@ -1680,7 +1682,10 @@ static SourceFindings ReadTheWriters(std::string const &source)
 
 		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") + CountOf(body, "coronaList->AddItem(4,") == 1)
 		{
-			int const corners = CountOf(body, "orthoVBOffset++") + 4 * CountOf(body, "orthoVBOffset += 4");
+			// a writer may write its corners in a loop of four, one step each (DrawQuadSharp: "for (int corner = 0; corner < 4; corner++)" around one orthoVBOffset++): that step is
+			// written once and counts four times, so the loop adds three
+			int const cornerLoops = CountOf(body, "for (int corner = 0; corner < 4; corner++)");
+			int const corners = CountOf(body, "orthoVBOffset++") + 3 * cornerLoops + 4 * CountOf(body, "orthoVBOffset += 4");
 
 			if (corners != 4)
 			{
@@ -1797,6 +1802,7 @@ static void CheckTheRealWriters()
 		{ "an answer that's looked at and ignored", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t}", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
 		{ "an answer that's thrown away with a cast", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "(void)decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
 		{ "a writer that writes one corner too many", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}\n\torthoVBOffset++;", &SourceFindings::wrongCornerCount, "DrawFadeQuad" },
+		{ "a writer whose loop of four writes each corner twice", "orthoVertex[orthoVBOffset].v = vs[corner];\n\t\torthoVBOffset++;", "orthoVertex[orthoVBOffset].v = vs[corner];\n\t\torthoVBOffset++;\n\t\torthoVBOffset++;", &SourceFindings::wrongCornerCount, "DrawQuadSharp" },
 		{ "a writer that writes before it asks", "\tif (!particleList->AddItem(4,", "\tparticleVertex[pVb].x = 0.0f;\n\tif (!particleList->AddItem(4,", &SourceFindings::writesBeforeAsking, "D3D_Particle_Output" },
 		{ "a corona that returns", "continue; // no room for this one", "return; // no room for this one", &SourceFindings::wrongWayOut, "DrawCoronas" },
 		{ "rain that doesn't make room", "if (!mainList->Check(3)) {\n\t\t\tFlushLists();\n\t\t}", "", &SourceFindings::mainWithoutRoom, "D3D_DrawParticle_Rain" },

@@ -323,6 +323,8 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	uint32_t numIndices = GetNumIndices(numVerts);
 
 	Items[listIndex].sortKey = 0; // zero it out
+	Items[listIndex].tinted = RenderListTintNow;
+	Items[listIndex].tintColour = RenderListTintNow ? RenderListTintColour : 0;
 
 	set_layerID        (Items[listIndex].sortKey, layer);
 	set_texID          (Items[listIndex].sortKey, textureID);
@@ -331,8 +333,12 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	set_texAddressType (Items[listIndex].sortKey, textureAddress);
 
 	// lets see if we can merge this item with the previous item
+	// (a tinted item, the editor's selected object, never joins an untinted one, or the other way round: joined, its polygons would be drawn
+	// with the neighbour's mark, so the selected object would show no green when the object beside it uses the same texture and states)
 	if ((listIndex != 0) &&		// only do this check if we're not adding the first item
-		(Items[listIndex-1].sortKey == Items[listIndex].sortKey))
+		(Items[listIndex-1].sortKey == Items[listIndex].sortKey) &&
+		(Items[listIndex-1].tinted == Items[listIndex].tinted) &&
+		(Items[listIndex-1].tintColour == Items[listIndex].tintColour))
 	{
 		// our new item uses the same states as previous item.
 		listIndex--;
@@ -417,7 +423,56 @@ void RenderList::Reset()
 // record of its settings has to stay true.
 // backwards draws every polygon in the opposite order, for the check in static_frame.cpp that finds where two polygons tie. It's only for that: the
 // polygons of one item normally go to the card in one draw, and here each goes in a draw of its own, because the order inside an item matters as well.
-void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief, bool withHeight, bool backwards)
+bool RenderListTintNow = false;
+
+// The level editor's Untextured (R_SetEditorUntextured, renderer.h): the main draw binds a 1 by 1 texture of one plain colour in place of each polygon's texture
+bool EditorUntextured = false;
+static unsigned int editorUntexturedColour = 0xFFFFFFFFu;
+static IDirect3DTexture9 *editorPlainTexture = 0;
+static unsigned int editorPlainTextureColour = 0;
+
+void R_SetEditorUntextured(bool on, unsigned int colour)
+{
+	EditorUntextured = on;
+	editorUntexturedColour = colour;
+}
+
+static void BindThePlainTexture()
+{
+	if (!editorPlainTexture || editorPlainTextureColour != editorUntexturedColour)
+	{
+		if (editorPlainTexture)
+		{
+			editorPlainTexture->Release();
+			editorPlainTexture = 0;
+		}
+
+		if (FAILED(d3d.lpD3DDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &editorPlainTexture, NULL)))
+		{
+			editorPlainTexture = 0;
+			return;
+		}
+
+		D3DLOCKED_RECT rect;
+
+		if (SUCCEEDED(editorPlainTexture->LockRect(0, &rect, NULL, 0)))
+		{
+			*(unsigned int *)rect.pBits = editorUntexturedColour;
+			editorPlainTexture->UnlockRect(0);
+		}
+
+		editorPlainTextureColour = editorUntexturedColour;
+	}
+
+	d3d.lpD3DDevice->SetTexture(0, editorPlainTexture);
+	R_ForgetTexture(0);   // what R_SetTexture remembers about this stage is no longer so
+}
+uint32_t RenderListTintColour = 0xFF00FF00u;
+bool RenderListTintLines = false;
+int RenderListTintedDrawn = 0;   // how many tinted items the last editor green pass drew (for the editor's report)
+
+// onlyTinted: only the items added for the editor's selected object (the editor's green pass; nothing is tinted in the game)
+void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief, bool withHeight, bool backwards, bool onlyTinted)
 {
 	declaration->Set();
 	(**vb).Set();
@@ -428,9 +483,25 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 		RenderItem *it = &Items[backwards ? listIndex - 1 - i : i];
 		uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
 
-		if (get_command(it->sortKey) || !numPrimitives || get_transType(it->sortKey) != TRANSLUCENCY_OFF)
+		// the editor's green pass draws the selected object whatever its see-through mode, so a glass or cut-out object is green too
+		bool const wrongKind = onlyTinted ? !it->tinted : get_transType(it->sortKey) != TRANSLUCENCY_OFF;
+
+		if (get_command(it->sortKey) || !numPrimitives || wrongKind)
 		{
 			continue;
+		}
+
+		if (onlyTinted)
+		{
+			RenderListTintedDrawn++;
+		}
+
+		// the editor's tint pass: each item in its own colour, a solid half see-through, a line as it is
+		if (onlyTinted)
+		{
+			DWORD const colour = RenderListTintLines ? it->tintColour : ((it->tintColour & 0x00FFFFFFu) | 0x80000000u);
+
+			d3d.lpD3DDevice->SetRenderState(D3DRS_TEXTUREFACTOR, colour);
 		}
 
 		DWORD const addressing = (get_texAddressType(it->sortKey) == TEXTURE_WRAP) ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;
@@ -493,6 +564,10 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 {
 	uint32_t baseIndexValue = 0;
+
+	// The level editor's Untextured: the picture the game had set on stage 0 before the plain one was bound over it, and whether the plain one was bound at all
+	texID_t plainOverPicture = NO_TEXTURE;
+	bool plainWasBound = false;
 
 	if (!BuffersExist() || !*decl)
 	{
@@ -579,6 +654,15 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 
 				// set texture
 				R_SetTexture(0, get_texID(it->sortKey));
+
+				// only the level's own list: the text, the HUD and the panels are drawn from other lists and keep their pictures
+				if (EditorUntextured && listName == "mainList")
+				{
+					plainOverPicture = get_texID(it->sortKey);
+					plainWasBound = true;
+					BindThePlainTexture();
+				}
+
 				ChangeTranslucencyMode((enum TRANSLUCENCY_TYPE)			get_transType(it->sortKey));
 				ChangeFilteringMode(0, (enum FILTERING_MODE_ID)			get_filterType(it->sortKey));
 				ChangeTextureAddressMode(0, (enum TEXTURE_ADDRESS_MODE) get_texAddressType(it->sortKey));
@@ -606,5 +690,22 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 	{
 		d3d.lpD3DDevice->SetTexture(2, NULL);
 		R_ForgetTexture(2);
+	}
+
+	// The level editor's Untextured bound its one plain picture over this list's items. What is drawn next, such as the editor's panels' boxes (a plain colour, no picture of their own),
+	// must not be left holding it: with a black plain colour they would come out black. So the stage goes back to what the game's own record says it holds, the last picture the list set,
+	// and the game then changes it the way it always does (R_SetTexture only acts when the picture is not the one it remembers).
+	if (plainWasBound)
+	{
+		R_ForgetTexture(0);
+
+		if (plainOverPicture != NO_TEXTURE)
+		{
+			R_SetTexture(0, plainOverPicture);
+		}
+		else
+		{
+			d3d.lpD3DDevice->SetTexture(0, NULL);
+		}
 	}
 }

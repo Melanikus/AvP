@@ -111,7 +111,7 @@
 			"changes": [
 				{
 					"file": "3dc/light_choice.cpp",
-					"from": "if (!(length > 0.0f))",
+					"from": "if (!IsRealNumber(length) || !(length > 0.0f))",
 					"to": "if (false)"
 				}
 			]

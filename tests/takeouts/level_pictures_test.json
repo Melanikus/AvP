@@ -204,6 +204,36 @@
 					"to": "for (int i = 0; i < 1; i++)\n\t{\n\t\tTEXANIM const *animation = ac->AnimList[i];"
 				}
 			]
+		},
+		{
+			"name": "REACH: an animated shape's radius is worked out from squares in whole numbers",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "\t\tsas->radius = (int)sqrt((double)x * x + (double)y * y + (double)z * z);\n",
+					"to": "\t\tsas->radius = (int)sqrt((double)(x * x + y * y + z * z));\n"
+				}
+			]
+		},
+		{
+			"name": "REACH: a sequence with no point counted keeps the starting numbers as its box",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_type.cpp",
+					"from": "\tif (!counted)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "REACH: a sequence never counts its points",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_type.cpp",
+					"from": "\t\t\tcounted = true;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

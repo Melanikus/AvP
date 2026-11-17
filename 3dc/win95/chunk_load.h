@@ -42,8 +42,10 @@ typedef enum UVCoordType
 // Functions which operate on RIFFHANDLEs
 /////////////////////////////////////////
 
-// load a rif file into memory
+// load a rif file into memory. load_rif is the game's: a file the loader refuses shows a message and stops the game. try_load_rif
+// gives that file back as INVALID_RIFFHANDLE, with nothing shown, for the map editor.
 RIFFHANDLE load_rif (const char * fname);
+RIFFHANDLE try_load_rif (const char * fname);
 RIFFHANDLE load_rif_non_env (const char * fname);
 #define LoadRIF(s) load_rif(s)
 

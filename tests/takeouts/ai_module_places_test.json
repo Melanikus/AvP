@@ -1,0 +1,59 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a negative place counts as a real one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "return index >= 1 && index < AIModuleArraySize;",
+					"to": "return index < AIModuleArraySize;"
+				}
+			]
+		},
+		{
+			"name": "the path setup uses a module's place unchecked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(!IsARealAIModule(path_ai_module)) continue;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the path lookup uses a module's place unchecked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(!IsARealAIModule(aimodule_index))",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "the link setup uses a module's own place unchecked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(!IsARealAIModule(this_ai_module_index))continue;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new read of a module's place comes with no check",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "int aimodule_index=aimodule_indeces[module_index];",
+					"to": "int aimodule_index=aimodule_indeces[module_index];\n\tint const unchecked_place=aimodule_indeces[module_index];\n\t(void)unchecked_place;"
+				}
+			]
+		}
+	]
+}

@@ -60,6 +60,15 @@ void LampIntensityCommand(char *words);
 // Melanikus (Third) for the AvP port.
 void LampLookCommand(char *words);
 
+// The lamp's look, playing alone: its strength, its half-distance, its cone, its spill, where the painted cone starts, and how the painted spot falls away. A network
+// game keeps them as built. See THE LAMP'S LOOK in shoulder_lamp.h (R-LAMP-1). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+void LampStrengthCommand(char *words);
+void LampHalfDistanceCommand(char *words);
+void LampConeCommand(char *words);
+void LampSpillCommand(char *words);
+void LampShoulderCommand(char *words);
+void LampSpotHalfDistanceCommand(char *words);
+
 // How a lamp's light looks per pixel, for this run of the game, playing alone with -dev. See pixel_look.h.
 void PixelGlowCommand(char *words);
 void PixelCurveCommand(char *words);

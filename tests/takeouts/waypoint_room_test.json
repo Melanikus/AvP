@@ -1,0 +1,149 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a corner at a scale is rounded, not cut off after the point",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "*scaled = (int32_t)exact;",
+					"to": "*scaled = (int32_t)(exact + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "the lowest isn't taken as how far it is from the centre",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "uint32_t const lowFromCentre = (uint32_t)low - (uint32_t)middle;",
+					"to": "uint32_t const lowFromCentre = (uint32_t)low;"
+				}
+			]
+		},
+		{
+			"name": "1 isn't taken off the highest",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "uint32_t const highFromCentre = (uint32_t)high - (uint32_t)middle - 1u;",
+					"to": "uint32_t const highFromCentre = (uint32_t)high - (uint32_t)middle;"
+				}
+			]
+		},
+		{
+			"name": "a quarter of the lowest loses its sign",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "int32_t const lowQuarters = (int32_t)(lowFromCentre * 3u) >> 2;",
+					"to": "int32_t const lowQuarters = (int32_t)((lowFromCentre * 3u) >> 2);"
+				}
+			]
+		},
+		{
+			"name": "the highest is taken whole, not three quarters of it",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "int32_t const highQuarters = (int32_t)(highFromCentre * 3u) >> 2;",
+					"to": "int32_t const highQuarters = (int32_t)highFromCentre;"
+				}
+			]
+		},
+		{
+			"name": "infinity and 'not a number' count as numbers the sums can use",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "return ((bits >> 52) & 0x7FF) != 0x7FF;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a corner too big for the game's whole numbers is kept",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "if (!WaypointNumberIsFinite(exact) || !(exact > -2147483649.0 && exact < 2147483648.0))",
+					"to": "if (!WaypointNumberIsFinite(exact))"
+				}
+			]
+		},
+		{
+			"name": "a room under 1 is divided by",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "return room >= 1 ? random % room : 0;",
+					"to": "return room != 0 ? random % room : 0;"
+				}
+			]
+		},
+		{
+			"name": "a room of 0 is divided by",
+			"changes": [
+				{
+					"file": "3dc/waypoint_room.h",
+					"from": "return room >= 1 ? random % room : 0;",
+					"to": "return room >= 0 ? random % room : 0;"
+				}
+			]
+		},
+		{
+			"name": "the place on x is taken by dividing by the room, as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_waypoint.cpp",
+					"from": "output->vx=minx+WaypointPlaceInRoom(FastRandom(),rangex);",
+					"to": "output->vx=minx+(FastRandom()%rangex);"
+				}
+			]
+		},
+		{
+			"name": "the place on z is taken by dividing by the room, as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_waypoint.cpp",
+					"from": "output->vz=minz+WaypointPlaceInRoom(FastRandom(),rangez);",
+					"to": "output->vz=minz+(FastRandom()%rangez);"
+				}
+			]
+		},
+		{
+			"name": "the level setup takes 2 off the highest on y",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "wv->max_extents.vy--;",
+					"to": "wv->max_extents.vy-=2;"
+				}
+			]
+		},
+		{
+			"name": "GlobalScale becomes 2",
+			"changes": [
+				{
+					"file": "3dc/avp/equates.h",
+					"from": "#define GlobalScale 1\n",
+					"to": "#define GlobalScale 2\n"
+				}
+			]
+		},
+		{
+			"name": "a corner times the scale is rounded on y",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_type.cpp",
+					"from": "v.y =(int) (a.y * s);",
+					"to": "v.y =(int) (a.y * s + 0.5);"
+				}
+			]
+		}
+	]
+}

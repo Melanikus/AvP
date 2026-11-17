@@ -16,10 +16,15 @@
 //   removed the switched-off code for a lift in another level file
 //   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
 //   a module with more lights than can be shown is logged, where an assert stood before
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a sound's name from the level file goes to the log only as a safe copy
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   code that could never run is taken out (#135): the xenoborg morph room's two leftovers here, a template and a flag nothing used; a
 //   proximity door's "no lock" (the lock is gone); and a lift station's environment and facing, which only the lift's change of
 //   environment read
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   three asserts on a level message's number are gone: they said under 450, but 450 is the last real message, so a Debug build
+//   stopped on a good level. The number is checked when the level is read (CheckMessageNumber, strategy_chunk.cpp)
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -70,6 +75,7 @@
 #include "bh_cable.h"
 #include "bh_death_volume.h"
 #include "bh_self_destruct.h"
+#include "self_destruct_time.h"
 #include "bh_particle_generator.h"
 #include "bh_videoscreen.h"
 
@@ -83,6 +89,7 @@
 #include "shared_roll.h"
 #include "3dc.h"
 #include "logString.h"
+#include "level_file_name.h"
 
 extern MAPSETVDB chnk_playcam_vdb;
 extern int GlobalAmbience;
@@ -143,7 +150,10 @@ LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 		// it goes to the log, and the game carries on with no sound here, as it does when a sound is missing.
 		if (_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name) < 0)
 		{
-			LogErrorString(std::string("sound file path too long: ") + wav_name);
+			// The name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+			char safeName[64];
+			LevelFileName_ForTheLog(wav_name, safeName, sizeof(safeName));
+			LogErrorString(std::string("sound file path too long: ") + safeName);
 			return 0;
 		}
 		filename[sizeof(filename) - 1] = '\0';
@@ -1817,7 +1827,14 @@ static void add_selfdestruct(const char* name,AVP_Strategy_Chunk* asc,ObjectID I
 	
 	SELF_DESTRUCT_TOOLS_TEMPLATE* sdtt=(SELF_DESTRUCT_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(SELF_DESTRUCT_TOOLS_TEMPLATE));
 
-	sdtt->timer=sds->timer<<16;
+	// The countdown is whole seconds in the file and 16.16 fixed point in the game. The file's number is held to 0 to 32767 seconds before it's turned, as a larger one
+	// would overflow the signed int and a negative one would be undefined (self_destruct_time.h; modified 2026-11-16 by Melanikus for the AvP port).
+	if (!SelfDestruct_SecondsFit(sds->timer))
+	{
+		LogErrorString("level file gives a self destruct a countdown outside 0 to 32767 seconds, held to that: " + Util::IntToString(sds->timer));
+	}
+
+	sdtt->timer=SelfDestruct_FixedTimer(sds->timer);
 
 	*(ObjectID*)&sdtt->nameID[0]=ID;
 	
@@ -1828,7 +1845,7 @@ static void add_selfdestruct(const char* name,AVP_Strategy_Chunk* asc,ObjectID I
 static void add_message_strategy(const char* name,AVP_Strategy_Chunk* asc,ObjectID ID)
 {
 	TextMessageStrategy* tms=(TextMessageStrategy*)asc->Strategy;
-	assert (tms->message_string>0 && tms->message_string<450);
+	// The number was already checked when the level was read: CheckMessageNumber, strategy_chunk.cpp. It's 0 to 450 here.
 
 	MESSAGE_TOOLS_TEMPLATE* mtt=(MESSAGE_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(MESSAGE_TOOLS_TEMPLATE));
 
@@ -3480,8 +3497,7 @@ void SetupMissionObjectives()
 	for(;!mlif.done();mlif.next())
 	{
 		MissionObjectiveStrategy * mos=(MissionObjectiveStrategy*) mlif()->asc->Strategy;
-		assert (mos->mission_description_string>=0 && mos->mission_description_string<450);
-		assert (mos->mission_complete_string>=0 && mos->mission_complete_string<450);
+		// Both numbers were already checked when the level was read: CheckMessageNumber, strategy_chunk.cpp. They're 0 to 450 here.
 	
 		TEXTSTRING_ID desc_string;
 		if(mos->mission_description_string==0)

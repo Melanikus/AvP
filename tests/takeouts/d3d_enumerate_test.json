@@ -1,0 +1,268 @@
+{
+	"copy": [
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "every adapter Direct3D says there is is kept",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "uint32_t const kept = found < MAX_D3D_DRIVERS ? found : MAX_D3D_DRIVERS;",
+					"to": "uint32_t const kept = found;"
+				}
+			]
+		},
+		{
+			"name": "the count of adapters isn't said",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "report->adaptersFound = found;",
+					"to": "report->adaptersFound = kept;"
+				}
+			]
+		},
+		{
+			"name": "the list's count isn't given back",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "*numDrivers = kept;",
+					"to": "*numDrivers = 0;"
+				}
+			]
+		},
+		{
+			"name": "an adapter Direct3D can't describe goes on as if it could",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (FAILED(result))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the reason the reading stopped is lost",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "report->failure = result;",
+					"to": "report->failure = S_OK;"
+				}
+			]
+		},
+		{
+			"name": "an adapter's modes go on from what was there",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\t\tdriver.NumModes = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an adapter's formats go on from what was there",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\t\tdriver.NumFormats = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a mode Direct3D failed to give is kept, rubbish and all",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (FAILED(d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode)))",
+					"to": "if (FAILED(d3d9->EnumAdapterModes(thisDevice, displayFormats[displayFormatIndex], modeIndex, &mode)) && false)"
+				}
+			]
+		},
+		{
+			"name": "low-resolution modes are kept",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (mode.Width < 640 || mode.Height < 480)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a mode is kept again at each refresh rate",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\t\t\t\tif (j < driver.NumModes)\n\t\t\t\t{\n\t\t\t\t\tcontinue;",
+					"to": "\t\t\t\tif (false)\n\t\t\t\t{\n\t\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "a mode is written past the end of its list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (driver.NumModes == MAX_D3D_DISPLAY_MODES)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "modes left out aren't counted",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "report->modesLeftOut++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a format is listed again for each mode",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\t\t\t\tif (f < driver.NumFormats)\n\t\t\t\t{\n\t\t\t\t\tcontinue;",
+					"to": "\t\t\t\tif (false)\n\t\t\t\t{\n\t\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "a format is written past the end of its list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (driver.NumFormats == MAX_D3D_FORMATS)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "Next moves on from a place off the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || (uint32_t)place == count - 1)",
+					"to": "if ((uint32_t)place == count - 1)"
+				}
+			]
+		},
+		{
+			"name": "Next goes past the last mode",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || (uint32_t)place == count - 1)",
+					"to": "if (!D3D_VideoModeIsListed(place, count))"
+				}
+			]
+		},
+		{
+			"name": "Previous with no modes goes to the place before the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "\tif (count == 0)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Previous moves back from a place off the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || place == 0)",
+					"to": "if (place == 0)"
+				}
+			]
+		},
+		{
+			"name": "Previous goes before the first mode",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "if (!D3D_VideoModeIsListed(place, count) || place == 0)",
+					"to": "if (!D3D_VideoModeIsListed(place, count))"
+				}
+			]
+		},
+		{
+			"name": "every place is said to be on the list",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "return (uint32_t)place < count;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the mode's description reads the list without asking",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t// The list is read only at a place on it (#252)\n\tif (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))",
+					"to": "\t// The list is read only at a place on it (#252)\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: changing to the chosen mode reads the list without asking",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)\n\tif (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))",
+					"to": "\t// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Previous goes back to its old sums",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "d3d.CurrentVideoMode = D3D_PreviousVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());",
+					"to": "if (--d3d.CurrentVideoMode < 0) d3d.CurrentVideoMode = R_GetNumVideoModes() - 1;"
+				}
+			]
+		},
+		{
+			"name": "formats left out aren't counted",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.cpp",
+					"from": "report->formatsLeftOut++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the mode list holds only 100 again, too few for a screen of today",
+			"changes": [
+				{
+					"file": "win32/d3_enumerate.h",
+					"from": "#define MAX_D3D_DISPLAY_MODES 512",
+					"to": "#define MAX_D3D_DISPLAY_MODES 100"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the chosen adapter isn't stored before its modes and depth formats are asked about",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\td3d.CurrentDriver = defaultDevice;\n",
+					"to": "\n"
+				}
+			]
+		}
+	]
+}

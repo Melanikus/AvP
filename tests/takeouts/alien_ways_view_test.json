@@ -230,8 +230,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tAlienWaysView_Thicken(&ends, kAlienWaysViewAside);\n",
-					"to": ""
+					"from": "// the owner's ask, alien_ways_view.h)\n\tAlienWaysView_Thicken(&ends, kAlienWaysViewAside);\n",
+					"to": "// the owner's ask, alien_ways_view.h)\n"
 				}
 			]
 		},

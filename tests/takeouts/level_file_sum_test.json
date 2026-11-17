@@ -6,6 +6,26 @@
 	],
 	"rows": [
 		{
+			"name": "a model with no name is loaded",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!environment || environment->r_u_miscellaneous() || !((Chunk_With_Children *) environment)->lookup_single_child (\"RIFFNAME\"))",
+					"to": "if (!environment || environment->r_u_miscellaneous())"
+				}
+			]
+		},
+		{
+			"name": "every file has to give its name, not only a model",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!error_code && lookup_single_child (\"OBJCHIER\"))",
+					"to": "if (!error_code)"
+				}
+			]
+		},
+		{
 			"name": "the loader reads a file larger than any level",
 			"changes": [
 				{
@@ -252,6 +272,26 @@
 					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
 					"from": "static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;",
 					"to": "static const long long kCustomMapMostFileBytes = 33LL << 20;"
+				}
+			]
+		},
+		{
+			"name": "a file with no level environment is loaded",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!error_code && !lookup_single_child (\"REBENVDT\"))",
+					"to": "if (!error_code && lookup_single_child (\"NOSUCHCH\"))"
+				}
+			]
+		},
+		{
+			"name": "a model with no level environment is loaded, though a level isn't",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!error_code && !lookup_single_child (\"REBENVDT\"))",
+					"to": "if (!error_code && !lookup_single_child (\"REBENVDT\") && !lookup_single_child (\"OBJCHIER\"))"
 				}
 			]
 		}

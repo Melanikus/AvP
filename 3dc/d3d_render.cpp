@@ -1,4 +1,8 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
+//   game always has it, changes nothing; DrawFilledOutlinesColour, their colour, white unless the editor asks for another; and
+//   DrawFilledOutlinesLit, whether that colour is shown in the level's own light
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the stars are drawn behind everything the level draws again, as in 1999, instead of in front of any cliff further than 65 metres
 //   away (#176, particle_depth.h)
@@ -44,6 +48,10 @@
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   the LAMPLOOK command says how the player's own lamp looks when it could be a real light: the real light, the real light with the
 //   painted spot over it, or painted only. A network game keeps it as built
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1):
+//   the LAMPSTRENGTH, LAMPHALFDISTANCE, LAMPCONE, LAMPSPILL, LAMPSHOULDER and LAMPSPOTHALFDISTANCE commands change the lamp's look, playing
+//   alone. A network game keeps them as built, and they're put back before the painted lamp sends any of them
+//   the glint where the painted lamp lands falls away with distance as its spot does
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the shoulder lamp is drawn before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
@@ -82,6 +90,7 @@
 #include "r2base.h"
 #include "Fonts.h"
 #include <vector>
+#include <map>
 #include <algorithm>
 #include "logString.h"
 #include "input.h"
@@ -181,6 +190,25 @@ VECTORCH MeshWorldVertex[256];
 uint32_t MeshVertexColour[256];
 
 int WireFrameMode;
+
+// The level editor's Filled polyline switch (AVP_OpenInteng's View menu). At 0, the game's own way, each polygon is drawn once. At 1,
+// each solid polygon's outline is drawn over it as well (DrawOutlinesOverTheSolids), so the person making a level sees every polygon's
+// edges on the filled level. Only the editor sets it: the game never does, and nothing saves it or reads it from a file, the console or
+// another player.
+int DrawFilledOutlines = 0;
+
+// The outlines' one colour, 0xRRGGBB (red in the high byte, blue in the low one): white, unless the level editor asks for another (its
+// unlit wireframe is green). Only the editor sets it, like DrawFilledOutlines. Only the low 24 bits are read, so any number at all is a
+// colour, and the outlines are always fully opaque. (Modified 2026-11-14 by Melanikus for the AvP port: the colour can be chosen.)
+int DrawFilledOutlinesColour = 0xFFFFFF;
+
+// Whether the outlines' colour is shown in the level's own light (1: the colour times each corner's light, the editor's lit green
+// wireframe) or as it is (0, the default: one hard colour everywhere). Only the editor sets it; anything but 0 counts as 1.
+int DrawFilledOutlinesLit = 0;
+
+// How far toward the camera the outlines are pulled (D3DRS_DEPTHBIAS), so they win the depth test against the faces they lie on. The default is what the outlines always had;
+// only the editor changes it, for the hidden-line look, where a faint fight with the black faces shows as a dashed edge.
+float DrawFilledOutlinesDepthBias = -0.00001f;
 
 uint32_t FMVParticleColour;
 
@@ -344,11 +372,46 @@ static float MenuWidthShare(void)
 	return MenuShape_WidthShare(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, MenuBackdropFullWidth);
 }
 
+// True only while R_DrawScreenToChain fills a swap chain of its own, such as the map editor's panels. That screen is laid out in its own
+// pixels whatever the game's menus are doing, so WPos2DC and HPos2DC below read each place as one of its pixels, as they do while a level
+// is running. Without it, outside a running level, they read a place as a point on the menus' 640 by 480 grid stretched over the whole
+// chain: on one 1024 wide, everything the editor's panels drew came out 1.6 times as far from the corner as it was placed, so a click on
+// the right of its first menu's title opened the second (Melanikus, 2026-11-14). Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+static bool drawingToChain = false;
+
+// R-DRAW-CHAIN-1 D3 (renderer.h): where the next R_DrawScreenToChain saves its chain's picture before it's shown, empty for nowhere,
+// and whether the last picture asked for was saved. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+static char chainPicturePath[260] = "";
+static bool chainPictureSaved = false;
+
+void R_SaveNextChainPicture(const char *path)
+{
+	chainPictureSaved = false;
+	chainPicturePath[0] = '\0';
+
+	if (path && strlen(path) < sizeof(chainPicturePath))
+	{
+		strcpy_s(chainPicturePath, sizeof(chainPicturePath), path);
+	}
+}
+
+bool R_ChainPictureSaved()
+{
+	return chainPictureSaved;
+}
+
+// R-DRAW-CHAIN-1 D4 (renderer.h): the editor adds its panels to the game's own frame, so it asks for places in pixels for as long as it does
+// (drawingToChain above says what that changes). Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+void R_SetScreenPlacesInPixels(bool inPixels)
+{
+	drawingToChain = inPixels;
+}
+
 // convert a width pixel range value (eg 0-640) to device coordinate (eg -1.0 to 1.0)
 inline float WPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
-	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
+	if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
 		return ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();
 	}
 	else {
@@ -360,7 +423,7 @@ inline float WPos2DC(int32_t pos)
 inline float HPos2DC(int32_t pos)
 {
 //	if (mainMenu) {
-	if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
+	if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {
 		return (float(pos / (float)480) * 2) - 1;
 	}
 	else {
@@ -396,6 +459,10 @@ static std::vector<float> normalLinesCorners;
 static int normalLinesNotNoted = 0;
 static void DrawNormalLines();
 static void DrawAlienWays();
+static void DrawEditorWorldLines();
+static void DrawEditorWorldTriangles();
+static std::vector<EditorWorldTriangle> editorWorldTriangles;   // R_SetEditorWorldTriangles: the level editor's filled flat triangles in the 3D view (empty in the game)
+static std::vector<EditorWorldLine> editorWorldLines;   // R_SetEditorWorldLines: the level editor's lines in the 3D view (empty in the game)
 extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
 char const *GetLoadedShapeName(int position);
@@ -583,6 +650,10 @@ static bool surfacePicturesAreFromThisFrame = false;
 
 static void DrawShoulderLamp();
 static void DrawLampBeams();
+static void DrawEditorOrthoViews();
+static bool editorOrthoOn = false;
+static bool editorMainBoxOn = false;   // R_SetEditorMainViewport: the world is drawn into a box of the window
+static int editorMainBox[4] = { 0, 0, 0, 0 };
 void LampBeams_Forget();
 static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
@@ -590,6 +661,11 @@ bool ToyShadows_ShoulderLampIsChosen();
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
+static void DrawOutlinesOverTheSolids();
+static void DrawTheSelectedInGreen();
+extern int EditorSelectedCount;
+extern const struct section_data *EditorSelectedSection;   // hmodel.cpp: the selected hierarchy section (editor only)
+extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
@@ -675,6 +751,26 @@ static void DrawHudsonPlayRibbon()
 	asItWas->Release();
 }
 
+// The level editor's switch for the fill mode (R_SetEditorFillFollowsWire, renderer.h). The game sets the card's fill mode (CheckWireFrameMode) as it ADDS
+// polygons to the lists, and the lists are drawn later, often in several goes in one frame (a go each time the buffer fills, then the last one), each with
+// whatever the last add left. The frame's last adds are the HUD's, which the game draws solid, so the last go, the nearest polygons, came out solid and
+// textured while the earlier goes, the far ones, were lines. With this on, every go sets the fill from WireFrameMode itself before it draws the world, and puts
+// it back to solid before the screen lists (HUD, panels). Only the editor sets it: the game's own way is exactly what it was.
+static bool EditorFillFollowsWire = false;
+
+void R_SetEditorFillFollowsWire(bool on)
+{
+	EditorFillFollowsWire = on;
+}
+
+static void EditorFillForTheWorld(bool world)
+{
+	if (EditorFillFollowsWire)
+	{
+		CheckWireFrameMode(world ? WireFrameMode : 0);
+	}
+}
+
 static bool ExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorDrawing);
@@ -697,6 +793,23 @@ static bool ExecuteBuffer()
 	// Relief map's way of drawing the solid polygons. Nothing below changes without it.
 	bool const solidsUseHeights = MainDrawUsesHeights();
 
+	EditorFillForTheWorld(true);
+
+	// The editor's 3D view in a box of the window: the world's drawings go there, and the whole window comes back before the weapon's and the screen lists
+	D3DVIEWPORT9 wholeViewport;
+	bool const inABox = editorMainBoxOn && d3d.lpD3DDevice && SUCCEEDED(d3d.lpD3DDevice->GetViewport(&wholeViewport));
+
+	if (inABox)
+	{
+		D3DVIEWPORT9 box = wholeViewport;
+
+		box.X = (DWORD)editorMainBox[0];
+		box.Y = (DWORD)editorMainBox[1];
+		box.Width = (DWORD)editorMainBox[2];
+		box.Height = (DWORD)editorMainBox[3];
+		d3d.lpD3DDevice->SetViewport(&box);
+	}
+
 	if (mainList->GetSize())
 	{
 		if (solidsUseHeights)
@@ -716,6 +829,20 @@ static bool ExecuteBuffer()
 		// draw our main list (level geometry, player weapon etc)
 		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
 		}
+	}
+
+	// The level editor's Filled polyline: each solid polygon's outline over it, for every drawing of the list, so a frame that fills its
+	// list early still gets them all. The walls from the fixed buffer stand aside on such a frame (static_scene.cpp), so every wall is
+	// in this list.
+	if (DrawFilledOutlines && mainList->GetSize())
+	{
+		DrawOutlinesOverTheSolids();
+	}
+
+	// The editor's selected object, in green over the level
+	if ((EditorSelectedCount || EditorHighlightedCount || EditorSelectedSection) && mainList->GetSize())
+	{
+		DrawTheSelectedInGreen();
 	}
 
 	if (wallsAreDue)
@@ -772,11 +899,16 @@ static bool ExecuteBuffer()
 
 	if (seeThroughLast && mainList->GetSize())
 	{
+		EditorFillForTheWorld(true);
+
 		d3d.effectSystem->SetActive(d3d.mainEffect);
 		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
 		mainList->Draw(RenderList::kSeeThrough);
 	}
+
+	// The world is drawn: what follows (particles, coronas, the weapon, the HUD, the editor's panels) is drawn solid, as the game draws it
+	EditorFillForTheWorld(false);
 
 	// The developer's view of the normals. Only in a frame's last drawing, when the whole level is in the depth buffer, which is what lets a wall hide them, and ahead of the weapon, which clears it.
 	if (toyFinalFlush && NormalLinesOn)
@@ -789,6 +921,18 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && AlienWaysViewSwitchedOn)
 	{
 		DrawAlienWays();
+	}
+
+	// The level editor's filled triangles in the world (R_SetEditorWorldTriangles): in the frame's last drawing too, before its lines. Empty in the game, so nothing here runs there.
+	if (toyFinalFlush && !editorWorldTriangles.empty())
+	{
+		DrawEditorWorldTriangles();
+	}
+
+	// The level editor's own lines in the world (R_SetEditorWorldLines): the same way, in the frame's last drawing. Empty in the game, so nothing here runs there.
+	if (toyFinalFlush && !editorWorldLines.empty())
+	{
+		DrawEditorWorldLines();
 	}
 
 	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
@@ -850,6 +994,12 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush)
 	{
 		DrawLampBeams();
+
+		// The level editor's three orthographic views, over the level and under the weapon, the HUD and the panels (renderer.h)
+		if (editorOrthoOn)
+		{
+			DrawEditorOrthoViews();
+		}
 	}
 
 	// draw player weapon
@@ -874,6 +1024,11 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		weaponList->Draw();
+	}
+
+	if (inABox)
+	{
+		d3d.lpD3DDevice->SetViewport(&wholeViewport);
 	}
 
 	if (compareTheLamp)
@@ -1427,6 +1582,43 @@ void DrawQuad(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t t
 	orthoVertex[orthoVBOffset].u = (1.0f / tempTexture.realWidth) * tempTexture.width;
 	orthoVertex[orthoVBOffset].v = 0.0f;
 	orthoVBOffset++;
+
+	orthoList->CreateOrthoIndices(orthoIndex);
+}
+
+// See renderer.h: DrawQuad, with filtering off. (Added 2026-11-16 by Melanikus for the AvP port.)
+void DrawQuadSharp(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType)
+{
+	float x1 = WPos2DC(x);
+	float y1 = HPos2DC(y);
+
+	float x2 = WPos2DC(x + width);
+	float y2 = HPos2DC(y + height);
+
+	Texture tempTexture = Tex_GetTextureDetails(textureID);
+
+	if (!orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_OFF, TEXTURE_CLAMP)) {
+		return;
+	}
+
+	float const u = (1.0f / tempTexture.realWidth) * tempTexture.width;
+	float const v = (1.0f / tempTexture.realHeight) * tempTexture.height;
+	float const xs[4] = { x1, x1, x2, x2 };
+	float const ys[4] = { y2, y1, y2, y1 };
+	float const us[4] = { 0.0f, 0.0f, u, u };
+	float const vs[4] = { v, 0.0f, v, 0.0f };
+
+	// bottom left, top left, bottom right, top right: as DrawQuad
+	for (int corner = 0; corner < 4; corner++)
+	{
+		orthoVertex[orthoVBOffset].x = xs[corner];
+		orthoVertex[orthoVBOffset].y = ys[corner];
+		orthoVertex[orthoVBOffset].z = 1.0f;
+		orthoVertex[orthoVBOffset].colour = colour;
+		orthoVertex[orthoVBOffset].u = us[corner];
+		orthoVertex[orthoVBOffset].v = vs[corner];
+		orthoVBOffset++;
+	}
 
 	orthoList->CreateOrthoIndices(orthoIndex);
 }
@@ -3233,6 +3425,162 @@ void ThisFramesRenderingHasFinished()
 
  	/* KJL 11:46:56 01/16/97 - kill off any lights which are fated to be removed */
 	LightBlockDeallocation();
+}
+
+// A screen of text and menu pictures drawn into another swap chain, between the game's own frames (R-DRAW-CHAIN-1, renderer.h). Added
+// 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+//
+// WHO CALLS IT: never the game. AVP_OpenInteng, the map editor, does: its panels are drawn with the game's own text and menu drawing
+// (Font_DrawText and the rest), as the owner's ruling for the editor says (R-INT-6), on a swap chain of their own over the editor's
+// window, beside the window the game draws its view into. Those drawing calls only add to the screen list (orthoList), which the game
+// draws at the end of its own frame, along with everything else in that frame. This draws that list alone, into the other chain.
+//
+// THE RULES:
+// - Only between the game's frames: with a frame open, or anything already on the screen list, it draws nothing and gives back false,
+//   so it never takes or wipes the game's own quads.
+// - width and height are 1 to 16384, the most the editor's window keeper makes a chain, or it draws nothing.
+// - Everything it changes is put back before it gives back, on every path, whether the drawing started or not: the render target, the
+//   depth buffer (the chain is the editor's whole window, larger than the view's, and Direct3D 9 draws into nothing larger than the depth
+//   buffer bound), the viewport, ScreenDescriptorBlock and matOrtho. The surfaces it asked the device for are let go of after.
+// - The screen's places are in pixels of width by height, always: while fill runs, WPos2DC and HPos2DC count pixels of the chain
+//   (drawingToChain), as they do while the game is in a level. (Until 2026-11-14 this said the editor was always in a level as the
+//   game counts it, MENUSSTATE_STARTGAME. It never is, so they counted the menus' 640 by 480 grid, and the panels came out stretched.)
+// It gives back true when the chain was presented. A lost device makes it false, and the editor's keeper sees that on its next frame.
+bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context)
+{
+	uint32_t const mostSide = 16384;
+
+	// The renderer's own start makes the screen list and the effects (d3d_render.cpp's list setup, d3_func.cpp), so before it, or after its
+	// end, there's nothing to draw with
+	if (!chain || !fill || !d3d.lpD3DDevice || !d3d.orthoVB || !d3d.orthoIB || !d3d.effectSystem || !orthoList || frameIsOpen
+		|| orthoList->GetSize() != 0 || width < 1 || width > mostSide || height < 1 || height > mostSide)
+	{
+		return false;
+	}
+
+	// What's put back. From here on there's one way out, at the end, past the putting back.
+	IDirect3DSurface9 *gameTarget = 0;
+	IDirect3DSurface9 *gameDepth = 0;
+	IDirect3DSurface9 *chainBuffer = 0;
+	D3DVIEWPORT9 gameViewport;
+	SCREENDESCRIPTORBLOCK const gameScreen = ScreenDescriptorBlock;
+	D3DXMATRIX const gameOrtho = d3d.matOrtho;
+	bool presented = false;
+
+	bool const saved = SUCCEEDED(d3d.lpD3DDevice->GetViewport(&gameViewport)) && SUCCEEDED(d3d.lpD3DDevice->GetRenderTarget(0, &gameTarget));
+
+	// The depth buffer may be none at all: then there's nothing to put back, and nothing larger to worry about
+	if (saved && FAILED(d3d.lpD3DDevice->GetDepthStencilSurface(&gameDepth)))
+	{
+		gameDepth = 0;
+	}
+
+	if (saved && SUCCEEDED(chain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &chainBuffer)) && SUCCEEDED(d3d.lpD3DDevice->SetRenderTarget(0, chainBuffer))
+		&& SUCCEEDED(d3d.lpD3DDevice->SetDepthStencilSurface(0)))
+	{
+		D3DVIEWPORT9 const screen = { 0, 0, width, height, 0.0f, 1.0f };
+
+		// The whole screen block at the chain's size, as R_ChangeResolution sets it (d3_func.cpp), since the text and menu calls may read
+		// any of it. At the most, 16384 by 16384, the size fits in an int.
+		ScreenDescriptorBlock.SDB_Width = (int)width;
+		ScreenDescriptorBlock.SDB_Height = (int)height;
+		ScreenDescriptorBlock.SDB_Size = (int)(width * height);
+		ScreenDescriptorBlock.SDB_CentreX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_CentreY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ProjX = (int)(width / 2);
+		ScreenDescriptorBlock.SDB_ProjY = (int)(height / 2);
+		ScreenDescriptorBlock.SDB_ClipLeft = 0;
+		ScreenDescriptorBlock.SDB_ClipRight = (int)width;
+		ScreenDescriptorBlock.SDB_ClipUp = 0;
+		ScreenDescriptorBlock.SDB_ClipDown = (int)height;
+
+		if (SUCCEEDED(d3d.lpD3DDevice->SetViewport(&screen)) && SUCCEEDED(d3d.lpD3DDevice->BeginScene()))
+		{
+			d3d.lpD3DDevice->Clear(0, NULL, D3DCLEAR_TARGET, background, 1.0f, 0);
+
+			// The screen list's buffers, as the game's frame locks them (LockExecuteBuffer), only for as long as fill() adds to them
+			bool const vertices = d3d.orthoVB->Lock((void **)&orthoVertex);
+			bool const indices = vertices && d3d.orthoIB->Lock(&orthoIndex);
+
+			if (vertices && indices)
+			{
+				orthoList->Reset();
+				orthoVBOffset = 0;
+				drawingToChain = true;
+				fill(context);
+				drawingToChain = false;
+			}
+
+			if (vertices)
+			{
+				d3d.orthoVB->Unlock();
+			}
+
+			if (indices)
+			{
+				d3d.orthoIB->Unlock();
+			}
+
+			if (vertices && indices && orthoList->GetSize())
+			{
+				d3d.effectSystem->SetActive(d3d.orthoEffect);
+				d3d.effectSystem->SetVertexShaderConstant(d3d.orthoEffect, 0, CONST_MATRIX, &d3d.matOrtho);
+				orthoList->Draw();
+			}
+
+			// The list is the game's again, empty, as its next frame expects
+			orthoList->Reset();
+			orthoVBOffset = 0;
+
+			d3d.lpD3DDevice->EndScene();
+
+			// The chain's picture as drawn, if one was asked for (R_SaveNextChainPicture): copied off the card now, because once it's shown a
+			// discarded back buffer holds nothing certain. Asked for once, saved once.
+			if (chainPicturePath[0])
+			{
+				IDirect3DSurface9 *copy = 0;
+				D3DSURFACE_DESC size;
+
+				chainPictureSaved = SUCCEEDED(chainBuffer->GetDesc(&size))
+					&& SUCCEEDED(d3d.lpD3DDevice->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL))
+					&& SUCCEEDED(d3d.lpD3DDevice->GetRenderTargetData(chainBuffer, copy))
+					&& SUCCEEDED(D3DXSaveSurfaceToFileA(chainPicturePath, D3DXIFF_PNG, copy, NULL, NULL));
+
+				if (copy)
+				{
+					copy->Release();
+				}
+
+				chainPicturePath[0] = '\0';
+			}
+
+			presented = SUCCEEDED(chain->Present(NULL, NULL, NULL, NULL, 0));
+		}
+	}
+
+	// Putting back, on every path
+	ScreenDescriptorBlock = gameScreen;
+	d3d.matOrtho = gameOrtho;
+
+	if (gameTarget)
+	{
+		d3d.lpD3DDevice->SetRenderTarget(0, gameTarget);
+		d3d.lpD3DDevice->SetDepthStencilSurface(gameDepth);
+		d3d.lpD3DDevice->SetViewport(&gameViewport);
+		gameTarget->Release();
+	}
+
+	if (gameDepth)
+	{
+		gameDepth->Release();
+	}
+
+	if (chainBuffer)
+	{
+		chainBuffer->Release();
+	}
+
+	return presented;
 }
 
 extern void D3D_DrawSliderBar(int x, int y, int alpha)
@@ -5514,6 +5862,779 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 	device->SetRenderState(state, asBits);
 }
 
+// The level editor's selection (R_SetEditorSelectedBlock, renderer.h): the object it has selected, drawn again in green. kshape.cpp's AddShape marks
+// every list item it adds for that object; this draws those items once more over the level. Over the solid modes the green is see-through (half),
+// so the object's own texture and light show through it; in the game's wireframe mode (the editor's Polyline) the object's lines are green, and
+// opaque. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+// More than one object can be selected (inteng's Shift+click): up to kEditorMostSelected of them, in EditorSelectedBlocks.
+#define kEditorMostSelected 1024
+DISPLAYBLOCK *EditorSelectedBlocks[kEditorMostSelected];
+unsigned int EditorSelectedColours[kEditorMostSelected];   // ARGB of each: the selected objects' green, or a colour the editor gave (R_SetEditorTintedBlocks)
+int EditorSelectedCount = 0;
+
+// The level editor's highlighted polygons (R_SetEditorHighlightedPolygons, renderer.h): a few polygons of a few blocks, each drawn again over the level in one colour (the editor's
+// Texture Map selection). Kept as, per block, its item numbers in order; kshape.cpp's ShapePipeline marks exactly those items as it adds them, the same way the selected object
+// is marked, so the green pass draws them. Always empty in the game: the game never calls the setter.
+static std::vector<std::pair<const DISPLAYBLOCK *, std::vector<int>>> editorHighlighted;
+unsigned int EditorHighlightColour = 0xFFFFFF00u;
+int EditorHighlightedCount = 0;
+
+void R_SetEditorHighlightedPolygons(const struct displayblock *const *blocks, const int *items, int count, unsigned int argb)
+{
+	editorHighlighted.clear();
+	EditorHighlightedCount = 0;
+	EditorHighlightColour = argb;
+
+	for (int i = 0; blocks && items && i < count && i < 100000; i++)
+	{
+		if (!blocks[i] || items[i] < 0)
+		{
+			continue;
+		}
+
+		std::vector<int> *mine = 0;
+
+		for (auto &entry : editorHighlighted)
+		{
+			if (entry.first == (const DISPLAYBLOCK *)blocks[i])
+			{
+				mine = &entry.second;
+				break;
+			}
+		}
+
+		if (!mine)
+		{
+			editorHighlighted.push_back(std::make_pair((const DISPLAYBLOCK *)blocks[i], std::vector<int>()));
+			mine = &editorHighlighted.back().second;
+		}
+
+		mine->push_back(items[i]);
+		EditorHighlightedCount++;
+	}
+
+	for (auto &entry : editorHighlighted)
+	{
+		std::sort(entry.second.begin(), entry.second.end());
+		entry.second.erase(std::unique(entry.second.begin(), entry.second.end()), entry.second.end());
+	}
+}
+
+// The highlighted items of one block, in order, for ShapePipeline: false when it has none
+bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int *count)
+{
+	for (const auto &entry : editorHighlighted)
+	{
+		if (entry.first == block)
+		{
+			*items = entry.second.data();
+			*count = (int)entry.second.size();
+			return !entry.second.empty();
+		}
+	}
+
+	return false;
+}
+
+// The level editor's objects outside every module (R_SetEditorDrawObjectsOutsideModules, renderer.h): KRenderItems draws an object with the module that holds it, so a file with no module draws none; with this on they are drawn
+// after the modules. Off in the game: the game never calls the setter.
+static bool editorDrawObjectsOutsideModules = false;
+
+void R_SetEditorDrawObjectsOutsideModules(bool on)
+{
+	editorDrawObjectsOutsideModules = on;
+}
+
+bool EditorDrawsObjectsOutsideModules()
+{
+	return editorDrawObjectsOutsideModules;
+}
+
+// The level editor's hidden objects (R_SetEditorHiddenBlocks, renderer.h): blocks AddShape does not draw at all, and with everyPlacedObject every block that has a strategy of its own and is not a
+// module (the objects the level file places). Always none in the game: the game never calls the setter, so nothing here runs.
+static std::vector<const DISPLAYBLOCK *> editorHiddenBlocks;
+static bool editorHideEveryPlacedObject = false;
+static bool editorMixed = false;   // R_SetEditorMixed: the tint pass draws solid even when the game draws lines
+
+void R_SetEditorMixed(bool on)
+{
+	editorMixed = on;
+}
+static bool editorHideEveryModule = false;
+int EditorHiddenCount = 0;   // 0 in the game
+
+void R_SetEditorHiddenBlocks(const struct displayblock *const *blocks, int count, bool everyPlacedObject, bool everyModule)
+{
+	editorHiddenBlocks.clear();
+	editorHideEveryPlacedObject = everyPlacedObject;
+	editorHideEveryModule = everyModule;
+
+	for (int i = 0; blocks && i < count && i < 100000; i++)
+	{
+		if (blocks[i])
+		{
+			editorHiddenBlocks.push_back((const DISPLAYBLOCK *)blocks[i]);
+		}
+	}
+
+	std::sort(editorHiddenBlocks.begin(), editorHiddenBlocks.end());
+	EditorHiddenCount = (int)editorHiddenBlocks.size() + (everyPlacedObject ? 1 : 0) + (everyModule ? 1 : 0);
+}
+
+bool EditorBlockIsHidden(const DISPLAYBLOCK *block)
+{
+	if (!block)
+	{
+		return false;
+	}
+
+	if (editorHideEveryPlacedObject && block->ObStrategyBlock && !block->ObMyModule)
+	{
+		return true;
+	}
+
+	if (editorHideEveryModule && block->ObMyModule)
+	{
+		return true;
+	}
+
+	return std::binary_search(editorHiddenBlocks.begin(), editorHiddenBlocks.end(), block);
+}
+
+bool EditorBlockIsTinted(const DISPLAYBLOCK *block)
+{
+	for (int i = 0; block && i < EditorSelectedCount; i++)
+	{
+		if (EditorSelectedBlocks[i] == block)
+		{
+			return true;
+		}
+	}
+
+	// a hidden module is not drawn from the fixed buffer either
+	if (EditorHiddenCount && EditorBlockIsHidden(block))
+	{
+		return true;
+	}
+
+	// a block with highlighted polygons is drawn the old way too, so those items can be marked
+	for (const auto &entry : editorHighlighted)
+	{
+		if (block && entry.first == block)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+int R_EditorSelectedItemsDrawn()
+{
+	extern int RenderListTintedDrawn;
+	return RenderListTintedDrawn;
+}
+
+void R_SetEditorTintedBlocks(const struct displayblock *const *blocks, const unsigned int *colours, int count)
+{
+	EditorSelectedCount = 0;
+
+	for (int i = 0; blocks && i < count && i < kEditorMostSelected; i++)
+	{
+		if (blocks[i])
+		{
+			EditorSelectedColours[EditorSelectedCount] = colours ? colours[i] : 0xFF00FF00u;
+			EditorSelectedBlocks[EditorSelectedCount++] = (DISPLAYBLOCK *)blocks[i];
+		}
+	}
+}
+
+void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int count)
+{
+	R_SetEditorTintedBlocks(blocks, 0, count);
+}
+
+static void DrawTheSelectedInGreen()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	bool const lines = WireFrameMode != 0 && !editorMixed;
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	device->SetPixelShader(NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, lines ? 0xFF00FF00u : 0x8000FF00u);
+	device->SetRenderState(D3DRS_FILLMODE, lines ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, lines ? FALSE : TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00002f);
+
+	extern int RenderListTintedDrawn;
+	extern bool RenderListTintLines;
+
+	RenderListTintedDrawn = 0;
+	RenderListTintLines = lines;
+	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false, true);
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
+// ---- THE LEVEL EDITOR'S THREE ORTHOGRAPHIC VIEWS (renderer.h) ----
+// Every polygon edge of the blocks in play, in world places, kept in one vertex buffer (the game's own walk through a shape's polygons, as the click-picking
+// uses it), rebuilt when the set of blocks or where they are changes. Each view draws that buffer with its own matrix, which turns a world place straight
+// into a place on inteng's 640 by 480 screen and then into the card's; a view is cut to its quarter by the scissor. Lines are drawn through the main
+// vertex shader as the ribbon is, with a plain colour (the texture factor), no depth, nothing else changed on the card (a state block puts it back).
+// the game's own walk through a shape's polygons (avp/dynamics.h, win95/plat_shp.h), as the editor's click-picking uses it
+struct ColPolyTag
+{
+	int NumberOfVertices;
+	VECTORCH PolyPoint[4];
+	VECTORCH PolyNormal;
+	DISPLAYBLOCK *ParentObject;
+};
+extern int SetupPolygonAccess(DISPLAYBLOCK *objectPtr);
+extern void AccessNextPolygon(void);
+extern void GetPolygonVertices(struct ColPolyTag *polyPtr);
+
+static EditorOrtho editorOrtho;
+static std::vector<EditorOrthoLine> editorOrthoLines;
+
+void R_SetEditorOrthoLines(const EditorOrthoLine *lines, int count)
+{
+	editorOrthoLines.clear();
+
+	if (lines && count > 0)
+	{
+		editorOrthoLines.assign(lines, lines + (count < 4096 ? count : 4096));
+	}
+}
+
+namespace
+{
+	struct OrthoRange { const DISPLAYBLOCK *block; unsigned first; unsigned count; };
+
+	std::vector<D3DLVERTEX> orthoVerts;
+	std::vector<OrthoRange> orthoObjects;   // each object's lines, for the selected ones in green
+	unsigned orthoModuleVerts = 0;          // the first verts are every module's, the rest every object's
+	IDirect3DVertexBuffer9 *orthoBuffer = 0;
+	unsigned orthoBufferSize = 0;
+	unsigned long long orthoSignature = 0;
+	bool orthoHasBounds = false;
+	int orthoMins[3], orthoMaxs[3];
+	unsigned const kOrthoMostVerts = 3000000;
+
+	unsigned long long OrthoSignatureNow()
+	{
+		unsigned long long sum = (unsigned long long)NumActiveBlocks * 1000003ull;
+
+		for (int i = 0; i < NumActiveBlocks; i++)
+		{
+			DISPLAYBLOCK const *const b = ActiveBlockList[i];
+
+			if (b)
+			{
+				sum = sum * 31ull + (unsigned long long)(size_t)b + (unsigned long long)(unsigned)b->ObShape * 7ull + (unsigned long long)(unsigned)b->ObWorld.vx * 13ull
+					+ (unsigned long long)(unsigned)b->ObWorld.vy * 17ull + (unsigned long long)(unsigned)b->ObWorld.vz * 19ull;
+			}
+		}
+
+		return sum;
+	}
+
+	void OrthoAddBlock(DISPLAYBLOCK *block, bool module)
+	{
+		unsigned const first = (unsigned)orthoVerts.size();
+		int const polygons = SetupPolygonAccess(block);
+
+		for (int p = 0; p < polygons && orthoVerts.size() + 8 < kOrthoMostVerts; p++)
+		{
+			ColPolyTag poly;
+
+			AccessNextPolygon();
+			memset(&poly, 0, sizeof(poly));
+			GetPolygonVertices(&poly);
+
+			if (poly.NumberOfVertices < 2 || poly.NumberOfVertices > 4)
+			{
+				continue;
+			}
+
+			VECTORCH world[4];
+
+			for (int v = 0; v < poly.NumberOfVertices; v++)
+			{
+				world[v] = poly.PolyPoint[v];
+
+				if (!block->ObMyModule)
+				{
+					MATRIXCH matrix = block->ObMat;
+					RotateVector(&world[v], &matrix);
+				}
+
+				world[v].vx += block->ObWorld.vx;
+				world[v].vy += block->ObWorld.vy;
+				world[v].vz += block->ObWorld.vz;
+			}
+
+			for (int e = 0; e < poly.NumberOfVertices; e++)
+			{
+				VECTORCH const &a = world[e];
+				VECTORCH const &b = world[(e + 1) % poly.NumberOfVertices];
+
+				for (int end = 0; end < 2; end++)
+				{
+					VECTORCH const &w = end ? b : a;
+					D3DLVERTEX vertex;
+
+					memset(&vertex, 0, sizeof(vertex));
+					vertex.x = (float)w.vx;
+					vertex.y = (float)w.vy;
+					vertex.z = (float)w.vz;
+					vertex.color = 0xFFFFFFFF;
+					orthoVerts.push_back(vertex);
+
+					int const at[3] = { w.vx, w.vy, w.vz };
+
+					for (int axis = 0; axis < 3; axis++)
+					{
+						if (!orthoHasBounds)
+						{
+							orthoMins[0] = orthoMaxs[0] = at[0];
+							orthoMins[1] = orthoMaxs[1] = at[1];
+							orthoMins[2] = orthoMaxs[2] = at[2];
+							orthoHasBounds = true;
+						}
+
+						orthoMins[axis] = at[axis] < orthoMins[axis] ? at[axis] : orthoMins[axis];
+						orthoMaxs[axis] = at[axis] > orthoMaxs[axis] ? at[axis] : orthoMaxs[axis];
+					}
+				}
+			}
+		}
+
+		if (!module)
+		{
+			OrthoRange const range = { block, first, (unsigned)orthoVerts.size() - first };
+			orthoObjects.push_back(range);
+		}
+	}
+
+	void OrthoRebuild()
+	{
+		orthoVerts.clear();
+		orthoObjects.clear();
+		orthoHasBounds = false;
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			for (int i = 0; i < NumActiveBlocks; i++)
+			{
+				DISPLAYBLOCK *const block = ActiveBlockList[i];
+
+				if (!block || block == Player || block->HModelControlBlock || !block->ObShapeData || (block->ObFlags & ObFlag_NotVis)
+					|| (!block->ObShape && block->SfxPtr) || ((block->ObMyModule != 0) != (pass == 0)))
+				{
+					continue;
+				}
+
+				OrthoAddBlock(block, pass == 0);
+			}
+
+			if (pass == 0)
+			{
+				orthoModuleVerts = (unsigned)orthoVerts.size();
+			}
+		}
+
+		if (orthoBuffer)
+		{
+			orthoBuffer->Release();
+			orthoBuffer = 0;
+			orthoBufferSize = 0;
+		}
+
+		if (!orthoVerts.empty() && SUCCEEDED(d3d.lpD3DDevice->CreateVertexBuffer((UINT)(orthoVerts.size() * sizeof(D3DLVERTEX)), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &orthoBuffer, NULL)))
+		{
+			void *data = 0;
+
+			if (SUCCEEDED(orthoBuffer->Lock(0, 0, &data, 0)))
+			{
+				memcpy(data, &orthoVerts[0], orthoVerts.size() * sizeof(D3DLVERTEX));
+				orthoBuffer->Unlock();
+				orthoBufferSize = (unsigned)orthoVerts.size();
+			}
+			else
+			{
+				orthoBuffer->Release();
+				orthoBuffer = 0;
+			}
+		}
+	}
+
+	// The matrix of one view: a world place to the card's clip space, through inteng's 640 by 480 screen. (D3DX's row vectors: x' = x * m11 + ... + m41.)
+	void OrthoMatrix(int view, D3DXMATRIX *out)
+	{
+		EditorOrthoView const &v = editorOrtho.views[view];
+		double const sx = v.scaleX ? 1.0 / v.scaleX : 0.0;
+		double const sy = v.scaleY ? 1.0 / v.scaleY : 0.0;
+		double across[4] = { 0, 0, 0, 0 };   // the screen's x as a sum of x, y, z and a constant
+		double down[4] = { 0, 0, 0, 0 };
+
+		if (view == 0)
+		{
+			across[0] = sx;  across[3] = v.originX - v.worldX * sx;
+			down[1] = sy;    down[3] = v.originY - v.worldY * sy;
+		}
+		else if (view == 1)
+		{
+			across[2] = -sx; across[3] = v.originX + v.worldZ * sx;
+			down[1] = sy;    down[3] = v.originY - v.worldY * sy;
+		}
+		else
+		{
+			across[0] = sx;  across[3] = v.originX - v.worldX * sx;
+			down[2] = -sy;   down[3] = v.originY + v.worldZ * sy;
+		}
+
+		ZeroMemory(out, sizeof(*out));
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			out->m[axis][0] = (float)(across[axis] * 2.0 / 640.0);
+			out->m[axis][1] = (float)(-down[axis] * 2.0 / 480.0);
+		}
+
+		out->m[3][0] = (float)(across[3] * 2.0 / 640.0 - 1.0);
+		out->m[3][1] = (float)(1.0 - down[3] * 2.0 / 480.0);
+		out->m[3][2] = 0.5f;
+		out->m[3][3] = 1.0f;
+	}
+
+	// The matrix that takes a place on the 640 by 480 screen as it is
+	void OrthoScreenMatrix(D3DXMATRIX *out)
+	{
+		ZeroMemory(out, sizeof(*out));
+		out->m[0][0] = (float)(2.0 / 640.0);
+		out->m[1][1] = (float)(-2.0 / 480.0);
+		out->m[3][0] = -1.0f;
+		out->m[3][1] = 1.0f;
+		out->m[3][2] = 0.5f;
+		out->m[3][3] = 1.0f;
+	}
+
+	void OrthoFlat(DWORD colour)
+	{
+		d3d.lpD3DDevice->SetRenderState(D3DRS_TEXTUREFACTOR, colour);
+	}
+}
+
+void R_SetEditorMainViewport(bool on, int x, int y, int width, int height)
+{
+	bool const was = editorMainBoxOn;
+
+	if (on && width >= 16 && height >= 12)
+	{
+		editorMainBoxOn = true;
+		editorMainBox[0] = x;
+		editorMainBox[1] = y;
+		editorMainBox[2] = width;
+		editorMainBox[3] = height;
+
+		// the projection's aspect is the box's own: its across scale is its down scale over the box's width to height
+		d3d.matProjection._11 = d3d.matProjection._22 / ((float)width / (float)height);
+	}
+	else
+	{
+		editorMainBoxOn = false;
+
+		if (was)
+		{
+			SetTransforms();   // the game's own projection again, from its field of view and the whole window
+		}
+	}
+}
+
+void R_EditorFlushWorld()
+{
+	FlushLists();
+}
+
+void R_SetEditorOrtho(const EditorOrtho *settings)
+{
+	editorOrthoOn = settings && settings->on;
+
+	if (settings)
+	{
+		editorOrtho = *settings;
+	}
+}
+
+bool R_EditorOrthoBounds(int mins[3], int maxs[3])
+{
+	if (!orthoHasBounds)
+	{
+		return false;
+	}
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		mins[axis] = orthoMins[axis];
+		maxs[axis] = orthoMaxs[axis];
+	}
+
+	return true;
+}
+
+static void DrawEditorOrthoViews()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || editorOrtho.boxWidth < 64 || editorOrtho.boxHeight < 48 || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	unsigned long long const signature = OrthoSignatureNow();
+
+	if (editorOrtho.showLevel && (signature != orthoSignature || (!orthoBuffer && orthoVerts.empty() && !orthoHasBounds)))
+	{
+		orthoSignature = signature;
+		OrthoRebuild();
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+
+	D3DVIEWPORT9 viewport;
+
+	viewport.X = (DWORD)editorOrtho.boxLeft;
+	viewport.Y = (DWORD)editorOrtho.boxTop;
+	viewport.Width = (DWORD)editorOrtho.boxWidth;
+	viewport.Height = (DWORD)editorOrtho.boxHeight;
+	viewport.MinZ = 0.0f;
+	viewport.MaxZ = 1.0f;
+	device->SetViewport(&viewport);
+
+	// the three quarters of the 640 by 480 screen: top left, top right, bottom left
+	int const quarterLeft[3] = { 0, 320, 0 };
+	int const quarterTop[3] = { 0, 0, 240 };
+	D3DXMATRIX screenMatrix;
+
+	OrthoScreenMatrix(&screenMatrix);
+
+	for (int view = 0; view < 3; view++)
+	{
+		RECT scissor;
+
+		scissor.left = editorOrtho.boxLeft + quarterLeft[view] * editorOrtho.boxWidth / 640;
+		scissor.top = editorOrtho.boxTop + quarterTop[view] * editorOrtho.boxHeight / 480;
+		scissor.right = editorOrtho.boxLeft + (quarterLeft[view] + 320) * editorOrtho.boxWidth / 640;
+		scissor.bottom = editorOrtho.boxTop + (quarterTop[view] + 240) * editorOrtho.boxHeight / 480;
+		device->SetScissorRect(&scissor);
+
+		// the ground: black, over the level, drawn as two triangles in screen places
+		D3DLVERTEX ground[6];
+		float const left = (float)quarterLeft[view], top = (float)quarterTop[view], right = left + 320.0f, bottom = top + 240.0f;
+		float const corners[6][2] = { { left, top }, { right, top }, { left, bottom }, { right, top }, { right, bottom }, { left, bottom } };
+
+		memset(ground, 0, sizeof(ground));
+
+		for (int i = 0; i < 6; i++)
+		{
+			ground[i].x = corners[i][0];
+			ground[i].y = corners[i][1];
+			ground[i].z = 0.0f;
+		}
+
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &screenMatrix);
+		OrthoFlat(0xFF000000);
+		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, ground, sizeof(D3DLVERTEX));
+
+		// the level's lines: modules grey, objects blue, the selected objects green
+		D3DXMATRIX matrix;
+
+		OrthoMatrix(view, &matrix);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matrix);
+
+		// the lines the editor gave (the track), each in its colour, in the same places as the level
+		for (size_t l = 0; l < editorOrthoLines.size(); l++)
+		{
+			EditorOrthoLine const &line = editorOrthoLines[l];
+			D3DLVERTEX ends[2];
+
+			memset(ends, 0, sizeof(ends));
+			ends[0].x = (float)line.x0; ends[0].y = (float)line.y0; ends[0].z = (float)line.z0;
+			ends[1].x = (float)line.x1; ends[1].y = (float)line.y1; ends[1].z = (float)line.z1;
+			OrthoFlat(line.colour);
+			device->DrawPrimitiveUP(D3DPT_LINELIST, 1, ends, sizeof(D3DLVERTEX));
+		}
+
+		if (editorOrtho.showLevel && orthoBuffer && orthoBufferSize)
+		{
+			device->SetStreamSource(0, orthoBuffer, 0, sizeof(D3DLVERTEX));
+
+			if (orthoModuleVerts >= 2)
+			{
+				OrthoFlat(0xFF808080);
+				device->DrawPrimitive(D3DPT_LINELIST, 0, orthoModuleVerts / 2);
+			}
+
+			if (orthoBufferSize > orthoModuleVerts + 1)
+			{
+				OrthoFlat(0xFF4090FF);
+				device->DrawPrimitive(D3DPT_LINELIST, orthoModuleVerts, (orthoBufferSize - orthoModuleVerts) / 2);
+			}
+
+			OrthoFlat(0xFF00FF00);
+
+			for (size_t r = 0; r < orthoObjects.size(); r++)
+			{
+				for (int s = 0; s < EditorSelectedCount; s++)
+				{
+					if (EditorSelectedBlocks[s] == orthoObjects[r].block && orthoObjects[r].count >= 2)
+					{
+						device->DrawPrimitive(D3DPT_LINELIST, orthoObjects[r].first, orthoObjects[r].count / 2);
+					}
+				}
+			}
+		}
+
+		// The marker at the 3D cursor. inteng blits a 9 by 9 picture from its marker sheet, (px - 4, py - 4) to (px + 5, py + 5) (FUN_00553ab0, run 18, menu-reads-18.txt:330-451);
+		// the sheet's picture isn't available, so a hollow square of that size stands in, in yellow (ours)
+		if (editorOrtho.crossShown[view])
+		{
+			float const left9 = (float)editorOrtho.crossX[view] - 4.0f, top9 = (float)editorOrtho.crossY[view] - 4.0f, right9 = left9 + 9.0f, bottom9 = top9 + 9.0f;
+			D3DLVERTEX marker[8];
+
+			memset(marker, 0, sizeof(marker));
+			marker[0].x = left9;  marker[0].y = top9;    marker[1].x = right9; marker[1].y = top9;
+			marker[2].x = right9; marker[2].y = top9;    marker[3].x = right9; marker[3].y = bottom9;
+			marker[4].x = right9; marker[4].y = bottom9; marker[5].x = left9;  marker[5].y = bottom9;
+			marker[6].x = left9;  marker[6].y = bottom9; marker[7].x = left9;  marker[7].y = top9;
+			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &screenMatrix);
+			OrthoFlat(0xFFFFFF00);
+			device->DrawPrimitiveUP(D3DPT_LINELIST, 4, marker, sizeof(D3DLVERTEX));
+		}
+
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
+// The level editor's Filled polyline (DrawFilledOutlines): each solid polygon's outline, drawn over it in DrawFilledOutlinesColour. Added
+// 2026-11-14 by Melanikus for the AvP port. With the game's WireFrameMode on as well, the polygons themselves are lines too, and these
+// lie on exactly the same edges, so every line shows in the outlines' one colour: the editor's unlit wireframe.
+// - It draws the list's solid polygons a second time, through the same sums, as the surface pictures do (RenderList::DrawOpaqueAgain),
+//   so each line lands exactly on its own polygon's edge. The card draws them as lines (its wireframe fill), in one colour with no
+//   texture and no light: no pixel shader, and the colour straight from the card's texture factor, as Hudson's ribbon takes its own
+//   colour (DrawHudsonPlayRibbon).
+// - A line is pulled a little nearer than its polygon, as the normal lines are, so the two don't fight over the same depth. A nearer
+//   wall still hides it, and it writes no depth of its own.
+// - See-through polygons get no outline: DrawOpaqueAgain draws only the solid ones. On a frame without shadows, the list draws its
+//   solid and see-through polygons together, so an outline can show over glass that doesn't write depth. It's the editor's view only,
+//   so that's left as it is.
+// - Everything it changes on the card is put back at the end (a state block, as Hudson's ribbon does), so the game's own record of the
+//   card's settings stays true.
+static void DrawOutlinesOverTheSolids()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	device->SetPixelShader(NULL);
+
+	// The colour alone, or (DrawFilledOutlinesLit) the colour times each corner's light: the list's corners carry the light the game
+	// worked out for them as their colour (the main shader hands it on as COLOR0), so multiplying by it puts the colour in the level's
+	// own light, with no texture either way
+	if (DrawFilledOutlinesLit)
+	{
+		device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+		device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	}
+	else
+	{
+		device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	}
+
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, 0xFF000000u | ((DWORD)DrawFilledOutlinesColour & 0x00FFFFFFu));
+
+	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, DrawFilledOutlinesDepthBias);
+
+	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false);
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 static inline void ToyPutScreenCorner(D3DLVERTEX &vertex, float x, float y, float u, float v)
 {
 	vertex.x = x;
@@ -5585,16 +6706,29 @@ static void DrawShoulderLamp()
 	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
 	bool const onWalls = (!isARealLight || fullOver) && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
 
-	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
-	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
-
-	device->SetPixelShaderConstantF(1, aim, 1);
-
 	// A network game keeps these as built. KeepDeveloperToolsOutOfNetworkGames sees to that, but ToyShadows_Draw leaves before it on a card with no stencil, so it's asked again here, where the numbers are used.
+	// It comes before any of them is sent, the shoulder's place included. (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: it was after the aim, which
+	// held nothing a command could change until R-LAMP-1.)
 	if (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())
 	{
 		LogString("lamp: this is a network game, so its size and strength are back as they were built");
 	}
+
+	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1. Then where
+	// the cone starts (LAMPSHOULDER, R-LAMP-1), measured across in screen heights the way the shader measures every place, so it costs the full shader nothing.
+	float const aim[4] =
+	{
+		ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f,
+		(float)ShoulderLamp_ShoulderAcross() * wide, (float)ShoulderLamp_ShoulderDown()
+	};
+
+	device->SetPixelShaderConstantF(1, aim, 1);
+
+	// The cone's line from the shoulder to the aim, and one over its length squared, which the shader has no room left to work out (shoulder_lamp.h)
+	float beam[4];
+
+	ShoulderLamp_PaintedBeam(aim[0], aim[1], wide, beam);
+	device->SetPixelShaderConstantF(3, beam, 1);
 
 	// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.
 	float spot[4];
@@ -6417,7 +7551,7 @@ static void DrawLampGlint(float strength, float wide, const float *aim, const fl
 	{
 		strength, 0.0f, 0.0f, wide,
 		aim[0], aim[1], 0.0f, 0.0f,
-		spot[0], spot[1], spot[2], 0.0f,
+		spot[0], spot[1], spot[2], spot[3],   // .w: the spot's half-distance, so the glint falls away as its spot does (R-LAMP-1, modified 2026-11-14 by Melanikus (Dietrich))
 		from[0], -from[1], from[2], 0.0f,
 	};
 
@@ -7974,6 +9108,284 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 	}
 }
 
+// The level editor's lines in the 3D view (R_SetEditorWorldLines): the same sums and the same card settings as DrawAlienWays, which this is made from, for lines the editor gave in the level's places.
+void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
+{
+	editorWorldLines.clear();
+
+	if (lines && count > 0)
+	{
+		editorWorldLines.assign(lines, lines + (count < 4096 ? count : 4096));
+	}
+}
+
+// The occlusion queries of the editor's triangle groups (R_SetEditorWorldTriangles): the answers of the frame before are collected at the start of the next draw, then each group gets a query of its own
+static std::vector<std::pair<int, IDirect3DQuery9 *>> editorGroupQueries;
+static std::map<int, int> editorGroupPixels;
+
+static void CollectEditorGroupQueries()
+{
+	for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+	{
+		DWORD pixels = 0;
+
+		if (one.second->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH) == S_OK)
+		{
+			editorGroupPixels[one.first] = (int)pixels;
+		}
+
+		one.second->Release();
+	}
+
+	editorGroupQueries.clear();
+}
+
+// The queries are default-pool objects that stay outstanding between frames: they are let go before the device is Reset or lost (ReleaseVolatileResources, d3_func.cpp), and what they said with them
+void ReleaseEditorGroupQueries()
+{
+	for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+	{
+		one.second->Release();
+	}
+
+	editorGroupQueries.clear();
+	editorGroupPixels.clear();
+}
+
+int R_EditorTriangleGroupPixels(int group)
+{
+	const auto found = editorGroupPixels.find(group);
+
+	return found == editorGroupPixels.end() ? -1 : found->second;
+}
+
+void R_SetEditorWorldTriangles(const EditorWorldTriangle *triangles, int count)
+{
+	editorWorldTriangles.clear();
+
+	if (!triangles || count <= 0)
+	{
+		// nothing to draw: the queries and what they said are let go
+		for (std::pair<int, IDirect3DQuery9 *> &one : editorGroupQueries)
+		{
+			one.second->Release();
+		}
+
+		editorGroupQueries.clear();
+		editorGroupPixels.clear();
+	}
+
+	if (triangles && count > 0)
+	{
+		// up to 65536 (it was 4096): a full level's editor objects (Invasion has 500 with 100 triangles each) all draw; the draw below is already chunked at kMostTrianglesInOneDraw
+		editorWorldTriangles.assign(triangles, triangles + (count < 65536 ? count : 65536));
+	}
+}
+
+// The level editor's filled triangles (R_SetEditorWorldTriangles): the same sums and the same card settings as DrawEditorWorldLines, with a triangle list in place of the line list
+static void DrawEditorWorldTriangles()
+{
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.clear();
+
+	CollectEditorGroupQueries();
+
+	for (size_t i = 0; i < editorWorldTriangles.size(); i++)
+	{
+		EditorWorldTriangle const &triangle = editorWorldTriangles[i];
+		int const at[3][3] = { { triangle.x0, triangle.y0, triangle.z0 }, { triangle.x1, triangle.y1, triangle.z1 }, { triangle.x2, triangle.y2, triangle.z2 } };
+
+		for (int corner = 0; corner < 3; corner++)
+		{
+			float const x = (float)at[corner][0], y = (float)at[corner][1], z = (float)at[corner][2];
+			D3DLVERTEX made;
+
+			// the camera's view by the game's ViewMatrix, then up turned over, as the game's own polygons are
+			made.x = ViewMatrix[0] * x + ViewMatrix[1] * y + ViewMatrix[2] * z + ViewMatrix[3];
+			made.y = -(ViewMatrix[4] * x + ViewMatrix[5] * y + ViewMatrix[6] * z + ViewMatrix[7]);
+			made.z = ViewMatrix[8] * x + ViewMatrix[9] * y + ViewMatrix[10] * z + ViewMatrix[11];
+			made.color = triangle.colour | 0xFF000000u;
+			made.specular = RGBA_MAKE(0, 0, 0, 0);
+			made.u = 0.0f;
+			made.v = 0.0f;
+			vertices.push_back(made);
+		}
+	}
+
+	if (vertices.empty())
+	{
+		return;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// compared with the level's depth, so a wall hides a triangle behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostTrianglesInOneDraw = 16000;
+
+	// runs of triangles: the ones of one group (0 or more) together, in a query of their own; the ones with no group in as few draws as possible
+	size_t const total = vertices.size() / 3;
+
+	for (size_t first = 0; first < total; )
+	{
+		int const group = editorWorldTriangles[first].group;
+		size_t last = first + 1;
+
+		while (last < total && (group < 0 ? editorWorldTriangles[last].group < 0 : editorWorldTriangles[last].group == group))
+		{
+			last++;
+		}
+
+		IDirect3DQuery9 *query = 0;
+
+		if (group >= 0 && SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+		{
+			query->Issue(D3DISSUE_BEGIN);
+		}
+
+		for (size_t triangle = first; triangle < last; triangle += kMostTrianglesInOneDraw)
+		{
+			size_t const left = last - triangle;
+
+			device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(left < kMostTrianglesInOneDraw ? left : kMostTrianglesInOneDraw), &vertices[triangle * 3], sizeof(D3DLVERTEX));
+		}
+
+		if (query)
+		{
+			query->Issue(D3DISSUE_END);
+			editorGroupQueries.push_back(std::make_pair(group, query));
+		}
+
+		first = last;
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
+static void DrawEditorWorldLines()
+{
+	static std::vector<AlienWaysViewEnd> ends;
+	ends.clear();
+
+	for (size_t i = 0; i < editorWorldLines.size(); i++)
+	{
+		EditorWorldLine const &line = editorWorldLines[i];
+		int const at[2][3] = { { line.x0, line.y0, line.z0 }, { line.x1, line.y1, line.z1 } };
+
+		for (int end = 0; end < 2; end++)
+		{
+			float const x = (float)at[end][0], y = (float)at[end][1], z = (float)at[end][2];
+			AlienWaysViewEnd made;
+
+			// the camera's view by the game's ViewMatrix, then up turned over, as the game's own polygons are (alien_ways_view.cpp IntoView)
+			made.x = ViewMatrix[0] * x + ViewMatrix[1] * y + ViewMatrix[2] * z + ViewMatrix[3];
+			made.y = -(ViewMatrix[4] * x + ViewMatrix[5] * y + ViewMatrix[6] * z + ViewMatrix[7]);
+			made.z = ViewMatrix[8] * x + ViewMatrix[9] * y + ViewMatrix[10] * z + ViewMatrix[11];
+			made.colour = line.colour;
+			ends.push_back(made);
+		}
+	}
+
+	if (ends.empty())
+	{
+		return;
+	}
+
+	AlienWaysView_Thicken(&ends, kAlienWaysViewAside);
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// compared with the level's depth, so a wall hides a line behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostLinesInOneDraw = 16000;
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.resize(ends.size());
+
+	for (size_t i = 0; i < ends.size(); i++)
+	{
+		vertices[i].x = ends[i].x;
+		vertices[i].y = ends[i].y;
+		vertices[i].z = ends[i].z;
+		vertices[i].color = ends[i].colour;
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+	{
+		size_t const left = ends.size() / 2 - line;
+
+		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 // The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), when the developer asks
 // for it (-dev -alienwaysview). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
 // frame of the game. The lines go through the same sums as the level's own polygons, by this frame's ViewMatrix, so a wall hides a way behind
@@ -8525,6 +9937,191 @@ void LampIntensityCommand(char *words)
 	char said[60] = { 0 };
 
 	_snprintf(said, sizeof(said) - 1, "LAMP INTENSITY IS %.2f", intensity);
+	SaySwitch(said);
+}
+
+// THE LAMP'S LOOK, R-LAMP-1 (shoulder_lamp.h): LAMPSTRENGTH, LAMPHALFDISTANCE, LAMPCONE, LAMPSPILL, LAMPSHOULDER and LAMPSPOTHALFDISTANCE, for this run of the
+// game, playing alone. On its own, each says what it is now. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+
+// What every one of them does first: the words, trimmed, and in a network game a number is refused and says why. Gives back false when that's all there is to do.
+// name is one of the commands' own names, written in the code, never anything typed.
+static bool LampLookWords(char *words, const char *name, char const **start, size_t *length)
+{
+	*start = "";
+	*length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, start, length);
+	}
+
+	char why[80] = { 0 };
+
+	_snprintf(why, sizeof(why) - 1, "%s IS OFF IN A NETWORK GAME: THE LAMP STAYS AS BUILT", name);
+	return !LampStaysAsBuiltHere(why, *length);
+}
+
+void LampStrengthCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSTRENGTH", &start, &length))
+	{
+		return;
+	}
+
+	double strength = ShoulderLamp_Strength();
+
+	if (length > 0 && !ShoulderLamp_StrengthFromWords(start, (unsigned int)length, &strength))
+	{
+		SaySwitch("LAMPSTRENGTH TAKES A NUMBER FROM 0.1 TO 4, LIKE 2.2");
+		return;
+	}
+
+	ShoulderLamp_SetStrength(strength);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP STRENGTH IS %.2f", ShoulderLamp_Strength());
+	SaySwitch(said);
+}
+
+void LampHalfDistanceCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPHALFDISTANCE", &start, &length))
+	{
+		return;
+	}
+
+	double millimetres = ShoulderLamp_HalfDistance();
+
+	if (length > 0 && !ShoulderLamp_HalfDistanceFromWords(start, (unsigned int)length, &millimetres))
+	{
+		SaySwitch("LAMPHALFDISTANCE TAKES MILLIMETRES FROM 1000 TO 20000, LIKE 9000");
+		return;
+	}
+
+	ShoulderLamp_SetHalfDistance(millimetres);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP HALF-DISTANCE IS %.0f MM", ShoulderLamp_HalfDistance());
+	SaySwitch(said);
+}
+
+void LampConeCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPCONE", &start, &length))
+	{
+		return;
+	}
+
+	double inside = ShoulderLamp_ConeInside();
+	double outside = ShoulderLamp_ConeOutside();
+
+	if (length > 0 && !ShoulderLamp_ConeFromWords(start, (unsigned int)length, &inside, &outside))
+	{
+		SaySwitch("LAMPCONE TAKES INSIDE THEN OUTSIDE: INSIDE FROM 0.80 TO 0.995, OUTSIDE FROM 0.70 TO 0.99 AND 0.01 OR MORE BELOW INSIDE, LIKE 0.90 0.86");
+		return;
+	}
+
+	ShoulderLamp_SetCone(inside, outside);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP CONE IS %.3f %.3f", ShoulderLamp_ConeInside(), ShoulderLamp_ConeOutside());
+	SaySwitch(said);
+}
+
+void LampSpillCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSPILL", &start, &length))
+	{
+		return;
+	}
+
+	double spill = ShoulderLamp_Spill();
+
+	if (length > 0 && !ShoulderLamp_SpillFromWords(start, (unsigned int)length, &spill))
+	{
+		SaySwitch("LAMPSPILL TAKES A NUMBER FROM 0 TO 0.5, LIKE 0.12. 0 IS NO SPILL");
+		return;
+	}
+
+	ShoulderLamp_SetSpill(spill);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SPILL IS %.2f", ShoulderLamp_Spill());
+	SaySwitch(said);
+}
+
+void LampShoulderCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSHOULDER", &start, &length))
+	{
+		return;
+	}
+
+	double across = ShoulderLamp_ShoulderAcross();
+	double down = ShoulderLamp_ShoulderDown();
+
+	if (length > 0 && !ShoulderLamp_ShoulderFromWords(start, (unsigned int)length, &across, &down))
+	{
+		SaySwitch("LAMPSHOULDER TAKES ACROSS THEN DOWN, EACH FROM -0.5 TO 1.5, LIKE 1 -0.1");
+		return;
+	}
+
+	ShoulderLamp_SetShoulder(across, down);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SHOULDER IS %.2f %.2f", ShoulderLamp_ShoulderAcross(), ShoulderLamp_ShoulderDown());
+	SaySwitch(said);
+}
+
+void LampSpotHalfDistanceCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (!LampLookWords(words, "LAMPSPOTHALFDISTANCE", &start, &length))
+	{
+		return;
+	}
+
+	double millimetres = ShoulderLamp_SpotHalfDistance();
+
+	if (length > 0 && !ShoulderLamp_SpotHalfDistanceFromWords(start, (unsigned int)length, &millimetres))
+	{
+		SaySwitch("LAMPSPOTHALFDISTANCE TAKES 0 FOR NO FALL, OR MILLIMETRES FROM 1000 TO 20000, LIKE 7000");
+		return;
+	}
+
+	ShoulderLamp_SetSpotHalfDistance(millimetres);
+
+	if (ShoulderLamp_SpotHalfDistance() == 0.0)
+	{
+		SaySwitch("LAMP SPOT HALF-DISTANCE IS 0: ITS LIGHT DOESN'T FALL AWAY");
+		return;
+	}
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SPOT HALF-DISTANCE IS %.0f MM", ShoulderLamp_SpotHalfDistance());
 	SaySwitch(said);
 }
 

@@ -102,6 +102,19 @@ This build doesn't read one either: a `servers.cfg` added by hand changes nothin
   - `2`: the painted spot only;
   - `3`: the real light and the painted lamp at full.
   Please try the lamp in a dark room with each.
+- **The shoulder lamp's light, as numbers,** in the console, for this run only and in single player only. Each one on its own says
+  what it is now. As built they're the lamp of 2026-11-05:
+  - `LAMPSTRENGTH`: how strong the real light is, from 0.1 to 4 (2.2);
+  - `LAMPHALFDISTANCE`: how far away its light has fallen to half, in millimetres, from 1000 to 20000 (9000);
+  - `LAMPCONE`: how wide it is, inside then outside, as in `LAMPCONE 0.90 0.86`. Smaller is wider, and outside has to be 0.01 or
+    more below inside;
+  - `LAMPSPILL`: the faint spill around its beam, from 0 to 0.5 (0, none);
+  - `LAMPSHOULDER`: where the painted cone starts on the screen, across then down, each from -0.5 to 1.5, as in `LAMPSHOULDER 1 -0.1`;
+  - `LAMPSPOTHALFDISTANCE`: how the painted spot's light falls away with distance: 0 for no fall (as built), or 1000 to 20000
+    millimetres.
+
+  The first four need the lamp to be a real light (a Per-pixel or Relief map choice of Rendering, and Shadows on), and they change
+  the other marines' lamps too. Please tell us the numbers you like best, in a dark room and in a lit one.
 - **Try the Custom maps** page, on the Single player page.
 - **Press F2 whenever something looks weird.** The screen says "Mark 1 saved" (then 2, 3 and so on). The game saves a picture of
   that moment as `mark-1.png` beside the log, and adds a line to the log: the time, the level, where you were and which way you

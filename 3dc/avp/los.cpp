@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus for the AvP port:
+//   the level editor's pick (FindDrawnPolygonInLineOfSight) meets only the faces that are drawn, as inteng's pick does
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a line of sight to a room with no display block left stops there
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -39,6 +41,11 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr, DISPLAYBLOCK *objectT
 #define POLY_REJECT_RANGE 500
 
 int LOS_PolygonNumber = -1;
+
+/* The level editor's pick (FindDrawnPolygonInLineOfSight below) sets this for one search and clears it again: the game's own lines of sight never
+   see it set. While set, a polygon counts only if it is DRAWN: a face turned away from the eye is passed by unless it is flagged iflag_no_bfc (the
+   card culls the rest), and an iflag_notvis polygon is passed by even when it is a mirror. */
+static int LOS_OnlyDrawnFaces = 0;
 
 extern MORPHDISPLAY MorphDisplay;
 extern VECTORCH MorphedPts[];
@@ -274,6 +281,15 @@ void FindPolygonInLineOfSight(VECTORCH *viewpointDirectionPtr, VECTORCH *viewpoi
 	/* Shell function. */
 	FindPolygonInLineOfSight_TwoIgnores(viewpointDirectionPtr,viewpointPositionPtr,useOnScreenBlockList,objectToIgnorePtr,NULL);
 	/* No, it's not recursive! */
+}
+
+/* The level editor's pick: as FindPolygonInLineOfSight, but only the polygons that are drawn count (LOS_OnlyDrawnFaces above). inteng picks among
+   the polygons it drew last frame (its FUN_00559750), so a face seen from behind is not there to be clicked. */
+void FindDrawnPolygonInLineOfSight(VECTORCH *viewpointDirectionPtr, VECTORCH *viewpointPositionPtr, int useOnScreenBlockList, DISPLAYBLOCK *objectToIgnorePtr)
+{
+	LOS_OnlyDrawnFaces = 1;
+	FindPolygonInLineOfSight_TwoIgnores(viewpointDirectionPtr,viewpointPositionPtr,useOnScreenBlockList,objectToIgnorePtr,NULL);
+	LOS_OnlyDrawnFaces = 0;
 }
 
 
@@ -547,6 +563,10 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr, DISPLAYBLOCK *objectT
 		if ((PolyheaderPtr->PolyFlags & iflag_notvis) && !(PolyheaderPtr->PolyFlags & iflag_mirror)) 
 			continue;
 
+		/* the editor's pick: a polygon that is not drawn is not there (LOS_OnlyDrawnFaces) */
+		if (LOS_OnlyDrawnFaces && (PolyheaderPtr->PolyFlags & iflag_notvis))
+			continue;
+
 		{
 			int normDotBeta;
 
@@ -560,6 +580,10 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr, DISPLAYBLOCK *objectT
 				//if((PolyheaderPtr->PolyFlags) & iflag_no_bfc)
 				/* KJL 16:06:11 10/07/98 - treat all polys as no bfc */
 				{
+					/* the editor's pick: a face turned away is culled, so not drawn, unless it is double-sided (LOS_OnlyDrawnFaces) */
+					if (normDotBeta > 0 && LOS_OnlyDrawnFaces && !(PolyheaderPtr->PolyFlags & iflag_no_bfc))
+						continue;
+
 					if (normDotBeta > 0)
 					{
 						normDotBeta=-normDotBeta;

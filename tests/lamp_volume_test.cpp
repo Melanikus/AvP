@@ -6,6 +6,8 @@
 
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port:
+//   the beam's cone is the real light's as built, read from shoulder_lamp.h's own numbers, so the two can't drift apart (R-LAMP-1)
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +19,7 @@
 #include <utility>
 
 #include "lamp_volume.h"
+#include "shoulder_lamp.h"
 #include "source_slice.h"
 
 static int checksFailed = 0;
@@ -209,7 +212,11 @@ static void TestTheFades()
 	Check(kLampVolumeConeCos < kLampVolumeFullInside && kLampVolumeFullInside < 1.0f, "the pool has all its light inside a narrower cone than the beam's edge");
 	Check(LampVolume_RimFade(1.0f) == 1.0f && LampVolume_RimFade(kLampVolumeFullInside) == 1.0f, "in its middle the pool has all of it");
 	Check(LampVolume_RimFade(kLampVolumeConeCos) < 0.000001f && LampVolume_RimFade(0.5f) == 0.0f, "at the edge, and outside it, none");
-	Check(LampVolume_RimFade(0.96f) > 0.3f && LampVolume_RimFade(0.96f) < 0.7f, "and about half halfway between");
+	// Halfway from the edge to where it's full, worked out from the two, so it stays halfway whatever the cone is (modified 2026-11-14 by Melanikus
+	// (Dietrich) for the AvP port: it was 0.96, halfway for the cone of 0.93 and 0.99, R-LAMP-1)
+	float const halfway = (kLampVolumeConeCos + kLampVolumeFullInside) * 0.5f;
+
+	Check(LampVolume_RimFade(halfway) > 0.3f && LampVolume_RimFade(halfway) < 0.7f, "and about half halfway between");
 
 	float const across[3] = { 1.0f, 0.0f, 0.0f };
 	float const towards[3] = { 0.0f, 0.0f, -1.0f };
@@ -514,7 +521,8 @@ static void TestTheGamesSide()
 
 	Check(Has(drawsBeams, "device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);") && Has(drawsBeams, "device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);"), "SOURCE: a beam is added onto the picture and writes no depth");
 	Check(Has(render, "\tsavedCardSettings->Apply();\n}\n\n// The mask is added to many times"), "SOURCE: and every card setting it changed is put back");
-	Check(Has(render, "if (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n\t}\n\n\t// draw player weapon"), "SOURCE: beams are drawn once a frame, before the gun");
+	// (since a95de16c the level editor's orthographic views are drawn after the beams, in the same block)
+	Check(Has(render, "if (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n") && render.find("\t\tDrawLampBeams();\n") < render.find("\t// draw player weapon"), "SOURCE: beams are drawn once a frame, before the gun");
 	Check(Has(render, "LampBeams_Forget();\n\n\t// The game goes on whether or not this frame could be drawn"), "SOURCE: and they end with their frame, so the menus after a level don't draw them");
 	Check(Has(shapes, "static void LampBeams_ForThisFrame()\n{\n\tLampBeams_Forget();"), "SOURCE: and each frame starts with none");
 	Check(Has(shapes, "int const wallsNear = LampVolume_KeepNear(lampBeamWalls, numLampBeamWalls, beam.from, beam.aim, kLampVolumeReach, lampBeamWallsNearOne, kLampBeamMostWalls);\n\tint const triangles = LampVolume_Build(beam.from, beam.aim, beam.strength, lampBeamWallsNearOne, wallsNear, vertices, indices);"), "SOURCE: a beam's rays test only the walls near it");
@@ -551,11 +559,13 @@ static void TestTheGamesSide()
 	Check(Has(shapes, "bool const air = !ToyShadowsLightsByPixel || ShoulderLamp_BeamsAreWanted();"), "SOURCE: the beams in the air go only with lights per pixel, and only if the player turns them off");
 	Check(Has(shapes, "return LampVolume_Parts(triangles, air, pool, first);"), "SOURCE: and those are the parts drawn");
 
-	// The shader's spot, which the pool's rim fades like
+	// The real light's spot, which the pool's rim fades like. Its cone comes from the game now (R-LAMP-1), so the beam is held to the light's cone as
+	// built, from the same header the game sends the light from. (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port.)
 	std::string const shader = ReadSourceFile("shaders/lightShapes.fxh");
 
-	Check(Has(shader, "static const float kLampFullInside = 0.99f;") && kLampVolumeFullInside == 0.99f, "SOURCE: the pool has all its light inside the same cone as the real light");
-	Check(Has(shader, "static const float kLampNothingOutside = 0.93f;") && kLampVolumeConeCos == 0.93f, "SOURCE: and none outside the same edge");
+	Check(kLampVolumeFullInside == (float)kShoulderLampConeInside, "the pool has all its light inside the same cone as the real light as built");
+	Check(kLampVolumeConeCos == (float)kShoulderLampConeOutside, "and none outside the same edge");
+	Check(Has(shader, "smoothstep(LampCone.y, LampCone.x, along)"), "SOURCE: and the real light's cone is the one the game sends, inside and outside");
 }
 
 int main()

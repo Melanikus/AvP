@@ -377,6 +377,10 @@ void AllocateModuleObject(MODULE *mptr);
 void DeallocateModuleObject(MODULE *mptr);
 void AllNewModuleHandler(void);
 
+// The level editor's switch: true makes every module count as seen from the camera, so the whole level is drawn from wherever the camera is,
+// outside every room as well. Only the editor sets it; it is false in the game, which keeps its own visibility (module.cpp).
+void Module_ShowEveryModule(bool on);
+
 
 /*
 

@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a level file can be loaded on a "try" path (try_load_rif), which gives a refused file back as INVALID_RIFFHANDLE with nothing
+//   shown, for the map editor; load_rif, the game's, still shows its message and stops the game at the same place
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   can give a shape's name from its position, for the NORMAL LINES view's log
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -15,6 +18,9 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a shape stays still if a frame of its texture animation has a place on its picture too far out to work out in 16.16 (#97). See
 //   texture_animation.h
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an animated shape's radius is worked out from squares that are fractions, as whole numbers can't hold them
+//   an outside shape or a skin with no name isn't put on the list of named shapes
 
 #include <stdlib.h>
 #include <string>
@@ -583,8 +589,10 @@ extern unsigned char *TextureLightingTable;
 // Functions which operate on RIFFHANDLEs
 /////////////////////////////////////////
 
-// load a rif file into memory
-RIFFHANDLE load_rif(const char *fname)
+// Loads a rif file into memory. A file the loader refuses is given back as INVALID_RIFFHANDLE, and nothing is shown: this is the
+// "try" path, for the map editor, which tells the mapper why itself. (Added 2026-11-14 by Melanikus for the AvP port: it's what
+// load_rif did, up to its message.)
+RIFFHANDLE try_load_rif(const char *fname)
 {
 	File_Chunk *fc = new File_Chunk(fname);
 
@@ -594,11 +602,6 @@ RIFFHANDLE load_rif(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		// fname can be a long custom level path: no fixed-size buffer
-		std::string message = std::string("Error loading ") + fname;
-		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
-		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
 
@@ -612,6 +615,24 @@ RIFFHANDLE load_rif(const char *fname)
 	if (pChunk)
 	{
 		h->envd = (Environment_Data_Chunk *)pChunk;
+	}
+
+	return h;
+}
+
+// The game's own way to load a rif file into memory: a file the loader refuses shows its message, and stops the game, as it always has
+RIFFHANDLE load_rif(const char *fname)
+{
+	RIFFHANDLE const h = try_load_rif(fname);
+
+	if (h == INVALID_RIFFHANDLE)
+	{
+		// fname can be a long custom level path: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
+		ChangeWindowsSize(1, 1);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
+		avp_exit(0x111);
+		return INVALID_RIFFHANDLE;
 	}
 
 	return h;
@@ -896,8 +917,15 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 	if (pChunk)
 	{
 		seflc = (Shape_External_File_Chunk *)pChunk;
-		rif_name = seflc->get_shape_name();
-		msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		char const * const shape_name = seflc->get_shape_name();
+
+		// An outside shape keeps its name in an object name chunk or a level name chunk, and one with neither has no name to be found
+		// by, so it isn't put on the list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
+		if (shape_name)
+		{
+			rif_name = shape_name;
+			msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		}
 	}
 	else
 	{
@@ -950,9 +978,14 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 					CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
 				}
 
+				// A skin keeps its name in a shape name chunk, and one with none has no name to be found by, so it isn't put on the
+				// list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
 				const char *shpname = sssc->get_shape_name();
-				GLOBALASSERT(shpname);
-				msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+
+				if (shpname)
+				{
+					msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+				}
 				h->shape_nums.add_entry(list_pos);
 				post_process_shape(mainshapelist[list_pos]);
 			}
@@ -2442,7 +2475,10 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 		//      double square_root = x*x+y*y+z*z;
 		//      square_root = sqrt(square_root);
 		//      sas->radius = (int)square_root;
-		sas->radius = (int)sqrt((double)(x * x + y * y + z * z));
+		// Each of x, y and z is at most 2^25: an end of the sequence's box and its centre are each within 2^24 of the level's middle
+		// (CheckPlace, in chunk.hpp), and the scale is at most 1. So the squares are worked out as fractions, where they fit, and the
+		// radius, at most the square root of 3 times 2^25, about 58 million, fits a whole number. (Added 2026-11-14 by Melanikus for the AvP port.)
+		sas->radius = (int)sqrt((double)x * x + (double)y * y + (double)z * z);
 		sas->vertex_normals = (int *)PoolAllocateMem(sizeof(VECTORCH) * cas->num_verts);
 
 		for (int i = 0; i < cas->num_verts; i++)

@@ -3,6 +3,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the route search's "}" before "#if ALLOW_USE_OF_LONGER_PATHS" moved above it, so each #if branch is a whole
 //   else-if block that code scanners can read; the game runs the same code as before
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an alien aiming for a place inside a waypoint never divides by a room under 1 (waypoint_room.h)
 
 #include "3dc.h"
 #include "inline.h"
@@ -27,6 +29,7 @@
 #include "bh_weapon.h"
 #include "weapons.h"
 #include "psnd.h"
+#include "waypoint_room.h"
 
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -988,9 +991,10 @@ void GetTargetPositionInWaypoint(WAYPOINT_VOLUME *waypoint,VECTORCH *output) {
 	rangey=maxy-miny;			
 	rangez=maxz-minz;			
 
-	output->vx=minx+(FastRandom()%rangex);
-	output->vy=miny+(FastRandom()%rangey);
-	output->vz=minz+(FastRandom()%rangez);
+	// The place in the room on each axis, from a new random number for each, in this order, as always (waypoint_room.h)
+	output->vx=minx+WaypointPlaceInRoom(FastRandom(),rangex);
+	output->vy=miny+WaypointPlaceInRoom(FastRandom(),rangey);
+	output->vz=minz+WaypointPlaceInRoom(FastRandom(),rangez);
 
 	GLOBALASSERT(WaypointContainsPoint(waypoint,output));
 

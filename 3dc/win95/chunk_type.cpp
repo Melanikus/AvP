@@ -6,6 +6,7 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   the texture file names of a shape are copied using their exact measured length, so they always fit; a
 //   sequence's frame list is no longer shrunk with realloc, because new[] made it and delete[] gives it back
+//   an animation sequence with no point counted in its box gets a box of a single place and a radius of 0 (2026-11-14)
 
 #include "chunk.hpp"
 #include <math.h>
@@ -1071,6 +1072,7 @@ void ChunkAnimSequence::UpdateNormalsAndExtents(ChunkShape const * cs,List<int>*
 	radius = 0;
 	
 	int* vert_in_bb  =0;
+	bool counted = false;   // whether any point is counted in the box, below
 	if (poly_not_in_bb)
 	{
 		vert_in_bb = new int[cs->num_verts];
@@ -1098,6 +1100,7 @@ void ChunkAnimSequence::UpdateNormalsAndExtents(ChunkShape const * cs,List<int>*
 			if (vert_in_bb && !vert_in_bb[j])
 				continue;
 
+			counted = true;
 			max.x = max(max.x, caf->v_list[j].x);
 			max.y = max(max.y, caf->v_list[j].y);
 			max.z = max(max.z, caf->v_list[j].z);
@@ -1112,6 +1115,16 @@ void ChunkAnimSequence::UpdateNormalsAndExtents(ChunkShape const * cs,List<int>*
 		}
 	}
 	delete[] vert_in_bb;
+
+	// A sequence with no point counted in its box, because its frames have no points or all its polygons are left out of the box, has no
+	// size: its box is the single place at its middle, and its radius 0, rather than the starting numbers above, which no box can have.
+	// (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!counted)
+	{
+		max.x = max.y = max.z = 0;
+		min.x = min.y = min.z = 0;
+		radius = 0;
+	}
 }
 
 void ChunkAnimSequence::DeleteInterpolatedFrames()

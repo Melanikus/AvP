@@ -160,8 +160,12 @@ bool FileStream::OpenActual(const std::string &fileName, eAccess accessType)
 	fileHandle = ::CreateFile(tempString.c_str(), desiredAccess, 0, NULL, creationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
 
 #else
-	// try open the file
-	fileHandle = ::CreateFile(fileName.c_str(), desiredAccess, 0, NULL, creationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+	// try open the file. A file opened only for reading lets other readers in (FILE_SHARE_READ): editors run side by side read the same fast files (.FFL), and with no
+	// sharing the second reader's open failed and that fast file's textures were missing. A file opened for writing keeps share mode 0: nobody else may read it while it is
+	// written. (Added 2026-11-16 by Melanikus for the AvP port.)
+	DWORD const shareMode = desiredAccess == GENERIC_READ ? FILE_SHARE_READ : 0;
+
+	fileHandle = ::CreateFile(fileName.c_str(), desiredAccess, shareMode, NULL, creationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
 #endif
 
 	if (INVALID_HANDLE_VALUE == fileHandle)

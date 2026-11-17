@@ -43,10 +43,12 @@
 #include <malloc.h>
 #include <memory>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <limits>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -2293,6 +2295,34 @@ static bool ConstructedAtTheWall(char const * bytes, size_t size, int kind)
 	return accepted;
 }
 
+// A placed hierarchy's data chunk that's fine: a name of 3 letters in 4 bytes, then 40 bytes of numbers, all zero, and a count of 0
+// extra numbers. Gives back where the next chunk goes.
+static char * PutGoodPlacedData(char * where)
+{
+	size_t const dataBytes = 4 + (4 + 12 + 16 + 8) + 4;
+	char * const data = PutChunk(where, "PLACHIDT", dataBytes);
+
+	memcpy(data, "abc", 3);
+
+	return data + dataBytes;
+}
+
+// A placed hierarchy holding the chunks from start up to end, and whether the level would be accepted
+static bool PlacedHierarchyAccepted(char const * start, char const * end)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Placed_Hierarchy_Chunk> const made(new Placed_Hierarchy_Chunk(&file, start, (size_t)(end - start)));
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
 static void TestPlacedHierarchies()
 {
 	puts("33. placed hierarchies, and Rainbow 6 generators");
@@ -2447,6 +2477,14 @@ static void TestPlacedHierarchies()
 
 		Check(ConstructedAtTheWall(bytes, generatorRows[i].size, 2) == generatorRows[i].accepted, generatorRows[i].what);
 	}
+
+	// A placed hierarchy has to hold its data chunk: the game reads it as soon as it sets the level up, for which model it is, where it
+	// stands and its name. One without it refuses the level, whatever else it holds. (Added 2026-11-14 by Melanikus for the AvP port.)
+	alignas(int) static char placed[256];
+
+	Check(PlacedHierarchyAccepted(placed, PutGoodPlacedData(placed)), "a placed hierarchy with its data chunk is accepted");
+	Check(!PlacedHierarchyAccepted(placed, placed), "a placed hierarchy with nothing in it is refused");
+	Check(!PlacedHierarchyAccepted(placed, PutChunk(placed, "NOTADATA", 4) + 4), "and so is one holding only a chunk of another kind, with no data chunk");
 }
 
 // 34. A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape. So a module's points have to
@@ -2498,6 +2536,10 @@ static void TestModuleBoxes()
 // look at the chunk, so it reads from a padded copy, and afterwards it has to be exactly the size its class says. Each chunk here is at the
 // wall, so if anything reads the chunk itself past its end, this stops.
 static size_t const StrategyNumbersBytes = 8;
+
+// Where a fan's times to speed up and slow down are in its strategy: after the kind, the type and the extra number, as FanStrategy reads them
+static size_t const FanSpeedUpAt = 12;
+static size_t const FanSlowDownAt = 16;
 
 static bool StrategyAccepted(char const * strategy, size_t strategyBytes)
 {
@@ -2658,6 +2700,14 @@ static void TestStrategies()
 
 		memset(strategy, 0, sizeof(strategy));
 		memcpy(strategy, &kind, sizeof(kind));
+
+		// A fan needs some time to speed up and slow down (FanTimesAccepted), so it gets the game's own second for both, and only its size is tried here
+		if (kind == StratFan)
+		{
+			int const second = 65536;
+			memcpy(strategy + FanSpeedUpAt, &second, sizeof(second));
+			memcpy(strategy + FanSlowDownAt, &second, sizeof(second));
+		}
 
 		Check(StrategyAccepted(strategy, size), "a strategy of its own size is accepted");
 		Check(!StrategyAccepted(strategy, size - 1), "one byte short of its size is refused");
@@ -2889,7 +2939,8 @@ static void TestCountedLists()
 
 	// where each count is, with any name before it empty, and what each item takes at the least
 	// bytesAfter is what the kind holds after its list. A whole chunk has it, and the bad counts are tried without it, so that only the check on the count can refuse them.
-	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; };
+	// goodAt and goodNumber: a number the kind refuses at 0, such as a light's range, which is put in first so only the count can refuse the chunk (goodNumber 0: none).
+	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; size_t goodAt; int goodNumber; };
 	CountedRow const rows[] =
 	{
 		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
@@ -2906,8 +2957,9 @@ static void TestCountedLists()
 		{ MakeChunk<Sprite_Bitmap_Scale_Chunk>,               0,  sizeof(float),                "a sprite's scales are accepted" },
 		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted", 4 },
 		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
-		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8 },
-		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8, 0, 0x00636261 },   // named "abc", as a set needs a name
+		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted", 0,
+			offsetof(Placed_Object_Light_Data, range), 10000 },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
 		{ MakeChunk<Preset_Palette_Chunk>,                    20, 24,                           "a list of palettes is accepted" },
 		{ MakeChunk<Preset_Palette_Store_Chunk>,              24, 24,                           "a store of palettes is accepted" },
@@ -2923,6 +2975,7 @@ static void TestCountedLists()
 		size_t const size = row.countAt + sizeof(int) + 2 * row.itemBytes;
 
 		memset(bytes, 0, sizeof(bytes));
+		if (row.goodNumber) PutNumber(bytes, row.goodAt, row.goodNumber);
 		PutNumber(bytes, row.countAt, 2);
 		Check(ChunkAccepted(row.make, bytes, size + row.bytesAfter), row.good);
 
@@ -3384,24 +3437,15 @@ static bool FramePlacesAccepted(int const * places, int frames)
 	return accepted;
 }
 
-// A placed hierarchy holding a strategy of this kind, with every number in it zero.
+// A placed hierarchy holding a strategy of this kind, with every number in it zero. It holds its data chunk first, as it has to, so the
+// strategy is all that's being tried.
 static bool PlacedStrategyAccepted(int kind)
 {
 	size_t const strategyBytes = StrategySizeOfKind(kind);
-	char * data = PutChunk(wholeShape, "AVPSTRAT", StrategyNumbersBytes + strategyBytes);
+	char * data = PutChunk(PutGoodPlacedData(wholeShape), "AVPSTRAT", StrategyNumbersBytes + strategyBytes);
 	memcpy(data + StrategyNumbersBytes, &kind, sizeof(kind));
 
-	File_Chunk file;
-	Parent_File = &file;
-
-	std::unique_ptr<Placed_Hierarchy_Chunk> const made(new Placed_Hierarchy_Chunk(&file, wholeShape, ChunkHeaderBytes + StrategyNumbersBytes + strategyBytes));
-	file.post_input_processing();
-
-	bool const accepted = (file.error_code == 0);
-
-	Parent_File = 0;
-
-	return accepted;
+	return PlacedHierarchyAccepted(wholeShape, data + StrategyNumbersBytes + strategyBytes);
 }
 
 // A strategy of this kind, with one number set, and every other number zero.
@@ -3415,6 +3459,20 @@ static bool StrategyNumberAccepted(int kind, size_t at, int number)
 	memcpy(strategy + at, &number, sizeof(number));
 
 	return StrategyAccepted(strategy, size);
+}
+
+// A fan with these times to speed up and slow down, in 65536ths of a second, and every other number zero. (Added 2026-11-14.)
+static bool FanTimesAccepted(int speedUp, int slowDown)
+{
+	alignas(int) static char strategy[64];
+	int const kind = StratFan;
+
+	memset(strategy, 0, sizeof(strategy));
+	memcpy(strategy, &kind, sizeof(kind));
+	memcpy(strategy + FanSpeedUpAt, &speedUp, sizeof(speedUp));
+	memcpy(strategy + FanSlowDownAt, &slowDown, sizeof(slowDown));
+
+	return StrategyAccepted(strategy, StrategySizeOfKind(StratFan));
 }
 
 static bool TrackSoundAccepted(int index)
@@ -3481,15 +3539,45 @@ static bool TrackAccepted(int count, int firstTime, int secondTime, int start)
 	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, flagsAt + 2 * sizeof(int));
 }
 
-// A placed light with one of its times set.
+// A placed light with one of its times set. Its range is 10 metres, as a light has to reach somewhere to be accepted at all (see LightRangeAccepted).
 static bool LightTimeAccepted(size_t at, int time)
 {
 	alignas(int) static char bytes[128];
 
 	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, offsetof(Placed_Object_Light_Data, range), 10000);
 	PutNumber(bytes, at, time);
 
 	return ChunkAccepted(MakeChunk<Placed_Object_Light_Chunk>, bytes, sizeof(Placed_Object_Light_Data) + sizeof(int));
+}
+
+// A light with this range, and every other number 0: a placed light (PLOBJLIT), or one of a level's lights (STDLIGHT). Each reads its
+// numbers in the order its class holds them, so a number's place in the chunk is its place in the class. (Added 2026-11-14.)
+static bool LightRangeAccepted(bool placed, int range)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+
+	if (placed)
+	{
+		PutNumber(bytes, offsetof(Placed_Object_Light_Data, range), range);
+		return ChunkAccepted(MakeChunk<Placed_Object_Light_Chunk>, bytes, sizeof(Placed_Object_Light_Data) + sizeof(int));
+	}
+
+	PutNumber(bytes, offsetof(Light_Data, range), range);
+	return ChunkAccepted(MakeChunk<Light_Chunk>, bytes, sizeof(Light_Data));
+}
+
+// A level's scale, the one number its ENVSDSCL chunk holds. (Added 2026-11-14.)
+static bool ScaleAccepted(double scale)
+{
+	alignas(double) static char bytes[16];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes, &scale, sizeof(scale));
+
+	return ChunkAccepted(MakeChunk<Environment_Scale_Chunk>, bytes, sizeof(scale));
 }
 
 static void TestNumbersUsedAsPlaces()
@@ -3525,6 +3613,25 @@ static void TestNumbersUsedAsPlaces()
 	Check(StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 450), "a mission's end message in the last place is accepted");
 	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 451), "a mission's end message past the last place is refused");
 	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, -1), "a mission's negative end message is refused");
+
+	// A fan's times to speed up and slow down: the game divides one second by each, so each has to be at least a thousandth of a second, 65, or the
+	// speed the game works out from it isn't a sensible one. (Added 2026-11-14 by Melanikus for the AvP port.) The game's own fans take a second, 65536.
+	{
+		int const quickest = 65;
+		int const second = 65536;
+
+		Check(FanTimesAccepted(second, second), "a fan that takes a second to speed up and to slow down, as the game's own do, is accepted");
+		Check(FanTimesAccepted(quickest, quickest), "a fan with the shortest times, a thousandth of a second, is accepted");
+		Check(FanTimesAccepted(0x7fffffff, 0x7fffffff), "a fan with the longest times a number holds is accepted");
+		Check(!FanTimesAccepted(quickest - 1, second), "a fan that speeds up in less than a thousandth of a second is refused");
+		Check(!FanTimesAccepted(second, quickest - 1), "a fan that slows down in less than a thousandth of a second is refused");
+		Check(!FanTimesAccepted(0, second), "a fan that takes no time to speed up is refused");
+		Check(!FanTimesAccepted(second, 0), "a fan that takes no time to slow down is refused");
+		Check(!FanTimesAccepted(2, second), "a fan time of 2 is refused");
+		Check(!FanTimesAccepted(-1, second), "a negative time to speed up is refused");
+		Check(!FanTimesAccepted(second, -1), "a negative time to slow down is refused");
+		Check(!FanTimesAccepted((int)0x80000000, (int)0x80000000), "the most negative times are refused");
+	}
 
 	{
 		alignas(int) static char generator[28];
@@ -3603,6 +3710,46 @@ static void TestNumbersUsedAsPlaces()
 		}
 	}
 
+	// A light has to reach somewhere: the game lights only what's nearer than its range, and divides its brightness by it. (Added 2026-11-14 by
+	// Melanikus for the AvP port.) The shortest ranges in the game's own levels are 100 for a placed light and 900 for one of a level's lights.
+	// And it can reach at most 2^28 millimetres, so the sums the game makes with it stay whole numbers it can hold; the game's own longest is
+	// 1,024,900 (Breakout's).
+	for (int kind = 0; kind < 2; kind++)
+	{
+		bool const placed = (kind == 0);
+		std::string const which = placed ? "a placed light" : "one of a level's lights";
+
+		Check(LightRangeAccepted(placed, 1), (which + " with the shortest range there is, a millimetre, is accepted").c_str());
+		Check(LightRangeAccepted(placed, placed ? 100 : 900), (which + " with the game's own shortest range is accepted").c_str());
+		Check(LightRangeAccepted(placed, 1024900), (which + " with the game's own longest range is accepted").c_str());
+		Check(LightRangeAccepted(placed, 1 << 28), (which + " with the longest range there is, 2^28 millimetres, is accepted").c_str());
+		Check(!LightRangeAccepted(placed, (1 << 28) + 1), (which + " with a range one past the longest is refused").c_str());
+		Check(!LightRangeAccepted(placed, 0x7fffffff), (which + " with the longest range a number holds is refused").c_str());
+		Check(!LightRangeAccepted(placed, 0), (which + " with a range of nothing is refused: it would reach nowhere").c_str());
+		Check(!LightRangeAccepted(placed, -1), (which + " with a negative range is refused").c_str());
+		Check(!LightRangeAccepted(placed, (int)0x80000000), (which + " with the most negative range is refused").c_str());
+	}
+
+	// A level's scale multiplies every place and distance in it, and each answer is turned back into a whole number, so it has to keep every
+	// whole number a whole number: from 0.5 to 1. The game's own levels use 0.8 and 0.9, or none. (Added 2026-11-14 by Melanikus for the AvP port.)
+	{
+		double const notANumber = std::numeric_limits<double>::quiet_NaN();
+		double const endless = std::numeric_limits<double>::infinity();
+
+		Check(ScaleAccepted(1.0), "a level at its own size is accepted");
+		Check(ScaleAccepted(0.8) && ScaleAccepted(0.9), "the scales the game's own levels use are accepted");
+		Check(ScaleAccepted(0.5), "a level at half its size, the smallest scale, is accepted");
+		Check(!ScaleAccepted(0.4999), "a scale under a half is refused");
+		Check(!ScaleAccepted(1.0001), "a scale over 1 is refused");
+		Check(!ScaleAccepted(2.0), "a level at twice its size is refused");
+		Check(!ScaleAccepted(0.0), "a scale of nothing is refused");
+		Check(!ScaleAccepted(-1.0), "a negative scale is refused");
+		Check(!ScaleAccepted(notANumber), "a scale that isn't a number is refused");
+		Check(!ScaleAccepted(endless), "an endless scale is refused");
+		Check(!ScaleAccepted(-endless), "an endlessly negative scale is refused");
+		Check(!ScaleAccepted(1e300), "a huge scale is refused");
+	}
+
 	Check(ImageIndexAccepted(0), "the first image's index is accepted");
 	Check(ImageIndexAccepted(73), "the largest image index in the game's own levels is accepted");
 	Check(ImageIndexAccepted(32767), "the largest image index a polygon can name is accepted");
@@ -3647,7 +3794,11 @@ static void TestNumbersUsedAsPlaces()
 
 // 33b. A name in a level file ends at a zero byte, and the search for it must stop at the end of its chunk. Here there's no zero byte in the chunk or in anything after
 // it, right up to the wall, so a search that doesn't stop runs into the wall and ends the test. flagsAt is where to put a 1, for a chunk that only has a name if a flag says so.
-static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt)
+// Modified 2026-11-14 by Melanikus for the AvP port: a chunk whose other numbers are checked too gets ones it allows, so that it's refused for its name and nothing else.
+// placeAt is where its places start, "places" of them one after another, each put at x, y and z all -1, which is inside the level (CheckPlace) and has no zero byte; and
+// kindAt is where its kind goes, put at 0; and turnAt is where its turn goes, each of its four parts the bytes 0x3F808080, about 1.004, which fits (CheckTurn) and has no
+// zero byte. Each comes before the name, where the search for the name's end never looks.
+static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt, int placeAt = -1, int places = 1, int kindAt = -1, int turnAt = -1)
 {
 	File_Chunk file;
 	Parent_File = &file;
@@ -3658,6 +3809,22 @@ static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt
 	if (flagsAt >= 0)
 	{
 		PutNumber(atTheWall, flagsAt, 1);
+	}
+
+	for (int i = 0; placeAt >= 0 && i < places; i++)
+	{
+		ChunkVectorInt const insideTheLevel = { -1, -1, -1 };
+		memcpy(atTheWall + placeAt + i * sizeof(insideTheLevel), &insideTheLevel, sizeof(insideTheLevel));
+	}
+
+	if (kindAt >= 0)
+	{
+		PutNumber(atTheWall, kindAt, 0);
+	}
+
+	for (int part = 0; turnAt >= 0 && part < 4; part++)
+	{
+		PutNumber(atTheWall, (size_t)turnAt + part * sizeof(int), 0x3F808080);
 	}
 
 	make(&file, atTheWall, size);
@@ -3762,20 +3929,21 @@ static void TestNamesStayInTheirChunks()
 		Parent_File = 0;
 	}
 
-	struct NameRow { MakesChunk make; int flagsAt; char const * what; };
+	// placeAt, places and kindAt: see AcceptedWithNoZeroAnywhere (added 2026-11-14)
+	struct NameRow { MakesChunk make; int flagsAt; char const * what; int placeAt = -1; int places = 1; int kindAt = -1; int turnAt = -1; };
 	NameRow const rows[] =
 	{
-		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused" },
+		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused", 0 },
 		{ MakeChunk<AVP_Generator_Extra_Name_Chunk>,              -1, "a generator's other name" },
-		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name" },
-		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name" },
+		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name", 0 },
+		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name", 40, 1, 0, 52 },
 		{ MakeChunk<AVP_Path_Chunk>,                              -1, "a path's name" },
-		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name" },
+		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name", 0 },
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,      -1, "an animation sequence's name" },
 		{ MakeChunk<External_Shape_BMPs_Store_Chunk>,             -1, "an outside shape's list of bitmaps" },
 		{ MakeChunk<Bitmap_MD5_Chunk>,                            -1, "a bitmap's check sum names" },
 		{ MakeChunk<Fragment_Type_Data_Chunk>,                    -1, "a fragment type's name" },
-		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name" },
+		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name", 8 },
 		{ MakeChunk<Fragment_Type_Sound_Chunk>,                   -1, "a fragment sound's name" },
 		{ MakeChunk<Object_Track_Sound_Chunk>,                    -1, "a track sound's name" },
 		{ MakeChunk<Environment_TLT_Chunk>,                       28, "a lighting table's outside file" },
@@ -3786,7 +3954,7 @@ static void TestNamesStayInTheirChunks()
 		{ MakeChunk<Shape_External_Object_Name_Chunk>,            -1, "an outside shape's object name" },
 		{ MakeChunk<Shape_Name_Chunk>,                            -1, "a shape's name" },
 		{ MakeChunk<Shape_Fragment_Type_Chunk>,                   -1, "a shape's fragment type" },
-		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name" },
+		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name", 0 },
 		{ MakeChunk<Sound_Object_Extra_Name_Chunk>,               -1, "a sound's other name" },
 		{ MakeChunk<Indexed_Sound_Chunk>,                         -1, "an indexed sound's file name" },
 		{ MakeChunk<BMP_Enums_Chunk>,                             -1, "a list of enums' type name" },
@@ -3797,13 +3965,13 @@ static void TestNamesStayInTheirChunks()
 		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>,  -1, "an alternate shape set's name" },
 		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,        -1, "a shape set collection's name" },
 		{ MakeChunk<RIF_Name_Chunk>,                              -1, "a level's name" },
-		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name" },
+		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name", 0, 3, -1, 36 },
 		{ MakeChunk<Dummy_Object_Text_Chunk>,                     -1, "a dummy object's text" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
 	{
-		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt), rows[i].what);
+		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt, rows[i].placeAt, rows[i].places, rows[i].kindAt, rows[i].turnAt), rows[i].what);
 	}
 
 	// A list of bitmap names: how many, then four numbers and the name's place in the list, then the name
@@ -4060,6 +4228,10 @@ static void TestHierarchyAnimations()
 		// The game leaves a hierarchy out altogether if its first section has no sequences, so nothing in that one is built, and it can't refuse the level. Two of the game's own are like this.
 		{ [](char * at) { return PutSectionName(at); }, true },
 		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true },
+
+		// The game reads the times in the first section's long list even when it has a compact list too, so each sequence there needs its header (added 2026-11-14 by Melanikus)
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutGoodCompact(at), true, 1, frames); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutGoodCompact(at), false, 1, frames); }, false },
 	};
 
 	// What each row above checks, in the same order
@@ -4093,6 +4265,8 @@ static void TestHierarchyAnimations()
 		"a section inside with no name chunk is refused",
 		"a first section with no sequences at all is left alone",
 		"and so is whatever's inside it",
+		"a first section with a compact list and a long one, whose sequence has its header, is accepted",
+		"but a sequence with no header in that long list is refused, though the compact list is the one built from",
 	};
 
 	static_assert(sizeof(rowWords) / sizeof(rowWords[0]) == sizeof(rows) / sizeof(rows[0]), "every row has its words");
@@ -4114,6 +4288,1249 @@ static void TestHierarchyAnimations()
 	{
 		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
 		Check(HierarchyAccepted(PutLongSequence(after, false, 0, 0)), "and so is one with no header");
+	}
+}
+
+// 39. Places. Every place a level gives, a point, a box's corner, a centre, where something stands or how far a frame moves it, has to be
+// within 2^24 millimetres of the level's middle along each of x, y and z, so that the sums the game makes with places stay whole numbers it
+// can hold (CheckPlace, in chunk.hpp). Each kind of chunk that gives a place is made here with that one place set, and everything else as
+// the game's own levels could have it. This test keeps its own copy of the limit, so a change to the game's limit shows here.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static int const TestFarthestPlace = 1 << 24;
+
+static ChunkVectorInt PlaceAt(int x, int y, int z)
+{
+	ChunkVectorInt const place = { x, y, z };
+	return place;
+}
+
+static void PutPlace(char * where, ChunkVectorInt const & place)
+{
+	memcpy(where, &place, sizeof(place));
+}
+
+// A chunk of this kind and size, all zeros but for the place at "at", and a count of 1 at "countAt" when the chunk holds a list.
+static bool PlaceInChunkAccepted(MakesChunk make, size_t bytes, size_t at, ChunkVectorInt const & place, int countAt = -1)
+{
+	alignas(int) static char data[256];
+
+	memset(data, 0, sizeof(data));
+	PutPlace(data + at, place);
+
+	if (countAt >= 0)
+	{
+		PutNumber(data, (size_t)countAt, 1);
+	}
+
+	return ChunkAccepted(make, data, bytes);
+}
+
+// A strategy of this kind, at its own size, all zeros but for its kind and the place at "at", counted from its kind.
+static bool PlaceInStrategyAccepted(int kind, size_t at, ChunkVectorInt const & place)
+{
+	alignas(int) static char strategy[256];
+
+	memset(strategy, 0, sizeof(strategy));
+	memcpy(strategy, &kind, sizeof(kind));
+	PutPlace(strategy + at, place);
+
+	return StrategyAccepted(strategy, StrategySizeOfKind(kind));
+}
+
+// Loads the sub-shape in wholeShape, this many bytes long, and says whether the level would be accepted.
+static bool SubShapeIsAccepted(size_t bytes)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+static int const PlaceTriangle[5] = { 0, 1, 2, -1, -1 };
+
+// Where a shape's first point is: after the shape's header chunk and the points chunk's own header. A sub-shape's header holds 44 bytes.
+static bool ShapePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	PutPlace(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, place);
+	return ShapeIsAccepted(wholeShape + bytes);
+}
+
+static bool SubShapePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+	PutPlace(wholeShape + ChunkHeaderBytes + 44 + ChunkHeaderBytes, place);
+	return SubShapeIsAccepted(bytes);
+}
+
+// An animation frame's first point comes after the sequence's header, its data chunk (a header and 24 bytes), the frame's header, the
+// frame's data chunk (a header and 24 bytes), and the frame's points chunk's own header (see PutAnimation).
+static bool FramePointAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const end = PutAnimation(wholeShape + bytes, 0, true, 0, 4, 1, 0);
+	size_t const firstPointAt = ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes;
+
+	PutPlace(wholeShape + bytes + firstPointAt, place);
+	return ShapeIsAccepted(end);
+}
+
+// A shape's header keeps its box as max x, min x, max y, min y, max z, min z, from byte 36; a sub-shape's from byte 20.
+static bool ShapeBoxAccepted(bool subShape, bool top, ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+	char * const box = wholeShape + ChunkHeaderBytes + (subShape ? 20 : 36) + (top ? 0 : 4);
+
+	memcpy(box, &place.x, sizeof(int));
+	memcpy(box + 8, &place.y, sizeof(int));
+	memcpy(box + 16, &place.z, sizeof(int));
+
+	return subShape ? SubShapeIsAccepted(bytes) : ShapeIsAccepted(wholeShape + bytes);
+}
+
+static bool ShapeBoxTopAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(false, true, place); }
+static bool ShapeBoxBottomAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(false, false, place); }
+static bool SubShapeBoxTopAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(true, true, place); }
+static bool SubShapeBoxBottomAccepted(ChunkVectorInt const & place) { return ShapeBoxAccepted(true, false, place); }
+
+// A shape's centre chunk holds the centre and then the radius about it.
+static bool ShapeCentreAccepted(ChunkVectorInt const & place)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const centre = PutChunk(wholeShape + bytes, "SHPCENTR", 16);
+
+	PutPlace(centre, place);
+	return ShapeIsAccepted(centre + 16);
+}
+
+static bool AnimatedShapeCentreAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Anim_Shape_Centre_Chunk>, 20, 0, place); }
+static bool PieceAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Shape_Fragment_Location_Chunk>, 28, 0, place); }
+
+// An object's header keeps its place after its flags and the 16 bytes of its lock's user.
+static bool ObjectPlaceAccepted(ChunkVectorInt const & place)
+{
+	TestFile file;
+	size_t const bytes = BuildObjectHeader("object", 7);
+
+	PutPlace(objectBytes + ChunkHeaderBytes + 20, place);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+
+	return file.error_code == 0;
+}
+
+// A track with one section that takes a second, with one of its places set.
+static bool TrackPlaceAccepted(size_t placeAt, ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+	size_t const sectionAt = sizeof(int);
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, sectionAt + offsetof(ChunkTrackSection, time_for_section), 65536);
+	PutPlace(bytes + sectionAt + placeAt, place);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, sectionAt + sizeof(ChunkTrackSection) + 2 * sizeof(int));
+}
+
+static bool TrackStartAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, pivot_start), place); }
+static bool TrackEndAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, pivot_end), place); }
+static bool TrackOffsetAccepted(ChunkVectorInt const & place) { return TrackPlaceAccepted(offsetof(ChunkTrackSection, object_offset), place); }
+
+// An object's other places: a group, a spare number, a count, and then the places.
+static bool OtherPlaceAccepted(ChunkVectorInt const & place)
+{
+	return PlaceInChunkAccepted(MakeChunk<Object_Alternate_Locations_Chunk>, 12 + sizeof(AltObjectLocation), 12 + offsetof(AltObjectLocation, position), place, 8);
+}
+
+// A module's ways in: a count, and then for each an object's number, its flags and the place.
+static bool WayInAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Adjacent_Module_Entry_Points_Chunk>, 24, 12, place, 0); }
+
+// One of a level's lights, with a range of 10 metres, as a light has to reach somewhere to be accepted at all (see LightRangeAccepted).
+static bool LevelLightAccepted(ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, offsetof(Light_Data, range), 10000);
+	PutPlace(bytes + offsetof(Light_Data, location), place);
+
+	return ChunkAccepted(MakeChunk<Light_Chunk>, bytes, sizeof(Light_Data));
+}
+
+// These keep their place first, and end with an empty name, so their size is their numbers and a zero byte, rounded up to whole numbers.
+static bool SoundAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Sound_Object_Chunk>, 44, 0, place); }
+static bool GeneratorAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Generator_Chunk>, 32, 0, place); }
+static bool PlayerStartAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Player_Start_Chunk>, 56, 0, place); }
+static bool CableAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Power_Cable_Chunk>, 48, 0, place); }
+static bool VirtualObjectAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Virtual_Object_Properties_Chunk>, 36, 0, place); }
+
+// A particle generator keeps its place after 40 bytes of other numbers.
+static bool ParticleGeneratorAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, 72, 40, place); }
+
+// A level's decals: a count, how big each is, and then the decals, each with its number and then its four corners.
+static bool DecalCornerAccepted(int corner, ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, (int)sizeof(AVP_Decal));
+	PutPlace(bytes + 8 + offsetof(AVP_Decal, Vertices) + corner * sizeof(ChunkVectorInt), place);
+
+	return ChunkAccepted(MakeChunk<AVP_Decal_Chunk>, bytes, 8 + sizeof(AVP_Decal));
+}
+
+static bool DecalFirstCornerAccepted(ChunkVectorInt const & place) { return DecalCornerAccepted(0, place); }
+static bool DecalLastCornerAccepted(ChunkVectorInt const & place) { return DecalCornerAccepted(3, place); }
+
+// Where a breaking shape's pieces start: an empty name in 4 bytes, the number of pieces, and then the place.
+static bool PiecesAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Fragment_Type_Shape_Chunk>, 32, 8, place); }
+
+// A dummy object: its place, the bottom and top corners of its box, its turn and an empty name.
+static bool DummyAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 0, place); }
+static bool DummyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 12, place); }
+static bool DummyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 24, place); }
+
+// A placed hierarchy's data: an empty name in 4 bytes, which model it is, its place, its turn, its id and a count of 0 extra numbers.
+static bool PlacedHierarchyPlaceAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Placed_Hierarchy_Data_Chunk>, 48, 8, place); }
+
+// A hierarchy's box: its bottom corner and its top corner, and nothing else.
+static bool HierarchyBoxBottomAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 0, place); }
+static bool HierarchyBoxTopAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Hierarchy_Bounding_Box_Chunk>, 24, 12, place); }
+
+// A path: an empty name in 4 bytes, its number, its flags, a spare number, a count, and then its points.
+static bool PathPointAccepted(ChunkVectorInt const & place)
+{
+	return PlaceInChunkAccepted(MakeChunk<AVP_Path_Chunk>, 20 + sizeof(ChunkPathPoint), 20 + offsetof(ChunkPathPoint, location), place, 16);
+}
+
+// A waypoint: a count, and then for each its box's bottom and top corners (from its centre) and its centre, its flags, a spare number, and
+// two empty lists of links.
+static bool WaypointAccepted(size_t placeAt, ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Module_Waypoint_Chunk>, 56, 4 + placeAt, place, 0); }
+static bool WaypointBottomAccepted(ChunkVectorInt const & place) { return WaypointAccepted(0, place); }
+static bool WaypointTopAccepted(ChunkVectorInt const & place) { return WaypointAccepted(12, place); }
+static bool WaypointCentreAccepted(ChunkVectorInt const & place) { return WaypointAccepted(24, place); }
+
+// A hierarchy's list of sequences: a count, and then for each its number of frames and three more numbers, and then its frames.
+static bool HierarchyFrameMoveAccepted(ChunkVectorInt const & place)
+{
+	alignas(int) static char bytes[256];
+	size_t const frameAt = 4 + 16;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, 1);
+	PutPlace(bytes + frameAt + offsetof(Object_Animation_Frame, transform), place);
+
+	return ChunkAccepted(MakeChunk<Object_Animation_All_Sequence_Chunk>, bytes, frameAt + sizeof(Object_Animation_Frame));
+}
+
+// An animation frame: its turn, then how far it moves the object, then three numbers and an empty list.
+static bool AnimationFrameMoveAccepted(ChunkVectorInt const & place) { return PlaceInChunkAccepted(MakeChunk<Object_Animation_Sequence_Frame_Chunk>, 44, 16, place); }
+
+// The strategies that keep a box or a place. An area switch keeps its box after its multi-switch numbers, here with no targets and no links.
+static bool AreaSwitchBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratAreaSwitch, 44, place); }
+static bool AreaSwitchTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratAreaSwitch, 56, place); }
+static bool DeathVolumeBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratDeathVolume, 12, place); }
+static bool DeathVolumeTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratDeathVolume, 24, place); }
+static bool TriggerVolumeBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyTriggerVolume, 12, place); }
+static bool TriggerVolumeTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyTriggerVolume, 24, place); }
+static bool PivotObjectBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyPivotObject, 36, place); }
+static bool PivotObjectTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyPivotObject, 48, place); }
+static bool ChestCameraAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyChest, 16, place); }
+static bool CameraZoneBottomAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyAlterCameraRange, 12, place); }
+static bool CameraZoneTopAccepted(ChunkVectorInt const & place) { return PlaceInStrategyAccepted(StratMummyAlterCameraRange, 24, place); }
+
+typedef bool (*PlaceAccepted)(ChunkVectorInt const & place);
+
+static void TestPlaces()
+{
+	puts("39. places");
+
+	int const farthest = TestFarthestPlace;
+
+	// Every way past the farthest, on one kind of chunk: each of x, y and z, each way
+	Check(ObjectPlaceAccepted(PlaceAt(farthest, farthest, farthest)), "an object at the farthest corner there is, every way positive, is accepted");
+	Check(ObjectPlaceAccepted(PlaceAt(-farthest, -farthest, -farthest)), "and at the farthest corner every way negative");
+	Check(!ObjectPlaceAccepted(PlaceAt(farthest + 1, 0, 0)), "an object a millimetre past the farthest along x is refused: it would be outside the level");
+	Check(!ObjectPlaceAccepted(PlaceAt(-farthest - 1, 0, 0)), "and the other way along x");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, farthest + 1, 0)), "and along y");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, -farthest - 1, 0)), "and the other way along y");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, 0, farthest + 1)), "and along z");
+	Check(!ObjectPlaceAccepted(PlaceAt(0, 0, -farthest - 1)), "and the other way along z");
+	Check(!ObjectPlaceAccepted(PlaceAt(0x7fffffff, 0, 0)), "and an object at the largest number there is");
+	Check(ObjectPlaceAccepted(PlaceAt(1627790, -1627790, 1627790)), "the farthest an object is in the game's own levels, 1,627,790, is accepted");
+	Check(LevelLightAccepted(PlaceAt(1855168, -1855168, 1855168)), "and the farthest place of all in them, a light at 1,855,168");
+
+	// And every kind of chunk with a place in it: at the middle, at the farthest corner, and a millimetre past it one way or another
+	struct PlaceRow { PlaceAccepted accepted; char const * what; };
+	PlaceRow const rows[] =
+	{
+		{ ShapePointAccepted,           "a shape's point" },
+		{ SubShapePointAccepted,        "a sub-shape's point" },
+		{ FramePointAccepted,           "an animation frame's point" },
+		{ ShapeBoxTopAccepted,          "the top corner of a shape's box" },
+		{ ShapeBoxBottomAccepted,       "the bottom corner of a shape's box" },
+		{ SubShapeBoxTopAccepted,       "the top corner of a sub-shape's box" },
+		{ SubShapeBoxBottomAccepted,    "the bottom corner of a sub-shape's box" },
+		{ ShapeCentreAccepted,          "a shape's centre" },
+		{ AnimatedShapeCentreAccepted,  "an animated shape's centre" },
+		{ PieceAccepted,                "where a shape's piece goes" },
+		{ ObjectPlaceAccepted,          "an object" },
+		{ TrackStartAccepted,           "a track's first pivot" },
+		{ TrackEndAccepted,             "a track's last pivot" },
+		{ TrackOffsetAccepted,          "an object's place on its track" },
+		{ OtherPlaceAccepted,           "an object's other place" },
+		{ WayInAccepted,                "a way into a module" },
+		{ LevelLightAccepted,           "one of a level's lights" },
+		{ SoundAccepted,                "a sound" },
+		{ GeneratorAccepted,            "a generator" },
+		{ PlayerStartAccepted,          "the player's start" },
+		{ CableAccepted,                "a power cable" },
+		{ ParticleGeneratorAccepted,    "a particle generator" },
+		{ DecalFirstCornerAccepted,     "a decal's first corner" },
+		{ DecalLastCornerAccepted,      "a decal's last corner" },
+		{ VirtualObjectAccepted,        "a virtual object" },
+		{ PiecesAccepted,               "where a breaking shape's pieces start" },
+		{ DummyAccepted,                "a dummy object" },
+		{ DummyBoxBottomAccepted,       "the bottom corner of a dummy object's box" },
+		{ DummyBoxTopAccepted,          "the top corner of a dummy object's box" },
+		{ HierarchyBoxBottomAccepted,   "the bottom corner of a hierarchy's box" },
+		{ HierarchyBoxTopAccepted,      "the top corner of a hierarchy's box" },
+		{ PathPointAccepted,            "a point on a path" },
+		{ WaypointBottomAccepted,       "the bottom corner of a waypoint's box" },
+		{ WaypointTopAccepted,          "the top corner of a waypoint's box" },
+		{ WaypointCentreAccepted,       "a waypoint's centre" },
+		{ HierarchyFrameMoveAccepted,   "how far a hierarchy's frame moves its object" },
+		{ AnimationFrameMoveAccepted,   "how far an animation frame moves its object" },
+		{ AreaSwitchBottomAccepted,     "the bottom corner of an area switch's box" },
+		{ AreaSwitchTopAccepted,        "the top corner of an area switch's box" },
+		{ DeathVolumeBottomAccepted,    "the bottom corner of a death volume" },
+		{ DeathVolumeTopAccepted,       "the top corner of a death volume" },
+		{ TriggerVolumeBottomAccepted,  "the bottom corner of a trigger volume" },
+		{ TriggerVolumeTopAccepted,     "the top corner of a trigger volume" },
+		{ PivotObjectBottomAccepted,    "the bottom corner of a pivoting object's trigger" },
+		{ PivotObjectTopAccepted,       "the top corner of a pivoting object's trigger" },
+		{ ChestCameraAccepted,          "a chest's camera" },
+		{ CameraZoneBottomAccepted,     "the bottom corner of a camera's zone" },
+		{ CameraZoneTopAccepted,        "the top corner of a camera's zone" },
+		{ PlacedHierarchyPlaceAccepted, "where a placed hierarchy stands" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		std::string const what = rows[i].what;
+
+		// The way past changes from row to row, so that between them every one of x, y and z is tried both ways
+		int const past[3] = { (i % 3 == 0) ? farthest + 1 : 0, (i % 3 == 1) ? farthest + 1 : 0, (i % 3 == 2) ? farthest + 1 : 0 };
+		int const sign = ((i / 3) % 2 == 0) ? 1 : -1;
+
+		Check(rows[i].accepted(PlaceAt(0, 0, 0)), (what + " at the level's middle is accepted").c_str());
+		Check(rows[i].accepted(PlaceAt(farthest, -farthest, farthest)), (what + " at the farthest a place can be is accepted").c_str());
+		Check(!rows[i].accepted(PlaceAt(sign * past[0], sign * past[1], sign * past[2])),
+			(what + " a millimetre past the farthest is refused: it would be outside the level").c_str());
+	}
+}
+
+// 40. A shape's radius. The file keeps it as a fraction, and the game makes a whole number of it and adds it to other distances, so it has
+// to be a real number from 0 up to 2^24 (CheckRadius, in chunk.hpp). Shapes and sub-shapes keep one in their headers, and a shape's centre
+// chunk keeps its radius about the centre. This test is built with the ordinary arithmetic, under which a value that isn't a number never
+// compares as in range, so it shows that the bit test on its own is what refuses one. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool ShapeRadiusAccepted(int kind, float radius)
+{
+	if (kind == 2)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+		char * const centre = PutChunk(wholeShape + bytes, "SHPCENTR", 16);
+
+		memcpy(centre + 12, &radius, sizeof(radius));
+		return ShapeIsAccepted(centre + 16);
+	}
+
+	bool const subShape = (kind == 1);
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+
+	memcpy(wholeShape + ChunkHeaderBytes + (subShape ? 16 : 32), &radius, sizeof(radius));
+	return subShape ? SubShapeIsAccepted(bytes) : ShapeIsAccepted(wholeShape + bytes);
+}
+
+static void TestShapeRadius()
+{
+	puts("40. a shape's radius");
+
+	float const farthest = 16777216.0f;
+	float const justPast = 16777218.0f;   // the next number a float can hold after 2^24
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	char const * const kinds[3] = { "a shape's radius", "a sub-shape's radius", "a shape's radius about its centre" };
+
+	for (int kind = 0; kind < 3; kind++)
+	{
+		std::string const what = kinds[kind];
+
+		Check(ShapeRadiusAccepted(kind, 0.0f), (what + " of nothing is accepted").c_str());
+		Check(ShapeRadiusAccepted(kind, 1520512.625f), (what + " the largest in the game's own levels, 1,520,512.6, is accepted").c_str());
+		Check(ShapeRadiusAccepted(kind, farthest), (what + " the largest there can be, 2^24, is accepted").c_str());
+		Check(!ShapeRadiusAccepted(kind, justPast), (what + " just past 2^24 is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, -1.0f), (what + " that's negative is refused: a distance can't be").c_str());
+		Check(!ShapeRadiusAccepted(kind, notANumber), (what + " that isn't a number is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, endless), (what + " that's endless is refused").c_str());
+		Check(!ShapeRadiusAccepted(kind, -endless), (what + " that's endlessly negative is refused").c_str());
+	}
+
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float negativeNotANumber;
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+	Check(!ShapeRadiusAccepted(0, negativeNotANumber), "a shape's radius that isn't a number, with its sign bit set, is refused too");
+}
+
+// 41. A particle generator's kind. It's one of four, from 0 (sparks) to 3 (flames), and the game picks what to make by it, so any other
+// number is refused. Its kind is the first number in its data chunk. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool ParticleKindAccepted(int kind)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, kind);
+
+	return ChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, bytes, 72);
+}
+
+static void TestParticleKind()
+{
+	puts("41. a particle generator's kind");
+
+	Check(ParticleKindAccepted(0), "a particle generator of the first kind, sparks, is accepted");
+	Check(ParticleKindAccepted(1) && ParticleKindAccepted(2), "and the two kinds between, steam and black smoke");
+	Check(ParticleKindAccepted(3), "and the last kind, flames");
+	Check(!ParticleKindAccepted(4), "a kind past the last is refused: there are only four kinds");
+	Check(!ParticleKindAccepted(-1), "a negative kind is refused");
+	Check(!ParticleKindAccepted(0x7fffffff), "the largest number there is as a kind is refused");
+	Check(!ParticleKindAccepted((int)0x80000000), "and the most negative");
+}
+
+// 42. Turns. A turn is kept as four fractions, and each part has to be a real number from -2 to 2 (CheckTurn, in chunk.hpp): a real turn's
+// parts are from -1 to 1, a tool can save one a rounding step past that, and the game makes a whole number of each. Each kind of chunk that
+// keeps a turn is made here with that turn set and everything else as the game's own levels could have it. This test is built with the
+// ordinary arithmetic, under which a part that isn't a number never compares as in range, so it shows that the bit test on its own is what
+// refuses one. (Added 2026-11-14 by Melanikus for the AvP port.)
+static float FloatFromBits(unsigned int bits)
+{
+	float value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+}
+
+static ChunkQuat TurnOf(float x, float y, float z, float w)
+{
+	ChunkQuat const turn = { x, y, z, w };
+	return turn;
+}
+
+static void PutTurn(char * where, ChunkQuat const & turn)
+{
+	memcpy(where, &turn, sizeof(turn));
+}
+
+// A chunk of this kind and size, all zeros but for the turn at "at", and a count of 1 at "countAt" when the chunk holds a list.
+static bool TurnInChunkAccepted(MakesChunk make, size_t bytes, size_t at, ChunkQuat const & turn, int countAt = -1)
+{
+	alignas(int) static char data[256];
+
+	memset(data, 0, sizeof(data));
+	PutTurn(data + at, turn);
+
+	if (countAt >= 0)
+	{
+		PutNumber(data, (size_t)countAt, 1);
+	}
+
+	return ChunkAccepted(make, data, bytes);
+}
+
+// An object's header keeps its turn after its place, at byte 32.
+static bool ObjectTurnAccepted(ChunkQuat const & turn)
+{
+	TestFile file;
+	size_t const bytes = BuildObjectHeader("object", 7);
+
+	PutTurn(objectBytes + ChunkHeaderBytes + 32, turn);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+
+	return file.error_code == 0;
+}
+
+// A track with one section that takes a second, with one of its turns set.
+static bool TrackTurnAccepted(size_t turnAt, ChunkQuat const & turn)
+{
+	alignas(int) static char bytes[256];
+	size_t const sectionAt = sizeof(int);
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, sectionAt + offsetof(ChunkTrackSection, time_for_section), 65536);
+	PutTurn(bytes + sectionAt + turnAt, turn);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, sectionAt + sizeof(ChunkTrackSection) + 2 * sizeof(int));
+}
+
+static bool TrackStartTurnAccepted(ChunkQuat const & turn) { return TrackTurnAccepted(offsetof(ChunkTrackSection, quat_start), turn); }
+static bool TrackEndTurnAccepted(ChunkQuat const & turn) { return TrackTurnAccepted(offsetof(ChunkTrackSection, quat_end), turn); }
+
+static bool OtherTurnAccepted(ChunkQuat const & turn)
+{
+	return TurnInChunkAccepted(MakeChunk<Object_Alternate_Locations_Chunk>, 12 + sizeof(AltObjectLocation), 12 + offsetof(AltObjectLocation, orientation), turn, 8);
+}
+
+static bool ParticleTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<AVP_Particle_Generator_Data_Chunk>, 72, 52, turn); }
+static bool DummyTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Dummy_Object_Data_Chunk>, 56, 36, turn); }
+static bool PlacedHierarchyTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Placed_Hierarchy_Data_Chunk>, 48, 20, turn); }
+static bool AnimationFrameTurnAccepted(ChunkQuat const & turn) { return TurnInChunkAccepted(MakeChunk<Object_Animation_Sequence_Frame_Chunk>, 44, 0, turn); }
+
+// A hierarchy's list of sequences, with one sequence of one frame, whose turn is set
+static bool HierarchyFrameTurnAccepted(ChunkQuat const & turn)
+{
+	alignas(int) static char bytes[256];
+	size_t const frameAt = 4 + 16;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, 4, 1);
+	PutTurn(bytes + frameAt + offsetof(Object_Animation_Frame, orientation), turn);
+
+	return ChunkAccepted(MakeChunk<Object_Animation_All_Sequence_Chunk>, bytes, frameAt + sizeof(Object_Animation_Frame));
+}
+
+typedef bool (*TurnAccepted)(ChunkQuat const & turn);
+
+static void TestTurns()
+{
+	puts("42. turns");
+
+	float const justPast = FloatFromBits(0x40000001);   // the next number a float can hold after 2
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const negativeNotANumber = FloatFromBits(0xFFC00000);
+	float const endless = std::numeric_limits<float>::infinity();
+
+	// Every way a part can be wrong, on one kind of chunk
+	Check(ObjectTurnAccepted(TurnOf(0.7071068f, 0.0f, 0.7071068f, 0.0f)), "an object turned a quarter of the way round is accepted");
+	Check(ObjectTurnAccepted(TurnOf(1.0f, -1.0f, 1.0f, -1.0f)), "and with every part at 1 or -1, as far as the game's own levels go");
+	char const * const parts[4] = { "x", "y", "z", "w" };
+
+	for (int part = 0; part < 4; part++)
+	{
+		float values[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		std::string const which = std::string("an object's turn with its ") + parts[part];
+
+		values[part] = justPast;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " just past 2 is refused: no turn is that far").c_str());
+		values[part] = -justPast;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " just past -2 is refused").c_str());
+		values[part] = notANumber;
+		Check(!ObjectTurnAccepted(TurnOf(values[0], values[1], values[2], values[3])), (which + " not a number is refused").c_str());
+	}
+
+	Check(!ObjectTurnAccepted(TurnOf(negativeNotANumber, 0.0f, 0.0f, 1.0f)), "and one with a part that isn't a number, with its sign bit set");
+	Check(!ObjectTurnAccepted(TurnOf(endless, 0.0f, 0.0f, 1.0f)), "and one with an endless part");
+	Check(!ObjectTurnAccepted(TurnOf(-endless, 0.0f, 0.0f, 1.0f)), "and one with an endlessly negative part");
+
+	// And every kind of chunk with a turn in it
+	struct TurnRow { TurnAccepted accepted; char const * what; };
+	TurnRow const rows[] =
+	{
+		{ ObjectTurnAccepted,          "an object's turn" },
+		{ TrackStartTurnAccepted,      "a track's first turn" },
+		{ TrackEndTurnAccepted,        "a track's last turn" },
+		{ OtherTurnAccepted,           "an object's other turn" },
+		{ ParticleTurnAccepted,        "a particle generator's turn" },
+		{ DummyTurnAccepted,           "a dummy object's turn" },
+		{ HierarchyFrameTurnAccepted,  "a hierarchy's frame's turn" },
+		{ AnimationFrameTurnAccepted,  "an animation frame's turn" },
+		{ PlacedHierarchyTurnAccepted, "a placed hierarchy's turn" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		std::string const what = rows[i].what;
+		float past[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		float broken[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		// The part that's wrong changes from row to row, and so does the way past
+		past[i % 4] = ((i / 4) % 2 == 0) ? justPast : -justPast;
+		broken[(i + 1) % 4] = notANumber;
+
+		Check(rows[i].accepted(TurnOf(0.0f, 0.0f, 0.0f, 1.0f)), (what + " of no turn at all is accepted").c_str());
+		Check(rows[i].accepted(TurnOf(2.0f, -2.0f, 2.0f, -2.0f)), (what + " with every part as far as it can be is accepted").c_str());
+		Check(!rows[i].accepted(TurnOf(past[0], past[1], past[2], past[3])), (what + " with a part just past 2 is refused: no turn is that far").c_str());
+		Check(!rows[i].accepted(TurnOf(broken[0], broken[1], broken[2], broken[3])), (what + " with a part that isn't a number is refused").c_str());
+	}
+}
+
+// 43. A set of random textures is found by its name, so one with no name is refused as it's read, and the level loader passes such a set
+// over as well (projload.cpp, which level_file_name_test reads). A set: its name, a count of 0 here, and two spare numbers. (Added
+// 2026-11-14 by Melanikus for the AvP port; a set with no name was read and passed over, and is now refused.)
+static bool RandomTexturesAccepted(char const * name)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	alignas(int) char bytes[16] = { 0 };
+	memcpy(bytes, name, strlen(name));
+	std::unique_ptr<Random_Texture_ID_Chunk> const set(new Random_Texture_ID_Chunk(&file, bytes, sizeof(bytes)));
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+static void TestRandomTextureName()
+{
+	puts("43. a set of random textures with no name");
+
+	Check(RandomTexturesAccepted("abc"), "a set of random textures with a name is accepted");
+	Check(!RandomTexturesAccepted(""), "a set of random textures with an empty name is refused: it couldn't be found by its name");
+}
+
+// 44. A shape's name for the list of named shapes. An outside shape keeps it in an object name or a level name chunk, and a sub-shape (a
+// skin) in a shape name chunk, and each can have none. An outside shape with neither, and a skin in an animated shape's alternate textures
+// with none, are refused as the level is read; the level loader also leaves a shape with no name off that list (chunk_load.cpp, which
+// level_file_name_test reads). (Added 2026-11-14 by Melanikus for the AvP port; such a shape is refused while the level is read,
+// since later the same day.)
+static void TestShapesWithNoName()
+{
+	puts("44. shapes with no name");
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, 0));
+		Check(outside->get_shape_name() == 0, "an outside shape with no name chunk has no name");
+		outside->post_input_processing();
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "so it's refused as the level is read: it couldn't be found by its name");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		// An object name chunk: a spare number, then the name
+		char * const named = PutChunk(wholeShape, "EXTOBJNM", 8);
+		memcpy(named + 4, "abc", 4);
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 8));
+		outside->post_input_processing();
+		Check(file.error_code == 0 && outside->get_shape_name() != 0, "an outside shape with an object name chunk is accepted, and has its name");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		// A level name chunk, the other place an outside shape keeps its name (chunk_shape.cpp's get_shape_name): just the name, from
+		// its first byte (mishchnk.cpp's RIF_Name_Chunk). (Added 2026-11-14 by Melanikus (Hicks).)
+		char * const named = PutChunk(wholeShape, "RIFFNAME", 4);
+		memcpy(named, "abc", 4);
+
+		std::unique_ptr<Shape_External_File_Chunk> const outside(new Shape_External_File_Chunk(&file, wholeShape, ChunkHeaderBytes + 4));
+		outside->post_input_processing();
+		char const *const name = outside->get_shape_name();
+		// bounded: the four bytes "abc" and its end, so a name with no end is never read past them
+		Check(file.error_code == 0 && name && strncmp(name, "abc", sizeof("abc")) == 0, "and so is one named only by a level name chunk, with that name");
+
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const loose(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
+		loose->post_input_processing();
+		Check(file.error_code == 0 && loose->get_shape_name() == 0, "a sub-shape with no shape name chunk has no name, and elsewhere that's allowed");
+
+		Parent_File = 0;
+	}
+
+	for (int named = 0; named < 2; named++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		std::unique_ptr<Anim_Shape_Alternate_Texturing_Chunk> const textures(new Anim_Shape_Alternate_Texturing_Chunk(&file, wholeShape, 0));
+		size_t bytes = BuildShapeData(wholeShape, true, 4, PlaceTriangle);
+
+		if (named)
+		{
+			char * const name = PutChunk(wholeShape + bytes, "SHPFNAME", 4);
+			memcpy(name, "abc", 4);
+			bytes += ChunkHeaderBytes + 4;
+		}
+
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const skin(new Shape_Sub_Shape_Chunk(textures.get(), wholeShape, bytes));
+		skin->post_input_processing();
+
+		if (named)
+		{
+			Check(file.error_code == 0, "a skin in an animated shape's alternate textures with a shape name chunk is accepted");
+		}
+		else
+		{
+			Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "and one with none is refused: it couldn't be found by its name");
+		}
+
+		Parent_File = 0;
+	}
+}
+
+// 45. An animation frame's polygon normals have to be sensible numbers by the same rule as a shape's own (normals_are_valid, in
+// chunk_shape.cpp): each a real number no bigger than 2 either way. The frame's normal comes after the sequence's header and data, the
+// frame's header and data, and its points (see PutAnimation). (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool FrameNormalAccepted(float x, float y, float z)
+{
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, PlaceTriangle);
+	char * const end = PutAnimation(wholeShape + bytes, 0, true, 0, 4, 1, 0);
+	size_t const normalAt = ChunkHeaderBytes + (ChunkHeaderBytes + 24) + ChunkHeaderBytes + (ChunkHeaderBytes + 24) + (ChunkHeaderBytes + 12 * 4) + ChunkHeaderBytes;
+	float const normal[3] = { x, y, z };
+
+	memcpy(wholeShape + bytes + normalAt, normal, sizeof(normal));
+	return ShapeIsAccepted(end);
+}
+
+static void TestFrameNormals()
+{
+	puts("45. an animation frame's normals");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastTwoBits = 0x40000001u;
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float justPastTwo;
+	float negativeNotANumber;
+	memcpy(&justPastTwo, &justPastTwoBits, sizeof(justPastTwo));
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	Check(FrameNormalAccepted(0.0f, 0.0f, 1.0f), "an animation frame whose normal points straight up is accepted");
+	Check(FrameNormalAccepted(2.0f, -2.0f, 2.0f), "and one with each number as far as the rule allows, 2 either way");
+	Check(!FrameNormalAccepted(justPastTwo, 0.0f, 0.0f), "a frame's normal with a number just past 2 is refused, as a shape's would be");
+	Check(!FrameNormalAccepted(0.0f, notANumber, 0.0f), "and one with a number that isn't a number");
+	Check(!FrameNormalAccepted(0.0f, 0.0f, negativeNotANumber), "and one that isn't a number with its sign bit set");
+	Check(!FrameNormalAccepted(endless, 0.0f, 0.0f), "and one with an endless number");
+}
+
+// 46. A texture coordinate, u or v, is a place on a picture in texels, and the game makes a whole number of it, so it has to be a real
+// number no further either way than an animated corner's can be (kTextureAnimationFurthestTexel, texture_animation.h). A shape's or a
+// sub-shape's list of them: how many lists, then each list's number of corners and u and v for each. (Added 2026-11-14 by Melanikus for
+// the AvP port.)
+static bool TextureCoordinateAccepted(bool subShape, float u, float v)
+{
+	size_t const bytes = BuildShapeData(wholeShape, subShape, 4, PlaceTriangle);
+	char * const data = PutChunk(wholeShape + bytes, "SHPUVCRD", 2 * sizeof(int) + 3 * 2 * sizeof(float));
+	int const lists = 1;
+	int const corners = 3;
+	float const place[2] = { u, v };
+
+	memcpy(data, &lists, sizeof(lists));
+	memcpy(data + sizeof(int), &corners, sizeof(corners));
+	memcpy(data + 2 * sizeof(int) + 2 * sizeof(float), place, sizeof(place));
+
+	char * const end = data + 2 * sizeof(int) + 3 * 2 * sizeof(float);
+	return subShape ? SubShapeIsAccepted(end - wholeShape) : ShapeIsAccepted(end);
+}
+
+static void TestTextureCoordinateNumbers()
+{
+	puts("46. a texture coordinate's numbers");
+
+	float const furthest = 16383.0f;
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastBits = 0x467FFC01u;   // the next float after 16383
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float justPast;
+	float negativeNotANumber;
+	memcpy(&justPast, &justPastBits, sizeof(justPast));
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	Check(TextureCoordinateAccepted(false, 127.0f, 127.0f), "a corner at 127, 127, as most in the game's own levels are, is accepted");
+	Check(TextureCoordinateAccepted(false, -1800.0f, -4715.0f) && TextureCoordinateAccepted(false, 3857.0f, 3081.0f), "and so are the furthest in them, either way");
+	Check(TextureCoordinateAccepted(false, 0.5f, 63.25f), "and a place between whole texels");
+	Check(TextureCoordinateAccepted(false, furthest, -furthest), "and the furthest a corner can be, 16383 texels either way");
+	Check(!TextureCoordinateAccepted(false, justPast, 0.0f), "a u just past 16383 is refused: no corner can be that far");
+	Check(!TextureCoordinateAccepted(false, 0.0f, -justPast), "and a v just past it the other way");
+	Check(!TextureCoordinateAccepted(false, notANumber, 0.0f), "a u that isn't a number is refused");
+	Check(!TextureCoordinateAccepted(false, 0.0f, notANumber), "and a v");
+	Check(!TextureCoordinateAccepted(false, negativeNotANumber, 0.0f), "and one that isn't a number with its sign bit set");
+	Check(!TextureCoordinateAccepted(false, endless, 0.0f) && !TextureCoordinateAccepted(false, 0.0f, -endless), "and endless either way");
+	Check(TextureCoordinateAccepted(true, 127.0f, 127.0f), "a sub-shape's corner at 127, 127 is accepted");
+	Check(!TextureCoordinateAccepted(true, notANumber, 0.0f), "and one that isn't a number is refused");
+}
+
+// 47. A light scale: its mode, then six fractions (the prelight's multiplier, the level it starts above and what it adds, then the same three
+// for the light at run time), then three spare numbers. Four of the fractions are made whole numbers as it's read, so each has to be a real
+// number no bigger than 2^24 either way. (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool LightScaleAccepted(float const numbers[6])
+{
+	alignas(int) static char bytes[64];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes + 4, numbers, 6 * sizeof(float));
+
+	return ChunkAccepted(MakeChunk<Light_Scale_Chunk>, bytes, 40);
+}
+
+static void TestLightScale()
+{
+	puts("47. a light scale");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const justPastBits = 0x4B800001u;   // the next float after 2^24
+	float justPast;
+	memcpy(&justPast, &justPastBits, sizeof(justPast));
+
+	float const nothing[6] = { 0, 0, 0, 0, 0, 0 };
+	float const plain[6] = { 1.0f, 0, 0, 1.0f, 0, 0 };
+	float const largest[6] = { 16777216.0f, -16777216.0f, 16777216.0f, -16777216.0f, 16777216.0f, -16777216.0f };
+
+	Check(LightScaleAccepted(nothing), "a light scale of nothing is accepted");
+	Check(LightScaleAccepted(plain), "and one that changes nothing, a multiplier of 1 and nothing added");
+	Check(LightScaleAccepted(largest), "and one with every number as big as it can be, 2^24 either way");
+
+	char const * const names[6] = { "prelight multiplier", "prelight's level to start above", "prelight's addition", "run-time multiplier", "run-time level to start above", "run-time addition" };
+
+	for (int i = 0; i < 6; i++)
+	{
+		std::string const which = std::string("a light scale whose ") + names[i];
+		float numbers[6] = { 1.0f, 0, 0, 1.0f, 0, 0 };
+
+		numbers[i] = notANumber;
+		Check(!LightScaleAccepted(numbers), (which + " isn't a number is refused").c_str());
+		numbers[i] = (i % 2 == 0) ? justPast : -justPast;
+		Check(!LightScaleAccepted(numbers), (which + " is just past 2^24 is refused: it couldn't be a whole number the game holds").c_str());
+		numbers[i] = endless;
+		Check(!LightScaleAccepted(numbers), (which + " is endless is refused").c_str());
+	}
+}
+
+// 48. A level's and a module's amount of echo: a sound setting's number, then the amount as a fraction, then a spare number. The game compares
+// the amount to choose what it means (from 0 to 1 is how much, and anything else leaves it to distance), so it has to be a real number.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static bool EchoAccepted(bool module, float amount)
+{
+	alignas(int) static char bytes[16];
+
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes + 4, &amount, sizeof(amount));
+
+	return module ? ChunkAccepted(MakeChunk<Module_Acoustics_Chunk>, bytes, 12) : ChunkAccepted(MakeChunk<Environment_Acoustics_Chunk>, bytes, 12);
+}
+
+static void TestEcho()
+{
+	puts("48. the amount of echo");
+
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+	unsigned int const negativeNotANumberBits = 0xFFC00000u;
+	float negativeNotANumber;
+	memcpy(&negativeNotANumber, &negativeNotANumberBits, sizeof(negativeNotANumber));
+
+	for (int kind = 0; kind < 2; kind++)
+	{
+		bool const module = (kind == 1);
+		std::string const which = module ? "a module's amount of echo" : "a level's amount of echo";
+
+		Check(EchoAccepted(module, -1.0f) && EchoAccepted(module, 0.2f) && EchoAccepted(module, 2.0f), (which + " of -1, 0.2 or 2, as in the game's own levels, is accepted").c_str());
+		Check(EchoAccepted(module, 0.5f), (which + " of a half is accepted").c_str());
+		Check(!EchoAccepted(module, notANumber), (which + " that isn't a number is refused: no comparison can choose what it means").c_str());
+		Check(!EchoAccepted(module, negativeNotANumber), (which + " that isn't a number, with its sign bit set, is refused").c_str());
+		Check(!EchoAccepted(module, endless) && !EchoAccepted(module, -endless), (which + " that's endless either way is refused").c_str());
+	}
+}
+
+// 49. A generator's weights. The game adds a generator's 15 weights up and divides by the total, so each has to be from 0 to 2^24. Its
+// extended settings: five numbers, then the block's size (64 here) and its 15 weights, from place 24. (Added 2026-11-14 by Melanikus for the
+// AvP port.)
+static bool GeneratorWeightAccepted(int which, int weight)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	int const blockSize = 64;
+	alignas(int) char bytes[84] = { 0 };
+	memcpy(bytes + 20, &blockSize, sizeof(int));
+	memcpy(bytes + 24 + which * sizeof(int), &weight, sizeof(int));
+
+	std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settings(new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes)));
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+static void TestGeneratorWeights()
+{
+	puts("49. a generator's weights");
+
+	Check(GeneratorWeightAccepted(0, 12), "a weight of 12, the largest in the game's own levels, is accepted");
+	Check(GeneratorWeightAccepted(14, 1 << 24), "and the largest a weight can be, 2^24, in the last place");
+	Check(!GeneratorWeightAccepted(0, (1 << 24) + 1), "a weight just past 2^24 is refused: the total couldn't be held");
+	Check(!GeneratorWeightAccepted(0, 0x7fffffff), "and the largest number there is");
+
+	for (int which = 0; which < 15; which++)
+	{
+		std::string const what = "a negative weight in place " + std::to_string(which + 1) + " of 15 is refused";
+		Check(!GeneratorWeightAccepted(which, -1), what.c_str());
+	}
+}
+
+// 50. A module's master and slave chunks. A slave module shares its master's room in the AI, and the game gives it a place there only
+// through its master. A module left with no place would still be linked to by the modules beside it, so a slave has to name a module that
+// is a master and isn't a slave itself, or the level is refused. projload.cpp's own check that no such place is used is in
+// ai_module_places_test. (Added 2026-11-14 by Melanikus for the AvP port.)
+
+// One module of a test level: its object number, whether it has module data at all, and in it a master chunk, a slave chunk naming
+// another module by its number (or -1 for none), or both
+struct ModuleRole { int number; bool hasModuleData; bool master; int slaveOf; };
+
+// Gives a level these modules, all of one shape that fits its box (as in section 34), and says whether the level would be accepted
+static bool ModulesAccepted(ModuleRole const * roles, size_t howMany)
+{
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const shapeNumber = 7;
+	int const firstPointX = 0;
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const shapeBytesUsed = BuildShapeData(wholeShape, false, 4, triangle);
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &firstPointX, sizeof(int));
+	std::unique_ptr<Shape_Chunk> const shape(new Shape_Chunk(&file, wholeShape, shapeBytesUsed));
+
+	std::unique_ptr<Object_Chunk> modules[4];
+
+	for (size_t i = 0; i < howMany && i < sizeof(modules) / sizeof(modules[0]); i++)
+	{
+		ModuleRole const &role = roles[i];
+		size_t used = BuildObject(role.number, shapeNumber);
+
+		if (role.hasModuleData)
+		{
+			size_t const inside = (role.master ? ChunkHeaderBytes : 0) + (role.slaveOf >= 0 ? ChunkHeaderBytes + sizeof(int) : 0);
+			char * at = PutChunk(objectBytes + used, "MODULEDT", inside);
+
+			if (role.master)
+			{
+				at = PutChunk(at, "AIMODMAS", 0);
+			}
+
+			if (role.slaveOf >= 0)
+			{
+				at = PutChunk(at, "AIMODSLA", sizeof(int));
+				memcpy(at, &role.slaveOf, sizeof(int));
+			}
+
+			used += ChunkHeaderBytes + inside;
+		}
+
+		modules[i].reset(new Object_Chunk(&file, objectBytes, used));
+	}
+
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++)
+	{
+		modules[i].reset();
+	}
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestModuleMasters()
+{
+	puts("50. a module's master and slaves");
+
+	// A master, and two slaves that name it. The game's own levels are all like this.
+	{
+		ModuleRole const roles[] = { { 5, true, true, -1 }, { 6, true, false, 5 }, { 8, true, false, 5 } };
+		Check(ModulesAccepted(roles, 3), "a master and the slaves that name it are accepted");
+	}
+
+	// Modules that are neither, and a master with no slaves, are as they always were
+	{
+		ModuleRole const roles[] = { { 5, true, false, -1 }, { 6, false, false, -1 }, { 8, true, true, -1 } };
+		Check(ModulesAccepted(roles, 3), "a module that is neither, one with no module data, and a master with no slaves are accepted");
+	}
+
+	struct BadRow { ModuleRole roles[3]; size_t howMany; char const * what; };
+	BadRow const rows[] =
+	{
+		{ { { 5, true, true, -1 }, { 6, true, false, 9 } }, 2, "a slave naming no object at all is refused" },
+		{ { { 5, false, false, -1 }, { 6, true, false, 5 } }, 2, "a slave naming an object that isn't a module is refused" },
+		{ { { 5, true, false, -1 }, { 6, true, false, 5 } }, 2, "a slave naming a module that isn't a master is refused" },
+		{ { { 7, true, true, -1 }, { 5, true, true, 7 }, { 6, true, false, 5 } }, 3, "a slave naming a master that is a slave itself is refused" },
+		{ { { 6, true, true, 6 } }, 1, "a module that is its own master and its own slave is refused" },
+		{ { { 6, true, false, 6 } }, 1, "a slave naming itself is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		Check(!ModulesAccepted(rows[i].roles, rows[i].howMany), rows[i].what);
+	}
+}
+
+// 51. Flags a file may and may not give. A module's flags (MODFLAGS) may hold only what a level maker can set in the editor, and an item in
+// a module's visibility list (VMDARRAY) no flags at all: the rest is the game's own state while it runs, such as "this list's branches are
+// already places", which a file could otherwise use to have a number taken as a place. (Added 2026-11-14 by Melanikus for the AvP port.)
+
+// A module's flags chunk holding these flags, and nothing in its spare number
+static bool ModuleFlagsAccepted(unsigned int flags)
+{
+	alignas(int) char bytes[8] = { 0 };
+	memcpy(bytes, &flags, sizeof(flags));
+
+	return ChunkAccepted(MakeChunk<Module_Flag_Chunk>, bytes, sizeof(bytes));
+}
+
+// A visibility list of one item, seeing object 0, with no branch, and these flags
+static bool VisibilityItemAccepted(int flags)
+{
+	alignas(int) char bytes[4 + 4 * sizeof(int)] = { 0 };
+	int const items = 1;
+	memcpy(bytes, &items, sizeof(items));
+	memcpy(bytes + 4 + 2 * sizeof(int), &flags, sizeof(flags));
+
+	return ChunkAccepted(MakeChunk<VModule_Array_Chunk>, bytes, sizeof(bytes));
+}
+
+static void TestFlagsFromAFile()
+{
+	puts("51. flags a file may give");
+
+	// Everything a level maker can set, all at once, and each part of it
+	Check(ModuleFlagsAccepted(0xFFFF0200u), "a module with every flag the editor sets is accepted");
+	Check(ModuleFlagsAccepted(0), "and one with none");
+	Check(ModuleFlagsAccepted(0x20000000u), "and the sky alone, as most of the game's own have");
+	Check(ModuleFlagsAccepted(127u << 21), "and a message number, the highest");
+
+	// The game's own state while it runs: none of it may come from a file
+	struct FlagRow { unsigned int flag; char const * what; };
+	FlagRow const running[] =
+	{
+		{ 0x00000001u, "a module's 'no extent test' from a file is refused" },
+		{ 0x00000002u, "a module's 'lists already turned into places' from a file is refused" },
+		{ 0x00000004u, "a module's 'door open' from a file is refused" },
+		{ 0x00000008u, "a module's 'not active' from a file is refused" },
+		{ 0x00000010u, "a module's 'got its matrix' from a file is refused" },
+		{ 0x00000020u, "a module's 'seen on the map' from a file is refused" },
+		{ 0x00000040u, "a module's 'slipped inside' from a file is refused" },
+		{ 0x00000100u, "a bit nobody names, below 'exclude from the map', is refused" },
+		{ 0x00008000u, "and one just under 'victory zone'" },
+	};
+
+	for (size_t i = 0; i < sizeof(running) / sizeof(running[0]); i++)
+	{
+		Check(!ModuleFlagsAccepted(running[i].flag), running[i].what);
+	}
+
+	Check(!ModuleFlagsAccepted(0x20000002u), "and a running-state bit beside an editor's one is still refused");
+
+	// An item in a visibility list has no flags a file may set
+	Check(VisibilityItemAccepted(0), "a visibility list's item with no flags is accepted");
+	Check(!VisibilityItemAccepted(1), "an item's 'branch already a place' from a file is refused");
+	Check(!VisibilityItemAccepted(2), "and so is any other flag");
+	Check(!VisibilityItemAccepted((int)0x80000000u), "even the top one");
+}
+
+// 52. A waypoint's room. An alien sent to a big waypoint aims for a random place inside it, and on each axis the room it has there is
+// worked out from the box's corners at the level's scale (waypoint_room.h). A box with a room of 0 on any axis refuses the level, and so
+// does a level scale that isn't a finite number, or a corner too big for the game's whole numbers at that scale. A room of -1, a box with
+// no size on an axis at its centre, is allowed: three of the game's own level files have one. waypoint_room_test checks the sums against a
+// copy of the game's own lines. (Added 2026-11-14 by Melanikus for the AvP port.)
+// A corner too big at the level's scale can't come from a file any more: every corner has to be within 2^24 of the level's middle
+// (section 39), and the scale no more than 1 (section 37), so a corner at the level's scale is within 2^24 too. So the last checks here
+// are that those two rules refuse such a corner and such a scale, and that the farthest box they allow, at the largest scale, still has
+// room. waypoint_room_test checks that the sums refuse a corner too big on their own. (Changed 2026-11-14 by Melanikus for the AvP port.)
+
+// One waypoint's box in a level file: its lowest corner, its highest and its centre, x, y and z
+struct WaypointBox { int lowest[3]; int highest[3]; int centre[3]; };
+
+// A box with room on every axis: 2,000 wide on x, 1,000 on y and 400 on z, around the middle of the level
+static WaypointBox const RoomyBox = { { -1000, -500, -200 }, { 1000, 500, 200 }, { 0, 0, 0 } };
+
+// The scale a test level gives in its environment: none at all, or this one
+enum LevelScaleGiven { NoScaleGiven, ScaleGiven };
+
+// A level with one module whose module data holds these waypoints, and an environment with the scale given or none, and whether it would
+// be accepted. Its module is the same one shape that fits its box as in section 50.
+static bool WaypointsAccepted(WaypointBox const * boxes, int howMany, LevelScaleGiven given, double scale)
+{
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const shapeNumber = 7;
+	int const firstPointX = 0;
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const shapeBytesUsed = BuildShapeData(wholeShape, false, 4, triangle);
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+	memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &firstPointX, sizeof(int));
+	std::unique_ptr<Shape_Chunk> const shape(new Shape_Chunk(&file, wholeShape, shapeBytesUsed));
+
+	// The level's environment, holding its scale if it gives one
+	alignas(double) char environmentBytes[ChunkHeaderBytes + sizeof(double)] = { 0 };
+	size_t environmentUsed = 0;
+
+	if (given == ScaleGiven)
+	{
+		char * const at = PutChunk(environmentBytes, "ENVSDSCL", sizeof(double));
+		memcpy(at, &scale, sizeof(scale));
+		environmentUsed = ChunkHeaderBytes + sizeof(double);
+	}
+
+	std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, environmentBytes, environmentUsed));
+
+	// The module, with its waypoints: their count, then for each its three corners, its flags and spare number, and no links of either kind
+	size_t used = BuildObject(5, shapeNumber);
+	size_t const oneWaypoint = 3 * 3 * sizeof(int) + 4 * sizeof(int);
+	size_t const waypointBytes = sizeof(int) + howMany * oneWaypoint;
+	char * at = PutChunk(objectBytes + used, "MODULEDT", ChunkHeaderBytes + waypointBytes);
+	at = PutChunk(at, "WAYPOINT", waypointBytes);
+	memcpy(at, &howMany, sizeof(int));
+	at += sizeof(int);
+
+	for (int i = 0; i < howMany; i++)
+	{
+		memcpy(at, boxes[i].lowest, sizeof(boxes[i].lowest));
+		memcpy(at + 3 * sizeof(int), boxes[i].highest, sizeof(boxes[i].highest));
+		memcpy(at + 6 * sizeof(int), boxes[i].centre, sizeof(boxes[i].centre));
+		memset(at + 9 * sizeof(int), 0, 4 * sizeof(int));
+		at += oneWaypoint;
+	}
+
+	used += ChunkHeaderBytes + ChunkHeaderBytes + waypointBytes;
+	std::unique_ptr<Object_Chunk> module(new Object_Chunk(&file, objectBytes, used));
+
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	module.reset();
+	environment.reset();
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// RoomyBox with one axis given its own three numbers
+static WaypointBox BoxWithAnAxis(int axis, int lowest, int highest, int centre)
+{
+	WaypointBox box = RoomyBox;
+	box.lowest[axis] = lowest;
+	box.highest[axis] = highest;
+	box.centre[axis] = centre;
+	return box;
+}
+
+// A double made from its bits, so the test can give a level a scale of infinity, or "not a number"
+static double DoubleFromBits(uint64_t bits)
+{
+	double number;
+	memcpy(&number, &bits, sizeof(number));
+	return number;
+}
+
+static void TestWaypointRooms()
+{
+	puts("52. a waypoint's room");
+
+	Check(WaypointsAccepted(&RoomyBox, 1, NoScaleGiven, 1.0), "a waypoint with room on every axis is accepted");
+	Check(WaypointsAccepted(&RoomyBox, 1, ScaleGiven, 0.8), "and at a level's own scale");
+
+	// No size on x and z, exactly at its centre, as in the game's own levels: a room of -1, allowed
+	{
+		WaypointBox flat = BoxWithAnAxis(0, 300, 300, 300);
+		flat.lowest[2] = flat.highest[2] = flat.centre[2] = -40;
+
+		Check(WaypointsAccepted(&flat, 1, NoScaleGiven, 1.0), "a box with no size on an axis, at its centre, as in three of the game's own level files, is accepted");
+		Check(WaypointsAccepted(&flat, 1, ScaleGiven, 0.9) && WaypointsAccepted(&flat, 1, ScaleGiven, 0.8), "and at the game's own other scales");
+	}
+
+	// No size on an axis, 1 above its centre: a room of 0
+	char const * const refusedOn[3] =
+	{
+		"a box with a room of 0 on x is refused",
+		"a box with a room of 0 on y is refused",
+		"a box with a room of 0 on z is refused",
+	};
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		WaypointBox const none = BoxWithAnAxis(axis, 1, 1, 0);
+		Check(!WaypointsAccepted(&none, 1, NoScaleGiven, 1.0), refusedOn[axis]);
+	}
+
+	{
+		WaypointBox const below = BoxWithAnAxis(1, -3, -3, 0);
+		Check(!WaypointsAccepted(&below, 1, NoScaleGiven, 1.0), "and one with no size 3 below its centre, which has a room of 0 too");
+	}
+
+	// The level's own scale, with what's after the point cut off, decides
+	{
+		WaypointBox const twoAbove = BoxWithAnAxis(0, 2, 2, 0);
+		Check(WaypointsAccepted(&twoAbove, 1, NoScaleGiven, 1.0) && !WaypointsAccepted(&twoAbove, 1, ScaleGiven, 0.8),
+			"a box with room at scale 1 and a room of 0 at the level's own scale of 0.8 is refused at that scale");
+
+		WaypointBox const oneAbove = BoxWithAnAxis(0, 1, 1, 0);
+		Check(WaypointsAccepted(&oneAbove, 1, ScaleGiven, 0.8), "and one with a room of 0 at scale 1 but room at 0.8 is accepted at 0.8");
+	}
+
+	// The bad one after good ones
+	{
+		WaypointBox const three[3] = { RoomyBox, RoomyBox, BoxWithAnAxis(2, 1, 1, 0) };
+		Check(WaypointsAccepted(three, 2, NoScaleGiven, 1.0) && !WaypointsAccepted(three, 3, NoScaleGiven, 1.0),
+			"a waypoint with no room after two with room still refuses the level");
+	}
+
+	// A scale the sums can't use
+	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF0000000000000ull)), "a level whose scale is infinity is refused, even with a roomy waypoint");
+	Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, DoubleFromBits(0x7FF8000000000000ull)), "and one whose scale is 'not a number'");
+
+	// A corner too big for the game's whole numbers, and a scale that could make one, are refused before the room is worked out (see the top)
+	{
+		WaypointBox const huge = BoxWithAnAxis(0, -10, 2000000000, 0);
+		Check(!WaypointsAccepted(&huge, 1, NoScaleGiven, 1.0), "a corner too big for the game's whole numbers is refused, at scale 1");
+		Check(!WaypointsAccepted(&RoomyBox, 1, ScaleGiven, 1.5), "and a level scale over 1, which could make one too big, is refused, even with a roomy waypoint");
+	}
+
+	// From one far corner of the level to the other, with its centre at its lowest corner, so its top corner is as far from its centre as a
+	// file can put it
+	{
+		WaypointBox const farthest =
+		{
+			{ -TestFarthestPlace, -TestFarthestPlace, -TestFarthestPlace },
+			{ TestFarthestPlace, TestFarthestPlace, TestFarthestPlace },
+			{ -TestFarthestPlace, -TestFarthestPlace, -TestFarthestPlace },
+		};
+		Check(WaypointsAccepted(&farthest, 1, ScaleGiven, 1.0), "the farthest box a level can give, at the largest scale, still has room and is accepted");
 	}
 }
 
@@ -4154,6 +5571,20 @@ int main()
 	TestCountedLists();
 	TestNumbersUsedAsPlaces();
 	TestHierarchyAnimations();
+	TestPlaces();
+	TestShapeRadius();
+	TestParticleKind();
+	TestTurns();
+	TestRandomTextureName();
+	TestShapesWithNoName();
+	TestFrameNormals();
+	TestTextureCoordinateNumbers();
+	TestLightScale();
+	TestEcho();
+	TestGeneratorWeights();
+	TestModuleMasters();
+	TestFlagsFromAFile();
+	TestWaypointRooms();
 
 	if (checksFailed)
 	{

@@ -145,12 +145,16 @@ static void TestTheGameUsesIt()
 		Has(share, "return MenuShape_WidthShare(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, MenuBackdropFullWidth);"),
 		"d3d_render.cpp asks the rule, with the screen's size and whether it's the starfield");
 
+	// the editor's R-DRAW-CHAIN-1 asks for places in pixels while it draws its panels (drawingToChain, set only by R_SetScreenPlacesInPixels and R_DrawScreenToChain, which the game never
+	// calls): it starts false, so in the game the menus' grid is as it was
+	Check(Has(render, "static bool drawingToChain = false;"), "the editor's drawing in pixels (drawingToChain) starts off");
+
 	std::string const across = SourceSlice(render, "inline float WPos2DC(int32_t pos)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(across, "if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();"),
+	Check(Has(across, "if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640) * 2) - 1) * MenuWidthShare();"),
 		"and WPos2DC scales the menus' grid by it around the screen's middle (the device's 0), only in the menus");
 
 	std::string const down = SourceSlice(render, "inline float HPos2DC(int32_t pos)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
-	Check(Has(down, "if ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480) * 2) - 1;"),
+	Check(Has(down, "if (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480) * 2) - 1;"),
 		"while the height still takes the whole screen");
 
 	std::string const backdrop = SourceSlice(menus, "extern void DrawMainMenusBackdrop(void)\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);

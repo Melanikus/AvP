@@ -18,6 +18,9 @@
 //
 //  3. A frame's places on its picture are worked out in 16.16 (texture_animation.h), so one too far out would run over. A shape with one
 //     stays still, the same way as for a refused picture. Every one in the game's own levels is 0 to 127 texels.
+//
+//  4. Not about pictures: this is the one test that runs chunk_load.cpp, so an animated shape's reach is checked here too. Its box and
+//     radius have to come out right even at the farthest a place can be. (Added 2026-11-14 by Melanikus for the AvP port.)
 
 #include <memory>
 #include <stdio.h>
@@ -38,6 +41,7 @@
 // These are in chunk_load.cpp, which doesn't list them in a header
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
 void setup_tex_conv_array(int &max_indices, int *&conv_array, RIFFHANDLE h, Chunk_With_Children *tmpshp);
+void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chunk *smdc);
 
 // ---- stand-ins for the parts of the game the loader calls ----
 
@@ -536,11 +540,152 @@ static void TestPlacesTooFarOut()
 	}
 }
 
+// ---- 4. an animated shape's reach ----
+
+// A shape of 4 points and one triangle, with one animation of one frame, whose 4 points are these, around this centre. If leftOut, the
+// triangle is left out of the animation's box, so no point is counted in it. The shape's own points and every normal are zeros, as allowed.
+static Bytes AnimatedShape(int const framePoints[4][3], int const centre[3], bool leftOut)
+{
+	Bytes shape;
+
+	Bytes header(68, 0);
+	int const points = 4;
+	int const polygons = 1;
+	memcpy(&header[24], &points, sizeof(points));
+	memcpy(&header[28], &polygons, sizeof(polygons));
+	AddPart(shape, "SHPHEAD1", header);
+	AddPart(shape, "SHPRAWVT", Bytes(12 * points, 0));
+
+	// A polygon keeps its corners after 16 bytes of other numbers, and -1 ends them
+	Bytes triangle(36, 0);
+	int const corners[5] = { 0, 1, 2, -1, -1 };
+	memcpy(&triangle[16], corners, sizeof(corners));
+	AddPart(shape, "SHPPOLYS", triangle);
+	AddPart(shape, "SHPVNORM", Bytes(12 * points, 0));
+	AddPart(shape, "SHPPNORM", Bytes(12 * polygons, 0));
+
+	// The animation's centre, then its flags and a spare number
+	Bytes middle;
+	for (int axis = 0; axis < 3; axis++)
+	{
+		AddNumber(middle, centre[axis]);
+	}
+	AddNumber(middle, 0);
+	AddNumber(middle, 0);
+	AddPart(shape, "ANSHCEN2", middle);
+
+	// The polygons left out of the box, then two spare numbers
+	if (leftOut)
+	{
+		Bytes outOfTheBox;
+		AddNumber(outOfTheBox, 0);
+		AddNumber(outOfTheBox, 0);
+		AddNumber(outOfTheBox, 0);
+		AddPart(shape, "PNOTINBB", outOfTheBox);
+	}
+
+	// The frame: its numbers (the first is its place, the second its flags) and an empty name, its points, and its polygon's normal
+	Bytes frame;
+	AddPart(frame, "ANIFRADT", Bytes(24, 0));
+	Bytes framePointBytes;
+	for (int point = 0; point < 4; point++)
+	{
+		for (int axis = 0; axis < 3; axis++)
+		{
+			AddNumber(framePointBytes, framePoints[point][axis]);
+		}
+	}
+	AddPart(frame, "SHPRAWVT", framePointBytes);
+	AddPart(frame, "SHPPNORM", Bytes(12 * polygons, 0));
+
+	// The sequence: its numbers (the first is its place) and an empty name, then its frame
+	Bytes sequence;
+	AddPart(sequence, "ANISEQDT", Bytes(24, 0));
+	AddPart(sequence, "ANIMFRAM", frame);
+	AddPart(shape, "ANIMSEQU", sequence);
+
+	return shape;
+}
+
+struct Reach { bool accepted; int radius; int maxX; int minX; };
+
+// Loads that shape as the level reader does, then sets up its animation as the game does, and gives back the sequence's radius and
+// the two ends of its box along x, both measured from the centre.
+static Reach AnimatedShapeReach(int const framePoints[4][3], int const centre[3], bool leftOut)
+{
+	LevelFile level;
+	Bytes const bytes = AnimatedShape(framePoints, centre, leftOut);
+
+	Shape_Chunk *const shape = new Shape_Chunk(&level.file, bytes.data(), bytes.size());
+	level.chunks.push_back(std::unique_ptr<Chunk>(shape));
+	shape->post_input_processing();
+
+	Reach reach = { level.file.error_code == 0, 0, 0, 0 };
+
+	if (reach.accepted)
+	{
+		// A shape's header keeps a list of lists of its points and normals, and setting up its animation points the first of each at the
+		// animation's first frame, so the header needs those lists, as a loaded shape has
+		int *points[1] = { 0 };
+		int *normals[1] = { 0 };
+		int *pointNormals[1] = { 0 };
+
+		SHAPEHEADER header;
+		memset(&header, 0, sizeof(header));
+		header.numitems = 1;
+		header.points = points;
+		header.sh_normals = normals;
+		header.sh_vnormals = pointNormals;
+		local_scale = 1;
+		SetupAnimatingShape(shape, &header, 0);
+
+		shapeanimationsequence const &made = header.animation_header->anim_sequences[0];
+		reach.radius = made.radius;
+		reach.maxX = made.max_x;
+		reach.minX = made.min_x;
+	}
+
+	return reach;
+}
+
+static void TestAnimatedShapeReach()
+{
+	puts("4. an animated shape's reach");
+
+	int const farthest = 1 << 24;   // the farthest a place can be from the level's middle (CheckPlace, in chunk.hpp)
+
+	{
+		int const points[4][3] = { { 100, 50, 25 }, { -100, -50, -25 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { 0, 0, 0 };
+		Reach const reach = AnimatedShapeReach(points, centre, false);
+		Check(reach.accepted && reach.radius == 114 && reach.maxX == 100 && reach.minX == -100, "an ordinary animated shape's box and radius are what they always were");
+	}
+
+	// Each side of the box is 2^25 from the centre, the most it can be, so the radius is the square root of 3 times 2^25
+	{
+		int const points[4][3] = { { farthest, farthest, farthest }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { -farthest, -farthest, -farthest };
+		Reach const reach = AnimatedShapeReach(points, centre, false);
+		Check(reach.accepted && reach.maxX == 2 * farthest && reach.minX == farthest, "a shape at the farthest corner, round a centre at the opposite one, has its box 2^25 from the centre");
+		Check(reach.radius == 58117981, "and its radius is the square root of 3 times 2^25, 58,117,981, worked out without running over");
+	}
+
+	// With its one polygon left out of the box, no point is counted, so the box is a single place at the level's middle
+	{
+		int const points[4][3] = { { farthest, farthest, farthest }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { farthest, farthest, farthest };
+		Reach const reach = AnimatedShapeReach(points, centre, true);
+		Check(reach.accepted && reach.maxX == -farthest && reach.minX == -farthest, "a sequence with no point counted in its box has a box of a single place, at the level's middle");
+		Check(reach.radius == 29058990, "and its radius is how far that is from the centre, the square root of 3 times 2^24, 29,058,990");
+	}
+}
+
 int main()
 {
 	TestTheLimit();
 	TestARefusedPicture();
 	TestPlacesTooFarOut();
+	TestAnimatedShapeReach();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;

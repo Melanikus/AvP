@@ -8,8 +8,14 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
+//   a waypoint's box and centre have to be inside the level, as CheckPlace in chunk.hpp says (2026-11-14)
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a slave module has to name a master module that isn't a slave itself, or the level is refused
+//   a waypoint's box has to give room on every axis at the level's scale, or the level is refused (waypoint_room.h)
 
 #include "chunk_waypoint.hpp"
+#include "environment_chunk.hpp"
+#include "waypoint_room.h"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(chunk_waypoint)
@@ -75,6 +81,9 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			cw->max=*(ChunkVectorInt*)data;
 			data+=sizeof(ChunkVectorInt);	
 			cw->centre=*(ChunkVectorInt*)data;
+			CheckPlace(cw->min);
+			CheckPlace(cw->max);
+			CheckPlace(cw->centre);
 			data+=sizeof(ChunkVectorInt);	
 			
 			cw->flags=*(int*)data;
@@ -147,6 +156,71 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 					Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 				}
 			}
+		}
+	}
+}
+
+// The scale the game sets this file's level up at (set_local_scale, projload.cpp): GlobalScale, which is 1 (equates.h), times the scale
+// the file's level environment gives (ENVSDSCL), if it gives one. So it's that scale, or 1. False if the environment or its scale is kept
+// only as plain bytes, as then there's no scale to read. waypoint_room_test reads projload.cpp and equates.h to check this is still so.
+static bool LevelScale(Chunk_With_Children * file, double * scale)
+{
+	*scale = 1.0;
+
+	Chunk * const environment = file->lookup_single_child("REBENVDT");
+
+	if (!environment)
+	{
+		return true;
+	}
+
+	if (environment->r_u_miscellaneous())
+	{
+		return false;
+	}
+
+	Chunk * const levelScale = ((Chunk_With_Children *) environment)->lookup_single_child("ENVSDSCL");
+
+	if (!levelScale)
+	{
+		return true;
+	}
+
+	if (levelScale->r_u_miscellaneous())
+	{
+		return false;
+	}
+
+	*scale = ((Environment_Scale_Chunk *) levelScale)->scale;
+	return true;
+}
+
+// Each waypoint's box has to give an alien room to aim for on every axis, worked out at the level's scale as the game works it out
+// (waypoint_room.h). A room of 0 refuses the level, and so does a scale that isn't a finite number, or a corner too big for the game's
+// whole numbers at that scale. This waits until the whole file has been read, because the scale is in the level's environment, which can
+// come after the waypoints. All 5,528 waypoints in the game's own levels have room, at scale 1 and at each level's own scale: 9 of them, in
+// three level files, have a room of -1 on an axis, which is allowed. Added 2026-11-14 by Melanikus for the AvP port.
+void Module_Waypoint_Chunk::post_input_processing()
+{
+	double scale;
+	bool const scaleKnown = LevelScale(GetRootChunk(), &scale);
+
+	for(int i=0;i<NumWaypoints;i++)
+	{
+		ChunkWaypoint const& waypoint=Waypoints[i];
+		int32_t roomX;
+		int32_t roomY;
+		int32_t roomZ;
+
+		bool const roomOnEveryAxis = scaleKnown
+			&& WaypointRoom(waypoint.min.x, waypoint.max.x, waypoint.centre.x, scale, &roomX) && roomX != 0
+			&& WaypointRoom(waypoint.min.y, waypoint.max.y, waypoint.centre.y, scale, &roomY) && roomY != 0
+			&& WaypointRoom(waypoint.min.z, waypoint.max.z, waypoint.centre.z, scale, &roomZ) && roomZ != 0;
+
+		if(!roomOnEveryAxis)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
 		}
 	}
 }
@@ -470,33 +544,36 @@ void AI_Module_Slave_Chunk::fill_data_block(char* data_start)
 	data_start += 4;
 }
 
+// A slave module shares its master's room in the AI. The game gives a slave its place there only through its master's list, and a
+// module left with no place is still linked to by the modules beside it (the AI setup in projload.cpp). So a slave has to name a module
+// that is a master, with a master chunk of its own, and isn't a slave itself. A level where one doesn't is refused. All 1,711 slaves in
+// the game's own levels name such a master, and none of their 285 masters is a slave. A link that leads to a slave is fine, and stays so:
+// 5,331 in the game's own levels do. Modified 2026-11-14 by Melanikus for the AvP port.
 void AI_Module_Slave_Chunk::post_input_processing()
 {
 	File_Chunk* fc=(File_Chunk*)GetRootChunk();
 	if(!strcmp(fc->identifier,"REBINFF2"))
 	{
+		// No such object, an object that isn't a module, a module with no master chunk, and a master that is a slave itself all leave
+		// the list empty or the module wrong, and each refuses the level
 		Object_Chunk* oc=fc->get_object_by_index(MasterModuleIndex);
-		if(oc)
-		{
-			Object_Module_Data_Chunk* omdc=(Object_Module_Data_Chunk*)oc->lookup_single_child("MODULEDT");
-			if(!omdc)
-			{
-				return;
-			}
-			
-			List<Chunk*> chlist;
-			omdc->lookup_child("AIMODMAS",chlist);
-			if(!chlist.size())
-			{
-				//master module doesn't have a master module chunk
-				return;
-			}
-			AI_Module_Master_Chunk* ammc=(AI_Module_Master_Chunk*)chlist.first_entry();
-			ammc->ModuleList.add_entry(get_my_object_chunk());
-			MasterModule=oc;
-			return;
+		Object_Module_Data_Chunk* omdc=oc ? (Object_Module_Data_Chunk*)oc->lookup_single_child("MODULEDT") : 0;
 
+		List<Chunk*> chlist;
+		if(omdc)
+		{
+			omdc->lookup_child("AIMODMAS",chlist);
 		}
+
+		if(!chlist.size() || omdc->lookup_single_child("AIMODSLA"))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		AI_Module_Master_Chunk* ammc=(AI_Module_Master_Chunk*)chlist.first_entry();
+		ammc->ModuleList.add_entry(get_my_object_chunk());
+		MasterModule=oc;
 	}
 }
 

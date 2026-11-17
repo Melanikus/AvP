@@ -850,8 +850,8 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_fragments.cpp",
-					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);",
-					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = (*(int*)data); data += sizeof(int);"
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = (*(int*)data); data += sizeof(int);"
 				}
 			]
 		},
@@ -860,8 +860,8 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_fragments.cpp",
-					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);",
-					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = (*(int*)data); data += sizeof(int);"
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = (*(int*)data); data += sizeof(int);"
 				}
 			]
 		},
@@ -870,8 +870,8 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_fragments.cpp",
-					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = ReadFromChunk<int>(start, chunk_bytes, data);",
-					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = (*(int*)data); data += sizeof(int);"
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\tCheckPlace(location);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = (*(int*)data); data += sizeof(int);"
 				}
 			]
 		},

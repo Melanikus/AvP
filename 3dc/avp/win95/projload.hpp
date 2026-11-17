@@ -122,6 +122,8 @@ extern int load_precompiled_shapes();
 
 void avp_undo_rif_load(RIFFHANDLE h);
 RIFFHANDLE avp_load_rif (const char * fname);
+// The same, but a file the loader refuses comes back as INVALID_RIFFHANDLE, with nothing shown and the game not stopped (the editor's)
+RIFFHANDLE avp_try_load_rif (const char * fname);
 RIFFHANDLE avp_load_rif_non_env (const char * fname);
 
 // The size and MD5 sum of the file a handle was loaded from, as the loader worked them out from its own reads (level_file_sum.h).

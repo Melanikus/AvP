@@ -10,6 +10,11 @@
 //   a name is only read as far as the end of its chunk
 //   the environment settings are always one block of bytes, made and given back the same way
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   every place a generator, the player's start, a power cable, a particle generator or a decal's corner gives has to be inside the
+//   level, as CheckPlace in chunk.hpp says
+//   a particle generator has to be one of the four kinds there are
+//   a particle generator's turn has to fit, as CheckTurn in chunk.hpp says
+//   each of a generator's 15 weights has to be from 0 to 2^24
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -72,6 +77,7 @@ AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const ch
 {
 	char const * const chunk_start = data;
 	location = *((ChunkVectorInt*) data);
+	CheckPlace(location);
 	data += sizeof(ChunkVectorInt);
 		
 	orientation = *((int *) data);
@@ -299,6 +305,19 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 	memcpy(weights,data,weight_bytes);
 
 	weights->data_size = max(weight_bytes,(int)sizeof(AVP_Generator_Weighting));
+
+	// Each of the 15 weights is a share of the NPCs a generator makes, and the game adds them up and divides by the total, so each has to
+	// be from 0 to 2^24, which keeps the total well inside what a whole number holds. The game's own are 0 to 12. They're 15 whole numbers
+	// in a row, from the pulse rifle marine's, as the game reads them too (object_setup.cpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const * const weight = &weights->PulseMarine_Wt;
+
+	for (int i = 0; i < 15; i++)
+	{
+		if (weight[i] < 0 || weight[i] > (1 << 24))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
 }
 
 AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent)
@@ -433,6 +452,7 @@ AVP_Player_Start_Chunk::AVP_Player_Start_Chunk(Chunk_With_Children* parent,const
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkMatrix)
 	CHUNK_EXTRACT(moduleID,ObjectID)
+	CheckPlace(location);
 }
 
 void AVP_Player_Start_Chunk::fill_data_block (char * data)
@@ -459,6 +479,7 @@ AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const c
 {
 	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
+	CheckPlace(location);
 	data+=sizeof(ChunkVectorInt);
 
 	id=*(ObjectID*)data;
@@ -544,7 +565,7 @@ void AVP_Power_Cable_Chunk::fill_data_block(char* data)
 
 size_t AVP_Power_Cable_Chunk::size_chunk()
 {
-	chunk_size=(strlen(name)+4)&~3;
+	chunk_size=((name ? strlen(name) : 0)+4)&~3;   // (no name is 0 bytes of it, as the particle generator's data chunk)
 	chunk_size+=12+sizeof(ChunkVectorInt)+sizeof(ObjectID)+28;
 	return chunk_size;
 }
@@ -684,6 +705,16 @@ AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,si
 	if (loaded_decal_size <= (int)sizeof(AVP_Decal))
 	{
 		decals = (AVP_Decal*)decal_buffer;
+
+		// Each corner of each decal the game uses has to be inside the level (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for
+		// the AvP port.)
+		for (int i = 0; i < num_decals; i++)
+		{
+			for (int corner = 0; corner < 4; corner++)
+			{
+				CheckPlace(decals[i].Vertices[corner]);
+			}
+		}
 	}
 	else
 	{
@@ -782,6 +813,17 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	char const * const chunk_start = data;
 	
 	CHUNK_EXTRACT(type,int)
+
+	// A particle generator is one of four kinds, from 0 (sparks) to 3 (flames), as PARTICLE_GENERATOR_TYPE in bh_particle_generator.h
+	// lists them, and the game picks what to make by its kind, so a level that gives any other number is refused. All 570 in the game's
+	// own levels are one of the four. (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const kinds_of_particle_generator = 4;
+
+	if (type < 0 || type >= kinds_of_particle_generator)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	CHUNK_EXTRACT(flags,int)
 	CHUNK_EXTRACT(time,unsigned short)
 	CHUNK_EXTRACT(probability,unsigned short)
@@ -792,7 +834,9 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(id,ObjectID)
 	CHUNK_EXTRACT(parent_id,ObjectID)
 	CHUNK_EXTRACT(location,ChunkVectorInt)
+	CheckPlace(location);
 	CHUNK_EXTRACT(orientation,ChunkQuat)
+	CheckTurn(orientation);
 	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }
 
@@ -824,7 +868,8 @@ size_t AVP_Particle_Generator_Data_Chunk::size_chunk()
 {
 	chunk_size=12+6*sizeof(int)+sizeof(ObjectID)*2;
 	chunk_size+=sizeof(ChunkVectorInt)+sizeof(ChunkQuat);
-	chunk_size+=(strlen(name)+4)&~3;
+	// (an empty name is read as no name at all, CopyOptionalNameFromChunk: 0 bytes of it, not strlen of a null pointer. Fixed 2026-11-16 for the AvP port: a particle generator, a dummy object or a power cable with no name stopped the program.)
+	chunk_size+=((name ? strlen(name) : 0)+4)&~3;
 	return chunk_size;
 }
 

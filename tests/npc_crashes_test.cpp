@@ -431,6 +431,21 @@ static void TestTheWokenPredator()
 		"EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );"), "and put back straight after, before it becomes a predator");
 }
 
+// Added 2026-11-14 by Melanikus for the AvP port: a zone alert, from the console, writes the module's name, which comes from the level
+// file, into a line of 256 letters. So the line is held to that room, and always ends.
+static void TestTheZoneAlertLine()
+{
+	puts("A zone alert's line:");
+
+	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+	std::string const alert = Between(marine, "void Console_ZoneAlert(int input)", "\n}\n");
+
+	Check(Has(marine, "static char tempstring[256];"), "the line has room for 256 letters");
+	Check(Has(alert, "_snprintf(tempstring,sizeof(tempstring)-1,\"NEW ZONE ALERT IN %d, '%s'\\n\",target->m_index,target->name);\n\ttempstring[sizeof(tempstring)-1]=0;"),
+		"and a zone alert writes the module's name into no more than that, and ends the line");
+	Check(!Has(alert, "sprintf(tempstring,"), "and nothing writes into it without a limit");
+}
+
 int main()
 {
 	TestTheXenoborg();
@@ -447,6 +462,7 @@ int main()
 	TestTheAliensSeenByAnAlien();
 	TestTheAlienWithNoTarget();
 	TestTheWokenPredator();
+	TestTheZoneAlertLine();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;

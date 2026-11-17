@@ -25,12 +25,20 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every point, box corner and centre a shape gives has to be inside the level, as CheckPlace in chunk.hpp says
+//   a shape's radius, and its radius about its centre, have to be real numbers from 0 to 2^24, as CheckRadius in chunk.hpp says
+//   an animation frame's polygon normals have to pass the same rule as a shape's own
+//   a texture coordinate has to be a real number no further than an animated corner's can be
+//   an outside shape, and a skin in an animated shape's alternate textures, have to have a name
+//   whether a normal's number is a real one is asked of real_numbers.h, the game's one rule for it
 
 #include <stdio.h>
 #include <math.h>
 #include <vector>
 
 #include "chunk.hpp"
+#include "real_numbers.h"
+#include "texture_animation.h"
 #include "chunk_type.hpp"
 #include "chunk_shape.hpp"
 #include "chunk_object.hpp"
@@ -130,15 +138,12 @@ Shape_Header_Chunk * Shape_Chunk::get_header()
 // game's own levels is 1.09 long. Anything much bigger means nothing, and the game can't turn it into its whole-number form safely,
 // and neither can it turn infinity or "not a number". A normal of all zeros is allowed: the game's own levels have 8619 of them.
 // This reads the float's bits instead of comparing the float itself, because the Release build's fast floating point setting lets
-// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. With the sign
-// taken off, a float's bits count upwards in the same order as its size. 0x40000000 is 2, and infinity and "not a number" come
-// after every real number, so this one test catches all of them.
+// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. So whether it's a
+// real number is asked first, of its bits (real_numbers.h), and only then whether it's from -2 to 2. (Changed 2026-11-14 by Melanikus
+// for the AvP port, to the game's one rule for this; it was its own bit test, which allowed exactly the same numbers.)
 static bool normal_number_is_valid (float number)
 {
-	unsigned int bits;
-	memcpy (&bits, &number, sizeof(bits));
-
-	return (bits & 0x7fffffff) <= 0x40000000;
+	return IsRealNumberFrom(number, -2.0f, 2.0f);
 }
 
 // A shape's normals are in two lists: one for its points and one for its polygons, each read from a chunk with a count of its own.
@@ -800,9 +805,12 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Shape_Chunk * parent, const char * vtdata
 
 	*((ChunkVectorInt**) &vert_data) = parent->shape_data_store->v_list;
 
+	// Each point has to be inside the level: CheckPlace, in chunk.hpp, says how far out that is, and why. The same goes for a sub-shape's
+	// points and an animation frame's, below. (Added 2026-11-14 by Melanikus for the AvP port.)
 	for (i=0;i<num_verts;i++)
 	{
 		parent->shape_data_store->v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(parent->shape_data_store->v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -822,6 +830,7 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Shape_Sub_Shape_Chunk * parent, const cha
 	for (i=0;i<num_verts;i++)
 	{
 		parent->shape_data_store->v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(parent->shape_data_store->v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -839,6 +848,7 @@ Shape_Vertex_Chunk::Shape_Vertex_Chunk(Anim_Shape_Frame_Chunk * parent, const ch
 	for (i=0;i<num_verts;i++)
 	{
 		v_list[i] = *((ChunkVectorInt *) vtdata );
+		CheckPlace(v_list[i]);
 		vtdata+=sizeof(ChunkVectorInt);
 	}
 }
@@ -1008,6 +1018,14 @@ Shape_Polygon_Normal_Chunk::Shape_Polygon_Normal_Chunk(Anim_Shape_Frame_Chunk * 
 	{
 		p_normal_list[i] = *((ChunkVectorFloat *) pndata);
 		pndata+=sizeof(ChunkVectorFloat);
+	}
+
+	// An animation frame's polygon normals have to be sensible numbers by the same rule as a shape's own (normals_are_valid, above),
+	// as the game makes whole numbers of them too. (Added 2026-11-14 by Melanikus for the AvP port.) Here the list is held to its own
+	// count; that the count is the shape's own number of polygons is checked once the whole file is read, in animation_matches_shape.
+	if (!normals_are_valid (p_normal_list, num_polys, num_polys))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
 }
 
@@ -1195,9 +1213,11 @@ Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* d
 
 	//fill in the appropriate entries
 	cs->centre=*(ChunkVectorInt*)data;
+	CheckPlace(cs->centre);
 	data+=sizeof(ChunkVectorInt);
 	
 	cs->radius_about_centre=*(float*)data;
+	CheckRadius(cs->radius_about_centre);
 }
 
 void Shape_Centre_Chunk::fill_data_block(char * data_start)
@@ -1305,6 +1325,17 @@ static void read_uv_lists (ChunkUV_List * lists, int count, const char * uvdata,
 		{
 			lists[i].vert[j] = *((ChunkUV *) uvdata);
 			uvdata += sizeof(ChunkUV);
+
+			// A corner's place on its picture is in texels, and the game makes a whole number of it, so each of u and v has to be a real
+			// number no further either way than an animated corner's can be (texture_animation.h). The furthest in the game's own levels
+			// is 4,715. Whether it's a real number is told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+			float const furthest = (float)kTextureAnimationFurthestTexel;
+
+			if (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))
+			{
+				Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				return;
+			}
 		}
 	}
 }
@@ -1542,6 +1573,7 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	hdata+=4;
 
 	parent->shape_data_store->radius = *((float *) hdata);
+	CheckRadius(parent->shape_data_store->radius);
 	hdata+=4;
 	
 	parent->shape_data_store->max.x = *((int *) hdata);
@@ -1558,6 +1590,10 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	hdata+=4;
 	parent->shape_data_store->min.z = *((int *) hdata);
 	hdata+=4;
+
+	// The shape's box has to be inside the level, as its points do (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	CheckPlace(parent->shape_data_store->max);
+	CheckPlace(parent->shape_data_store->min);
 
 	version_no = *((int *) hdata);
 	hdata+=4;
@@ -1801,6 +1837,14 @@ CHUNK_WITH_CHILDREN_LOADER("SHPEXTFL",Shape_External_File_Chunk)
 void Shape_External_File_Chunk::post_input_processing()
 {
 	Chunk_With_Children::post_input_processing();
+
+	// An outside shape is found by its name, which it keeps in an object name chunk or a level name chunk, so one with neither is refused.
+	// It's asked only now, as an object name chunk makes its name in the step just above. Every one of the 1,160 in the game's own levels
+	// has one. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!get_shape_name())
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 const char* Shape_External_File_Chunk::get_shape_name()
@@ -2287,6 +2331,14 @@ void Shape_Sub_Shape_Chunk::post_input_processing()
 		return;
 	}
 
+	// A skin, a sub-shape in an animated shape's alternate textures, is found by its name, which it keeps in a shape name chunk, so one
+	// with none is refused. No level of the game's own has a skin. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (parent && !strcmp(parent->identifier, "ASALTTEX") && !get_shape_name())
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	Chunk_With_Children::post_input_processing();
 }
 
@@ -2334,6 +2386,7 @@ Shape_Sub_Shape_Header_Chunk::Shape_Sub_Shape_Header_Chunk (Shape_Sub_Shape_Chun
 	hdata += 4;
 
 	parent->shape_data_store->radius = *((float *) (hdata));
+	CheckRadius(parent->shape_data_store->radius);
 	hdata += 4;
 
 	parent->shape_data_store->max.x = *((int *) (hdata));
@@ -2349,6 +2402,10 @@ Shape_Sub_Shape_Header_Chunk::Shape_Sub_Shape_Header_Chunk (Shape_Sub_Shape_Chun
 	parent->shape_data_store->max.z = *((int *) (hdata));
 	hdata += 4;
 	parent->shape_data_store->min.z = *((int *) (hdata));
+
+	// The sub-shape's box has to be inside the level, as its points do (CheckPlace, in chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+	CheckPlace(parent->shape_data_store->max);
+	CheckPlace(parent->shape_data_store->min);
 }
 
 Shape_Sub_Shape_Header_Chunk::~Shape_Sub_Shape_Header_Chunk()
@@ -2609,6 +2666,7 @@ Shape_Fragment_Location_Chunk::Shape_Fragment_Location_Chunk (Chunk_With_Childre
 : Chunk (parent, "FRAGLOCN")
 {
 	frag_loc = *((ChunkVectorInt *) sdata);
+	CheckPlace(frag_loc);
 
 	sdata += sizeof(ChunkVectorInt);
 
@@ -3040,6 +3098,7 @@ Anim_Shape_Centre_Chunk::Anim_Shape_Centre_Chunk(Chunk_With_Children* const pare
 :Chunk(parent,"ANSHCEN2")
 {
 	Centre=*(ChunkVectorInt*)data;
+	CheckPlace(Centre);
 	data+=sizeof(ChunkVectorInt);
 	flags=*(int*)data;
 	data+=4;

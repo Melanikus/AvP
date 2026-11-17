@@ -106,4 +106,133 @@ inline const char *SaveFolder_Make(const char *under, char *folder, size_t size,
 	return 0;
 }
 
+// A FOLDER OF THE CALLER'S CHOOSING (SaveFolder_UseThisFolder, utilities.h). The map editor keeps the game's files (its log, its
+// settings) in a folder of its own beside it, so it never writes into the player's My Games. The folder comes from outside the game, so
+// it's checked here, before the game uses it. (Added 2026-11-14 by Melanikus for the AvP port, SAVE-FOLDER-1.)
+//
+// The longest name the game itself puts after the save folder's path, in letters, measured 2026-11-14 at afbf9545:
+//   MPConfig/<a network setting's name, at most 21 letters: MP_Config_Name[22], menu_data.cpp>.skirmish_cfg     43
+//   User_Profiles/<a player's name, at most 15: MAX_SIZE_OF_USERS_NAME, user_profile.h>_<a slot, 1 to 8>.sav    35
+//   AliensVsPredator.cfg (ConfigFile.cpp) 20; mark-999999.png (mark_files.h) 15; avp_log.5.txt, the oldest kept log (log_files.h) 13
+// A folder given has to leave room for it, so each of those paths fits in MAX_PATH. One name isn't the game's own: a level's log, when it
+// can't be written beside the level, is named after the level (level_log.h), whose name can be 200 letters long. That one may not fit,
+// and then it isn't written, which the game's own log says (level_log.cpp).
+static const size_t kSaveFolderLongestName = 43;
+
+static const char *const kSaveFolderGivenNothing = "no folder was given";
+static const char *const kSaveFolderGivenNotWhole = "the folder isn't a whole path, starting with a drive letter, a colon and a slash";
+static const char *const kSaveFolderGivenWholeDrive = "the folder is a whole drive";
+static const char *const kSaveFolderGivenStream = "the folder's path has a colon after its drive letter, which names a hidden stream, not a folder";
+static const char *const kSaveFolderGivenGoesUp = "the folder's path has a \"..\" part";
+static const char *const kSaveFolderGivenPartEnding = "a part of the folder's path ends in a dot or a space";
+static const char *const kSaveFolderGivenTwoSlashes = "the folder's path ends in more than one slash";
+static const char *const kSaveFolderGivenTooLong = "the folder's path is too long to leave room for the game's file names";
+static const char *const kSaveFolderGivenNotThere = "there's no folder there";
+static const char *const kSaveFolderGivenAFile = "that's a file, not a folder";
+static const char *const kSaveFolderGivenLink = "that's a link, or another reparse point, not a plain folder";
+
+// Can the game keep its files in folder? It gives back 0 if it can, and then out (room for outSize letters) holds the folder, ending in
+// exactly one '\', ready for a file's name. Otherwise it gives back why not, and out is empty. The folder must be:
+// - a whole path from a drive letter, "C:\..." or "C:/...". Refused: a path from the current folder ("settings"), from the top of the
+//   current drive ("\settings"), a drive's own current folder ("C:settings"), another computer's ("\\server\share") and Windows' own
+//   device names ("\\.\", "\\?\").
+// - not a whole drive ("C:\"), with no colon after the drive letter, no ".." part, and no part ending in a dot or a space;
+// - ending in at most one slash, which is given back as '\';
+// - short enough that the game's longest file name still fits after it (kSaveFolderLongestName), within MAX_PATH;
+// - a plain folder that's there: not a file, and not a link or any other reparse point. That's asked of the folder's own name, never of
+//   what a link points to (GetFileAttributesA doesn't follow the last part of a path), and without its last slash, which would make
+//   Windows go through a link to the folder behind it.
+inline const char *SaveFolder_WhyNotUsable(const char *folder, char *out, size_t outSize)
+{
+	if (out && outSize)
+	{
+		out[0] = 0;
+	}
+
+	if (!out || outSize == 0 || !folder || !folder[0])
+	{
+		return kSaveFolderGivenNothing;
+	}
+
+	bool const driveLetter = (folder[0] >= 'A' && folder[0] <= 'Z') || (folder[0] >= 'a' && folder[0] <= 'z');
+	if (!driveLetter || folder[1] != ':' || (folder[2] != '\\' && folder[2] != '/'))
+	{
+		return kSaveFolderGivenNotWhole;
+	}
+
+	// Its length is found looking no further than MAX_PATH, so a path with no end is never read past that
+	size_t const length = strnlen(folder, MAX_PATH);
+	if (length >= MAX_PATH)
+	{
+		return kSaveFolderGivenTooLong;
+	}
+	std::string path(folder, length);
+
+	if (path.find(':', 2) != std::string::npos)
+	{
+		return kSaveFolderGivenStream;
+	}
+
+	// One slash at its end is taken off here, and put back as '\' at the end. A second one is refused.
+	if (path.back() == '\\' || path.back() == '/')
+	{
+		path.pop_back();
+	}
+	if (path.back() == '\\' || path.back() == '/')
+	{
+		return kSaveFolderGivenTwoSlashes;
+	}
+	if (path.length() <= 2)
+	{
+		return kSaveFolderGivenWholeDrive;
+	}
+
+	// Each part, between two slashes or at the end, from just after the drive's slash. A ".." part goes up a folder. A part that ends in a
+	// dot or a space is refused too: Windows drops those from the end of a name, so ".. " could become "..", and no folder can be made
+	// with such a name anyway (the game's rule for level file names refuses them as well: level_file_name.h).
+	for (size_t start = 3; start <= path.length(); )
+	{
+		size_t end = path.find_first_of("\\/", start);
+		if (end == std::string::npos)
+		{
+			end = path.length();
+		}
+		std::string const part = path.substr(start, end - start);
+		if (part == "..")
+		{
+			return kSaveFolderGivenGoesUp;
+		}
+		if (!part.empty() && (part.back() == '.' || part.back() == ' '))
+		{
+			return kSaveFolderGivenPartEnding;
+		}
+		start = end + 1;
+	}
+
+	// The folder, its '\', the longest name and the 0 that ends them all have to fit in MAX_PATH, and the folder with its '\' in out
+	if (path.length() + 1 + kSaveFolderLongestName + 1 > MAX_PATH || path.length() + 2 > outSize)
+	{
+		return kSaveFolderGivenTooLong;
+	}
+
+	DWORD const what = ::GetFileAttributesA(path.c_str());
+	if (what == INVALID_FILE_ATTRIBUTES)
+	{
+		return kSaveFolderGivenNotThere;
+	}
+	if ((what & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+	{
+		return kSaveFolderGivenLink;
+	}
+	if ((what & FILE_ATTRIBUTE_DIRECTORY) == 0)
+	{
+		return kSaveFolderGivenAFile;
+	}
+
+	memcpy(out, path.c_str(), path.length());
+	out[path.length()] = '\\';
+	out[path.length() + 1] = 0;
+	return 0;
+}
+
 #endif
