@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus for the AvP port:
+//   the file's SHA-256 is worked out from the same reads as its MD5 (level_file_sum.h, sha256_stream.h), for the level editor's proof
+//   that the loader read exactly the bytes it wrote; the game's MD5 and its log line are as they were
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a file with no level environment is refused, a level or a model alike
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -35,6 +38,7 @@
 #include "huffman.hpp"
 #include "mbstring.h"
 #include "md5.h"
+#include "sha256_stream.h"
 #include "logstring.h"
 
 // Class Lockable_Chunk_With_Children functions
@@ -166,6 +170,10 @@ File_Chunk::File_Chunk(const char * file_name)
 	MD5Context sum_so_far;
 	MD5Init(&sum_so_far);
 
+	// And its SHA-256, from the same reads, for the level editor's proof that the loader read exactly the bytes it wrote
+	Sha256Stream sha256_so_far;
+	Sha256_Start(&sha256_so_far);
+
 	// Each read has to get every byte it asked for. The size above says they are all there, so getting fewer means the file
 	// isn't what it said it was.
 	if (!ReadFile(rif_file, id_buffer, 8, &bytes_read, 0) || bytes_read != 8)
@@ -176,6 +184,7 @@ File_Chunk::File_Chunk(const char * file_name)
 	}
 
 	MD5Update(&sum_so_far, (md5byte const *)id_buffer, 8);
+	Sha256_Add(&sha256_so_far, id_buffer, 8);
 
 	/* KJL 16:46:14 19/09/98 - check for a compressed rif */
 	if (!strncmp (id_buffer, COMPRESSED_RIF_IDENTIFIER, 8))
@@ -206,6 +215,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 		// The rest of the file as it is on disk, still packed: the sum is of the file, not of the level unpacked from it
 		MD5Update(&sum_so_far, (md5byte const *)(buffer+8), file_size-8);
+		Sha256_Add(&sha256_so_far, buffer+8, file_size-8);
 
 		// Every level the game comes with is compressed, so this runs before anything else looks at the file. A decoder that trusted what the
 		// file says could be made to write past the end of its table, or of the memory for the result. This one knows the file's size and checks.
@@ -237,6 +247,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 		// The 4 bytes just as they were read from the file
 		MD5Update(&sum_so_far, (md5byte const *)&file_size_from_file, 4);
+		Sha256_Add(&sha256_so_far, &file_size_from_file, 4);
 
 		if (file_size != file_size_from_file)
 		{
@@ -257,12 +268,14 @@ File_Chunk::File_Chunk(const char * file_name)
 		}
 
 		MD5Update(&sum_so_far, (md5byte const *)buffer, file_size-12);
+		Sha256_Add(&sha256_so_far, buffer, file_size-12);
 		buffer_ptr = buffer;
 	}
 
 	// Every byte of the file has now been read, and added to the sum. The size kept is the file's own: for a packed file,
 	// file_size above has become the size of the level unpacked from it.
 	MD5Final(file_sum.md5, &sum_so_far);
+	Sha256_Finish(&sha256_so_far, file_sum.sha256);
 	file_sum.bytes = (unsigned int)bytes_on_disk;
 
 	// Process the RIF

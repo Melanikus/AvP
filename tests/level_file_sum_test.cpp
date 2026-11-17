@@ -5,6 +5,8 @@
 //
 // - level_file_sum.h on its own: which sizes a level file may be, the words of the line, with the sum the MD5 standard gives for
 //   its own example, and the words for a file refused for its size.
+// - sha256_stream.h on its own: the SHA-256 standard's answers, its input given in pieces of any size (added 2026-11-17 by Melanikus
+//   for the AvP port); and the loader's SHA-256 of each file it loads is Windows' own SHA-256 of that file.
 // - The game's real level loader (File_Chunk, in mishchnk.cpp), on real files this test writes in a folder of its own, which it makes
 //   inside the folder it runs in and names by its own process number:
 //   - a plain level and a packed level both load, and the size and sum each one gives are those of the file as it is on disk;
@@ -42,7 +44,11 @@
 #include "mishchnk.hpp"
 #include "huffman.hpp"
 #include "md5.h"
+#include "sha256_stream.h"
 #include "level_file_sum.h"
+
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")   // Windows' own SHA-256, to hold sha256_stream.h to
 
 static int checksFailed = 0;
 
@@ -235,6 +241,72 @@ static bool Same(const unsigned char a[16], const Sum &b)
 	return memcmp(a, b.md5, 16) == 0;
 }
 
+// SHA-256 of some bytes by Windows' own CNG, a second implementation the loader's (sha256_stream.h) is held to. All zeros if CNG failed,
+// which no loaded file's sum equals.
+struct Sha256
+{
+	unsigned char sum[32];
+};
+
+static Sha256 Sha256ByWindows(const Bytes &bytes)
+{
+	Sha256 out = {};
+	BCRYPT_ALG_HANDLE algorithm = NULL;
+
+	if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, NULL, 0) == 0)
+	{
+		BCRYPT_HASH_HANDLE hash = NULL;
+		bool made = false;
+
+		if (BCryptCreateHash(algorithm, &hash, NULL, 0, NULL, 0, 0) == 0)
+		{
+			made = BCryptHashData(hash, (PUCHAR)bytes.data(), (ULONG)bytes.size(), 0) == 0 && BCryptFinishHash(hash, out.sum, sizeof(out.sum), 0) == 0;
+			BCryptDestroyHash(hash);
+		}
+
+		if (!made)
+		{
+			memset(out.sum, 0, sizeof(out.sum));
+		}
+
+		BCryptCloseAlgorithmProvider(algorithm, 0);
+	}
+
+	return out;
+}
+
+static bool SameSha256(const unsigned char a[32], const Sha256 &b)
+{
+	static const unsigned char none[32] = {};
+	return memcmp(b.sum, none, 32) != 0 && memcmp(a, b.sum, 32) == 0;
+}
+
+// sha256_stream.h on some text, fed in pieces of the given size, written as hex
+static std::string StreamSha256(const std::string &text, size_t piece)
+{
+	static const char kHex[] = "0123456789abcdef";
+	Sha256Stream stream;
+	unsigned char sum[32];
+	std::string hex;
+
+	Sha256_Start(&stream);
+
+	for (size_t at = 0; at < text.size(); at += piece)
+	{
+		Sha256_Add(&stream, text.data() + at, text.size() - at < piece ? text.size() - at : piece);
+	}
+
+	Sha256_Finish(&stream, sum);
+
+	for (int i = 0; i < 32; i++)
+	{
+		hex += kHex[sum[i] >> 4];
+		hex += kHex[sum[i] & 15];
+	}
+
+	return hex;
+}
+
 // Loads a file through the game's loader, as load_rif does, and gives back whether it loaded, and the size and sum it worked out
 static bool Loads(const std::string &path, LevelFileSum *sum)
 {
@@ -291,6 +363,18 @@ static std::string Between(const std::string &text, const char *start, const cha
 }
 
 // ---- The tests
+
+// sha256_stream.h gives the SHA-256 standard's own answers (FIPS 180-2 appendix B and its examples), however its input is cut into pieces
+static void TestTheSha256()
+{
+	Check(StreamSha256("abc", 1) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of \"abc\" is the standard's");
+	Check(StreamSha256("", 1) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "and of nothing");
+	Check(StreamSha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 7) ==
+		"248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", "and of the standard's 56 letters, given 7 at a time");
+	Check(StreamSha256(std::string(1000000, 'a'), 997) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+		"and of a million a's, given 997 at a time");
+	Check(StreamSha256(std::string(1000000, 'a'), 1000000) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", "or all at once");
+}
 
 static void TestTheRule()
 {
@@ -363,12 +447,15 @@ static void TestTheLoader(const std::string &folder)
 
 	Check(Loads(plainFile, &got), "a plain level loads");
 	Check(got.bytes == level.size() && Same(got.md5, SumOf(level)), "and its size and sum are those of the file");
+	Check(SameSha256(got.sha256, Sha256ByWindows(level)), "and its SHA-256 is the file's, as Windows' own SHA-256 gives it");
 
 	Check(Loads(changedFile, &got), "a copy with its last byte changed loads");
 	Check(got.bytes == changed.size() && Same(got.md5, SumOf(changed)) && !Same(got.md5, SumOf(level)), "and its sum is its own, not the first file's");
+	Check(SameSha256(got.sha256, Sha256ByWindows(changed)) && !SameSha256(got.sha256, Sha256ByWindows(level)), "and so is its SHA-256");
 
 	Check(Loads(packedFile, &got), "a packed level loads");
 	Check(got.bytes == packed.size() && Same(got.md5, SumOf(packed)), "and its size and sum are those of the file as it is on disk, still packed");
+	Check(SameSha256(got.sha256, Sha256ByWindows(packed)), "and its SHA-256 too, of the file still packed");
 
 	Check(errorLines.empty(), "none of those writes an error in the log");
 
@@ -471,6 +558,8 @@ static void TestTheGameUsesIt()
 	Check(Count(loader, "ReadFile(") == 4 && Count(loader, ", &bytes_read, 0) || bytes_read != ") == 4,
 		"each of the loader's four reads has to get every byte it asked for");
 	Check(Count(loader, "MD5Update(&sum_so_far, ") == 4, "and each one adds what it read to the sum");
+	Check(Count(loader, "Sha256_Add(&sha256_so_far, ") == 4 && Has(loader, "Sha256_Finish(&sha256_so_far, file_sum.sha256);"),
+		"and to the SHA-256, which is finished with the MD5");
 
 	std::string const loaders = ReadWholeFile("3dc/win95/chunk_load.cpp");
 	// the level's: load_rif reads through try_load_rif (the editor's, which shows nothing on a refusal), and only that one makes the file's chunk
@@ -547,6 +636,7 @@ int main()
 	}
 
 	TestTheRule();
+	TestTheSha256();
 	TestTheLoader(folder);
 	TestAModelGivesItsName(folder);
 	TestTheGameUsesIt();

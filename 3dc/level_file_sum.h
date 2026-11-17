@@ -1,5 +1,6 @@
 // Which level file a machine loaded: its size and its MD5 sum, for the log, and the sizes a level file may be. Written 2026-11-08 by
-// Melanikus for the AvP port (#89).
+// Melanikus for the AvP port (#89). Modified 2026-11-17 by Melanikus for the AvP port: the sum also holds the file's SHA-256, for the
+// level editor.
 //
 // WHY: in a network game every machine loads its own copy of the level from its own avp_rifs folder. The host only says which level,
 // never sends it. If two copies differ (a mod, a damaged file, another edition's copy), the game doesn't match between the machines and
@@ -66,6 +67,9 @@ struct LevelFileSum
 {
 	unsigned int bytes = 0;            // the file's size, as it is on disk (packed, if it's packed)
 	unsigned char md5[16] = {};        // the MD5 sum of all those bytes, in the order they are in the file
+	unsigned char sha256[32] = {};     // their SHA-256 (sha256_stream.h), from the same reads. MD5 tells honest copies apart, which is all
+	                                   // the log needs; the level editor uses this one to PROVE the loader read exactly the bytes it
+	                                   // wrote, which MD5 can't (two files can be made with one MD5). Added 2026-11-17.
 };
 
 // The line for the log, as in the example at the top. path is the path the loader opened, as the game gave it (from the game's own
