@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   load_rif_bitmap: the level editor's Prefer .BMP over .RIM (R_SetEditorPreferBmp) tries the picture as a .bmp first; the game never sets it
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   avp_try_load_rif: a level file the loader refuses comes back as INVALID_RIFFHANDLE, with nothing shown (chunk_load.cpp)
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -85,6 +87,7 @@
 #include "inventory.h"
 #include <vector>
 #include "TextureManager.h"
+#include "renderer.h"   // R_SetEditorPreferBmp
 #include "utilities.h"
 #include "logString.h"
 #include "surface_normals.h"
@@ -2862,6 +2865,14 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 	return TRUE;
 }
 
+// The level editor's Prefer .BMP over .RIM (R_SetEditorPreferBmp, renderer.h): never set in the game. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+static bool editorPreferBmp = false;
+
+void R_SetEditorPreferBmp(bool on)
+{
+	editorPreferBmp = on;
+}
+
 // hook to load a bitmap - so you can load them from test directories, etc. should return tex index
 texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 {
@@ -2880,7 +2891,24 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 
 	Util::ChangeSlashes(fileName);
 
-	texID_t textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
+	texID_t textureID = MISSING_TEXTURE;
+
+	// The level editor's Prefer .BMP over .RIM (inteng's FUN_0046df30): the name with its ending after the last '.' made ".bmp" is tried first, and the .RIM is
+	// taken when there's no such picture or bmp_picture.h refuses it. Only a name the check above took is ever changed, and only its ending.
+	if (!whyRefused && editorPreferBmp)
+	{
+		std::string::size_type const dot = fileName.rfind('.');
+
+		if (dot != std::string::npos)
+		{
+			textureID = Tex_CreateFromBMP("graphics/" + fileName.substr(0, dot) + ".bmp");
+		}
+	}
+
+	if (textureID == MISSING_TEXTURE)
+	{
+		textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
+	}
 /*
 		CL_LoadImageOnce
 		(
