@@ -1961,6 +1961,47 @@ static void CheckTheRealWriters()
 	Check(shapes.size() > 100000 && shapes.find("->AddItem(") == std::string::npos, "and the only other file that uses the lists doesn't add shapes to them");
 }
 
+// THE SCREEN LIST'S ROOM (Frost 2026-11-18): the level editor draws every letter of its panels as a quad on the screen list, and at 2560 x 1440 they
+// filled the 4096 corners the game made it with, so letters and boxes were left out ("Render list orthoList is full"). d3_func.cpp makes it with
+// 65536 corners now, the most its 16-bit index numbers can number: read there, then a list of that size filled to the brim.
+static void CheckTheScreenListsRoom()
+{
+	printf("The screen list's room:\n");
+
+	std::string const device = JustTheCode(WithoutReturns(ReadSourceFile("win32/d3_func.cpp")));
+	Check(device.find("const uint32_t kMaxOrthoVertices = 65536;") != std::string::npos, "d3_func.cpp gives the screen list 65536 corners, the most 16-bit numbers reach");
+	Check(device.find("const uint32_t kMaxOrthoIndices  = (kMaxOrthoVertices / 4) * 6;") != std::string::npos, "and the index numbers for that many quads");
+	Check(device.find("d3d.orthoVB->Create(kMaxOrthoVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);") != std::string::npos
+		&& device.find("d3d.orthoIB->Create(kMaxOrthoIndices, USAGE_DYNAMIC);") != std::string::npos, "and makes the screen list's two buffers with them");
+	Check(device.find("d3d.mainVB->Create(kMaxVertices*5, sizeof(D3DLVERTEX), USAGE_DYNAMIC);") != std::string::npos
+		&& device.find("d3d.particleVB->Create(kMaxVertices*6, sizeof(PARTICLEVERTEX), USAGE_DYNAMIC);") != std::string::npos, "while the game's other lists keep their sizes");
+
+	uint32_t const corners = 65536;
+	uint32_t const indexRoom = (corners / 4) * 6;
+	TestList t("orthoList", 50, corners, indexRoom, sizeof(ORTHOVERTEX));
+	t.Open();
+
+	uint32_t accepted = 0;
+
+	for (uint32_t i = 0; i < corners / 4 + 3; i++)
+	{
+		accepted += WriteScreenQuad(t, 1) ? 1 : 0;
+	}
+
+	uint32_t highest = 0;
+
+	for (uint32_t i = 0; i < t.indexBuffer.GetSize(); i++)
+	{
+		highest = t.indices[i] > highest ? t.indices[i] : highest;
+	}
+
+	Check(accepted == corners / 4, "a list of that size takes 16384 quads, " + std::to_string(accepted));
+	Check(t.list.GetLeftOutBecauseFull() == 3, "and refuses the 3 past them as full, " + std::to_string(t.list.GetLeftOutBecauseFull()));
+	Check(t.indexBuffer.GetSize() == indexRoom && highest == corners - 1, "its index numbers fill their room and the last corner is number 65535: none wrapped past 16 bits, " + std::to_string(highest));
+	Check(t.NothingPastTheEnd(), "and nothing was written past the end of its buffers");
+	t.Close();
+}
+
 int main()
 {
 	CheckTheCountsAgree();
@@ -1984,6 +2025,7 @@ int main()
 	CheckNewBuffersStartEmpty();
 	CheckTheRealWriters();
 	CheckLinesStayApart();
+	CheckTheScreenListsRoom();
 
 	if (checksFailed)
 	{
