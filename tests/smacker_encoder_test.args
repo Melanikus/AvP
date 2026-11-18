@@ -1,0 +1,12 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0
+/Idependencies/libsmackerenc/include /Idependencies/libsmackerdec/include
+tests/smacker_encoder_test.cpp
+dependencies/libsmackerenc/src/BitWriter.cpp
+dependencies/libsmackerenc/src/HuffmanTree.cpp
+dependencies/libsmackerenc/src/SmackerEncoder.cpp
+dependencies/libsmackerdec/src/BitReader.cpp
+dependencies/libsmackerdec/src/FileStream.cpp
+dependencies/libsmackerdec/src/HuffmanVLC.cpp
+dependencies/libsmackerdec/src/LogError.cpp
+dependencies/libsmackerdec/src/SmackerDecoder.cpp
