@@ -1,0 +1,20 @@
+Dereference the effect slot clusters with a lambda, not with the address of std::unique_ptr::operator*.
+
+Our own patch (AvP), 2026-11-18. alc.cpp hands &ContextBase::EffectSlotCluster::operator* (the member function of
+std::unique_ptr<std::array<EffectSlotBase,4>>) to std::views::transform. The C++ standard leaves taking the address of a
+standard library member function unspecified ([namespace.std]), and MSVC 14.52.37025 (GitHub windows-2025-vs2026 image,
+2026-11-18) refuses it with C3889 at alc.cpp(1787) and (1788), which stopped every CI build of the libraries. A lambda
+that dereferences the pointer gives the same view on every compiler.
+
+diff --git a/alc/alc.cpp b/alc/alc.cpp
+--- a/alc/alc.cpp
++++ b/alc/alc.cpp
+@@ -1781,7 +1781,7 @@ auto UpdateDeviceParams(gsl::not_null<al::Device*> device,
+          * configuration in aluInitEffectPanning.
+          */
+         std::ranges::for_each(context->mEffectSlotClusters
+-            | std::views::transform(&ContextBase::EffectSlotCluster::operator*)
++            | std::views::transform([](ContextBase::EffectSlotCluster const &cluster) -> auto& { return *cluster; })
+             | std::views::join, [](EffectSlotBase &slot)
+         {
+             slot.mWetBuffer.clear();
