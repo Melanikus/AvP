@@ -2151,23 +2151,36 @@ void Shape_Morphing_Frame_Data_Chunk::prepare_for_output()
 	// but they will be by the parent class which will have it's prepare
 	// for output called first
 	
-	delete[] frame_store;
+	// INTENG BUG FIXED, a named difference (the level editor inteng saved levels with this same code): the list was made with new and never
+	// filled where no frame reaches (see the layout below: with 2 frames or more, the last 2 numbers of each frame after the first), so inteng
+	// wrote there whatever the memory held, and two saves of one level differed there. Now each of those places keeps the number the file gave
+	// it, as long as the chunk still has the file's count of frames, so a level saved untouched writes this chunk exactly as it was read (the
+	// game's own levels hold such left-over numbers there: 43 of their 47 two-frame chunks). Every other place no frame reaches is 0.
+	int const count = anim_frames.size();
+	int * list = 0;
 
-	if (anim_frames.size())
+	if (count)
 	{
-		// The list starts as zeros, so every number written is set: a place of the list that no frame reaches is written as 0
-		frame_store = new int [ anim_frames.size() * 3 ]();
+		list = new int [ count * 3 ]();
+
+		if (count == num_frames && frame_store)
+		{
+			for (int place = 0; place < count * 3; place++)
+			{
+				list[place] = frame_store[place];
+			}
+		}
 	}
-	else
-	{
-		frame_store = 0;
-	}
+
+	delete[] frame_store;
+	frame_store = list;
 
 	int num_f = 0;
 
-	// Frame k's three numbers go at k, k+1 and k+2, each frame over the one before. That is the layout the game's loader reads (post_input_processing
-	// finds frame i's shapes at i and i+1) and the one the game's own levels hold, so it stays as it is: a level saved here gives the game the frames
-	// it gave before.
+	// Frame k's three numbers go at k, k+1 and k+2, each frame over the one before, as inteng wrote them: the list ends up as the first shape of
+	// every frame, then the last frame's second shape and spare number. That is the layout the game's own levels hold, and the one the game's
+	// loader reads (post_input_processing finds frame i's shapes at i and i+1). Frame k at k*3, the order the chunk's reader and writer keep,
+	// would change what the game reads from a saved level (a door's second frame gets another spare number, or is lost), so it stays as it is.
 	for (LIF<a_frame *> afi(&anim_frames); !afi.done(); afi.next())
 	{
 		int s1no, s2no;
