@@ -2155,7 +2155,8 @@ void Shape_Morphing_Frame_Data_Chunk::prepare_for_output()
 
 	if (anim_frames.size())
 	{
-		frame_store = new int [ anim_frames.size() * 3 ];
+		// The list starts as zeros, so every number written is set: a place of the list that no frame reaches is written as 0
+		frame_store = new int [ anim_frames.size() * 3 ]();
 	}
 	else
 	{
@@ -2164,6 +2165,9 @@ void Shape_Morphing_Frame_Data_Chunk::prepare_for_output()
 
 	int num_f = 0;
 
+	// Frame k's three numbers go at k, k+1 and k+2, each frame over the one before. That is the layout the game's loader reads (post_input_processing
+	// finds frame i's shapes at i and i+1) and the one the game's own levels hold, so it stays as it is: a level saved here gives the game the frames
+	// it gave before.
 	for (LIF<a_frame *> afi(&anim_frames); !afi.done(); afi.next())
 	{
 		int s1no, s2no;
