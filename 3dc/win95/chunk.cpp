@@ -127,7 +127,8 @@ char * Chunk::make_data_block_for_process ()
 		return(0);
 	}
 
-	data_block = new char [block_size];
+	// The block starts as zeros, as make_data_block_from_chunk's does: the same writers leave the same bytes alone
+	data_block = new char [block_size]();
 
 	fill_data_block_for_process(data_block);
 
