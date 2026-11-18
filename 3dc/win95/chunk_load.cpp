@@ -27,6 +27,7 @@
 //   an outside shape or a skin with no name isn't put on the list of named shapes
 
 #include <stdlib.h>
+#include <set>
 #include <string>
 #include <avp_string.hpp>
 
@@ -758,11 +759,12 @@ void close_rif_handle(RIFFHANDLE h)
 static int const kMostPicturesOneFileCanAskFor = 4096;
 
 // The level editor's MISSING PICTURES (R_SetEditorCountMissingPictures, renderer.h; Frost 2026-11-17, the owner: "if someone gives you a map it is very likely it won't have a
-// texture"): a picture that can't be loaded (no file, a refused name, past the limit) leaves its number unknown, so its polygons become lines (I_Polyline, the conversion below);
-// with this on, each such name is said in the log once, and they are counted, with those polygons and whether the level has no list of pictures at all, for the editor to tell the
-// user. The game never sets it.
+// texture"): a picture that can't be loaded (no file, a refused name) leaves its number unknown, so its polygons become lines (I_Polyline, the conversion below); with this on,
+// each such name is said in the log once and counted once, however many of the level's lists name it, and the names past the limit are counted apart (the log says once that
+// there are too many), with those polygons and whether the level has no list of pictures at all, for the editor to tell the user. The game never sets it.
 bool EditorCountsMissingPictures = false;
 int EditorPicturesMissing = 0;
+int EditorPicturesPastLimit = 0;
 int EditorPolygonsWithoutPicture = 0;
 bool EditorNoPictureList = false;
 
@@ -770,6 +772,9 @@ bool EditorNoPictureList = false;
 // around it (the characters', the HUD's), whose pictures are not the level's.
 static bool editorCountingLevel = false;
 static bool editorLevelCounted = false;
+
+// The missing names said so far, in small letters (Windows' file names don't tell the two apart): at most the limit's 4096
+static std::set<std::string> editorMissingNames;
 
 void R_SetEditorCountMissingPictures(bool on)
 {
@@ -779,18 +784,21 @@ void R_SetEditorCountMissingPictures(bool on)
 	if (on)
 	{
 		EditorPicturesMissing = 0;
+		EditorPicturesPastLimit = 0;
 		EditorPolygonsWithoutPicture = 0;
 		EditorNoPictureList = false;
 		editorCountingLevel = false;
 		editorLevelCounted = false;
+		editorMissingNames.clear();
 	}
 }
 
-void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList)
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit)
 {
 	if (picturesMissing) *picturesMissing = EditorPicturesMissing;
 	if (polygonsWithoutPicture) *polygonsWithoutPicture = EditorPolygonsWithoutPicture;
 	if (noPictureList) *noPictureList = EditorNoPictureList;
+	if (picturesPastLimit) *picturesPastLimit = EditorPicturesPastLimit;
 }
 
 // Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
@@ -807,7 +815,7 @@ static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags fl
 
 		if (editorCountingLevel)
 		{
-			EditorPicturesMissing++;
+			EditorPicturesPastLimit++;
 		}
 
 		return GEI_NOTLOADED;
@@ -819,11 +827,21 @@ static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags fl
 
 	if (got == GEI_NOTLOADED && editorCountingLevel)
 	{
-		char safeName[64];
+		std::string key(name ? name : "");
 
-		EditorPicturesMissing++;
-		LevelFileName_ForTheLog(name, safeName, sizeof(safeName));
-		LogErrorStringC((std::string("the level names a picture that could not be loaded (its polygons are drawn as lines): ") + safeName).c_str());
+		for (char &letter : key)
+		{
+			letter = (letter >= 'A' && letter <= 'Z') ? (char)(letter - 'A' + 'a') : letter;
+		}
+
+		if (editorMissingNames.insert(key).second)
+		{
+			char safeName[64];
+
+			EditorPicturesMissing++;
+			LevelFileName_ForTheLog(name, safeName, sizeof(safeName));
+			LogErrorStringC((std::string("the level names a picture that could not be loaded (its polygons are drawn as lines): ") + safeName).c_str());
+		}
 	}
 
 	return got;

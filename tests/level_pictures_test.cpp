@@ -238,7 +238,7 @@ struct LevelFile
 	}
 
 	// The level's own list of pictures, which is what load_rif_bitmaps goes through
-	void LoadLevelNames(int howMany)
+	void LoadLevelNames(int howMany, int flags = 0)
 	{
 		Bytes bytes;
 		AddNames(bytes, "BMPNAMES", howMany);
@@ -246,7 +246,7 @@ struct LevelFile
 		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, bytes.data(), bytes.size()));
 		handle.envd = environment.get();
 		chunks.push_back(std::move(environment));
-		load_rif_bitmaps(&handle, 0);
+		load_rif_bitmaps(&handle, flags);
 	}
 
 	// An outside shape's own list of pictures, which is the other way a picture gets asked for. This hands back a copy of that shape's list of picture numbers.
@@ -786,7 +786,7 @@ static void TestNoListOfPictures()
 
 // R_SetEditorCountMissingPictures (renderer.h); the editor tells the user how many of a level's pictures couldn't be loaded, and how many polygons are lines for it
 void R_SetEditorCountMissingPictures(bool on);
-void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList);
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
 
 static void TestTheEditorsCount()
 {
@@ -813,10 +813,10 @@ static void TestTheEditorsCount()
 		ConvertOneTexturedTriangle(level, 2, &kind, &colour);
 		ConvertOneTexturedTriangle(level, 1, &kind, &colour);
 
-		int missing = -1, lines = -1;
+		int missing = -1, lines = -1, pastLimit = -1;
 		bool noList = true;
 
-		R_EditorMissingPictures(&missing, &lines, &noList);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
 		Check(missing == 1 && lines == 1 && !noList, "the level's one refused picture is counted, with its one polygon drawn as a line, and the level has a list");
 		Check(linesInTheLog == 1, "and the log names it");
 
@@ -826,7 +826,7 @@ static void TestTheEditorsCount()
 		pictureToRefuse = "picture0.RIM";
 		another.LoadLevelNames(1);
 		ConvertOneTexturedTriangle(another, 0, &kind, &colour);
-		R_EditorMissingPictures(&missing, &lines, &noList);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
 		Check(missing == 1 && lines == 1, "a later RIF's refused picture and its polygon aren't counted as the level's");
 		R_SetEditorCountMissingPictures(false);
 	}
@@ -843,10 +843,10 @@ static void TestTheEditorsCount()
 
 		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
 
-		int missing = -1, lines = -1;
+		int missing = -1, lines = -1, pastLimit = -1;
 		bool noList = false;
 
-		R_EditorMissingPictures(&missing, &lines, &noList);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
 		Check(noList && missing == 0 && lines == 1, "a level with no list of pictures is said to have none, with its textured polygon counted as a line");
 		R_SetEditorCountMissingPictures(false);
 	}
@@ -867,11 +867,53 @@ static void TestTheEditorsCount()
 		level.chunks.push_back(std::move(environment));
 		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
 
-		int missing = -1, lines = -1;
+		int missing = -1, lines = -1, pastLimit = -1;
 		bool noList = true;
 
-		R_EditorMissingPictures(&missing, &lines, &noList);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
 		Check(missing == 0 && lines == 0 && !noList && linesInTheLog == 0, "in the game nothing is counted, and the log says nothing");
+	}
+
+	{
+		// A missing picture two outside shapes of the level name (each shape's BMPLSTST; their names are asked for as "<its RIF>/<name>", so with no RIF name as
+		// "/picture2.RIM", the same for both): counted and named once (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(3, CCF_ENVIRONMENT);
+		pictureToRefuse = "/picture2.RIM";
+		level.LoadShapeNames(3);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && linesInTheLog == 1, "the first outside shape's missing picture is counted and named");
+
+		LevelFile secondShape;   // still the level's load (no other RIF's pictures since): only the list is another shape's
+
+		pictureToRefuse = "/picture2.RIM";
+		secondShape.LoadShapeNames(3);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(picturesAskedFor == 3 && missing == 1 && linesInTheLog == 0, (std::string("a second shape naming the same missing picture asks for it again, but it is not counted or named again (") +
+			std::to_string(missing) + " counted, " + std::to_string(linesInTheLog) + " more lines in the log)").c_str());
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// Past the limit of 4096 a file may ask for: those are counted apart, not as missing pictures the log names (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(4098, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 0 && pastLimit == 2 && linesInTheLog == 1, (std::string("4098 names that all load: none missing, 2 past the limit, and the log says once that there are too many (") +
+			std::to_string(missing) + " / " + std::to_string(pastLimit) + " / " + std::to_string(linesInTheLog) + ")").c_str());
+		R_SetEditorCountMissingPictures(false);
 	}
 }
 

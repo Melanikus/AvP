@@ -1760,6 +1760,31 @@ static std::string Names(std::vector<std::string> const &names)
 	return all;
 }
 
+// The level editor's line polygons (RenderListLinesNow, R_SetEditorDrawPolylines): an item drawn as lines never joins its filled neighbour, though both use the same
+// states, or one of them would be drawn the other's way. (Added 2026-11-18 by Melanikus (Frost) for the AvP port.)
+static void CheckLinesStayApart()
+{
+	TestList t("lines", 10, 100, 100, sizeof(ORTHOVERTEX));
+	bool const wasWire = CurrentRenderStates.WireFrameModeIsOn != 0;
+
+	t.Open();
+	RenderListLinesNow = true;
+	bool const lineAdded = WriteShape(t, 4, 1);
+	RenderListLinesNow = false;
+	bool const filledAdded = WriteShape(t, 4, 1);
+	bool const secondFilled = WriteShape(t, 4, 1);
+	t.Close();
+
+	// the card already draws lines, so neither way changes its fill (this test has no card)
+	CurrentRenderStates.WireFrameModeIsOn = 1;
+	drawn.clear();
+	t.list.Draw();
+	CurrentRenderStates.WireFrameModeIsOn = wasWire ? 1 : 0;
+
+	Check(lineAdded && filledAdded && secondFilled && drawn.size() == 2, "a line polygon and two filled ones with the same states are two items, not one (" +
+		std::to_string(drawn.size()) + " drawn)");
+}
+
 static void CheckTheRealWriters()
 {
 	printf("Reading the real writers in d3d_render.cpp:\n");
@@ -1958,6 +1983,7 @@ int main()
 	CheckTheLog();
 	CheckNewBuffersStartEmpty();
 	CheckTheRealWriters();
+	CheckLinesStayApart();
 
 	if (checksFailed)
 	{

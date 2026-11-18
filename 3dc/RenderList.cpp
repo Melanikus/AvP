@@ -343,7 +343,8 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	if ((listIndex != 0) &&		// only do this check if we're not adding the first item
 		(Items[listIndex-1].sortKey == Items[listIndex].sortKey) &&
 		(Items[listIndex-1].tinted == Items[listIndex].tinted) &&
-		(Items[listIndex-1].tintColour == Items[listIndex].tintColour))
+		(Items[listIndex-1].tintColour == Items[listIndex].tintColour) &&
+		(Items[listIndex-1].lines == Items[listIndex].lines))   // nor a line item with a filled one (the editor's polygons whose picture can't be had)
 	{
 		// our new item uses the same states as previous item.
 		listIndex--;

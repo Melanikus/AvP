@@ -631,6 +631,11 @@ static void FlushLists()
 		return;
 	}
 
+	// The level editor's line polygon being drawn when the list filled (RenderListLinesNow, kshape.cpp) marks only its own items: the particles and coronas
+	// written into the lists now are not lines
+	bool const linesNow = RenderListLinesNow;
+
+	RenderListLinesNow = false;
 	UnlockExecuteBufferAndPrepareForUse();
 	ExecuteBuffer();
 	LockExecuteBuffer();
@@ -640,6 +645,8 @@ static void FlushLists()
 	{
 		mainList->AddCommand(kCommandSeeThroughWithoutDepth);
 	}
+
+	RenderListLinesNow = linesNow;
 }
 
 float cot(float in)

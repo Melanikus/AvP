@@ -234,11 +234,12 @@ void R_SetEditorFillUntextured	(bool on, unsigned int lineColour);
 // The level editor's MISSING PICTURES (Added 2026-11-17 by Melanikus (Frost) for the AvP port; the owner: "if someone gives you a map it is very likely it won't have a texture"):
 // the level loader makes a textured polygon whose picture can't be had (no file, a refused name, no list of pictures at all) a white unlit line, I_Polyline, which the game leaves out.
 // R_SetEditorDrawPolylines(true) draws those polygons as lines, as inteng does (its kind 0xe). R_SetEditorCountMissingPictures(true) says each picture that couldn't be loaded in the
-// log, once, and counts them; R_EditorMissingPictures gives the count for the last level loaded, the polygons made lines, and whether it had no list of pictures at all.
+// log, once however many lists name it, and counts them; R_EditorMissingPictures gives the count for the last level loaded, the polygons made lines, whether it had no list of
+// pictures at all, and how many names were past the 4096 one file may ask for (not loaded, not named: the log says once that there are too many).
 // Only the editor sets them: the game draws and logs as it always did.
 void R_SetEditorDrawPolylines	(bool on);
 void R_SetEditorCountMissingPictures	(bool on);
-void R_EditorMissingPictures	(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList);
+void R_EditorMissingPictures	(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
 // The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
 bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;
