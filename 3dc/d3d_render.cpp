@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   the level editor's polygon view distance (R_SetEditorFarPlane): the projection's far plane at the editor's view distance. The game never sets it
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   the level editor's No Textures (R_SetEditorFillUntextured, RenderList.cpp): after the list is drawn, its textured polygons are drawn again as lines in one plain colour, unlit
 //   (DrawTheTexturedAsPlainLines), over the lit lines and around the filled untextured polygons. The game never sets it, so nothing here runs there
@@ -1786,6 +1788,14 @@ void TransformToViewspace(VECTORCHF *vector)
 	vector->vz = output.z;
 }
 
+// The level editor's polygon view distance (R_SetEditorFarPlane, renderer.h): 0 is the game's own farthest, zFar
+static float editorFarPlane = 0.0f;
+
+void R_SetEditorFarPlane(float millimetres)
+{
+	editorFarPlane = (millimetres > zNear && millimetres < zFar) ? millimetres : 0.0f;
+}
+
 void UpdateProjectionMatrix()
 {
 	// manually generate the perspective matrix as per http://msdn.microsoft.com/en-us/library/bb205350(VS.85).aspx
@@ -1818,6 +1828,14 @@ void UpdateProjectionMatrix()
 	d3d.matProjection._23 = 0.0f;
 	d3d.matProjection._33 = zFar/(zFar-zNear);
 	d3d.matProjection._43 = -zNear*zFar/(zFar-zNear);
+
+	// The level editor's polygon view distance: the far plane at the view distance, so what is past it is cut away polygon by polygon (inteng's hazing bit 0x100 with
+	// VDB_H1 = VDB_H2 = the view distance). The game never sets it.
+	if (editorFarPlane > 0.0f)
+	{
+		d3d.matProjection._33 = editorFarPlane/(editorFarPlane-zNear);
+		d3d.matProjection._43 = -zNear*editorFarPlane/(editorFarPlane-zNear);
+	}
 
 	// column 4
 	d3d.matProjection._14 = 0.0f;

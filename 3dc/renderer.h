@@ -28,6 +28,8 @@
 //   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   the level editor's missing pictures: R_SetEditorDrawPolylines, R_SetEditorCountMissingPictures, R_EditorMissingPictures
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   the level editor's polygon view distance: R_SetEditorFarPlane; Prefer .BMP over .RIM: R_SetEditorPreferBmp
 
 #ifndef _renderer_h_
 #define _renderer_h_
@@ -231,6 +233,15 @@ void R_SetEditorUntextured		(bool on, unsigned int colour);
 // the editor tints is filled in its tint, in the light (inteng paints the block's shape that colour). Off (false): as the game draws. Only the editor sets it. Added 2026-11-17 by
 // Melanikus (Frost) for the AvP port.
 void R_SetEditorFillUntextured	(bool on, unsigned int lineColour);
+// The level editor's Use Polygon View Distance (inteng's Construction > Options 0x1f6, DAT_00636f84: FUN_00474ee0, every frame, gives the view the hazing bit 0x100
+// and makes its haze start and end, VDB_H1 / VDB_H2, the view distance, so the polygons past it are cut there one by one, not each object as a whole): the camera's
+// farthest is this many millimetres, in place of the game's 1000 metres. 0, or anything not between the camera's nearest and the game's farthest, gives the game's
+// own back. Only the editor sets it. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+void R_SetEditorFarPlane		(float millimetres);
+// The level editor's Prefer .BMP over .RIM (inteng's Construction > Options 0x1f5, DAT_00636f88, read by its picture loader FUN_0046df30): while on, a level's
+// pictures loaded from then on are tried first as "<name>.bmp" (the ending after the name's last '.' made .bmp) and read by bmp_picture.h, opaque; the .RIM
+// when there's none. Only the editor sets it. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+void R_SetEditorPreferBmp		(bool on);
 // The level editor's MISSING PICTURES (Added 2026-11-17 by Melanikus (Frost) for the AvP port; the owner: "if someone gives you a map it is very likely it won't have a texture"):
 // the level loader makes a textured polygon whose picture can't be had (no file, a refused name, no list of pictures at all) a white unlit line, I_Polyline, which the game leaves out.
 // R_SetEditorDrawPolylines(true) draws those polygons as lines, as inteng does (its kind 0xe). R_SetEditorCountMissingPictures(true) says each picture that couldn't be loaded in the

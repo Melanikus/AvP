@@ -51,6 +51,9 @@
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   the chosen video adapter is stored before the video mode and the depth formats are looked up on it, so they're asked of that
 //   adapter and not of adapter 0
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   the screen list's buffers hold 65536 corners, 16384 quads, the most its 16-bit index numbers reach: the level editor draws every letter of
+//   its panels as a quad, and at 2560 x 1440 they filled the 4096 the game had, so letters and boxes were left out. The game draws as it did.
 #include "d3_func.h"
 #include "hudson.h"
 #include "window_slot.h"
@@ -89,6 +92,12 @@ extern AVPIndexedFont IntroFont_Light;
 // size of vertex and index buffers
 const uint32_t kMaxVertices = 4096;
 const uint32_t kMaxIndices  = 9216;
+
+// The screen list's (orthoList's) room: its corners are numbered with 16 bits, so 65536 is the most, 16384 quads of 4 corners and 6 index numbers
+// each. The game's HUD and menus use a few hundred a frame; the level editor's panels, every letter a quad, used more than the game's 4096 at
+// 2560 x 1440 (Frost 2026-11-18).
+const uint32_t kMaxOrthoVertices = 65536;
+const uint32_t kMaxOrthoIndices  = (kMaxOrthoVertices / 4) * 6;
 
 static HRESULT LastError;
 texID_t NO_TEXTURE = 0;
@@ -892,10 +901,10 @@ bool CreateVolatileResources()
 
 	// orthographic projected quads
 	d3d.orthoVB = new VertexBuffer;
-	d3d.orthoVB->Create(kMaxVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);
+	d3d.orthoVB->Create(kMaxOrthoVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);
 
 	d3d.orthoIB = new IndexBuffer;
-	d3d.orthoIB->Create(kMaxIndices * 3, USAGE_DYNAMIC);
+	d3d.orthoIB->Create(kMaxOrthoIndices, USAGE_DYNAMIC);
 
 	// particle vertex buffer
 	d3d.particleVB = new VertexBuffer;
