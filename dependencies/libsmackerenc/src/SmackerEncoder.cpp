@@ -161,12 +161,11 @@ struct Colours
 	std::vector<uint64_t> count;   // by key
 	std::vector<uint8_t> slot;     // by key: its palette entry
 	std::vector<uint32_t> keys;    // the keys the film has
-	uint8_t palette[256][3];       // levels, 0..63
-	uint32_t used;                 // palette entries used, 1 to kMostColours
+	uint8_t palette[256][3] = {};  // levels, 0..63; the entries not used stay 0
+	uint32_t used = 0;             // palette entries used, 1 to kMostColours
 
-	Colours() : count(kKeys, 0), slot(kKeys, 0), used(0)
+	Colours() : count(kKeys, 0), slot(kKeys, 0)
 	{
-		memset(palette, 0, sizeof(palette));
 	}
 };
 
