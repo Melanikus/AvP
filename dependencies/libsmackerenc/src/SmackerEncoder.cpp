@@ -47,9 +47,16 @@
  * what it writes). Each part names the part of his SmackerDecoder.cpp that reads it back:
  *   the header and the frame tables              Open
  *   the header trees                             DecodeHeaderTrees, DecodeHeaderTree, DecodeTree, DecodeBigTree
- *   a frame's palette                            ReadPacket (the palette change: new entries on smk_pal's 64 levels)
+ *   frame 0's palette                            ReadPacket (the palette change: new entries on smk_pal's 64 levels, then a skip)
  *   a frame's sound                              ReadPacket and DecodeAudio (8-bit mono, his "packed" kind)
  *   a frame's picture                            DecodeFrame (one block type, FULL, for every block; mode 0, as SMK2 has)
+ * THE STOCK LAYOUT (the owner, 11-18: AvP on Steam plays films with RAD's own player, not Barry's decoder): the file is laid out as AvP's own
+ * message videos are, read with AvP-docs/tools/frost/smk/smk-trees.js from message100.smk, Message154.smk and message103.smk:
+ *   - one palette, in frame 0 only (768 bytes there);
+ *   - all four header trees there (MMAP and MCLR too, though no block uses them), each table's size field its entries x 4 + 12, every tree
+ *     and byte tree with two leaves at least, no code longer than RAD's own (the deepest there: 21 bits in FULL, 16 in a byte tree);
+ *   - runs of 256, 128 or 1 to 59 blocks, the runs RAD's FULL blocks use, ending at the frame's end (a whole frame skipped is 512 + 256);
+ *   - sound chunks of a multiple of 4 samples (1468 / 1472 at 15 a second), frame 0's 16 frames' worth.
  */
 
 #include "SmackerEncoder.h"
@@ -81,17 +88,29 @@ const uint8_t smk_pal[64] = {
 	0xE3, 0xE7, 0xEB, 0xEF, 0xF3, 0xF7, 0xFB, 0xFF
 };
 
+/* possible runs of blocks (his block_runs) */
+const int block_runs[64] = {
+	  1,    2,    3,    4,    5,    6,    7,    8,
+	  9,   10,   11,   12,   13,   14,   15,   16,
+	 17,   18,   19,   20,   21,   22,   23,   24,
+	 25,   26,   27,   28,   29,   30,   31,   32,
+	 33,   34,   35,   36,   37,   38,   39,   40,
+	 41,   42,   43,   44,   45,   46,   47,   48,
+	 49,   50,   51,   52,   53,   54,   55,   56,
+	 57,   58,   59,  128,  256,  512, 1024, 2048 };
+
 // 255 colours at most: palette entry 255 is never used, so every 16-bit value with a byte of 255 is free for a tree's three "escape"
-// values (DecodeBigTree takes a leaf of an escape's value as one of its "last" places, which this encoder doesn't use)
+// values (DecodeBigTree takes a leaf of an escape's value as one of its "last" places, which this encoder doesn't use; RAD's own MMAP
+// trees have no such leaf either)
 const uint32_t kMostColours = 255;
 
-const uint32_t kFullBlocksLongestRun = 1 | (63 << 2);   // a block type code: SMK_BLK_FULL with block_runs[63], 2048 blocks
+const uint32_t kBlockFull = 1;                           // SMK_BLK_FULL
 const uint8_t kFramePalette = 0x01;                      // kSMKpal
 const uint8_t kFrameSound0 = 0x02;                       // sound track 0 (ReadPacket shifts the flags right once)
 const uint32_t kSoundPacked = 0x80000000u;               // SMK_AUD_PACKED
 const uint32_t kSoundPresent = 0x40000000u;              // as AvP's own films set it (message100.smk: 0xC0005622)
-const uint32_t kByteTreeLongest = 24;                    // DecodeTree refuses a code over 32 bits (kTreeDecodeMaxRecursion)
-const uint32_t kBigTreeLongest = 32;                     // DecodeBigTree refuses a tree deeper than 500
+const uint32_t kByteTreeLongest = 15;                    // RAD's own byte trees: 16 bits at most in AvP's films (DecodeTree takes 32)
+const uint32_t kBigTreeLongest = 20;                     // RAD's own FULL trees: 21 at most (DecodeBigTree takes 500)
 const uint64_t kMostFileBytes = 0x7FFFFFF0u;             // ReadPacket keeps the next frame's place in an int32_t
 const uint32_t kHeaderBytes = 104;
 
@@ -136,20 +155,19 @@ uint32_t LevelOf(uint32_t key, int channel)
 	return (key >> (12 - 6 * channel)) & 63;
 }
 
-struct Picture
+// The film's colours: how many pixels of each key, over every frame, and which palette entry each key gets
+struct Colours
 {
-	uint8_t palette[256][3];       // levels, 0..63
-	std::vector<uint8_t> index;    // a palette entry for each pixel
-};
-
-// what one frame's quantizing uses, kept from frame to frame (every count is put back to 0 after each frame)
-struct Work
-{
-	std::vector<uint32_t> count;   // by key: how many pixels
+	std::vector<uint64_t> count;   // by key
 	std::vector<uint8_t> slot;     // by key: its palette entry
-	std::vector<uint32_t> keys;    // the keys the frame has
+	std::vector<uint32_t> keys;    // the keys the film has
+	uint8_t palette[256][3];       // levels, 0..63
+	uint32_t used;                 // palette entries used, 1 to kMostColours
 
-	Work() : count(kKeys, 0), slot(kKeys, 0) {}
+	Colours() : count(kKeys, 0), slot(kKeys, 0), used(0)
+	{
+		memset(palette, 0, sizeof(palette));
+	}
 };
 
 struct Box
@@ -160,7 +178,7 @@ struct Box
 	uint32_t range;      // how wide, in levels
 };
 
-Box BoxOf(const std::vector<uint32_t> &keys, const std::vector<uint32_t> &count, size_t begin, size_t end)
+Box BoxOf(const std::vector<uint32_t> &keys, const std::vector<uint64_t> &count, size_t begin, size_t end)
 {
 	Box box = { begin, end, 0, 0, 0 };
 	uint32_t low[3] = { 63, 63, 63 }, high[3] = { 0, 0, 0 };
@@ -197,7 +215,7 @@ Box BoxOf(const std::vector<uint32_t> &keys, const std::vector<uint32_t> &count,
 
 // More colours than a palette holds: MEDIAN CUT. The box of colours with the most pixels times width is cut at its pixels' middle
 // along its widest channel, until there are kMostColours boxes; each box's colour is its pixels' mean, on the nearest levels.
-uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint32_t> &count, uint8_t palette[256][3])
+uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint64_t> &count, uint8_t palette[256][3])
 {
 	std::vector<Box> boxes;
 
@@ -206,11 +224,11 @@ uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint32_t> &cou
 	while (boxes.size() < kMostColours)
 	{
 		size_t pick = boxes.size();
-		uint64_t best = 0;
+		double best = 0.0;
 
 		for (size_t b = 0; b < boxes.size(); b++)
 		{
-			uint64_t const score = (uint64_t)boxes[b].range * boxes[b].pixels;
+			double const score = (double)boxes[b].range * (double)boxes[b].pixels;
 
 			if (boxes[b].range > 0 && boxes[b].end - boxes[b].begin >= 2 && score > best)
 			{
@@ -254,146 +272,189 @@ uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint32_t> &cou
 
 	for (size_t b = 0; b < boxes.size(); b++)
 	{
-		uint64_t sum[3] = { 0, 0, 0 };
+		double sum[3] = { 0.0, 0.0, 0.0 };
 
 		for (size_t i = boxes[b].begin; i < boxes[b].end; i++)
 		{
 			for (int c = 0; c < 3; c++)
 			{
-				sum[c] += (uint64_t)smk_pal[LevelOf(keys[i], c)] * count[keys[i]];
+				sum[c] += (double)smk_pal[LevelOf(keys[i], c)] * (double)count[keys[i]];
 			}
 		}
 
 		for (int c = 0; c < 3; c++)
 		{
-			uint64_t const mean = boxes[b].pixels ? (sum[c] + boxes[b].pixels / 2) / boxes[b].pixels : 0;
+			double const mean = boxes[b].pixels ? sum[c] / (double)boxes[b].pixels + 0.5 : 0.0;
 
-			palette[b][c] = TheLevels().nearest[mean > 255 ? 255 : mean];
+			palette[b][c] = TheLevels().nearest[mean >= 255.0 ? 255 : (int)mean];
 		}
 	}
 
 	return (uint32_t)boxes.size();
 }
 
-// One frame to at most kMostColours palette entries. 255 colours or fewer (on the levels) are kept exactly; more are cut down.
-void Quantize(const uint8_t *rgb, size_t pixels, Work &work, Picture *picture)
+void CountColours(const uint8_t *rgb, size_t pixels, Colours &colours)
 {
 	const Levels &levels = TheLevels();
-
-	work.keys.clear();
 
 	for (size_t i = 0; i < pixels; i++)
 	{
 		uint32_t const key = KeyOf(rgb + i * 3, levels);
 
-		if (work.count[key]++ == 0)
+		if (colours.count[key]++ == 0)
 		{
-			work.keys.push_back(key);
+			colours.keys.push_back(key);
 		}
 	}
+}
 
-	// the same picture always gets the same palette, so a frame like the one before needs none of its own
-	std::sort(work.keys.begin(), work.keys.end());
-	memset(picture->palette, 0, sizeof(picture->palette));
+// The film's ONE palette (as AvP's own films have, in frame 0 only). 255 colours or fewer (on the levels) are kept exactly; more are cut down.
+void MakePalette(Colours &colours)
+{
+	// the same film always gets the same palette
+	std::sort(colours.keys.begin(), colours.keys.end());
 
-	if (work.keys.size() <= kMostColours)
+	if (colours.keys.size() <= kMostColours)
 	{
-		for (size_t k = 0; k < work.keys.size(); k++)
+		for (size_t k = 0; k < colours.keys.size(); k++)
 		{
 			for (int c = 0; c < 3; c++)
 			{
-				picture->palette[k][c] = (uint8_t)LevelOf(work.keys[k], c);
+				colours.palette[k][c] = (uint8_t)LevelOf(colours.keys[k], c);
 			}
 
-			work.slot[work.keys[k]] = (uint8_t)k;
+			colours.slot[colours.keys[k]] = (uint8_t)k;
 		}
+
+		colours.used = (uint32_t)colours.keys.size();
+		return;
 	}
-	else
+
+	std::vector<uint32_t> keys = colours.keys;
+
+	colours.used = MedianCut(keys, colours.count, colours.palette);
+
+	// each colour to its nearest entry (not always its box's)
+	for (uint32_t key : colours.keys)
 	{
-		std::vector<uint32_t> keys = work.keys;
-		uint32_t const colours = MedianCut(keys, work.count, picture->palette);
+		uint32_t best = 0, bestDistance = 0xFFFFFFFFu;
 
-		// each colour to its nearest entry (not always its box's)
-		for (uint32_t key : work.keys)
+		for (uint32_t e = 0; e < colours.used; e++)
 		{
-			uint32_t best = 0, bestDistance = 0xFFFFFFFFu;
+			uint32_t distance = 0;
 
-			for (uint32_t e = 0; e < colours; e++)
+			for (int c = 0; c < 3; c++)
 			{
-				uint32_t distance = 0;
-
-				for (int c = 0; c < 3; c++)
-				{
-					int const d = (int)smk_pal[LevelOf(key, c)] - (int)smk_pal[picture->palette[e][c]];
-					distance += (uint32_t)(d * d);
-				}
-
-				if (distance < bestDistance)
-				{
-					bestDistance = distance;
-					best = e;
-				}
+				int const d = (int)smk_pal[LevelOf(key, c)] - (int)smk_pal[colours.palette[e][c]];
+				distance += (uint32_t)(d * d);
 			}
 
-			work.slot[key] = (uint8_t)best;
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				best = e;
+			}
 		}
-	}
 
-	picture->index.resize(pixels);
+		colours.slot[key] = (uint8_t)best;
+	}
+}
+
+void MapFrame(const uint8_t *rgb, size_t pixels, const Colours &colours, std::vector<uint8_t> *index)
+{
+	const Levels &levels = TheLevels();
+
+	index->resize(pixels);
 
 	for (size_t i = 0; i < pixels; i++)
 	{
-		picture->index[i] = work.slot[KeyOf(rgb + i * 3, levels)];
-	}
-
-	for (uint32_t key : work.keys)
-	{
-		work.count[key] = 0;
+		(*index)[i] = colours.slot[KeyOf(rgb + i * 3, levels)];
 	}
 }
 
 // Each 4 x 4 block, left to right and top to bottom (DecodeFrame's blk), as FULL: each of its 4 rows is the code of pixels 2 and 3 (the
 // low byte the left one), then of pixels 0 and 1. count gives each pair to the counts; else the pairs' codes are written.
-void PairsOf(const Picture &picture, uint32_t width, uint32_t height, std::vector<uint64_t> *count, BitWriter *bits, const HuffTree *full)
+void PairsOf(const std::vector<uint8_t> &index, uint32_t width, uint32_t by, uint32_t bx, std::vector<uint64_t> *count, BitWriter *bits, const HuffTree *full)
 {
-	for (uint32_t by = 0; by < height / 4; by++)
+	for (uint32_t r = 0; r < 4; r++)
 	{
-		for (uint32_t bx = 0; bx < width / 4; bx++)
-		{
-			for (uint32_t r = 0; r < 4; r++)
-			{
-				const uint8_t *const row = &picture.index[((size_t)by * 4 + r) * width + (size_t)bx * 4];
-				uint32_t const right = (uint32_t)row[2] | ((uint32_t)row[3] << 8);
-				uint32_t const left = (uint32_t)row[0] | ((uint32_t)row[1] << 8);
+		const uint8_t *const row = &index[((size_t)by * 4 + r) * width + (size_t)bx * 4];
+		uint32_t const right = (uint32_t)row[2] | ((uint32_t)row[3] << 8);
+		uint32_t const left = (uint32_t)row[0] | ((uint32_t)row[1] << 8);
 
-				if (count)
-				{
-					(*count)[right]++;
-					(*count)[left]++;
-				}
-				else
-				{
-					HuffTree_PutSymbol(*bits, *full, right);
-					HuffTree_PutSymbol(*bits, *full, left);
-				}
-			}
+		if (count)
+		{
+			(*count)[right]++;
+			(*count)[left]++;
+		}
+		else
+		{
+			HuffTree_PutSymbol(*bits, *full, right);
+			HuffTree_PutSymbol(*bits, *full, left);
 		}
 	}
 }
 
-// A 16-bit tree as DecodeHeaderTree reads it: its low bytes' tree, its high bytes' tree (each "there", then a 0 bit after it), three
-// escape values no leaf holds, the tree, and a 0 bit. false when no three such values are free.
-bool PutHeaderTree(BitWriter &bits, const HuffTree &tree)
+// A frame's blocks as runs, each a block type code: 256, 128, or 1 to 59 blocks, the longest that fits first (RAD's own FULL runs), so
+// the last run ends at the frame's last block
+void RunsOf(uint32_t blocks, std::vector<uint32_t> *types)
 {
+	types->clear();
+
+	while (blocks > 0)
+	{
+		int run = blocks >= 256 ? 60 : blocks >= 128 ? 59 : (int)std::min<uint32_t>(blocks, 59) - 1;
+
+		types->push_back(kBlockFull | ((uint32_t)run << 2));
+		blocks -= (uint32_t)block_runs[run];
+	}
+}
+
+// Two leaves at least, as every tree of AvP's own films has: a lone symbol gets a second, never used (the first symbol of count 0)
+void TwoAtLeast(std::vector<uint64_t> &counts)
+{
+	size_t had = 0, firstFree = counts.size();
+
+	for (size_t i = 0; i < counts.size(); i++)
+	{
+		if (counts[i])
+			had++;
+		else if (firstFree == counts.size())
+			firstFree = i;
+	}
+
+	for (; had < 2 && firstFree < counts.size(); had++)
+	{
+		counts[firstFree] = 1;
+
+		while (firstFree < counts.size() && counts[firstFree])
+			firstFree++;
+	}
+}
+
+// A 16-bit tree as DecodeHeaderTree reads it: "there" (1), its low bytes' tree (there 1, the tree, 0), its high bytes' tree (the same),
+// three escape values no leaf holds, the tree, and a 0 bit. false when no three such values are free, or a tree can't be made.
+bool PutHeaderTree(BitWriter &bits, std::vector<uint64_t> counts)
+{
+	TwoAtLeast(counts);
+
+	HuffTree tree;
+
+	if (!HuffTree_Build(counts, kBigTreeLongest, &tree))
+	{
+		return false;
+	}
+
 	std::vector<uint64_t> lowCount(256, 0), highCount(256, 0);
-	std::vector<bool> used(65536, false);
 
 	for (uint32_t symbol : tree.leaves)
 	{
 		lowCount[symbol & 0xFF]++;
 		highCount[symbol >> 8]++;
-		used[symbol] = true;
 	}
+
+	TwoAtLeast(lowCount);
+	TwoAtLeast(highCount);
 
 	HuffTree low, high;
 
@@ -407,7 +468,7 @@ bool PutHeaderTree(BitWriter &bits, const HuffTree &tree)
 
 	for (int32_t v = 0xFFFF; v >= 0 && found < 3; v--)
 	{
-		if (!used[(size_t)v])
+		if (!counts[(size_t)v])
 		{
 			escapes[found++] = (uint32_t)v;
 		}
@@ -418,6 +479,7 @@ bool PutHeaderTree(BitWriter &bits, const HuffTree &tree)
 		return false;
 	}
 
+	bits.PutBit(1);
 	bits.PutBit(1);
 	HuffTree_WriteByteTree(bits, low);
 	bits.PutBit(0);
@@ -436,6 +498,21 @@ bool PutHeaderTree(BitWriter &bits, const HuffTree &tree)
 	return true;
 }
 
+// How many entries a tree of these counts has, as PutHeaderTree makes it (its header size field is that x 4 + 12, as RAD's)
+uint32_t EntriesOf(std::vector<uint64_t> counts)
+{
+	TwoAtLeast(counts);
+
+	size_t leaves = 0;
+
+	for (uint64_t c : counts)
+	{
+		leaves += c ? 1 : 0;
+	}
+
+	return (uint32_t)(2 * leaves - 1);
+}
+
 void PutU32(std::vector<uint8_t> &out, uint32_t value)
 {
 	out.push_back((uint8_t)value);
@@ -452,23 +529,32 @@ void PadTo4(std::vector<uint8_t> &out, size_t start)
 	}
 }
 
-// The palette change ReadPacket reads: a size byte (the chunk's length in 4s), then 256 "new entry" commands of three levels each (a
-// level is under 0x40, so no command reads as a skip, 0x80, or a copy, 0x40), padded to the size
-void PutPalette(std::vector<uint8_t> &out, const uint8_t palette[256][3])
+// The palette change ReadPacket reads: a size byte (the chunk's length in 4s), then a "new entry" command of three levels for each entry
+// used (a level is under 0x40, so it reads as neither a skip, 0x80, nor a copy, 0x40), a skip over the rest (0x80 | n - 1, 128 at most
+// each), padded to the size: 768 bytes for 255 colours, as AvP's own films' palette
+void PutPalette(std::vector<uint8_t> &out, const uint8_t palette[256][3], uint32_t used)
 {
 	size_t const start = out.size();
 
 	out.push_back(0);
 
-	for (int e = 0; e < 256; e++)
+	for (uint32_t e = 0; e < used; e++)
 	{
 		out.push_back(palette[e][0]);
 		out.push_back(palette[e][1]);
 		out.push_back(palette[e][2]);
 	}
 
+	for (uint32_t left = 256 - used; left > 0;)
+	{
+		uint32_t const n = std::min<uint32_t>(left, 128);
+
+		out.push_back((uint8_t)(0x80 | (n - 1)));
+		left -= n;
+	}
+
 	PadTo4(out, start);
-	out[start] = (uint8_t)((out.size() - start) / 4);   // 772 / 4: 193
+	out[start] = (uint8_t)((out.size() - start) / 4);
 }
 
 // One frame's sound as DecodeAudio reads it (8-bit mono, packed): the chunk's size (4 bytes, counting itself), then bits: the sample count
@@ -483,10 +569,7 @@ void PutSound(std::vector<uint8_t> &out, const uint8_t *samples, size_t count)
 		stepCount[(uint8_t)(samples[i] - samples[i - 1])]++;
 	}
 
-	if (count < 2)
-	{
-		stepCount[0] = 1;   // no steps, but the tree is read all the same: one leaf
-	}
+	TwoAtLeast(stepCount);
 
 	HuffTree steps;
 
@@ -550,46 +633,71 @@ int Encode(const SmackerEncodeInput &in, std::vector<uint8_t> *file)
 {
 	size_t const pixels = (size_t)in.width * in.height;
 	size_t const frameBytes = pixels * 3;
+	uint32_t const blocksAcross = in.width / 4, blocksDown = in.height / 4;
+	std::vector<uint8_t> index;
 
-	// 1. every frame to a palette, and the counts of the pixel pairs over the whole film (the trees are the header's, one for all frames)
-	std::vector<Picture> pictures(in.frameCount);
-	std::vector<uint64_t> pairCount(65536, 0);
-	Work work;
+	// 1. the film's one palette, from every frame's colours
+	Colours colours;
 
 	for (uint32_t f = 0; f < in.frameCount; f++)
 	{
-		Quantize(in.rgb + frameBytes * f, pixels, work, &pictures[f]);
-		PairsOf(pictures[f], in.width, in.height, &pairCount, 0, 0);
+		CountColours(in.rgb + frameBytes * f, pixels, colours);
 	}
 
-	// 2. the header trees: no MMAP and no MCLR (no MONO blocks), the FULL tree of the pairs, and a TYPE tree of one leaf (every block FULL,
-	// the longest run), whose code is 0 bits long
-	HuffTree full, type;
-	std::vector<uint64_t> typeCount(65536, 0);
+	MakePalette(colours);
 
-	typeCount[kFullBlocksLongestRun] = 1;
+	// 2. the counts of the pixel pairs over the whole film and of the block type codes (the trees are the header's, one for all frames)
+	std::vector<uint64_t> pairCount(65536, 0), typeCount(65536, 0), unused(65536, 0);
+	std::vector<uint32_t> types;
 
-	if (!HuffTree_Build(pairCount, kBigTreeLongest, &full) || !HuffTree_Build(typeCount, kBigTreeLongest, &type))
-		return SMACKER_ENCODE_NO_MEMORY;   // not reached: every frame has pixels
+	RunsOf(blocksAcross * blocksDown, &types);
+
+	for (uint32_t f = 0; f < in.frameCount; f++)
+	{
+		MapFrame(in.rgb + frameBytes * f, pixels, colours, &index);
+
+		for (uint32_t by = 0; by < blocksDown; by++)
+			for (uint32_t bx = 0; bx < blocksAcross; bx++)
+				PairsOf(index, in.width, by, bx, &pairCount, 0, 0);
+
+		for (uint32_t type : types)
+			typeCount[type]++;
+	}
+
+	// 3. the header trees, all four there as in AvP's own films: MMAP and MCLR (no MONO block uses them: two leaves each), FULL, TYPE
+	std::vector<uint64_t> spare(65536, 0);
+
+	spare[0] = 1;
+	spare[1] = 1;
 
 	BitWriter trees;
 
-	trees.PutBit(0);   // MMAP
-	trees.PutBit(0);   // MCLR
-	trees.PutBit(1);   // FULL
+	if (!PutHeaderTree(trees, spare) || !PutHeaderTree(trees, spare) || !PutHeaderTree(trees, pairCount) || !PutHeaderTree(trees, typeCount))
+		return SMACKER_ENCODE_NO_MEMORY;   // not reached: palette entry 255 is never used, so escapes are free
 
-	if (!PutHeaderTree(trees, full))
-		return SMACKER_ENCODE_NO_MEMORY;   // not reached: palette entry 255 is never used
+	TwoAtLeast(pairCount);
+	TwoAtLeast(typeCount);
 
-	trees.PutBit(1);   // TYPE
+	HuffTree full, type;
 
-	if (!PutHeaderTree(trees, type))
+	if (!HuffTree_Build(pairCount, kBigTreeLongest, &full) || !HuffTree_Build(typeCount, kBigTreeLongest, &type))
 		return SMACKER_ENCODE_NO_MEMORY;
 
-	// 3. the frames. Frame 0's sound is one second more than the others' (frames 0 to fps), so the player's buffer (sized from frame 0) holds
-	// any frame's; frame f after it has the sound of frame f + fps
+	// 4. the frames. Frame 0's sound is one second more than the others' (frames 0 to fps), so the player's buffer (sized from frame 0) holds
+	// any frame's; frame f after it has the sound of frame f + fps. Every chunk is a whole number of 4 samples (the sound is filled out to
+	// one with its last sample), as AvP's own films have.
 	bool const sound = in.pcmBytes > 0;
 	uint64_t const lead = in.fps;
+	std::vector<uint8_t> pcm;
+
+	if (sound)
+	{
+		pcm.assign(in.pcm, in.pcm + in.pcmBytes);
+
+		while (pcm.size() % 4)
+			pcm.push_back(pcm.back());
+	}
+
 	std::vector<std::vector<uint8_t> > frames(in.frameCount);
 	std::vector<uint8_t> flags(in.frameCount, 0);
 	uint32_t mostSound = 0;
@@ -597,17 +705,17 @@ int Encode(const SmackerEncodeInput &in, std::vector<uint8_t> *file)
 
 	auto soundAt = [&](uint64_t frame) -> size_t
 	{
-		uint64_t const at = frame * in.sampleRate / in.fps;
-		return (size_t)std::min<uint64_t>(at, in.pcmBytes);
+		uint64_t const at = (frame * in.sampleRate / in.fps) & ~(uint64_t)3;
+		return (size_t)std::min<uint64_t>(at, pcm.size());
 	};
 
 	for (uint32_t f = 0; f < in.frameCount; f++)
 	{
 		std::vector<uint8_t> &out = frames[f];
 
-		if (f == 0 || memcmp(pictures[f].palette, pictures[f - 1].palette, sizeof(pictures[f].palette)) != 0)
+		if (f == 0)
 		{
-			PutPalette(out, pictures[f].palette);
+			PutPalette(out, colours.palette, colours.used);
 			flags[f] |= kFramePalette;
 		}
 
@@ -618,23 +726,27 @@ int Encode(const SmackerEncodeInput &in, std::vector<uint8_t> *file)
 
 			if (to > from)
 			{
-				PutSound(out, in.pcm + from, to - from);
+				PutSound(out, pcm.data() + from, to - from);
 				flags[f] |= kFrameSound0;
 				mostSound = std::max(mostSound, (uint32_t)(to - from));
 			}
 		}
 
+		MapFrame(in.rgb + frameBytes * f, pixels, colours, &index);
+
 		BitWriter picture;
+		uint32_t blk = 0;
 
-		PairsOf(pictures[f], in.width, in.height, 0, &picture, &full);
+		for (uint32_t t : types)
+		{
+			HuffTree_PutSymbol(picture, type, t);
 
-		size_t const start = 0;
+			for (int n = block_runs[(t >> 2) & 63]; n > 0; n--, blk++)
+				PairsOf(index, in.width, blk / blocksAcross, blk % blocksAcross, 0, &picture, &full);
+		}
 
 		out.insert(out.end(), picture.Bytes().begin(), picture.Bytes().end());
-		PadTo4(out, start);
-
-		// the picture's memory isn't needed any more
-		std::vector<uint8_t>().swap(pictures[f].index);
+		PadTo4(out, 0);
 
 		total += out.size();
 
@@ -642,7 +754,7 @@ int Encode(const SmackerEncodeInput &in, std::vector<uint8_t> *file)
 			return SMACKER_ENCODE_TOO_BIG;
 	}
 
-	// 4. the header (Open), the frame sizes and flags, the trees, the frames
+	// 5. the header (Open), the frame sizes and flags, the trees, the frames
 	file->clear();
 	file->reserve((size_t)total);
 	file->push_back('S');
@@ -659,10 +771,10 @@ int Encode(const SmackerEncodeInput &in, std::vector<uint8_t> *file)
 		PutU32(*file, t == 0 ? mostSound : 0);             // each track's largest sound chunk, unpacked
 
 	PutU32(*file, (uint32_t)trees.Bytes().size());
-	PutU32(*file, 0);                                       // MMAP's table size (not there)
-	PutU32(*file, 0);                                       // MCLR's
-	PutU32(*file, (uint32_t)(full.nodes.size() + 3) * 4);  // FULL's: its entries and the three "last" places, 4 bytes each
-	PutU32(*file, (uint32_t)(type.nodes.size() + 3) * 4);  // TYPE's
+	PutU32(*file, (EntriesOf(spare) + 3) * 4);              // each table's size: its entries and the three "last" places, 4 bytes each
+	PutU32(*file, (EntriesOf(spare) + 3) * 4);
+	PutU32(*file, ((uint32_t)full.nodes.size() + 3) * 4);
+	PutU32(*file, ((uint32_t)type.nodes.size() + 3) * 4);
 
 	for (int t = 0; t < 7; t++)
 		PutU32(*file, t == 0 && sound ? kSoundPacked | kSoundPresent | in.sampleRate : 0);

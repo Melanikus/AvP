@@ -7,7 +7,7 @@
 //   - an AvP message video's shape (128 x 96, 15 a second, 22050 Hz 8-bit mono, 2 seconds): every frame's pixels, put through the decoder's
 //     palette, are the RGB that went in, exactly (each frame has 255 colours or fewer, all on Smacker's 64 levels); every sound byte is the
 //     one that went in, exactly; the header reads as AvP's own message videos do (message100.smk: SMK2, frame rate -6666, sound flags
-//     0xC0005622, the first frame's sound one second more than the others'); a frame like the one before has no palette of its own;
+//     0xC0005622, the first frame's sound one second more than the others'); one palette, in frame 0 only; all four trees there; every sound chunk a whole number of 4 samples;
 //   - a video with more colours than a palette holds: each frame comes back near (median cut), and palette entry 255 is never used;
 //   - a video with no sound: the decoder finds no sound track;
 //   - a bigger frame (256 x 192, 3072 blocks: more than one run of the block type), and one of 4 x 4 pixels, one frame;
@@ -68,10 +68,10 @@ static void MakeFewColours(uint32_t w, uint32_t h, uint32_t f, uint8_t *rgb)
 			uint8_t *const p = rgb + ((size_t)y * w + x) * 3;
 			bool const square = x >= (f * 4) % (w - 16) && x < (f * 4) % (w - 16) + 16 && y >= (f * 2) % (h - 16) && y < (f * 2) % (h - 16) + 16;
 
-			// the colours themselves change with the frame too, so each frame's palette is another
-			p[0] = square ? 0xFF : kLevels[(c + f * 3) % 64];
+			// the same 128 colours (and white) in every frame, moving: the film has 129, so its one palette holds them all
+			p[0] = square ? 0xFF : kLevels[c % 64];
 			p[1] = square ? 0xFF : kLevels[(c * 7) % 64];
-			p[2] = square ? 0xFF : kLevels[(c * 13 + 5 + f) % 64];
+			p[2] = square ? 0xFF : kLevels[(c * 13 + 5) % 64];
 		}
 	}
 }
@@ -131,6 +131,7 @@ struct Played
 	std::vector<std::vector<uint8_t> > indices;      // each frame's palette numbers
 	std::vector<uint8_t> sound;                      // every frame's sound, one after the other
 	uint32_t firstFrameSound = 0;
+	bool soundInFours = true;                        // every frame's sound a whole number of 4 samples (as AvP's own films)
 };
 
 // Plays the file with the decoder's own exported calls, as the game's SmackerPlayback does
@@ -179,6 +180,8 @@ static Played Play(std::string const &path)
 			{
 				p.firstFrameSound = got;
 			}
+
+			p.soundInFours = p.soundInFours && got % 4 == 0;
 
 			p.sound.insert(p.sound.end(), bytes, bytes + (got <= p.audio.idealBufferSize ? got : 0));
 		}
@@ -236,9 +239,6 @@ static void TestMessageVideo(std::string const &folder)
 		MakeFewColours(w, h, f, &rgb[frameBytes * f]);
 	}
 
-	// frame 21 is frame 20 again: its palette is the one before's
-	memcpy(&rgb[frameBytes * 21], &rgb[frameBytes * 20], frameBytes);
-
 	std::vector<uint8_t> const pcm = MakeSound(44100);
 	std::vector<uint8_t> smk;
 	int result = -1;
@@ -284,9 +284,19 @@ static void TestMessageVideo(std::string const &folder)
 
 	Check(fours && at == smk.size(), "each frame's size is a whole number of 4 bytes, and they end where the file ends");
 
-	uint8_t const flags20 = smk[104 + 4 * (size_t)frames + 20], flags21 = smk[104 + 4 * (size_t)frames + 21], flags0 = smk[104 + 4 * (size_t)frames];
+	uint8_t const flags0 = smk[104 + 4 * (size_t)frames];
+	bool laterPalette = false;
 
-	Check((flags0 & 1) && (flags20 & 1) && !(flags21 & 1), "frame 0 and 20 carry a palette, frame 21 (the same picture) none");
+	for (uint32_t f = 1; f < frames; f++)
+	{
+		laterPalette = laterPalette || (smk[104 + 4 * (size_t)frames + f] & 1) != 0;
+	}
+
+	size_t const frame0 = 104 + 5 * (size_t)frames + treeSize;
+
+	Check((flags0 & 1) && !laterPalette && frame0 < smk.size() && smk[frame0] * 4 <= 768, "one palette, in frame 0 only, of 768 bytes at most (as AvP's own films)");
+	Check(U32At(smk, 56) == 24 && U32At(smk, 60) == 24 && U32At(smk, 64) % 4 == 0 && U32At(smk, 64) > 24 && U32At(smk, 68) % 4 == 0 && U32At(smk, 68) >= 24,
+		"all four trees there: MMAP and MCLR of two leaves (24: 3 entries x 4 + 12), FULL and TYPE sized in 4s");
 	Check((flags0 & 2) != 0, "frame 0 carries sound");
 
 	std::string const path = folder + "\\message_test.smk";
@@ -310,6 +320,7 @@ static void TestMessageVideo(std::string const &folder)
 	}
 
 	Check(exactFrames == frames, "every frame, through its palette, is the RGB that went in, exactly (" + std::to_string(exactFrames) + " of 30)");
+	Check(p.soundInFours, "every frame's sound is a whole number of 4 samples (as AvP's own: 1468 / 1472)");
 	Check(p.sound.size() == pcm.size() && memcmp(p.sound.data(), pcm.data(), pcm.size()) == 0,
 		"every sound byte is the one that went in, exactly (" + std::to_string(p.sound.size()) + " of " + std::to_string(pcm.size()) + ")");
 
@@ -367,7 +378,8 @@ static void TestManyColours(std::string const &folder)
 		}
 	}
 
-	Check(p.rgb.size() == frames && worst < 6.0, "each frame comes back near: the worst frame's mean difference is " + std::to_string(worst) + " of 255 (under 6)");
+	// one palette for the whole film (as AvP's own films have) over 4 frames of ramps: 6.12 when written (a palette per frame gave 4.36)
+	Check(p.rgb.size() == frames && worst < 8.0, "each frame comes back near: the worst frame's mean difference is " + std::to_string(worst) + " of 255 (under 8)");
 	Check(no255, "palette entry 255 is never used (255 colours at most)");
 
 	DeleteFileA(path.c_str());
@@ -408,7 +420,9 @@ static void TestBigAndSmall(std::string const &folder)
 		}
 
 		Check(p.opened && p.fps == 10.0f && exact == frames, "decoded exactly, every frame (" + std::to_string(exact) + " of 3), 10 a second");
-		Check(p.sound.size() == pcm.size() && memcmp(p.sound.data(), pcm.data(), pcm.size()) == 0, "and its sound exactly");
+		// 6615 samples: filled out to 6616 with the last one, a whole number of 4
+		Check(p.sound.size() == 6616 && memcmp(p.sound.data(), pcm.data(), pcm.size()) == 0 && p.sound.back() == pcm.back(),
+			"and its sound exactly, filled out to a whole number of 4 samples with its last (" + std::to_string(p.sound.size()) + ")");
 		DeleteFileA(path.c_str());
 	}
 
