@@ -2,6 +2,9 @@
 //   a stand-in for what the memory code now tells the game's sounds
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a place on an animation's picture too far out keeps the shape still (#97)
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   5: a level with no list of pictures
+//   6: the level editor's count of missing pictures
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
@@ -21,6 +24,12 @@
 //
 //  4. Not about pictures: this is the one test that runs chunk_load.cpp, so an animated shape's reach is checked here too. Its box and
 //     radius have to come out right even at the farthest a place can be. (Added 2026-11-14 by Melanikus for the AvP port.)
+//
+//  5. A level with no list of pictures at all (no BMPNAMES) has no list of picture numbers, so a textured polygon's picture is looked up in
+//     nothing: it has to become a line, as a polygon whose picture can't be had does. (Added 2026-11-17 by Melanikus (Frost) for the AvP port.)
+//
+//  6. The level editor's count of missing pictures: only the level's own (the load with CCF_ENVIRONMENT) are counted and named in the log,
+//     with the polygons made lines for them, and in the game, which never turns it on, nothing is. (Added 2026-11-17 by Melanikus (Frost).)
 
 #include <memory>
 #include <stdio.h>
@@ -229,7 +238,7 @@ struct LevelFile
 	}
 
 	// The level's own list of pictures, which is what load_rif_bitmaps goes through
-	void LoadLevelNames(int howMany)
+	void LoadLevelNames(int howMany, int flags = 0)
 	{
 		Bytes bytes;
 		AddNames(bytes, "BMPNAMES", howMany);
@@ -237,7 +246,7 @@ struct LevelFile
 		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, bytes.data(), bytes.size()));
 		handle.envd = environment.get();
 		chunks.push_back(std::move(environment));
-		load_rif_bitmaps(&handle, 0);
+		load_rif_bitmaps(&handle, flags);
 	}
 
 	// An outside shape's own list of pictures, which is the other way a picture gets asked for. This hands back a copy of that shape's list of picture numbers.
@@ -680,12 +689,242 @@ static void TestAnimatedShapeReach()
 	}
 }
 
+// ---- 5. a level with no list of pictures ----
+
+// One triangle with a texture, whose picture number and list of texture coordinates are in its colour, as a level file gives it, made into
+// the game's shape (copy_to_shapeheader). Gives back the polygon's kind and colour as the game has them.
+static void ConvertOneTexturedTriangle(LevelFile &level, unsigned int colour, int *kind, unsigned int *convertedColour)
+{
+	ChunkShape triangle;
+
+	triangle.num_verts = 3;
+	triangle.v_list = new ChunkVectorInt[3];
+	triangle.v_normal_list = new ChunkVectorFloat[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		triangle.v_list[i].x = i == 1 ? 100 : 0;
+		triangle.v_list[i].y = i == 2 ? 100 : 0;
+		triangle.v_list[i].z = 0;
+		triangle.v_normal_list[i].x = 0;
+		triangle.v_normal_list[i].y = 0;
+		triangle.v_normal_list[i].z = 1;
+	}
+
+	triangle.num_polys = 1;
+	triangle.poly_list = new ChunkPoly[1];
+	triangle.p_normal_list = new ChunkVectorFloat[1];
+	triangle.p_normal_list[0].x = 0;
+	triangle.p_normal_list[0].y = 0;
+	triangle.p_normal_list[0].z = 1;
+
+	ChunkPoly &polygon = triangle.poly_list[0];
+
+	polygon.engine_type = I_ZB_Gouraud3dTexturedPolygon;
+	polygon.normal_index = 0;
+	polygon.flags = 0;
+	polygon.colour = colour;
+	polygon.num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		polygon.vert_ind[i] = i < 3 ? i : -1;
+	}
+
+	triangle.num_uvs = 1;
+	triangle.uv_list = new ChunkUV_List[1];
+	triangle.uv_list[0].num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		triangle.uv_list[0].vert[i].u = 0;
+		triangle.uv_list[0].vert[i].v = 0;
+	}
+
+	SHAPEHEADER *made = 0;
+
+	local_scale = 1;
+	copy_to_shapeheader(&level.handle, triangle, made, &level.file, 0, level.handle.max_index, level.handle.tex_index_nos);
+
+	*kind = made ? made->items[0][0] : -1;
+	*convertedColour = made ? (unsigned int)made->items[0][3] : 0;
+}
+
+static void TestNoListOfPictures()
+{
+	puts("5. a level with no list of pictures");
+
+	{
+		// A level file without BMPNAMES: the level has no list of picture numbers at all, so picture 0 (and every other) isn't one it has
+		LevelFile level;
+
+		load_rif_bitmaps(&level.handle, 0);
+		Check(level.handle.tex_index_nos == 0, "a level with no BMPNAMES has no list of picture numbers");
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_Polyline && colour == 0xffffffffu, "its polygon of picture 0 becomes a line, as one whose picture isn't there, and no list is read");
+	}
+
+	{
+		// The same polygon in a level whose list has picture 0 keeps its texture
+		LevelFile level;
+
+		level.LoadLevelNames(1);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_ZB_Gouraud3dTexturedPolygon && colour == (unsigned int)level.handle.tex_index_nos[0], "with picture 0 in the list, the polygon keeps its texture");
+	}
+}
+
+// ---- 6. the level editor's count of missing pictures ----
+
+// R_SetEditorCountMissingPictures (renderer.h); the editor tells the user how many of a level's pictures couldn't be loaded, and how many polygons are lines for it
+void R_SetEditorCountMissingPictures(bool on);
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
+
+static void TestTheEditorsCount()
+{
+	puts("6. the level editor's count of missing pictures");
+
+	{
+		// The level's own pictures load with CCF_ENVIRONMENT: picture 2 of its three is refused, and one polygon shows it
+		LevelFile level;
+
+		pictureToRefuse = "picture2.RIM";
+		R_SetEditorCountMissingPictures(true);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 3);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 2, &kind, &colour);
+		ConvertOneTexturedTriangle(level, 1, &kind, &colour);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && lines == 1 && !noList, "the level's one refused picture is counted, with its one polygon drawn as a line, and the level has a list");
+		Check(linesInTheLog == 1, "and the log names it");
+
+		// Another RIF's pictures after the level's (a character's, the HUD's) aren't the level's
+		LevelFile another;
+
+		pictureToRefuse = "picture0.RIM";
+		another.LoadLevelNames(1);
+		ConvertOneTexturedTriangle(another, 0, &kind, &colour);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && lines == 1, "a later RIF's refused picture and its polygon aren't counted as the level's");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// A level with no list of pictures at all
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = false;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(noList && missing == 0 && lines == 1, "a level with no list of pictures is said to have none, with its textured polygon counted as a line");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// The game never sets the count: nothing is counted or said
+		LevelFile level;
+
+		pictureToRefuse = "picture0.RIM";
+		R_SetEditorCountMissingPictures(true);
+		R_SetEditorCountMissingPictures(false);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 1);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 0 && lines == 0 && !noList && linesInTheLog == 0, "in the game nothing is counted, and the log says nothing");
+	}
+
+	{
+		// A missing picture two outside shapes of the level name (each shape's BMPLSTST; their names are asked for as "<its RIF>/<name>", so with no RIF name as
+		// "/picture2.RIM", the same for both): counted and named once (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(3, CCF_ENVIRONMENT);
+		pictureToRefuse = "/picture2.RIM";
+		level.LoadShapeNames(3);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && linesInTheLog == 1, "the first outside shape's missing picture is counted and named");
+
+		LevelFile secondShape;   // still the level's load (no other RIF's pictures since): only the list is another shape's
+
+		pictureToRefuse = "/picture2.RIM";
+		secondShape.LoadShapeNames(3);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(picturesAskedFor == 3 && missing == 1 && linesInTheLog == 0, (std::string("a second shape naming the same missing picture asks for it again, but it is not counted or named again (") +
+			std::to_string(missing) + " counted, " + std::to_string(linesInTheLog) + " more lines in the log)").c_str());
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// Past the limit of 4096 a file may ask for: those are counted apart, not as missing pictures the log names (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(4098, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 0 && pastLimit == 2 && linesInTheLog == 1, (std::string("4098 names that all load: none missing, 2 past the limit, and the log says once that there are too many (") +
+			std::to_string(missing) + " / " + std::to_string(pastLimit) + " / " + std::to_string(linesInTheLog) + ")").c_str());
+		R_SetEditorCountMissingPictures(false);
+	}
+}
+
 int main()
 {
 	TestTheLimit();
 	TestARefusedPicture();
 	TestPlacesTooFarOut();
 	TestAnimatedShapeReach();
+	TestNoListOfPictures();
+	TestTheEditorsCount();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;

@@ -1668,6 +1668,21 @@ static void TestChunksInTheWrongPlace()
 		Shape_Chunk * shape = shapeOwner.get();
 
 		Check(shape->shape_data.centre.y == 8 && shape->shape_data.radius_about_centre == radius, "a shape's centre inside a shape is read");
+
+		// Saved again, the chunk holds the radius about the centre it was read with, not the header's radius about the origin (0 here): the
+		// old code wrote the header's radius, as the original tools did (inteng's writer FUN_00511570 at 0x511655, its reader FUN_00511460
+		// reads the radius about the centre), so every save of a level changed it, and the level editor's rebuilt centre was lost on save
+		Chunk * const centreChunk = shape->lookup_single_child("SHPCENTR");
+		char written[ChunkHeaderBytes + 16] = {};
+		bool same = false;
+
+		if (centreChunk && centreChunk->size_chunk() == sizeof(written))
+		{
+			centreChunk->fill_data_block(written);
+			same = memcmp(written + ChunkHeaderBytes, centre, 16) == 0;
+		}
+
+		Check(same, "a shape's centre is saved as it was read: the radius about the centre, not the header's radius about the origin");
 		Parent_File = 0;
 	}
 

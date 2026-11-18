@@ -26,6 +26,8 @@
 //   a square picture with all its smaller copies
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   the level editor's missing pictures: R_SetEditorDrawPolylines, R_SetEditorCountMissingPictures, R_EditorMissingPictures
 
 #ifndef _renderer_h_
 #define _renderer_h_
@@ -223,6 +225,21 @@ void R_EditorFlushWorld			(void);
 // The level editor's Untextured: every polygon of the level is drawn with one plain texel of the colour given (ARGB), so it is as the level's light makes it,
 // whatever the draw mode. Off (false) draws the textures as the game does. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
 void R_SetEditorUntextured		(bool on, unsigned int colour);
+// The level editor's No Textures (inteng's Strategy Data entered with load flag 0x80: FUN_00522ab0 -> FUN_0046e700(0x93)): while the card draws lines, the level's UNTEXTURED polygons (the
+// game's items with no texture of their own; inteng leaves its kinds 2 / 3 as they are) are drawn FILLED, as the level's light makes them, and every other polygon of the level is drawn
+// again as a line in lineColour (ARGB), unlit, over its lit line (inteng makes each textured polygon a line, kind 0xe, with flag 2: its colour as it is). An untextured polygon of a block
+// the editor tints is filled in its tint, in the light (inteng paints the block's shape that colour). Off (false): as the game draws. Only the editor sets it. Added 2026-11-17 by
+// Melanikus (Frost) for the AvP port.
+void R_SetEditorFillUntextured	(bool on, unsigned int lineColour);
+// The level editor's MISSING PICTURES (Added 2026-11-17 by Melanikus (Frost) for the AvP port; the owner: "if someone gives you a map it is very likely it won't have a texture"):
+// the level loader makes a textured polygon whose picture can't be had (no file, a refused name, no list of pictures at all) a white unlit line, I_Polyline, which the game leaves out.
+// R_SetEditorDrawPolylines(true) draws those polygons as lines, as inteng does (its kind 0xe). R_SetEditorCountMissingPictures(true) says each picture that couldn't be loaded in the
+// log, once however many lists name it, and counts them; R_EditorMissingPictures gives the count for the last level loaded, the polygons made lines, whether it had no list of
+// pictures at all, and how many names were past the 4096 one file may ask for (not loaded, not named: the log says once that there are too many).
+// Only the editor sets them: the game draws and logs as it always did.
+void R_SetEditorDrawPolylines	(bool on);
+void R_SetEditorCountMissingPictures	(bool on);
+void R_EditorMissingPictures	(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
 // The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
 bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
 struct displayblock;

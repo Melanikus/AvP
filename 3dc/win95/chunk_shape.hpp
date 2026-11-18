@@ -791,9 +791,9 @@ class Shape_Morphing_Frame_Data_Chunk : public Chunk
 {
 public:
 
-	// constructor from wherever
+	// constructor from wherever: the flags and the speed start as 0, as the save writes them (fill_data_block)
 	Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent)
-	: Chunk (parent, "FRMMORPH"), num_frames(0), frame_store(0)
+	: Chunk (parent, "FRMMORPH"), a_flags(0), a_speed(0), num_frames(0), frame_store(0)
 	{}
 	// constructor from buffer
 	Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *, size_t);

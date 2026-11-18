@@ -1,4 +1,8 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   the level editor's No Textures (R_SetEditorFillUntextured, RenderList.cpp): after the list is drawn, its textured polygons are drawn again as lines in one plain colour, unlit
+//   (DrawTheTexturedAsPlainLines), over the lit lines and around the filled untextured polygons. The game never sets it, so nothing here runs there
+//   the level editor's line for a polygon whose picture can't be had (R_SetEditorDrawPolylines, kshape.cpp) is white, as inteng draws it
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
 //   game always has it, changes nothing; DrawFilledOutlinesColour, their colour, white unless the editor asks for another; and
@@ -627,6 +631,11 @@ static void FlushLists()
 		return;
 	}
 
+	// The level editor's line polygon being drawn when the list filled (RenderListLinesNow, kshape.cpp) marks only its own items: the particles and coronas
+	// written into the lists now are not lines
+	bool const linesNow = RenderListLinesNow;
+
+	RenderListLinesNow = false;
 	UnlockExecuteBufferAndPrepareForUse();
 	ExecuteBuffer();
 	LockExecuteBuffer();
@@ -636,6 +645,8 @@ static void FlushLists()
 	{
 		mainList->AddCommand(kCommandSeeThroughWithoutDepth);
 	}
+
+	RenderListLinesNow = linesNow;
 }
 
 float cot(float in)
@@ -663,6 +674,8 @@ static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
 static void DrawOutlinesOverTheSolids();
 static void DrawTheSelectedInGreen();
+static void DrawTheTexturedAsPlainLines();
+extern bool EditorFillUntextured;   // RenderList.cpp: the level editor's No Textures fill (R_SetEditorFillUntextured)
 extern int EditorSelectedCount;
 extern const struct section_data *EditorSelectedSection;   // hmodel.cpp: the selected hierarchy section (editor only)
 extern int EditorHighlightedCount;
@@ -837,6 +850,12 @@ static bool ExecuteBuffer()
 	if (DrawFilledOutlines && mainList->GetSize())
 	{
 		DrawOutlinesOverTheSolids();
+	}
+
+	// The level editor's No Textures: every textured polygon again as a plain unlit line over its lit one (the untextured ones were filled), before the tinted ones go over both
+	if (EditorFillUntextured && WireFrameMode && mainList->GetSize())
+	{
+		DrawTheTexturedAsPlainLines();
 	}
 
 	// The editor's selected object, in green over the level
@@ -2154,7 +2173,11 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 		mainVertex[vb].y = (float)-vertices->Y;
 		mainVertex[vb].z = (float)vertices->Z;
 
-		if (flags & iflag_transparent)
+		if (RenderListLinesNow)
+		{
+			mainVertex[vb].color = RGBA_MAKE(255, 255, 255, 255);   // the level editor's polygon whose picture isn't known: a WHITE line, as inteng draws it (its colour word is 0xffffffff)
+		}
+		else if (flags & iflag_transparent)
 		{
 	  		mainVertex[vb].color = RGBA_MAKE(vertices->R, vertices->G, vertices->B, vertices->A);
 		}
@@ -6052,6 +6075,51 @@ void R_SetEditorTintedBlocks(const struct displayblock *const *blocks, const uns
 void R_SetEditorSelectedBlocks(const struct displayblock *const *blocks, int count)
 {
 	R_SetEditorTintedBlocks(blocks, 0, count);
+}
+
+// The level editor's No Textures (R_SetEditorFillUntextured, renderer.h): the main draw lit every polygon, filled the untextured ones and drew the rest as lines; here those lines are drawn
+// again in one plain colour, unlit (inteng's textured polygons become lines with flag 2, their colour as it is), compared with the level's depth (a filled polygon hides a line behind it)
+// and not written into it, the way the green pass draws. A state block puts the card back.
+static void DrawTheTexturedAsPlainLines()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	extern unsigned int EditorFillUntexturedLineColour;
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	device->SetPixelShader(NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, EditorFillUntexturedLineColour);
+	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00001f);
+
+	mainList->DrawOpaqueAgain(d3d.mainDecl, false, false, false, false, true);
+
+	asItWas->Apply();
+	asItWas->Release();
 }
 
 static void DrawTheSelectedInGreen()
