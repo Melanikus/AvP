@@ -1,3 +1,5 @@
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= says where he is a second time, that many seconds after meets=yes's first reading (SayWhereHeIsAgainIfItIsTime)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the comment on what a run is for no longer points at a plan kept outside the repository (#151), and says where runs are asked for and read
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -5928,6 +5930,56 @@ static void DieIfItIsTime()
 	}
 }
 
+// meetsagain=: with meets=yes, where he is and the room he's in are said a second time, that many seconds after the first frame's
+// reading, once in the run. The first reading is on the first frame, where the level put him down; this one is where he stands once he
+// has had time to fall, so a start placed in the air or over nothing reads differently. For the mapper's journey: a start placed in the
+// editor, then played. Added 2026-11-18 by Melanikus (Drake) for the AvP port.
+static void SayWhereHeIsAgainIfItIsTime()
+{
+	static DWORD started = 0;
+	static bool saidAlready = false;
+
+	if (plan.meetsAgainSeconds == 0 || saidAlready)
+	{
+		return;
+	}
+
+	DWORD const now = GetTickCount();
+
+	if (started == 0)
+	{
+		started = now;
+	}
+
+	if (now - started >= (DWORD)plan.meetsAgainSeconds * 1000)
+	{
+		STRATEGYBLOCK *const block = Player ? Player->ObStrategyBlock : NULL;
+
+		// With no one to read, he is read on the next frame he is there
+		if (!block || !block->DynPtr)
+		{
+			return;
+		}
+
+		saidAlready = true;
+
+		char line[300];
+		MODULE const *const room = block->containingModule;
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: he's at %d %d %d", block->DynPtr->Position.vx, block->DynPtr->Position.vy, block->DynPtr->Position.vz);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: he's in room %s", room && room->name ? room->name : "(none)");
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: health %d, %d seconds in", block->SBDamageBlock.Health, plan.meetsAgainSeconds);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+}
+
 // listplace= with coopend=: in a skirmish, the level's end is reached this long in, on each level
 static void ReachTheEndIfItIsTime()
 {
@@ -6430,6 +6482,7 @@ void Hudson_EndOfFrame()
 	DieIfItIsTime();
 	FollowTheNamedThing();
 	ReachTheEndIfItIsTime();
+	SayWhereHeIsAgainIfItIsTime();
 
 	// After dying, in single player or in the mode that plays like it: the same lines, for comparing with the first
 	if (levelStartedAgain)

@@ -24,6 +24,8 @@
 //   friendlyfire=off has the host of a network test turn friendly fire off
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   floorislava=off has the run play 1999's aliens, as the console's FLOORISLAVA OFF does, for the other side of a film (#109's flip)
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= has a meets=yes run say where he is a second time, that many seconds in
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port. See hudson_plan.h.
 
 #include "hudson_plan.h"
@@ -168,6 +170,8 @@ const char *const kHudsonRefusedPlayWithSomethingElse = "play= is him playing th
 const char *const kHudsonRefusedPlayNetWithoutCoop = "play= with net= is two Hudsons playing a level of a campaign together, so it needs coop=yes";
 const char *const kHudsonRefusedGunAlienWithoutGun = "gunalien= makes something for a gun to hit, so it needs gun=";
 const char *const kHudsonRefusedMeetsNotYes = "meets= can only be yes";
+const char *const kHudsonRefusedMeetsAgainNotANumber = "meetsagain= isn't a number of seconds from 1 to 3600";
+const char *const kHudsonRefusedMeetsAgainWithoutMeets = "meetsagain= needs meets=yes, whose first reading it is the second of";
 const char *const kHudsonRefusedDieAtNotANumber = "dieat= isn't a number of seconds from 1 to 3600";
 const char *const kHudsonRefusedLevelFilmsNotYes = "levelfilms= can only be yes";
 const char *const kHudsonRefusedScreenWord = "screen= is second or main";
@@ -2330,6 +2334,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedFilmSkipNotANumber;
 			}
 		}
+		else if (WordIs(place, nameLength, "meetsagain"))
+		{
+			if (plan->meetsAgainSeconds != 0)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!ReadNumber(value, valueLength, &plan->meetsAgainSeconds) || plan->meetsAgainSeconds < 1 || plan->meetsAgainSeconds > 3600)
+			{
+				return kHudsonRefusedMeetsAgainNotANumber;
+			}
+		}
 		else if (WordIs(place, nameLength, "dieat"))
 		{
 			if (plan->dieAtSeconds != 0)
@@ -3142,6 +3158,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->filmSkipSeconds != 0 && !plan->levelFilms)
 	{
 		return kHudsonRefusedFilmSkipWithoutFilms;
+	}
+
+	if (plan->meetsAgainSeconds != 0 && !plan->meets)
+	{
+		return kHudsonRefusedMeetsAgainWithoutMeets;
 	}
 
 	if (((plan->playAsPredator || plan->playAsAlien) && plan->gunSlot == 0 && !plan->meets) && !plan->play)

@@ -2,6 +2,10 @@
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Dietrich) for the AvP port:
+//   the level editor's plain polygons (the file's engine type 2, inteng's kind 2 / 3; R_SetEditorDrawPolylines, the editor's flag): drawn in their own colour times the light (the
+//   colour word's three low bytes, R G B), and one with iflag_nolight (I_ZB_Polygon, which the game leaves out) in its colour, as inteng draws them; the game's own untextured way
+//   (the light's grey into red and green) is unchanged. The game never sets the flag
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   the level editor's lines (R_SetEditorDrawPolylines): a polygon the level loader made a line, because its picture can't be had (I_Polyline), is drawn as white lines, the way
 //   inteng draws it, where the game leaves it out. The game never sets it
@@ -761,6 +765,14 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 					RenderListLinesNow = true;
 					// and on into the untextured polygon's way
 
+				// A plain polygon with iflag_nolight (post_process_shape leaves it I_Polygon, so I_ZB_Polygon), which the game leaves out: the level editor draws it in its colour (Dietrich 2026-11-18)
+				case I_ZB_Polygon:
+					if (polyPtr->PolyItemType == I_ZB_Polygon && !EditorDrawPolylines)
+					{
+						break;
+					}
+					// and on into the untextured polygon's way
+
 				case I_ZB_GouraudPolygon: {
 					//                  break;
 					//                LOCALASSERT(0);
@@ -1288,12 +1300,31 @@ static void GouraudPolygon_Construct(POLYHEADER *polyPtr)
 	VertexNumberPtr = &polyPtr->Poly1stPt;
 	RenderPolygon.TranslucencyMode = TRANSLUCENCY_OFF;
 
+	// The level editor's plain polygon (not one of its lines): its own colour, times the light unless it has iflag_nolight (inteng's kinds 2 / 3)
+	bool const editorColour = EditorDrawPolylines && !RenderListLinesNow;
+	bool const editorUnlit = editorColour && (polyPtr->PolyFlags & iflag_nolight) != 0;
+	int const plainR = (polyPtr->PolyColour >> 16) & 0xff, plainG = (polyPtr->PolyColour >> 8) & 0xff, plainB = polyPtr->PolyColour & 0xff;
+
 	do {
 		renderVerticesPtr->X = RotatedPts[*VertexNumberPtr].vx;
 		renderVerticesPtr->Y = RotatedPts[*VertexNumberPtr].vy;
 		renderVerticesPtr->Z = RotatedPts[*VertexNumberPtr].vz;
 
 		VertexIntensity(renderVerticesPtr);
+
+		if (editorColour)
+		{
+			int const lightR = editorUnlit ? 255 : (renderVerticesPtr->R < 0 ? 0 : renderVerticesPtr->R > 255 ? 255 : renderVerticesPtr->R);
+			int const lightG = editorUnlit ? 255 : (renderVerticesPtr->G < 0 ? 0 : renderVerticesPtr->G > 255 ? 255 : renderVerticesPtr->G);
+			int const lightB = editorUnlit ? 255 : (renderVerticesPtr->B < 0 ? 0 : renderVerticesPtr->B > 255 ? 255 : renderVerticesPtr->B);
+
+			renderVerticesPtr->R = plainR * lightR / 255;
+			renderVerticesPtr->G = plainG * lightG / 255;
+			renderVerticesPtr->B = plainB * lightB / 255;
+			renderVerticesPtr++;
+			VertexNumberPtr++;
+			continue;
+		}
 
 		int colour = (renderVerticesPtr->B + renderVerticesPtr->R + renderVerticesPtr->G) / 3;
 		renderVerticesPtr->R = colour;
