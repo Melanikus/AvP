@@ -173,6 +173,7 @@ $licences = [ordered]@{
     'libbinkdec.txt'    = 'dependencies\libbinkdec\COPYING'
     'LGPL-2.1.txt'      = 'dependencies\libbinkdec\COPYING'   # the GNU Lesser GPL 2.1, the version this project takes OpenAL Soft under
     'libsmackerdec.txt' = 'dependencies\libsmackerdec\COPYING'
+    'libsmackerenc.txt' = 'dependencies\libsmackerenc\COPYING'
     'D3DX.txt'          = "$installed\dxsdk-d3dx\copyright"
     'Microsoft-VC-Runtime.txt' = 'notices\Microsoft-VC-Runtime.txt'   # ours: what the files are, and where Microsoft's terms are
 }
@@ -212,6 +213,20 @@ Copy-Item -LiteralPath $openalArchives[0].FullName -Destination (Join-Path $open
 Copy-Item -Path (Join-Path $openalPortFolder '*') -Destination (Join-Path $openalSourceFolder 'port') -Recurse
 Copy-Item -LiteralPath 'vcpkg-overlay-triplets\x86-windows.cmake' -Destination (Join-Path $openalSourceFolder 'port\triplet-x86-windows.cmake')
 
+# libsmackerenc's source goes with it too, in licences/sources/libsmackerenc: the owner (2026-11-18) ships the encoder with Open Inteng, whose
+# package takes this package's licences/sources whole, as OpenAL Soft's. Its licence, headers, sources and project, as they are at this commit,
+# named one by one, so nothing a local build left beside them (its objects under win32\VS2026\Win32) goes too. (Added 2026-11-18 by Melanikus
+# for the AvP port.)
+$encoderSourceFolder = Join-Path $licenceFolder 'sources\libsmackerenc'
+foreach ($part in 'COPYING', 'include\BitWriter.h', 'include\HuffmanTree.h', 'include\SmackerEncoder.h', 'src\BitWriter.cpp', 'src\HuffmanTree.cpp',
+    'src\SmackerEncoder.cpp', 'win32\smackerenc.def', 'win32\VS2026\smackerenc_dynamic.vcxproj') {
+    $from = Join-Path 'dependencies\libsmackerenc' $part
+    if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { throw "libsmackerenc's $part, which its source in the package needs, isn't there" }
+    $to = Join-Path $encoderSourceFolder $part
+    New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+    Copy-Item -LiteralPath $from -Destination $to
+}
+
 # Where this repository is, so our own changes to OpenAL Soft, and our two film libraries, can be found at the very commit this package
 # was built from
 $here = if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) { "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" } else { 'https://github.com/Melanikus/AvP' }
@@ -227,6 +242,7 @@ $whatEachIs = @{
     'pthreadvc3.dll'     = 'PThreads4W, built by this project''s own port in vcpkg-overlay-ports/pthreads (licences/PThreads4W.txt, the Apache License 2.0, with its notice in licences/PThreads4W-NOTICE.txt and the contributors that names in licences/PThreads4W-CONTRIBUTORS.txt).'
     'libbinkdec.dll'     = "libbinkdec, Barry Duncan's player for Bink films (licences/libbinkdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libbinkdec. You may put your own build of it in its place."
     'libsmackerdec.dll'  = "libsmackerdec, Barry Duncan's player for Smacker films (licences/libsmackerdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libsmackerdec. You may put your own build of it in its place."
+    'libsmackerenc.dll'  = "libsmackerenc, a Smacker film encoder made from Barry Duncan's libsmackerdec for Open Inteng, the level editor (licences/libsmackerenc.txt, the GNU Lesser General Public License, version 2.1). The game itself doesn't use it. Its source is here with it, in licences/sources/libsmackerenc, and at $here/tree/$commit/dependencies/libsmackerenc. You may put your own build of it in its place."
     'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
     'd3dcompiler_43.dll' = "Microsoft's D3DX shader compiler (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
 }

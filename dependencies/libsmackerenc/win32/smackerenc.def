@@ -1,0 +1,7 @@
+LIBRARY
+EXPORTS
+
+; functions (SmackerEncoder.h)
+Smacker_Encode
+Smacker_FreeEncoded
+Smacker_EncodeWords
