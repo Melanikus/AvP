@@ -1242,7 +1242,10 @@ void Shape_Centre_Chunk::fill_data_block(char * data_start)
 	*(ChunkVectorInt*)data_start=cs->centre;
 	data_start+=sizeof(ChunkVectorInt);
 
-	*(float*)data_start=cs->radius;
+	// The radius about the centre, the number the reader above puts in radius_about_centre. The original wrote the shape's radius about
+	// its origin here (cs->radius, the header's), as the tools did (inteng's writer FUN_00511570 at 0x511655), so every save changed the
+	// chunk; the game never reads this number
+	*(float*)data_start=cs->radius_about_centre;
 }
 
 
