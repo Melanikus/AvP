@@ -2,6 +2,7 @@
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   the level editor's No Textures (R_SetEditorFillUntextured, RenderList.cpp): after the list is drawn, its textured polygons are drawn again as lines in one plain colour, unlit
 //   (DrawTheTexturedAsPlainLines), over the lit lines and around the filled untextured polygons. The game never sets it, so nothing here runs there
+//   the level editor's line for a polygon whose picture can't be had (R_SetEditorDrawPolylines, kshape.cpp) is white, as inteng draws it
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   DrawFilledOutlines, the level editor's switch to draw each solid polygon's outline over it (DrawOutlinesOverTheSolids); 0, as the
 //   game always has it, changes nothing; DrawFilledOutlinesColour, their colour, white unless the editor asks for another; and
@@ -2165,7 +2166,11 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 		mainVertex[vb].y = (float)-vertices->Y;
 		mainVertex[vb].z = (float)vertices->Z;
 
-		if (flags & iflag_transparent)
+		if (RenderListLinesNow)
+		{
+			mainVertex[vb].color = RGBA_MAKE(255, 255, 255, 255);   // the level editor's polygon whose picture isn't known: a WHITE line, as inteng draws it (its colour word is 0xffffffff)
+		}
+		else if (flags & iflag_transparent)
 		{
 	  		mainVertex[vb].color = RGBA_MAKE(vertices->R, vertices->G, vertices->B, vertices->A);
 		}

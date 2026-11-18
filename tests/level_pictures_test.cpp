@@ -4,6 +4,7 @@
 //   a place on an animation's picture too far out keeps the shape still (#97)
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   5: a level with no list of pictures
+//   6: the level editor's count of missing pictures
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
@@ -26,6 +27,9 @@
 //
 //  5. A level with no list of pictures at all (no BMPNAMES) has no list of picture numbers, so a textured polygon's picture is looked up in
 //     nothing: it has to become a line, as a polygon whose picture can't be had does. (Added 2026-11-17 by Melanikus (Frost) for the AvP port.)
+//
+//  6. The level editor's count of missing pictures: only the level's own (the load with CCF_ENVIRONMENT) are counted and named in the log,
+//     with the polygons made lines for them, and in the game, which never turns it on, nothing is. (Added 2026-11-17 by Melanikus (Frost).)
 
 #include <memory>
 #include <stdio.h>
@@ -778,6 +782,99 @@ static void TestNoListOfPictures()
 	}
 }
 
+// ---- 6. the level editor's count of missing pictures ----
+
+// R_SetEditorCountMissingPictures (renderer.h); the editor tells the user how many of a level's pictures couldn't be loaded, and how many polygons are lines for it
+void R_SetEditorCountMissingPictures(bool on);
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList);
+
+static void TestTheEditorsCount()
+{
+	puts("6. the level editor's count of missing pictures");
+
+	{
+		// The level's own pictures load with CCF_ENVIRONMENT: picture 2 of its three is refused, and one polygon shows it
+		LevelFile level;
+
+		pictureToRefuse = "picture2.RIM";
+		R_SetEditorCountMissingPictures(true);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 3);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 2, &kind, &colour);
+		ConvertOneTexturedTriangle(level, 1, &kind, &colour);
+
+		int missing = -1, lines = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList);
+		Check(missing == 1 && lines == 1 && !noList, "the level's one refused picture is counted, with its one polygon drawn as a line, and the level has a list");
+		Check(linesInTheLog == 1, "and the log names it");
+
+		// Another RIF's pictures after the level's (a character's, the HUD's) aren't the level's
+		LevelFile another;
+
+		pictureToRefuse = "picture0.RIM";
+		another.LoadLevelNames(1);
+		ConvertOneTexturedTriangle(another, 0, &kind, &colour);
+		R_EditorMissingPictures(&missing, &lines, &noList);
+		Check(missing == 1 && lines == 1, "a later RIF's refused picture and its polygon aren't counted as the level's");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// A level with no list of pictures at all
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+
+		int missing = -1, lines = -1;
+		bool noList = false;
+
+		R_EditorMissingPictures(&missing, &lines, &noList);
+		Check(noList && missing == 0 && lines == 1, "a level with no list of pictures is said to have none, with its textured polygon counted as a line");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// The game never sets the count: nothing is counted or said
+		LevelFile level;
+
+		pictureToRefuse = "picture0.RIM";
+		R_SetEditorCountMissingPictures(true);
+		R_SetEditorCountMissingPictures(false);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 1);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList);
+		Check(missing == 0 && lines == 0 && !noList && linesInTheLog == 0, "in the game nothing is counted, and the log says nothing");
+	}
+}
+
 int main()
 {
 	TestTheLimit();
@@ -785,6 +882,7 @@ int main()
 	TestPlacesTooFarOut();
 	TestAnimatedShapeReach();
 	TestNoListOfPictures();
+	TestTheEditorsCount();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;

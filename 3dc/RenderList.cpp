@@ -33,6 +33,7 @@
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   the level editor's No Textures fill (R_SetEditorFillUntextured): while the card draws lines, an untextured solid polygon of the level's list is drawn filled, and in the editor's
 //   tint pass a tinted one is filled in its tint times its light; DrawOpaqueAgain can draw only the items with a texture of their own (the fill's plain lines). The game never sets it
+//   the level editor's lines for polygons whose picture can't be had (R_SetEditorDrawPolylines, kshape.cpp): an item added while kshape draws one is drawn as lines
 
 #include "RenderList.h"
 #include "TextureManager.h"
@@ -328,6 +329,7 @@ bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	Items[listIndex].sortKey = 0; // zero it out
 	Items[listIndex].tinted = RenderListTintNow;
 	Items[listIndex].tintColour = RenderListTintNow ? RenderListTintColour : 0;
+	Items[listIndex].lines = RenderListLinesNow;
 
 	set_layerID        (Items[listIndex].sortKey, layer);
 	set_texID          (Items[listIndex].sortKey, textureID);
@@ -483,6 +485,16 @@ void R_SetEditorFillUntextured(bool on, unsigned int lineColour)
 {
 	EditorFillUntextured = on;
 	EditorFillUntexturedLineColour = lineColour;
+}
+
+// The level editor's polygons whose picture isn't known (R_SetEditorDrawPolylines, renderer.h): the game's level loader makes a textured polygon whose picture can't be had a
+// line (I_Polyline, white, unlit: chunk_load.cpp), which the game never draws; inteng draws it (its kind 0xe), so the editor does too, as a line
+bool RenderListLinesNow = false;
+bool EditorDrawPolylines = false;
+
+void R_SetEditorDrawPolylines(bool on)
+{
+	EditorDrawPolylines = on;
 }
 
 // An item the No Textures fill draws filled: a solid polygon with no texture of its own (the game's untextured polygons are added with NO_TEXTURE)
@@ -715,11 +727,17 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 
 				// The level editor's No Textures fill (R_SetEditorFillUntextured): the level's untextured polygon is filled though the card draws lines, and the lines come back after it
 				// (the card's fill stays what the game's record says: CheckWireFrameMode)
-				bool const filled = CurrentRenderStates.WireFrameModeIsOn && UntexturedSolid(it) && listName == "mainList";
+				bool const filled = CurrentRenderStates.WireFrameModeIsOn && !it->lines && UntexturedSolid(it) && listName == "mainList";
+				// The level editor's polygon whose picture isn't known (R_SetEditorDrawPolylines): a line, whatever the card's fill (inteng draws it as kind 0xe)
+				bool const lined = it->lines && !CurrentRenderStates.WireFrameModeIsOn;
 
 				if (filled)
 				{
 					d3d.lpD3DDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+				}
+				else if (lined)
+				{
+					d3d.lpD3DDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 				}
 
 				R_DrawIndexedPrimitive(baseIndexValue, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
@@ -727,6 +745,10 @@ void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 				if (filled)
 				{
 					d3d.lpD3DDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+				}
+				else if (lined)
+				{
+					d3d.lpD3DDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
 				}
 			}
 		}

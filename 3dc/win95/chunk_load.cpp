@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
 //   a level with no list of pictures (no BMPNAMES) has no list of picture numbers to look in: each of its textured polygons is made a line, as one whose picture can't be had
+//   the level editor's count of missing pictures (R_SetEditorCountMissingPictures): each of the level's own pictures that can't be loaded is named in the log and counted, with the
+//   polygons made lines for it. The game never sets it
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a level file can be loaded on a "try" path (try_load_rif), which gives a refused file back as INVALID_RIFFHANDLE with nothing
 //   shown, for the map editor; load_rif, the game's, still shows its message and stops the game at the same place
@@ -46,6 +48,7 @@
 #include "animation_chunk.hpp"
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
+#include "level_file_name.h"   // LevelFileName_ForTheLog: a name from the file, safe for the log
 #include "mempool.h"
 #include "logstring.h"
 #include "surface_tangent.h"
@@ -754,6 +757,42 @@ void close_rif_handle(RIFFHANDLE h)
 // lists count together. The most any of the game's 86 files holds is 439, in all its lists, so this leaves plenty of room for a real level.
 static int const kMostPicturesOneFileCanAskFor = 4096;
 
+// The level editor's MISSING PICTURES (R_SetEditorCountMissingPictures, renderer.h; Frost 2026-11-17, the owner: "if someone gives you a map it is very likely it won't have a
+// texture"): a picture that can't be loaded (no file, a refused name, past the limit) leaves its number unknown, so its polygons become lines (I_Polyline, the conversion below);
+// with this on, each such name is said in the log once, and they are counted, with those polygons and whether the level has no list of pictures at all, for the editor to tell the
+// user. The game never sets it.
+bool EditorCountsMissingPictures = false;
+int EditorPicturesMissing = 0;
+int EditorPolygonsWithoutPicture = 0;
+bool EditorNoPictureList = false;
+
+// True while the LEVEL's own pictures and shapes load: from its load_rif_bitmaps (the one with CCF_ENVIRONMENT: copy_rif_data's) to the next RIF's. The game loads other RIFs
+// around it (the characters', the HUD's), whose pictures are not the level's.
+static bool editorCountingLevel = false;
+static bool editorLevelCounted = false;
+
+void R_SetEditorCountMissingPictures(bool on)
+{
+	EditorCountsMissingPictures = on;
+	editorCountingLevel = editorCountingLevel && on;
+
+	if (on)
+	{
+		EditorPicturesMissing = 0;
+		EditorPolygonsWithoutPicture = 0;
+		EditorNoPictureList = false;
+		editorCountingLevel = false;
+		editorLevelCounted = false;
+	}
+}
+
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList)
+{
+	if (picturesMissing) *picturesMissing = EditorPicturesMissing;
+	if (polygonsWithoutPicture) *polygonsWithoutPicture = EditorPolygonsWithoutPicture;
+	if (noPictureList) *noPictureList = EditorNoPictureList;
+}
+
 // Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
 // because any picture can turn out to be missing.
 static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags flags)
@@ -766,11 +805,28 @@ static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags fl
 			h->said_too_many_pictures = true;
 		}
 
+		if (editorCountingLevel)
+		{
+			EditorPicturesMissing++;
+		}
+
 		return GEI_NOTLOADED;
 	}
 
 	h->pictures_asked_for++;
-	return load_rif_bitmap(name, flags);
+
+	texID_t const got = load_rif_bitmap(name, flags);
+
+	if (got == GEI_NOTLOADED && editorCountingLevel)
+	{
+		char safeName[64];
+
+		EditorPicturesMissing++;
+		LevelFileName_ForTheLog(name, safeName, sizeof(safeName));
+		LogErrorStringC((std::string("the level names a picture that could not be loaded (its polygons are drawn as lines): ") + safeName).c_str());
+	}
+
+	return got;
 }
 
 // Not static, only so that tests/level_pictures_test.cpp can reach it
@@ -1257,7 +1313,7 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 }
 
 // load textures for environment
-BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
+BOOL load_rif_bitmaps(RIFFHANDLE h, int flags)
 {
 	Global_BMP_Name_Chunk *gbnc = 0;
 
@@ -1268,6 +1324,19 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 		if (pChunk)
 		{
 			gbnc = (Global_BMP_Name_Chunk *) pChunk;
+		}
+	}
+
+	// the level editor's count (R_SetEditorCountMissingPictures): the level's own pictures load here with CCF_ENVIRONMENT (copy_rif_data); its shapes follow. Another RIF's
+	// load (a character's, the HUD's) ends the count
+	if (EditorCountsMissingPictures)
+	{
+		editorCountingLevel = (flags & CCF_ENVIRONMENT) != 0 && !editorLevelCounted;
+
+		if (editorCountingLevel)
+		{
+			editorLevelCounted = true;
+			EditorNoPictureList = gbnc == 0;
 		}
 	}
 
@@ -2802,6 +2871,11 @@ BOOL copy_to_shapeheader(
 				item_list[i * 9] = I_Polyline;
 				item_list[i * 9 + 2] = (cshp_ptr->poly_list[i].flags&~ChunkInternalItemFlags) | iflag_nolight;
 				item_list[i * 9 + 3] = 0xffffffff;
+
+				if (editorCountingLevel)
+				{
+					EditorPolygonsWithoutPicture++;
+				}
 			}
 		}
 

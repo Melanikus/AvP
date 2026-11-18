@@ -2,6 +2,9 @@
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   the level editor's lines (R_SetEditorDrawPolylines): a polygon the level loader made a line, because its picture can't be had (I_Polyline), is drawn as white lines, the way
+//   inteng draws it, where the game leaves it out. The game never sets it
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   two commented-out calls to DecalWithinFrustum are gone, with the function (see frustum.cpp)
 //   the shoulder lamp's place on the light list carries its own aim, and whether it was a real light is worked out again each frame
@@ -375,6 +378,8 @@ void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
 **********************************************************************************KJL*/
 // The level editor's highlighted polygons (d3d_render.cpp, RenderList.cpp): always none in the game
 extern bool RenderListTintNow;
+extern bool RenderListLinesNow;    // RenderList.cpp: the level editor's line mark for a polygon whose picture isn't known
+extern bool EditorDrawPolylines;   // RenderList.cpp: R_SetEditorDrawPolylines
 extern unsigned int RenderListTintColour;
 extern unsigned int EditorHighlightColour;
 extern int EditorHighlightedCount;
@@ -715,6 +720,8 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 		int pif = PolygonWithinFrustum(polyPtr);
 
+		RenderListLinesNow = false;   // the level editor's line mark is for one item (I_Polyline, below)
+
 		if (highlightedCount)
 		{
 			int const thisItem = itemsInTheShape - numitems;
@@ -728,7 +735,6 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 			switch (polyPtr->PolyItemType) {
 #if debug
 
-				case I_Polyline:
 				case I_FilledPolyline:
 				case I_Wireframe:
 				/* NB This is intended to fall through to the GouraudPolygon case */
@@ -743,6 +749,17 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 					//  LOCALASSERT(0);
 					break;
 				}
+
+				// A polygon whose picture isn't known: the level loader made it a white, unlit line (I_Polyline, chunk_load.cpp), which the game leaves out. The level editor
+				// draws it as inteng does (its kind 0xe): the untextured polygon's way, its items marked as lines (R_SetEditorDrawPolylines; Frost 2026-11-17)
+				case I_Polyline:
+					if (!EditorDrawPolylines)
+					{
+						break;
+					}
+
+					RenderListLinesNow = true;
+					// and on into the untextured polygon's way
 
 				case I_ZB_GouraudPolygon: {
 					//                  break;
@@ -895,6 +912,8 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 			}
 		}
 	} while (--numitems);
+
+	RenderListLinesNow = false;
 }
 
 void PredatorThermalVision_ShapePipeline(SHAPEHEADER *shapePtr)
