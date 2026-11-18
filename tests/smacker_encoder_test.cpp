@@ -15,7 +15,8 @@
 //
 // HOW IT RUNS
 //
-// tests/build.ps1 compiles this file with the encoder's and the decoder's real sources (tests/smacker_encoder_test.args). It writes its
+// It is built with the encoder's and the decoder's own sources, and nothing else (in the AvP port: tests/build.ps1, with the list in
+// tests/smacker_encoder_test.args). It writes its
 // films into a folder of its own in the working folder and takes the folder away after. A non-zero result means a check failed.
 
 #include <math.h>
@@ -134,8 +135,9 @@ struct Played
 	bool soundInFours = true;                        // every frame's sound a whole number of 4 samples (as AvP's own films)
 };
 
-// Plays the file with the decoder's own exported calls, as the game's SmackerPlayback does
-static Played Play(std::string const &path)
+// Plays the file with the decoder's own exported calls, as the game's SmackerPlayback does. hasSound: the film was made with sound. The decoder is
+// asked about sound only then: an older libsmackerdec says there is one track even when the file has none, and leaves that track's numbers unset.
+static Played Play(std::string const &path, bool hasSound)
 {
 	Played p;
 	SmackerHandle handle = Smacker_Open(path.c_str());
@@ -149,8 +151,11 @@ static Played Play(std::string const &path)
 	p.frames = Smacker_GetNumFrames(handle);
 	Smacker_GetFrameSize(handle, p.width, p.height);
 	p.fps = Smacker_GetFrameRate(handle);
-	p.audioTracks = Smacker_GetNumAudioTracks(handle);
-	p.audio = Smacker_GetAudioTrackDetails(handle, 0);
+	if (hasSound)
+	{
+		p.audioTracks = Smacker_GetNumAudioTracks(handle);
+		p.audio = Smacker_GetAudioTrackDetails(handle, 0);
+	}
 
 	std::vector<int16_t> audioBuffer((p.audio.idealBufferSize + 1) / 2 + 1);
 	std::vector<uint8_t> palette(768), frame((size_t)p.width * p.height);
@@ -303,7 +308,7 @@ static void TestMessageVideo(std::string const &folder)
 
 	Check(WriteFile(path, smk.data(), smk.size()), "written to a file");
 
-	Played const p = Play(path);
+	Played const p = Play(path, true);
 
 	Check(p.opened, "Barry's decoder opens it (Smacker_Open)");
 	Check(p.frames == frames && p.width == w && p.height == h, "the decoder reads 30 frames of 128 x 96");
@@ -351,10 +356,16 @@ static void TestManyColours(std::string const &folder)
 
 	Check(WriteFile(path, smk.data(), smk.size()), "written to a file");
 
-	Played const p = Play(path);
+	Played const p = Play(path, false);
+	bool soundInAFrame = false;
+
+	for (uint32_t f = 0; f < frames && smk.size() > 104 + 5 * (size_t)frames; f++)
+	{
+		soundInAFrame = soundInAFrame || (smk[104 + 4 * (size_t)frames + f] & 2) != 0;
+	}
 
 	Check(p.opened && p.frames == frames, "Barry's decoder opens it and reads 4 frames");
-	Check(p.audioTracks == 0, "no sound track");
+	Check(U32At(smk, 24) == 0 && U32At(smk, 72) == 0 && !soundInAFrame, "no sound: the header names no track, and no frame carries sound");
 
 	double worst = 0.0;
 	bool no255 = true;
@@ -411,7 +422,7 @@ static void TestBigAndSmall(std::string const &folder)
 
 		WriteFile(path, smk.data(), smk.size());
 
-		Played const p = Play(path);
+		Played const p = Play(path, true);
 		size_t exact = 0;
 
 		for (uint32_t f = 0; f < frames && f < p.rgb.size(); f++)
@@ -445,7 +456,7 @@ static void TestBigAndSmall(std::string const &folder)
 
 		WriteFile(path, smk.data(), smk.size());
 
-		Played const p = Play(path);
+		Played const p = Play(path, false);
 
 		Check(p.opened && p.frames == 1 && p.rgb.size() == 1 && memcmp(p.rgb[0].data(), rgb.data(), rgb.size()) == 0, "decoded exactly");
 		DeleteFileA(path.c_str());

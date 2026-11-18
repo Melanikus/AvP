@@ -50,8 +50,8 @@
  *   frame 0's palette                            ReadPacket (the palette change: new entries on smk_pal's 64 levels, then a skip)
  *   a frame's sound                              ReadPacket and DecodeAudio (8-bit mono, his "packed" kind)
  *   a frame's picture                            DecodeFrame (one block type, FULL, for every block; mode 0, as SMK2 has)
- * THE STOCK LAYOUT (the owner, 11-18: AvP on Steam plays films with RAD's own player, not Barry's decoder): the file is laid out as AvP's own
- * message videos are, read with AvP-docs/tools/frost/smk/smk-trees.js from message100.smk, Message154.smk and message103.smk:
+ * THE STOCK LAYOUT (AvP on Steam plays its films with RAD's own player, not with this library's decoder): the file is laid out as AvP's own
+ * message videos are, as read from message100.smk, Message154.smk and message103.smk:
  *   - one palette, in frame 0 only (768 bytes there);
  *   - all four header trees there (MMAP and MCLR too, though no block uses them), each table's size field its entries x 4 + 12, every tree
  *     and byte tree with two leaves at least, no code longer than RAD's own (the deepest there: 21 bits in FULL, 16 in a byte tree);
@@ -136,12 +136,6 @@ struct Levels
 	}
 };
 
-const Levels &TheLevels()
-{
-	static const Levels levels;
-	return levels;
-}
-
 // a colour as three levels, 6 bits each: red 12..17, green 6..11, blue 0..5
 const uint32_t kKeys = 1u << 18;
 
@@ -155,9 +149,11 @@ uint32_t LevelOf(uint32_t key, int channel)
 	return (key >> (12 - 6 * channel)) & 63;
 }
 
-// The film's colours: how many pixels of each key, over every frame, and which palette entry each key gets
+// The film's colours: how many pixels of each key, over every frame, and which palette entry each key gets. One is made for each call, with the
+// table of nearest levels, so the encoder keeps no state between calls (it may be called from more than one thread at once).
 struct Colours
 {
+	Levels levels;
 	std::vector<uint64_t> count;   // by key
 	std::vector<uint8_t> slot;     // by key: its palette entry
 	std::vector<uint32_t> keys;    // the keys the film has
@@ -214,7 +210,7 @@ Box BoxOf(const std::vector<uint32_t> &keys, const std::vector<uint64_t> &count,
 
 // More colours than a palette holds: MEDIAN CUT. The box of colours with the most pixels times width is cut at its pixels' middle
 // along its widest channel, until there are kMostColours boxes; each box's colour is its pixels' mean, on the nearest levels.
-uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint64_t> &count, uint8_t palette[256][3])
+uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint64_t> &count, const Levels &levels, uint8_t palette[256][3])
 {
 	std::vector<Box> boxes;
 
@@ -285,7 +281,7 @@ uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint64_t> &cou
 		{
 			double const mean = boxes[b].pixels ? sum[c] / (double)boxes[b].pixels + 0.5 : 0.0;
 
-			palette[b][c] = TheLevels().nearest[mean >= 255.0 ? 255 : (int)mean];
+			palette[b][c] = levels.nearest[mean >= 255.0 ? 255 : (int)mean];
 		}
 	}
 
@@ -294,7 +290,7 @@ uint32_t MedianCut(std::vector<uint32_t> &keys, const std::vector<uint64_t> &cou
 
 void CountColours(const uint8_t *rgb, size_t pixels, Colours &colours)
 {
-	const Levels &levels = TheLevels();
+	const Levels &levels = colours.levels;
 
 	for (size_t i = 0; i < pixels; i++)
 	{
@@ -331,7 +327,7 @@ void MakePalette(Colours &colours)
 
 	std::vector<uint32_t> keys = colours.keys;
 
-	colours.used = MedianCut(keys, colours.count, colours.palette);
+	colours.used = MedianCut(keys, colours.count, colours.levels, colours.palette);
 
 	// each colour to its nearest entry (not always its box's)
 	for (uint32_t key : colours.keys)
@@ -361,7 +357,7 @@ void MakePalette(Colours &colours)
 
 void MapFrame(const uint8_t *rgb, size_t pixels, const Colours &colours, std::vector<uint8_t> *index)
 {
-	const Levels &levels = TheLevels();
+	const Levels &levels = colours.levels;
 
 	index->resize(pixels);
 
