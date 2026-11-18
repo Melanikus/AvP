@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   a level with no list of pictures (no BMPNAMES) has no list of picture numbers to look in: each of its textured polygons is made a line, as one whose picture can't be had
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   a level file can be loaded on a "try" path (try_load_rif), which gives a refused file back as INVALID_RIFFHANDLE with nothing
 //   shown, for the map editor; load_rif, the game's, still shows its message and stops the game at the same place
@@ -2770,7 +2772,10 @@ BOOL copy_to_shapeheader(
 			int texno = item_list[i * 9 + 3] & 0x7fff;
 			int UVIndex = item_list[i * 9 + 3] >> 16;
 
-			if (texno <= local_max_index &&
+			// A level with no list of pictures (no BMPNAMES) has no list of picture numbers: each of its textured polygons is one whose picture isn't
+			// known, and goes on as a line below (tests/level_pictures_test.cpp, 5)
+			if (local_tex_index_nos &&
+			    texno <= local_max_index &&
 			    local_tex_index_nos[texno] != -1 &&
 			    cshp_ptr->uv_list[UVIndex].num_verts)
 			{

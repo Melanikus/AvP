@@ -2,6 +2,8 @@
 //   a stand-in for what the memory code now tells the game's sounds
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a place on an animation's picture too far out keeps the shape still (#97)
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   5: a level with no list of pictures
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
@@ -21,6 +23,9 @@
 //
 //  4. Not about pictures: this is the one test that runs chunk_load.cpp, so an animated shape's reach is checked here too. Its box and
 //     radius have to come out right even at the farthest a place can be. (Added 2026-11-14 by Melanikus for the AvP port.)
+//
+//  5. A level with no list of pictures at all (no BMPNAMES) has no list of picture numbers, so a textured polygon's picture is looked up in
+//     nothing: it has to become a line, as a polygon whose picture can't be had does. (Added 2026-11-17 by Melanikus (Frost) for the AvP port.)
 
 #include <memory>
 #include <stdio.h>
@@ -680,12 +685,106 @@ static void TestAnimatedShapeReach()
 	}
 }
 
+// ---- 5. a level with no list of pictures ----
+
+// One triangle with a texture, whose picture number and list of texture coordinates are in its colour, as a level file gives it, made into
+// the game's shape (copy_to_shapeheader). Gives back the polygon's kind and colour as the game has them.
+static void ConvertOneTexturedTriangle(LevelFile &level, unsigned int colour, int *kind, unsigned int *convertedColour)
+{
+	ChunkShape triangle;
+
+	triangle.num_verts = 3;
+	triangle.v_list = new ChunkVectorInt[3];
+	triangle.v_normal_list = new ChunkVectorFloat[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		triangle.v_list[i].x = i == 1 ? 100 : 0;
+		triangle.v_list[i].y = i == 2 ? 100 : 0;
+		triangle.v_list[i].z = 0;
+		triangle.v_normal_list[i].x = 0;
+		triangle.v_normal_list[i].y = 0;
+		triangle.v_normal_list[i].z = 1;
+	}
+
+	triangle.num_polys = 1;
+	triangle.poly_list = new ChunkPoly[1];
+	triangle.p_normal_list = new ChunkVectorFloat[1];
+	triangle.p_normal_list[0].x = 0;
+	triangle.p_normal_list[0].y = 0;
+	triangle.p_normal_list[0].z = 1;
+
+	ChunkPoly &polygon = triangle.poly_list[0];
+
+	polygon.engine_type = I_ZB_Gouraud3dTexturedPolygon;
+	polygon.normal_index = 0;
+	polygon.flags = 0;
+	polygon.colour = colour;
+	polygon.num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		polygon.vert_ind[i] = i < 3 ? i : -1;
+	}
+
+	triangle.num_uvs = 1;
+	triangle.uv_list = new ChunkUV_List[1];
+	triangle.uv_list[0].num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		triangle.uv_list[0].vert[i].u = 0;
+		triangle.uv_list[0].vert[i].v = 0;
+	}
+
+	SHAPEHEADER *made = 0;
+
+	local_scale = 1;
+	copy_to_shapeheader(&level.handle, triangle, made, &level.file, 0, level.handle.max_index, level.handle.tex_index_nos);
+
+	*kind = made ? made->items[0][0] : -1;
+	*convertedColour = made ? (unsigned int)made->items[0][3] : 0;
+}
+
+static void TestNoListOfPictures()
+{
+	puts("5. a level with no list of pictures");
+
+	{
+		// A level file without BMPNAMES: the level has no list of picture numbers at all, so picture 0 (and every other) isn't one it has
+		LevelFile level;
+
+		load_rif_bitmaps(&level.handle, 0);
+		Check(level.handle.tex_index_nos == 0, "a level with no BMPNAMES has no list of picture numbers");
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_Polyline && colour == 0xffffffffu, "its polygon of picture 0 becomes a line, as one whose picture isn't there, and no list is read");
+	}
+
+	{
+		// The same polygon in a level whose list has picture 0 keeps its texture
+		LevelFile level;
+
+		level.LoadLevelNames(1);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_ZB_Gouraud3dTexturedPolygon && colour == (unsigned int)level.handle.tex_index_nos[0], "with picture 0 in the list, the polygon keeps its texture");
+	}
+}
+
 int main()
 {
 	TestTheLimit();
 	TestARefusedPicture();
 	TestPlacesTooFarOut();
 	TestAnimatedShapeReach();
+	TestNoListOfPictures();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;
