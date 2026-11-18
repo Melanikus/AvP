@@ -229,6 +229,14 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 species=alien", kHudsonRefusedSpeciesWithoutGun);
 	Refused("-hudson level=a frames=1 meets=no", kHudsonRefusedMeetsNotYes);
 	Refused("-hudson level=a frames=1 meets=yes meets=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=0", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=3601", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=-5", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=ten", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=99999999999999999999", kHudsonRefusedMeetsAgainNotANumber);
+	Refused("-hudson level=a frames=1 meets=yes meetsagain=10 meetsagain=10", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 meetsagain=10", kHudsonRefusedMeetsAgainWithoutMeets);
 	Refused("-hudson level=a frames=1 listplace=x", kHudsonRefusedListPlaceNotANumber);
 	Refused("-hudson level=a frames=1 listplace=-1", kHudsonRefusedListPlaceNotANumber);
 	Refused("-hudson level=a frames=1 listplace=1000", kHudsonRefusedListPlaceNotANumber);
@@ -476,6 +484,10 @@ static void TestBadPlans()
 		HudsonPlan plan;
 		Check(HudsonPlan_Read("-hudson level=a frames=1 listplace=13", &plan) == 0 && plan.listPlaceAsked && plan.listPlace == 13 && plan.meets, "listplace= is read, and it says what he meets");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 meets=yes species=alien", &plan) == 0 && plan.playAsAlien && plan.meets && !plan.listPlaceAsked, "an alien can be asked for, to say what he meets");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 meets=yes meetsagain=10", &plan) == 0 && plan.meets && plan.meetsAgainSeconds == 10, "meetsagain= is read");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 meets=yes meetsagain=1", &plan) == 0 && plan.meetsAgainSeconds == 1, "from 1 second");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 meets=yes meetsagain=3600", &plan) == 0 && plan.meetsAgainSeconds == 3600, "to an hour");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 meets=yes", &plan) == 0 && plan.meetsAgainSeconds == 0, "and he isn't read again unless asked");
 		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && plan.difficulty == 1 && plan.dieAtSeconds == 0, "Medium, and he doesn't die, unless asked");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 difficulty=easy", &plan) == 0 && plan.difficulty == 0, "easy is the game's 0");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 difficulty=medium", &plan) == 0 && plan.difficulty == 1, "medium is 1");
@@ -1493,6 +1505,10 @@ static void TestTheRealGame()
 		Check(Has(watchCode, "else if (plan.walkSaid && walkPictureName[0])\n\t{\n\t\t_snprintf(name, sizeof(name) - 1, \"walk-%s.png\", walkPictureName);"), "SOURCE: named for the walk, and only the walk's");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "EndTheLevel(\"the walk is done, and he has looked\", kHudsonExitFinished);"), "SOURCE: and then the run ends");
 		Check(Has(watchCode, "if (!plan.walkSaid)\n\t\t\t{\n\t\t\t\tendAfterLookingAt"), "SOURCE: meets= doesn't end a walk's run before the walk");
+		Check(Has(Between(watchCode, "static void SayWhereHeIsAgainIfItIsTime()", "\n}\n"), "if (plan.meetsAgainSeconds == 0 || saidAlready)"), "SOURCE: meetsagain= reads him again once, only when asked");
+		Check(Has(Between(watchCode, "static void SayWhereHeIsAgainIfItIsTime()", "\n}\n"), "if (now - started >= (DWORD)plan.meetsAgainSeconds * 1000)"), "SOURCE: that many seconds after the first frame's reading");
+		Check(Has(Between(watchCode, "static void SayWhereHeIsAgainIfItIsTime()", "\n}\n"), "\"meets-again: he's at %d %d %d\""), "SOURCE: and says where he is, as the first reading does");
+		Check(Has(watchCode, "\tReachTheEndIfItIsTime();\n\tSayWhereHeIsAgainIfItIsTime();\n"), "SOURCE: each frame");
 		Check(Has(ReadSourceFile("3dc/avp/hudson_strategies.cpp"), "\t\tcase I_BehaviourFaceHugger:\n\t\t{\n\t\t\tstatic const char *const states[] = { \"approaching\", \"attacking\", \"waiting\", \"avoiding\", \"dying\", \"floating\", \"jumping\", \"about to jump\" };"), "SOURCE: a facehugger's state is said in words");
 		Check(Has(ReadSourceFile("3dc/avp/bh_facehugger.h"), "\tFHNS_Approach,\n\tFHNS_Attack,\n\tFHNS_Wait,\n\tFHNS_Avoidance,\n\tFHNS_Dying,\n\tFHNS_Floating,\n\tFHNS_Jumping,\n\tFHNS_AboutToJump,"), "SOURCE: in the order the game has them");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LampSize) { $arguments += \" lampsize=$LampSize\" }"), "SOURCE: the script can ask for lampsize=");

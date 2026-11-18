@@ -23,6 +23,8 @@
 //   yespage= shows an access run the yes page and presses one of its rows, and hostrow= hosts through the Multiplayer page's Host row
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   hoston= names the server a host through the rows chooses on the Host on row, and joinon= the server whose game a Find games run joins
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= has a meets=yes run say where he is a second time, that many seconds in
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -279,6 +281,7 @@ struct HudsonPlan
 	int windowsTogether;  // windowsof=: how many games share that screen, from 1 to 4. Unless a run asks, 1
 	int windowBig;        // windowbig=: with two windows, the number of the one that has the big part of the screen, the left three quarters. Unless a run asks, -1, and they share it half and half
 	bool meets;           // meets=yes: the log says what the player meets when the level starts, in lines made for comparing runs
+	int meetsAgainSeconds; // meetsagain=: with meets=yes, where he is and his room are said again this many seconds after the first frame's reading, once in the run, to see that he stands where the level put him down (a start in the air or over nothing reads differently). 0 means not asked
 	char siegeRoom[kHudsonLongestWallName + 1]; // siege=: after the smoke test both players go to the room of this name, armed and unable to die, and the host keeps enemies coming. Nothing means none
 	char siegeFar[kHudsonLongestWallName + 1];  // siegefar=: the room a siege's xenoborgs are made in, further off, so that they have time to wake. Nothing means where the others come from
 	char customMap[kCustomMapNameMost + 1]; // custommap=: a custom map made for single player, played instead of level=, which still says who plays. Nothing means none
@@ -539,6 +542,8 @@ extern const char *const kHudsonRefusedClassWithoutGun;
 extern const char *const kHudsonRefusedClassAsPredator;
 extern const char *const kHudsonRefusedCoopWithoutNet;
 extern const char *const kHudsonRefusedMeetsNotYes;
+extern const char *const kHudsonRefusedMeetsAgainNotANumber;
+extern const char *const kHudsonRefusedMeetsAgainWithoutMeets;
 extern const char *const kHudsonRefusedDieAtNotANumber;
 extern const char *const kHudsonRefusedLevelFilmsNotYes;
 extern const char *const kHudsonRefusedScreenWord;
