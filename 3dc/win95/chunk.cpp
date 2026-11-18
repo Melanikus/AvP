@@ -107,7 +107,8 @@ char * Chunk::make_data_block_from_chunk ()
 		return(0);
 	}
 
-	data_block = new char [block_size];
+	// The block starts as zeros, so a byte the chunk's writer leaves alone (the rounding after a name, say) is written as 0
+	data_block = new char [block_size]();
 
 	this->fill_data_block(data_block);
 
