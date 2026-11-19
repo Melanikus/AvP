@@ -2762,6 +2762,18 @@ static void MoveThePlayerTo(const VECTORCH &place)
 	DoObjectVisibilities();
 }
 
+// The lane probe puts the player down the same way (hudson_lanes.cpp). Added 2026-11-19 by Melanikus (Frost): setting the place alone left the
+// player's world place and his rooms behind, and the game had him back at the level's start.
+void Hudson_MoveThePlayerTo(const VECTORCH &place)
+{
+	if (!HudsonRunIsOn || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	MoveThePlayerTo(place);
+}
+
 // Puts him and the player where this view looks from, at the height he's standing at now. False if that's in no room at all. He settles again before the view counts, so a floor that's a little lower there does no harm.
 static bool StandForThisView(STRATEGYBLOCK *marine)
 {

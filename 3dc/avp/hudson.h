@@ -108,6 +108,10 @@ void Hudson_SayWhichShaderWasCompiled(const char *path);
 // A run's window stays out of the way, unless it was asked to show itself: then this is false, and the window opens as a normal game's does.
 bool Hudson_StaysOutOfTheWay();
 
+// Puts the player at place as a fight run moves him: his world place, the rooms he is in, and the view's place (the lane probe's standat=, hudson_lanes.cpp). Nothing outside a run.
+// Added 2026-11-19 by Melanikus (Frost)
+void Hudson_MoveThePlayerTo(const VECTORCH &place);
+
 // A run's window goes on the second screen, where it covers nothing anyone's using, if there is one and the run didn't say screen=main. If so, this changes where it goes and how big it is, and says true. Outside a run it does nothing and says false.
 bool Hudson_PlaceTheWindow(int *left, int *top, int *width, int *height);
 

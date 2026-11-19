@@ -41,6 +41,7 @@ namespace
 	long const kFramesBeforeTheAlien = 60;          // the player is put down at frame 1 and has a second to land
 	long const kFramesAfterTheFirstBlow = 120;      // the run goes on two seconds after the alien first attacks, for what it does then
 	int const kAlienStartsAboveTheFloor = 300;      // as hudson.cpp's MakeTheAlien
+	int const kPlayerStartsAboveTheFloor = 300;     // the player too, so that he lands in the second before the alien
 	int const kCos45 = 46341;                        // 16.16: which surface its down points at
 	int const kGravityKicksIn = 16384;               // TIME_BEFORE_GRAVITY_KICKS_IN (dynamics.h): a quarter second with no contact
 	int const kCurveToPlayerDistance = 8000;         // ALIEN_CURVETOPLAYERDIST (bh_near.cpp): Approach's gravity rule changes here
@@ -48,6 +49,7 @@ namespace
 	bool asked = false;
 	VECTORCH alienAt, standAt;
 	long mostFrames = 0;
+	MODULE const *placedIn = nullptr;               // the room standat= is in, where he must still be when the alien is made
 
 	FILE *file = nullptr;
 	bool alienMade = false;
@@ -434,9 +436,13 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			return true;
 		}
 
-		me->DynPtr->Position = standAt;
-		me->DynPtr->PrevPosition = standAt;
-		me->containingModule = room;
+		// moved as a fight run moves him (hudson.cpp's MoveThePlayerTo: his world place, his rooms and the view's place as well); the place alone left him to be
+		// put back at the level's start (the first run, 11-19 20:39: pmod=start#156 on every frame)
+		VECTORCH place = standAt;
+
+		place.vy -= kPlayerStartsAboveTheFloor;   // up is smaller
+		Hudson_MoveThePlayerTo(place);
+		placedIn = room;
 
 		Write("LANE PROBE (hudson_lanes.cpp, Frost 2026-11-19): one standard alien made at alienat=, the player put at standat=, standing still and unable to die; the level's own NPCs, generators and hive kept still");
 		Write("AS 1999: FLOORISLAVA OFF (the alien ways off), NEWDYNAMICCOLLISIONS OFF; the alien's code unchanged. Still AvPx's, not 1999's: pfarlocs.cpp's fourth-corner height fix (#161, where a far alien lands), pheromone.cpp's door test (scent through a door that isn't its AI module's first module), near_wake.cpp (placed sleeping aliens, not this one)");
@@ -452,6 +458,21 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		{
 			return false;
 		}
+
+		// he has had his second to land: in the room he was put in, or the run ends here, because every line after would measure him from somewhere else
+		VECTORCH const landed = me->DynPtr->Position;
+
+		if (me->containingModule != placedIn)
+		{
+			Write("PLAYER NOT KEPT at standat=: at " + std::to_string(landed.vx) + " " + std::to_string(landed.vy) + " " + std::to_string(landed.vz) + " in " + ModuleWords(me->containingModule) +
+				", not " + ModuleWords(placedIn));
+			*howItEnded = "the player didn't stay where standat= put him";
+			*exitCode = kHudsonExitMarineGone;
+			Finish(*howItEnded);
+			return true;
+		}
+
+		Write("PLAYER LANDED at " + std::to_string(landed.vx) + " " + std::to_string(landed.vy) + " " + std::to_string(landed.vz) + " in " + ModuleWords(me->containingModule));
 
 		VECTORCH spot = alienAt;
 
@@ -675,7 +696,8 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 	wasNear = isNear;
 	lastAiModule = aiNumber;
 
-	if (file && frame % 60 == 0)
+	// every frame, so that a run stopped from outside loses one line at most (the first run, 11-19 20:39, ended at frame 6439 with no word and 60 lines unwritten)
+	if (file)
 	{
 		fflush(file);
 	}
