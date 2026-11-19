@@ -667,6 +667,7 @@ static void DrawEditorOrthoViews();
 static bool editorOrthoOn = false;
 static bool editorMainBoxOn = false;   // R_SetEditorMainViewport: the world is drawn into a box of the window
 static int editorMainBox[4] = { 0, 0, 0, 0 };
+static bool backdropClearedThisFrame = false;   // FillTheBackdrop: the frame's first backdrop cleared the whole window; a later view's clears only its box
 void LampBeams_Forget();
 static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
@@ -3097,6 +3098,24 @@ void D3D_DrawWaterFall(int xOrigin, int yOrigin, int zOrigin)
 	}
 }
 
+// The backdrop's fill. The level editor's split screen draws several views into boxes of ONE frame (R_SetEditorMainViewport, each through
+// AvpShowViews): the first fills the whole window as the game does, a later one only its own box, or each view would wipe the ones drawn
+// before it (the whole window is the viewport here: the box is set only while the lists are drawn). The game itself has one view a
+// frame, so it never gets past the first.
+static void FillTheBackdrop(int colour)
+{
+	if (backdropClearedThisFrame && editorMainBoxOn && d3d.lpD3DDevice)
+	{
+		D3DRECT const box = { editorMainBox[0], editorMainBox[1], editorMainBox[0] + editorMainBox[2], editorMainBox[1] + editorMainBox[3] };
+
+		d3d.lpD3DDevice->Clear(1, &box, D3DCLEAR_TARGET, (D3DCOLOR)colour, 1.0f, 0);
+		return;
+	}
+
+	backdropClearedThisFrame = true;
+	ColourFillBackBuffer(colour);
+}
+
 void D3D_DrawBackdrop(void)
 {
 	if (TRIPTASTIC_CHEATMODE || MOTIONBLUR_CHEATMODE)
@@ -3104,12 +3123,12 @@ void D3D_DrawBackdrop(void)
 
 	if (WireFrameMode)
 	{
-   		ColourFillBackBuffer(0);
+   		FillTheBackdrop(0);
 		return;
 	}
 	else if (ShowDebuggingText.Tears)
 	{
-		ColourFillBackBuffer((63<<5));
+		FillTheBackdrop((63<<5));
 		return;
 	}
 
@@ -3129,7 +3148,7 @@ void D3D_DrawBackdrop(void)
 	}
 	if (needToDrawBackdrop)
 	{
-		ColourFillBackBuffer(0);
+		FillTheBackdrop(0);
 
 		if (LevelHasStars)
 		{
@@ -3145,7 +3164,7 @@ void D3D_DrawBackdrop(void)
 	// if the player is outside the environment, clear the screen!
 	if (!playerPherModule)
 	{
-		ColourFillBackBuffer(0);
+		FillTheBackdrop(0);
 		return;
 	}
 
@@ -3154,7 +3173,7 @@ void D3D_DrawBackdrop(void)
 	if (!playerStatusPtr->IsAlive || FREEFALL_CHEATMODE)
 	{
 		// minimise effects of camera glitches
-		ColourFillBackBuffer(0);
+		FillTheBackdrop(0);
 		return;
 	}
 }
@@ -3361,6 +3380,7 @@ bool ThisFramesRenderingIsOpen()
 void ThisFramesRenderingHasBegun()
 {
 	surfacePicturesAreFromThisFrame = false;
+	backdropClearedThisFrame = false;   // FillTheBackdrop: this frame's first backdrop fills the whole window
 	surfaceNormalsWereWrittenThisFrame = false;
 
 	// A frame always starts outside the stretch of see-through polygons without depth, even if the last one ended inside it (#177)
