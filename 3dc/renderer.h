@@ -107,6 +107,12 @@ bool R_UnsetVertexShader();
 
 // pixel shader functions
 bool R_CreatePixelShader  (const std::string &fileName, r_PixelShader &pixelShader);
+
+// Where a shader's text comes from (AVP_OpenInteng, its shaders baked in, 2026-11-19). Unset, as the game leaves it: the file shaders/<name>, as always. Set, only by the
+// level editor's own code (never by a setting): it gives the text of <name>, a .vsh, a .psh or an .fxh one of them includes, and its length in bytes, or false when it has
+// none, which fails that shader as a missing file does. No file is read then; the compile is the same call in its in-memory form, with the same entry, profile and flags.
+typedef bool (*R_ShaderTextSource)(const char *name, const char **text, size_t *length);
+void R_SetShaderTextSource(R_ShaderTextSource source);
 bool R_SetPixelShader     (r_PixelShader &pixelShader);
 void R_ReleasePixelShader (r_PixelShader &pixelShader);
 bool R_SetPixelShaderConstant (r_PixelShader &pixelShader, uint32_t registerIndex, enum SHADER_CONSTANT type, const void *constantData);

@@ -121,6 +121,65 @@ bool usingStencil = false;
 // Always this folder beside the game. It used to come from the settings file, and a file someone shared could point it at another computer, so that the game fetched
 // shaders from there and ran them. tests/settings_file_test.cpp keeps it out.
 static const std::string shaderPath = "shaders/";
+
+// R_SetShaderTextSource (renderer.h): null in the game, so shaders come from shaderPath; the level editor sets it to its own baked-in text
+static R_ShaderTextSource shaderTextSource = nullptr;
+
+void R_SetShaderTextSource(R_ShaderTextSource source)
+{
+	shaderTextSource = source;
+}
+
+namespace
+{
+	// #include "x.fxh" in a shader compiled from text: served by the same source, as D3DX's own handler reads it beside a shader file. Nothing from the disk.
+	class TextSourceInclude : public ID3DXInclude
+	{
+	public:
+		STDMETHOD(Open)(D3DXINCLUDE_TYPE, LPCSTR fileName, LPCVOID, LPCVOID *data, UINT *bytes)
+		{
+			const char *text = nullptr;
+			size_t length = 0;
+
+			if (!shaderTextSource || !fileName || !data || !bytes || !shaderTextSource(fileName, &text, &length) || !text || length > 0x7fffffffu)
+			{
+				return E_FAIL;
+			}
+
+			*data = text;
+			*bytes = (UINT)length;
+			return S_OK;
+		}
+
+		STDMETHOD(Close)(LPCVOID)
+		{
+			return S_OK;   // the text is the source's own, never freed here
+		}
+	};
+
+	// The shader <fileName> compiled: from the source's text when one is set (D3DXCompileShader, the in-memory form of the call below), else from its file as always
+	HRESULT CompileTheShader(const std::string &fileName, const std::string &actualPath, const char *entry, const char *profile, LPD3DXBUFFER *code, LPD3DXBUFFER *errors,
+		LPD3DXCONSTANTTABLE *constants)
+	{
+		if (shaderTextSource)
+		{
+			const char *text = nullptr;
+			size_t length = 0;
+
+			if (!shaderTextSource(fileName.c_str(), &text, &length) || !text || length > 0x7fffffffu)
+			{
+				LogErrorString("No shader '" + fileName + "' among the ones built in", __LINE__, kThisFile);
+				return E_FAIL;
+			}
+
+			TextSourceInclude include;
+
+			return D3DXCompileShader(text, (UINT)length, NULL, &include, entry, profile, 0, code, errors, constants);
+		}
+
+		return D3DXCompileShaderFromFile(actualPath.c_str(), NULL, NULL, entry, profile, 0, code, errors, constants);
+	}
+}
 std::string videoModeDescription;
 
 bool CreateVolatileResources();
@@ -1440,26 +1499,21 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LPD3DXBUFFER pCode = NULL;
 	std::string actualPath = shaderPath + fileName;
 
-	// test that the path to the file is valid first (d3dx doesn't give a specific error message for this)
-	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
-	if (!fileOpenTest.good())
+	// test that the path to the file is valid first (d3dx doesn't give a specific error message for this); not when the text comes from a source (renderer.h)
+	if (!shaderTextSource)
 	{
-		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
-		return false;
+		std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
+		if (!fileOpenTest.good())
+		{
+			LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
+			return false;
+		}
+		// close the file
+		fileOpenTest.close();
 	}
-	// close the file
-	fileOpenTest.close();
 
-	// set up vertex shader
-	LastError = D3DXCompileShaderFromFile(actualPath.c_str(), //filepath
-						NULL,            // macro's
-						NULL,            // includes
-						"vs_main",       // main function
-						ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0",        // shader profile
-						0,               // flags
-						&pCode,          // compiled operations
-						&pErrors,        // errors
-						&vertexShader.constantTable); // constants
+	// set up vertex shader (from the file, or the source's text: CompileTheShader)
+	LastError = CompileTheShader(fileName, actualPath, "vs_main", ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0", &pCode, &pErrors, &vertexShader.constantTable);
 
 	if (FAILED(LastError))
 	{
@@ -1537,26 +1591,21 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	LPD3DXBUFFER pCode = NULL;
 	std::string actualPath = shaderPath + fileName;
 
-    // test that the path to the file is valid first (d3dx doesn't give a specific error message for this)
-	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
-	if (!fileOpenTest.good())
+    // test that the path to the file is valid first (d3dx doesn't give a specific error message for this); not when the text comes from a source (renderer.h)
+	if (!shaderTextSource)
 	{
-		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
-		return false;
+		std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
+		if (!fileOpenTest.good())
+		{
+			LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
+			return false;
+		}
+		// close the file
+		fileOpenTest.close();
 	}
-	// close the file
-	fileOpenTest.close();
 
-	// set up pixel shader
-	LastError = D3DXCompileShaderFromFile(actualPath.c_str(), //filepath
-						NULL,            // macro's
-						NULL,            // includes
-						"ps_main",       // main function
-						ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0",        // shader profile
-						0,               // flags
-						&pCode,          // compiled operations
-						&pErrors,        // errors
-						&pixelShader.constantTable);    // constants
+	// set up pixel shader (from the file, or the source's text: CompileTheShader)
+	LastError = CompileTheShader(fileName, actualPath, "ps_main", ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0", &pCode, &pErrors, &pixelShader.constantTable);
 
 	if (FAILED(LastError))
 	{
