@@ -22,9 +22,9 @@
  *
  * Modified 2026-11-18 by Melanikus for the AvP port: an ENCODER, the other way round from Barry's decoder. It writes what his
  * SmackerDecoder reads (the same header, the same header trees in his DecodeTree / DecodeBigTree layouts, the same frame chunks), so
- * the game's own player plays it. The first version writes: Smacker 2 ("SMK2"), one palette per frame (left out when it is the
- * frame before's), every 4 x 4 block FULL, and 8-bit mono sound compressed as his DecodeAudio reads it (his decoder plays only
- * compressed sound: raw sound is skipped, SM-P14).
+ * the game's own player plays it. It writes: Smacker 2 ("SMK2"), one palette for the whole film (in frame 0 only, as AvP's own films
+ * have it), every 4 x 4 block FULL, and 8-bit mono sound compressed as his DecodeAudio reads it (his decoder plays only compressed
+ * sound: raw sound is skipped, SM-P14).
  */
 
 /* THE CALL. Everything the caller gives is checked before anything is made; nothing is written past what it gives.
@@ -39,8 +39,8 @@
  *   Smacker_FreeEncoded(smk);                                 // the bytes are this library's: only it frees them
  *
  * AvP's message videos (FMVs\messageNNN.smk) are 128 x 96 at 15 frames a second with 22050 Hz 8-bit mono sound.
- * THE PICTURE: each frame gets its own palette of at most 255 colours (Smacker's palette holds 64 levels a colour, smk_pal), chosen by
- * median cut when the frame has more. A frame of 255 colours or fewer, each on those levels, comes back exactly.
+ * THE PICTURE: the film gets one palette of at most 255 colours (Smacker's palette holds 64 levels a colour, smk_pal), chosen by
+ * median cut when the film has more. A film of 255 colours or fewer in all, each on those levels, comes back exactly.
  * THE SOUND: the decoder's player sizes its sound buffer from the first frame, so the first frame carries one second more than the
  * others (as AvP's own films do: message100.smk's first frame holds 16 frames' worth at 15 a second). Sound past the end of that
  * (the frames' time plus that second) is not kept.
