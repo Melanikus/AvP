@@ -116,6 +116,10 @@ const char *const kHudsonRefusedBotFightWithoutCoop = "botfight= is for a net= r
 const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be off";
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
+// lanes=yes, the lane probe (hudson_lanes.h). Added 2026-11-19 by Melanikus (Frost) for the AvP port
+const char *const kHudsonRefusedLanesNotYes = "lanes= can only be yes";
+const char *const kHudsonRefusedLanesNeedsPlaces = "lanes=yes needs one alienat= place for its alien and a standat= place for the player";
+const char *const kHudsonRefusedLanesNotAlone = "lanes=yes is the player standing still while one alien comes for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play=, net=, gun=, a walk, a nav, a route or a strategy";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -1403,6 +1407,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->noFriendlyFire = true;
+		}
+		else if (WordIs(place, nameLength, "lanes"))
+		{
+			// The lane probe (hudson_lanes.h): one alien made at alienat=, the player put at standat=, 1999's aliens, and a line a frame of what the alien's
+			// route is, for whether it stays on the ceiling. Added 2026-11-19 by Melanikus (Frost) for the AvP port (the owner's ceiling lanes).
+			if (plan->lanes)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedLanesNotYes;
+			}
+
+			plan->lanes = true;
 		}
 		else if (WordIs(place, nameLength, "floorislava"))
 		{
@@ -2915,10 +2935,29 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedOneJobAtATime;
 	}
 
-	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight
-	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien)
+	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight. alienat= and standat= also place the lane probe's alien and player
+	if ((seenWatch || seenHoldFire || ((seenAlienAt || seenStandAt) && !plan->lanes) || seenWatchFrom || seenTogether) && !plan->combatAlien)
 	{
 		return kHudsonRefusedWatchWordsWithoutCombat;
+	}
+
+	// lanes=yes: the player stands still at standat= while one alien made at alienat= comes for him, as in 1999's game. Nothing else may move
+	// or be asked for. (Added 2026-11-19 by Melanikus (Frost) for the AvP port.)
+	if (plan->lanes)
+	{
+		if (!plan->alienAtSaid || plan->alienAtPlaces != 1 || !plan->standAtSaid)
+		{
+			return kHudsonRefusedLanesNeedsPlaces;
+		}
+
+		if (plan->rooms > 0 || plan->combatAlien || seenWatch || seenHoldFire || seenWatchFrom || seenTogether || plan->play || plan->netMode != kHudsonNetNone ||
+			plan->gunSlot != 0 || seenWalkFrom || seenWalkTo || seenNav || seenRoute || seenStrategy)
+		{
+			return kHudsonRefusedLanesNotAlone;
+		}
+
+		// 1999's aliens: the console's FLOORISLAVA OFF before any level, as floorislava=off asks
+		plan->floorIsLavaOff = true;
 	}
 
 	if (plan->holdFire && !plan->watchAlien)

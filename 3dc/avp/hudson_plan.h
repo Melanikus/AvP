@@ -350,6 +350,7 @@ struct HudsonPlan
 	int alienAtMore[kHudsonMostTogether - 1][3];
 	bool standAtSaid;     // standat=x,y,z: he stands here, instead of where the level starts the player
 	int standAtX, standAtY, standAtZ;
+	bool lanes;           // lanes=yes: the lane probe (hudson_lanes.h): the player stands still at standat=, one alien is made at alienat=, 1999's aliens, and hudson-lanes.txt has a line a frame of the alien's route and whether it stays on the ceiling. Added 2026-11-19 by Melanikus (Frost)
 	char follow[kHudsonLongestStrategyName + 1];   // follow=: the name of one thing in the level, often an NPC, whose place and state the log says once a second. Nothing means none. For #126's floating facehugger
 	bool walkSaid;        // walkfrom=x,y,z and walkto=x,y,z: he's put at walkfrom= and walks to walkto= as a player does, with the forward key. With dieat=, only once the level has started again. See "A WALK" in hudson.cpp
 	int walkFromX, walkFromY, walkFromZ;
@@ -477,6 +478,9 @@ extern const char *const kHudsonRefusedBotFightWithoutCoop;
 extern const char *const kHudsonRefusedFriendlyFireNotOff;
 extern const char *const kHudsonRefusedFriendlyFireWithoutCoop;
 extern const char *const kHudsonRefusedFloorIsLavaNotOff;
+extern const char *const kHudsonRefusedLanesNotYes;
+extern const char *const kHudsonRefusedLanesNeedsPlaces;
+extern const char *const kHudsonRefusedLanesNotAlone;
 extern const char *const kHudsonRefusedUnknownName;
 extern const char *const kHudsonRefusedAskedTwice;
 extern const char *const kHudsonRefusedNoLevel;

@@ -1,3 +1,5 @@
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   lanes=yes, the lane probe (hudson_lanes.h): HudsonLanesAreOn, its one alien moves while the level's own are kept still, and it ends the run
 // Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
 //   meetsagain= says where he is a second time, that many seconds after meets=yes's first reading (SayWhereHeIsAgainIfItIsTime)
 // Modified 2026-11-09 by Melanikus for the AvP port:
@@ -196,6 +198,7 @@ static const float kHudsonLampWideUp = 200.0f;
 #include "hudson.h"
 #include "load_shape.h"
 #include "hudson_plan.h"
+#include "hudson_lanes.h"   // lanes=yes, the lane probe (added 2026-11-19 by Melanikus (Frost))
 #include "custom_maps.h"
 #include "hmodel.h"
 #include "weapon_hooks.h"
@@ -261,6 +264,7 @@ bool HudsonPeopleStandStill = false;
 int HudsonWayOfDying = -1;
 bool HudsonWorldIsLive = false;
 bool HudsonMarineHoldsFire = false;
+bool HudsonLanesAreOn = false;
 
 static const DWORD kWatchdogLooksEveryMilliseconds = 50;
 static const char kRunFolderName[] = "HudsonRun";
@@ -1088,6 +1092,15 @@ int Hudson_CheckBeforeStarting()
 			HudsonMarineHoldsFire = plan.holdFire;
 			ForceLoad_Alien = TRUE;
 		}
+	}
+
+	// lanes=yes, the lane probe (hudson_lanes.h): before the level loads, as above, so that an alien's models are there. The level's own NPCs,
+	// generators and hive are kept still, and the probe's one alien is let move (Hudson_KeepsStill)
+	if (plan.lanes)
+	{
+		HudsonLanesAreOn = true;
+		ForceLoad_Alien = TRUE;
+		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames);
 	}
 
 	char line[256] = { 0 };
@@ -5566,6 +5579,12 @@ bool Hudson_KeepsStill(STRATEGYBLOCK *block)
 		return false;
 	}
 
+	// lanes=yes: the probe's one alien is the only thing that moves
+	if (HudsonLanes_IsTheAlien(block))
+	{
+		return false;
+	}
+
 	switch (block->I_SBtype)
 	{
 		case I_BehaviourMarine:
@@ -6600,6 +6619,20 @@ void Hudson_EndOfFrame()
 	if (done == 1 && !GotTheModeItAskedFor())
 	{
 		EndTheLevel("this machine can't draw the mode it was asked for", kHudsonExitModeNotThere);
+		return;
+	}
+
+	// lanes=yes: the lane probe ends the run itself, its verdict written first (hudson_lanes.h)
+	if (plan.lanes)
+	{
+		const char *howItEnded = "";
+		int code = kHudsonExitFinished;
+
+		if (HudsonLanes_EndOfFrame(done, &howItEnded, &code))
+		{
+			EndTheLevel(howItEnded, code);
+		}
+
 		return;
 	}
 

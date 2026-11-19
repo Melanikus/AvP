@@ -141,6 +141,7 @@ param(
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # lets the alien ways' developer switches below through. The ways themselves are on in every run since the flip (2026-11-11)
     [switch]$FloorIsLavaOff, # the run plays 1999's aliens: floorislava=off, the console's FLOORISLAVA OFF, for the other side of a film
+    [switch]$Lanes,          # lanes=yes, the lane probe (3dc/avp/hudson_lanes.h): the player stands still at -StandAt, one alien is made at -AlienAt, 1999's aliens; hudson-lanes.txt is kept with the run (added 2026-11-19 by Melanikus (Frost))
     [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
     [int]$AlienWaysAim = -1, # the game's -alienwaysaim=N, 0 to 10000 mm: how far along its way an alien aims, where that's in the build. Left out, the build's own. Needs -AlienWays
@@ -502,6 +503,7 @@ if ($Uncapped -and $PSBoundParameters.ContainsKey('Fps')) { Stop-Here "-Uncapped
 if ($Uncapped) { $arguments += " fps=uncapped" } else { $arguments += " fps=$Fps" }
 if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
 if ($FloorIsLavaOff) { $arguments += " floorislava=off" }
+if ($Lanes) { $arguments += " lanes=yes" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }
 if ($HostileKind) { $arguments += " hostile=$HostileKind" }
@@ -646,6 +648,10 @@ foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
 # window-place.txt, which nothing writes, so it was never kept (Primary's read, 2026-11-09)
 $windowNotes = Join-Path $saves 'hudson-window.txt'
 if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -Destination $kept }
+
+# lanes=yes: the lane probe's line a frame and its verdict (3dc/avp/hudson_lanes.cpp, kLanesFileName). Added 2026-11-19 by Melanikus (Frost)
+$laneNotes = Join-Path $saves 'hudson-lanes.txt'
+if (Test-Path -LiteralPath $laneNotes) { Copy-Item -LiteralPath $laneNotes -Destination $kept }
 
 $result = Join-Path $kept 'hudson-result.txt'
 

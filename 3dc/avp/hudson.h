@@ -36,6 +36,7 @@ extern int HudsonWayOfDying;
 
 // True only in a run that asked for a fight, with combat=. Then nothing in the world is kept still, and a marine can have a target like any other.
 extern bool HudsonWorldIsLive;
+extern bool HudsonLanesAreOn;   // lanes=yes: the lane probe keeps the level's own NPCs, generators and hive still, all but its one alien (hudson_lanes.h)
 
 // True only in a watched fight with holdfire=yes. Then a marine takes nothing as a target, so the alien being watched gets to him. False in a real game.
 extern bool HudsonMarineHoldsFire;

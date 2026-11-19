@@ -1433,13 +1433,15 @@ static void TestTheRealGame()
 
 	std::string const game = ReadSourceFile("3dc/avp/game.cpp");
 
-	std::string const stoppedInARun = Between(game, "if (!HudsonMarineIsOn || HudsonWorldIsLive)", "\n\t}\n");
+	// a lane probe (lanes=yes, hudson_lanes.h) keeps them still as well (2026-11-19, Frost)
+	std::string const stoppedInARun = Between(game, "if ((!HudsonMarineIsOn && !HudsonLanesAreOn) || HudsonWorldIsLive)", "\n\t}\n");
 
-	Check(Has(stoppedInARun, "DoHive();") && Has(stoppedInARun, "DoSquad();"), "only a run with a marine stops the hive and the squad");
+	Check(Has(stoppedInARun, "DoHive();") && Has(stoppedInARun, "DoSquad();"), "only a run with a marine, or a lane probe, stops the hive and the squad");
 
 	std::string const behaviours = Between(ReadSourceFile("3dc/avp/bh_types.cpp"), "void ExecuteBehaviour(STRATEGYBLOCK* sbptr)", "switch(sbptr->I_SBtype)");
 
-	Check(Has(behaviours, "if (HudsonMarineIsOn && Hudson_KeepsStill(sbptr))"), "and only such a run keeps anyone still");
+	Check(Has(behaviours, "if ((HudsonMarineIsOn || HudsonLanesAreOn) && Hudson_KeepsStill(sbptr))"), "and only such a run keeps anyone still");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (HudsonLanes_IsTheAlien(block))\n\t{\n\t\treturn false;\n\t}\n") || Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (HudsonLanes_IsTheAlien(block))\r\n\t{\r\n\t\treturn false;\r\n\t}\r\n"), "and a lane probe's own alien is the one thing it lets move");
 
 	std::string const keepsStill = Between(hudson, "bool Hudson_KeepsStill(STRATEGYBLOCK *block)", "void Hudson_EndOfFrame()");
 
@@ -2684,6 +2686,34 @@ static void CheckFloorIsLavaWord()
 	Check(!Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "' -alienways'"), "and passes no -alienways, which the game no longer has");
 }
 
+// lanes=yes: the lane probe (hudson_lanes.h), one alien at alienat= coming for the player standing still at standat=, as 1999's game.
+// Added 2026-11-19 by Melanikus (Frost) for the AvP port (the owner's ceiling lanes).
+static void CheckLanesWord()
+{
+	puts("lanes=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=-1000,2000,-3000 standat=4000,-5000,6000", &plan) == 0 && plan.lanes, "a run can be a lane probe");
+	Check(plan.alienAtSaid && plan.alienAtPlaces == 1 && plan.alienAtX == -1000 && plan.alienAtY == 2000 && plan.alienAtZ == -3000, "its alien's place is alienat='s");
+	Check(plan.standAtSaid && plan.standAtX == 4000 && plan.standAtY == -5000 && plan.standAtZ == 6000, "and the player's standat='s");
+	Check(plan.floorIsLavaOff, "a lane probe plays 1999's aliens: the alien ways are off, as floorislava=off asks");
+	Check(plan.rooms == 0 && !plan.combatAlien, "with no marine of Hudson's and no fight");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000", &plan) == 0 && !plan.lanes, "without the word, it isn't one");
+	Refused("-hudson level=genshd1 frames=9000 lanes=no alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Refused("-hudson level=genshd1 frames=9000 lanes= alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes lanes=yes alienat=1,2,3 standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes standat=4,5,6", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3/7,8,9 standat=4,5,6", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 rooms=1", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 rooms=1 combat=alien", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 alienat=1,2,3 standat=4,5,6", kHudsonRefusedWatchWordsWithoutCombat);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Lanes) { $arguments += \" lanes=yes\" }"), "the run script can ask for it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "$laneNotes = Join-Path $saves 'hudson-lanes.txt'"), "and keeps what it wrote with the run");
+}
+
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
 static void SecondsAre(const char *text, long expected)
 {
@@ -2804,6 +2834,7 @@ int main()
 	CheckBotFight();
 	CheckFriendlyFire();
 	CheckFloorIsLavaWord();
+	CheckLanesWord();
 	TestTheGridInTheGame();
 	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");

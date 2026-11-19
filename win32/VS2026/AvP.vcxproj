@@ -431,6 +431,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\pldnet.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\progress_bar.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_lanes.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_play.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp" />
