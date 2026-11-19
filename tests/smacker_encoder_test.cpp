@@ -11,11 +11,17 @@
 //   - a video with more colours than a palette holds: each frame comes back near (median cut), and palette entry 255 is never used;
 //   - a video with no sound: the decoder finds no sound track;
 //   - a bigger frame (256 x 192, 3072 blocks: more than one run of the block type), and one of 4 x 4 pixels, one frame;
-//   - the refusals: every field out of range gives its reason, and nothing is handed back.
+//   - the refusals: every field out of range gives its reason, and nothing is handed back;
+//   - THE STREAM (Smacker_Begin / AddFrame / End): for each kind of film above, its sound given in uneven pieces, the file it writes is
+//     Smacker_Encode's, byte for byte, and the decoder plays it; its own two files are there until End and gone after; a long film (2000
+//     frames, 73.7 MB of them) is streamed with the process's peak private memory growing by under 16 MB; its refusals (Begin, AddFrame,
+//     End), a refused frame leaving the stream to go on; a file someone else has under the name of the stream's own is never touched;
+//     End with no frame or too little sound, and Abandon, leave nothing behind.
 //
 // HOW IT RUNS
 //
-// tests/build.ps1 compiles this file with the encoder's and the decoder's real sources (tests/smacker_encoder_test.args). It writes its
+// It is built with the encoder's and the decoder's own sources, and nothing else (in the AvP port: tests/build.ps1, with the list in
+// tests/smacker_encoder_test.args). It writes its
 // films into a folder of its own in the working folder and takes the folder away after. A non-zero result means a check failed.
 
 #include <math.h>
@@ -23,10 +29,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include <windows.h>
+#include <psapi.h>
 
 #include "SmackerEncoder.h"
 #include "SmackerDecoder.h"
@@ -134,8 +142,9 @@ struct Played
 	bool soundInFours = true;                        // every frame's sound a whole number of 4 samples (as AvP's own films)
 };
 
-// Plays the file with the decoder's own exported calls, as the game's SmackerPlayback does
-static Played Play(std::string const &path)
+// Plays the file with the decoder's own exported calls, as the game's SmackerPlayback does. hasSound: the film was made with sound. The decoder is
+// asked about sound only then: an older libsmackerdec says there is one track even when the file has none, and leaves that track's numbers unset.
+static Played Play(std::string const &path, bool hasSound)
 {
 	Played p;
 	SmackerHandle handle = Smacker_Open(path.c_str());
@@ -149,8 +158,11 @@ static Played Play(std::string const &path)
 	p.frames = Smacker_GetNumFrames(handle);
 	Smacker_GetFrameSize(handle, p.width, p.height);
 	p.fps = Smacker_GetFrameRate(handle);
-	p.audioTracks = Smacker_GetNumAudioTracks(handle);
-	p.audio = Smacker_GetAudioTrackDetails(handle, 0);
+	if (hasSound)
+	{
+		p.audioTracks = Smacker_GetNumAudioTracks(handle);
+		p.audio = Smacker_GetAudioTrackDetails(handle, 0);
+	}
 
 	std::vector<int16_t> audioBuffer((p.audio.idealBufferSize + 1) / 2 + 1);
 	std::vector<uint8_t> palette(768), frame((size_t)p.width * p.height);
@@ -303,7 +315,7 @@ static void TestMessageVideo(std::string const &folder)
 
 	Check(WriteFile(path, smk.data(), smk.size()), "written to a file");
 
-	Played const p = Play(path);
+	Played const p = Play(path, true);
 
 	Check(p.opened, "Barry's decoder opens it (Smacker_Open)");
 	Check(p.frames == frames && p.width == w && p.height == h, "the decoder reads 30 frames of 128 x 96");
@@ -351,10 +363,16 @@ static void TestManyColours(std::string const &folder)
 
 	Check(WriteFile(path, smk.data(), smk.size()), "written to a file");
 
-	Played const p = Play(path);
+	Played const p = Play(path, false);
+	bool soundInAFrame = false;
+
+	for (uint32_t f = 0; f < frames && smk.size() > 104 + 5 * (size_t)frames; f++)
+	{
+		soundInAFrame = soundInAFrame || (smk[104 + 4 * (size_t)frames + f] & 2) != 0;
+	}
 
 	Check(p.opened && p.frames == frames, "Barry's decoder opens it and reads 4 frames");
-	Check(p.audioTracks == 0, "no sound track");
+	Check(U32At(smk, 24) == 0 && U32At(smk, 72) == 0 && !soundInAFrame, "no sound: the header names no track, and no frame carries sound");
 
 	double worst = 0.0;
 	bool no255 = true;
@@ -411,7 +429,7 @@ static void TestBigAndSmall(std::string const &folder)
 
 		WriteFile(path, smk.data(), smk.size());
 
-		Played const p = Play(path);
+		Played const p = Play(path, true);
 		size_t exact = 0;
 
 		for (uint32_t f = 0; f < frames && f < p.rgb.size(); f++)
@@ -445,7 +463,7 @@ static void TestBigAndSmall(std::string const &folder)
 
 		WriteFile(path, smk.data(), smk.size());
 
-		Played const p = Play(path);
+		Played const p = Play(path, false);
 
 		Check(p.opened && p.frames == 1 && p.rgb.size() == 1 && memcmp(p.rgb[0].data(), rgb.data(), rgb.size()) == 0, "decoded exactly");
 		DeleteFileA(path.c_str());
@@ -562,6 +580,417 @@ static void TestRefusals()
 	Check(Smacker_EncodeWords(-5) != nullptr && Smacker_EncodeWords(1000) != nullptr, "words for any number, never null");
 }
 
+// ---- THE STREAM (Smacker_Begin, Smacker_AddFrame, Smacker_End, Smacker_Abandon)
+
+static std::wstring Wide(std::string const &s)
+{
+	return std::wstring(s.begin(), s.end());   // the test's own paths: plain ASCII
+}
+
+static bool Exists(std::wstring const &path)
+{
+	return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static bool ReadAll(std::wstring const &path, std::vector<uint8_t> *bytes)
+{
+	bytes->clear();
+
+	FILE *const in = _wfopen(path.c_str(), L"rb");
+
+	if (!in)
+	{
+		return false;
+	}
+
+	std::vector<uint8_t> chunk(65536);
+	size_t got = 0;
+
+	while ((got = fread(chunk.data(), 1, chunk.size(), in)) > 0)
+	{
+		bytes->insert(bytes->end(), chunk.begin(), chunk.begin() + (std::ptrdiff_t)got);
+	}
+
+	fclose(in);
+	return true;
+}
+
+// Neither of the stream's own files is left beside the film
+static bool OwnFilesGone(std::wstring const &path)
+{
+	return !Exists(path + L".frames.tmp") && !Exists(path + L".sound.tmp");
+}
+
+// A film in memory, streamed as a caller reading it from somewhere else would: a frame at a time, its sound in uneven pieces (none with
+// frame 0, then 977, 1954, 2931, 907 ... samples, the last frame the rest). sawOwnFiles: both of the stream's own files were there before End.
+static int StreamOf(std::wstring const &path, uint32_t w, uint32_t h, uint32_t frames, uint32_t fps, std::vector<uint8_t> const &rgb,
+	std::vector<uint8_t> const &pcm, uint32_t rate, bool *sawOwnFiles)
+{
+	SmackerStreamSettings s = {};
+
+	s.width = w;
+	s.height = h;
+	s.fps = fps;
+	s.sampleRate = rate;
+
+	SmackerStream *stream = nullptr;
+	int result = Smacker_Begin(&s, path.c_str(), &stream);
+
+	if (result != SMACKER_ENCODE_DONE)
+	{
+		return result;
+	}
+
+	size_t const frameBytes = (size_t)w * h * 3;
+	size_t given = 0;
+
+	for (uint32_t f = 0; f < frames; f++)
+	{
+		size_t const left = pcm.size() - given;
+		size_t const piece = f + 1 == frames ? left : std::min<size_t>(left, ((size_t)f * 977) % 3001);
+
+		result = Smacker_AddFrame(stream, &rgb[frameBytes * f], frameBytes, piece ? &pcm[given] : nullptr, piece);
+
+		if (result != SMACKER_ENCODE_DONE)
+		{
+			Smacker_Abandon(stream);
+			return result;
+		}
+
+		given += piece;
+	}
+
+	if (sawOwnFiles)
+	{
+		*sawOwnFiles = Exists(path + L".frames.tmp") && Exists(path + L".sound.tmp");
+	}
+
+	return Smacker_End(stream);
+}
+
+// The same film both ways: the stream's file is Smacker_Encode's, byte for byte
+static void CheckSameBothWays(std::string const &folder, char const *what, uint32_t w, uint32_t h, uint32_t frames, uint32_t fps,
+	std::vector<uint8_t> const &rgb, std::vector<uint8_t> const &pcm, uint32_t rate, bool play)
+{
+	std::vector<uint8_t> whole, streamed;
+	int result = -1;
+	bool const encoded = Encode(InputOf(w, h, frames, fps, rgb, pcm, rate), &whole, &result);
+	std::wstring const path = Wide(folder + "\\streamed.smk");
+	bool sawOwnFiles = false;
+	int const ended = StreamOf(path, w, h, frames, fps, rgb, pcm, rate, &sawOwnFiles);
+	bool const read = ReadAll(path, &streamed);
+
+	Check(encoded && ended == SMACKER_ENCODE_DONE && read && streamed.size() == whole.size() && memcmp(streamed.data(), whole.data(), whole.size()) == 0,
+		std::string(what) + ": the stream's file is Smacker_Encode's, byte for byte (" + std::to_string(streamed.size()) + " bytes; " +
+		Smacker_EncodeWords(ended) + ")");
+	Check(sawOwnFiles && OwnFilesGone(path), std::string(what) + ": the stream's own two files were there until End, and are gone after it");
+
+	if (play)
+	{
+		size_t const frameBytes = (size_t)w * h * 3;
+		Played const p = Play(folder + "\\streamed.smk", !pcm.empty());
+		size_t exact = 0;
+
+		for (uint32_t f = 0; f < frames && f < p.rgb.size(); f++)
+		{
+			exact += memcmp(p.rgb[f].data(), &rgb[frameBytes * f], frameBytes) == 0 ? 1 : 0;
+		}
+
+		Check(p.opened && p.frames == frames && exact == frames && p.sound.size() >= pcm.size() && memcmp(p.sound.data(), pcm.data(), pcm.size()) == 0,
+			std::string(what) + ": Barry's decoder plays the streamed file, every frame and every sample exactly");
+	}
+
+	DeleteFileW(path.c_str());
+}
+
+static void TestStreamSameFile(std::string const &folder)
+{
+	puts("the stream: the very same file as Smacker_Encode, for each kind of film");
+
+	{
+		uint32_t const w = 128, h = 96, frames = 30;
+		size_t const frameBytes = (size_t)w * h * 3;
+		std::vector<uint8_t> rgb(frameBytes * frames);
+
+		for (uint32_t f = 0; f < frames; f++)
+		{
+			MakeFewColours(w, h, f, &rgb[frameBytes * f]);
+		}
+
+		CheckSameBothWays(folder, "an AvP message video", w, h, frames, 15, rgb, MakeSound(44100), 22050, true);
+		CheckSameBothWays(folder, "the same with a sound rate and no sound", w, h, frames, 15, rgb, std::vector<uint8_t>(), 22050, false);
+	}
+
+	{
+		uint32_t const w = 64, h = 48, frames = 4;
+		size_t const frameBytes = (size_t)w * h * 3;
+		std::vector<uint8_t> rgb(frameBytes * frames);
+
+		for (uint32_t f = 0; f < frames; f++)
+		{
+			MakeManyColours(w, h, f, &rgb[frameBytes * f]);
+		}
+
+		CheckSameBothWays(folder, "thousands of colours, no sound", w, h, frames, 15, rgb, std::vector<uint8_t>(), 0, false);
+	}
+
+	{
+		uint32_t const w = 256, h = 192, frames = 3;
+		size_t const frameBytes = (size_t)w * h * 3;
+		std::vector<uint8_t> rgb(frameBytes * frames);
+
+		for (uint32_t f = 0; f < frames; f++)
+		{
+			MakeFewColours(w, h, f, &rgb[frameBytes * f]);
+		}
+
+		// 6615 samples: not a whole number of 4
+		CheckSameBothWays(folder, "256 x 192 at 10 a second", w, h, frames, 10, rgb, MakeSound(22050 / 10 * 3), 22050, true);
+	}
+
+	{
+		std::vector<uint8_t> rgb(4 * 4 * 3);
+
+		for (size_t k = 0; k < rgb.size(); k++)
+		{
+			rgb[k] = kLevels[(k * 11) % 64];
+		}
+
+		CheckSameBothWays(folder, "4 x 4, one frame", 4, 4, 1, 1, rgb, std::vector<uint8_t>(), 0, true);
+		CheckSameBothWays(folder, "4 x 4, one frame, 8 samples", 4, 4, 1, 1, rgb, MakeSound(8), 22050, false);
+	}
+}
+
+static void TestStreamRefusals(std::string const &folder)
+{
+	puts("the stream's refusals, and what is left behind");
+
+	SmackerStreamSettings const good = { 8, 8, 15, 22050 };
+	std::wstring const path = Wide(folder + "\\refused.smk");
+	int notAStream = 0;
+	SmackerStream *const notNull = reinterpret_cast<SmackerStream *>(&notAStream);
+
+	// Smacker_Begin
+	struct BeginCase
+	{
+		char const *what;
+		SmackerStreamSettings settings;
+		int expected;
+	};
+
+	BeginCase const cases[] = {
+		{ "width 0", { 0, 8, 15, 22050 }, SMACKER_ENCODE_BAD_SIZE },
+		{ "width 6 (not a multiple of 4)", { 6, 8, 15, 22050 }, SMACKER_ENCODE_BAD_SIZE },
+		{ "height 4100", { 8, 4100, 15, 22050 }, SMACKER_ENCODE_BAD_SIZE },
+		{ "0 frames a second", { 8, 8, 0, 22050 }, SMACKER_ENCODE_BAD_FPS },
+		{ "101 frames a second", { 8, 8, 101, 22050 }, SMACKER_ENCODE_BAD_FPS },
+		{ "999 samples a second", { 8, 8, 15, 999 }, SMACKER_ENCODE_BAD_SOUND },
+		{ "96001 samples a second", { 8, 8, 15, 96001 }, SMACKER_ENCODE_BAD_SOUND },
+	};
+
+	for (BeginCase const &c : cases)
+	{
+		SmackerStream *stream = notNull;
+		int const result = Smacker_Begin(&c.settings, path.c_str(), &stream);
+
+		Check(result == c.expected && stream == nullptr && !Exists(path) && OwnFilesGone(path),
+			std::string("Begin, ") + c.what + ": " + Smacker_EncodeWords(result) + ", no stream, nothing made");
+	}
+
+	{
+		SmackerStream *stream = notNull;
+		bool const noSettings = Smacker_Begin(nullptr, path.c_str(), &stream) == SMACKER_ENCODE_BAD_CALL && stream == nullptr;
+
+		stream = notNull;
+
+		bool const noPath = Smacker_Begin(&good, nullptr, &stream) == SMACKER_ENCODE_BAD_CALL && stream == nullptr;
+
+		stream = notNull;
+
+		bool const emptyPath = Smacker_Begin(&good, L"", &stream) == SMACKER_ENCODE_BAD_CALL && stream == nullptr;
+
+		Check(noSettings && noPath && emptyPath && Smacker_Begin(&good, path.c_str(), nullptr) == SMACKER_ENCODE_BAD_CALL && !Exists(path),
+			"Begin with no settings, no path, an empty path, or nowhere to put the stream: BAD_CALL, nothing made");
+	}
+
+	{
+		std::wstring const nowhere = Wide(folder + "\\no such folder\\film.smk");
+		SmackerStream *stream = notNull;
+		int const result = Smacker_Begin(&good, nowhere.c_str(), &stream);
+
+		Check(result == SMACKER_ENCODE_FILE && stream == nullptr && !Exists(nowhere), std::string("Begin in a folder that is not there: ") + Smacker_EncodeWords(result));
+	}
+
+	{
+		// a file with the name the stream's own would have is someone else's: never written over, never taken away
+		std::wstring const theirs = path + L".frames.tmp";
+		uint8_t const mark[5] = { 'T', 'H', 'E', 'I', 'R' };
+
+		WriteFile(folder + "\\refused.smk.frames.tmp", mark, sizeof(mark));
+
+		SmackerStream *stream = notNull;
+		int const result = Smacker_Begin(&good, path.c_str(), &stream);
+		std::vector<uint8_t> kept;
+
+		Check(result == SMACKER_ENCODE_FILE && stream == nullptr && !Exists(path) && !Exists(path + L".sound.tmp") && ReadAll(theirs, &kept) &&
+			kept.size() == sizeof(mark) && memcmp(kept.data(), mark, sizeof(mark)) == 0,
+			std::string("Begin where a file has the name of the stream's own: ") + Smacker_EncodeWords(result) + "; that file kept as it was, nothing else left");
+		DeleteFileW(theirs.c_str());
+	}
+
+	// Smacker_AddFrame: a refused frame adds nothing, and the stream goes on
+	std::vector<uint8_t> rgb(8 * 8 * 3 * 2);
+
+	for (size_t k = 0; k < rgb.size(); k++)
+	{
+		rgb[k] = kLevels[(k * 5) % 64];
+	}
+
+	std::vector<uint8_t> const pcm = MakeSound(3000);
+	size_t const frameBytes = 8 * 8 * 3;
+
+	{
+		SmackerStream *stream = nullptr;
+		bool const begun = Smacker_Begin(&good, path.c_str(), &stream) == SMACKER_ENCODE_DONE && stream != nullptr;
+
+		Check(begun && Exists(path), "Begin: the film's file is made at once");
+
+		int const noRgb = Smacker_AddFrame(stream, nullptr, frameBytes, nullptr, 0);
+		int const oneShort = Smacker_AddFrame(stream, rgb.data(), frameBytes - 1, nullptr, 0);
+		int const oneOver = Smacker_AddFrame(stream, rgb.data(), frameBytes + 1, nullptr, 0);
+		int const noPcm = Smacker_AddFrame(stream, rgb.data(), frameBytes, nullptr, 5);
+
+		Check(noRgb == SMACKER_ENCODE_BAD_PIXELS && oneShort == SMACKER_ENCODE_BAD_PIXELS && oneOver == SMACKER_ENCODE_BAD_PIXELS && noPcm == SMACKER_ENCODE_BAD_SOUND,
+			"AddFrame with no pixels, one byte short, one byte over: BAD_PIXELS; samples counted but not given: BAD_SOUND");
+		Check(Smacker_AddFrame(nullptr, rgb.data(), frameBytes, nullptr, 0) == SMACKER_ENCODE_BAD_CALL, "AddFrame with no stream: BAD_CALL");
+
+		bool const added = Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data(), 1000) == SMACKER_ENCODE_DONE &&
+			Smacker_AddFrame(stream, rgb.data() + frameBytes, frameBytes, pcm.data() + 1000, 2000) == SMACKER_ENCODE_DONE;
+		int const ended = Smacker_End(stream);
+		std::vector<uint8_t> whole, streamed;
+		int result = -1;
+		bool const encoded = Encode(InputOf(8, 8, 2, 15, rgb, pcm, 22050), &whole, &result);
+		bool const read = ReadAll(path, &streamed);
+
+		Check(added && ended == SMACKER_ENCODE_DONE && encoded && read && streamed == whole && OwnFilesGone(path),
+			"after the refused frames the stream went on: its file is Smacker_Encode's of the two good frames, byte for byte");
+		DeleteFileW(path.c_str());
+	}
+
+	{
+		SmackerStreamSettings silent = good;
+
+		silent.sampleRate = 0;
+
+		SmackerStream *stream = nullptr;
+
+		Smacker_Begin(&silent, path.c_str(), &stream);
+
+		int const sound = Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data(), 100);
+
+		Check(sound == SMACKER_ENCODE_BAD_SOUND, std::string("AddFrame with samples on a stream begun with no sound rate: ") + Smacker_EncodeWords(sound));
+		Smacker_Abandon(stream);
+	}
+
+	// Smacker_End and Smacker_Abandon: the film's file is taken away unless it was written
+	{
+		SmackerStream *stream = nullptr;
+
+		Smacker_Begin(&good, path.c_str(), &stream);
+
+		int const result = Smacker_End(stream);
+
+		Check(result == SMACKER_ENCODE_BAD_FRAMES && !Exists(path) && OwnFilesGone(path), std::string("End with no frame: ") + Smacker_EncodeWords(result) + ", nothing left");
+	}
+
+	{
+		SmackerStream *stream = nullptr;
+
+		Smacker_Begin(&good, path.c_str(), &stream);
+		Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data(), 3);
+		Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data() + 3, 4);
+
+		int const result = Smacker_End(stream);
+
+		Check(result == SMACKER_ENCODE_BAD_SOUND && !Exists(path) && OwnFilesGone(path), std::string("End with 7 samples in all: ") + Smacker_EncodeWords(result) + ", nothing left");
+	}
+
+	{
+		SmackerStream *stream = nullptr;
+
+		Smacker_Begin(&good, path.c_str(), &stream);
+		Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data(), 1000);
+		Smacker_AddFrame(stream, rgb.data(), frameBytes, pcm.data(), 1000);
+
+		bool const there = Exists(path) && Exists(path + L".frames.tmp") && Exists(path + L".sound.tmp");
+
+		Smacker_Abandon(stream);
+		Check(there && !Exists(path) && OwnFilesGone(path), "Abandon after two frames: the film's file and the stream's own are all gone");
+	}
+
+	Smacker_Abandon(nullptr);
+	Check(Smacker_End(nullptr) == SMACKER_ENCODE_BAD_CALL, "End with no stream: BAD_CALL (and Abandon with none is nothing)");
+	Check(strcmp(Smacker_EncodeWords(SMACKER_ENCODE_FILE), Smacker_EncodeWords(1000)) != 0, std::string("words for FILE: ") + Smacker_EncodeWords(SMACKER_ENCODE_FILE));
+}
+
+// A long film streamed in memory that does not grow with it. It runs first, so the process's peak private memory before it is at its least.
+static void TestStreamLong(std::string const &folder)
+{
+	puts("the stream: a long film (2000 frames, 2 min 13 s, 73.7 MB of frames) in bounded memory");
+
+	uint32_t const w = 128, h = 96, frames = 2000, fps = 15, rate = 22050;
+	size_t const frameBytes = (size_t)w * h * 3;
+	size_t const sampleCount = (size_t)frames * rate / fps;
+	std::vector<uint8_t> const pcm = MakeSound(sampleCount);
+	std::vector<uint8_t> frame(frameBytes);
+	std::wstring const path = Wide(folder + "\\long.smk");
+	PROCESS_MEMORY_COUNTERS before = {}, after = {};
+
+	before.cb = sizeof(before);
+	after.cb = sizeof(after);
+	GetProcessMemoryInfo(GetCurrentProcess(), &before, sizeof(before));
+
+	SmackerStreamSettings const s = { w, h, fps, rate };
+	SmackerStream *stream = nullptr;
+	int result = Smacker_Begin(&s, path.c_str(), &stream);
+	size_t given = 0;
+
+	for (uint32_t f = 0; f < frames && result == SMACKER_ENCODE_DONE; f++)
+	{
+		size_t const piece = f + 1 == frames ? sampleCount - given : (size_t)rate / fps;
+
+		MakeFewColours(w, h, f, frame.data());
+		result = Smacker_AddFrame(stream, frame.data(), frameBytes, &pcm[given], piece);
+		given += piece;
+	}
+
+	if (result == SMACKER_ENCODE_DONE)
+		result = Smacker_End(stream);
+	else
+		Smacker_Abandon(stream);
+
+	GetProcessMemoryInfo(GetCurrentProcess(), &after, sizeof(after));
+
+	double const grewMb = (double)(after.PeakPagefileUsage - before.PeakPagefileUsage) / (1024.0 * 1024.0);
+
+	Check(result == SMACKER_ENCODE_DONE && OwnFilesGone(path), std::string("streamed and written: ") + Smacker_EncodeWords(result));
+	Check(grewMb < 16.0, "the process's peak private memory grew by " + std::to_string(grewMb) + " MB (under 16: the frames are 73.7 MB)");
+
+	// and the same film whole, in memory: the same file
+	std::vector<uint8_t> rgb(frameBytes * frames), whole, streamed;
+
+	for (uint32_t f = 0; f < frames; f++)
+	{
+		MakeFewColours(w, h, f, &rgb[frameBytes * f]);
+	}
+
+	bool const encoded = Encode(InputOf(w, h, frames, fps, rgb, pcm, rate), &whole, &result);
+	bool const read = ReadAll(path, &streamed);
+
+	Check(encoded && read && streamed == whole, "the same as Smacker_Encode's file of the whole film, byte for byte (" + std::to_string(whole.size()) + " bytes)");
+	DeleteFileW(path.c_str());
+}
+
 int main()
 {
 	setvbuf(stdout, 0, _IONBF, 0);
@@ -574,10 +1003,13 @@ int main()
 		return 1;
 	}
 
+	TestStreamLong(folder);
 	TestMessageVideo(folder);
 	TestManyColours(folder);
 	TestBigAndSmall(folder);
 	TestRefusals();
+	TestStreamSameFile(folder);
+	TestStreamRefusals(folder);
 
 	RemoveDirectoryA(folder.c_str());
 	printf("%d checks, %d failed\n", checks, checksFailed);
