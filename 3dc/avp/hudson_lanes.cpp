@@ -68,6 +68,16 @@ namespace
 	long madeAtFrame = 0;
 	long long gameTime = 0;                          // 16.16 seconds since the alien was made, by the game's own frame times
 
+	// the run's end on an event (Bishop 11-20, see where they are used)
+	int const kRunMoved = 1000;                      // mm: moved at all, and headway toward him
+	long long const kRunMovedWithin = 5LL * 65536;   // a void run: no move in this long
+	long long const kRunNoHeadway = 15LL * 65536;    // no headway in this long
+	long long const kRunMost = 60LL * 65536;         // at most
+	VECTORCH madeSpot = { 0, 0, 0 };
+	bool movedYet = false;
+	int closest = -1;
+	long long closestAt = 0;
+
 	// what was seen
 	bool climbing = false;                           // its gravity its own (UseStandardGravity 0) and its down not the floor's
 	bool everClimbed = false, everOnTheCeiling = false;
@@ -1318,6 +1328,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		memcpy(alienName, made->SBname, SB_NAME_LENGTH);
 		alienMade = true;
 		madeAtFrame = frame;
+		madeSpot = spot;   // where it was made: a void run is one where it never gets 1 m from here
 		Event(frame, std::string(alienOnCeiling ? "MADE ON THE CEILING at " : "MADE at ") + std::to_string(spot.vx) + " " + std::to_string(spot.vy) + " " + std::to_string(spot.vz) + " in " + ModuleWords(made->containingModule));
 		return false;
 	}
@@ -1560,6 +1571,30 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 	if (file)
 	{
 		fflush(file);
+	}
+
+	// THE RUN ENDS ON AN EVENT (Bishop 11-20, the owner watching: "most of them is marine sitting for 3 minutes doing nothing"): a void run (the alien hasn't moved 1 m in
+	// its first 5 s) costs his screen 5 s; no headway toward him (its distance not 1 m shorter) for 15 s ends it; 60 s at most; and the attack, 2 s after the first blow
+	if (!movedYet && Apart(at, madeSpot) >= kRunMoved)
+	{
+		movedYet = true;
+	}
+
+	if (closest < 0 || distance < closest - kRunMoved)
+	{
+		closest = distance;
+		closestAt = gameTime;
+	}
+
+	char const *const stop = !movedYet && gameTime >= kRunMovedWithin ? "VOID: the alien didn't move 1 m in its first 5 s" :
+		gameTime - closestAt >= kRunNoHeadway ? "no headway toward him (1 m) for 15 s" : gameTime >= kRunMost ? "60 s of game time" : nullptr;
+
+	if (stop)
+	{
+		*howItEnded = stop;
+		*exitCode = kHudsonExitFinished;
+		Finish(*howItEnded);
+		return true;
 	}
 
 	if ((attacked && frame >= attackedAt + kFramesAfterTheFirstBlow) || frame >= mostFrames)
