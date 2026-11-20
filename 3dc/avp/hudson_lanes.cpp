@@ -1562,7 +1562,9 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		std::string const flags = StockFlags_Words();
 		bool const stock = flags.size() >= 7 && flags.compare(flags.size() - 7, 7, "(stock)") == 0 && !AlienWaysSwitchedOn;
 
-		Write("MODE " + StockFlags_Words() + "; " + DebugView_Words() + "; the level's alien ways " + (AlienWaysSwitchedOn ? "on" : "off") + (stock ? "; STOCK" : "; NOT STOCK: the run stops itself"));
+		extern int QuantumObjectDieRollOveride;
+		Write("MODE " + StockFlags_Words() + "; " + DebugView_Words() + "; the level's alien ways " + (AlienWaysSwitchedOn ? "on" : "off") + "; quantum roll " +
+			(QuantumObjectDieRollOveride >= 0 ? std::to_string(QuantumObjectDieRollOveride) + " (dieroll=: every alternate place that mod its count)" : std::string("random (the game's own)")) + (stock ? "; STOCK" : "; NOT STOCK: the run stops itself"));
 
 		if (!stock)
 		{

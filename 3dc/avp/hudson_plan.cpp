@@ -242,6 +242,8 @@ const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him sta
 const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
 const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
 // watchmost=S (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, as long as the level takes)
+// dieroll=N (added 2026-11-20 by Melanikus (Frost) for the AvP port: Bishop, the same layout on every A/B and full run)
+const char *const kHudsonRefusedDieRollOutOfRange = "dieroll= is the game's QUANTUM_ROLL, a whole number from 0 to 65535";
 const char *const kHudsonRefusedWatchMostOutOfRange = "watchmost= is the most seconds of game time the watch plays, from 60 to 7200";
 const char *const kHudsonRefusedWatchMostWithoutWatch = "watchmost= is how long the lane probe's watch plays, so it needs lanes=watch";
 const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
@@ -2599,6 +2601,21 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->playFlares = true;
+		}
+		else if (WordIs(place, nameLength, "dieroll"))
+		{
+			// dieroll=N: the game's own QUANTUM_ROLL console variable, set before the level loads (hudson.cpp; added 2026-11-20 by Melanikus (Frost))
+			if (plan->dieRollAsked)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			plan->dieRollAsked = true;
+
+			if (!ReadNumber(value, valueLength, &plan->dieRoll) || plan->dieRoll < 0 || plan->dieRoll > 65535)
+			{
+				return kHudsonRefusedDieRollOutOfRange;
+			}
 		}
 		else if (WordIs(place, nameLength, "watchmost"))
 		{

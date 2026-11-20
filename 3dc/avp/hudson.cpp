@@ -1124,6 +1124,15 @@ int Hudson_CheckBeforeStarting()
 		}
 	}
 
+	// dieroll=N (added 2026-11-20 by Melanikus (Frost), Bishop: the same layout on every A/B and full run): the game's own QUANTUM_ROLL console variable, before
+	// the level loads, so every alternate-location group takes its place N mod its count (object_setup.cpp, select_alternate_location)
+	if (plan.dieRollAsked)
+	{
+		extern int QuantumObjectDieRollOveride;
+
+		QuantumObjectDieRollOveride = plan.dieRoll;
+	}
+
 	// lanes=yes, the lane probe (hudson_lanes.h): before the level loads, as above, so that an alien's models are there. The level's own NPCs,
 	// generators and hive are kept still, and the probe's one alien is let move (Hudson_KeepsStill)
 	// lanes=watch (added 2026-11-20 by Melanikus (Frost)): the level as he plays it, so nothing is kept still: HudsonLanesAreOn stays off, and the probe still ends the run
