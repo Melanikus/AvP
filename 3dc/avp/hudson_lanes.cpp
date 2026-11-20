@@ -1107,11 +1107,17 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 
 	// its contacts, from its last movement
 	int contacts = 0, withNpc = 0;
+	std::string touched;   // cn=: each report's normal and point (the first 6), for Vasquez's contact set (11-20: which faces the game counts)
 
 	for (COLLISIONREPORT const *r = d->CollisionReportPtr; r && contacts < 256; r = r->NextCollisionReportPtr)
 	{
 		contacts++;
 		withNpc += r->ObstacleSBPtr ? 1 : 0;
+
+		if (contacts <= 6)
+		{
+			touched += (touched.empty() ? "" : ";") + PlaceWords(r->ObstacleNormal) + "@" + PlaceWords(r->ObstaclePoint) + (r->ObstacleSBPtr ? "npc" : "");
+		}
 	}
 
 	bool const steered = w->searched && w->found;
@@ -1132,7 +1138,7 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 		" mod=" + where + " ai=" + std::to_string(ai ? ai->m_index : -1) + " wps=" + std::to_string(boxes ? boxes->num_waypoints : 0) + " pmod=" + (inPlayersModule ? "1" : "0") +
 		" pai=" + (inPlayersAi ? "1" : "0") + " pos=" + PlaceWords(d->Position) + " on=" + surface + " down=" + PlaceWords(d->GravityDirection) + " mat=" + std::to_string(d->OrientMat.mat21) + "," +
 		std::to_string(d->OrientMat.mat22) + "," + std::to_string(d->OrientMat.mat23) + " std=" + std::to_string(gravityOn) + " nocontact=" + std::to_string(d->TimeNotInContactWithFloor) +
-		" floor=" + (d->IsInContactWithFloor ? "1" : "0") + " contacts=" + std::to_string(contacts) + "/" + std::to_string(withNpc) + " crouch=" + (s->IAmCrouched ? "1" : "0") +
+		" floor=" + (d->IsInContactWithFloor ? "1" : "0") + " contacts=" + std::to_string(contacts) + "/" + std::to_string(withNpc) + " cn=" + (touched.empty() ? std::string("-") : touched) + " crouch=" + (s->IAmCrouched ? "1" : "0") +
 		" crawl=" + w->crawl + " able=" + (able ? "1" : "0") + " tgt=" + target + " ep=" + ep + " go=" + go + " search=" + w->dropout + " npcboxes=" + std::to_string(w->npcBoxes) +
 		" tgtboxes=" + std::to_string(w->targetBoxes) + " in=" + w->in + " tgtin=" + w->tgt + " route=" + route + " heads=" + w->headsFor +
 		" point=" + (steered ? PlaceWords(w->targetPoint) : std::string("-")) + " link=" + w->link + " lb=" + w->linkBefore + " by=" + by + " enc=" + std::to_string(w->encSearch) +
