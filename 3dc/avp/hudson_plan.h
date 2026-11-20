@@ -294,6 +294,7 @@ struct HudsonPlan
 	bool play;            // play=yes: he plays the level on foot, as a player would. See hudson_play.h
 	bool gunAlien;        // gunalien=yes: a gun= run makes an alien in front of him before the throws and shots that it times, for them to hit
 	bool noFriendlyFire;  // friendlyfire=off: the host of a net= run with coop=yes turns friendly fire off, as its menu row would
+	bool stock;           // stock=yes: every flag of stock_flags.h off before any level starts (FLOORISLAVA, NEWDYNAMICCOLLISIONS, FARLOCS4THCORNER, PHEROMONEDOOR, NEARWAKE): 1999's aliens
 	bool floorIsLavaOff;  // floorislava=off: the run types the console's FLOORISLAVA OFF before any level starts, for 1999's aliens
 	int framesPerSecond;  // fps=: a run goes no faster than this many frames a second. Unless it asks, that's kHudsonDefaultFramesPerSecond. 0, from fps=uncapped, is as fast as it can.
 	int killKind;         // killkind=: this run kills the level's own NPC of this kind, the one placed nearest killat=, from kHudsonBotFight.... 0 for none
@@ -479,6 +480,7 @@ inline long long HudsonNextFrameDue(long long thisFrameWasDue, long long now, lo
 extern const char *const kHudsonRefusedBotFightWithoutCoop;
 extern const char *const kHudsonRefusedFriendlyFireNotOff;
 extern const char *const kHudsonRefusedFriendlyFireWithoutCoop;
+extern const char *const kHudsonRefusedStockNotYes;
 extern const char *const kHudsonRefusedFloorIsLavaNotOff;
 extern const char *const kHudsonRefusedLanesNotYes;
 extern const char *const kHudsonRefusedLanesNeedsPlaces;
