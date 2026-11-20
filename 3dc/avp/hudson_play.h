@@ -50,6 +50,9 @@ void HudsonPlay_ThrowFlares(bool throwThem);
 // True once he's been down his whole list (the lane probe's watch ends there: "route done")
 bool HudsonPlay_FinishedTheList();
 
+// The place of the step k after the one he is on now (0: the one he is walking to), for the lane probe's supplyat=around (Frost 2026-11-20); false past his list
+bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z);
+
 // One line for the run's result: how many steps there were, how many worked, and how many cheats it took
 void HudsonPlay_ForTheResult(char *line, int size);
 

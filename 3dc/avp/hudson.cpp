@@ -688,7 +688,7 @@ static void WriteResult(const char *howItEnded, int code)
 
 		if (plan.play)
 		{
-			char playLine[200];
+			char playLine[260];   // play_flares= made the line longer than 200 (Frost 11-20)
 
 			HudsonPlay_ForTheResult(playLine, (int)sizeof(playLine));
 			fprintf(file, "%s\n", playLine);

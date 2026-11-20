@@ -3373,6 +3373,21 @@ bool HudsonPlay_FinishedTheList()
 	return phase == kFinishedTheList;
 }
 
+bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z)
+{
+	size_t const at = stepAt + (size_t)(k < 0 ? 0 : k);
+
+	if (phase == kStopped || phase == kFinishedTheList || at >= steps.size())
+	{
+		return false;
+	}
+
+	*x = steps[at].x;
+	*y = steps[at].y;
+	*z = steps[at].z;
+	return true;
+}
+
 void HudsonPlay_SetStepSeconds(int seconds)
 {
 	// The plan reader only takes 10 to 600; anything else here keeps the usual limit, so a mistake can't make a step endless or instant
@@ -3386,6 +3401,6 @@ void HudsonPlay_HoldGun(int slot)
 
 void HudsonPlay_ForTheResult(char *line, int size)
 {
-	_snprintf(line, size - 1, "play_steps=%d play_steps_worked=%d play_cheats=%d play_stray_most=%d play_stray_average=%d play_big_turns=%d play_stuck_times=%d play_stuck_seconds=%.1f play_waits=%d play_waited_seconds=%.1f play_rides=%d", (int)steps.size(), stepsThatWorked, cheatsUsed, strayMost, strayFrames ? (int)(strayAdded / strayFrames) : 0, bigTurns, stuckTimes, stuckMilliseconds / 1000.0, waitsDone, waitedMilliseconds / 1000.0, ridesDone);
+	_snprintf(line, size - 1, "play_steps=%d play_steps_worked=%d play_cheats=%d play_stray_most=%d play_stray_average=%d play_big_turns=%d play_stuck_times=%d play_stuck_seconds=%.1f play_waits=%d play_waited_seconds=%.1f play_rides=%d play_flares=%d", (int)steps.size(), stepsThatWorked, cheatsUsed, strayMost, strayFrames ? (int)(strayAdded / strayFrames) : 0, bigTurns, stuckTimes, stuckMilliseconds / 1000.0, waitsDone, waitedMilliseconds / 1000.0, ridesDone, flaresAtAliens);
 	line[size - 1] = 0;
 }
