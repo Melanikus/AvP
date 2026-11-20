@@ -2758,6 +2758,10 @@ static void CheckLanesWord()
 	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!target && step.kind != kHudsonPlayGoTo)"), "a goto needs no object of its name: he walks there");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "case kHudsonPlayGoTo:"), "and the step is done when he gets there");
+	// he crouches by the measured ceiling, not by a room's airduct flag (the owner 11-20: "he's crouching like aliens"; "hudson doesn't need to follow that flag")
+	Check(!Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "MODULEFLAG_AIRDUCT"), "playing, he never reads a room's airduct flag");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "OnlyCrouchedFits("), "he crouches where only a crouched marine fits, measured on his grid");
+	Check(Has(ReadSourceFile("3dc/avp/bh_marine.cpp"), "MODULEFLAG_AIRDUCT"), "the game's own marines still crawl by the flag (bh_marine.cpp unchanged)");
 
 	// what each alien read, told to the probe by the alien's own code at the moment it read it (one alien's route is gone by the frame's end when several search)
 	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienBefore(sbPtr);") && Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienAfter(sbPtr);"), "the near alien tells the probe before and after its state runs");

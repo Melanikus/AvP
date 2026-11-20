@@ -231,6 +231,31 @@ static void TestHeights()
 		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "but not one 1100 high");
 	}
 
+	// WHERE HE CROUCHES when he plays (the owner 11-20, watching the lane probe: "he's crouching like aliens", all along rooms only MARKED as ducts; "hudson doesn't
+	// need to follow that flag"): only where standing doesn't fit and crouched does, measured, whatever the floor's mark. Added 2026-11-20 by Melanikus (Frost).
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000, true);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(!grid.OnlyCrouchedFits(2000, 1000, 1500), "a floor marked as a duct under a high ceiling: he stands");
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500), "under a ceiling 1300 up: he crouches");
+		Check(!grid.OnlyCrouchedFits(10000, 1000, 1500), "and stands again past it");
+		Check(!grid.OnlyCrouchedFits(2000, 1000, 100), "against a wall, crouching wouldn't help: he stands");
+	}
+
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		grid.Build(world);
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500), "a ceiling 1300 up over a floor with no mark: he crouches all the same");
+	}
+
 	// Two floors, one over the other, are different places
 	{
 		World world;
