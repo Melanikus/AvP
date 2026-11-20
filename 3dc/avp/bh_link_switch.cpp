@@ -27,6 +27,7 @@
 #include "psnd.h"
 #include "inventory.h"
 #include "near_wake_game.h"
+#include "stock_flags.h"   // NEARWAKE (Vasquez 2026-11-20)
 
 static BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)
 {
@@ -341,7 +342,7 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		// The sleeping NPCs this box wakes
 		NearWakeSleepers sleepers;
 
-		if (NearWake_ThisMachineRunsNpcs())
+		if (NearWakeOn && NearWake_ThisMachineRunsNpcs())   // NEARWAKE off: no sleeper looked for, only the walk-in box wakes one, as in 1999 (stock_flags.h)
 		{
 			NearWake_FindSleepers(sbptr, &ls_bhv->trigger_volume_min, &ls_bhv->trigger_volume_max, &sleepers);
 		}

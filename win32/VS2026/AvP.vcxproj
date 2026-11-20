@@ -353,6 +353,7 @@
     <ClCompile Include="..\..\3dc\avp\secstats.cpp" />
     <ClCompile Include="..\..\3dc\avp\sfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\shapes\cube.cpp" />
+    <ClCompile Include="..\..\3dc\avp\stock_flags.cpp" />
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp" />
     <ClCompile Include="..\..\3dc\avp\near_wake.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp" />
@@ -688,6 +689,7 @@
     <ClInclude Include="..\..\3dc\avp\sequences.h" />
     <ClInclude Include="..\..\3dc\avp\sfx.h" />
     <ClInclude Include="..\..\3dc\avp\status_panel.h" />
+    <ClInclude Include="..\..\3dc\avp\stock_flags.h" />
     <ClInclude Include="..\..\3dc\avp\strategy_def.h" />
     <ClInclude Include="..\..\3dc\avp\support\command.hpp" />
     <ClInclude Include="..\..\3dc\avp\support\console_batch.hpp" />

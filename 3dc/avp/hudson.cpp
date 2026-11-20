@@ -180,6 +180,7 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "pfarlocs.h"
 #include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
 #include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
+#include "stock_flags.h"     // stock=yes, and every flag's state in the log (added 2026-11-20, Vasquez)
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -918,6 +919,16 @@ int Hudson_CheckBeforeStarting()
 	{
 		FloorIsLava_FromWords("OFF", &FloorIsLavaAsked);
 	}
+
+	// stock=yes: every flag of stock_flags.h off, before any level (the owner 2026-11-20: "we need any new behavior we added behind a flag in AVPX or these
+	// tests mean nothing"). Every run then writes each flag's state to the log, before any level, for the run's reader to check: "flags: floorislava=off
+	// newdynamiccollisions=off farlocs4thcorner=off pheromonedoor=off nearwake=off (stock)". Added 2026-11-20 by Melanikus (Vasquez).
+	if (plan.stock)
+	{
+		StockFlags_AllStock();
+	}
+
+	LogString(std::string("hudson: ") + StockFlags_Words());
 
 	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone
 	// (relay_list.h). Here, before the menus, so the list can't have started yet. Added 2026-11-10 by Melanikus (Third) for the AvP port.

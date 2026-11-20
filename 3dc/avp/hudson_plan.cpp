@@ -115,6 +115,7 @@ const char *const kHudsonRefusedBotFightUnknown = "botfight= is alien, marine, f
 const char *const kHudsonRefusedBotFightWithoutCoop = "botfight= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be off";
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
+const char *const kHudsonRefusedStockNotYes = "stock= can only be yes: without it, every flag is on, as for every player";
 const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
@@ -1419,6 +1420,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->floorIsLavaOff = true;
+		}
+		else if (WordIs(place, nameLength, "stock"))
+		{
+			// 1999's aliens for the lane probe: every flag of stock_flags.h off before any level (the owner 2026-11-20, through Bishop: "we need any new
+			// behavior we added behind a flag in AVPX or these tests mean nothing"). Only yes. Added 2026-11-20 by Melanikus (Vasquez) for the AvP port.
+			if (plan->stock)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedStockNotYes;
+			}
+
+			plan->stock = true;
 		}
 		else if (WordIs(place, nameLength, "fps"))
 		{
