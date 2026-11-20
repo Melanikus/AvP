@@ -117,11 +117,14 @@ const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be 
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
 // lanes=yes, the lane probe (hudson_lanes.h). Added 2026-11-19 by Melanikus (Frost) for the AvP port
-const char *const kHudsonRefusedLanesNotYes = "lanes= can only be yes";
+const char *const kHudsonRefusedLanesNotYes = "lanes= is yes (one alien made for the player standing still) or watch (the level as he plays it)";
 const char *const kHudsonRefusedLanesNeedsPlaces = "lanes=yes needs one alienat= place for its alien and a standat= place for the player";
 const char *const kHudsonRefusedAlienOnNotFloorOrCeiling = "alienon= is floor or ceiling";
 const char *const kHudsonRefusedAlienOnWithoutLanes = "alienon= says where the lane probe's alien is made, so it needs lanes=yes";
-const char *const kHudsonRefusedLanesNotAlone = "lanes=yes is the player standing still while one alien comes for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play=, net=, gun=, a walk, a nav, a route or a strategy";
+// lanes=watch (added 2026-11-20 by Melanikus (Frost) for the AvP port)
+const char *const kHudsonRefusedLanesWatchNeedsStand = "lanes=watch needs a standat= place for the player";
+const char *const kHudsonRefusedLanesWatchNoAlien = "lanes=watch is the level as he plays it: it makes no alien of its own, so it can't go with alienat= or alienon=";
+const char *const kHudsonRefusedLanesNotAlone = "a lane probe (lanes=yes or watch) is the player standing still while aliens come for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play=, net=, gun=, a walk, a nav, a route or a strategy";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -1440,7 +1443,12 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedAskedTwice;
 			}
 
-			if (!WordIs(value, valueLength, "yes"))
+			// lanes=watch: the level as he plays it, every near alien a line a frame (Bishop 11-20; added 2026-11-20 by Melanikus (Frost))
+			if (WordIs(value, valueLength, "watch"))
+			{
+				plan->lanesWatch = true;
+			}
+			else if (!WordIs(value, valueLength, "yes"))
 			{
 				return kHudsonRefusedLanesNotYes;
 			}
@@ -2973,7 +2981,20 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	// or be asked for. (Added 2026-11-19 by Melanikus (Frost) for the AvP port.)
 	if (plan->lanes)
 	{
-		if (!plan->alienAtSaid || plan->alienAtPlaces != 1 || !plan->standAtSaid)
+		if (plan->lanesWatch)
+		{
+			// lanes=watch: the level's own aliens only, the player at standat= (added 2026-11-20 by Melanikus (Frost))
+			if (seenAlienAt || seenAlienOn)
+			{
+				return kHudsonRefusedLanesWatchNoAlien;
+			}
+
+			if (!plan->standAtSaid)
+			{
+				return kHudsonRefusedLanesWatchNeedsStand;
+			}
+		}
+		else if (!plan->alienAtSaid || plan->alienAtPlaces != 1 || !plan->standAtSaid)
 		{
 			return kHudsonRefusedLanesNeedsPlaces;
 		}

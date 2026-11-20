@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-20 by Melanikus (Frost) for the AvP port:
+//   a Hudson lane probe is told what a near alien reads, before and after its state runs (HudsonLanes_AlienBefore / _AlienAfter, hudson_lanes.h); the calls only read
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   a wandering alien's crouching changes only for a standard alien on a way, or clinging between ways, so predaliens, praetorians
 //   and any alien off the ways wander as they did in 1999 (R-LAVA-2; Secondary's plan for floor is lava, F4)
@@ -46,6 +48,7 @@
 #include "particle.h"
 #include "scream.h"
 #include "alien_ways.h"
+#include "hudson_lanes.h"   // the lane probe's two calls in NearAlienBehaviour (added 2026-11-20 by Melanikus (Frost))
 #include "hudson.h"   // Hudson_AlienStrikes: which alien a claw is, in Hudson's runs only (added 2026-11-11 by Melanikus (Third))
 
 extern int ShowHiveState;
@@ -213,6 +216,8 @@ void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)
 		Alien_ElectToCrawl(sbPtr);
 	}
 
+	HudsonLanes_AlienBefore(sbPtr);   // the lane probe reads what this alien is about to read (hudson_lanes.h; only reads)
+
 	switch (alienStatusPointer->BehaviourState)
 	{
 		case ABS_Wait:
@@ -321,6 +326,8 @@ void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)
 		// The watch on one alien, if it was asked for (-alienwayswatch): one line for this frame
 		AlienWays_WatchLine(sbPtr, alienStatusPointer->Target != NULL, keptDriving);
 	}
+
+	HudsonLanes_AlienAfter(sbPtr);   // and what its state decided (hudson_lanes.h; only reads)
 
 	if (ShowHiveState)
 	{

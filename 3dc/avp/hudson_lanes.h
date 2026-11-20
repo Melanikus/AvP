@@ -15,6 +15,15 @@
 // moves the far aux locations a far alien lands on; pheromone.cpp's door test differs when the door is not its AI module's first module;
 // near_wake.cpp wakes placed sleeping aliens near the player (not this run's alien). The header of hudson-lanes.txt says so too.
 //
+// LANES=WATCH (added 2026-11-20 by Melanikus (Frost), Bishop's order after the owner's Steam play: the aliens ran at the walls and never reached a ceiling):
+// lanes=watch standat=x,y,z (run-hudson.ps1 -LanesWatch -StandAt) is the level as he plays it: nothing is kept still and no alien is made; the player is put at
+// standat= and can't die, as above. It ends after three minutes of game time, or at frames=.
+//
+// EVERY ALIEN'S LINE (both kinds of probe, 2026-11-20): the near alien's own code tells the probe what it read at the moment it read it, through the three calls
+// below, because Global_Route is one for every NPC (at the end of a frame it is the route of whichever NPC searched last). hudson-lanes.txt then has an A line a
+// frame for each near alien (its state, gravity, target, route, links, and why its gravity is as it is by Rebellion's lines), an F line when a far one's AI module
+// changes, and at the end an ALIEN line for each (did it ever reach a ceiling, and if not the reason that kept gravity on most) and BY STATE totals.
+//
 // WHAT IT WRITES: hudson-lanes.txt in the save folder, a line a frame (f=, t=, near=, mod=, ai=, wps=, state=, dist=, pos=, ceil=, on=,
 // std=, down=, nocontact=, crouch=, enc=, in=, corners=, tgt=, route=, link=, pmod=), a line for each event (CLIMBS, ON THE CEILING,
 // DOORWAY, DROP, FAR, NEAR, IN THE PLAYER'S MODULE, ATTACK), and at the end the VERDICT: STAYED UP, DROPPED (the frame, the module, the
@@ -23,13 +32,22 @@
 #pragma once
 
 struct strategyblock;
+struct vectorch;
 
 // Before the level: what the plan asked for. Only stores it.
 // onCeiling (alienon=ceiling): the alien is made hanging from the ceiling at alienat=, its own gravity up, for a run of the lane alone
-void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int mostFrames, bool onCeiling);
+// watch (lanes=watch): the level as he plays it, no alien made
+void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int mostFrames, bool onCeiling, bool watch);
 
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);
 
 // Each frame, from Hudson_EndOfFrame. True when the probe is over: *howItEnded and *exitCode are what to end the level with.
 bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode);
+
+// From the alien's own code, only while a lane probe runs (they return at once otherwise), and they only read: before and after a near alien's state runs
+// (bh_near.cpp NearAlienBehaviour), and after each NPC's waypoint search (bh_ais.cpp NPCGetMovementDirection: the point it headed for, the direction it found, and
+// whether it steered)
+void HudsonLanes_AlienBefore(const struct strategyblock *alien);
+void HudsonLanes_AlienAfter(const struct strategyblock *alien);
+void HudsonLanes_Searched(const struct strategyblock *npc, const struct vectorch *target, const struct vectorch *heading, int found);

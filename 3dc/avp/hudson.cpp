@@ -1096,11 +1096,12 @@ int Hudson_CheckBeforeStarting()
 
 	// lanes=yes, the lane probe (hudson_lanes.h): before the level loads, as above, so that an alien's models are there. The level's own NPCs,
 	// generators and hive are kept still, and the probe's one alien is let move (Hudson_KeepsStill)
+	// lanes=watch (added 2026-11-20 by Melanikus (Frost)): the level as he plays it, so nothing is kept still: HudsonLanesAreOn stays off, and the probe still ends the run
 	if (plan.lanes)
 	{
-		HudsonLanesAreOn = true;
+		HudsonLanesAreOn = !plan.lanesWatch;
 		ForceLoad_Alien = TRUE;
-		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling);
+		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling, plan.lanesWatch);
 	}
 
 	char line[256] = { 0 };

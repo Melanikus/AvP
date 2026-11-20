@@ -1,5 +1,5 @@
 // hudson_lanes.cpp: the lane probe. hudson_lanes.h says what it is for and how it is asked for. Written 2026-11-19 by Melanikus (Frost)
-// for the AvP port.
+// for the AvP port. Modified 2026-11-20 by Melanikus (Frost): lanes=watch, and every alien's line from what its own code read (Bishop's order, Vasquez's fields).
 //
 // Nothing here changes what the alien does: it reads the alien's blocks, the waypoint code's globals and each box's flags as the game's
 // own code left them at the end of the frame. The one alien is the only thing using the waypoint code (everything else that moves is
@@ -21,8 +21,12 @@
 #include "new_dynamic_collisions.h"
 #include "hudson.h"
 #include "hudson_lanes.h"
+#include "bh_ais.h"
+#include "pfarlocs.h"
+#include "alien_ways.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <string>
@@ -34,6 +38,11 @@ extern int NormalFrameTime;
 extern WAYPOINT_ROUTE Global_Route;
 extern int NPC_Waypoints;
 extern int Num_Target_Waypoints;
+
+// bh_near.cpp's own questions, only asked here (they read the alien's kind and wounds)
+extern int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr);
+extern int AlienIsAbleToStand(STRATEGYBLOCK *sbPtr);
+extern int AlienHasNoArms(STRATEGYBLOCK *sbPtr);
 
 namespace
 {
@@ -86,6 +95,108 @@ namespace
 	int stutterAi = -1, stutterStart = -1, stutterStartBefore = -1, stutterTarget = -1;
 	long long stutterSecondFrom = 0;
 	long stutterThisSecond = 0, stutterWorstSecond = 0;
+
+	// EVERY ALIEN'S LINE (Bishop 11-20: in the owner's Steam play of the whole-level auto-plot file, ae03c42d, the aliens ran at the walls, climbed only now and then
+	// when crawling, and he never saw one on a ceiling; Vasquez 11-20 named the fields). Each alien whose near state runs gets a line a frame, in both probes: lanes=yes
+	// (its one alien) and lanes=watch (the level as he plays it: nothing kept still, no alien made). The alien's own code tells the probe what it read at the moment it
+	// read it (HudsonLanes_AlienBefore and _AlienAfter around its near state, bh_near.cpp; HudsonLanes_Searched after each waypoint search, bh_ais.cpp), because
+	// Global_Route is one for every NPC: at the end of a frame it is the route of whichever NPC searched last. Why its gravity is as it is, is read from what its state
+	// saw, by the lines of Rebellion's code (AvP-assembla branches/reb 3dc/avp/Bh_near.c), and checked against the gravity the alien has: a reading that disagrees says so.
+	bool watching = false;                           // lanes=watch
+	long long const kWatchMost = 180LL * 65536;      // lanes=watch ends after 3 minutes of game time (Bishop: "for a few minutes"), or at frames=
+	bool watchStarted = false;
+	long thisFrame = 0;                              // the frame the alien code is in: the frame the next EndOfFrame is called with
+	int lastSearchBy = 0;                            // who searched last: an alien's number, -1 another NPC, 0 nobody yet (a number, never a pointer: the NPC can be gone)
+
+	enum Why
+	{
+		WhyNone, WhyWander, WhyAttack, WhyRetreat, WhyHuntStanding, WhyHuntCant, WhyHuntClimbs, WhyNearClimbs, WhyNearCant, WhyRippedOff, WhyNoTarget, WhyFarNoSearch,
+		WhyFarNoBoxIt, WhyFarNoBoxTarget, WhyFarNoRoute, WhyFarNoLink, WhyFarStale, WhyFarPlain, WhyFarLane, WhyFarLaneCant, WhyWaitClimbs, WhyWaitCant, WhyAvoidance,
+		WhyPounceJump, WhyDormant, WhyDying, WhyTaunting, WhyUnexplained, WhyCount
+	};
+
+	struct WhyWords
+	{
+		char const *code;
+		int gravity;           // what the reading says UseStandardGravity is: 1 on, 0 off, -1 either (a state that leaves it as it was)
+		char const *words;
+	};
+
+	WhyWords const kWhy[WhyCount] =
+	{
+		{ "-", -1, "no near state ran" },
+		{ "WANDER", 1, "Wander turns gravity on every frame, 'don't climb on walls' (reb Bh_near.c 1340)" },
+		{ "ATTACK", 1, "Attack turns gravity on (reb 1206)" },
+		{ "RETREAT", 1, "Retreat turns gravity on (reb 1617)" },
+		{ "HUNT-STANDING", 1, "Hunt turns gravity off only while crouched (reb 1781-1789), and it stands: AlienShouldBeCrawling said no (crawl=); its encouraged test (reb 2051) reads the route the last NPC to search left (lb=, by=)" },
+		{ "HUNT-CROUCHED-CANT", 1, "Hunt, crouched, but AlienIsAbleToClimb says no (reb 1786: a praetorian, or a hand lost)" },
+		{ "HUNT-CLIMBS", 0, "Hunt, crouched and able: gravity off (reb 1784)" },
+		{ "APPROACH-NEAR", 0, "Approach under 8 m of its target: gravity off (reb 841)" },
+		{ "APPROACH-NEAR-CANT", 1, "Approach under 8 m, but AlienIsAbleToClimb says no (reb 843)" },
+		{ "RIPPED-OFF", 1, "Approach in the player's MODULE (pmod=1), heading nearly straight away from its surface (dot under -60000): it jumps off it, gravity on (reb 951 curving, 993 not)" },
+		{ "APPROACH-NO-TARGET", -1, "Approach with no target goes to Hunt and leaves gravity as it was" },
+		{ "APPROACH-FAR-NOSEARCH", 1, "Approach 8 m or more away: gravity on (reb 851), off again only if the route's first link is aliens-only (reb 974-979); it searched no route this frame (no waypoints in its module, D6), so that test read the route the last NPC to search left" },
+		{ "APPROACH-FAR-D4-ALIEN", 1, "Approach 8 m or more away: gravity on (reb 851); no box of its module holds it (D4, npcboxes=0), so no route and no first link" },
+		{ "APPROACH-FAR-D4-TARGET", 1, "Approach 8 m or more away: gravity on (reb 851); no box of its module holds the point it heads for (D4, tgtboxes=0)" },
+		{ "APPROACH-FAR-D5", 1, "Approach 8 m or more away: gravity on (reb 851); no continuous route between its boxes and the target's (D5)" },
+		{ "APPROACH-FAR-NOLINK", 1, "Approach 8 m or more away: gravity on (reb 851); the route has no first link (route= shows it: start==end is D3)" },
+		{ "APPROACH-FAR-STALE", 1, "Approach 8 m or more away: gravity on (reb 851); the first link it read is in no box of its module" },
+		{ "APPROACH-FAR-D2", 1, "Approach 8 m or more away: gravity on (reb 851); the route's first link is not aliens-only (D2)" },
+		{ "APPROACH-FAR-LANE", 0, "Approach 8 m or more away, the route's first link aliens-only: gravity off (reb 976)" },
+		{ "APPROACH-FAR-LANE-CANT", 1, "Approach 8 m or more away, the first link aliens-only, but AlienIsAbleToClimb says no (reb 978)" },
+		{ "WAIT", 0, "Wait: gravity off, able to climb (reb 1472)" },
+		{ "WAIT-CANT", 1, "Wait, not able to climb (reb 1474)" },
+		{ "AVOIDANCE", -1, "Avoidance leaves gravity as it was" },
+		{ "POUNCE-JUMP", -1, "Pounce (reb 2485) or Jump (reb 2646, 2679-2681)" },
+		{ "DORMANT", 1, "Dormant (reb 2709) or Awakening (reb 2777): gravity on" },
+		{ "DYING", -1, "Dying" },
+		{ "TAUNTING", -1, "Taunting leaves gravity as it was" },
+		{ "UNEXPLAINED", -1, "the reading above disagrees with the gravity the alien has (why= shows both)" },
+	};
+
+	int const kStates = 16;          // ALIEN_BHSTATE's values (ABS_Wait .. ABS_Taunting) are below this
+
+	struct Watched
+	{
+		char name[SB_NAME_LENGTH];
+		int number;                  // a1, a2, ... in the order the probe met them
+		long firstFrame;
+		char firstModule[64];
+		// this frame: HudsonLanes_AlienBefore, then any HudsonLanes_Searched, then HudsonLanes_AlienAfter
+		long beforeFrame;
+		int ran;                     // the near state that ran
+		int targetKind;              // its Target: 0 none, 1 the player, 2 another
+		int targetDistance;          // to its Target, as Approach's 8 m test measures it (reb 834); -1 with none
+		int encBefore;               // AlienIsEncouragedToCrawl() before its state ran: what Hunt's crouching test reads (reb 1753, 2051)
+		int routeBy;                 // who searched last before its state ran (as lastSearchBy)
+		char linkBefore[48];         // Global_Route.first_link then
+		char crawl[16];              // which test in AlienShouldBeCrawling answers, asked as Hunt asks it, before its own search
+		bool searched;
+		int found, npcBoxes, targetBoxes;
+		char dropout[16];
+		VECTORCH searchedFor;
+		VECTORCH heading;            // NPCGetWaypointDirection's direction, when it steered (found)
+		int start, second, last, routeLength;
+		char link[48];               // its own first link, after its search
+		int encSearch;               // AlienIsEncouragedToCrawl() just after its own search: what Approach's test reads (reb 974)
+		char in[48], tgt[48];        // the boxes its sweep found holding it, and holding the point it heads for
+		char headsFor[12];           // second (reb bh_waypt.c 162) or start (169-176): the box its waypoint manager heads for
+		VECTORCH targetPoint;        // its manager's current_target_point
+		// the run
+		long nearFrames, climbFrames, ceilingFrames, firstCeiling, firstClimb;
+		char ceilingWhere[64];
+		bool wasClimbing;
+		long whyFrames[WhyCount];
+		long stateFrames[kStates];
+		int farAi;
+		bool wasFar;
+	};
+
+	int const kMostWatched = 96;
+	Watched watched[kMostWatched];   // plain data, all zero at the start: nothing of Hudson's may have code that runs before WinMain
+	int watchedCount = 0;
+	bool watchedFull = false;
+	long stateTotals[kStates][4];    // by the near state that ran: alien-frames, gravity on, climbing (gravity its own, not on the floor), on the ceiling
 
 	void Keep(char *to, size_t size, std::string const &text)
 	{
@@ -252,6 +363,340 @@ namespace
 		return count;
 	}
 
+	// EVERY ALIEN'S LINE: its record (see where watched[] is kept)
+	Watched *Record(STRATEGYBLOCK const *alien, bool add)
+	{
+		for (int i = 0; i < watchedCount; i++)
+		{
+			if (memcmp(watched[i].name, alien->SBname, SB_NAME_LENGTH) == 0)
+			{
+				return &watched[i];
+			}
+		}
+
+		if (!add)
+		{
+			return nullptr;
+		}
+
+		if (watchedCount >= kMostWatched)
+		{
+			watchedFull = true;
+			return nullptr;
+		}
+
+		Watched *const w = &watched[watchedCount++];
+
+		memset(w, 0, sizeof(*w));
+		memcpy(w->name, alien->SBname, SB_NAME_LENGTH);
+		w->number = watchedCount;
+		w->firstFrame = thisFrame;
+		w->firstCeiling = -1;
+		w->firstClimb = -1;
+		w->beforeFrame = -1;
+		w->farAi = -2;
+		Keep(w->firstModule, sizeof(w->firstModule), ModuleWords(alien->containingModule));
+		return w;
+	}
+
+	int Apart(VECTORCH const &a, VECTORCH const &b)
+	{
+		double const dx = (double)a.vx - b.vx, dy = (double)a.vy - b.vy, dz = (double)a.vz - b.vz;
+
+		return (int)sqrt(dx * dx + dy * dy + dz * dz);
+	}
+
+	std::string PlaceWords(VECTORCH const &v)
+	{
+		return std::to_string(v.vx) + "," + std::to_string(v.vy) + "," + std::to_string(v.vz);
+	}
+
+	// its surface by its down's y (down is +y): Vasquez's bands (11-20), FLOOR over 46000, WALL within 20000 of level, CEILING under -46000, a slope between
+	char const *SurfaceOf(DYNAMICSBLOCK const *d)
+	{
+		int const vy = d->GravityDirection.vy;
+
+		return vy > 46000 ? "floor" : vy < -46000 ? "ceiling" : (vy < 20000 && vy > -20000) ? "wall" : "slope";
+	}
+
+	// a link as "owner box.slot->target box flags", "none", or "elsewhere" (in no box of this AI module: another NPC's, or an earlier frame's)
+	std::string LinkWords(WAYPOINT_HEADER const *boxes, WAYPOINT_LINK const *link)
+	{
+		if (!link)
+		{
+			return "none";
+		}
+
+		int owner = -1;
+
+		if (!LinkPlace(boxes, link, &owner))
+		{
+			return "elsewhere";
+		}
+
+		char flags[16];
+
+		_snprintf(flags, sizeof(flags) - 1, "0x%x", (unsigned)link->link_flags);
+		flags[sizeof(flags) - 1] = 0;
+		return std::to_string(owner) + "." + std::to_string((int)(link - boxes->first_waypoint[owner].first_link)) + "->" + std::to_string(link->link_target_index) + " " + flags;
+	}
+
+	// a direction's 16.16 dot with world up (up is -y), the direction made one long first; 0 for none
+	int UpDot(VECTORCH const &v)
+	{
+		double const length = sqrt((double)v.vx * v.vx + (double)v.vy * v.vy + (double)v.vz * v.vz);
+
+		return length > 0.0 ? (int)(-v.vy * 65536.0 / length) : 0;
+	}
+
+	// a 16.16 direction's dot with another direction of any length, made one long; 0 for none
+	int DotWith(VECTORCH const &unit, VECTORCH const &v)
+	{
+		double const length = sqrt((double)v.vx * v.vx + (double)v.vy * v.vy + (double)v.vz * v.vz);
+
+		return length > 0.0 ? (int)(((double)unit.vx * v.vx + (double)unit.vy * v.vy + (double)unit.vz * v.vz) / length) : 0;
+	}
+
+	// what a point it heads for is: an entry point into a module next to its own (which one), the player (within 2 m of him), or another point
+	std::string PointWords(STRATEGYBLOCK const *alien, VECTORCH const &point)
+	{
+		AIMODULE *const mine = alien->containingModule ? alien->containingModule->m_aimodule : nullptr;
+
+		for (int i = 0; mine && mine->m_link_ptrs && mine->m_link_ptrs[i]; i++)
+		{
+			AIMODULE *const next = mine->m_link_ptrs[i];
+			FARENTRYPOINT const *const ep = GetAIModuleEP(next, mine);
+
+			if (ep && abs(ep->position.vx + next->m_world.vx - point.vx) <= 2 && abs(ep->position.vy + next->m_world.vy - point.vy) <= 2 &&
+				abs(ep->position.vz + next->m_world.vz - point.vz) <= 2)
+			{
+				return "EP>" + ModuleWords(next->m_module_ptrs ? next->m_module_ptrs[0] : nullptr) + "(ai " + std::to_string(next->m_index) + (ep->alien_only ? ", aliens-only)" : ")");
+			}
+		}
+
+		if (Player && Player->ObStrategyBlock && Player->ObStrategyBlock->DynPtr && Apart(Player->ObStrategyBlock->DynPtr->Position, point) < 2000)
+		{
+			return "player";
+		}
+
+		return "point";
+	}
+
+	// which test in AlienShouldBeCrawling (bh_near.cpp; reb Bh_near.c 2025-2058) answers, in its order, asked of the alien as it is: its tests only read the alien and Global_Route
+	char const *CrawlTest(STRATEGYBLOCK *alien, ALIEN_STATUS_BLOCK const *s)
+	{
+		if (alien->DynPtr->OrientMat.mat22 < 63000)
+		{
+			return "tilted";
+		}
+
+		if (alien->containingModule && (alien->containingModule->m_flags & MODULEFLAG_AIRDUCT))
+		{
+			return "duct";
+		}
+
+		if (AlienIsAbleToStand(alien) == 0)
+		{
+			return "legs";
+		}
+
+		if (s->BehaviourState == ABS_Attack)
+		{
+			return "no:attack";
+		}
+
+		if (AlienHasNoArms(alien))
+		{
+			return "no:arms";
+		}
+
+		if (AlienWays_Following(alien))
+		{
+			return "ways";
+		}
+
+		if (AlienIsEncouragedToCrawl() && s->EnableWaypoints)
+		{
+			return "encouraged";
+		}
+
+		return s->PreferToCrouch ? "prefer" : "no";
+	}
+
+	// why its gravity is as it is after its near state ran, read from what the state saw (the reasons and their lines: kWhy)
+	Why GravityWhy(Watched const *w, ALIEN_STATUS_BLOCK const *s, DYNAMICSBLOCK const *d, bool able, bool inPlayersModule)
+	{
+		switch (w->ran)
+		{
+			case ABS_Wander: return WhyWander;
+			case ABS_Attack: return WhyAttack;
+			case ABS_Retreat: return WhyRetreat;
+			case ABS_Hunt: return !s->IAmCrouched ? WhyHuntStanding : able ? WhyHuntClimbs : WhyHuntCant;
+			case ABS_Wait: return able ? WhyWaitClimbs : WhyWaitCant;
+			case ABS_Avoidance: return WhyAvoidance;
+			case ABS_Pounce: case ABS_Jump: return WhyPounceJump;
+			case ABS_Dormant: case ABS_Awakening: return WhyDormant;
+			case ABS_Dying: return WhyDying;
+			case ABS_Taunting: return WhyTaunting;
+			case ABS_Approach: break;
+			default: return WhyUnexplained;
+		}
+
+		if (w->targetKind == 0)
+		{
+			return WhyNoTarget;
+		}
+
+		// the rip-off sets the contact counter to 0 and gravity on (reb 951, 993)
+		if (d->UseStandardGravity && d->TimeNotInContactWithFloor == 0 && inPlayersModule)
+		{
+			return WhyRippedOff;
+		}
+
+		// under 8 m: climbs when able (reb 841, 843); in a module with waypoints the encouraged test after it sets the same
+		if (w->targetDistance < kCurveToPlayerDistance)
+		{
+			return able ? WhyNearClimbs : WhyNearCant;
+		}
+
+		// 8 m or more: gravity on (reb 851), and off again only when AlienIsEncouragedToCrawl, asked just after the search (reb 974), finds the first link aliens-only.
+		// With no search of its own, it read what was there before.
+		bool const encouraged = (w->searched ? w->encSearch : w->encBefore) != 0;
+
+		if (encouraged && s->EnableWaypoints)
+		{
+			return able ? WhyFarLane : WhyFarLaneCant;
+		}
+
+		if (!w->searched)
+		{
+			return WhyFarNoSearch;
+		}
+
+		if (strcmp(w->dropout, "no-box") == 0)
+		{
+			return w->npcBoxes == 0 ? WhyFarNoBoxIt : WhyFarNoBoxTarget;
+		}
+
+		if (strcmp(w->dropout, "no-route") == 0)
+		{
+			return WhyFarNoRoute;
+		}
+
+		if (strcmp(w->link, "none") == 0)
+		{
+			return WhyFarNoLink;
+		}
+
+		return strcmp(w->link, "elsewhere") == 0 || strcmp(w->dropout, "no-modules") == 0 ? WhyFarStale : WhyFarPlain;
+	}
+
+	// lanes=watch: an alien whose module is out of the player's sight (no near state runs): a line when its AI module changes
+	void FarScan()
+	{
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+			if (!block || block->I_SBtype != I_BehaviourAlien || !block->DynPtr)
+			{
+				continue;
+			}
+
+			Watched *const w = Record(block, true);
+
+			if (!w)
+			{
+				continue;
+			}
+
+			if (block->SBdptr)
+			{
+				w->wasFar = false;
+				continue;
+			}
+
+			MODULE const *const module = block->containingModule;
+			int const ai = module && module->m_aimodule ? module->m_aimodule->m_index : -1;
+
+			if (!w->wasFar || ai != w->farAi)
+			{
+				ALIEN_STATUS_BLOCK const *const s = (ALIEN_STATUS_BLOCK const *)block->SBdataptr;
+
+				Write("F a" + std::to_string(w->number) + " f=" + std::to_string(thisFrame) + " far mod=" + ModuleWords(module) + " ai=" + std::to_string(ai) + " pos=" + PlaceWords(block->DynPtr->Position) +
+					" state=" + (s ? StateName(s->BehaviourState) : "?"));
+				w->farAi = ai;
+			}
+
+			w->wasFar = true;
+		}
+	}
+
+	// at the end: each alien, and the totals by state
+	void WriteAliens()
+	{
+		Write("ALIENS " + std::to_string(watchedCount) + " met" + (watchedFull ? std::string(" (the table was full: later ones not counted)") : std::string()));
+
+		for (int i = 0; i < watchedCount; i++)
+		{
+			Watched const *const w = &watched[i];
+			std::string line = "ALIEN a" + std::to_string(w->number) + " met at f=" + std::to_string(w->firstFrame) + " in " + w->firstModule + ": near " + std::to_string(w->nearFrames) + " frames (";
+			bool first = true;
+
+			for (int st = 0; st < kStates; st++)
+			{
+				if (w->stateFrames[st])
+				{
+					line += (first ? "" : ", ") + std::string(StateName((ALIEN_BHSTATE)st)) + " " + std::to_string(w->stateFrames[st]);
+					first = false;
+				}
+			}
+
+			line += "); climbing " + std::to_string(w->climbFrames) + (w->firstClimb >= 0 ? " from f=" + std::to_string(w->firstClimb) : std::string()) + ", on the ceiling " + std::to_string(w->ceilingFrames);
+
+			if (w->firstCeiling >= 0)
+			{
+				line += ": CEILING YES, first at f=" + std::to_string(w->firstCeiling) + " in " + w->ceilingWhere;
+			}
+			else
+			{
+				int top = -1;
+
+				for (int why = 0; why < WhyCount; why++)
+				{
+					if (w->whyFrames[why] && kWhy[why].gravity == 1 && (top < 0 || w->whyFrames[why] > w->whyFrames[top]))
+					{
+						top = why;
+					}
+				}
+
+				line += w->nearFrames == 0 ? std::string(": CEILING NO, never near") : top < 0 ? std::string(": CEILING NO") :
+					": CEILING NO, gravity kept on mostly by " + std::string(kWhy[top].code) + " (" + std::to_string(w->whyFrames[top]) + " frames): " + kWhy[top].words;
+			}
+
+			line += "; every reason:";
+
+			for (int why = 0; why < WhyCount; why++)
+			{
+				if (w->whyFrames[why])
+				{
+					line += " " + std::string(kWhy[why].code) + " " + std::to_string(w->whyFrames[why]);
+				}
+			}
+
+			Write(line);
+		}
+
+		for (int st = 0; st < kStates; st++)
+		{
+			if (stateTotals[st][0])
+			{
+				Write("BY STATE " + std::string(StateName((ALIEN_BHSTATE)st)) + ": " + std::to_string(stateTotals[st][0]) + " near alien-frames, gravity on " + std::to_string(stateTotals[st][1]) +
+					", climbing " + std::to_string(stateTotals[st][2]) + ", on the ceiling " + std::to_string(stateTotals[st][3]));
+			}
+		}
+	}
+
 	struct Seen
 	{
 		bool isNear;
@@ -352,6 +797,21 @@ namespace
 
 	void Finish(char const *why)
 	{
+		if (watching)
+		{
+			WriteAliens();
+			Write(std::string("END ") + why);
+			LogString((std::string("lanes: the watch ended: ") + why).c_str());
+
+			if (file)
+			{
+				fclose(file);
+				file = nullptr;
+			}
+
+			return;
+		}
+
 		std::string verdict;
 
 		if (!everClimbed)
@@ -385,6 +845,7 @@ namespace
 		Write(case2);
 		Write(stutter);
 		LogString((std::string("lanes: ") + stutter).c_str());
+		WriteAliens();
 		Write(std::string("END ") + why);
 		LogString(("lanes: " + verdict).c_str());
 		LogString(("lanes: " + case2).c_str());
@@ -395,9 +856,62 @@ namespace
 			file = nullptr;
 		}
 	}
+
+	// lanes=watch, each frame from the second on: the far aliens, the player's landing, and the end
+	bool WatchFrame(long frame, STRATEGYBLOCK *me, const char **howItEnded, int *exitCode)
+	{
+		FarScan();
+
+		if (!watchStarted)
+		{
+			if (frame < kFramesBeforeTheAlien)
+			{
+				if (file)
+				{
+					fflush(file);
+				}
+
+				return false;
+			}
+
+			// he has had his second to land: in the room he was put in, or the run ends here
+			VECTORCH const landed = me->DynPtr->Position;
+
+			if (me->containingModule != placedIn)
+			{
+				Write("PLAYER NOT KEPT at standat=: at " + PlaceWords(landed) + " in " + ModuleWords(me->containingModule) + ", not " + ModuleWords(placedIn));
+				*howItEnded = "the player didn't stay where standat= put him";
+				*exitCode = kHudsonExitMarineGone;
+				Finish(*howItEnded);
+				return true;
+			}
+
+			Write("PLAYER LANDED at " + PlaceWords(landed) + " in " + ModuleWords(me->containingModule));
+			Event(frame, "WATCH STARTS: three minutes of game time from here");
+			watchStarted = true;
+		}
+
+		gameTime += NormalFrameTime;
+
+		// every frame, so that a run stopped from outside loses one line at most
+		if (file)
+		{
+			fflush(file);
+		}
+
+		if (gameTime >= kWatchMost || frame >= mostFrames)
+		{
+			*howItEnded = gameTime >= kWatchMost ? "three minutes of game time watched" : "frames= ran out";
+			*exitCode = kHudsonExitFinished;
+			Finish(*howItEnded);
+			return true;
+		}
+
+		return false;
+	}
 }
 
-void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int framesMost, bool onCeiling)
+void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int framesMost, bool onCeiling, bool watch)
 {
 	if (!HudsonRunIsOn)
 	{
@@ -413,6 +927,7 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 	standAt.vz = standAtZ;
 	mostFrames = framesMost;
 	alienOnCeiling = onCeiling;
+	watching = watch;
 }
 
 bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
@@ -425,12 +940,244 @@ bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
 	return block->I_SBtype == I_BehaviourAlien && memcmp(block->SBname, alienName, SB_NAME_LENGTH) == 0;
 }
 
+// What the alien's own code read, at the moment it read it (hudson_lanes.h, "EVERY ALIEN'S LINE" above). They only read and keep: nothing here changes the alien.
+void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
+{
+	if (!HudsonRunIsOn || !asked || !block || !block->SBdataptr || !block->DynPtr)
+	{
+		return;
+	}
+
+	STRATEGYBLOCK *const alien = (STRATEGYBLOCK *)block;   // bh_near.cpp's questions take a block that isn't const; they only read it
+	Watched *const w = Record(alien, true);
+
+	if (!w)
+	{
+		return;
+	}
+
+	ALIEN_STATUS_BLOCK const *const s = (ALIEN_STATUS_BLOCK const *)alien->SBdataptr;
+	MODULE const *const module = alien->containingModule;
+	WAYPOINT_HEADER const *const boxes = module && module->m_aimodule ? module->m_aimodule->m_waypoints : nullptr;
+	VECTORCH const none = { 0, 0, 0 };
+
+	w->beforeFrame = thisFrame;
+	w->ran = s->BehaviourState;
+	w->targetKind = 0;
+	w->targetDistance = -1;
+
+	if (s->Target && s->Target->DynPtr)
+	{
+		w->targetKind = Player && s->Target == Player->ObStrategyBlock ? 1 : 2;
+		w->targetDistance = Apart(alien->DynPtr->Position, s->Target->DynPtr->Position);
+	}
+
+	w->encBefore = AlienIsEncouragedToCrawl();
+	w->routeBy = lastSearchBy;
+	Keep(w->linkBefore, sizeof(w->linkBefore), LinkWords(boxes, Global_Route.first_link));
+	Keep(w->crawl, sizeof(w->crawl), CrawlTest(alien, s));
+
+	// nothing searched yet this frame
+	w->searched = false;
+	w->found = 0;
+	w->npcBoxes = 0;
+	w->targetBoxes = 0;
+	Keep(w->dropout, sizeof(w->dropout), "-");
+	w->searchedFor = none;
+	w->heading = none;
+	w->start = w->second = w->last = -1;
+	w->routeLength = -1;
+	Keep(w->link, sizeof(w->link), "-");
+	w->encSearch = 0;
+	Keep(w->in, sizeof(w->in), "-");
+	Keep(w->tgt, sizeof(w->tgt), "-");
+	Keep(w->headsFor, sizeof(w->headsFor), "-");
+	w->targetPoint = none;
+}
+
+void HudsonLanes_Searched(const STRATEGYBLOCK *npc, const VECTORCH *target, const VECTORCH *heading, int found)
+{
+	if (!HudsonRunIsOn || !asked || !npc)
+	{
+		return;
+	}
+
+	if (npc->I_SBtype != I_BehaviourAlien || !npc->SBdataptr)
+	{
+		lastSearchBy = -1;
+		return;
+	}
+
+	Watched *const w = Record(npc, true);
+
+	lastSearchBy = w ? w->number : -1;
+
+	if (!w || w->beforeFrame != thisFrame)
+	{
+		return;   // a search outside its near state: not one of the lines
+	}
+
+	MODULE const *const module = npc->containingModule;
+	WAYPOINT_HEADER const *const boxes = module && module->m_aimodule ? module->m_aimodule->m_waypoints : nullptr;
+	ALIEN_STATUS_BLOCK const *const s = (ALIEN_STATUS_BLOCK const *)npc->SBdataptr;
+	WAYPOINT_MANAGER const &manager = s->waypointManager;
+	VECTORCH const none = { 0, 0, 0 };
+
+	w->searched = true;
+	w->found = found;
+	w->npcBoxes = NPC_Waypoints;
+	w->targetBoxes = Num_Target_Waypoints;
+	w->searchedFor = target ? *target : none;
+	w->heading = found && heading ? *heading : none;
+	// the dropouts of NPCGetWaypointDirection (reb bh_waypt.c 100, 122, 136, 151), in its order
+	Keep(w->dropout, sizeof(w->dropout), !playerPherModule || !module ? "no-modules" : NPC_Waypoints == 0 || Num_Target_Waypoints == 0 ? "no-box" : !found ? "no-route" :
+		Global_Route.start == Global_Route.last ? "start=end" : "none");
+
+	std::string in, tgt;
+
+	for (int b = 0; boxes && b < boxes->num_waypoints; b++)
+	{
+		WAYPOINT_VOLUME const *const box = boxes->first_waypoint + b;
+
+		if (box->contains_npc)
+		{
+			in += (in.empty() ? "" : ",") + std::to_string(b);
+		}
+
+		if (box->contains_target)
+		{
+			tgt += (tgt.empty() ? "" : ",") + std::to_string(b);
+		}
+	}
+
+	Keep(w->in, sizeof(w->in), in.empty() ? std::string("-") : in);
+	Keep(w->tgt, sizeof(w->tgt), tgt.empty() ? std::string("-") : tgt);
+	w->start = BoxNumber(boxes, Global_Route.start);
+	w->second = BoxNumber(boxes, Global_Route.second);
+	w->last = BoxNumber(boxes, Global_Route.last);
+	w->routeLength = Global_Route.num_waypoints == ONE_FIXED ? -1 : Global_Route.num_waypoints;
+	Keep(w->link, sizeof(w->link), LinkWords(boxes, Global_Route.first_link));
+	w->encSearch = AlienIsEncouragedToCrawl();
+	Keep(w->headsFor, sizeof(w->headsFor), !found || !manager.current_target ? "-" : manager.current_target == Global_Route.second && Global_Route.second != Global_Route.start ? "second" :
+		manager.current_target == Global_Route.start ? "start" : "other");
+	w->targetPoint = manager.current_target_point;
+}
+
+void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
+{
+	if (!HudsonRunIsOn || !asked || !block || !block->SBdataptr || !block->DynPtr)
+	{
+		return;
+	}
+
+	STRATEGYBLOCK *const alien = (STRATEGYBLOCK *)block;
+	Watched *const w = Record(alien, false);
+
+	if (!w || w->beforeFrame != thisFrame)
+	{
+		return;
+	}
+
+	ALIEN_STATUS_BLOCK const *const s = (ALIEN_STATUS_BLOCK const *)alien->SBdataptr;
+	DYNAMICSBLOCK const *const d = alien->DynPtr;
+	MODULE const *const module = alien->containingModule;
+	AIMODULE const *const ai = module ? module->m_aimodule : nullptr;
+	WAYPOINT_HEADER const *const boxes = ai ? ai->m_waypoints : nullptr;
+	bool const able = AlienIsAbleToClimb(alien) != 0;
+	bool const inPlayersModule = playerPherModule && module == playerPherModule;
+	bool const inPlayersAi = playerPherModule && ai && ai == playerPherModule->m_aimodule;
+	Why const read = GravityWhy(w, s, d, able, inPlayersModule);
+	int const gravityOn = d->UseStandardGravity ? 1 : 0;
+	Why const why = kWhy[read].gravity < 0 || kWhy[read].gravity == gravityOn ? read : WhyUnexplained;
+	char const *const surface = SurfaceOf(d);
+	bool const climbing = !gravityOn && strcmp(surface, "floor") != 0;
+	bool const onCeiling = !gravityOn && strcmp(surface, "ceiling") == 0;
+	int const st = w->ran >= 0 && w->ran < kStates ? w->ran : 0;
+	std::string const where = ModuleWords(module);
+
+	w->nearFrames++;
+	w->climbFrames += climbing ? 1 : 0;
+	w->ceilingFrames += onCeiling ? 1 : 0;
+	w->whyFrames[why]++;
+	w->stateFrames[st]++;
+	stateTotals[st][0]++;
+	stateTotals[st][1] += gravityOn;
+	stateTotals[st][2] += climbing ? 1 : 0;
+	stateTotals[st][3] += onCeiling ? 1 : 0;
+
+	// its contacts, from its last movement
+	int contacts = 0, withNpc = 0;
+
+	for (COLLISIONREPORT const *r = d->CollisionReportPtr; r && contacts < 256; r = r->NextCollisionReportPtr)
+	{
+		contacts++;
+		withNpc += r->ObstacleSBPtr ? 1 : 0;
+	}
+
+	bool const steered = w->searched && w->found;
+	std::string const target = w->targetKind == 0 ? std::string("none") : std::string(w->targetKind == 1 ? "player:" : "other:") + std::to_string(w->targetDistance) +
+		(w->targetDistance < kCurveToPlayerDistance ? "<8m" : "");
+	std::string const ep = w->ran == ABS_Wander || w->ran == ABS_Hunt ? std::string(w->ran == ABS_Hunt ? "hunt:" : "wander:") + PointWords(alien, s->wanderData.worldPosition) + ":" +
+		std::to_string(Apart(d->Position, s->wanderData.worldPosition)) : std::string("-");
+	std::string const go = w->searched ? PointWords(alien, w->searchedFor) + ":" + std::to_string(Apart(d->Position, w->searchedFor)) : std::string("-");
+	std::string const route = w->start >= 0 ? std::to_string(w->start) + ">" + (w->second >= 0 ? std::to_string(w->second) : std::string("-")) + ".." +
+		(w->last >= 0 ? std::to_string(w->last) : std::string("-")) + " len=" + std::to_string(w->routeLength) : std::string("-");
+	std::string const by = w->routeBy > 0 ? "a" + std::to_string(w->routeBy) : w->routeBy < 0 ? std::string("npc") : std::string("-");
+	char t[32];
+
+	_snprintf(t, sizeof(t) - 1, " t=%.3f", (double)gameTime / 65536.0);
+	t[sizeof(t) - 1] = 0;
+
+	std::string const line = "A a" + std::to_string(w->number) + " f=" + std::to_string(thisFrame) + t + " ran=" + StateName((ALIEN_BHSTATE)w->ran) + " now=" + StateName(s->BehaviourState) +
+		" mod=" + where + " ai=" + std::to_string(ai ? ai->m_index : -1) + " wps=" + std::to_string(boxes ? boxes->num_waypoints : 0) + " pmod=" + (inPlayersModule ? "1" : "0") +
+		" pai=" + (inPlayersAi ? "1" : "0") + " pos=" + PlaceWords(d->Position) + " on=" + surface + " down=" + PlaceWords(d->GravityDirection) + " mat=" + std::to_string(d->OrientMat.mat21) + "," +
+		std::to_string(d->OrientMat.mat22) + "," + std::to_string(d->OrientMat.mat23) + " std=" + std::to_string(gravityOn) + " nocontact=" + std::to_string(d->TimeNotInContactWithFloor) +
+		" floor=" + (d->IsInContactWithFloor ? "1" : "0") + " contacts=" + std::to_string(contacts) + "/" + std::to_string(withNpc) + " crouch=" + (s->IAmCrouched ? "1" : "0") +
+		" crawl=" + w->crawl + " able=" + (able ? "1" : "0") + " tgt=" + target + " ep=" + ep + " go=" + go + " search=" + w->dropout + " npcboxes=" + std::to_string(w->npcBoxes) +
+		" tgtboxes=" + std::to_string(w->targetBoxes) + " in=" + w->in + " tgtin=" + w->tgt + " route=" + route + " heads=" + w->headsFor +
+		" point=" + (steered ? PlaceWords(w->targetPoint) : std::string("-")) + " link=" + w->link + " lb=" + w->linkBefore + " by=" + by + " enc=" + std::to_string(w->encSearch) +
+		" encb=" + std::to_string(w->encBefore) + " heading=" + (steered ? PlaceWords(w->heading) : std::string("-")) + " hup=" + (steered ? std::to_string(UpDot(w->heading)) : std::string("-")) +
+		" vel=" + PlaceWords(d->LinVelocity) + " vup=" + std::to_string(UpDot(d->LinVelocity)) + " rdot=" + (steered ? std::to_string(DotWith(d->GravityDirection, w->heading)) : std::string("-")) +
+		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string());
+
+	Write(line);
+
+	// its own events (written only, not in the game's log: a level of aliens makes many)
+	std::string const who = "EVENT f=" + std::to_string(thisFrame) + " a" + std::to_string(w->number) + " ";
+
+	if (climbing && !w->wasClimbing)
+	{
+		w->firstClimb = w->firstClimb < 0 ? thisFrame : w->firstClimb;
+		Write(who + "CLIMBS onto the " + surface + " in " + where + " (" + StateName((ALIEN_BHSTATE)w->ran) + ", " + kWhy[why].code + ")");
+	}
+
+	if (onCeiling && w->firstCeiling < 0)
+	{
+		w->firstCeiling = thisFrame;
+		Keep(w->ceilingWhere, sizeof(w->ceilingWhere), where);
+		Write(who + "ON THE CEILING in " + where);
+	}
+
+	if (!climbing && w->wasClimbing)
+	{
+		std::string const cause = gravityOn ? std::string(kWhy[why].code) + ": " + kWhy[why].words : d->TimeNotInContactWithFloor <= 0 ?
+			std::string("LOST-CONTACT: no contact for a quarter second, its down went straight down (D19)") : std::string("its down is the floor's again, its gravity still its own");
+
+		Write(who + "DOWN in " + where + " (" + StateName((ALIEN_BHSTATE)w->ran) + "): " + cause);
+	}
+
+	w->wasClimbing = climbing;
+}
+
 bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 {
 	if (!HudsonRunIsOn || !asked)
 	{
 		return false;
 	}
+
+	// the alien code's calls until the next call here are of the next frame
+	thisFrame = frame + 1;
 
 	STRATEGYBLOCK *const me = Player ? Player->ObStrategyBlock : nullptr;
 
@@ -470,12 +1217,26 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		Hudson_MoveThePlayerTo(place);
 		placedIn = room;
 
-		Write("LANE PROBE (hudson_lanes.cpp, Frost 2026-11-19): one standard alien made at alienat=, the player put at standat=, standing still and unable to die; the level's own NPCs, generators and hive kept still");
+		Write(watching ? "LANE PROBE, lanes=watch (hudson_lanes.cpp, Frost 2026-11-20): the level as he plays it, its own NPCs, generators and hive live, no alien made; the player put at standat=, standing still and unable to die; every near alien a line a frame (A lines), a far one a line when its AI module changes (F lines), for three minutes of game time"
+			: "LANE PROBE (hudson_lanes.cpp, Frost 2026-11-19): one standard alien made at alienat=, the player put at standat=, standing still and unable to die; the level's own NPCs, generators and hive kept still");
 		Write("AS 1999: FLOORISLAVA OFF (the alien ways off), NEWDYNAMICCOLLISIONS OFF; the alien's code unchanged. Still AvPx's, not 1999's: pfarlocs.cpp's fourth-corner height fix (#161, where a far alien lands), pheromone.cpp's door test (scent through a door that isn't its AI module's first module), near_wake.cpp (placed sleeping aliens, not this one)");
 		Write("ROWS: AvP-docs\\engine\\inteng\\reassess\\alien-drop-audit.md. FIELDS: f frame, t game seconds since the alien was made, near (its module drawn), mod its module, ai its AI module, wps boxes in its AI module, state, dist to the player, pos, ceil its height below its module's top, on its surface (by its down), std UseStandardGravity, down its GravityDirection, nocontact TimeNotInContactWithFloor (16384 while it touches something, counting down without; at 0 its down becomes straight down), crouch IAmCrouched, enc AlienIsEncouragedToCrawl, in the boxes whose contains_npc the last sweep set, corners of its 8 in the route's start box, tgt the boxes holding its target, route start>second..last, link the first link (owner box.slot->target flags), pmod the player's module");
-		Write("PLAYER at " + std::to_string(standAt.vx) + " " + std::to_string(standAt.vy) + " " + std::to_string(standAt.vz) + " in " + ModuleWords(room) + "; the alien at " + std::to_string(alienAt.vx) +
-			" " + std::to_string(alienAt.vy) + " " + std::to_string(alienAt.vz));
+		Write("ALIEN LINES (Frost 2026-11-20, Bishop's order, Vasquez's fields), A a<n>: a line a frame for each alien whose near state ran, from its own code at the moment it read it. f frame, t game seconds; ran the state that ran, now its state after; mod its module, ai its AI module, wps boxes there; pmod 1 when its MODULE is the player's (the rip-off's test), pai its AI module; pos; on its surface by its down's y (floor over 46000, wall within 20000, ceiling under -46000, slope between); down GravityDirection; mat OrientMat mat21-23 (tilted under 63000); std UseStandardGravity; nocontact TimeNotInContactWithFloor; floor IsInContactWithFloor; contacts the collision reports/of them with an NPC; crouch IAmCrouched; crawl the AlienShouldBeCrawling test that answers, asked before its search; able AlienIsAbleToClimb; tgt its Target and the distance (<8m under 8 m); ep Wander's or Hunt's entry point and the distance; go the point its waypoint search headed for and the distance; search the dropout (none, no-modules, no-box, no-route, start=end), npcboxes NPC_Waypoints, tgtboxes Num_Target_Waypoints; in the boxes holding it, tgtin those holding the point; route start>second..last and len; heads the box its manager heads for (second or start), point its current_target_point; link its own first link (owner box.slot->target flags); lb Global_Route.first_link before its state ran and by who left it (a<n>, npc, -); enc encouraged after its search, encb before; heading the search's direction, hup its dot with up; vel LinVelocity after its state, vup; rdot its down against the heading (the rip-off fires under -60000); why the reading of its gravity (WHY lines). F a<n>: a far alien, when its AI module changes. EVENT lines a<n>: CLIMBS, ON THE CEILING, DOWN");
+
+		for (int why = 0; why < WhyCount; why++)
+		{
+			Write(std::string("WHY ") + kWhy[why].code + " (gravity " + (kWhy[why].gravity == 1 ? "on" : kWhy[why].gravity == 0 ? "off" : "as it was") + "): " + kWhy[why].words);
+		}
+
+		Write("PLAYER at " + std::to_string(standAt.vx) + " " + std::to_string(standAt.vy) + " " + std::to_string(standAt.vz) + " in " + ModuleWords(room) + (watching ? std::string("; no alien made") : "; the alien at " + std::to_string(alienAt.vx) +
+			" " + std::to_string(alienAt.vy) + " " + std::to_string(alienAt.vz)));
 		return false;
+	}
+
+	// lanes=watch: the level as he plays it (its frame: WatchFrame)
+	if (watching)
+	{
+		return WatchFrame(frame, me, howItEnded, exitCode);
 	}
 
 	if (!alienMade)

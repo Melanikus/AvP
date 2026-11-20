@@ -142,6 +142,7 @@ param(
     [switch]$AlienWays,    # lets the alien ways' developer switches below through. The ways themselves are on in every run since the flip (2026-11-11)
     [switch]$FloorIsLavaOff, # the run plays 1999's aliens: floorislava=off, the console's FLOORISLAVA OFF, for the other side of a film
     [string]$AlienOn = '',   # floor or ceiling: with -Lanes, where the alien is made (alienon=); ceiling hangs it from the ceiling at -AlienAt, for a run of the lane alone (added 2026-11-19 by Melanikus (Frost))
+    [switch]$LanesWatch,     # lanes=watch, the lane probe on the level as he plays it (3dc/avp/hudson_lanes.h): the player stands still at -StandAt, nothing kept still, no alien made; every near alien a line a frame in hudson-lanes.txt (added 2026-11-20 by Melanikus (Frost))
     [switch]$Lanes,          # lanes=yes, the lane probe (3dc/avp/hudson_lanes.h): the player stands still at -StandAt, one alien is made at -AlienAt, 1999's aliens; hudson-lanes.txt is kept with the run (added 2026-11-19 by Melanikus (Frost))
     [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
@@ -505,6 +506,7 @@ if ($Uncapped) { $arguments += " fps=uncapped" } else { $arguments += " fps=$Fps
 if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
 if ($FloorIsLavaOff) { $arguments += " floorislava=off" }
 if ($Lanes) { $arguments += " lanes=yes" }
+if ($LanesWatch) { $arguments += " lanes=watch" }
 if ($AlienOn) { $arguments += " alienon=$AlienOn" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }

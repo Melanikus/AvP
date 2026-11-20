@@ -352,6 +352,7 @@ struct HudsonPlan
 	int standAtX, standAtY, standAtZ;
 	bool alienOnCeiling;  // alienon=ceiling: with lanes=yes, the alien is made hanging from the ceiling at alienat=, its own gravity up, for a run of the lane alone. alienon=floor is the default. Added 2026-11-19 by Melanikus (Frost)
 	bool lanes;           // lanes=yes: the lane probe (hudson_lanes.h): the player stands still at standat=, one alien is made at alienat=, 1999's aliens, and hudson-lanes.txt has a line a frame of the alien's route and whether it stays on the ceiling. Added 2026-11-19 by Melanikus (Frost)
+	bool lanesWatch;      // lanes=watch: the lane probe on the level as he plays it: the player stands still at standat=, nothing is kept still and no alien is made, and hudson-lanes.txt has a line a frame for every near alien (what it read and why its gravity is as it is). Added 2026-11-20 by Melanikus (Frost)
 	char follow[kHudsonLongestStrategyName + 1];   // follow=: the name of one thing in the level, often an NPC, whose place and state the log says once a second. Nothing means none. For #126's floating facehugger
 	bool walkSaid;        // walkfrom=x,y,z and walkto=x,y,z: he's put at walkfrom= and walks to walkto= as a player does, with the forward key. With dieat=, only once the level has started again. See "A WALK" in hudson.cpp
 	int walkFromX, walkFromY, walkFromZ;
@@ -482,6 +483,8 @@ extern const char *const kHudsonRefusedFloorIsLavaNotOff;
 extern const char *const kHudsonRefusedLanesNotYes;
 extern const char *const kHudsonRefusedLanesNeedsPlaces;
 extern const char *const kHudsonRefusedLanesNotAlone;
+extern const char *const kHudsonRefusedLanesWatchNeedsStand;
+extern const char *const kHudsonRefusedLanesWatchNoAlien;
 extern const char *const kHudsonRefusedAlienOnNotFloorOrCeiling;
 extern const char *const kHudsonRefusedAlienOnWithoutLanes;
 extern const char *const kHudsonRefusedUnknownName;
