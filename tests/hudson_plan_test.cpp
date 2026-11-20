@@ -2722,6 +2722,25 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon=ceiling alienon=floor alienat=1,2,3 standat=4,5,6", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=genshd1 frames=9000 alienon=ceiling", kHudsonRefusedAlienOnWithoutLanes);
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienOn) { $arguments += \" alienon=$AlienOn\" }"), "the run script can ask for it");
+
+	// lanes=watch: the level as he plays it, every alien a line a frame, nothing kept still and no alien made (Bishop 11-20: in the owner's Steam play the aliens ran at
+	// the walls and never reached a ceiling). Added 2026-11-20 by Melanikus (Frost) for the AvP port.
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=watch standat=4000,-5000,6000", &plan) == 0 && plan.lanes && plan.lanesWatch, "a lane probe can watch the level as it plays");
+	Check(plan.standAtSaid && plan.standAtX == 4000 && !plan.alienAtSaid, "the player at standat=, and no alien of its own");
+	Check(plan.floorIsLavaOff, "1999's aliens, as lanes=yes");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.lanesWatch, "lanes=yes is still the one alien");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch", kHudsonRefusedLanesWatchNeedsStand);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienon=floor standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 rooms=1", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch lanes=yes standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 lanes=Watch standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LanesWatch) { $arguments += \" lanes=watch\" }"), "the run script can ask for it");
+
+	// what each alien read, told to the probe by the alien's own code at the moment it read it (one alien's route is gone by the frame's end when several search)
+	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienBefore(sbPtr);") && Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienAfter(sbPtr);"), "the near alien tells the probe before and after its state runs");
+	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "HudsonLanes_Searched(sbPtr, targetPosition, velocityDirection, found);"), "and each waypoint search what it found");
 }
 
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
