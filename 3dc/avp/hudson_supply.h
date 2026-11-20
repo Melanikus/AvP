@@ -24,6 +24,9 @@ static const double kHudsonSupplyLevel = 2000;     // mm up or down from his hei
 static const double kHudsonSupplyRoute = 6000;     // mm across from a place ahead
 static const double kHudsonSupplyFarAway = 40000;  // mm: further off, it frees its slot
 static const int kHudsonSupplyMostTimes = 4;
+// supplyin=: in the named rooms only (the corridors of his route), so no route test, and further off: they are already on his way
+static const double kHudsonSupplyInNear = 10000;   // mm
+static const double kHudsonSupplyInFar = 40000;
 
 struct HudsonSupplyRoom
 {
@@ -73,6 +76,31 @@ inline int HudsonSupply_Pick(std::vector<HudsonSupplyRoom> const &rooms, int hx,
 			best = (int)i;
 			bestOff = fabs(d - kHudsonSupplyMiddle);
 		}
+	}
+
+	return best;
+}
+
+// supplyin=: of the named rooms' middles (the caller gives only those), the one out of his view, on his level, kHudsonSupplyInNear to kHudsonSupplyInFar from him,
+// nearest kHudsonSupplyMiddle; -1 if none fits
+inline int HudsonSupply_PickIn(std::vector<HudsonSupplyRoom> const &rooms, int hx, int hy, int hz)
+{
+	int best = -1;
+	double bestOff = 1e300;
+
+	for (size_t i = 0; i < rooms.size(); i++)
+	{
+		HudsonSupplyRoom const &r = rooms[i];
+		double const dx = (double)r.x - hx, dy = (double)r.y - hy, dz = (double)r.z - hz;
+		double const d = sqrt(dx * dx + dy * dy + dz * dz);
+
+		if (r.inHisView || fabs(dy) > kHudsonSupplyLevel || d < kHudsonSupplyInNear || d > kHudsonSupplyInFar || fabs(d - kHudsonSupplyMiddle) >= bestOff)
+		{
+			continue;
+		}
+
+		best = (int)i;
+		bestOff = fabs(d - kHudsonSupplyMiddle);
 	}
 
 	return best;

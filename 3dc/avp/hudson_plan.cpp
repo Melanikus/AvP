@@ -238,6 +238,8 @@ const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
 const char *const kHudsonRefusedSupplyWithoutPlay = "supply= is the lane probe's own aliens while he plays, so it needs lanes=watch and play=yes";
 const char *const kHudsonRefusedSupplyNeedsPlace = "supply= and supplyat= go together: how many aliens, and the place they're made at";
 const char *const kHudsonRefusedSupplyOutOfRange = "supply= is 1 to 8 aliens, supplyevery= 1 to 120 seconds";
+const char *const kHudsonRefusedSupplyInAndAt = "supplyin= and supplyat= both say where the supply's aliens are made: one of them";
+const char *const kHudsonRefusedSupplyInName = "supplyin= is room names (letters, digits, _ - ?) with commas between them";
 const char *const kHudsonRefusedBreakUnknown = "break= isn't prisms or video";
 const char *const kHudsonRefusedBreakWithoutVision = "break= is for seeing that vision= notices, so it needs vision=";
 const char *const kHudsonRefusedVisionUnknown = "vision= isn't check";
@@ -501,7 +503,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
-	bool seenSupply = false, seenSupplyAt = false, seenSupplyEvery = false;
+	bool seenSupply = false, seenSupplyAt = false, seenSupplyEvery = false, seenSupplyIn = false;
 	bool seenGun = false;
 	bool seenStepSeconds = false;
 	bool seenPlayGun = false;
@@ -2623,6 +2625,34 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedSupplyOutOfRange;
 			}
 		}
+		else if (WordIs(place, nameLength, "supplyin"))
+		{
+			// supplyin=room,room,...: the supply's aliens made only in these rooms (the corridors of his route; hudson_supply.h; added 2026-11-20 by Melanikus (Frost))
+			if (seenSupplyIn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenSupplyIn = true;
+
+			if (valueLength == 0 || valueLength >= sizeof(plan->supplyIn))
+			{
+				return kHudsonRefusedSupplyInName;
+			}
+
+			for (size_t i = 0; i < valueLength; i++)
+			{
+				char const c = value[i];
+
+				if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '?' || c == ','))
+				{
+					return kHudsonRefusedSupplyInName;
+				}
+			}
+
+			memcpy(plan->supplyIn, value, valueLength);
+			plan->supplyIn[valueLength] = 0;
+		}
 		else if (WordIs(place, nameLength, "supplyat"))
 		{
 			if (seenSupplyAt)
@@ -3424,12 +3454,17 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	}
 
 	// supply=: the lane probe's own aliens as he plays (lanes=watch, play=yes), at supplyat=, one every supplyevery= seconds, 10 without it
-	if ((seenSupply || seenSupplyAt || seenSupplyEvery) && !(plan->lanes && plan->lanesWatch && plan->play))
+	if (seenSupplyIn && seenSupplyAt)
+	{
+		return kHudsonRefusedSupplyInAndAt;
+	}
+
+	if ((seenSupply || seenSupplyAt || seenSupplyEvery || seenSupplyIn) && !(plan->lanes && plan->lanesWatch && plan->play))
 	{
 		return kHudsonRefusedSupplyWithoutPlay;
 	}
 
-	if ((seenSupply || seenSupplyEvery) != seenSupplyAt || (seenSupplyEvery && !seenSupply))
+	if ((seenSupply || seenSupplyEvery) != (seenSupplyAt || seenSupplyIn) || (seenSupplyEvery && !seenSupply))
 	{
 		return kHudsonRefusedSupplyNeedsPlace;
 	}

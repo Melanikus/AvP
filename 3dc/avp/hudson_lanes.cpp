@@ -143,6 +143,9 @@ namespace
 	// 15 to 25 m from him, on his level, by the places he walks to next, the one nearest 20 m, so the same walk makes the same aliens; a far-away (40 m) or dead one
 	// frees its slot. A room's middle is HudsonNav_MiddleOfRoom's (FarLoc_IsAPlaceToStand)
 	bool supplyAround = false;
+	// IN THE NAMED ROOMS (supplyin=, the owner 11-20: "We need the extra alien spawners on those corridors"): as around him, but only in these rooms (the corridors of his
+	// route), out of his sight, on his level, 10 to 40 m from him (hudson_supply.h, HudsonSupply_PickIn)
+	std::vector<std::string> supplyRoomNames;
 	long long supplyNextAt = 0;
 	bool middlesMade = false;
 	std::vector<VECTORCH> roomMiddles;
@@ -1000,7 +1003,7 @@ namespace
 		}
 
 		// AROUND HIM: while fewer than supplyCount of its aliens are alive, one every supplyEvery, at the middle of a room he can't see 15 to 25 m from him
-		if (supplyAround && supplyCount > 0 && gameTime >= supplyNextAt)
+		if ((supplyAround || !supplyRoomNames.empty()) && supplyCount > 0 && gameTime >= supplyNextAt)
 		{
 			int alive = 0;
 
@@ -1027,7 +1030,17 @@ namespace
 					VECTORCH place;
 					int away = 0;
 
-					if (HudsonNav_MiddleOfRoom(room, &place, &away))
+					// with supplyin=, only the named rooms (an AI module by its first module's name, as the level file has it)
+					bool named = supplyRoomNames.empty();
+
+					for (std::string const &want : supplyRoomNames)
+					{
+						MODULE const *const first = AIModuleArray[room].m_module_ptrs ? AIModuleArray[room].m_module_ptrs[0] : nullptr;
+
+						named = named || (first && first->name && want == first->name);
+					}
+
+					if (named && HudsonNav_MiddleOfRoom(room, &place, &away))
 					{
 						roomMiddles.push_back(place);
 					}
@@ -1064,7 +1077,7 @@ namespace
 					}
 				}
 
-				int const pick = HudsonSupply_Pick(rooms, here.vx, here.vy, here.vz, ahead);
+				int const pick = supplyRoomNames.empty() ? HudsonSupply_Pick(rooms, here.vx, here.vy, here.vz, ahead) : HudsonSupply_PickIn(rooms, here.vx, here.vy, here.vz);
 				VECTORCH const *const best = pick >= 0 ? &roomMiddles[(size_t)pick] : nullptr;
 				double bestD = 0;
 
@@ -1096,7 +1109,7 @@ namespace
 					_snprintf(howFar, sizeof(howFar) - 1, "%.1f m from him", bestD / 1000.0);
 					howFar[sizeof(howFar) - 1] = 0;
 					Event(frame, std::string("SUPPLY ") + std::to_string(supplyMade) + " of " + std::to_string(supplyCount) + (made ? " MADE at " : " NOT MADE (the game made none) at ") +
-						PlaceWords(spot) + " in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)) + " (around him: " + howFar + ", out of his view; " + std::to_string(alive + (made ? 1 : 0)) +
+						PlaceWords(spot) + " in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)) + (supplyRoomNames.empty() ? " (around him: " : " (in a named room: ") + howFar + ", out of his view; " + std::to_string(alive + (made ? 1 : 0)) +
 						" alive)");
 					supplyNextAt = gameTime + supplyEvery;
 				}
@@ -1112,7 +1125,7 @@ namespace
 		}
 
 		// the supply: the next alien when its time has come (the first at the watch's start)
-		while (!supplyAround && supplyMade < supplyCount && gameTime >= supplyEvery * supplyMade)
+		while (!supplyAround && supplyRoomNames.empty() && supplyMade < supplyCount && gameTime >= supplyEvery * supplyMade)
 		{
 			VECTORCH spot = supplyAt;
 
@@ -1193,6 +1206,35 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 void HudsonLanes_HePlays()
 {
 	hePlays = true;
+}
+
+void HudsonLanes_SupplyIn(const char *names)
+{
+	supplyRoomNames.clear();
+
+	std::string one;
+
+	for (const char *c = names ? names : ""; ; c++)
+	{
+		if (*c == ',' || *c == 0)
+		{
+			if (!one.empty())
+			{
+				supplyRoomNames.push_back(one);
+			}
+
+			one.clear();
+
+			if (*c == 0)
+			{
+				break;
+			}
+		}
+		else
+		{
+			one += *c;
+		}
+	}
 }
 
 void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around)
@@ -1505,7 +1547,21 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		}
 
 		// THE SUPPLY's line, second: how many aliens, where, how often, and that the level's own are kept still; a place in no room stops the run
-		if (supplyCount > 0 && supplyAround)
+		if (supplyCount > 0 && !supplyRoomNames.empty())
+		{
+			std::string rooms;
+
+			for (std::string const &r : supplyRoomNames)
+			{
+				rooms += (rooms.empty() ? "" : ",") + r;
+			}
+
+			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe in the named rooms (" + rooms + "), one every " + std::to_string((int)(supplyEvery / 65536)) +
+				" s of game time while fewer hold a slot (alive and within 40 m), each at the middle of one of them he can't see, on his level (2 m), 10 to 40 m from him, the one" +
+				" nearest 20 m (hudson_supply.h; HudsonNav_MiddleOfRoom, ModuleCurrVisArray; CreateAlienBot, the console's own), at most " + std::to_string(HudsonSupply_MostMade(supplyCount)) +
+				" made; the level's own NPCs, generators and hive kept still");
+		}
+		else if (supplyCount > 0 && supplyAround)
 		{
 			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe around him, one every " + std::to_string((int)(supplyEvery / 65536)) +
 				" s of game time while fewer hold a slot (alive and within 40 m), each at the middle of a room he can't see, 15 to 25 m from him, on his level (2 m), by the places he" +

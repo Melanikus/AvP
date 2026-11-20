@@ -49,6 +49,10 @@ void HudsonLanes_HePlays();
 // can't see 15 to 25 m from him
 void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around);
 
+// supplyin= (added 2026-11-20 by Melanikus (Frost), the owner: "the extra alien spawners on those corridors"): the supply's aliens made only in these rooms, names with
+// commas between them, as around him otherwise (hudson_supply.h, HudsonSupply_PickIn)
+void HudsonLanes_SupplyIn(const char *names);
+
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);
 

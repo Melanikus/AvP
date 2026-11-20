@@ -191,6 +191,7 @@ param(
     [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
     [string]$SupplyAt = '',
     [int]$SupplyEvery = 0,
+    [string]$SupplyIn = '',   # with -Supply, the aliens made only in these rooms (names with commas between them): supplyin= (Frost 2026-11-20)
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
     [switch]$GunAlien,     # a gun= run makes an alien in front of him, for a throw or a shot to hit
@@ -483,6 +484,7 @@ if ($Normals) { $arguments += " normals=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }
 if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')" }
 if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
+if ($SupplyIn) { $arguments += " supplyin=$SupplyIn" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 # The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied
 if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { Stop-Here "-StepSeconds is a whole number of seconds, from 10 to 600" }
