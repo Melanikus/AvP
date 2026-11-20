@@ -73,10 +73,31 @@ static void TestWhichOnesCountAsAlive()
 	Check(HudsonSupply_MostMade(4) == 16, "at most 4 times the cap made in a run, so a run can't fill the level");
 }
 
+static void TestInTheNamedRooms()
+{
+	printf("In the named rooms (supplyin=)\n");
+
+	std::vector<HudsonSupplyRoom> rooms;
+
+	rooms.push_back(Room(30000, 1948, 0, false));          // 0: 30 m, on his level, out of view
+	rooms.push_back(Room(21000, 1948, 0, true));           // 1: 21 m but in his view
+	rooms.push_back(Room(19000, 1948 - 6000, 0, false));   // 2: 19 m but a storey up
+	rooms.push_back(Room(8000, 1948, 0, false));           // 3: 8 m: too near
+	rooms.push_back(Room(45000, 1948, 0, false));          // 4: 45 m: too far
+	rooms.push_back(Room(0, 1948, 22000, false));          // 5: 22 m, on his level, out of view, nearer 20 m than 0: THE ONE
+
+	Check(HudsonSupply_PickIn(rooms, 0, 1948, 0) == 5, "of the named rooms: out of his view, on his level, 10 to 40 m from him, the one nearest 20 m");
+	rooms[5].inHisView = true;
+	Check(HudsonSupply_PickIn(rooms, 0, 1948, 0) == 0, "and the next nearest 20 m when that one comes into view");
+	rooms[0].inHisView = true;
+	Check(HudsonSupply_PickIn(rooms, 0, 1948, 0) == -1, "none when none fits");
+}
+
 int main()
 {
 	TestWhereTheNextOneIsMade();
 	TestWhichOnesCountAsAlive();
+	TestInTheNamedRooms();
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all ok");
 	return checksFailed ? 1 : 0;
 }

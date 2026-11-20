@@ -2809,6 +2809,16 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_Pick(") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_HoldsASlot("),
 		"the room is chosen by hudson_supply.h's rule, and a slot freed by it");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_PlaceAhead("), "the places he walks to next come from his list");
+	// supplyin= (the owner 11-20: "We need the extra alien spawners on those corridors"): made only in the named rooms of his route, out of his sight, on his level
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=6 supplyin=pipes05,Object03,OPEN?11 supplyevery=5", &plan) == 0 && plan.supply == 6 &&
+		std::string(plan.supplyIn) == "pipes05,Object03,OPEN?11" && plan.supplyEvery == 5, "aliens in the named rooms: up to 6, one every 5 s");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=pipes05 supplyat=1,2,3", kHudsonRefusedSupplyInAndAt);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplyin=pipes05", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=pipes05;del", kHudsonRefusedSupplyInName);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=", kHudsonRefusedSupplyInName);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyIn(plan.supplyIn);"), "the probe is told the rooms");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_PickIn("), "and picks among them by hudson_supply.h's rule");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyIn) { $arguments += \" supplyin=$SupplyIn\" }"), "the run script can ask for it");
 	// play's own flares in the run's result (the result's flares_thrown is flare='s, the holds' flares: it read 0 on runs that threw 16)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "play_flares=%d"), "the run's result counts the flares he threw at aliens");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
