@@ -56,6 +56,10 @@ void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, 
 // commas between them, as around him otherwise (hudson_supply.h, HudsonSupply_PickIn)
 void HudsonLanes_SupplyIn(const char *names);
 
+// Whether the probe watches (lanes=watch): then the level's own NPCs act as stock, and a supply run keeps only its generators (and hive) still (Hudson_KeepsStill;
+// Frost 2026-11-20, the snowplow: the level's own alieninoffice, kept still in Wait, was shoved down Object07 in every supply run)
+bool HudsonLanes_Watching();
+
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);
 

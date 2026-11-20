@@ -2805,7 +2805,9 @@ static void CheckLanesWord()
 	// in every supply run; Drake: no trigger wakes it, its own near state does): they act as stock; only the generators stay still, so the supply is the only one made
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (HudsonLanes_Watching() && block->I_SBtype != I_BehaviourGenerator)"), "in a watch run, only the level's generators are kept still");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "bool HudsonLanes_Watching()"), "the probe says whether it watches");
-	Check(!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "the level's own NPCs, generators and hive kept still\");"), "and its SUPPLY line no longer says the level's NPCs are");
+	Check(!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), " made; the level's own NPCs, generators and hive kept still") &&
+		!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "the console's own); the level's own NPCs, generators and hive kept still"),
+		"and its SUPPLY lines no longer say the level's NPCs are (lanes=yes, the one-alien probe, still keeps them all)");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags

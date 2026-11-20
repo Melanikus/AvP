@@ -1268,6 +1268,11 @@ void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, 
 	supplyEvery = (long long)(everySeconds > 0 ? everySeconds : 10) * 65536;
 }
 
+bool HudsonLanes_Watching()
+{
+	return HudsonRunIsOn && asked && watching;
+}
+
 bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
 {
 	if (!HudsonRunIsOn || !asked || !block || block->I_SBtype != I_BehaviourAlien)
@@ -1580,21 +1585,21 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe in the named rooms (" + rooms + "), one every " + std::to_string((int)(supplyEvery / 65536)) +
 				" s of game time while fewer hold a slot (alive, however far), each at the middle of one of them he can't see, on his level (2 m), 10 to 40 m from him, the one" +
 				" nearest 20 m (hudson_supply.h; HudsonNav_MiddleOfRoom, ModuleCurrVisArray; CreateAlienBot, the console's own), at most " + std::to_string(HudsonSupply_MostMade(supplyCount)) +
-				" made; the level's own NPCs, generators and hive kept still");
+				" made; the level's generators and hive kept still, its own NPCs as stock");
 		}
 		else if (supplyCount > 0 && supplyAround)
 		{
 			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe around him, one every " + std::to_string((int)(supplyEvery / 65536)) +
 				" s of game time while fewer hold a slot (alive, however far), each at the middle of a room he can't see, 15 to 25 m from him, on his level (2 m), by the places he" +
 				" walks to next (6 m), the one nearest 20 m (hudson_supply.h; HudsonNav_MiddleOfRoom, ModuleCurrVisArray; CreateAlienBot, the console's own), at most " +
-				std::to_string(HudsonSupply_MostMade(supplyCount)) + " made; the level's own NPCs, generators and hive kept still");
+				std::to_string(HudsonSupply_MostMade(supplyCount)) + " made; the level's generators and hive kept still, its own NPCs as stock");
 		}
 		else if (supplyCount > 0)
 		{
 			MODULE *const supplyRoom = ModuleFromPosition(&supplyAt, (MODULE *)0);
 
 			Write("SUPPLY " + std::to_string(supplyCount) + " aliens made by the probe at " + PlaceWords(supplyAt) + " in " + ModuleWords(supplyRoom) + ", one every " +
-				std::to_string((int)(supplyEvery / 65536)) + " s of game time from the watch's start (CreateAlienBot, the console's own); the level's own NPCs, generators and hive kept still");
+				std::to_string((int)(supplyEvery / 65536)) + " s of game time from the watch's start (CreateAlienBot, the console's own); the level's generators and hive kept still, its own NPCs as stock");
 
 			if (!supplyRoom)
 			{

@@ -5640,6 +5640,14 @@ bool Hudson_KeepsStill(STRATEGYBLOCK *block)
 		return false;
 	}
 
+	// lanes=watch with a supply (Frost 2026-11-20, Bishop for the owner, the snowplow: the level's own alieninoffice, a placed alien in Wait that only its own near
+	// state wakes, was kept still and shoved down Object07 in every supply run): the level's own NPCs act as stock; only its generators stay still (the hive is off
+	// with HudsonLanesAreOn), so the probe's supply is the only thing made. A watch with no supply keeps nothing still (HudsonLanesAreOn stays off)
+	if (HudsonLanes_Watching() && block->I_SBtype != I_BehaviourGenerator)
+	{
+		return false;
+	}
+
 	switch (block->I_SBtype)
 	{
 		case I_BehaviourMarine:
