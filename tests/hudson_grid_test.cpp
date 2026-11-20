@@ -256,6 +256,38 @@ static void TestHeights()
 		Check(grid.OnlyCrouchedFits(6000, 1000, 1500), "a ceiling 1300 up over a floor with no mark: he crouches all the same");
 	}
 
+	// CROUCHED, ANYWHERE (crouchanywhere=yes; added 2026-11-20 by Melanikus (Frost): shft21's walkway on the owner's second stretch has about 1950 of room, crouch-only,
+	// and no duct mark, and with Airduct off on every plotted room no duct is marked at all, so his way can't go where a player crouches): a place wherever a crouched
+	// marine fits, whatever the floor's mark; off unless asked
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "a ceiling 1300 up over a floor with no mark: no way under it, as before");
+		grid.SetCrouchAnywhere(true);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "crouched anywhere: his way goes under it");
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500) && !grid.OnlyCrouchedFits(2000, 1000, 1500), "crouched under it, standing before it");
+		grid.SetCrouchAnywhere(false);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "and off again when it's asked off");
+	}
+
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1100);
+		grid.SetCrouchAnywhere(true);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "but not under 1100, where even crouched he doesn't fit");
+		grid.SetCrouchAnywhere(false);
+	}
+
 	// Two floors, one over the other, are different places
 	{
 		World world;

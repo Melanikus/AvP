@@ -2781,6 +2781,15 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AimNearest) { $arguments += \" aimnearest=yes\" }") &&
 		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($HoldGround) { $arguments += \" holdground=yes\" }"), "the run script can ask for them");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"AIM f=\""), "the lane probe logs whom he aims at, and his hold, each frame");
+	// crouchanywhere=yes (Frost 11-20: shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a crouched marine fits
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes crouchanywhere=yes", &plan) == 0 && plan.playCrouchAnywhere, "his way can go wherever he fits crouched");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playCrouchAnywhere, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 crouchanywhere=yes", kHudsonRefusedCrouchAnywhereWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes crouchanywhere=no", kHudsonRefusedCrouchAnywhereNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes crouchanywhere=yes crouchanywhere=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);"), "which tells his grid before it's built");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($CrouchAnywhere) { $arguments += \" crouchanywhere=yes\" }"), "the run script can ask for it");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
