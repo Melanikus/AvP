@@ -123,7 +123,7 @@ namespace
 	bool hePlays = false;
 	int const kPlayHeadway = 1000;                   // mm
 	long long const kPlayNoHeadway = 15LL * 65536;
-	long long const kPlayMost = 600LL * 65536;
+	long long const kPlayMost = 180LL * 65536;         // laps of a stretch for at most 3 minutes (Bishop 11-20)
 	VECTORCH headwayFrom = { 0, 0, 0 };              // where he was when he last made headway
 	long long headwayAt = 0;
 	long thisFrame = 0;                              // the frame the alien code is in: the frame the next EndOfFrame is called with
@@ -936,7 +936,7 @@ namespace
 			}
 
 			char const *const end = HudsonPlay_FinishedTheList() ? "route done: he has been down his whole list" : gameTime - headwayAt >= kPlayNoHeadway ?
-				"no headway (1 m) for 15 s" : gameTime >= kPlayMost ? "10 minutes of game time" : frame >= mostFrames ? "frames= ran out" : nullptr;
+				"no headway (1 m) for 15 s" : gameTime >= kPlayMost ? "3 minutes of game time" : frame >= mostFrames ? "frames= ran out" : nullptr;
 
 			if (end)
 			{
