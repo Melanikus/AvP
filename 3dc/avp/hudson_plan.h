@@ -320,6 +320,9 @@ struct HudsonPlan
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool playFlares;      // flares=yes: with play=yes, he throws a flare at an alien he sees coming within 8 m (hudson_play.h; the owner 11-20)
+	int supply;           // supply=N: with lanes=watch play=yes, the probe makes N aliens (1 to 8) at supplyat=, one every supplyEvery seconds; the level's own are kept still
+	int supplyAtX, supplyAtY, supplyAtZ;
+	int supplyEvery;      // supplyevery=: seconds between them, 1 to 120; 10 when not said
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
 	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
@@ -602,6 +605,9 @@ extern const char *const kHudsonRefusedFlareSpoilsComparing;
 extern const char *const kHudsonRefusedFlareWithoutHolds;
 extern const char *const kHudsonRefusedFlaresNotYes;
 extern const char *const kHudsonRefusedFlaresWithoutPlay;
+extern const char *const kHudsonRefusedSupplyWithoutPlay;
+extern const char *const kHudsonRefusedSupplyNeedsPlace;
+extern const char *const kHudsonRefusedSupplyOutOfRange;
 extern const char *const kHudsonRefusedLampUnknown;
 extern const char *const kHudsonRefusedLampSpoilsComparing;
 extern const char *const kHudsonRefusedLampKindUnknown;

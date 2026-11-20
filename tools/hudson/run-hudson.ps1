@@ -186,6 +186,9 @@ param(
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
     [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
     [switch]$Flares,       # with -Play, he throws a flare at an alien he sees coming within 8 m (flares=yes; Frost 2026-11-20)
+    [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
+    [string]$SupplyAt = '',
+    [int]$SupplyEvery = 0,
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
     [switch]$GunAlien,     # a gun= run makes an alien in front of him, for a throw or a shot to hit
@@ -474,6 +477,8 @@ if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
 if ($Flares) { $arguments += " flares=yes" }
+if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$SupplyAt" }
+if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 # The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied
 if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { Stop-Here "-StepSeconds is a whole number of seconds, from 10 to 600" }

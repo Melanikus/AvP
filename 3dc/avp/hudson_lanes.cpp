@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include <vector>
 
 extern void CreateAlienBot(VECTORCH *Position, int type);   // bh_alien.cpp: the console's own way of making one
 extern int NormalFrameTime;
@@ -126,6 +127,14 @@ namespace
 	long long const kPlayMost = 180LL * 65536;         // laps of a stretch for at most 3 minutes (Bishop 11-20)
 	VECTORCH headwayFrom = { 0, 0, 0 };              // where he was when he last made headway
 	long long headwayAt = 0;
+	// THE SUPPLY (supply=, Bishop 11-20: "the probe makes a FIXED supply per run ... so two plots compare fairly in one run each"): supplyCount aliens made at supplyAt,
+	// one every supplyEvery from the watch's start, with the console's own CreateAlienBot (awake, as the console makes one); the level's own NPCs, generators and hive
+	// are kept still (HudsonLanesAreOn, Hudson_KeepsStill), so these are the only aliens that move
+	int supplyCount = 0;
+	VECTORCH supplyAt = { 0, 0, 0 };
+	long long supplyEvery = 10LL * 65536;
+	int supplyMade = 0;
+	std::vector<std::string> supplyNames;            // their strategy names (SB_NAME_LENGTH bytes each)
 	long thisFrame = 0;                              // the frame the alien code is in: the frame the next EndOfFrame is called with
 	int lastSearchBy = 0;                            // who searched last: an alien's number, -1 another NPC, 0 nobody yet (a number, never a pointer: the NPC can be gone)
 
@@ -923,6 +932,27 @@ namespace
 			fflush(file);
 		}
 
+		// the supply: the next alien when its time has come (the first at the watch's start)
+		while (supplyMade < supplyCount && gameTime >= supplyEvery * supplyMade)
+		{
+			VECTORCH spot = supplyAt;
+
+			spot.vy -= kAlienStartsAboveTheFloor;   // up is smaller, as alienat=
+			CreateAlienBot(&spot, 0);
+
+			STRATEGYBLOCK *const made = TheAlienMadeAt(spot);
+
+			supplyMade++;
+
+			if (made)
+			{
+				supplyNames.push_back(std::string(made->SBname, SB_NAME_LENGTH));
+			}
+
+			Event(frame, std::string("SUPPLY ") + std::to_string(supplyMade) + " of " + std::to_string(supplyCount) + (made ? " MADE at " : " NOT MADE (the game made none) at ") + PlaceWords(spot) +
+				" in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)));
+		}
+
 		// he plays: the watch ends when his list is done, or when he has made no headway for a while (probe v3)
 		if (hePlays)
 		{
@@ -986,14 +1016,32 @@ void HudsonLanes_HePlays()
 	hePlays = true;
 }
 
+void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds)
+{
+	supplyCount = count > 0 ? count : 0;
+	supplyAt.vx = atX;
+	supplyAt.vy = atY;
+	supplyAt.vz = atZ;
+	supplyEvery = (long long)(everySeconds > 0 ? everySeconds : 10) * 65536;
+}
+
 bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
 {
-	if (!HudsonRunIsOn || !asked || !alienMade || !block)
+	if (!HudsonRunIsOn || !asked || !block || block->I_SBtype != I_BehaviourAlien)
 	{
 		return false;
 	}
 
-	return block->I_SBtype == I_BehaviourAlien && memcmp(block->SBname, alienName, SB_NAME_LENGTH) == 0;
+	// a supply alien (supply=) moves as the probe's one alien does
+	for (std::string const &name : supplyNames)
+	{
+		if (memcmp(block->SBname, name.data(), SB_NAME_LENGTH) == 0)
+		{
+			return true;
+		}
+	}
+
+	return alienMade && memcmp(block->SBname, alienName, SB_NAME_LENGTH) == 0;
 }
 
 // What the alien's own code read, at the moment it read it (hudson_lanes.h, "EVERY ALIEN'S LINE" above). They only read and keep: nothing here changes the alien.
@@ -1274,6 +1322,27 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			*exitCode = kHudsonExitBadArguments;
 			Finish(*howItEnded);
 			return true;
+		}
+
+		// THE SUPPLY's line, second: how many aliens, where, how often, and that the level's own are kept still; a place in no room stops the run
+		if (supplyCount > 0)
+		{
+			MODULE *const supplyRoom = ModuleFromPosition(&supplyAt, (MODULE *)0);
+
+			Write("SUPPLY " + std::to_string(supplyCount) + " aliens made by the probe at " + PlaceWords(supplyAt) + " in " + ModuleWords(supplyRoom) + ", one every " +
+				std::to_string((int)(supplyEvery / 65536)) + " s of game time from the watch's start (CreateAlienBot, the console's own); the level's own NPCs, generators and hive kept still");
+
+			if (!supplyRoom)
+			{
+				*howItEnded = "supplyat= isn't in any of this level's rooms";
+				*exitCode = kHudsonExitBadArguments;
+				Finish(*howItEnded);
+				return true;
+			}
+		}
+		else
+		{
+			Write("SUPPLY the level's own (no supply=): its NPCs, generators and hive as they are, so two runs can meet different numbers of aliens");
 		}
 
 		// he plays (probe v3): from wherever the level's own start put him, so he is neither put anywhere nor kept there

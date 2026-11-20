@@ -1110,7 +1110,8 @@ int Hudson_CheckBeforeStarting()
 	// lanes=watch (added 2026-11-20 by Melanikus (Frost)): the level as he plays it, so nothing is kept still: HudsonLanesAreOn stays off, and the probe still ends the run
 	if (plan.lanes)
 	{
-		HudsonLanesAreOn = !plan.lanesWatch;
+		// supply= (Frost 11-20): the level's own kept still, the probe's supply of aliens the only ones that move
+		HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;
 		ForceLoad_Alien = TRUE;
 		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling, plan.lanesWatch);
 
@@ -1119,6 +1120,7 @@ int Hudson_CheckBeforeStarting()
 		{
 			HudsonLanes_HePlays();
 			HudsonPlay_HoldFire(plan.lanesWatch);
+			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);
 		}
 	}
 
