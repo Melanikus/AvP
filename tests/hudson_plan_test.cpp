@@ -2684,6 +2684,23 @@ static void CheckFloorIsLavaWord()
 	Check(!Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "' -alienways'"), "and passes no -alienways, which the game no longer has");
 }
 
+// stock=yes: every flag of stock_flags.h off before any level, 1999's aliens for the lane probe (the owner 2026-11-20, through Bishop: "we need any new
+// behavior we added behind a flag in AVPX or these tests mean nothing"). Added 2026-11-20 by Melanikus (Vasquez) for the AvP port.
+static void CheckStockWord()
+{
+	puts("stock=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5 stock=yes", &plan) == 0 && plan.stock, "a run can play with every flag off");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5", &plan) == 0 && !plan.stock, "without the word, every flag is on, as for every player");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5 stock=yes floorislava=off", &plan) == 0 && plan.stock && plan.floorIsLavaOff,
+		"and with floorislava=off beside it (the switch turns that one off too, through the same OFF)");
+	Refused("-hudson level=genshd1 frames=5 stock=no", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=YES!", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=yes stock=yes", kHudsonRefusedAskedTwice);
+}
+
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
 static void SecondsAre(const char *text, long expected)
 {
@@ -2804,6 +2821,7 @@ int main()
 	CheckBotFight();
 	CheckFriendlyFire();
 	CheckFloorIsLavaWord();
+	CheckStockWord();
 	TestTheGridInTheGame();
 	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");
