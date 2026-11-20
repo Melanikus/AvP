@@ -25,6 +25,7 @@
 #include "pfarlocs.h"
 #include "alien_ways.h"
 #include "stock_flags.h"     // the MODE line: every AvPx flag that touches aliens (Vasquez 11-20)
+#include "debug_view.h"      // and the debug views, render only (Drake 11-20)
 #include "hudson_play.h"     // lanes=watch with play=yes: his list done (probe v3)
 #include "shoulder_lamp.h"   // the LAMP line
 
@@ -1370,7 +1371,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		std::string const flags = StockFlags_Words();
 		bool const stock = flags.size() >= 7 && flags.compare(flags.size() - 7, 7, "(stock)") == 0 && !AlienWaysSwitchedOn;
 
-		Write("MODE " + StockFlags_Words() + "; the level's alien ways " + (AlienWaysSwitchedOn ? "on" : "off") + (stock ? "; STOCK" : "; NOT STOCK: the run stops itself"));
+		Write("MODE " + StockFlags_Words() + "; " + DebugView_Words() + "; the level's alien ways " + (AlienWaysSwitchedOn ? "on" : "off") + (stock ? "; STOCK" : "; NOT STOCK: the run stops itself"));
 
 		if (!stock)
 		{

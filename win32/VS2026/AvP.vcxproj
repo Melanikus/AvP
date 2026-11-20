@@ -458,6 +458,7 @@
     <ClCompile Include="..\..\3dc\ConfigFile.cpp" />
     <ClCompile Include="..\..\3dc\console.cpp" />
     <ClCompile Include="..\..\3dc\d3d_render.cpp" />
+    <ClCompile Include="..\..\3dc\debug_view.cpp" />
     <ClCompile Include="..\..\3dc\FastFile.cpp" />
     <ClCompile Include="..\..\3dc\FileStream.cpp" />
     <ClCompile Include="..\..\3dc\FmvCutscenes.cpp" />

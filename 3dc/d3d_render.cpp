@@ -91,6 +91,7 @@
 //   an animated polygon's corners are read in 16.16, as CreateTxAnimUVArray now gives them, so flowing animated textures move smoothly
 //   (#97, reported by Bobblen). See texture_animation.h
 #include "console.h"
+#include "debug_view.h"      // the normals view (Drake 11-20)
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
 #include "r2base.h"
@@ -834,13 +835,16 @@ static bool ExecuteBuffer()
 		}
 		else
 		{
-		// set main shaders to active
-		d3d.effectSystem->SetActive(d3d.mainEffect);
+		// set main shaders to active; THE NORMALS VIEW (debug_view.h, a run's normals=yes): its own pair in their place, when they loaded, the same constant in
+		// the same register. Render only: the list, its vertices and its order are the same either way
+		effectID_t const listEffect = DebugView_Normals() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect;
+
+		d3d.effectSystem->SetActive(listEffect);
 
 		// we don't need world matrix here as avp has done all the world transforms itself
 		R_MATRIX matWorldViewProj = /*d3d.matView **/ d3d.matProjection;
 
-		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matWorldViewProj);
+		d3d.effectSystem->SetVertexShaderConstant(listEffect, 0, CONST_MATRIX, &matWorldViewProj);
 
 		// draw our main list (level geometry, player weapon etc)
 		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
