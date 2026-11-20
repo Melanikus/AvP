@@ -2782,6 +2782,9 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;"), "with a supply the level's own are kept still, the supply's aliens move");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);"), "the probe is told the supply");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
+	// every hit on Hudson and every refill, a line each (the owner 11-20: "more ceiling crawling aliens him faster"; "hudson's getting more and more hurt")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"REFILL f=\""), "and each time his health is filled up again, a REFILL line");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')\" }"),
 		"the run script can ask for it, a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 
