@@ -363,6 +363,96 @@ inline bool HudsonPlay_FacesItToThrow(int angleToTurn)
 	return angleToTurn <= kHudsonPlayFlareFacing && angleToTurn >= -kHudsonPlayFlareFacing;
 }
 
+// AIM AT THE NEAREST (aimnearest=yes; added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not firing) always at the nearest
+// alien"): of the aliens within kHudsonPlayAimWithin, the nearest he can see, else the nearest. He keeps the one he has unless another is under
+// kHudsonPlayAimSwitchShare of its distance, or he has lost sight of his and sees another, so his view doesn't flick between two. -1: none near, and he faces along his
+// way as before. His view turns kHudsonPlayAimTurnsOneIn of the way to it each frame, as his view goes after his way, so a recording isn't jittery.
+static const int kHudsonPlayAimWithin = 20000;            // mm
+static const double kHudsonPlayAimSwitchShare = 0.75;
+static const int kHudsonPlayAimTurnsOneIn = 4;
+
+struct HudsonPlayAimCandidate
+{
+	int id;
+	int distance;   // mm
+	bool seen;
+};
+
+inline int HudsonPlay_PickTheNearest(std::vector<HudsonPlayAimCandidate> const &aliens, int current)
+{
+	int seenId = -1, seenDistance = kHudsonPlayAimWithin, anyId = -1, anyDistance = kHudsonPlayAimWithin;
+	HudsonPlayAimCandidate const *kept = 0;
+
+	for (size_t i = 0; i < aliens.size(); i++)
+	{
+		HudsonPlayAimCandidate const &a = aliens[i];
+
+		if (a.distance >= kHudsonPlayAimWithin)
+		{
+			continue;
+		}
+
+		kept = a.id == current ? &a : kept;
+
+		if (a.seen && a.distance < seenDistance)
+		{
+			seenId = a.id;
+			seenDistance = a.distance;
+		}
+
+		if (a.distance < anyDistance)
+		{
+			anyId = a.id;
+			anyDistance = a.distance;
+		}
+	}
+
+	int const pick = seenId >= 0 ? seenId : anyId;
+	int const pickDistance = seenId >= 0 ? seenDistance : anyDistance;
+	bool const lostSightOfHis = kept && !kept->seen && seenId >= 0;
+
+	if (kept && pick != current && !lostSightOfHis && !(pickDistance < kept->distance * kHudsonPlayAimSwitchShare))
+	{
+		return current;
+	}
+
+	return pick;
+}
+
+// HOLD HIS GROUND (holdground=yes; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow: an alien in Attack is held still by its own state, and he,
+// unkillable, walked it 50 to 100 m down a corridor, twice in run 200126): while an alien within kHudsonPlayHoldWithin is ahead of him on his way (on his way's side of
+// him), he doesn't walk on: under kHudsonPlayBackOffWithin he backs off from it, else he stands, as a clawed player would. At most kHudsonPlayHoldMost at a time, then he
+// walks on for kHudsonPlayHoldRest before he holds again: a clawed player pushes past or dies, and the run mustn't stand still for good. The snowplow check
+// (snowplow.cjs) needs 3 s of shoving, more than the rest.
+static const int kHudsonPlayHoldWithin = 1500;              // mm
+static const int kHudsonPlayBackOffWithin = 1000;           // mm
+static const unsigned long kHudsonPlayHoldMost = 4000;      // ms
+static const unsigned long kHudsonPlayHoldRest = 2000;      // ms
+
+enum HudsonPlayHold
+{
+	kHudsonPlayWalkOn,
+	kHudsonPlayStand,
+	kHudsonPlayBackOff
+};
+
+// toAlien: from him to it, across; way: the way he's going (to the point he aims at along it); distance: to it
+inline bool HudsonPlay_AlienAheadOnHisWay(int toAlienX, int toAlienZ, int wayX, int wayZ, int distance)
+{
+	return distance <= kHudsonPlayHoldWithin && (double)toAlienX * wayX + (double)toAlienZ * wayZ > 0.0;
+}
+
+// heldFor: how long this hold has lasted (0: he isn't holding); sinceTheLast: since the last hold ended
+inline HudsonPlayHold HudsonPlay_Hold(bool aheadOnHisWay, int distance, unsigned long heldFor, unsigned long sinceTheLast)
+{
+	if (!aheadOnHisWay || heldFor >= kHudsonPlayHoldMost || (heldFor == 0 && sinceTheLast < kHudsonPlayHoldRest))
+	{
+		return kHudsonPlayWalkOn;
+	}
+
+	return distance < kHudsonPlayBackOffWithin ? kHudsonPlayBackOff : kHudsonPlayStand;
+}
+
 // Has he reached a point on his way? Across, he has to be close. Up and down it's more generous, because where the game says he is and where the grid says
 // the floor is differ by about his height. But a point on the floor above isn't one he's reached, however close it is across.
 inline bool HudsonPlay_ReachedPoint(int acrossX, int acrossZ, int upOrDown, int closeAcross, int closeUpOrDown)

@@ -232,6 +232,12 @@ const char *const kHudsonRefusedFlareWithoutHolds = "flare= throws one as each h
 // flares=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "throwing flares when aliens approach him")
 const char *const kHudsonRefusedFlaresNotYes = "flares= can only be yes";
 const char *const kHudsonRefusedFlaresWithoutPlay = "flares= has him throw flares at aliens as he plays, so it needs play=yes";
+// aimnearest=yes, holdground=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "I want hudson to run backwards pointing (but not firing) always at
+// the nearest alien"; Bishop, the snowplow)
+const char *const kHudsonRefusedAimNearestNotYes = "aimnearest= can only be yes";
+const char *const kHudsonRefusedAimNearestWithoutPlay = "aimnearest= has his view on the nearest alien as he plays, so it needs play=yes";
+const char *const kHudsonRefusedHoldGroundNotYes = "holdground= can only be yes";
+const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him stand or back off from an alien close ahead as he plays, so it needs play=yes";
 const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
 const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
 const char *const kHudsonRefusedNormalColoursNotYes = "normalcolours= can only be yes";
@@ -2588,6 +2594,25 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
+		else if (WordIs(place, nameLength, "aimnearest") || WordIs(place, nameLength, "holdground"))
+		{
+			// aimnearest=yes: as he plays, his view and gun on the nearest alien, never firing; holdground=yes: an alien close ahead on his way, and he stands or backs
+			// off (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner and Bishop)
+			bool const aim = WordIs(place, nameLength, "aimnearest");
+			bool &asked = aim ? plan->playAimNearest : plan->playHoldGround;
+
+			if (asked)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return aim ? kHudsonRefusedAimNearestNotYes : kHudsonRefusedHoldGroundNotYes;
+			}
+
+			asked = true;
+		}
 		else if (WordIs(place, nameLength, "normals") || WordIs(place, nameLength, "normalcolours") || WordIs(place, nameLength, "wireframe"))
 		{
 			// normals=yes, normalcolours=yes, wireframe=yes: the debug views, render only (3dc/debug_view.h; added 2026-11-20 by Melanikus (Drake), the owner: "see the
@@ -3478,6 +3503,16 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playFlares && !plan->play)
 	{
 		return kHudsonRefusedFlaresWithoutPlay;
+	}
+
+	if (plan->playAimNearest && !plan->play)
+	{
+		return kHudsonRefusedAimNearestWithoutPlay;
+	}
+
+	if (plan->playHoldGround && !plan->play)
+	{
+		return kHudsonRefusedHoldGroundWithoutPlay;
 	}
 
 	if (plan->breakPrisms && !plan->vision)

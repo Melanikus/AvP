@@ -320,6 +320,8 @@ struct HudsonPlan
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool playFlares;      // flares=yes: with play=yes, he throws a flare at an alien he sees coming within 8 m (hudson_play.h; the owner 11-20)
+	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
+	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
 	bool viewNormals;     // normals=yes: the normals view, each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only; the owner 11-20)
 	bool viewNormalColours; // normalcolours=yes: each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only)
 	bool viewWireframe;   // wireframe=yes: everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (3dc/debug_view.h; render only)
@@ -610,6 +612,10 @@ extern const char *const kHudsonRefusedFlareSpoilsComparing;
 extern const char *const kHudsonRefusedFlareWithoutHolds;
 extern const char *const kHudsonRefusedFlaresNotYes;
 extern const char *const kHudsonRefusedFlaresWithoutPlay;
+extern const char *const kHudsonRefusedAimNearestNotYes;
+extern const char *const kHudsonRefusedAimNearestWithoutPlay;
+extern const char *const kHudsonRefusedHoldGroundNotYes;
+extern const char *const kHudsonRefusedHoldGroundWithoutPlay;
 extern const char *const kHudsonRefusedNormalsNotYes;
 extern const char *const kHudsonRefusedWireframeNotYes;
 extern const char *const kHudsonRefusedNormalColoursNotYes;

@@ -988,6 +988,19 @@ namespace
 					std::string("no alien within 3 m")));
 			}
 
+			// aimnearest= / holdground= (Frost 2026-11-20, Bishop: "Log the target alien per frame"): whom his view is on this frame, and his hold
+			if (HudsonPlay_AimsOrHolds())
+			{
+				int aimDistance = 0;
+				bool aimSeen = false;
+				char const *hold = "-";
+				STRATEGYBLOCK const *const aimed = (STRATEGYBLOCK const *)HudsonPlay_AimedAt(&aimDistance, &aimSeen, &hold);
+				Watched const *const aimedW = aimed ? Record(aimed, true) : nullptr;
+
+				Write("AIM f=" + std::to_string(frame) + " " + (aimedW ? "a" + std::to_string(aimedW->number) + " " + std::to_string(aimDistance) + " mm " + (aimSeen ? "seen" : "unseen") :
+					std::string("none")) + " hold=" + hold);
+			}
+
 			if (healthSeen && health > lastHealth)
 			{
 				char words[120];

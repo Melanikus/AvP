@@ -47,6 +47,19 @@ void HudsonPlay_HoldFire(bool hold);
 // with the player's own flare action (hudson_play_steps.h says when); asked for before he starts
 void HudsonPlay_ThrowFlares(bool throwThem);
 
+// aimnearest=yes (added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not firing) always at the nearest alien"): as he plays,
+// his view and gun on the nearest alien within 20 m (hudson_play_steps.h says which), his feet on his way; he never fires for it. Asked for before he starts
+void HudsonPlay_AimAtTheNearest(bool aim);
+
+// holdground=yes (added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow): an alien within 1.5 m ahead on his way, and he stands, or under 1 m backs
+// off, instead of walking through it, 4 s at a time (hudson_play_steps.h says when). Asked for before he starts
+void HudsonPlay_HoldHisGround(bool hold);
+
+// For the lane probe's AIM line each frame: whether either is on; the alien (a STRATEGYBLOCK) his view is on, 0 for none, how far, whether he sees it, and his hold
+// ("-", "stand" or "back")
+bool HudsonPlay_AimsOrHolds();
+void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold);
+
 // True once he's been down his whole list (the lane probe's watch ends there: "route done")
 bool HudsonPlay_FinishedTheList();
 

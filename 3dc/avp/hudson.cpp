@@ -6941,6 +6941,10 @@ void Hudson_PlayInput(void *playerStatus)
 		// flares=yes: a flare at an alien he sees coming (added 2026-11-20 by Melanikus (Frost))
 		HudsonPlay_ThrowFlares(plan.playFlares);
 
+		// aimnearest=yes, holdground=yes: his view on the nearest alien, and he stands or backs off from one close ahead (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_AimAtTheNearest(plan.playAimNearest);
+		HudsonPlay_HoldHisGround(plan.playHoldGround);
+
 		if (plan.netMode == kHudsonNetJoin)
 		{
 			HudsonPlay_StartFollowing(LevelName);

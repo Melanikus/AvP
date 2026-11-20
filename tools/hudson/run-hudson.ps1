@@ -186,6 +186,8 @@ param(
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
     [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
     [switch]$Flares,       # with -Play, he throws a flare at an alien he sees coming within 8 m (flares=yes; Frost 2026-11-20)
+    [switch]$AimNearest,   # with -Play, his view and gun on the nearest alien, never firing (aimnearest=yes; Frost 2026-11-20)
+    [switch]$HoldGround,   # with -Play, an alien within 1.5 m ahead on his way and he stands or backs off (holdground=yes; Frost 2026-11-20)
     [switch]$Normals,      # the NORMAL LINES view: each polygon's normals stood up as lines over the lit scene, as J does with -dev (normals=yes; render only; Drake 2026-11-20)
     [switch]$NormalColours, # each polygon coloured by its facing, at full brightness (normalcolours=yes; render only; Drake 2026-11-20)
     [switch]$Wireframe,    # everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (wireframe=yes; render only; Drake 2026-11-20)
@@ -481,6 +483,8 @@ if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
 if ($Flares) { $arguments += " flares=yes" }
+if ($AimNearest) { $arguments += " aimnearest=yes" }
+if ($HoldGround) { $arguments += " holdground=yes" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }

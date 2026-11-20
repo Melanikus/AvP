@@ -242,6 +242,13 @@ static int gunToHold = 0;             // playgun=: the slot of the gun he's give
 static bool holdingFire = false;      // HudsonPlay_HoldFire: under the lane probe's watch he never fights (probe v3, Frost 2026-11-20)
 static bool throwingFlares = false;   // HudsonPlay_ThrowFlares: flares=yes (Frost 2026-11-20)
 static int flaresAtAliens = 0;        // the flares that went, at aliens
+static bool aimingAtTheNearest = false;      // HudsonPlay_AimAtTheNearest: aimnearest=yes (Frost 2026-11-20)
+static bool holdingHisGround = false;        // HudsonPlay_HoldHisGround: holdground=yes (Frost 2026-11-20)
+static STRATEGYBLOCK const *aimedAt = 0;     // the alien his view is on, for the lane probe's AIM line
+static int aimedAtDistance = 0;
+static bool aimedAtSeen = false;
+static char const *holdWord = "-";           // "-", "stand" or "back", for the AIM line
+static int holdsMade = 0;
 static bool gunGiven = false;
 static bool gunInHand = false;
 static int gunSlotSaid = -2;
@@ -1114,6 +1121,98 @@ static void GetToDoingTheStep(DWORD now, std::string const &why)
 	SayAboutTheStep(why + StepTitle());
 }
 
+// HOLD HIS GROUND (holdground=yes; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow): an alien close ahead on his
+// way, and he stands, or backs off straight away from it, instead of walking through it. True: he held this frame and his feet are set here. Hudson's code only: nothing
+// of the game or of an alien changes.
+static bool HoldingHisGround(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, HudsonPlayAim const &aim, DWORD now)
+{
+	static DWORD holdStartedAt = 0, holdEndedAt = 0;
+	static bool holding = false, heldBefore = false;
+
+	if (!holdingHisGround)
+	{
+		return false;
+	}
+
+	STRATEGYBLOCK const *nearest = 0;
+	int nearestDistance = kHudsonPlayHoldWithin + 1;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance < nearestDistance)
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	int const toX = nearest ? nearest->DynPtr->Position.vx - dyn->Position.vx : 0, toZ = nearest ? nearest->DynPtr->Position.vz - dyn->Position.vz : 0;
+	bool const ahead = nearest && HudsonPlay_AlienAheadOnHisWay(toX, toZ, aim.x - dyn->Position.vx, aim.z - dyn->Position.vz, nearestDistance);
+	unsigned long const heldFor = holding ? (now - holdStartedAt > 0 ? now - holdStartedAt : 1) : 0;
+	unsigned long const sinceTheLast = heldBefore ? now - holdEndedAt : 0xffffffffUL;
+	HudsonPlayHold const hold = HudsonPlay_Hold(ahead, nearestDistance, heldFor, sinceTheLast);
+
+	if (hold == kHudsonPlayWalkOn)
+	{
+		if (holding)
+		{
+			holding = false;
+			heldBefore = true;
+			holdEndedAt = now;
+			LogString("play: hold " + std::to_string(holdsMade) + " ended after " + std::to_string(heldFor) + " ms (" + (ahead ? "4 s at most, so he walks on" : "nothing close ahead now") + ")");
+		}
+
+		holdWord = "-";
+		return false;
+	}
+
+	if (!holding)
+	{
+		holding = true;
+		holdStartedAt = now;
+		holdsMade++;
+		LogString("play: hold " + std::to_string(holdsMade) + ": " + HudsonStrategies_Title(nearest) + " " + std::to_string(nearestDistance) + " mm ahead on his way, so he " +
+			(hold == kHudsonPlayBackOff ? "backs off" : "stands") + ", " + RoomOf(Player->ObStrategyBlock));
+	}
+
+	holdWord = hold == kHudsonPlayBackOff ? "back" : "stand";
+	status->Mvt_InputRequests.Flags.Rqst_Forward = 0;
+	status->Mvt_InputRequests.Flags.Rqst_Backward = 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepRight = 0;
+	status->Mvt_MotionIncrement = 0;
+	status->Mvt_SideStepIncrement = 0;
+
+	double const across = sqrt((double)toX * toX + (double)toZ * toZ);
+
+	if (hold == kHudsonPlayBackOff && across >= 1.0)
+	{
+		// straight away from it, with forward and sidestep together as SteerAlongTheWay goes, whichever way he faces
+		double const forward = -((double)toX * dyn->OrientMat.mat31 + (double)toZ * dyn->OrientMat.mat33) / (65536.0 * across);
+		double const side = -((double)toX * dyn->OrientMat.mat11 + (double)toZ * dyn->OrientMat.mat13) / (65536.0 * across);
+		int forwardControl = 0, sideControl = 0;
+
+		HudsonPlay_WalkControls(forward, side, ONE_FIXED, &forwardControl, &sideControl);
+		status->Mvt_MotionIncrement = forwardControl;
+		status->Mvt_SideStepIncrement = sideControl;
+		status->Mvt_InputRequests.Flags.Rqst_Forward = forwardControl > 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_Backward = forwardControl < 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_SideStepRight = sideControl > 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = sideControl < 0 ? 1 : 0;
+	}
+
+	return true;
+}
+
 // One frame of walking along the way. False if he's at the end of it.
 static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 {
@@ -1148,6 +1247,13 @@ static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 	VECTORCH const aimingAt = { aim.x, dyn->Position.vy, aim.z };
 
 	if (OverACarThatIsntLevelWith(aimingAt, dyn->Position.vy))
+	{
+		placeLastChangedAt = now;
+		return true;
+	}
+
+	// holdground=yes: an alien close ahead on his way, and he stands or backs off instead of walking through it; that isn't being stuck
+	if (HoldingHisGround(status, dyn, aim, now))
 	{
 		placeLastChangedAt = now;
 		return true;
@@ -3077,6 +3183,123 @@ static void FlareAtAnAlien(PLAYER_STATUS *status, DWORD now)
 		std::to_string(nearestDistance) + " mm from him, t=" + std::to_string((unsigned long)timeGetTime()) + ", " + RoomOf(Player->ObStrategyBlock));
 }
 
+// AIM AT THE NEAREST (aimnearest=yes; hudson_play_steps.h says which; added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not
+// firing) always at the nearest alien"): his view, and so his gun, on the nearest alien each frame, his feet still on his way (forward and sidestep go wherever he faces,
+// so he backpedals or strafes as it needs). It turns him and tilts his view a share of the way each frame, as his view goes after his way, so a recording isn't jittery.
+// AimAtTheNearest never fires: his fire stays held (lanes=watch) and nothing here asks for it. Hudson's code only: nothing of the game or of an alien changes.
+static void AimAtTheNearest(PLAYER_STATUS *status)
+{
+	static float tilt = 0.0f;   // his view's tilt, eased toward the alien's chest, in the game's 4096ths of a turn
+
+	if (!aimingAtTheNearest || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	std::vector<HudsonPlayAimCandidate> candidates;
+	std::vector<STRATEGYBLOCK *> blocks;
+	int current = -1;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance >= kHudsonPlayAimWithin)
+		{
+			continue;
+		}
+
+		// seen from its chest, as a fight sees it
+		VECTORCH chest;
+
+		GetTargetingPointOfObject_Far(block, &chest);
+
+		HudsonPlayAimCandidate const candidate = { (int)blocks.size(), distance, IsThisObjectVisibleFromThisPosition_WithIgnore(Player, block->SBdptr, &chest, kHudsonPlayAimWithin) != 0 };
+
+		current = block == aimedAt ? candidate.id : current;
+		candidates.push_back(candidate);
+		blocks.push_back(block);
+	}
+
+	int const pick = HudsonPlay_PickTheNearest(candidates, current);
+
+	if (pick < 0)
+	{
+		if (aimedAt)
+		{
+			LogString("play: aims at nothing now: no alien within 20 m, so he faces along his way");
+		}
+
+		aimedAt = 0;
+		tilt = 0.0f;
+		return;
+	}
+
+	STRATEGYBLOCK *const it = blocks[pick];
+
+	if (it != aimedAt)
+	{
+		LogString("play: aims at " + HudsonStrategies_Title(it) + ", " + std::to_string(candidates[pick].distance) + " mm from him" + (candidates[pick].seen ? "" : ", out of his sight") +
+			", " + RoomOf(Player->ObStrategyBlock));
+	}
+
+	aimedAt = it;
+	aimedAtDistance = candidates[pick].distance;
+	aimedAtSeen = candidates[pick].seen;
+
+	// his turn to it, a share each frame, and nothing else of this frame's turning
+	int const toX = it->DynPtr->Position.vx - dyn->Position.vx, toZ = it->DynPtr->Position.vz - dyn->Position.vz;
+	int const angle = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+	int const control = HudsonPlay_TurnControl(angle / kHudsonPlayAimTurnsOneIn, kTurnsAtFull, NormalFrameTime);
+
+	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = control < 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_TurnRight = control > 0 ? 1 : 0;
+	status->Mvt_TurnIncrement = control;
+
+	// his view's tilt to its chest, eased the same way (a ceiling alien is above him)
+	VECTORCH chest;
+
+	GetTargetingPointOfObject_Far(it, &chest);
+
+	VECTORCH const eyes = Global_VDB_Ptr->VDB_World;
+	float const acrossX = (float)(chest.vx - eyes.vx), acrossZ = (float)(chest.vz - eyes.vz);
+	float const wanted = atan2f((float)(chest.vy - eyes.vy), sqrtf(acrossX * acrossX + acrossZ * acrossZ)) * (float)kHudsonPlayWholeTurn / 6.2831853f;
+
+	tilt += (wanted - tilt) / (float)kHudsonPlayAimTurnsOneIn;
+	status->ViewPanX = ((int)tilt) & (kHudsonPlayWholeTurn - 1);
+}
+
+void HudsonPlay_AimAtTheNearest(bool aim)
+{
+	aimingAtTheNearest = aim;
+}
+
+void HudsonPlay_HoldHisGround(bool hold)
+{
+	holdingHisGround = hold;
+}
+
+bool HudsonPlay_AimsOrHolds()
+{
+	return aimingAtTheNearest || holdingHisGround;
+}
+
+void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold)
+{
+	*distance = aimedAt ? aimedAtDistance : 0;
+	*seen = aimedAt ? aimedAtSeen : false;
+	*hold = holdWord;
+	return aimedAt;
+}
+
 void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 {
 	PLAYER_STATUS *const status = (PLAYER_STATUS *)playerStatus;
@@ -3242,6 +3465,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 		default:
 			break;
 	}
+
+	// aimnearest=yes: his view on the nearest alien; then a flare that's due turns it to the one it's thrown at, for those frames
+	AimAtTheNearest(status);
 
 	// last, so that turning to an alien for a flare is what this frame does with his view; his feet still go along his way
 	FlareAtAnAlien(status, now);
