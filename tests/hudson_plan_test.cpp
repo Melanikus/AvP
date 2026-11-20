@@ -2790,6 +2790,17 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);"), "the run tells play");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);"), "which tells his grid before it's built");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($CrouchAnywhere) { $arguments += \" crouchanywhere=yes\" }"), "the run script can ask for it");
+	// watchmost=S (Bishop 11-20, the owner: "have him run the level, identify genshd's triggers, go hit them all"): the full-level run plays as long as the level takes,
+	// so the watch's 3 minutes of play can be asked longer: 60 to 7200 s of game time
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=500000 lanes=watch play=yes watchmost=3600", &plan) == 0 && plan.watchMost == 3600, "the watch can play for an hour");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.watchMost == 0, "and for 3 minutes unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=59", kHudsonRefusedWatchMostOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=7201", kHudsonRefusedWatchMostOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes watchmost=600", kHudsonRefusedWatchMostWithoutWatch);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=600 watchmost=600", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_PlayMost(plan.watchMost);"), "the run tells the probe");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "gameTime >= playMost ?"), "which ends his play there, not at 3 minutes");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchMost -gt 0) { $arguments += \" watchmost=$WatchMost\" }"), "the run script can ask for it");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
