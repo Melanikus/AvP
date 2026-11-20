@@ -321,6 +321,7 @@ struct HudsonPlan
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
 	bool playFlares;      // flares=yes: with play=yes, he throws a flare at an alien he sees coming within 8 m (hudson_play.h; the owner 11-20)
 	bool viewNormals;     // normals=yes: the normals view, each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only; the owner 11-20)
+	bool viewNormalColours; // normalcolours=yes: each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only)
 	bool viewWireframe;   // wireframe=yes: everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (3dc/debug_view.h; render only)
 	int supply;           // supply=N: with lanes=watch play=yes, the probe makes N aliens (1 to 8) at supplyat=, one every supplyEvery seconds; the level's own are kept still
 	int supplyAtX, supplyAtY, supplyAtZ;
@@ -611,6 +612,7 @@ extern const char *const kHudsonRefusedFlaresNotYes;
 extern const char *const kHudsonRefusedFlaresWithoutPlay;
 extern const char *const kHudsonRefusedNormalsNotYes;
 extern const char *const kHudsonRefusedWireframeNotYes;
+extern const char *const kHudsonRefusedNormalColoursNotYes;
 extern const char *const kHudsonRefusedSupplyWithoutPlay;
 extern const char *const kHudsonRefusedSupplyNeedsPlace;
 extern const char *const kHudsonRefusedSupplyOutOfRange;

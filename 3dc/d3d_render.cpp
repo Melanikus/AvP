@@ -835,9 +835,9 @@ static bool ExecuteBuffer()
 		}
 		else
 		{
-		// set main shaders to active; THE NORMALS VIEW (debug_view.h, a run's normals=yes): its own pair in their place, when they loaded, the same constant in
+		// set main shaders to active; THE NORMAL COLOURS VIEW (debug_view.h, a run's normalcolours=yes): its own pair in their place, when they loaded, the same constant in
 		// the same register. Render only: the list, its vertices and its order are the same either way
-		effectID_t const listEffect = DebugView_Normals() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect;
+		effectID_t const listEffect = DebugView_NormalColours() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect;
 
 		d3d.effectSystem->SetActive(listEffect);
 

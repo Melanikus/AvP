@@ -234,6 +234,7 @@ const char *const kHudsonRefusedFlaresNotYes = "flares= can only be yes";
 const char *const kHudsonRefusedFlaresWithoutPlay = "flares= has him throw flares at aliens as he plays, so it needs play=yes";
 const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
 const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
+const char *const kHudsonRefusedNormalColoursNotYes = "normalcolours= can only be yes";
 // supply= (added 2026-11-20 by Melanikus (Frost) for the AvP port, Bishop: a fixed alien supply for the lane probe)
 const char *const kHudsonRefusedSupplyWithoutPlay = "supply= is the lane probe's own aliens while he plays, so it needs lanes=watch and play=yes";
 const char *const kHudsonRefusedSupplyNeedsPlace = "supply= and supplyat= go together: how many aliens, and the place they're made at";
@@ -2587,12 +2588,12 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
-		else if (WordIs(place, nameLength, "normals") || WordIs(place, nameLength, "wireframe"))
+		else if (WordIs(place, nameLength, "normals") || WordIs(place, nameLength, "normalcolours") || WordIs(place, nameLength, "wireframe"))
 		{
-			// normals=yes, wireframe=yes: the debug views, render only (3dc/debug_view.h; added 2026-11-20 by Melanikus (Drake), the owner: "see the aliens in the
-			// dark", "Showing normals would be enough/look cool")
-			bool const normals = WordIs(place, nameLength, "normals");
-			bool &asked = normals ? plan->viewNormals : plan->viewWireframe;
+			// normals=yes, normalcolours=yes, wireframe=yes: the debug views, render only (3dc/debug_view.h; added 2026-11-20 by Melanikus (Drake), the owner: "see the
+			// aliens in the dark", "Showing normals would be enough/look cool", then "display normals like we did on debugging shaders": normals= is the NORMAL LINES view)
+			bool const normals = WordIs(place, nameLength, "normals"), colours = WordIs(place, nameLength, "normalcolours");
+			bool &asked = normals ? plan->viewNormals : colours ? plan->viewNormalColours : plan->viewWireframe;
 
 			if (asked)
 			{
@@ -2601,7 +2602,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			if (!WordIs(value, valueLength, "yes"))
 			{
-				return normals ? kHudsonRefusedNormalsNotYes : kHudsonRefusedWireframeNotYes;
+				return normals ? kHudsonRefusedNormalsNotYes : colours ? kHudsonRefusedNormalColoursNotYes : kHudsonRefusedWireframeNotYes;
 			}
 
 			asked = true;
