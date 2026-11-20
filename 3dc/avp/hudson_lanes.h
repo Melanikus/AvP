@@ -39,6 +39,10 @@ struct vectorch;
 // watch (lanes=watch): the level as he plays it, no alien made
 void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int mostFrames, bool onCeiling, bool watch);
 
+// lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he plays the level from its own start (hudson_play.h), so he is neither put anywhere nor
+// kept anywhere; the watch ends when his list is done, or when he makes no headway (1 m) for 15 s
+void HudsonLanes_HePlays();
+
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);
 

@@ -1113,6 +1113,13 @@ int Hudson_CheckBeforeStarting()
 		HudsonLanesAreOn = !plan.lanesWatch;
 		ForceLoad_Alien = TRUE;
 		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling, plan.lanesWatch);
+
+		// lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he plays from the level's own start, holding his fire
+		if (plan.play)
+		{
+			HudsonLanes_HePlays();
+			HudsonPlay_HoldFire(plan.lanesWatch);
+		}
 	}
 
 	char line[256] = { 0 };

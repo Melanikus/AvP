@@ -40,6 +40,12 @@ void HudsonPlay_HoldGun(int slot);
 // stepseconds=: how long one step may take before he's moved to it, a logged cheat, from 10 to 600 (the plan reader checks it). Without it, 180.
 void HudsonPlay_SetStepSeconds(int seconds);
 
+// lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he holds his fire, so nothing he sees is a fight and he walks on; asked for before he starts
+void HudsonPlay_HoldFire(bool hold);
+
+// True once he's been down his whole list (the lane probe's watch ends there: "route done")
+bool HudsonPlay_FinishedTheList();
+
 // One line for the run's result: how many steps there were, how many worked, and how many cheats it took
 void HudsonPlay_ForTheResult(char *line, int size);
 

@@ -123,9 +123,11 @@ const char *const kHudsonRefusedLanesNeedsPlaces = "lanes=yes needs one alienat=
 const char *const kHudsonRefusedAlienOnNotFloorOrCeiling = "alienon= is floor or ceiling";
 const char *const kHudsonRefusedAlienOnWithoutLanes = "alienon= says where the lane probe's alien is made, so it needs lanes=yes";
 // lanes=watch (added 2026-11-20 by Melanikus (Frost) for the AvP port)
-const char *const kHudsonRefusedLanesWatchNeedsStand = "lanes=watch needs a standat= place for the player";
+const char *const kHudsonRefusedLanesWatchNeedsStand = "lanes=watch needs a standat= place for the player, or play=yes (he plays from the level's own start)";
+// lanes=watch with play=yes, probe v3 (added 2026-11-20 by Melanikus (Frost) for the AvP port)
+const char *const kHudsonRefusedLanesPlayNoStand = "lanes=watch with play=yes has him play from the level's own start, so it can't go with standat=";
 const char *const kHudsonRefusedLanesWatchNoAlien = "lanes=watch is the level as he plays it: it makes no alien of its own, so it can't go with alienat= or alienon=";
-const char *const kHudsonRefusedLanesNotAlone = "a lane probe (lanes=yes or watch) is the player standing still while aliens come for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play=, net=, gun=, a walk, a nav, a route or a strategy";
+const char *const kHudsonRefusedLanesNotAlone = "a lane probe (lanes=yes or watch) is the player standing still while aliens come for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play= (lanes=yes; lanes=watch takes it: he plays from the level's start), net=, gun=, a walk, a nav, a route or a strategy";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -3006,7 +3008,13 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedLanesWatchNoAlien;
 			}
 
-			if (!plan->standAtSaid)
+			// with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he plays from the level's own start, on foot, by his grid's ways (hudson_play.cpp)
+			if (plan->play && plan->standAtSaid)
+			{
+				return kHudsonRefusedLanesPlayNoStand;
+			}
+
+			if (!plan->play && !plan->standAtSaid)
 			{
 				return kHudsonRefusedLanesWatchNeedsStand;
 			}
@@ -3016,14 +3024,16 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			return kHudsonRefusedLanesNeedsPlaces;
 		}
 
-		if (plan->rooms > 0 || plan->combatAlien || seenWatch || seenHoldFire || seenWatchFrom || seenTogether || plan->play || plan->netMode != kHudsonNetNone ||
+		if (plan->rooms > 0 || plan->combatAlien || seenWatch || seenHoldFire || seenWatchFrom || seenTogether || (plan->play && !plan->lanesWatch) || plan->netMode != kHudsonNetNone ||
 			plan->gunSlot != 0 || seenWalkFrom || seenWalkTo || seenNav || seenRoute || seenStrategy)
 		{
 			return kHudsonRefusedLanesNotAlone;
 		}
 
-		// 1999's aliens: the console's FLOORISLAVA OFF before any level, as floorislava=off asks
+		// 1999's aliens: the console's FLOORISLAVA OFF before any level, as floorislava=off asks; and every lane probe stock (stock=yes, stock_flags.h: the five AvPx
+		// changes that touch aliens off before any level; the owner 11-20: "we need any new behavior we added behind a flag in AVPX or these tests mean nothing")
 		plan->floorIsLavaOff = true;
+		plan->stock = true;
 	}
 
 	if (plan->holdFire && !plan->watchAlien)

@@ -486,6 +486,7 @@ extern const char *const kHudsonRefusedLanesNotYes;
 extern const char *const kHudsonRefusedLanesNeedsPlaces;
 extern const char *const kHudsonRefusedLanesNotAlone;
 extern const char *const kHudsonRefusedLanesWatchNeedsStand;
+extern const char *const kHudsonRefusedLanesPlayNoStand;
 extern const char *const kHudsonRefusedLanesWatchNoAlien;
 extern const char *const kHudsonRefusedAlienOnNotFloorOrCeiling;
 extern const char *const kHudsonRefusedAlienOnWithoutLanes;

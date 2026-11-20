@@ -238,6 +238,7 @@ static DWORD lookedAtWhatsWatchedAt = 0;
 static bool saidHesOnALift = false;
 static bool heWasJustMoved = false;   // the first Hudson was moved by a cheat, and the second hasn't done anything about it yet
 static int gunToHold = 0;             // playgun=: the slot of the gun he's given, or 0
+static bool holdingFire = false;      // HudsonPlay_HoldFire: under the lane probe's watch he never fights (probe v3, Frost 2026-11-20)
 static bool gunGiven = false;
 static bool gunInHand = false;
 static int gunSlotSaid = -2;
@@ -801,6 +802,12 @@ static void FireAt(PLAYER_STATUS *status, VECTORCH const &point)
 // that won't go down, is killed for him after longer, and if even that doesn't work he leaves it alone.
 static bool Fighting(PLAYER_STATUS *status, DWORD now)
 {
+	// lanes=watch (probe v3, HudsonPlay_HoldFire): he holds his fire, so nothing is a fight and he walks on; the aliens are what is watched
+	if (holdingFire)
+	{
+		return false;
+	}
+
 	static const STRATEGYBLOCK *lastThreat = 0;
 	static const STRATEGYBLOCK *leftAlone = 0;
 	static DWORD fightingItSince = 0;
@@ -3228,6 +3235,16 @@ void HudsonPlay_KeepHimAliveWhileHeWaits(void *playerStatus)
 	{
 		KeepHimAlive(status, GetTickCount());
 	}
+}
+
+void HudsonPlay_HoldFire(bool hold)
+{
+	holdingFire = hold;
+}
+
+bool HudsonPlay_FinishedTheList()
+{
+	return phase == kFinishedTheList;
 }
 
 void HudsonPlay_SetStepSeconds(int seconds)

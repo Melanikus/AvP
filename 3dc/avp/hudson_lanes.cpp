@@ -24,6 +24,9 @@
 #include "bh_ais.h"
 #include "pfarlocs.h"
 #include "alien_ways.h"
+#include "stock_flags.h"     // the MODE line: every AvPx flag that touches aliens (Vasquez 11-20)
+#include "hudson_play.h"     // lanes=watch with play=yes: his list done (probe v3)
+#include "shoulder_lamp.h"   // the LAMP line
 
 #include <math.h>
 #include <stdlib.h>
@@ -115,6 +118,14 @@ namespace
 	bool watching = false;                           // lanes=watch
 	long long const kWatchMost = 180LL * 65536;      // lanes=watch ends after 3 minutes of game time (Bishop: "for a few minutes"), or at frames=
 	bool watchStarted = false;
+	// lanes=watch with play=yes (probe v3, Bishop 11-20, the owner: "get hudson to walk it"): he plays from the level's start; the watch ends when his list is done,
+	// when he makes no headway (kPlayHeadway) for kPlayNoHeadway, or at kPlayMost
+	bool hePlays = false;
+	int const kPlayHeadway = 1000;                   // mm
+	long long const kPlayNoHeadway = 15LL * 65536;
+	long long const kPlayMost = 600LL * 65536;
+	VECTORCH headwayFrom = { 0, 0, 0 };              // where he was when he last made headway
+	long long headwayAt = 0;
 	long thisFrame = 0;                              // the frame the alien code is in: the frame the next EndOfFrame is called with
 	int lastSearchBy = 0;                            // who searched last: an alien's number, -1 another NPC, 0 nobody yet (a number, never a pointer: the NPC can be gone)
 
@@ -884,10 +895,10 @@ namespace
 				return false;
 			}
 
-			// he has had his second to land: in the room he was put in, or the run ends here
+			// he has had his second to land: in the room he was put in, or the run ends here (when he plays, wherever the level's start put him)
 			VECTORCH const landed = me->DynPtr->Position;
 
-			if (me->containingModule != placedIn)
+			if (!hePlays && me->containingModule != placedIn)
 			{
 				Write("PLAYER NOT KEPT at standat=: at " + PlaceWords(landed) + " in " + ModuleWords(me->containingModule) + ", not " + ModuleWords(placedIn));
 				*howItEnded = "the player didn't stay where standat= put him";
@@ -897,8 +908,11 @@ namespace
 			}
 
 			Write("PLAYER LANDED at " + PlaceWords(landed) + " in " + ModuleWords(me->containingModule));
-			Event(frame, "WATCH STARTS: three minutes of game time from here");
+			Write(std::string("LAMP ") + (ShoulderLamp_IsOn() ? "on" : "off") + (ShoulderLamp_RealLightIsWanted() ? ", a real light" : ", painted"));
+			Event(frame, hePlays ? "WATCH STARTS: he plays his list from here" : "WATCH STARTS: three minutes of game time from here");
 			watchStarted = true;
+			headwayFrom = landed;
+			headwayAt = 0;
 		}
 
 		gameTime += NormalFrameTime;
@@ -907,6 +921,33 @@ namespace
 		if (file)
 		{
 			fflush(file);
+		}
+
+		// he plays: the watch ends when his list is done, or when he has made no headway for a while (probe v3)
+		if (hePlays)
+		{
+			VECTORCH const here = me->DynPtr->Position;
+			double const dx = (double)here.vx - headwayFrom.vx, dy = (double)here.vy - headwayFrom.vy, dz = (double)here.vz - headwayFrom.vz;
+
+			if (dx * dx + dy * dy + dz * dz >= (double)kPlayHeadway * kPlayHeadway)
+			{
+				headwayFrom = here;
+				headwayAt = gameTime;
+			}
+
+			char const *const end = HudsonPlay_FinishedTheList() ? "route done: he has been down his whole list" : gameTime - headwayAt >= kPlayNoHeadway ?
+				"no headway (1 m) for 15 s" : gameTime >= kPlayMost ? "10 minutes of game time" : frame >= mostFrames ? "frames= ran out" : nullptr;
+
+			if (end)
+			{
+				Write("PLAYER ENDS at " + PlaceWords(here) + " in " + ModuleWords(me->containingModule));
+				*howItEnded = end;
+				*exitCode = HudsonPlay_FinishedTheList() ? kHudsonExitFinished : kHudsonExitMarineStuck;
+				Finish(*howItEnded);
+				return true;
+			}
+
+			return false;
 		}
 
 		if (gameTime >= kWatchMost || frame >= mostFrames)
@@ -938,6 +979,11 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 	mostFrames = framesMost;
 	alienOnCeiling = onCeiling;
 	watching = watch;
+}
+
+void HudsonLanes_HePlays()
+{
+	hePlays = true;
 }
 
 bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
@@ -1215,7 +1261,28 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 		file = fopen(path.c_str(), "w");
 
-		MODULE *const room = ModuleFromPosition(&standAt, (MODULE *)0);
+		// THE MODE FIRST (probe v3, Bishop 11-20: "the run's first log line states the mode, and a run that isn't in stock mode stops itself"): every flag of
+		// stock_flags.h as the game has it now, and the level's own alien-ways switch (alien_ways.cpp, set at the level's start)
+		std::string const flags = StockFlags_Words();
+		bool const stock = flags.size() >= 7 && flags.compare(flags.size() - 7, 7, "(stock)") == 0 && !AlienWaysSwitchedOn;
+
+		Write("MODE " + StockFlags_Words() + "; the level's alien ways " + (AlienWaysSwitchedOn ? "on" : "off") + (stock ? "; STOCK" : "; NOT STOCK: the run stops itself"));
+
+		if (!stock)
+		{
+			*howItEnded = "not stock: a lane probe runs only with every AvPx change that touches aliens off";
+			*exitCode = kHudsonExitBadArguments;
+			Finish(*howItEnded);
+			return true;
+		}
+
+		// he plays (probe v3): from wherever the level's own start put him, so he is neither put anywhere nor kept there
+		if (hePlays)
+		{
+			standAt = me->DynPtr->Position;
+		}
+
+		MODULE *const room = hePlays ? me->containingModule : ModuleFromPosition(&standAt, (MODULE *)0);
 
 		if (!room)
 		{
@@ -1227,15 +1294,20 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 		// moved as a fight run moves him (hudson.cpp's MoveThePlayerTo: his world place, his rooms and the view's place as well); the place alone left him to be
 		// put back at the level's start (the first run, 11-19 20:39: pmod=start#156 on every frame)
-		VECTORCH place = standAt;
+		if (!hePlays)
+		{
+			VECTORCH place = standAt;
 
-		place.vy -= kPlayerStartsAboveTheFloor;   // up is smaller
-		Hudson_MoveThePlayerTo(place);
+			place.vy -= kPlayerStartsAboveTheFloor;   // up is smaller
+			Hudson_MoveThePlayerTo(place);
+		}
+
 		placedIn = room;
 
-		Write(watching ? "LANE PROBE, lanes=watch (hudson_lanes.cpp, Frost 2026-11-20): the level as he plays it, its own NPCs, generators and hive live, no alien made; the player put at standat=, standing still and unable to die; every near alien a line a frame (A lines), a far one a line when its AI module changes (F lines), for three minutes of game time"
+		Write(hePlays ? "LANE PROBE v3, lanes=watch play=yes (hudson_lanes.cpp, Frost 2026-11-20): Hudson plays the level from its own start, on foot, by his grid's ways to each place of his list (hudson_play.cpp, the HudsonChains folder's <level>.play), holding his fire and unable to die; the level live, its own NPCs, generators and hive; every near alien a line a frame (A lines), a far one a line when its AI module changes (F lines); the watch ends when his list is done, or when he makes no headway (1 m) for 15 s"
+			: watching ? "LANE PROBE, lanes=watch (hudson_lanes.cpp, Frost 2026-11-20): the level as he plays it, its own NPCs, generators and hive live, no alien made; the player put at standat=, standing still and unable to die; every near alien a line a frame (A lines), a far one a line when its AI module changes (F lines), for three minutes of game time"
 			: "LANE PROBE (hudson_lanes.cpp, Frost 2026-11-19): one standard alien made at alienat=, the player put at standat=, standing still and unable to die; the level's own NPCs, generators and hive kept still");
-		Write("AS 1999: FLOORISLAVA OFF (the alien ways off), NEWDYNAMICCOLLISIONS OFF; the alien's code unchanged. Still AvPx's, not 1999's: pfarlocs.cpp's fourth-corner height fix (#161, where a far alien lands), pheromone.cpp's door test (scent through a door that isn't its AI module's first module), near_wake.cpp (placed sleeping aliens, not this one)");
+		Write("AS 1999: stock=yes, every AvPx change that touches aliens off before the level (stock_flags.h, the MODE line: FLOORISLAVA, NEWDYNAMICCOLLISIONS, pfarlocs.cpp's fourth-corner height #161, pheromone.cpp's door test, near_wake.cpp); the alien's code unchanged");
 		Write("ROWS: AvP-docs\\engine\\inteng\\reassess\\alien-drop-audit.md. FIELDS: f frame, t game seconds since the alien was made, near (its module drawn), mod its module, ai its AI module, wps boxes in its AI module, state, dist to the player, pos, ceil its height below its module's top, on its surface (by its down), std UseStandardGravity, down its GravityDirection, nocontact TimeNotInContactWithFloor (16384 while it touches something, counting down without; at 0 its down becomes straight down), crouch IAmCrouched, enc AlienIsEncouragedToCrawl, in the boxes whose contains_npc the last sweep set, corners of its 8 in the route's start box, tgt the boxes holding its target, route start>second..last, link the first link (owner box.slot->target flags), pmod the player's module");
 		Write("ALIEN LINES (Frost 2026-11-20, Bishop's order, Vasquez's fields), A a<n>: a line a frame for each alien whose near state ran, from its own code at the moment it read it. f frame, t game seconds; ran the state that ran, now its state after; mod its module, ai its AI module, wps boxes there; pmod 1 when its MODULE is the player's (the rip-off's test), pai its AI module; pos; on its surface by its down's y (floor over 46000, wall within 20000, ceiling under -46000, slope between); down GravityDirection; mat OrientMat mat21-23 (tilted under 63000); std UseStandardGravity; nocontact TimeNotInContactWithFloor; floor IsInContactWithFloor; contacts the collision reports/of them with an NPC; crouch IAmCrouched; crawl the AlienShouldBeCrawling test that answers, asked before its search; able AlienIsAbleToClimb; tgt its Target and the distance (<8m under 8 m); ep Wander's or Hunt's entry point and the distance; go the point its waypoint search headed for and the distance; search the dropout (none, no-modules, no-box, no-route, start=end), npcboxes NPC_Waypoints, tgtboxes Num_Target_Waypoints; in the boxes holding it, tgtin those holding the point; route start>second..last and len; heads the box its manager heads for (second or start), point its current_target_point; link its own first link (owner box.slot->target flags); lb Global_Route.first_link before its state ran and by who left it (a<n>, npc, -); enc encouraged after its search, encb before; heading the search's direction, hup its dot with up; vel LinVelocity after its state, vup; rdot its down against the heading (the rip-off fires under -60000); why the reading of its gravity (WHY lines). F a<n>: a far alien, when its AI module changes. EVENT lines a<n>: CLIMBS, ON THE CEILING, DOWN");
 
@@ -1244,7 +1316,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			Write(std::string("WHY ") + kWhy[why].code + " (gravity " + (kWhy[why].gravity == 1 ? "on" : kWhy[why].gravity == 0 ? "off" : "as it was") + "): " + kWhy[why].words);
 		}
 
-		Write("PLAYER at " + std::to_string(standAt.vx) + " " + std::to_string(standAt.vy) + " " + std::to_string(standAt.vz) + " in " + ModuleWords(room) + (watching ? std::string("; no alien made") : "; the alien at " + std::to_string(alienAt.vx) +
+		Write(std::string(hePlays ? "PLAYER STARTS (the level's own start; he plays his list) at " : "PLAYER at ") + std::to_string(standAt.vx) + " " + std::to_string(standAt.vy) + " " + std::to_string(standAt.vz) + " in " + ModuleWords(room) + (watching ? std::string("; no alien made") : "; the alien at " + std::to_string(alienAt.vx) +
 			" " + std::to_string(alienAt.vy) + " " + std::to_string(alienAt.vz)));
 		return false;
 	}
