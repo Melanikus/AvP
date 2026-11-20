@@ -2780,7 +2780,15 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=1,2,3 supplyevery=0", kHudsonRefusedSupplyOutOfRange);
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supply=4 supplyat=1,2,3", kHudsonRefusedAskedTwice);
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;"), "with a supply the level's own are kept still, the supply's aliens move");
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);"), "the probe is told the supply");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);"), "the probe is told the supply");
+	// supplyat=around (Bishop 11-20, the owner's second stretch: "while you guys spawn aliens around him"): made around Hudson as he moves, in a room he can't see 15 to
+	// 25 m from him, one every supplyevery= seconds while fewer than supply= are alive
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=3 supplyat=around supplyevery=8", &plan) == 0 && plan.supply == 3 && plan.supplyAround &&
+		plan.supplyEvery == 8, "aliens around him: up to 3 alive, one every 8 s");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=3 supplyat=1,2,3", &plan) == 0 && !plan.supplyAround, "a place is a place");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=3 supplyat=Around", kHudsonRefusedPlaceNotThreeNumbers);
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ModuleCurrVisArray"), "a room he can't see: the game's own list of the rooms in his view");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonNav_MiddleOfRoom("), "the middle of a room, where a marine can stand (the game's own test)");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
 	// every hit on Hudson and every refill, a line each (the owner 11-20: "more ceiling crawling aliens him faster"; "hudson's getting more and more hurt")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
