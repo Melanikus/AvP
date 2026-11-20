@@ -477,7 +477,7 @@ if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
 if ($Flares) { $arguments += " flares=yes" }
-if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$SupplyAt" }
+if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')" }
 if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 # The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied

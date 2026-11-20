@@ -2782,7 +2782,8 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;"), "with a supply the level's own are kept still, the supply's aliens move");
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);"), "the probe is told the supply");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
-	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply supplyat=$SupplyAt\" }"), "the run script can ask for it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')\" }"),
+		"the run script can ask for it, a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 
 	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const kPlayMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time");
