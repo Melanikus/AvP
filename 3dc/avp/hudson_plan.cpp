@@ -229,6 +229,9 @@ const char *const kHudsonRefusedGunWithAMarine = "gun= tries a gun in the player
 const char *const kHudsonRefusedFlareNotYes = "flare= can only be yes";
 const char *const kHudsonRefusedFlareSpoilsComparing = "a flare changes what's on the screen, so a run that compares it, with vision= or compare=, can't have flare=";
 const char *const kHudsonRefusedFlareWithoutHolds = "flare= throws one as each hold starts, so it needs a run that stands in rooms and looks round";
+// flares=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "throwing flares when aliens approach him")
+const char *const kHudsonRefusedFlaresNotYes = "flares= can only be yes";
+const char *const kHudsonRefusedFlaresWithoutPlay = "flares= has him throw flares at aliens as he plays, so it needs play=yes";
 const char *const kHudsonRefusedBreakUnknown = "break= isn't prisms or video";
 const char *const kHudsonRefusedBreakWithoutVision = "break= is for seeing that vision= notices, so it needs vision=";
 const char *const kHudsonRefusedVisionUnknown = "vision= isn't check";
@@ -2559,6 +2562,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->flareEachHold = true;
 		}
+		else if (WordIs(place, nameLength, "flares"))
+		{
+			// flares=yes: as he plays, a flare at an alien he sees coming within 8 m (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner: "throwing flares
+			// when aliens approach him")
+			if (plan->playFlares)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedFlaresNotYes;
+			}
+
+			plan->playFlares = true;
+		}
 		else if (WordIs(place, nameLength, "break"))
 		{
 			if (seenBreak)
@@ -3338,6 +3357,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))
 	{
 		return kHudsonRefusedFlareWithoutHolds;
+	}
+
+	if (plan->playFlares && !plan->play)
+	{
+		return kHudsonRefusedFlaresWithoutPlay;
 	}
 
 	if (plan->breakPrisms && !plan->vision)

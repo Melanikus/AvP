@@ -345,6 +345,24 @@ inline bool HudsonPlay_CantHurtIt(unsigned long fightingFor, int healthAtStart, 
 	return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;
 }
 
+// FLARES (flares=yes; added 2026-11-20 by Melanikus (Frost), the owner, watching the lane probe: "throwing flares when aliens approach him"): one at an alien he can
+// see within kHudsonPlayFlareWithin, once he faces it within kHudsonPlayFlareFacing (the game throws a flare along his view), and none again for kHudsonPlayFlareEvery.
+// The game keeps 4 flares in the world at most (pmove.cpp's ThrowAFlare).
+static const int kHudsonPlayFlareWithin = 8000;              // mm
+static const int kHudsonPlayFlareFacing = 256;               // of a whole turn's 4096: 22.5 degrees either way
+static const unsigned long kHudsonPlayFlareEvery = 6000;     // ms
+
+inline bool HudsonPlay_FlareIsDue(int distance, bool seen, unsigned long sinceTheLast, bool thrownBefore)
+{
+	return seen && distance < kHudsonPlayFlareWithin && (!thrownBefore || sinceTheLast >= kHudsonPlayFlareEvery);
+}
+
+// angleToTurn as HudsonPlay_AngleToTurn gives it: how far he still has to turn to face it
+inline bool HudsonPlay_FacesItToThrow(int angleToTurn)
+{
+	return angleToTurn <= kHudsonPlayFlareFacing && angleToTurn >= -kHudsonPlayFlareFacing;
+}
+
 // Has he reached a point on his way? Across, he has to be close. Up and down it's more generous, because where the game says he is and where the grid says
 // the floor is differ by about his height. But a point on the floor above isn't one he's reached, however close it is across.
 inline bool HudsonPlay_ReachedPoint(int acrossX, int acrossZ, int upOrDown, int closeAcross, int closeUpOrDown)

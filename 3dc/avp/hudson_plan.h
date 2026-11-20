@@ -319,6 +319,7 @@ struct HudsonPlan
 	int playGunSlot;      // playgun=: with play=yes, the slot of the gun he's given and holds, from 1 to 14. 0 leaves him what the level gives him
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
+	bool playFlares;      // flares=yes: with play=yes, he throws a flare at an alien he sees coming within 8 m (hudson_play.h; the owner 11-20)
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
 	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
@@ -599,6 +600,8 @@ extern const char *const kHudsonRefusedGunWithAMarine;
 extern const char *const kHudsonRefusedFlareNotYes;
 extern const char *const kHudsonRefusedFlareSpoilsComparing;
 extern const char *const kHudsonRefusedFlareWithoutHolds;
+extern const char *const kHudsonRefusedFlaresNotYes;
+extern const char *const kHudsonRefusedFlaresWithoutPlay;
 extern const char *const kHudsonRefusedLampUnknown;
 extern const char *const kHudsonRefusedLampSpoilsComparing;
 extern const char *const kHudsonRefusedLampKindUnknown;

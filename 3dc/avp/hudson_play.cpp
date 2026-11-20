@@ -37,6 +37,7 @@
 #include "hudson_play.h"
 #include "hudson_play_steps.h"
 #include "hudson_play_ribbon.h"
+#include "pmove.h"   // ThrowAFlare: the player's own flare action, as the key (flares=yes)
 
 #include <stdio.h>
 #include <map>
@@ -239,6 +240,8 @@ static bool saidHesOnALift = false;
 static bool heWasJustMoved = false;   // the first Hudson was moved by a cheat, and the second hasn't done anything about it yet
 static int gunToHold = 0;             // playgun=: the slot of the gun he's given, or 0
 static bool holdingFire = false;      // HudsonPlay_HoldFire: under the lane probe's watch he never fights (probe v3, Frost 2026-11-20)
+static bool throwingFlares = false;   // HudsonPlay_ThrowFlares: flares=yes (Frost 2026-11-20)
+static int flaresAtAliens = 0;        // the flares that went, at aliens
 static bool gunGiven = false;
 static bool gunInHand = false;
 static int gunSlotSaid = -2;
@@ -2995,6 +2998,85 @@ void HudsonPlay_StartFollowing(const char *levelName)
 	HudsonNav_StartTheGrid();
 }
 
+// FLARES (flares=yes; added 2026-11-20 by Melanikus (Frost), the owner: "hudson to walk with lamp on, throwing flares when aliens approach him"). An alien he can see
+// within kHudsonPlayFlareWithin, and no flare for a while (HudsonPlay_FlareIsDue): he turns his view to it, his feet still on his way (forward and sidestep go wherever
+// he faces), and once he faces it (HudsonPlay_FacesItToThrow) he throws one with the player's own flare action, pmove.cpp's ThrowAFlare, which the key calls. The game
+// keeps 4 flares in the world at most, so a throw may make none: it's counted only when one went. Hudson's code only: nothing of the game or of an alien changes.
+static void FlareAtAnAlien(PLAYER_STATUS *status, DWORD now)
+{
+	static DWORD lastFlareAt = 0;
+	static bool thrownBefore = false;
+
+	if (!throwingFlares || AvP.PlayerType != I_Marine || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	VECTORCH const here = dyn->Position;
+	STRATEGYBLOCK *nearest = 0;
+	int nearestDistance = kHudsonPlayFlareWithin;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(here, block->DynPtr->Position);
+
+		if (distance >= nearestDistance)
+		{
+			continue;
+		}
+
+		// seen from its chest, as a fight sees it
+		VECTORCH chest;
+
+		GetTargetingPointOfObject_Far(block, &chest);
+
+		if (IsThisObjectVisibleFromThisPosition_WithIgnore(Player, block->SBdptr, &chest, kHudsonPlayFlareWithin))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (!nearest || !HudsonPlay_FlareIsDue(nearestDistance, true, now - lastFlareAt, thrownBefore))
+	{
+		return;
+	}
+
+	int const toX = nearest->DynPtr->Position.vx - here.vx, toZ = nearest->DynPtr->Position.vz - here.vz;
+	int const angle = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+
+	// his view to it, and nothing else of this frame's turning
+	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
+	status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
+	TurnTowards(status, dyn, toX, toZ);
+
+	if (!HudsonPlay_FacesItToThrow(angle))
+	{
+		return;
+	}
+
+	extern int NumberOfFlaresActive;
+	int const before = NumberOfFlaresActive;
+
+	ThrowAFlare();
+	lastFlareAt = now;
+	thrownBefore = true;
+
+	bool const went = NumberOfFlaresActive > before;
+
+	flaresAtAliens += went ? 1 : 0;
+	LogString(std::string("play: flare ") + (went ? std::to_string(flaresAtAliens) + " thrown" : "not thrown (the game's 4 are out)") + " at " + HudsonStrategies_Title(nearest) + ", " +
+		std::to_string(nearestDistance) + " mm from him, t=" + std::to_string((unsigned long)timeGetTime()) + ", " + RoomOf(Player->ObStrategyBlock));
+}
+
 void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 {
 	PLAYER_STATUS *const status = (PLAYER_STATUS *)playerStatus;
@@ -3160,6 +3242,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 		default:
 			break;
 	}
+
+	// last, so that turning to an alien for a flare is what this frame does with his view; his feet still go along his way
+	FlareAtAnAlien(status, now);
 }
 
 int HudsonPlay_EndOfFrame(const char **howItEnded)
@@ -3276,6 +3361,11 @@ void HudsonPlay_KeepHimAliveWhileHeWaits(void *playerStatus)
 void HudsonPlay_HoldFire(bool hold)
 {
 	holdingFire = hold;
+}
+
+void HudsonPlay_ThrowFlares(bool throwThem)
+{
+	throwingFlares = throwThem;
 }
 
 bool HudsonPlay_FinishedTheList()

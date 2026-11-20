@@ -6916,6 +6916,9 @@ void Hudson_PlayInput(void *playerStatus)
 			HudsonPlay_SetStepSeconds(plan.playStepSeconds);
 		}
 
+		// flares=yes: a flare at an alien he sees coming (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_ThrowFlares(plan.playFlares);
+
 		if (plan.netMode == kHudsonNetJoin)
 		{
 			HudsonPlay_StartFollowing(LevelName);

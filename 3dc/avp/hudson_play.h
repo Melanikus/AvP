@@ -43,6 +43,10 @@ void HudsonPlay_SetStepSeconds(int seconds);
 // lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he holds his fire, so nothing he sees is a fight and he walks on; asked for before he starts
 void HudsonPlay_HoldFire(bool hold);
 
+// flares=yes (added 2026-11-20 by Melanikus (Frost), the owner: "throwing flares when aliens approach him"): as he plays, a flare at an alien he sees coming within 8 m,
+// with the player's own flare action (hudson_play_steps.h says when); asked for before he starts
+void HudsonPlay_ThrowFlares(bool throwThem);
+
 // True once he's been down his whole list (the lane probe's watch ends there: "route done")
 bool HudsonPlay_FinishedTheList();
 
