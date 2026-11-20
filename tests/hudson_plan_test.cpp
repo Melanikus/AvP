@@ -2733,10 +2733,28 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienon=floor standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 rooms=1", kHudsonRefusedLanesNotAlone);
-	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 play=yes", kHudsonRefusedLanesPlayNoStand);
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch lanes=yes standat=4,5,6", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=genshd1 frames=9000 lanes=Watch standat=4,5,6", kHudsonRefusedLanesNotYes);
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LanesWatch) { $arguments += \" lanes=watch\" }"), "the run script can ask for it");
+
+	// lanes=watch with play=yes (probe v3, the owner 11-20: "get hudson to walk it", "with shoulder lamp on so we can see stuff"): Hudson plays the level from its own start,
+	// on foot, by his grid's ways to each place of his list (hudson_play.cpp), holding his fire, the level live and him unable to die; every lane probe is stock (stock=yes,
+	// stock_flags.h); the watch ends when his list is done or he makes no headway for 15 s. Added 2026-11-20 by Melanikus (Frost) for the AvP port.
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes lamp=on lampkind=real", &plan) == 0 && plan.lanes && plan.lanesWatch && plan.play,
+		"a lane probe can watch Hudson play the level");
+	Check(plan.lampOn && plan.lampReal && !plan.standAtSaid, "the shoulder lamp on, a real light; from the level's own start");
+	Check(plan.stock && plan.floorIsLavaOff, "stock: every flag of stock_flags.h off");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && plan.stock, "every lane probe is stock");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6", &plan) == 0 && plan.stock, "lanes=watch standing still is stock too");
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes gun=3", kHudsonRefusedLanesNotAlone);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_HoldFire(plan.lanesWatch);"), "under lanes=watch he holds his fire: the aliens are what is watched");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (holdingFire)"), "holding his fire, nothing is a fight");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_HePlays();"), "the probe is told he plays");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_FinishedTheList()"), "the watch ends when his list is done");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words()"), "its first line reads every flag back");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ShoulderLamp_IsOn()"), "and the lamp");
 
 	// what each alien read, told to the probe by the alien's own code at the moment it read it (one alien's route is gone by the frame's end when several search)
 	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienBefore(sbPtr);") && Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienAfter(sbPtr);"), "the near alien tells the probe before and after its state runs");
