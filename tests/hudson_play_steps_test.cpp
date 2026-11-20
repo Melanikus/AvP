@@ -81,6 +81,14 @@ static void TestAGoodList()
 	Check(places.size() == 1 && places[0].kind == kHudsonPlayGoTo && places[0].x == 52902 && places[0].y == 595 && places[0].z == 15587 && places[0].name == "gold 1 of 10: gencor05",
 		"goto, a place with a name for the log");
 
+	// FLARES (flares=yes, the lane probe; the owner 11-20: "throwing flares when aliens approach him"): one at an alien he can see within 8 m, once he faces it, and not
+	// again for a while
+	Check(HudsonPlay_FlareIsDue(7999, true, 0, false), "an alien he sees 8 m away or nearer: a flare, the first");
+	Check(!HudsonPlay_FlareIsDue(8000, true, 0, false) && !HudsonPlay_FlareIsDue(3000, false, 0, false), "not one further off, nor one he can't see");
+	Check(!HudsonPlay_FlareIsDue(3000, true, kHudsonPlayFlareEvery - 1, true) && HudsonPlay_FlareIsDue(3000, true, kHudsonPlayFlareEvery, true), "and not again until the wait is over");
+	Check(HudsonPlay_FacesItToThrow(kHudsonPlayFlareFacing) && HudsonPlay_FacesItToThrow(-kHudsonPlayFlareFacing) && !HudsonPlay_FacesItToThrow(kHudsonPlayFlareFacing + 1),
+		"thrown once he faces it, either side");
+
 	std::vector<HudsonPlayStep> reused;
 	std::string whyNot;
 

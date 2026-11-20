@@ -2755,6 +2755,17 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_FinishedTheList()"), "the watch ends when his list is done");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words()"), "its first line reads every flag back");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ShoulderLamp_IsOn()"), "and the lamp");
+	// flares=yes (the owner 11-20: "hudson to walk with lamp on, throwing flares when aliens approach him"): Hudson's own switch, playing only
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes flares=yes", &plan) == 0 && plan.playFlares, "he can throw flares at aliens as he plays");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.playFlares, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 flares=yes", kHudsonRefusedFlaresWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes flares=no", kHudsonRefusedFlaresNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes flares=yes flares=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ThrowFlares(plan.playFlares);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonPlay_FlareIsDue(") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "ThrowAFlare();"),
+		"the player's own flare action, when one is due");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Flares) { $arguments += \" flares=yes\" }"), "the run script can ask for it");
+
 	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const kPlayMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time");
 	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
