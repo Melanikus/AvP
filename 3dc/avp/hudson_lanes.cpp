@@ -135,6 +135,10 @@ namespace
 	long long supplyEvery = 10LL * 65536;
 	int supplyMade = 0;
 	std::vector<std::string> supplyNames;            // their strategy names (SB_NAME_LENGTH bytes each)
+	// HITS ON HUDSON (Bishop 11-20, the owner: "more ceiling crawling aliens him faster", "hudson's getting more and more hurt"): his health and armour last frame
+	bool healthSeen = false;
+	int lastHealth = 0, lastArmour = 0;
+	int const kHitBy = 3000;                         // mm: the alien nearest him within this is named as the one that hit him
 	long thisFrame = 0;                              // the frame the alien code is in: the frame the next EndOfFrame is called with
 	int lastSearchBy = 0;                            // who searched last: an alien's number, -1 another NPC, 0 nobody yet (a number, never a pointer: the NPC can be gone)
 
@@ -930,6 +934,58 @@ namespace
 		if (file)
 		{
 			fflush(file);
+		}
+
+		// HITS AND REFILLS: each frame his health or armour went down is a HIT, with the alien nearest him within kHitBy (its number, state and distance) as the one that
+		// hit him; each time his health went up again (play fills it when it runs out) a REFILL. Health and armour as the game keeps them, a whole one = 65536
+		{
+			int const health = me->SBDamageBlock.Health, armour = me->SBDamageBlock.Armour;
+
+			if (healthSeen && (health < lastHealth || armour < lastArmour))
+			{
+				STRATEGYBLOCK *nearest = nullptr;
+				double nearestD = kHitBy;
+
+				for (int i = 0; i < NumActiveStBlocks; i++)
+				{
+					STRATEGYBLOCK *const b = ActiveStBlockList[i];
+
+					if (b && b->I_SBtype == I_BehaviourAlien && b->DynPtr && b->SBdataptr)
+					{
+						double const dx = (double)b->DynPtr->Position.vx - me->DynPtr->Position.vx, dy = (double)b->DynPtr->Position.vy - me->DynPtr->Position.vy,
+							dz = (double)b->DynPtr->Position.vz - me->DynPtr->Position.vz;
+						double const d = sqrt(dx * dx + dy * dy + dz * dz);
+
+						if (d < nearestD)
+						{
+							nearest = b;
+							nearestD = d;
+						}
+					}
+				}
+
+				Watched const *const w = nearest ? Record(nearest, true) : nullptr;
+				char words[200];
+
+				_snprintf(words, sizeof(words) - 1, "health %.1f -> %.1f, armour %.1f -> %.1f", lastHealth / 65536.0, health / 65536.0, lastArmour / 65536.0, armour / 65536.0);
+				words[sizeof(words) - 1] = 0;
+				Write("HIT f=" + std::to_string(frame) + " " + words + " at " + PlaceWords(me->DynPtr->Position) + " in " + ModuleWords(me->containingModule) + ", by " +
+					(w ? "a" + std::to_string(w->number) + " (" + StateName(((ALIEN_STATUS_BLOCK *)nearest->SBdataptr)->BehaviourState) + ", " + std::to_string((int)nearestD) + " mm)" :
+					std::string("no alien within 3 m")));
+			}
+
+			if (healthSeen && health > lastHealth)
+			{
+				char words[120];
+
+				_snprintf(words, sizeof(words) - 1, "health %.1f -> %.1f", lastHealth / 65536.0, health / 65536.0);
+				words[sizeof(words) - 1] = 0;
+				Write("REFILL f=" + std::to_string(frame) + " " + words);
+			}
+
+			lastHealth = health;
+			lastArmour = armour;
+			healthSeen = true;
 		}
 
 		// the supply: the next alien when its time has come (the first at the watch's start)
