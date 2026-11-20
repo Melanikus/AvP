@@ -69,6 +69,9 @@
     <ClCompile Include="..\..\3dc\d3d_render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\debug_view.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\FastFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

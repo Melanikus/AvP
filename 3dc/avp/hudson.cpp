@@ -183,6 +183,9 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
 #include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
 #include "stock_flags.h"     // stock=yes, and every flag's state in the log (added 2026-11-20, Vasquez)
+#include "debug_view.h"      // normals=yes, wireframe=yes: the debug views, render only (added 2026-11-20, Drake)
+
+extern int WireFrameMode;      // d3d_render.cpp: Rebellion's own WIREFRAMEMODE (1 the environment, 2 the objects, 3 both)
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -932,7 +935,16 @@ int Hudson_CheckBeforeStarting()
 		StockFlags_AllStock();
 	}
 
-	LogString(std::string("hudson: ") + StockFlags_Words());
+	// normals=, wireframe=: the debug views, before any level. They change how a pixel looks, never what the game decides (debug_view.h), and the log line
+	// below reads them back beside the stock flags. wireframe=yes is Rebellion's own WIREFRAMEMODE 3, the console's cheat
+	DebugView_Set(plan.viewNormals, plan.viewWireframe);
+
+	if (plan.viewWireframe)
+	{
+		WireFrameMode = 3;
+	}
+
+	LogString(std::string("hudson: ") + StockFlags_Words() + "; " + DebugView_Words());
 
 	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone
 	// (relay_list.h). Here, before the menus, so the list can't have started yet. Added 2026-11-10 by Melanikus (Third) for the AvP port.

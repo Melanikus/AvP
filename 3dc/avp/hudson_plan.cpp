@@ -2585,6 +2585,25 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
+		else if (WordIs(place, nameLength, "normals") || WordIs(place, nameLength, "wireframe"))
+		{
+			// normals=yes, wireframe=yes: the debug views, render only (3dc/debug_view.h; added 2026-11-20 by Melanikus (Drake), the owner: "see the aliens in the
+			// dark", "Showing normals would be enough/look cool")
+			bool const normals = WordIs(place, nameLength, "normals");
+			bool &asked = normals ? plan->viewNormals : plan->viewWireframe;
+
+			if (asked)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return normals ? kHudsonRefusedNormalsNotYes : kHudsonRefusedWireframeNotYes;
+			}
+
+			asked = true;
+		}
 		else if (WordIs(place, nameLength, "supply") || WordIs(place, nameLength, "supplyevery"))
 		{
 			// supply=N, supplyevery=S: the lane probe's own aliens, N of them, one every S seconds (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost))

@@ -186,6 +186,8 @@ param(
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
     [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
     [switch]$Flares,       # with -Play, he throws a flare at an alien he sees coming within 8 m (flares=yes; Frost 2026-11-20)
+    [switch]$Normals,      # the normals view: each polygon coloured by its facing, at full brightness, so the aliens show in the dark (normals=yes; render only; Drake 2026-11-20)
+    [switch]$Wireframe,    # everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (wireframe=yes; render only; Drake 2026-11-20)
     [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
     [string]$SupplyAt = '',
     [int]$SupplyEvery = 0,
@@ -477,6 +479,8 @@ if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
 if ($Flares) { $arguments += " flares=yes" }
+if ($Normals) { $arguments += " normals=yes" }
+if ($Wireframe) { $arguments += " wireframe=yes" }
 if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')" }
 if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }

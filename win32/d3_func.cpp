@@ -2914,6 +2914,8 @@ bool InitialiseDirect3D()
 	d3d.effectSystem = new EffectManager;
 
 	d3d.mainEffect  = d3d.effectSystem->Add("main", "vertex.vsh", "pixel.psh", d3d.mainDecl);
+	// the normals view's pair (3dc/debug_view.h, Drake 11-20): the main list's declaration; a folder without them only goes without the view
+	d3d.debugNormalsEffect = d3d.effectSystem->Add("debugNormals", "debugNormals.vsh", "debugNormals.psh", d3d.mainDecl);
 	d3d.orthoEffect = d3d.effectSystem->Add("ortho", "orthoVertex.vsh", "orthoPixel.psh", d3d.orthoDecl);
 	d3d.shoulderLampEffect = d3d.effectSystem->Add("shoulderLamp", "orthoVertex.vsh", "shoulderLamp.psh", d3d.orthoDecl);
 	d3d.decalEffect = d3d.effectSystem->Add("decal", "decal.vsh", "decal.psh", d3d.decalDecl);

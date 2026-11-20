@@ -243,6 +243,7 @@ typedef struct D3DInfo
 
 	// shader IDs
 	effectID_t				mainEffect;
+	effectID_t				debugNormalsEffect;   // the normals view (3dc/debug_view.h), kNullEffectID when its shaders aren't there
 	effectID_t				shadowBlurEffect;
 	effectID_t				decalEffect;
 	effectID_t				orthoEffect;
