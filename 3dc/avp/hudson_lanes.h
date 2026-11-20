@@ -45,7 +45,9 @@ void HudsonLanes_HePlays();
 
 // supply= (added 2026-11-20 by Melanikus (Frost), Bishop: a fixed alien supply, so two plots compare fairly in one run each): with lanes=watch play=yes, the probe makes
 // count aliens at the place, one every everySeconds of game time from the watch's start, the console's own way; the level's own NPCs, generators and hive are kept still
-void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds);
+// around (supplyat=around, Bishop 11-20): made around him as he moves instead, one every everySeconds while fewer than count are alive, each at the middle of a room he
+// can't see 15 to 25 m from him
+void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around);
 
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);

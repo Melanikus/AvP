@@ -27,6 +27,7 @@
 #include "stock_flags.h"     // the MODE line: every AvPx flag that touches aliens (Vasquez 11-20)
 #include "debug_view.h"      // and the debug views, render only (Drake 11-20)
 #include "hudson_play.h"     // lanes=watch with play=yes: his list done (probe v3)
+#include "hudson_nav.h"      // supplyat=around: the middle of a room, where a marine can stand (HudsonNav_MiddleOfRoom)
 #include "shoulder_lamp.h"   // the LAMP line
 
 #include <math.h>
@@ -136,6 +137,14 @@ namespace
 	long long supplyEvery = 10LL * 65536;
 	int supplyMade = 0;
 	std::vector<std::string> supplyNames;            // their strategy names (SB_NAME_LENGTH bytes each)
+	// AROUND HIM (supplyat=around, Bishop 11-20, the owner's second stretch: "while you guys spawn aliens around him"): one at a time, every supplyEvery while fewer than
+	// supplyCount of them are alive, at the middle of a room he can't see (not in ModuleCurrVisArray, the game's own list of the rooms in his view) kAroundNear to
+	// kAroundFar from him: the one nearest kAroundMiddle, so the same walk makes the same aliens. A room's middle is HudsonNav_MiddleOfRoom's (FarLoc_IsAPlaceToStand)
+	bool supplyAround = false;
+	double const kAroundNear = 15000, kAroundFar = 25000, kAroundMiddle = 20000;   // mm
+	long long supplyNextAt = 0;
+	bool middlesMade = false;
+	std::vector<VECTORCH> roomMiddles;
 	// HITS ON HUDSON (Bishop 11-20, the owner: "more ceiling crawling aliens him faster", "hudson's getting more and more hurt"): his health and armour last frame
 	bool healthSeen = false;
 	int lastHealth = 0, lastArmour = 0;
@@ -989,8 +998,102 @@ namespace
 			healthSeen = true;
 		}
 
+		// AROUND HIM: while fewer than supplyCount of its aliens are alive, one every supplyEvery, at the middle of a room he can't see 15 to 25 m from him
+		if (supplyAround && supplyCount > 0 && gameTime >= supplyNextAt)
+		{
+			int alive = 0;
+
+			for (int i = 0; i < NumActiveStBlocks; i++)
+			{
+				STRATEGYBLOCK *const b = ActiveStBlockList[i];
+
+				if (b && b->I_SBtype == I_BehaviourAlien && HudsonLanes_IsTheAlien(b) && !NPC_IsDead(b))
+				{
+					alive++;
+				}
+			}
+
+			if (!middlesMade)
+			{
+				middlesMade = true;
+
+				for (int room = 0; room < AIModuleArraySize; room++)
+				{
+					VECTORCH place;
+					int away = 0;
+
+					if (HudsonNav_MiddleOfRoom(room, &place, &away))
+					{
+						roomMiddles.push_back(place);
+					}
+				}
+			}
+
+			if (alive < supplyCount)
+			{
+				VECTORCH const here = me->DynPtr->Position;
+				VECTORCH const *best = nullptr;
+				double bestOff = 1e300, bestD = 0;
+
+				for (VECTORCH const &p : roomMiddles)
+				{
+					double const dx = (double)p.vx - here.vx, dy = (double)p.vy - here.vy, dz = (double)p.vz - here.vz;
+					double const d = sqrt(dx * dx + dy * dy + dz * dz);
+
+					if (d < kAroundNear || d > kAroundFar || fabs(d - kAroundMiddle) >= bestOff)
+					{
+						continue;
+					}
+
+					VECTORCH at = p;
+					MODULE const *const room = ModuleFromPosition(&at, (MODULE *)0);
+
+					if (room && ModuleCurrVisArray && !ModuleCurrVisArray[room->m_index])
+					{
+						best = &p;
+						bestOff = fabs(d - kAroundMiddle);
+						bestD = d;
+					}
+				}
+
+				if (best)
+				{
+					VECTORCH spot = *best;
+
+					spot.vy -= kAlienStartsAboveTheFloor;
+					CreateAlienBot(&spot, 0);
+
+					STRATEGYBLOCK *const made = TheAlienMadeAt(spot);
+
+					supplyMade++;
+
+					if (made)
+					{
+						supplyNames.push_back(std::string(made->SBname, SB_NAME_LENGTH));
+					}
+
+					char howFar[40];   // not far: a Windows macro
+
+					_snprintf(howFar, sizeof(howFar) - 1, "%.1f m from him", bestD / 1000.0);
+					howFar[sizeof(howFar) - 1] = 0;
+					Event(frame, std::string("SUPPLY ") + std::to_string(supplyMade) + " of " + std::to_string(supplyCount) + (made ? " MADE at " : " NOT MADE (the game made none) at ") +
+						PlaceWords(spot) + " in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)) + " (around him: " + howFar + ", out of his view; " + std::to_string(alive + (made ? 1 : 0)) +
+						" alive)");
+					supplyNextAt = gameTime + supplyEvery;
+				}
+				else
+				{
+					supplyNextAt = gameTime + 65536;   // no room fits now: look again in a second
+				}
+			}
+			else
+			{
+				supplyNextAt = gameTime + 65536;
+			}
+		}
+
 		// the supply: the next alien when its time has come (the first at the watch's start)
-		while (supplyMade < supplyCount && gameTime >= supplyEvery * supplyMade)
+		while (!supplyAround && supplyMade < supplyCount && gameTime >= supplyEvery * supplyMade)
 		{
 			VECTORCH spot = supplyAt;
 
@@ -1073,9 +1176,10 @@ void HudsonLanes_HePlays()
 	hePlays = true;
 }
 
-void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds)
+void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around)
 {
 	supplyCount = count > 0 ? count : 0;
+	supplyAround = around;
 	supplyAt.vx = atX;
 	supplyAt.vy = atY;
 	supplyAt.vz = atZ;
@@ -1382,7 +1486,13 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		}
 
 		// THE SUPPLY's line, second: how many aliens, where, how often, and that the level's own are kept still; a place in no room stops the run
-		if (supplyCount > 0)
+		if (supplyCount > 0 && supplyAround)
+		{
+			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe around him, one every " + std::to_string((int)(supplyEvery / 65536)) +
+				" s of game time while fewer are alive, each at the middle of a room he can't see 15 to 25 m from him (the one nearest 20 m: HudsonNav_MiddleOfRoom, ModuleCurrVisArray;" +
+				" CreateAlienBot, the console's own); the level's own NPCs, generators and hive kept still");
+		}
+		else if (supplyCount > 0)
 		{
 			MODULE *const supplyRoom = ModuleFromPosition(&supplyAt, (MODULE *)0);
 

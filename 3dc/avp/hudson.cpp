@@ -1132,7 +1132,7 @@ int Hudson_CheckBeforeStarting()
 		{
 			HudsonLanes_HePlays();
 			HudsonPlay_HoldFire(plan.lanesWatch);
-			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);
+			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);
 		}
 	}
 

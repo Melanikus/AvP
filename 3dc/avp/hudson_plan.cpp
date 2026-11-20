@@ -2632,7 +2632,12 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			seenSupplyAt = true;
 
-			if (!ReadPlace(value, valueLength, &plan->supplyAtX, &plan->supplyAtY, &plan->supplyAtZ))
+			// supplyat=around: made around him as he moves (hudson_lanes.h), not at a place
+			if (WordIs(value, valueLength, "around"))
+			{
+				plan->supplyAround = true;
+			}
+			else if (!ReadPlace(value, valueLength, &plan->supplyAtX, &plan->supplyAtY, &plan->supplyAtZ))
 			{
 				return kHudsonRefusedPlaceNotThreeNumbers;
 			}

@@ -325,6 +325,7 @@ struct HudsonPlan
 	int supply;           // supply=N: with lanes=watch play=yes, the probe makes N aliens (1 to 8) at supplyat=, one every supplyEvery seconds; the level's own are kept still
 	int supplyAtX, supplyAtY, supplyAtZ;
 	int supplyEvery;      // supplyevery=: seconds between them, 1 to 120; 10 when not said
+	bool supplyAround;    // supplyat=around: made around him as he moves, each in a room he can't see 15 to 25 m from him, while fewer than supply= are alive (Frost 11-20)
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
 	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
