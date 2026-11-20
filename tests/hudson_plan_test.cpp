@@ -2808,6 +2808,16 @@ static void CheckLanesWord()
 	Check(!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), " made; the level's own NPCs, generators and hive kept still") &&
 		!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "the console's own); the level's own NPCs, generators and hive kept still"),
 		"and its SUPPLY lines no longer say the level's NPCs are (lanes=yes, the one-alien probe, still keeps them all)");
+	// dieroll=N (Bishop 11-20: "on every A/B and every full run", Drake: alieninoffice has 3 places, one rolled per run): the game's own QUANTUM_ROLL console variable,
+	// QuantumObjectDieRollOveride, set before the level loads, so every alternate-location group takes place N mod its count and two runs have the same layout
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes dieroll=2", &plan) == 0 && plan.dieRollAsked && plan.dieRoll == 2, "the level's layout can be fixed");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.dieRollAsked, "and is the game's own random one unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=65536", kHudsonRefusedDieRollOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=two", kHudsonRefusedDieRollOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=1 dieroll=1", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "QuantumObjectDieRollOveride = plan.dieRoll;"), "the run sets the game's own roll before the level loads");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"; quantum roll \""), "and the probe's MODE line reads it back");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($DieRoll -ge 0) { $arguments += \" dieroll=$DieRoll\" }"), "the run script can ask for it");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
