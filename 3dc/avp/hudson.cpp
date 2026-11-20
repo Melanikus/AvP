@@ -6944,6 +6944,8 @@ void Hudson_PlayInput(void *playerStatus)
 		// aimnearest=yes, holdground=yes: his view on the nearest alien, and he stands or backs off from one close ahead (added 2026-11-20 by Melanikus (Frost))
 		HudsonPlay_AimAtTheNearest(plan.playAimNearest);
 		HudsonPlay_HoldHisGround(plan.playHoldGround);
+		// crouchanywhere=yes: his grid has a place wherever he fits crouched (added 2026-11-20 by Melanikus (Frost)); before his grid is built
+		HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

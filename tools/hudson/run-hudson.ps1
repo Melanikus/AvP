@@ -188,6 +188,7 @@ param(
     [switch]$Flares,       # with -Play, he throws a flare at an alien he sees coming within 8 m (flares=yes; Frost 2026-11-20)
     [switch]$AimNearest,   # with -Play, his view and gun on the nearest alien, never firing (aimnearest=yes; Frost 2026-11-20)
     [switch]$HoldGround,   # with -Play, an alien within 1.5 m ahead on his way and he stands or backs off (holdground=yes; Frost 2026-11-20)
+    [switch]$CrouchAnywhere, # with -Play, his way can go wherever he fits crouched, whatever a floor's duct mark (crouchanywhere=yes; Frost 2026-11-20)
     [switch]$Normals,      # the NORMAL LINES view: each polygon's normals stood up as lines over the lit scene, as J does with -dev (normals=yes; render only; Drake 2026-11-20)
     [switch]$NormalColours, # each polygon coloured by its facing, at full brightness (normalcolours=yes; render only; Drake 2026-11-20)
     [switch]$Wireframe,    # everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (wireframe=yes; render only; Drake 2026-11-20)
@@ -485,6 +486,7 @@ if ($Play) { $arguments += " play=yes" }
 if ($Flares) { $arguments += " flares=yes" }
 if ($AimNearest) { $arguments += " aimnearest=yes" }
 if ($HoldGround) { $arguments += " holdground=yes" }
+if ($CrouchAnywhere) { $arguments += " crouchanywhere=yes" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }

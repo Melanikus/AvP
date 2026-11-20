@@ -244,6 +244,7 @@ static bool throwingFlares = false;   // HudsonPlay_ThrowFlares: flares=yes (Fro
 static int flaresAtAliens = 0;        // the flares that went, at aliens
 static bool aimingAtTheNearest = false;      // HudsonPlay_AimAtTheNearest: aimnearest=yes (Frost 2026-11-20)
 static bool holdingHisGround = false;        // HudsonPlay_HoldHisGround: holdground=yes (Frost 2026-11-20)
+static bool crouchingAnywhere = false;       // HudsonPlay_CrouchAnywhere: crouchanywhere=yes (Frost 2026-11-20)
 static STRATEGYBLOCK const *aimedAt = 0;     // the alien his view is on, for the lane probe's AIM line
 static int aimedAtDistance = 0;
 static bool aimedAtSeen = false;
@@ -3082,6 +3083,7 @@ bool HudsonPlay_Start(const char *levelName)
 	cheatsUsed = 0;
 	ribbonIsOn = true;
 	phase = kWaitingForTheGrid;
+	HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);
 	HudsonNav_StartTheGrid();
 
 	return true;
@@ -3285,6 +3287,11 @@ void HudsonPlay_AimAtTheNearest(bool aim)
 void HudsonPlay_HoldHisGround(bool hold)
 {
 	holdingHisGround = hold;
+}
+
+void HudsonPlay_CrouchAnywhere(bool crouch)
+{
+	crouchingAnywhere = crouch;
 }
 
 bool HudsonPlay_AimsOrHolds()

@@ -238,6 +238,9 @@ const char *const kHudsonRefusedAimNearestNotYes = "aimnearest= can only be yes"
 const char *const kHudsonRefusedAimNearestWithoutPlay = "aimnearest= has his view on the nearest alien as he plays, so it needs play=yes";
 const char *const kHudsonRefusedHoldGroundNotYes = "holdground= can only be yes";
 const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him stand or back off from an alien close ahead as he plays, so it needs play=yes";
+// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and no duct marked with Airduct off)
+const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
+const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
 const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
 const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
 const char *const kHudsonRefusedNormalColoursNotYes = "normalcolours= can only be yes";
@@ -2594,6 +2597,21 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
+		else if (WordIs(place, nameLength, "crouchanywhere"))
+		{
+			// crouchanywhere=yes: his grid has a place wherever a crouched marine fits, whatever the floor's mark (hudson_grid.h; added 2026-11-20 by Melanikus (Frost))
+			if (plan->playCrouchAnywhere)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedCrouchAnywhereNotYes;
+			}
+
+			plan->playCrouchAnywhere = true;
+		}
 		else if (WordIs(place, nameLength, "aimnearest") || WordIs(place, nameLength, "holdground"))
 		{
 			// aimnearest=yes: as he plays, his view and gun on the nearest alien, never firing; holdground=yes: an alien close ahead on his way, and he stands or backs
@@ -3513,6 +3531,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playHoldGround && !plan->play)
 	{
 		return kHudsonRefusedHoldGroundWithoutPlay;
+	}
+
+	if (plan->playCrouchAnywhere && !plan->play)
+	{
+		return kHudsonRefusedCrouchAnywhereWithoutPlay;
 	}
 
 	if (plan->breakPrisms && !plan->vision)

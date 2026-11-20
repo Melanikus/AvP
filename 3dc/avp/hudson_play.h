@@ -55,6 +55,10 @@ void HudsonPlay_AimAtTheNearest(bool aim);
 // off, instead of walking through it, 4 s at a time (hudson_play_steps.h says when). Asked for before he starts
 void HudsonPlay_HoldHisGround(bool hold);
 
+// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost): shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a
+// crouched marine fits, whatever the floor's mark (HudsonGrid::SetCrouchAnywhere), and he crouches there as before (CrouchWhereItsLow). Asked for before he starts
+void HudsonPlay_CrouchAnywhere(bool crouch);
+
 // For the lane probe's AIM line each frame: whether either is on; the alien (a STRATEGYBLOCK) his view is on, 0 for none, how far, whether he sees it, and his hold
 // ("-", "stand" or "back")
 bool HudsonPlay_AimsOrHolds();

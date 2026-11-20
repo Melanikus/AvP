@@ -478,7 +478,8 @@ bool HudsonGrid::MakePlaces()
 				}
 
 				// He crawls as soon as he's in a duct, so the last stretch before its mouth, where his square is already under its roof, has to count as well
-				int const tall = CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight;
+				// crouchanywhere=yes (Frost 2026-11-20): wherever crouched fits, whatever the mark (SetCrouchAnywhere)
+				int const tall = crouchAnywhere || CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight;
 
 				if (InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + tall))
 				{

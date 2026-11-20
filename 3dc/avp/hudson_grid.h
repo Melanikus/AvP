@@ -151,6 +151,10 @@ public:
 	// Added 2026-11-20 by Melanikus (Frost) for the AvP port.
 	bool OnlyCrouchedFits(int x, int y, int z) const;
 
+	// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and with Airduct off no duct is marked at all): the next
+	// Build makes a place wherever a crouched marine fits, as it does in a marked duct, whatever the floor's mark. Off unless asked; kept across builds until asked off.
+	void SetCrouchAnywhere(bool on) { crouchAnywhere = on; }
+
 	// The places near a point, up to most of them. It gives back how many it wrote. This is what a drawing of the map reads, and it never looks further than radius, so it can't take long.
 	int CellsNear(int x, int y, int z, int radius, HudsonGridCell *cells, int most) const;
 
@@ -222,6 +226,7 @@ private:
 	std::vector<uint8_t> fromWall;        // how many moves he is from a place with a way blocked, up to 255
 	std::vector<uint8_t> smallPatch;      // the floor this place is on is too small to count as anywhere: the top of a lamp, say
 	std::vector<LowFloor> lowFloors;      // the floors where only a crouched marine fits (OnlyCrouchedFits), in row, column and height order
+	bool crouchAnywhere = false;          // SetCrouchAnywhere: places wherever crouched fits (crouchanywhere=yes)
 	size_t drops, polygonsLeftOut, polygonsUsed, bitsBeforeJoining;
 
 	// One search
