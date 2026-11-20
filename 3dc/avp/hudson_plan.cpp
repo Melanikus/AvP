@@ -232,6 +232,8 @@ const char *const kHudsonRefusedFlareWithoutHolds = "flare= throws one as each h
 // flares=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "throwing flares when aliens approach him")
 const char *const kHudsonRefusedFlaresNotYes = "flares= can only be yes";
 const char *const kHudsonRefusedFlaresWithoutPlay = "flares= has him throw flares at aliens as he plays, so it needs play=yes";
+const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
+const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
 // supply= (added 2026-11-20 by Melanikus (Frost) for the AvP port, Bishop: a fixed alien supply for the lane probe)
 const char *const kHudsonRefusedSupplyWithoutPlay = "supply= is the lane probe's own aliens while he plays, so it needs lanes=watch and play=yes";
 const char *const kHudsonRefusedSupplyNeedsPlace = "supply= and supplyat= go together: how many aliens, and the place they're made at";

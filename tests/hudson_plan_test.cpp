@@ -2765,6 +2765,22 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonPlay_FlareIsDue(") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "ThrowAFlare();"),
 		"the player's own flare action, when one is due");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Flares) { $arguments += \" flares=yes\" }"), "the run script can ask for it");
+	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
+	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
+	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes normals=yes", &plan) == 0 && plan.viewNormals && !plan.viewWireframe, "a run can ask for the normals view");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 wireframe=yes", &plan) == 0 && plan.viewWireframe && !plan.viewNormals, "or the wireframe, with or without play");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.viewNormals && !plan.viewWireframe, "and has neither unless it asks");
+	Refused("-hudson level=genshd1 frames=9000 normals=no", kHudsonRefusedNormalsNotYes);
+	Refused("-hudson level=genshd1 frames=9000 wireframe=on", kHudsonRefusedWireframeNotYes);
+	Refused("-hudson level=genshd1 frames=9000 normals=yes normals=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "DebugView_Set(plan.viewNormals, plan.viewWireframe);"), "the run sets the views before any level");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "StockFlags_Words() + \"; \" + DebugView_Words()"), "the run's first log line reads them back beside the stock flags");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words() + \"; \" + DebugView_Words()"), "and the lane probe's MODE line");
+	Check(Has(ReadSourceFile("3dc/d3d_render.cpp"), "DebugView_Normals() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect"),
+		"the main list is drawn with the normals view's shaders only when asked, and they loaded");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Normals) { $arguments += \" normals=yes\" }") &&
+		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Wireframe) { $arguments += \" wireframe=yes\" }"), "the run script can ask for them");
 
 	// supply= (Bishop 11-20: "the probe makes a FIXED supply per run ... so two plots compare fairly in one run each"): with lanes=watch play=yes, the probe makes that many
 	// aliens at supplyat=, one every supplyevery= seconds (10 without it), the console's own way, awake; the level's own NPCs, generators and hive are kept still
