@@ -568,9 +568,37 @@ static void LookUpOrDownAt(PLAYER_STATUS *status, VECTORCH const &point)
 	status->ViewPanX = ((int)(atan2f((float)(point.vy - eyes.vy), across) * (float)kHudsonPlayWholeTurn / 6.2831853f)) & (kHudsonPlayWholeTurn - 1);
 }
 
-static void CrouchInADuct(PLAYER_STATUS *status)
+// He crouches where only a crouched marine fits, measured on his grid (HudsonGrid::OnlyCrouchedFits) where he is and a stride ahead, the way he's going. Not by a room's
+// airduct flag: the owner 11-20, watching the lane probe on test levels whose rooms are marked as ducts: "he's crouching like aliens", "hudson doesn't need to follow
+// that flag". The game's own marines still crawl by it (bh_marine.cpp, unchanged). Changed 2026-11-20 by Melanikus (Frost) for the AvP port.
+static const int kLowCeilingLookAhead = 600;   // mm
+
+static void CrouchWhereItsLow(PLAYER_STATUS *status)
 {
-	if (Player->ObStrategyBlock->containingModule && (Player->ObStrategyBlock->containingModule->m_flags & MODULEFLAG_AIRDUCT))
+	HudsonGrid const &grid = HudsonNav_TheGrid();
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+
+	if (!dyn || !grid.Ready())
+	{
+		return;
+	}
+
+	// the way he's going: his speed's, or, standing, the way he faces
+	VECTORCH const here = dyn->Position;
+	double wayX = (double)dyn->LinVelocity.vx, wayZ = (double)dyn->LinVelocity.vz;
+	double length = sqrt(wayX * wayX + wayZ * wayZ);
+
+	if (length < 100.0)
+	{
+		wayX = (double)dyn->OrientMat.mat31;
+		wayZ = (double)dyn->OrientMat.mat33;
+		length = sqrt(wayX * wayX + wayZ * wayZ);
+	}
+
+	int const aheadX = length > 0.0 ? here.vx + (int)(wayX * kLowCeilingLookAhead / length) : here.vx;
+	int const aheadZ = length > 0.0 ? here.vz + (int)(wayZ * kLowCeilingLookAhead / length) : here.vz;
+
+	if (grid.OnlyCrouchedFits(here.vx, here.vy, here.vz) || grid.OnlyCrouchedFits(aheadX, here.vy, aheadZ))
 	{
 		status->Mvt_InputRequests.Flags.Rqst_Crouch = 1;
 	}
@@ -582,7 +610,7 @@ static void WalkForward(PLAYER_STATUS *status, int howHard = ONE_FIXED)
 	status->Mvt_InputRequests.Flags.Rqst_Forward = 1;
 	status->Mvt_MotionIncrement = howHard;
 	walkedLastFrame = true;
-	CrouchInADuct(status);
+	CrouchWhereItsLow(status);
 }
 
 // He goes where the way goes, with forward and sidestep together, whichever way he's facing, and his view swings round after him. So putting his feet right doesn't need him to look round.
@@ -627,7 +655,7 @@ static void SteerAlongTheWay(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 		status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 1;
 	}
 
-	CrouchInADuct(status);
+	CrouchWhereItsLow(status);
 	walkedLastFrame = true;
 
 	// His view goes after where the way is heading, a share each frame

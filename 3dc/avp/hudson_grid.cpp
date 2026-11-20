@@ -182,6 +182,7 @@ void HudsonGrid::Clear()
 	std::vector<int>().swap(columnFirstSpan);
 	std::vector<Span>().swap(spans);
 	std::vector<int>().swap(columnFirstPlace);
+	std::vector<LowFloor>().swap(lowFloors);
 	std::vector<uint16_t>().swap(placeX);
 	std::vector<uint16_t>().swap(placeZ);
 	std::vector<int>().swap(placeHeight);
@@ -462,6 +463,18 @@ bool HudsonGrid::MakePlaces()
 				if (!(span.flags & kIsFloor))
 				{
 					continue;
+				}
+
+				// Where only a crouched marine fits, whatever the floor's mark (OnlyCrouchedFits). Kept apart: it changes no place, so a search goes as before
+				if (lowFloors.size() < limitPlaces && InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + kHudsonGridMarineHeight) &&
+					!InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + kHudsonGridCrawlHeight))
+				{
+					LowFloor low;
+
+					low.ix = (uint16_t)ix;
+					low.iz = (uint16_t)row;
+					low.height = span.high;
+					lowFloors.push_back(low);
 				}
 
 				// He crawls as soon as he's in a duct, so the last stretch before its mouth, where his square is already under its roof, has to count as well
@@ -1174,6 +1187,42 @@ bool HudsonGrid::IsMarked(const std::vector<uint8_t> &marks, int x, int y, int z
 	for (size_t i = 0; i < places.size(); i++)
 	{
 		if (marks[(size_t)places[i]])
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool HudsonGrid::OnlyCrouchedFits(int x, int y, int z) const
+{
+	if (!ready)
+	{
+		return false;
+	}
+
+	double const fx = floor((double)(x - minX) / kHudsonGridCell), fz = floor((double)(z - minZ) / kHudsonGridCell);
+
+	if (fx < 0.0 || fz < 0.0 || fx > 65535.0 || fz > 65535.0)
+	{
+		return false;
+	}
+
+	LowFloor key;
+
+	key.ix = (uint16_t)fx;
+	key.iz = (uint16_t)fz;
+	key.height = 0;
+
+	// in row, then column order, as MakePlaces wrote them
+	auto const before = [](LowFloor const &a, LowFloor const &b) { return a.iz != b.iz ? a.iz < b.iz : a.ix < b.ix; };
+	auto const range = std::equal_range(lowFloors.begin(), lowFloors.end(), key, before);
+	int const height = -y;
+
+	for (auto at = range.first; at != range.second; ++at)
+	{
+		if (abs(at->height - height) <= kHudsonGridStepUp)
 		{
 			return true;
 		}
