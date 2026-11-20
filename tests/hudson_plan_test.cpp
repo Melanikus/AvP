@@ -2801,6 +2801,11 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_PlayMost(plan.watchMost);"), "the run tells the probe");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "gameTime >= playMost ?"), "which ends his play there, not at 3 minutes");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchMost -gt 0) { $arguments += \" watchmost=$WatchMost\" }"), "the run script can ask for it");
+	// THE LEVEL'S OWN NPCs in a watch run (Bishop 11-20, the snowplow: the level's own "alieninoffice", a placed alien in Wait, was kept still and shoved down Object07
+	// in every supply run; Drake: no trigger wakes it, its own near state does): they act as stock; only the generators stay still, so the supply is the only one made
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (HudsonLanes_Watching() && block->I_SBtype != I_BehaviourGenerator)"), "in a watch run, only the level's generators are kept still");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "bool HudsonLanes_Watching()"), "the probe says whether it watches");
+	Check(!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "the level's own NPCs, generators and hive kept still\");"), "and its SUPPLY line no longer says the level's NPCs are");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
