@@ -2805,6 +2805,12 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=3 supplyat=Around", kHudsonRefusedPlaceNotThreeNumbers);
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ModuleCurrVisArray"), "a room he can't see: the game's own list of the rooms in his view");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonNav_MiddleOfRoom("), "the middle of a room, where a marine can stand (the game's own test)");
+	// on his level, by his route ahead (hudson_supply.h; the first around run made them a storey up), and a far-away one frees its slot
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_Pick(") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_HoldsASlot("),
+		"the room is chosen by hudson_supply.h's rule, and a slot freed by it");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_PlaceAhead("), "the places he walks to next come from his list");
+	// play's own flares in the run's result (the result's flares_thrown is flare='s, the holds' flares: it read 0 on runs that threw 16)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "play_flares=%d"), "the run's result counts the flares he threw at aliens");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
 	// every hit on Hudson and every refill, a line each (the owner 11-20: "more ceiling crawling aliens him faster"; "hudson's getting more and more hurt")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
