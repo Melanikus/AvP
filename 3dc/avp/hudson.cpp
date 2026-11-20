@@ -186,6 +186,7 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "debug_view.h"      // normals=yes, wireframe=yes: the debug views, render only (added 2026-11-20, Drake)
 
 extern int WireFrameMode;      // d3d_render.cpp: Rebellion's own WIREFRAMEMODE (1 the environment, 2 the objects, 3 both)
+extern int NormalLinesOn;      // d3d_render.cpp: the NORMAL LINES view (normal_lines.h), J with -dev
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -935,9 +936,15 @@ int Hudson_CheckBeforeStarting()
 		StockFlags_AllStock();
 	}
 
-	// normals=, wireframe=: the debug views, before any level. They change how a pixel looks, never what the game decides (debug_view.h), and the log line
-	// below reads them back beside the stock flags. wireframe=yes is Rebellion's own WIREFRAMEMODE 3, the console's cheat
-	DebugView_Set(plan.viewNormals, plan.viewWireframe);
+	// normals=, normalcolours=, wireframe=: the debug views, before any level. They change how a pixel looks, never what the game decides (debug_view.h), and the log
+	// line below reads them back beside the stock flags. normals=yes is the NORMAL LINES view, J's (normal_lines.h: each polygon's normals stood up as lines over the lit
+	// scene; a network game has none); wireframe=yes is Rebellion's own WIREFRAMEMODE 3, the console's cheat
+	DebugView_Set(plan.viewNormals, plan.viewNormalColours, plan.viewWireframe);
+
+	if (plan.viewNormals)
+	{
+		NormalLinesOn = 1;
+	}
 
 	if (plan.viewWireframe)
 	{

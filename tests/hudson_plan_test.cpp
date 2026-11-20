@@ -2777,7 +2777,7 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "DebugView_Set(plan.viewNormals, plan.viewNormalColours, plan.viewWireframe);"), "the run sets the views before any level");
 	// the owner's correction 11-20: "When I said normal mode I meant display normals like we did on debugging shaders, not the ugly normal maps view": normals=yes is the
 	// NORMAL LINES view (normal_lines.h, J with -dev: each polygon's normals stood up as lines over the lit scene), and the colours are their own word
-	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (plan.viewNormals)\r\n\t{\r\n\t\tNormalLinesOn = 1;"), "normals=yes switches the NORMAL LINES view on");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (plan.viewNormals)\n\t{\n\t\tNormalLinesOn = 1;"), "normals=yes switches the NORMAL LINES view on");
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 normalcolours=yes", &plan) == 0 && plan.viewNormalColours && !plan.viewNormals, "normalcolours=yes is the colours, alone");
 	Refused("-hudson level=genshd1 frames=9000 normalcolours=no", kHudsonRefusedNormalColoursNotYes);
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "StockFlags_Words() + \"; \" + DebugView_Words()"), "the run's first log line reads them back beside the stock flags");

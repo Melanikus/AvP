@@ -4,16 +4,23 @@
 
 static bool normalsAsked = false;
 static bool wireframeAsked = false;
+static bool normalColoursAsked = false;
 
-void DebugView_Set(bool normals, bool wireframe)
+void DebugView_Set(bool normals, bool normalColours, bool wireframe)
 {
 	normalsAsked = normals;
+	normalColoursAsked = normalColours;
 	wireframeAsked = wireframe;
 }
 
 bool DebugView_Normals()
 {
 	return normalsAsked;
+}
+
+bool DebugView_NormalColours()
+{
+	return normalColoursAsked;
 }
 
 bool DebugView_Wireframe()
@@ -23,5 +30,5 @@ bool DebugView_Wireframe()
 
 std::string DebugView_Words()
 {
-	return std::string("view normals=") + (normalsAsked ? "on" : "off") + " wireframe=" + (wireframeAsked ? "on" : "off");
+	return std::string("view normals=") + (normalsAsked ? "on" : "off") + " normalcolours=" + (normalColoursAsked ? "on" : "off") + " wireframe=" + (wireframeAsked ? "on" : "off");
 }
