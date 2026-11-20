@@ -2766,6 +2766,24 @@ static void CheckLanesWord()
 		"the player's own flare action, when one is due");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Flares) { $arguments += \" flares=yes\" }"), "the run script can ask for it");
 
+	// supply= (Bishop 11-20: "the probe makes a FIXED supply per run ... so two plots compare fairly in one run each"): with lanes=watch play=yes, the probe makes that many
+	// aliens at supplyat=, one every supplyevery= seconds (10 without it), the console's own way, awake; the level's own NPCs, generators and hive are kept still
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=11000,1628,26302", &plan) == 0 && plan.supply == 4 && plan.supplyAtX == 11000 &&
+		plan.supplyAtZ == 26302 && plan.supplyEvery == 10, "a fixed supply: 4 aliens at a place, one every 10 s");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=2 supplyat=1,2,3 supplyevery=30", &plan) == 0 && plan.supplyEvery == 30, "every 30 s if asked");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.supply == 0, "none unless asked: the level's own");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 supply=4 supplyat=1,2,3", kHudsonRefusedSupplyWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplyat=1,2,3", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=0 supplyat=1,2,3", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=9 supplyat=1,2,3", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=1,2,3 supplyevery=0", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supply=4 supplyat=1,2,3", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;"), "with a supply the level's own are kept still, the supply's aliens move");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery);"), "the probe is told the supply");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply supplyat=$SupplyAt\" }"), "the run script can ask for it");
+
 	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const kPlayMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time");
 	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
