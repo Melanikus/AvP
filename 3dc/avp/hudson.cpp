@@ -1138,6 +1138,8 @@ int Hudson_CheckBeforeStarting()
 		if (plan.play)
 		{
 			HudsonLanes_HePlays();
+			// watchmost=S: the full-level run plays as long as the level takes (Frost 11-20)
+			HudsonLanes_PlayMost(plan.watchMost);
 			HudsonPlay_HoldFire(plan.lanesWatch);
 			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);
 			HudsonLanes_SupplyIn(plan.supplyIn);

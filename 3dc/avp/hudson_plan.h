@@ -323,6 +323,7 @@ struct HudsonPlan
 	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
 	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
 	bool playCrouchAnywhere;  // crouchanywhere=yes: with play=yes, his grid has a place wherever a crouched marine fits (hudson_grid.h; Frost 11-20, shft21)
+	int watchMost;        // watchmost=S: with lanes=watch, his play is watched for at most S s of game time, 60 to 7200, not 3 minutes (the full-level run; Frost 11-20). 0: 3 minutes
 	bool viewNormals;     // normals=yes: the normals view, each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only; the owner 11-20)
 	bool viewNormalColours; // normalcolours=yes: each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only)
 	bool viewWireframe;   // wireframe=yes: everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (3dc/debug_view.h; render only)
@@ -619,6 +620,8 @@ extern const char *const kHudsonRefusedHoldGroundNotYes;
 extern const char *const kHudsonRefusedHoldGroundWithoutPlay;
 extern const char *const kHudsonRefusedCrouchAnywhereNotYes;
 extern const char *const kHudsonRefusedCrouchAnywhereWithoutPlay;
+extern const char *const kHudsonRefusedWatchMostOutOfRange;
+extern const char *const kHudsonRefusedWatchMostWithoutWatch;
 extern const char *const kHudsonRefusedNormalsNotYes;
 extern const char *const kHudsonRefusedWireframeNotYes;
 extern const char *const kHudsonRefusedNormalColoursNotYes;

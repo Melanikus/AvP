@@ -241,6 +241,9 @@ const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him sta
 // crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and no duct marked with Airduct off)
 const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
 const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
+// watchmost=S (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, as long as the level takes)
+const char *const kHudsonRefusedWatchMostOutOfRange = "watchmost= is the most seconds of game time the watch plays, from 60 to 7200";
+const char *const kHudsonRefusedWatchMostWithoutWatch = "watchmost= is how long the lane probe's watch plays, so it needs lanes=watch";
 const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
 const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
 const char *const kHudsonRefusedNormalColoursNotYes = "normalcolours= can only be yes";
@@ -513,7 +516,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
-	bool seenSupply = false, seenSupplyAt = false, seenSupplyEvery = false, seenSupplyIn = false;
+	bool seenSupply = false, seenSupplyAt = false, seenSupplyEvery = false, seenSupplyIn = false, seenWatchMost = false;
 	bool seenGun = false;
 	bool seenStepSeconds = false;
 	bool seenPlayGun = false;
@@ -2597,6 +2600,21 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
+		else if (WordIs(place, nameLength, "watchmost"))
+		{
+			// watchmost=S: the watch plays for at most S s of game time (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run)
+			if (seenWatchMost)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenWatchMost = true;
+
+			if (!ReadNumber(value, valueLength, &plan->watchMost) || plan->watchMost < 60 || plan->watchMost > 7200)
+			{
+				return kHudsonRefusedWatchMostOutOfRange;
+			}
+		}
 		else if (WordIs(place, nameLength, "crouchanywhere"))
 		{
 			// crouchanywhere=yes: his grid has a place wherever a crouched marine fits, whatever the floor's mark (hudson_grid.h; added 2026-11-20 by Melanikus (Frost))
@@ -3536,6 +3554,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playCrouchAnywhere && !plan->play)
 	{
 		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->watchMost > 0 && !plan->lanesWatch)
+	{
+		return kHudsonRefusedWatchMostWithoutWatch;
 	}
 
 	if (plan->breakPrisms && !plan->vision)

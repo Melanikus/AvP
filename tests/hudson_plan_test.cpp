@@ -2872,7 +2872,7 @@ static void CheckLanesWord()
 		"and supplyat= only when it's said (an empty one ended a supplyin= batch with exit 21), a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 
 	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
-	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const kPlayMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long playMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time, unless watchmost= says longer");
 	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!target && step.kind != kHudsonPlayGoTo)"), "a goto needs no object of its name: he walks there");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "case kHudsonPlayGoTo:"), "and the step is done when he gets there");

@@ -123,11 +123,11 @@ namespace
 	long long const kWatchMost = 180LL * 65536;      // lanes=watch ends after 3 minutes of game time (Bishop: "for a few minutes"), or at frames=
 	bool watchStarted = false;
 	// lanes=watch with play=yes (probe v3, Bishop 11-20, the owner: "get hudson to walk it"): he plays from the level's start; the watch ends when his list is done,
-	// when he makes no headway (kPlayHeadway) for kPlayNoHeadway, or at kPlayMost
+	// when he makes no headway (kPlayHeadway) for kPlayNoHeadway, or at playMost (3 minutes, or watchmost=)
 	bool hePlays = false;
 	int const kPlayHeadway = 1000;                   // mm
 	long long const kPlayNoHeadway = 15LL * 65536;
-	long long const kPlayMost = 180LL * 65536;         // laps of a stretch for at most 3 minutes (Bishop 11-20)
+	long long playMost = 180LL * 65536;               // laps of a stretch for at most 3 minutes (Bishop 11-20), or watchmost= (HudsonLanes_PlayMost: the full-level run)
 	VECTORCH headwayFrom = { 0, 0, 0 };              // where he was when he last made headway
 	long long headwayAt = 0;
 	// THE SUPPLY (supply=, Bishop 11-20: "the probe makes a FIXED supply per run ... so two plots compare fairly in one run each"): supplyCount aliens made at supplyAt,
@@ -1171,7 +1171,7 @@ namespace
 			}
 
 			char const *const end = HudsonPlay_FinishedTheList() ? "route done: he has been down his whole list" : gameTime - headwayAt >= kPlayNoHeadway ?
-				"no headway (1 m) for 15 s" : gameTime >= kPlayMost ? "3 minutes of game time" : frame >= mostFrames ? "frames= ran out" : nullptr;
+				"no headway (1 m) for 15 s" : gameTime >= playMost ? (playMost == 180LL * 65536 ? "3 minutes of game time" : "watchmost= of game time") : frame >= mostFrames ? "frames= ran out" : nullptr;
 
 			if (end)
 			{
@@ -1219,6 +1219,14 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 void HudsonLanes_HePlays()
 {
 	hePlays = true;
+}
+
+void HudsonLanes_PlayMost(int seconds)
+{
+	if (seconds > 0)
+	{
+		playMost = (long long)seconds * 65536;
+	}
 }
 
 void HudsonLanes_SupplyIn(const char *names)

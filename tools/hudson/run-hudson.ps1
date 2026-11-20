@@ -195,6 +195,7 @@ param(
     [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
     [string]$SupplyAt = '',
     [int]$SupplyEvery = 0,
+    [int]$WatchMost = 0,   # with -LanesWatch -Play, the watch plays for at most this many seconds of game time (60 to 7200), not 3 minutes: the full-level run (watchmost=; Frost 2026-11-20)
     [string]$SupplyIn = '',   # with -Supply, the aliens made only in these rooms (names with commas between them): supplyin= (Frost 2026-11-20)
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
@@ -487,6 +488,7 @@ if ($Flares) { $arguments += " flares=yes" }
 if ($AimNearest) { $arguments += " aimnearest=yes" }
 if ($HoldGround) { $arguments += " holdground=yes" }
 if ($CrouchAnywhere) { $arguments += " crouchanywhere=yes" }
+if ($WatchMost -gt 0) { $arguments += " watchmost=$WatchMost" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }
