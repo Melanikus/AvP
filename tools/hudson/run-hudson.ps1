@@ -484,7 +484,8 @@ if ($Flares) { $arguments += " flares=yes" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }
-if ($Supply -gt 0) { $arguments += " supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')" }
+if ($Supply -gt 0) { $arguments += " supply=$Supply" }
+if ($SupplyAt) { $arguments += " supplyat=$($SupplyAt -replace 'm', '-')" }   # only when said: supplyin= says where instead
 if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
 if ($SupplyIn) { $arguments += " supplyin=$SupplyIn" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }

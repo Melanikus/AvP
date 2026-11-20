@@ -1011,7 +1011,7 @@ namespace
 			{
 				STRATEGYBLOCK *const b = ActiveStBlockList[i];
 
-				// one of the supply's keeps its slot while alive and near enough (hudson_supply.h): a far-away one frees it, so the supply keeps coming
+				// one of the supply's keeps its slot while alive, however far (hudson_supply.h): only a dead one frees it
 				if (b && b->I_SBtype == I_BehaviourAlien && b->DynPtr && HudsonLanes_IsTheAlien(b))
 				{
 					double const ox = (double)b->DynPtr->Position.vx - me->DynPtr->Position.vx, oy = (double)b->DynPtr->Position.vy - me->DynPtr->Position.vy,
@@ -1557,14 +1557,14 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			}
 
 			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe in the named rooms (" + rooms + "), one every " + std::to_string((int)(supplyEvery / 65536)) +
-				" s of game time while fewer hold a slot (alive and within 40 m), each at the middle of one of them he can't see, on his level (2 m), 10 to 40 m from him, the one" +
+				" s of game time while fewer hold a slot (alive, however far), each at the middle of one of them he can't see, on his level (2 m), 10 to 40 m from him, the one" +
 				" nearest 20 m (hudson_supply.h; HudsonNav_MiddleOfRoom, ModuleCurrVisArray; CreateAlienBot, the console's own), at most " + std::to_string(HudsonSupply_MostMade(supplyCount)) +
 				" made; the level's own NPCs, generators and hive kept still");
 		}
 		else if (supplyCount > 0 && supplyAround)
 		{
 			Write("SUPPLY up to " + std::to_string(supplyCount) + " aliens alive made by the probe around him, one every " + std::to_string((int)(supplyEvery / 65536)) +
-				" s of game time while fewer hold a slot (alive and within 40 m), each at the middle of a room he can't see, 15 to 25 m from him, on his level (2 m), by the places he" +
+				" s of game time while fewer hold a slot (alive, however far), each at the middle of a room he can't see, 15 to 25 m from him, on his level (2 m), by the places he" +
 				" walks to next (6 m), the one nearest 20 m (hudson_supply.h; HudsonNav_MiddleOfRoom, ModuleCurrVisArray; CreateAlienBot, the console's own), at most " +
 				std::to_string(HudsonSupply_MostMade(supplyCount)) + " made; the level's own NPCs, generators and hive kept still");
 		}
