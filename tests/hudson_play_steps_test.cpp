@@ -75,6 +75,12 @@ static void TestAGoodList()
 		Check(steps[4].kind == kHudsonPlayKill, "kill");
 	}
 
+	// goto: a place and nothing else, no object of that name (the lane probe v3's list, Frost 2026-11-20: a "walk" step with no switch of its name was gone past unwalked)
+	std::vector<HudsonPlayStep> const places = Read("goto 52902 595 15587 | gold 1 of 10: gencor05\n", "a goto line is read");
+
+	Check(places.size() == 1 && places[0].kind == kHudsonPlayGoTo && places[0].x == 52902 && places[0].y == 595 && places[0].z == 15587 && places[0].name == "gold 1 of 10: gencor05",
+		"goto, a place with a name for the log");
+
 	std::vector<HudsonPlayStep> reused;
 	std::string whyNot;
 

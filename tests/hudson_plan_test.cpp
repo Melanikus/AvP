@@ -2755,6 +2755,9 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_FinishedTheList()"), "the watch ends when his list is done");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words()"), "its first line reads every flag back");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ShoulderLamp_IsOn()"), "and the lamp");
+	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!target && step.kind != kHudsonPlayGoTo)"), "a goto needs no object of its name: he walks there");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "case kHudsonPlayGoTo:"), "and the step is done when he gets there");
 
 	// what each alien read, told to the probe by the alien's own code at the moment it read it (one alien's route is gone by the frame's end when several search)
 	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienBefore(sbPtr);") && Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienAfter(sbPtr);"), "the near alien tells the probe before and after its state runs");
