@@ -25,7 +25,8 @@
 struct strategyblock;
 
 // Before the level: what the plan asked for. Only stores it.
-void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int mostFrames);
+// onCeiling (alienon=ceiling): the alien is made hanging from the ceiling at alienat=, its own gravity up, for a run of the lane alone
+void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int mostFrames, bool onCeiling);
 
 // Whether this is the probe's alien, the one thing Hudson_KeepsStill lets move
 bool HudsonLanes_IsTheAlien(const struct strategyblock *block);

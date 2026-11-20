@@ -119,6 +119,8 @@ const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be of
 // lanes=yes, the lane probe (hudson_lanes.h). Added 2026-11-19 by Melanikus (Frost) for the AvP port
 const char *const kHudsonRefusedLanesNotYes = "lanes= can only be yes";
 const char *const kHudsonRefusedLanesNeedsPlaces = "lanes=yes needs one alienat= place for its alien and a standat= place for the player";
+const char *const kHudsonRefusedAlienOnNotFloorOrCeiling = "alienon= is floor or ceiling";
+const char *const kHudsonRefusedAlienOnWithoutLanes = "alienon= says where the lane probe's alien is made, so it needs lanes=yes";
 const char *const kHudsonRefusedLanesNotAlone = "lanes=yes is the player standing still while one alien comes for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play=, net=, gun=, a walk, a nav, a route or a strategy";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
@@ -511,6 +513,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
 	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
+	bool seenAlienOn = false;
 	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false, seenTogether = false, seenEvery = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
@@ -1407,6 +1410,26 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->noFriendlyFire = true;
+		}
+		else if (WordIs(place, nameLength, "alienon"))
+		{
+			// alienon=ceiling: the lane probe's alien is made hanging from the ceiling, for a run of the lane alone (Drake 11-19); floor is the default.
+			// Added 2026-11-19 by Melanikus (Frost) for the AvP port.
+			if (seenAlienOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAlienOn = true;
+
+			if (WordIs(value, valueLength, "ceiling"))
+			{
+				plan->alienOnCeiling = true;
+			}
+			else if (!WordIs(value, valueLength, "floor"))
+			{
+				return kHudsonRefusedAlienOnNotFloorOrCeiling;
+			}
 		}
 		else if (WordIs(place, nameLength, "lanes"))
 		{
@@ -2939,6 +2962,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if ((seenWatch || seenHoldFire || ((seenAlienAt || seenStandAt) && !plan->lanes) || seenWatchFrom || seenTogether) && !plan->combatAlien)
 	{
 		return kHudsonRefusedWatchWordsWithoutCombat;
+	}
+
+	if (seenAlienOn && !plan->lanes)
+	{
+		return kHudsonRefusedAlienOnWithoutLanes;
 	}
 
 	// lanes=yes: the player stands still at standat= while one alien made at alienat= comes for him, as in 1999's game. Nothing else may move

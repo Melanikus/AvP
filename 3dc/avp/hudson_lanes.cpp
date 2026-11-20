@@ -43,10 +43,12 @@ namespace
 	int const kAlienStartsAboveTheFloor = 300;      // as hudson.cpp's MakeTheAlien
 	int const kPlayerStartsAboveTheFloor = 300;     // the player too, so that he lands in the second before the alien
 	int const kCos45 = 46341;                        // 16.16: which surface its down points at
-	int const kGravityKicksIn = 16384;               // TIME_BEFORE_GRAVITY_KICKS_IN (dynamics.h): a quarter second with no contact
+	int const kGravityKicksIn = 16384;               // TIME_BEFORE_GRAVITY_KICKS_IN (dynamics.h): TimeNotInContactWithFloor is set to this on every contact and counts
+	                                                 // down without one; at 0 or below, a climber's down becomes straight down (dynamics.cpp ApplyGravity)
 	int const kCurveToPlayerDistance = 8000;         // ALIEN_CURVETOPLAYERDIST (bh_near.cpp): Approach's gravity rule changes here
 
 	bool asked = false;
+	bool alienOnCeiling = false;                    // alienon=ceiling: the alien is made hanging from the ceiling at alienat=, for a run of the lane alone
 	VECTORCH alienAt, standAt;
 	long mostFrames = 0;
 	MODULE const *placedIn = nullptr;               // the room standat= is in, where he must still be when the alien is made
@@ -269,7 +271,9 @@ namespace
 			return "S3: it went far (its module out of the player's sight): the far AI moves it module to module and puts it down upright (bh_far.cpp LocateFarNPCInAIModule)";
 		}
 
-		if (!s.standardGravity && s.noContact >= kGravityKicksIn)
+		// the counter is kGravityKicksIn while it touches something and counts down without: at 0 its down is made straight down (until 11-19 ~21:30 this
+		// read >= kGravityKicksIn, which is the TOUCHING value: no drop of the first runs was put down to it, both had standard gravity on)
+		if (!s.standardGravity && s.noContact <= 0)
 		{
 			return "D19: it lost contact for a quarter second while climbing, so its down became straight down (dynamics.cpp, TIME_BEFORE_GRAVITY_KICKS_IN)";
 		}
@@ -372,7 +376,7 @@ namespace
 	}
 }
 
-void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int framesMost)
+void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, int standAtY, int standAtZ, int framesMost, bool onCeiling)
 {
 	if (!HudsonRunIsOn)
 	{
@@ -387,6 +391,7 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 	standAt.vy = standAtY;
 	standAt.vz = standAtZ;
 	mostFrames = framesMost;
+	alienOnCeiling = onCeiling;
 }
 
 bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
@@ -446,7 +451,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 		Write("LANE PROBE (hudson_lanes.cpp, Frost 2026-11-19): one standard alien made at alienat=, the player put at standat=, standing still and unable to die; the level's own NPCs, generators and hive kept still");
 		Write("AS 1999: FLOORISLAVA OFF (the alien ways off), NEWDYNAMICCOLLISIONS OFF; the alien's code unchanged. Still AvPx's, not 1999's: pfarlocs.cpp's fourth-corner height fix (#161, where a far alien lands), pheromone.cpp's door test (scent through a door that isn't its AI module's first module), near_wake.cpp (placed sleeping aliens, not this one)");
-		Write("ROWS: AvP-docs\\engine\\inteng\\reassess\\alien-drop-audit.md. FIELDS: f frame, t game seconds since the alien was made, near (its module drawn), mod its module, ai its AI module, wps boxes in its AI module, state, dist to the player, pos, ceil its height below its module's top, on its surface (by its down), std UseStandardGravity, down its GravityDirection, nocontact TimeNotInContactWithFloor, crouch IAmCrouched, enc AlienIsEncouragedToCrawl, in the boxes whose contains_npc the last sweep set, corners of its 8 in the route's start box, tgt the boxes holding its target, route start>second..last, link the first link (owner box.slot->target flags), pmod the player's module");
+		Write("ROWS: AvP-docs\\engine\\inteng\\reassess\\alien-drop-audit.md. FIELDS: f frame, t game seconds since the alien was made, near (its module drawn), mod its module, ai its AI module, wps boxes in its AI module, state, dist to the player, pos, ceil its height below its module's top, on its surface (by its down), std UseStandardGravity, down its GravityDirection, nocontact TimeNotInContactWithFloor (16384 while it touches something, counting down without; at 0 its down becomes straight down), crouch IAmCrouched, enc AlienIsEncouragedToCrawl, in the boxes whose contains_npc the last sweep set, corners of its 8 in the route's start box, tgt the boxes holding its target, route start>second..last, link the first link (owner box.slot->target flags), pmod the player's module");
 		Write("PLAYER at " + std::to_string(standAt.vx) + " " + std::to_string(standAt.vy) + " " + std::to_string(standAt.vz) + " in " + ModuleWords(room) + "; the alien at " + std::to_string(alienAt.vx) +
 			" " + std::to_string(alienAt.vy) + " " + std::to_string(alienAt.vz));
 		return false;
@@ -476,7 +481,10 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 		VECTORCH spot = alienAt;
 
-		spot.vy -= kAlienStartsAboveTheFloor;   // up is smaller
+		if (!alienOnCeiling)
+		{
+			spot.vy -= kAlienStartsAboveTheFloor;   // up is smaller; on the ceiling, alienat= is where it hangs, just under it
+		}
 
 		if (!ModuleFromPosition(&spot, (MODULE *)0))
 		{
@@ -488,7 +496,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 		CreateAlienBot(&spot, 0);
 
-		STRATEGYBLOCK const *const made = TheAlienMadeAt(spot);
+		STRATEGYBLOCK *const made = TheAlienMadeAt(spot);
 
 		if (!made)
 		{
@@ -498,10 +506,31 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 			return true;
 		}
 
+		// alienon=ceiling: a start no stock level gives, for a run of the lane alone (Drake, 11-19 ~21:25: the climb is tested apart). It hangs as one that has
+		// climbed does: its own gravity (UseStandardGravity 0) pointing up, its contact counter as a contact sets it (dynamics.cpp ApplyGravity), so it has its
+		// quarter second to meet the ceiling, and turned half a turn, upside down. Everything after this frame is the game's own.
+		if (alienOnCeiling && made->DynPtr)
+		{
+			DYNAMICSBLOCK *const d = made->DynPtr;
+
+			d->UseStandardGravity = 0;
+			d->GravityDirection.vx = 0;
+			d->GravityDirection.vy = -ONE_FIXED;
+			d->GravityDirection.vz = 0;
+			d->TimeNotInContactWithFloor = kGravityKicksIn;
+			d->OrientEuler.EulerX = 0;
+			d->OrientEuler.EulerY = 0;
+			d->OrientEuler.EulerZ = 2048;   // 4096 a turn
+			CreateEulerMatrix(&d->OrientEuler, &d->OrientMat);
+			TransposeMatrixCH(&d->OrientMat);
+			d->PrevOrientEuler = d->OrientEuler;
+			d->PrevOrientMat = d->OrientMat;
+		}
+
 		memcpy(alienName, made->SBname, SB_NAME_LENGTH);
 		alienMade = true;
 		madeAtFrame = frame;
-		Event(frame, "MADE at " + std::to_string(spot.vx) + " " + std::to_string(spot.vy) + " " + std::to_string(spot.vz) + " in " + ModuleWords(made->containingModule));
+		Event(frame, std::string(alienOnCeiling ? "MADE ON THE CEILING at " : "MADE at ") + std::to_string(spot.vx) + " " + std::to_string(spot.vy) + " " + std::to_string(spot.vz) + " in " + ModuleWords(made->containingModule));
 		return false;
 	}
 

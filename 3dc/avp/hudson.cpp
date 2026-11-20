@@ -1100,7 +1100,7 @@ int Hudson_CheckBeforeStarting()
 	{
 		HudsonLanesAreOn = true;
 		ForceLoad_Alien = TRUE;
-		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames);
+		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling);
 	}
 
 	char line[256] = { 0 };

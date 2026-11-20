@@ -2712,6 +2712,16 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 alienat=1,2,3 standat=4,5,6", kHudsonRefusedWatchWordsWithoutCombat);
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Lanes) { $arguments += \" lanes=yes\" }"), "the run script can ask for it");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "$laneNotes = Join-Path $saves 'hudson-lanes.txt'"), "and keeps what it wrote with the run");
+
+	// alienon=: where its alien is made (added 2026-11-19 by Melanikus (Frost), Drake's run of the lane alone)
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.alienOnCeiling, "a lane probe's alien is made on the floor unless it says");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienon=ceiling alienat=1,2,3 standat=4,5,6", &plan) == 0 && plan.alienOnCeiling, "alienon=ceiling hangs it from the ceiling");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienon=floor alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.alienOnCeiling, "alienon=floor is the floor");
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon=wall alienat=1,2,3 standat=4,5,6", kHudsonRefusedAlienOnNotFloorOrCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon= alienat=1,2,3 standat=4,5,6", kHudsonRefusedAlienOnNotFloorOrCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon=ceiling alienon=floor alienat=1,2,3 standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 alienon=ceiling", kHudsonRefusedAlienOnWithoutLanes);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienOn) { $arguments += \" alienon=$AlienOn\" }"), "the run script can ask for it");
 }
 
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
