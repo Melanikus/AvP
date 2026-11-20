@@ -77,6 +77,16 @@ namespace
 	long attackedAt = -1;
 	char downInPlayersModule[560] = { 0 };            // how it came down there, once it was there
 
+	// THE STUTTER COUNT (Bishop 11-19 ~23:30, the owner's "the game is not dealing well with discreet squares": to compare v2d with the consolidated plot). While the alien is
+	// near, in an AI module with waypoints and with a route this frame, a frame whose route starts from another box than the last frame's is a box switch, and one whose target is
+	// held by another box (the lowest box with contains_target) a target switch; a switch back to the box it left the switch before is a return (flicker). A new AI module starts
+	// the count afresh (crossing a doorway is not a switch). Over the run: the totals, per second of that time, and the busiest second.
+	long stutterBoxSwitches = 0, stutterBoxReturns = 0, stutterTargetSwitches = 0, stutterFrames = 0;
+	long long stutterTime = 0;                        // 16.16 seconds counted
+	int stutterAi = -1, stutterStart = -1, stutterStartBefore = -1, stutterTarget = -1;
+	long long stutterSecondFrom = 0;
+	long stutterThisSecond = 0, stutterWorstSecond = 0;
+
 	void Keep(char *to, size_t size, std::string const &text)
 	{
 		_snprintf(to, size - 1, "%s", text.c_str());
@@ -362,8 +372,19 @@ namespace
 		std::string const case2 = inPlayersModule ? "CASE 2 (the player's module): " + (downInPlayersModule[0] == 0 ? std::string("it never came down there") : std::string(downInPlayersModule)) +
 			(attacked ? ", first attack at f=" + std::to_string(attackedAt) : std::string(", no attack")) : std::string("CASE 2: it never reached the player's module");
 
+		double const stutterSeconds = (double)stutterTime / 65536.0;
+		char stutter[400];
+
+		_snprintf(stutter, sizeof(stutter) - 1, "STUTTER near in AI modules with waypoints for %.1f s (%ld frames): its start box switched %ld times (%.2f a second; %ld of them back to the box "
+			"before), its target box %ld times (%.2f a second); the busiest second %ld switches", stutterSeconds, stutterFrames, stutterBoxSwitches,
+			stutterSeconds > 0.0 ? stutterBoxSwitches / stutterSeconds : 0.0, stutterBoxReturns, stutterTargetSwitches, stutterSeconds > 0.0 ? stutterTargetSwitches / stutterSeconds : 0.0,
+			stutterWorstSecond > stutterThisSecond ? stutterWorstSecond : stutterThisSecond);
+		stutter[sizeof(stutter) - 1] = 0;
+
 		Write(verdict);
 		Write(case2);
+		Write(stutter);
+		LogString((std::string("lanes: ") + stutter).c_str());
 		Write(std::string("END ") + why);
 		LogString(("lanes: " + verdict).c_str());
 		LogString(("lanes: " + case2).c_str());
@@ -563,7 +584,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 
 	// what the waypoint code left, for its AI module
 	std::string in, target, route = "-", link = "none", corners = "-";
-	int holdingIt = 0, holdingTarget = 0;
+	int holdingIt = 0, holdingTarget = 0, firstTarget = -1;
 
 	for (int b = 0; boxes && b < boxes->num_waypoints; b++)
 	{
@@ -577,6 +598,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		if (box->contains_target)
 		{
 			target += (holdingTarget++ ? "," : "") + std::to_string(b);
+			firstTarget = firstTarget < 0 ? b : firstTarget;
 		}
 	}
 
@@ -719,6 +741,48 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		attacked = true;
 		attackedAt = frame;
 		Event(frame, "ATTACK " + std::to_string(distance) + " mm from him, " + (nowClimbing ? std::string("still up") : std::string("on the floor")));
+	}
+
+	// the stutter count (see where it is kept)
+	if (isNear && boxes && boxes->num_waypoints > 0 && routeNow)
+	{
+		if (aiNumber == stutterAi)
+		{
+			if (start != stutterStart)
+			{
+				stutterBoxSwitches++;
+				stutterBoxReturns += start == stutterStartBefore ? 1 : 0;
+				stutterThisSecond++;
+				stutterStartBefore = stutterStart;
+			}
+
+			if (firstTarget != stutterTarget)
+			{
+				stutterTargetSwitches++;
+				stutterThisSecond++;
+			}
+		}
+		else
+		{
+			stutterStartBefore = -1;
+		}
+
+		stutterAi = aiNumber;
+		stutterStart = start;
+		stutterTarget = firstTarget;
+		stutterFrames++;
+		stutterTime += NormalFrameTime;
+
+		if (stutterTime - stutterSecondFrom >= 65536)
+		{
+			stutterWorstSecond = stutterThisSecond > stutterWorstSecond ? stutterThisSecond : stutterWorstSecond;
+			stutterThisSecond = 0;
+			stutterSecondFrom = stutterTime;
+		}
+	}
+	else
+	{
+		stutterAi = -1;
 	}
 
 	climbing = nowClimbing;
