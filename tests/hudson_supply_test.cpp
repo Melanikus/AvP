@@ -68,9 +68,9 @@ static void TestWhichOnesCountAsAlive()
 	printf("Which ones keep their slot\n");
 
 	Check(HudsonSupply_HoldsASlot(true, 39000), "alive and within 40 m: it holds its slot");
-	Check(!HudsonSupply_HoldsASlot(true, 41000), "alive but over 40 m from him: it frees its slot, so the supply keeps coming");
+	Check(HudsonSupply_HoldsASlot(true, 41000), "alive, even over 40 m from him: it holds its slot (Bishop 11-20, the owner's 'swarm': a far alien doesn't free a slot)");
 	Check(!HudsonSupply_HoldsASlot(false, 1000), "dead: it frees its slot");
-	Check(HudsonSupply_MostMade(4) == 16, "at most 4 times the cap made in a run, so a run can't fill the level");
+	Check(HudsonSupply_MostMade(4) == 8, "at most twice the cap made in a run: 8 for 4 (the owner: \"Let's limit to 4\", Bishop: at most 8 made)");
 }
 
 static void TestInTheNamedRooms()
