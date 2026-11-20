@@ -2765,6 +2765,22 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonPlay_FlareIsDue(") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "ThrowAFlare();"),
 		"the player's own flare action, when one is due");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Flares) { $arguments += \" flares=yes\" }"), "the run script can ask for it");
+	// aimnearest=yes (the owner 11-20: "I want hudson to run backwards pointing (but not firing) always at the nearest alien") and holdground=yes (Bishop 11-20, the
+	// snowplow: an alien close ahead on his way, and he holds his ground or backs off instead of walking through it): Hudson's own switches, playing only, off unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes aimnearest=yes holdground=yes", &plan) == 0 && plan.playAimNearest && plan.playHoldGround,
+		"he can aim at the nearest alien and hold his ground as he plays");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.playAimNearest && !plan.playHoldGround, "and does neither unless asked");
+	Refused("-hudson level=genshd1 frames=9000 aimnearest=yes", kHudsonRefusedAimNearestWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 holdground=yes", kHudsonRefusedHoldGroundWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes aimnearest=no", kHudsonRefusedAimNearestNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes holdground=no", kHudsonRefusedHoldGroundNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes aimnearest=yes aimnearest=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 play=yes holdground=yes holdground=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_AimAtTheNearest(plan.playAimNearest);") && Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_HoldHisGround(plan.playHoldGround);"),
+		"the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AimNearest) { $arguments += \" aimnearest=yes\" }") &&
+		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($HoldGround) { $arguments += \" holdground=yes\" }"), "the run script can ask for them");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"AIM f=\""), "the lane probe logs whom he aims at, and his hold, each frame");
 	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
 	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
 	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
@@ -2831,8 +2847,9 @@ static void CheckLanesWord()
 	// every hit on Hudson and every refill, a line each (the owner 11-20: "more ceiling crawling aliens him faster"; "hudson's getting more and more hurt")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"REFILL f=\""), "and each time his health is filled up again, a REFILL line");
-	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply supplyat=$($SupplyAt -replace 'm', '-')\" }"),
-		"the run script can ask for it, a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply\" }"), "the run script can ask for it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyAt) { $arguments += \" supplyat=$($SupplyAt -replace 'm', '-')\" }"),
+		"and supplyat= only when it's said (an empty one ended a supplyin= batch with exit 21), a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 
 	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const kPlayMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time");

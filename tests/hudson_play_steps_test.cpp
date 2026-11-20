@@ -495,8 +495,50 @@ static void TestFightsThatCantStopHim()
 	Check(play.find("if (HudsonPlay_CantHurtIt(now - fightingItSince, healthAtStart, threat->SBDamageBlock.Health))") != std::string::npos, "a threat he can't hurt is judged by its health since the fight began");
 }
 
+// AIM AT THE NEAREST (aimnearest=yes; the owner 11-20: "I want hudson to run backwards pointing (but not firing) always at the nearest alien") and HOLD HIS GROUND
+// (holdground=yes; Bishop 11-20, the snowplow: an alien in Attack is held still by its own state, and he, unkillable, walked it 50 to 100 m down a corridor)
+static void TestAimAndHold()
+{
+	printf("Aiming at the nearest, and holding his ground\n");
+
+	std::vector<HudsonPlayAimCandidate> aliens = { { 0, 9000, true }, { 1, 6000, false }, { 2, 7000, true } };
+
+	Check(HudsonPlay_PickTheNearest(aliens, -1) == 2, "the nearest he can see, before a nearer one he can't");
+	aliens[1].seen = true;
+	Check(HudsonPlay_PickTheNearest(aliens, -1) == 1, "the nearest of those he can see");
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 2, "but he keeps the one he has unless another is clearly nearer (6 m against 7 m isn't), so his view doesn't flick");
+	aliens[1].distance = 5000;
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 1, "one under three quarters of the distance of his is clearly nearer");
+	aliens[2].seen = false;
+	aliens[1].distance = 6900;
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 1, "and one he has lost sight of gives way to one he sees");
+	std::vector<HudsonPlayAimCandidate> far = { { 0, kHudsonPlayAimWithin, true } };
+	Check(HudsonPlay_PickTheNearest(far, -1) == -1 && HudsonPlay_PickTheNearest(std::vector<HudsonPlayAimCandidate>(), -1) == -1,
+		"none near (20 m or more off): none, and he faces along his way as before");
+	Check(HudsonPlay_PickTheNearest(far, 0) == -1, "nor does he keep one that has gone that far");
+
+	Check(HudsonPlay_AlienAheadOnHisWay(1000, 100, 1, 0, 1005), "an alien 1 m ahead on his way blocks it");
+	Check(!HudsonPlay_AlienAheadOnHisWay(-1000, 100, 1, 0, 1005), "one behind him doesn't");
+	Check(!HudsonPlay_AlienAheadOnHisWay(1600, 0, 1, 0, kHudsonPlayHoldWithin + 1), "nor one over 1.5 m off");
+	Check(HudsonPlay_Hold(true, 1200, 0, 1000000) == kHudsonPlayStand, "it ahead, 1.2 m: he stands his ground");
+	Check(HudsonPlay_Hold(true, 900, 500, 1000000) == kHudsonPlayBackOff, "under 1 m: he backs off");
+	Check(HudsonPlay_Hold(false, 900, 500, 1000000) == kHudsonPlayWalkOn, "nothing ahead: he walks on");
+	Check(HudsonPlay_Hold(true, 1200, kHudsonPlayHoldMost, 1000000) == kHudsonPlayWalkOn,
+		"after 4 s he walks on (a clawed player pushes past or dies, and the run mustn't stand still for good)");
+	Check(HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest - 1) == kHudsonPlayWalkOn && HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest) == kHudsonPlayStand,
+		"and holds again only after 2 s, under the snowplow check's 3 s");
+
+	std::string play;
+
+	Check(ReadWholeFile("3dc/avp/hudson_play.cpp", &play), "3dc/avp/hudson_play.cpp is there");
+	Check(play.find("if (HoldingHisGround(status, dyn, aim, now))") != std::string::npos, "his walk asks whether he holds before it steers");
+	Check(play.find("AimAtTheNearest(status);") != std::string::npos, "and his view goes to the nearest each frame, before a flare's turn");
+	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
+}
+
 int main()
 {
+	TestAimAndHold();
 	TestAGoodList();
 	TestBadFiles();
 	TestSteering();
