@@ -353,6 +353,7 @@ static char const *KindWord(HudsonPlayKind kind)
 		case kHudsonPlayWalkInto: return "walk into";
 		case kHudsonPlayPickUp: return "pick up";
 		case kHudsonPlayDestroy: return "destroy";
+		case kHudsonPlayGoTo: return "go to";
 		default: return "kill";
 	}
 }
@@ -477,7 +478,7 @@ static void MoveHimToTheStep(std::string const &why, DWORD now)
 	movedToThisStep = true;
 
 	HudsonPlayStep const &step = steps[stepAt];
-	VECTORCH place = step.kind == kHudsonPlayWalkInto ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
+	VECTORCH place = step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
 	HudsonGridPoint floor;
 
 	if (FindTheFloorNear(place, &floor))
@@ -919,7 +920,7 @@ static void StartFindingTheWay(VECTORCH const &here)
 	}
 
 	HudsonPlayStep const &step = steps[stepAt];
-	bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto;
+	bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo;
 	VECTORCH const place = staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
 
 	HudsonNav_TheGridToSearch().StartSearch(here.vx, here.vy, here.vz, place.vx, place.vy, place.vz);
@@ -1181,7 +1182,7 @@ static void WalkAlongTheWay(PLAYER_STATUS *status, DWORD now)
 
 	if (!wayGoesAllTheWay && !movedToThisStep)
 	{
-		bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto;
+		bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo;
 
 		if (!PutHimWhereALiftGoesFrom(staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace()), now))
 		{
@@ -2755,6 +2756,12 @@ static void DoTheStep(PLAYER_STATUS *status, DWORD now)
 			DoTheShooting(status, now, kGiveUpOnShootingSomething);
 			break;
 
+		// a place: done once he's there (the grid's way went all the way), or as near as the grid knows, which doesn't count as done
+		case kHudsonPlayGoTo:
+			SayAboutTheStep(wayGoesAllTheWay ? "he got to " + step.name : "he got as near to " + step.name + " as the grid knows, so he goes on");
+			NextStep(wayGoesAllTheWay);
+			break;
+
 		default:
 			DoTheShooting(status, now, kGiveUpOnAKill);
 			break;
@@ -3049,14 +3056,15 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			ridesThisStep = 0;
 			SayAboutTheStep(StepTitle());
 
-			if (!target)
+			// a goto is a place and nothing else: no object of its name is looked for (the lane probe v3)
+			if (!target && step.kind != kHudsonPlayGoTo)
 			{
 				SayAboutTheStep("there's nothing called " + step.name + " here, so he goes on");
 				NextStep(false);
 				break;
 			}
 
-			stateBefore = HudsonStrategies_State(target);
+			stateBefore = target ? HudsonStrategies_State(target) : std::string();
 			StartFindingTheWay(here);
 			break;
 		}
@@ -3081,7 +3089,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 				&& otherPlayer->DynPtr->Position.vy - here.vy <= kSameLevelWithin && here.vy - otherPlayer->DynPtr->Position.vy <= kSameLevelWithin))
 			{
 				HudsonPlayStep const *const step = following ? 0 : &steps[stepAt];
-				bool const staysPut = step && (step->kind == kHudsonPlayPress || step->kind == kHudsonPlayWalkInto);
+				bool const staysPut = step && (step->kind == kHudsonPlayPress || step->kind == kHudsonPlayWalkInto || step->kind == kHudsonPlayGoTo);
 				VECTORCH const there = following ? otherPlayer->DynPtr->Position : staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step->name.c_str()), StepPlace());
 
 				if (TryALift(here, there, now))

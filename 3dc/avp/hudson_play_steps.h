@@ -18,7 +18,8 @@ enum HudsonPlayKind
 	kHudsonPlayWalkInto,  // walk to a place, because going there sets something off
 	kHudsonPlayPickUp,    // walk onto something
 	kHudsonPlayDestroy,   // get within sight of something, and shoot it until it's gone
-	kHudsonPlayKill       // the same, for someone
+	kHudsonPlayKill,      // the same, for someone
+	kHudsonPlayGoTo       // walk to a place, and nothing else: no object of its name (the lane probe v3's list, added 2026-11-20 by Melanikus (Frost))
 };
 
 struct HudsonPlayStep
@@ -150,6 +151,10 @@ inline std::string HudsonPlay_ReadLine(std::string const &line, std::vector<Huds
 	else if (words[0] == "kill")
 	{
 		step.kind = kHudsonPlayKill;
+	}
+	else if (words[0] == "goto")
+	{
+		step.kind = kHudsonPlayGoTo;
 	}
 	else
 	{
