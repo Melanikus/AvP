@@ -633,6 +633,12 @@ static void TestAimAndHold()
 
 	Check(drops.size() == 1 && drops[0].kind == kHudsonPlayDrop && drops[0].y == 7792, "drop, a place to walk straight at and fall to");
 	Check(play.find("case kHudsonPlayDrop:") != std::string::npos, "and it's done as a step of its own");
+	// a JUMP step (Frost 2026-11-20; Drake 23:2x: bypass rests on a dais in med02, 780 mm tall with four vertical faces and no ramp, so a player jumps onto it, and every
+	// full run ended that step with the 90 s move): straight at a place higher than a step, jumping when he's near its edge, till he's up there
+	std::vector<HudsonPlayStep> const jumps = Read("jump -62200 -6624 57590 | onto the dais\n", "a jump line is read");
+
+	Check(jumps.size() == 1 && jumps[0].kind == kHudsonPlayJumpUp && jumps[0].y == -6624, "jump, a place to jump up onto");
+	Check(play.find("case kHudsonPlayJumpUp:") != std::string::npos && play.find("static void DoTheJump(") != std::string::npos, "and it's done as a step of its own");
 	// a back-up only with floor behind him, and short; the nudges short too; and the step limit's move puts him by a switch, not on it (the 22:26 run: cheat 23 put
 	// him at opslev01's own point, in its console, and nothing got him out)
 	Check(play.find("if (rescue == kHudsonPlayBackUp && !FloorBehindHim())") != std::string::npos, "no back-up over an edge");
