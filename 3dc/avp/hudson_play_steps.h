@@ -477,6 +477,17 @@ struct HudsonPlayRearCandidate
 };
 
 // Of the aliens within the rear guard (the caller leaves out the rest): the nearest on a ceiling, else the nearest on a wall, else the nearest. -1: none
+// FACEHUGGERS (the owner 22:51: "He must kill facehuggers"): a hugger within kHudsonPlayHuggerWithin comes first for the rear guard, before any alien (its rank
+// is under the ceiling's), and he shoots it from there; an alien from shootwithin=. Beyond kHudsonPlayHuggerSeenWithin only one he can see counts. Frost 2026-11-20
+static const int kHudsonPlayHuggerRank = -1;
+static const int kHudsonPlayHuggerWithin = 10000;       // mm
+static const int kHudsonPlayHuggerSeenWithin = 3000;    // mm
+
+inline int HudsonPlay_ShootsFrom(bool hugger, int shootingWithin)
+{
+	return hugger && shootingWithin < kHudsonPlayHuggerWithin ? kHudsonPlayHuggerWithin : shootingWithin;
+}
+
 inline int HudsonPlay_PickTheRearTarget(std::vector<HudsonPlayRearCandidate> const &aliens)
 {
 	int best = -1, bestRank = 3, bestDistance = 0;

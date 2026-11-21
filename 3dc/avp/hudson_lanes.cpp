@@ -998,8 +998,10 @@ namespace
 
 				_snprintf(words, sizeof(words) - 1, "health %.1f -> %.1f, armour %.1f -> %.1f", lastHealth / 65536.0, health / 65536.0, lastArmour / 65536.0, armour / 65536.0);
 				words[sizeof(words) - 1] = 0;
+				// a facehugger on his face first: that's what kills him then (the owner 22:51)
 				Write("HIT f=" + std::to_string(frame) + " " + words + " at " + PlaceWords(me->DynPtr->Position) + " in " + ModuleWords(me->containingModule) + ", by " +
-					(w ? "a" + std::to_string(w->number) + " (" + StateName(((ALIEN_STATUS_BLOCK *)nearest->SBdataptr)->BehaviourState) + ", " + std::to_string((int)nearestD) + " mm)" :
+					(HudsonPlay_AHuggerIsOnHim() ? std::string("facehugger (on his face)") :
+					w ? "a" + std::to_string(w->number) + " (" + StateName(((ALIEN_STATUS_BLOCK *)nearest->SBdataptr)->BehaviourState) + ", " + std::to_string((int)nearestD) + " mm)" :
 					std::string("no alien within 3 m")));
 			}
 
@@ -1023,7 +1025,8 @@ namespace
 
 					_snprintf(words, sizeof(words) - 1, "from %d mm, its health %.1f -> %.1f, %s", shotDistance, shotBefore / 65536.0, shotAfter / 65536.0, shotDied ? "died" : "alive");
 					words[sizeof(words) - 1] = 0;
-					Write("SHOT f=" + std::to_string(frame) + " " + (shotW ? "a" + std::to_string(shotW->number) : std::string("an alien the probe never met")) + " " + words);
+					Write("SHOT f=" + std::to_string(frame) + " " + (HudsonPlay_LastBurstWasAtAHugger() ? std::string("facehugger") :
+						shotW ? "a" + std::to_string(shotW->number) : std::string("an alien the probe never met")) + " " + words);
 				}
 			}
 
@@ -1033,7 +1036,8 @@ namespace
 				bool aimSeen = false;
 				char const *hold = "-";
 				STRATEGYBLOCK const *const aimed = (STRATEGYBLOCK const *)HudsonPlay_AimedAt(&aimDistance, &aimSeen, &hold);
-				Watched const *const aimedW = aimed ? Record(aimed, true) : nullptr;
+				bool const aimedHugger = aimed && aimed->I_SBtype == I_BehaviourFaceHugger;   // a facehugger isn't one of the probe's aliens (Frost 2026-11-20)
+				Watched const *const aimedW = aimed && !aimedHugger ? Record(aimed, true) : nullptr;
 
 				// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
 				int offBy = -1, onFor = 0, delay = 0;
@@ -1042,7 +1046,8 @@ namespace
 
 				std::string const off = offBy < 0 ? std::string("-") : std::to_string(offBy / 10) + "." + std::to_string(offBy % 10);
 
-				Write("AIM f=" + std::to_string(frame) + " " + (aimedW ? "a" + std::to_string(aimedW->number) + " " + std::to_string(aimDistance) + " mm " + (aimSeen ? "seen" : "unseen") :
+				Write("AIM f=" + std::to_string(frame) + " " + (aimedW || aimedHugger ? (aimedW ? "a" + std::to_string(aimedW->number) : std::string("facehugger")) + " " +
+					std::to_string(aimDistance) + " mm " + (aimSeen ? "seen" : "unseen") :
 					std::string("none")) + " hold=" + hold + " pitch=" + PitchWords(((PLAYER_STATUS *)me->SBdataptr)->ViewPanX) + " crouched=" +
 					(((PLAYER_STATUS *)me->SBdataptr)->ShapeState != PMph_Standing ? "1" : "0") + " off=" + off + " on=" + std::to_string(onFor) + "/" + std::to_string(delay));
 			}
@@ -1053,7 +1058,21 @@ namespace
 
 				_snprintf(words, sizeof(words) - 1, "health %.1f -> %.1f", lastHealth / 65536.0, health / 65536.0);
 				words[sizeof(words) - 1] = 0;
-				Write("REFILL f=" + std::to_string(frame) + " " + words);
+				Write("REFILL f=" + std::to_string(frame) + " " + words + (HudsonPlay_AHuggerIsOnHim() ? " cause=facehugger" : ""));
+			}
+
+			// a facehugger onto his face: a death in the real game, whatever his health (the owner 22:51: "we died to face huggers, we're cheating")
+			{
+				static bool huggerWasOn = false;
+				bool const huggerOn = HudsonPlay_AHuggerIsOnHim();
+
+				if (huggerOn && !huggerWasOn)
+				{
+					Write("LATCH f=" + std::to_string(frame) + " a facehugger is on his face at " + PlaceWords(me->DynPtr->Position) + " in " + ModuleWords(me->containingModule) +
+						" (a death in the real game)");
+				}
+
+				huggerWasOn = huggerOn;
 			}
 
 			lastHealth = health;

@@ -89,6 +89,8 @@ char const *HudsonPlay_StatusLine();
 // its health then and at the burst's last frame (the game's 16.16), and whether it died
 bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died);
 void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold);
+bool HudsonPlay_AHuggerIsOnHim();             // a facehugger on his face: a death in the real game (Frost 2026-11-20)
+bool HudsonPlay_LastBurstWasAtAHugger();      // the burst HudsonPlay_TakeTheBurst gives was at a facehugger
 void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay);   // the shot's crosshair: tenths of a degree off (-1: none in range), ms on it, the delay
 
 // True once he's been down his whole list (the lane probe's watch ends there: "route done")

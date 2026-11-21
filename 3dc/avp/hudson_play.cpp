@@ -28,6 +28,7 @@
 #include "dynblock.h"
 #include "dynamics.h"
 #include "bh_alien.h"
+#include "bh_facehugger.h"   // facehuggers as targets, and one on his face (Frost 2026-11-20)
 #include "pvisible.h"
 #include "weapons.h"
 #include "pldghost.h"
@@ -266,6 +267,7 @@ static bool bursting = false, burstWaiting = false;   // a burst going on; one e
 static STRATEGYBLOCK const *burstAt = 0;
 static char burstName[SB_NAME_LENGTH];         // its strategy name: SB_NAME_LENGTH bytes, not text, compared as bytes only
 static std::string burstTitle;                // what the log calls it (HudsonStrategies_Title), taken when the burst began
+static bool burstAtAHugger = false;           // and whether it was at a facehugger, for the SHOT line (Frost 2026-11-20)
 static int burstDistance = 0, burstHealthBefore = 0, burstHealthAfter = 0;
 static bool burstDied = false;
 static bool gunGiven = false;
@@ -618,6 +620,33 @@ static void KillItForHim(STRATEGYBLOCK *target, std::string const &name, std::st
 	CauseDamageToObject(target, &certainDeath, ONE_FIXED, NULL);
 }
 
+// Is a facehugger on his face (FHNS_Attack, after him)? It kills him there, again each FACEHUGGER_NEARATTACKTIME, and in the real game that's his death whatever his
+// health (the owner 22:51: "we died to face huggers, we're cheating"). For the refill's cause and the lane probe's LATCH line. Frost 2026-11-20
+bool HudsonPlay_AHuggerIsOnHim()
+{
+	if (!Player || !Player->ObStrategyBlock)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (block && block->I_SBtype == I_BehaviourFaceHugger && block->SBdataptr)
+		{
+			FACEHUGGER_STATUS_BLOCK const *const hugger = (FACEHUGGER_STATUS_BLOCK const *)block->SBdataptr;
+
+			if (hugger->nearBehaviourState == FHNS_Attack && (!hugger->Target || hugger->Target == Player->ObStrategyBlock))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 // He can't die in this run. A player would have, so every time his health runs out it's counted and logged, and it's filled up again. In something that kills every frame, it's
 // only counted once a second, so that the log can still be read.
 static void KeepHimAlive(PLAYER_STATUS *status, DWORD now)
@@ -634,7 +663,8 @@ static void KeepHimAlive(PLAYER_STATUS *status, DWORD now)
 	if (me->SBDamageBlock.Health <= 0 && now - filledHisHealthAt >= kLeastTimeBetweenFillingHisHealth)
 	{
 		filledHisHealthAt = now;
-		SayTheCheat("his health is filled up again", "it ran out, and a player would be dead here");
+		SayTheCheat("his health is filled up again", HudsonPlay_AHuggerIsOnHim() ? "a facehugger is on his face, and a player would be dead here" :
+			"it ran out, and a player would be dead here");
 		me->SBDamageBlock.Health = healthAtTheStart;
 		status->Health = healthAtTheStart;
 	}
@@ -852,6 +882,19 @@ static bool IsAsleepOrDead(const STRATEGYBLOCK *block)
 	}
 
 	return false;
+}
+
+// A facehugger he can shoot: not one on his face already (bh_facehugger.cpp stops drawing it there), dying or gone (the owner 22:51). Frost 2026-11-20
+static bool HuggerHeCanShoot(STRATEGYBLOCK const *block)
+{
+	if (block->I_SBtype != I_BehaviourFaceHugger || !block->SBdataptr || IsAsleepOrDead(block))
+	{
+		return false;
+	}
+
+	FACEHUGGER_STATUS_BLOCK const *const hugger = (FACEHUGGER_STATUS_BLOCK const *)block->SBdataptr;
+
+	return hugger->nearBehaviourState != FHNS_Attack && hugger->nearBehaviourState != FHNS_Dying;
 }
 
 // The nearest he can see, but he stays on the one he's fighting for as long as he can see it. Someone who keeps swapping between two hits neither, and the time he's allowed on one would never run out.
@@ -3549,20 +3592,23 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	{
 		STRATEGYBLOCK *const block = ActiveStBlockList[i];
 
-		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		// a facehugger within 10 m comes first, before any alien (the owner 22:51: "He must kill facehuggers")
+		bool const hugger = block && block->SBdptr && block->DynPtr && HuggerHeCanShoot(block);
+
+		if (!block || (block->I_SBtype != I_BehaviourAlien && !hugger) || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
 		{
 			continue;
 		}
 
 		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
 
-		if (distance >= within)
+		if (distance >= (hugger ? kHudsonPlayHuggerWithin : within))
 		{
 			continue;
 		}
 
 		// rearguard=: only an alien that's chasing him is faced; with none, he faces along his way and sprints (the owner 22:36)
-		if (rearGuardWithin > 0 && !IsChasingHim(block, distance))
+		if (rearGuardWithin > 0 && !hugger && !IsChasingHim(block, distance))
 		{
 			continue;
 		}
@@ -3574,9 +3620,15 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 
 		HudsonPlayAimCandidate const candidate = { (int)blocks.size(), distance, IsThisObjectVisibleFromThisPosition_WithIgnore(Player, block->SBdptr, &chest, kHudsonPlayAimWithin) != 0 };
 
+		// a hugger beyond 3 m only if he can see it: one behind a wall would hold his aim from the aliens after him
+		if (hugger && distance > kHudsonPlayHuggerSeenWithin && !candidate.seen)
+		{
+			continue;
+		}
+
 		current = block == aimedAt ? candidate.id : current;
 		candidates.push_back(candidate);
-		rear.push_back(HudsonPlayRearCandidate{ candidate.id, distance, HudsonPlay_SurfaceRank(block->DynPtr->GravityDirection.vy) });
+		rear.push_back(HudsonPlayRearCandidate{ candidate.id, distance, hugger ? kHudsonPlayHuggerRank : HudsonPlay_SurfaceRank(block->DynPtr->GravityDirection.vy) });
 		blocks.push_back(block);
 	}
 
@@ -3600,7 +3652,8 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	if (it != aimedAt)
 	{
 		LogString("play: aims at " + HudsonStrategies_Title(it) + ", " + std::to_string(candidates[pick].distance) + " mm from him" + (candidates[pick].seen ? "" : ", out of his sight") +
-			(rearGuardWithin > 0 ? std::string(", on ") + (rear[(size_t)pick].rank == 0 ? "the ceiling" : rear[(size_t)pick].rank == 1 ? "a wall" : "the floor") : std::string()) +
+			(rearGuardWithin > 0 ? std::string(", ") + (rear[(size_t)pick].rank == kHudsonPlayHuggerRank ? "a facehugger" : rear[(size_t)pick].rank == 0 ? "on the ceiling" :
+				rear[(size_t)pick].rank == 1 ? "on a wall" : "on the floor") : std::string()) +
 			", " + RoomOf(Player->ObStrategyBlock));
 	}
 
@@ -3690,7 +3743,8 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 	{
 		int const distance = DistanceTo(dyn->Position, aimedAt->DynPtr->Position);
 
-		if (distance < shootingWithin)
+		// a facehugger from 10 m (the owner 22:51)
+		if (distance < HudsonPlay_ShootsFrom(aimedAt->I_SBtype == I_BehaviourFaceHugger, shootingWithin))
 		{
 			nearest = (STRATEGYBLOCK *)aimedAt;
 			nearestDistance = distance;
@@ -3777,6 +3831,7 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 		burstAt = nearest;
 		memcpy(burstName, nearest->SBname, SB_NAME_LENGTH);
 		burstTitle = HudsonStrategies_Title(nearest);
+		burstAtAHugger = nearest->I_SBtype == I_BehaviourFaceHugger;
 		burstDistance = nearestDistance;
 		burstHealthBefore = nearest->SBDamageBlock.Health;
 	}
@@ -3789,6 +3844,11 @@ void HudsonPlay_ShootWithin(int within, int delay)
 {
 	shootingWithin = within;
 	shootingDelay = delay > 0 ? (unsigned long)delay : 0;
+}
+
+bool HudsonPlay_LastBurstWasAtAHugger()
+{
+	return burstAtAHugger;
 }
 
 bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died)
