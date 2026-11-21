@@ -559,6 +559,9 @@ static void TestAimAndHold()
 	// The full run's try 5 (Frost 2026-11-20): stepping onto liftplt's car, a frame with no collision report with the car read as "the car went before he was on it",
 	// so he went back to waiting and walked off the rising car into hole02. Over the car and at its top counts as on it
 	Check(play.find("if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))") != std::string::npos, "getting on, he's on the car when he's over it at its top, touching or not");
+	// The full run's try 5: RAMP-01AB's switch is beside the shut door MNDR01, inside its box, so his grid found no way to it and he was moved 75 m. A door whose box
+	// holds the step's own place isn't shut for that step: he has to get to it
+	Check(play.find("if (stepHere && InTheBox(box, stepPlace))") != std::string::npos, "a door beside the step's switch isn't a wall for that step");
 	Check(play.find("return n >= 0 && OnTheCarNow(lifts[(size_t)n]) &&") != std::string::npos || play.find("OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp") != std::string::npos,
 		"and on a moving car by the same test he doesn't walk");
 	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
