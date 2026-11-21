@@ -2936,6 +2936,13 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 play=yes ribbon=on", kHudsonRefusedRibbonNotOff);
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RibbonOff(plan.playRibbonOff);"), "the run tells play");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RibbonOff) { $arguments += \" ribbon=off\" }"), "the run script can ask for it");
+	// filmclock=off (Bishop 11-20, the films for the public: the machine's clock stamped in the corner of a playing Hudson's film, for join-films, isn't wanted in a
+	// solo film): no stamp; a siege's or a net pair's film keeps it unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes filmclock=off", &plan) == 0 && plan.filmClockOff, "the clock can be left out of a film");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.filmClockOff, "and is in it unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes filmclock=on", kHudsonRefusedFilmClockNotOff);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if ((plan.siegeRoom[0] || plan.play) && !plan.filmClockOff &&"), "the film writer leaves the stamp out");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($FilmClockOff) { $arguments += \" filmclock=off\" }"), "the run script can ask for it");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyAt) { $arguments += \" supplyat=$($SupplyAt -replace 'm', '-')\" }"),
 		"and supplyat= only when it's said (an empty one ended a supplyin= batch with exit 21), a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 
