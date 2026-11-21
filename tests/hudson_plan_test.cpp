@@ -2784,6 +2784,17 @@ static void CheckLanesWord()
 	// and his view's tilt in degrees (down is plus, as the game's own look-down limit reads it) and whether he's crouched (the owner 11-20: "What's hudson doing dying
 	// looking up?")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
+	// supplygate=ceiling (the owner 21:13: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the supply's next alien only once the last one made
+	// has been on a ceiling (its on=ceiling frames, the reading the scorecard counts), or is dead; a SUPPLY GATE line each time it holds or opens
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplygate=ceiling", &plan) == 0 && plan.supplyGate, "the supply can wait for a ceiling");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4", &plan) == 0 && !plan.supplyGate, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplygate=ceiling", kHudsonRefusedSupplyGateWithoutSupply);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplygate=floor", kHudsonRefusedSupplyGateNotCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplygate=ceiling supplygate=ceiling", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyGate(plan.supplyGate);"), "the run tells the probe");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY GATE f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "lastMade->ceilingFrames > 0"),
+		"which makes the next one only once the last one made has been on a ceiling, and says so");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyGate) { $arguments += \" supplygate=ceiling\" }"), "the run script can ask for it");
 	// crouchanywhere=yes (Frost 11-20: shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a crouched marine fits
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes crouchanywhere=yes", &plan) == 0 && plan.playCrouchAnywhere, "his way can go wherever he fits crouched");
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playCrouchAnywhere, "and doesn't unless asked");
