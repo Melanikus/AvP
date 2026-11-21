@@ -338,6 +338,8 @@ static DWORD lastFrameAt = 0;
 
 static DWORD saidThisSecondAt = 0;
 static int secondsSaid = 0;
+static int movedEachWay[3] = { 0, 0, 0 };     // SayHisSpeeds: mm walked forwards, sideways and backwards of his facing, by HudsonPlayMoveKind (Frost 2026-11-20)
+static int secondsEachWay[3] = { 0, 0, 0 };   // and the seconds of it
 static VECTORCH placeASecondAgo = { 0, 0, 0 };
 
 static int cheatsUsed = 0;
@@ -3226,6 +3228,23 @@ static void MeasureHowWellHesFollowing(DWORD now)
 	}
 }
 
+// His speeds so far, walked forwards, backwards and sideways of his facing, against what's asked: the marine's 15000 mm/s every way while he sprints (the owner
+// 22:41: "he should move looking at aliens as fast as he can run forward"). Frost 2026-11-20
+static void SayHisSpeeds()
+{
+	static char const *const kWays[3] = { "forwards", "sideways", "backwards" };
+	std::string line = "play: his speeds so far:";
+
+	for (int i = 0; i < 3; i++)
+	{
+		line += std::string(i ? "," : "") + " " + kWays[i] + " " + std::to_string(secondsEachWay[i] ? movedEachWay[i] / secondsEachWay[i] : 0) + " mm/s over " +
+			std::to_string(secondsEachWay[i]) + " s";
+	}
+
+	LogString(line + "; asked " + std::to_string(rearGuardWithin > 0 ? 15000 : 0) + (rearGuardWithin > 0 ? " mm/s every way (sprinting, MARINE_MOVESCALE)" :
+		" (no rear guard: he slows for bends)"));
+}
+
 // One line a second, for reading a stall afterwards: where he is, where he's making for, how fast the game is asked to move him and how far he really went, and what he's touching.
 static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 {
@@ -3245,6 +3264,20 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 	char text[300];
 
 	placeASecondAgo = placeNow;
+
+	// his speeds each way of his facing, for SayHisSpeeds: only a second he was walking, on the floor and not riding
+	if (walkedLastFrame && dyn->IsInContactWithFloor && rideStage == kNotRiding && moved < 30000)
+	{
+		HudsonPlayMoveKind const kind = HudsonPlay_MoveKind(dyn->OrientMat.mat31, dyn->OrientMat.mat33, movedX, movedZ);
+
+		movedEachWay[kind] += moved;
+		secondsEachWay[kind]++;
+	}
+
+	if (secondsSaid % 30 == 0)
+	{
+		SayHisSpeeds();
+	}
 
 	if (wayAt < way.size())
 	{
@@ -3459,6 +3492,43 @@ static void FlareAtAnAlien(PLAYER_STATUS *status, DWORD now)
 // firing) always at the nearest alien"): his view, and so his gun, on the nearest alien each frame, his feet still on his way (forward and sidestep go wherever he faces,
 // so he backpedals or strafes as it needs). It turns him and tilts his view a share of the way each frame, as his view goes after his way, so a recording isn't jittery.
 // AimAtTheNearest never fires: his fire stays held (lanes=watch) and nothing here asks for it. Hudson's code only: nothing of the game or of an alien changes.
+// rearguard=: the distance of each alien near him half a second ago and now, for HudsonPlay_IsChasing. Frost 2026-11-20
+struct HudsonChaseSample
+{
+	int older;       // the distance at the reading before: half a second to a second ago (0: none yet)
+	int newer;       // the distance at the last reading
+	DWORD newerAt;   // when that was
+};
+
+static std::map<STRATEGYBLOCK const *, HudsonChaseSample> chaseSamples;
+
+// Is this alien chasing him: after him (Approach, Hunt or Attack with him its target), or closing in over the last half second? (the owner 22:36)
+static bool IsChasingHim(STRATEGYBLOCK const *block, int distance)
+{
+	DWORD const now = GetTickCount();
+	HudsonChaseSample &sample = chaseSamples[block];
+
+	// new, or not near him for a while (or a dead one's block used again): no reading from before
+	if (sample.newerAt == 0 || now - sample.newerAt > 2000)
+	{
+		sample.older = 0;
+		sample.newer = distance;
+		sample.newerAt = now;
+	}
+	else if (now - sample.newerAt >= 500)
+	{
+		sample.older = sample.newer;
+		sample.newer = distance;
+		sample.newerAt = now;
+	}
+
+	ALIEN_STATUS_BLOCK const *const alien = (ALIEN_STATUS_BLOCK const *)block->SBdataptr;
+	bool const afterHim = alien && alien->Target == Player->ObStrategyBlock &&
+		(alien->BehaviourState == ABS_Approach || alien->BehaviourState == ABS_Hunt || alien->BehaviourState == ABS_Attack);
+
+	return HudsonPlay_IsChasing(afterHim, distance, sample.older);
+}
+
 static void AimAtTheNearest(PLAYER_STATUS *status)
 {
 	static float tilt = 0.0f;   // his view's tilt, eased toward the alien's chest, in the game's 4096ths of a turn
@@ -3491,6 +3561,12 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 			continue;
 		}
 
+		// rearguard=: only an alien that's chasing him is faced; with none, he faces along his way and sprints (the owner 22:36)
+		if (rearGuardWithin > 0 && !IsChasingHim(block, distance))
+		{
+			continue;
+		}
+
 		// seen from its chest, as a fight sees it
 		VECTORCH chest;
 
@@ -3511,7 +3587,7 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	{
 		if (aimedAt)
 		{
-			LogString("play: aims at nothing now: no alien within " + std::to_string(within / 1000) + " m, so he faces along his way");
+			LogString("play: aims at nothing now: no alien " + std::string(rearGuardWithin > 0 ? "chasing him " : "") + "within " + std::to_string(within / 1000) + " m, so he faces along his way");
 		}
 
 		aimedAt = 0;
@@ -3808,6 +3884,7 @@ void HudsonPlay_RibbonOff(bool off)
 void HudsonPlay_RearGuard(int within)
 {
 	rearGuardWithin = within > 0 ? within : 0;
+	chaseSamples.clear();
 
 	if (rearGuardWithin > 0)
 	{
@@ -3816,7 +3893,8 @@ void HudsonPlay_RearGuard(int within)
 		LogString("play: rear guard within " + std::to_string(rearGuardWithin) + " mm: his aim turned a quarter of the angle a frame, at most " +
 			std::to_string((int)fullDegrees) + " deg/s (the game's full key turn); now three times that, at most " + std::to_string((int)(3.0 * fullDegrees)) +
 			" deg/s. He sprints (no slowing for bends) and runs his way backwards as fast as forwards: a marine's backward run isn't halved (pmove.cpp halves only a" +
-			" Predator's), the same " + std::to_string(15000) + " mm/s (MARINE_MOVESCALE)");
+			" Predator's), the same " + std::to_string(15000) + " mm/s (MARINE_MOVESCALE). He faces only an alien chasing him (after him in Approach, Hunt or Attack," +
+			" or nearer by " + std::to_string(kHudsonPlayClosingBy) + " mm in half a second): on the ceiling first, then a wall, then the floor; with none, he faces his way");
 	}
 }
 

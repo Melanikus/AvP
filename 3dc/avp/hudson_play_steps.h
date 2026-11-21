@@ -716,6 +716,39 @@ inline void HudsonPlay_WalkControls(double ahead, double side, int howHard, int 
 	*sideControl = (int)(side * howHard);
 }
 
+// rearguard=: is an alien within the rear guard chasing him (the owner 22:36: "always facing aliens chasing him")? It is when it's after him (Approach, Hunt or
+// Attack with him its target), or when it's nearer now than half a second ago by more than kHudsonPlayClosingBy. 0 for then means there's no reading yet.
+// Frost 2026-11-20
+static const int kHudsonPlayClosingBy = 250;   // mm in half a second: half a metre a second, more than an idle alien's shuffle
+
+inline bool HudsonPlay_IsChasing(bool afterHim, int distanceNow, int distanceHalfASecondAgo)
+{
+	return afterHim || (distanceHalfASecondAgo > 0 && distanceHalfASecondAgo - distanceNow > kHudsonPlayClosingBy);
+}
+
+// Which way of his facing a second's move went (the owner 22:41: "he should move looking at aliens as fast as he can run forward"): forwards within 45 degrees of
+// it, backwards over 135, else sideways. facingX and facingZ are his view's ahead (OrientMat mat31, mat33). Frost 2026-11-20
+enum HudsonPlayMoveKind
+{
+	kHudsonPlayMovedForwards,
+	kHudsonPlayMovedSideways,
+	kHudsonPlayMovedBackwards
+};
+
+inline HudsonPlayMoveKind HudsonPlay_MoveKind(int facingX, int facingZ, double movedX, double movedZ)
+{
+	double const facing = sqrt((double)facingX * facingX + (double)facingZ * facingZ), moved = sqrt(movedX * movedX + movedZ * movedZ);
+
+	if (facing <= 0.0 || moved <= 0.0)
+	{
+		return kHudsonPlayMovedSideways;
+	}
+
+	double const along = ((double)facingX * movedX + (double)facingZ * movedZ) / (facing * moved);
+
+	return along >= 0.7071 ? kHudsonPlayMovedForwards : along <= -0.7071 ? kHudsonPlayMovedBackwards : kHudsonPlayMovedSideways;
+}
+
 // How much of the way to where he should be looking his view turns each frame. A small share, so that it swings round smoothly and the small corrections his feet make don't shake it.
 static const int kHudsonPlayViewTurnsOneIn = 6;
 
