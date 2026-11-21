@@ -323,6 +323,9 @@ struct HudsonPlan
 	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
 	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
 	bool playCrouchAnywhere;  // crouchanywhere=yes: with play=yes, his grid has a place wherever a crouched marine fits (hudson_grid.h; Frost 11-20, shft21)
+	int shootWithin;      // shootwithin=MM: with play=yes, he fires at the nearest alien once one has been nearer than this (1000 to 20000) for shootdelay= (hudson_play.h;
+	int shootDelay;       //   the owner 11-20: "less than 4m away with a delay of 500ms"); shootdelay=MS, 0 to 5000. 0: he holds his fire as before
+	bool shootDelayAsked;
 	int dieRoll;          // dieroll=N: the game's own QUANTUM_ROLL (QuantumObjectDieRollOveride) before the level loads, 0 to 65535: every alternate place N mod its count
 	bool dieRollAsked;    //   (Bishop 11-20: the same layout on every A/B and full run; Frost). Without it, the game's own random roll
 	int watchMost;        // watchmost=S: with lanes=watch, his play is watched for at most S s of game time, 60 to 7200, not 3 minutes (the full-level run; Frost 11-20). 0: 3 minutes
@@ -633,6 +636,10 @@ extern const char *const kHudsonRefusedSupplyWithoutPlay;
 extern const char *const kHudsonRefusedSupplyNeedsPlace;
 extern const char *const kHudsonRefusedSupplyOutOfRange;
 extern const char *const kHudsonRefusedSupplyGateNotCeiling;
+extern const char *const kHudsonRefusedShootWithinOutOfRange;
+extern const char *const kHudsonRefusedShootDelayOutOfRange;
+extern const char *const kHudsonRefusedShootDelayWithoutWithin;
+extern const char *const kHudsonRefusedShootWithinWithoutPlay;
 extern const char *const kHudsonRefusedSupplyGateWithoutSupply;
 extern const char *const kHudsonRefusedSupplyInAndAt;
 extern const char *const kHudsonRefusedSupplyInName;

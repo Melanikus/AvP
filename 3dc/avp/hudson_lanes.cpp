@@ -1004,6 +1004,29 @@ namespace
 			}
 
 			// aimnearest= / holdground= (Frost 2026-11-20, Bishop: "Log the target alien per frame"): whom his view is on this frame, and his hold
+			// shootwithin= (Frost 2026-11-20, the owner: "start shooting only if he's less than 4m away with a delay of 500ms"): a SHOT line for each burst that ended
+			{
+				char const *shotName = nullptr;
+				int shotDistance = 0, shotBefore = 0, shotAfter = 0;
+				bool shotDied = false;
+
+				if (HudsonPlay_TakeTheBurst(&shotName, &shotDistance, &shotBefore, &shotAfter, &shotDied))
+				{
+					Watched const *shotW = nullptr;
+
+					for (int i = 0; i < kMostWatched && !shotW; i++)
+					{
+						shotW = watched[i].number > 0 && memcmp(watched[i].name, shotName, SB_NAME_LENGTH) == 0 ? &watched[i] : nullptr;
+					}
+
+					char words[160];
+
+					_snprintf(words, sizeof(words) - 1, "from %d mm, its health %.1f -> %.1f, %s", shotDistance, shotBefore / 65536.0, shotAfter / 65536.0, shotDied ? "died" : "alive");
+					words[sizeof(words) - 1] = 0;
+					Write("SHOT f=" + std::to_string(frame) + " " + (shotW ? "a" + std::to_string(shotW->number) : std::string("an alien the probe never met")) + " " + words);
+				}
+			}
+
 			if (HudsonPlay_AimsOrHolds())
 			{
 				int aimDistance = 0;

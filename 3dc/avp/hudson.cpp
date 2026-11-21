@@ -6967,6 +6967,8 @@ void Hudson_PlayInput(void *playerStatus)
 		HudsonPlay_HoldHisGround(plan.playHoldGround);
 		// crouchanywhere=yes: his grid has a place wherever he fits crouched (added 2026-11-20 by Melanikus (Frost)); before his grid is built
 		HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);
+		// shootwithin= shootdelay=: he fires at an alien that has been close that long (added 2026-11-20 by Melanikus (Frost), the owner)
+		HudsonPlay_ShootWithin(plan.shootWithin, plan.shootDelay);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

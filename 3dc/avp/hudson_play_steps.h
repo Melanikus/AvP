@@ -447,6 +447,15 @@ inline bool HudsonPlay_AlienAheadOnHisWay(int toAlienX, int toAlienZ, int wayX, 
 	return distance <= kHudsonPlayHoldWithin && (double)toAlienX * wayX + (double)toAlienZ * wayZ > 0.0;
 }
 
+// SHOOTING (shootwithin=, shootdelay=; added 2026-11-20 by Melanikus (Frost), the owner 21:33: "his crosshair on top of an alien for more tha 500ms", "attack things
+// tha are really close ( less than say 2m) and attackihg him", "If they are not attacking hi keeps moving and observing"): he fires only at an alien nearer than
+// within that is attacking him (in Attack), once his crosshair has been on it for more than delay; he holds his fire otherwise.
+// distance: -1 for none; crosshairOnFor: how long his aim has been on it (HudsonPlay_AimedWell)
+inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long crosshairOnFor, int within, unsigned long delay)
+{
+	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;
+}
+
 // heldFor: how long this hold has lasted (0: he isn't holding); sinceTheLast: since the last hold ended
 inline HudsonPlayHold HudsonPlay_Hold(bool aheadOnHisWay, int distance, unsigned long heldFor, unsigned long sinceTheLast)
 {

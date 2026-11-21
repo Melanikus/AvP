@@ -242,6 +242,11 @@ const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him sta
 const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
 const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
 // watchmost=S (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, as long as the level takes)
+// shootwithin= shootdelay= (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "start shooting only if he's less than 4m away with a delay of 500ms")
+const char *const kHudsonRefusedShootWithinOutOfRange = "shootwithin= is how near an alien has to be for him to fire, from 1000 to 20000 mm";
+const char *const kHudsonRefusedShootDelayOutOfRange = "shootdelay= is how long it has to be that near first, from 0 to 5000 ms";
+const char *const kHudsonRefusedShootDelayWithoutWithin = "shootdelay= is the wait before he fires at a close alien, so it needs shootwithin=";
+const char *const kHudsonRefusedShootWithinWithoutPlay = "shootwithin= has him fire at close aliens as he plays, so it needs play=yes";
 // supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
 const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
 const char *const kHudsonRefusedSupplyGateWithoutSupply = "supplygate= waits for the supply's last alien to reach a ceiling, so it needs supply=";
@@ -498,7 +503,26 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 // as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
 static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
 {
-	if (WordIs(place, nameLength, "supplygate"))
+	if (WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
+	{
+		// shootwithin=MM, shootdelay=MS: he fires at the nearest alien once one has been that near that long (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
+		bool const within = WordIs(place, nameLength, "shootwithin");
+
+		if (within ? plan->shootWithin != 0 : plan->shootDelayAsked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		plan->shootDelayAsked = plan->shootDelayAsked || !within;
+
+		int *const into = within ? &plan->shootWithin : &plan->shootDelay;
+
+		if (!ReadNumber(value, valueLength, into) || (within ? (*into < 1000 || *into > 20000) : (*into < 0 || *into > 5000)))
+		{
+			return within ? kHudsonRefusedShootWithinOutOfRange : kHudsonRefusedShootDelayOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "supplygate"))
 	{
 		// supplygate=ceiling: the next alien only once the last one made has been on a ceiling (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost))
 		if (plan->supplyGate)
@@ -2673,7 +2697,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
-		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere"))
+		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
+			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
 		{
 			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
 			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
@@ -3607,6 +3632,16 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playCrouchAnywhere && !plan->play)
 	{
 		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->shootDelayAsked && plan->shootWithin == 0)
+	{
+		return kHudsonRefusedShootDelayWithoutWithin;
+	}
+
+	if (plan->shootWithin > 0 && !plan->play)
+	{
+		return kHudsonRefusedShootWithinWithoutPlay;
 	}
 
 	if (plan->supplyGate && plan->supply <= 0)

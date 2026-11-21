@@ -250,6 +250,13 @@ static int aimedAtDistance = 0;
 static bool aimedAtSeen = false;
 static char const *holdWord = "-";           // "-", "stand" or "back", for the AIM line
 static int holdsMade = 0;
+static int shootingWithin = 0;               // HudsonPlay_ShootWithin: shootwithin= (Frost 2026-11-20)
+static unsigned long shootingDelay = 0;      // shootdelay=
+static bool bursting = false, burstWaiting = false;   // a burst going on; one ended and not yet taken for the SHOT line
+static STRATEGYBLOCK const *burstAt = 0;
+static char burstName[SB_NAME_LENGTH];
+static int burstDistance = 0, burstHealthBefore = 0, burstHealthAfter = 0;
+static bool burstDied = false;
 static bool gunGiven = false;
 static bool gunInHand = false;
 static int gunSlotSaid = -2;
@@ -1124,6 +1131,12 @@ static void GetToDoingTheStep(DWORD now, std::string const &why)
 	SayAboutTheStep(why + StepTitle());
 }
 
+// Is this alien attacking him: in its Attack state (bh_near.cpp's, the one that claws)? The owner 21:33: only those are shot, and only those hold him
+static bool AttackingHim(STRATEGYBLOCK const *alien)
+{
+	return alien && alien->I_SBtype == I_BehaviourAlien && alien->SBdataptr && ((ALIEN_STATUS_BLOCK const *)alien->SBdataptr)->BehaviourState == ABS_Attack;
+}
+
 // HOLD HIS GROUND (holdground=yes; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow): an alien close ahead on his
 // way, and he stands, or backs off straight away from it, instead of walking through it. True: he held this frame and his feet are set here. Hudson's code only: nothing
 // of the game or of an alien changes.
@@ -1159,7 +1172,7 @@ static bool HoldingHisGround(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 	}
 
 	int const toX = nearest ? nearest->DynPtr->Position.vx - dyn->Position.vx : 0, toZ = nearest ? nearest->DynPtr->Position.vz - dyn->Position.vz : 0;
-	bool const ahead = nearest && HudsonPlay_AlienAheadOnHisWay(toX, toZ, aim.x - dyn->Position.vx, aim.z - dyn->Position.vz, nearestDistance);
+	bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(toX, toZ, aim.x - dyn->Position.vx, aim.z - dyn->Position.vz, nearestDistance);
 	unsigned long const heldFor = holding ? (now - holdStartedAt > 0 ? now - holdStartedAt : 1) : 0;
 	unsigned long const sinceTheLast = heldBefore ? now - holdEndedAt : 0xffffffffUL;
 	HudsonPlayHold const hold = HudsonPlay_Hold(ahead, nearestDistance, heldFor, sinceTheLast);
@@ -3297,6 +3310,145 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	status->ViewPanX = ((int)tilt) & (kHudsonPlayWholeTurn - 1);
 }
 
+// Is this block still one of the game's? A killed alien's block can go, so a burst's alien is looked for before it's read
+static bool StillThere(STRATEGYBLOCK const *block)
+{
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		if (ActiveStBlockList[i] == block)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void EndTheBurst()
+{
+	bool const there = StillThere(burstAt);
+
+	burstHealthAfter = there ? burstAt->SBDamageBlock.Health : burstHealthAfter;
+	burstDied = !there || burstHealthAfter <= 0 || IsAsleepOrDead(burstAt);
+	bursting = false;
+	burstWaiting = true;
+	LogString("play: a burst at " + std::string(burstName, strnlen(burstName, SB_NAME_LENGTH)) + " from " + std::to_string(burstDistance) + " mm: its health " +
+		std::to_string(burstHealthBefore >> ONE_FIXED_SHIFT) + " -> " + std::to_string(burstHealthAfter >> ONE_FIXED_SHIFT) + (burstDied ? ", and it died" : ""));
+}
+
+// SHOOTING (shootwithin=, shootdelay=; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), the owner 21:33): the nearest alien nearer than
+// shootwithin that is attacking him. He turns his crosshair to it, and once it has been on it for more than shootdelay he fires (the fight's own FireAt). He holds
+// his fire otherwise, as lanes=watch has him, and keeps moving and observing. Hudson's code only.
+static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
+{
+	static DWORD crosshairOnSince = 0;
+	static STRATEGYBLOCK const *crosshairOn = 0;
+
+	if (shootingWithin <= 0 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	STRATEGYBLOCK *nearest = 0;
+	int nearestDistance = -1;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block) || !AttackingHim(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance < shootingWithin && (nearestDistance < 0 || distance < nearestDistance))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (!nearest)
+	{
+		crosshairOn = 0;
+		crosshairOnSince = 0;
+
+		if (bursting)
+		{
+			EndTheBurst();
+		}
+
+		return;
+	}
+
+	// his crosshair to it, and how long it has been on it
+	VECTORCH chest;
+
+	GetTargetingPointOfObject_Far(nearest, &chest);
+
+	int const toX = chest.vx - dyn->Position.vx, toZ = chest.vz - dyn->Position.vz;
+	bool const onIt = HudsonPlay_AimedWell(HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ));
+
+	crosshairOnSince = onIt && crosshairOn == nearest ? (crosshairOnSince ? crosshairOnSince : now) : 0;
+	crosshairOn = nearest;
+	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
+	status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
+	TurnTowards(status, dyn, toX, toZ);
+	LookUpOrDownAt(status, chest);
+
+	if (!HudsonPlay_ShootNow(nearestDistance, true, crosshairOnSince ? now - crosshairOnSince : 0, shootingWithin, shootingDelay))
+	{
+		if (bursting)
+		{
+			EndTheBurst();
+		}
+
+		return;
+	}
+
+	if (bursting && nearest != burstAt)
+	{
+		EndTheBurst();
+	}
+
+	if (!bursting)
+	{
+		bursting = true;
+		burstAt = nearest;
+		memcpy(burstName, nearest->SBname, SB_NAME_LENGTH);
+		burstDistance = nearestDistance;
+		burstHealthBefore = nearest->SBDamageBlock.Health;
+	}
+
+	burstHealthAfter = nearest->SBDamageBlock.Health;
+	FireAt(status, chest);
+}
+
+void HudsonPlay_ShootWithin(int within, int delay)
+{
+	shootingWithin = within;
+	shootingDelay = delay > 0 ? (unsigned long)delay : 0;
+}
+
+bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died)
+{
+	if (!burstWaiting)
+	{
+		return false;
+	}
+
+	burstWaiting = false;
+	*name = burstName;
+	*distance = burstDistance;
+	*healthBefore = burstHealthBefore;
+	*healthAfter = burstHealthAfter;
+	*died = burstDied;
+	return true;
+}
+
 void HudsonPlay_AimAtTheNearest(bool aim)
 {
 	aimingAtTheNearest = aim;
@@ -3510,6 +3662,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 	{
 		AimAtTheNearest(status);
 	}
+
+	// shootwithin=: he fires at the close one, after its reaction delay (the owner 21:27)
+	ShootTheCloseOne(status, now);
 
 	// last, so that turning to an alien for a flare is what this frame does with his view; his feet still go along his way
 	FlareAtAnAlien(status, now);
