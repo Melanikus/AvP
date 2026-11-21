@@ -5,3 +5,7 @@ EXPORTS
 Smacker_Encode
 Smacker_FreeEncoded
 Smacker_EncodeWords
+Smacker_Begin
+Smacker_AddFrame
+Smacker_End
+Smacker_Abandon
