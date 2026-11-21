@@ -380,6 +380,7 @@ static char const *KindWord(HudsonPlayKind kind)
 		case kHudsonPlayDestroy: return "destroy";
 		case kHudsonPlayGoTo: return "go to";
 		case kHudsonPlayMoveTo: return "be moved to";
+		case kHudsonPlayDrop: return "drop to";
 		default: return "kill";
 	}
 }
@@ -1235,6 +1236,35 @@ static bool HoldingHisGround(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 	return true;
 }
 
+// The drop step's start (DoTheDrop)
+static DWORD dropStartedAt = 0;
+static int dropStartY = 0;
+
+// His grid knows no way to the step yet: he stands at the end of the way it has, and looks again every 10 s (a door can open: doorwalls=yes looks again at once).
+// Not being stuck. Frost 2026-11-20, in place of the lift rescue's long moves
+static void WaitForAWay(DWORD now)
+{
+	static DWORD lookedAt = 0;
+	static size_t saidForStep = (size_t)-1;
+
+	placeLastChangedAt = now;
+
+	if (saidForStep != stepAt)
+	{
+		saidForStep = stepAt;
+		lookedAt = now;
+		SayAboutTheStep("his grid knows no way there yet: he waits at the end of his way and looks again every 10 s and when a door changes; the step limit moves him at " +
+			std::to_string((int)(aStepHasTakenTooLong / 1000)) + " s");
+		return;
+	}
+
+	if (now - lookedAt >= 10000)
+	{
+		lookedAt = now;
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
 // One frame of walking along the way. False if he's at the end of it.
 static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 {
@@ -1349,13 +1379,9 @@ static void WalkAlongTheWay(PLAYER_STATUS *status, DWORD now)
 
 	if (!wayGoesAllTheWay && !movedToThisStep)
 	{
-		bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo;
-
-		if (!PutHimWhereALiftGoesFrom(staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace()), now))
-		{
-			MoveHimToTheStep("the grid knows no way there from here", now);
-		}
-
+		// No way on his grid: he doesn't go to a lift he never walked to (the owner: "he's using lifts as teleports to advance the map"). He waits at the end of
+		// his way and looks again, every 10 s and at a door's change; the 90 s step limit above is the one long move
+		WaitForAWay(now);
 		return;
 	}
 
@@ -1835,6 +1861,14 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		placeLastChangedAt = now;
 	}
 
+	// On the car at the stop he needs: he steps off (the 22:12 run: on liftplt's car at its top, he counted "couldn't get onto the car" three times)
+	if (rideStage != kGettingOff && rideStage != kWalkingToTheLift && OnTheCarNow(lift) && CarIsStoppedAt(lift, rideTo))
+	{
+		rodeOnce = true;
+		SetRideStage(kGettingOff, std::string("he's on the car at the ") + EndWord(rideTo) + ", where he's going, so he steps off", now);
+		return true;
+	}
+
 	// THE LIFT RULE: failed it (3 boardings, a minute at it, or a ride already and waiting again), so he's put on the landing he needed. Riding and getting off
 	// have their own limits
 	if (rideStage != kWalkingToTheLift && rideStage != kRiding && rideStage != kGettingOff &&
@@ -1911,6 +1945,13 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		{
 			// At the far side, where his whole square is on the car
 			int const onWithin = 300;
+
+			// On the car as it moves: he's riding, wherever on it he is, and stands still
+			if (!CarIsStoppedAt(lift, rideFrom) && OnTheCarNow(lift))
+			{
+				SetRideStage(kRiding, "rides, the car going with him on it", now);
+				return true;
+			}
 
 			if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))
 			{
@@ -2831,6 +2872,33 @@ static void LookAtWhatsWatched(DWORD now)
 
 // ---- Doing the step, once he's there
 
+// The drop step (Frost 2026-11-20): straight at the place, no grid, till he has fallen 2 m or is within 600 mm of it across; 20 s at most, then he goes on
+static void DoTheDrop(PLAYER_STATUS *status, DWORD now)
+{
+	HudsonPlayStep const &step = steps[stepAt];
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const toX = step.x - dyn->Position.vx, toZ = step.z - dyn->Position.vz;
+	int const across = (int)sqrt((double)toX * toX + (double)toZ * toZ);
+	int const fallen = dyn->Position.vy - dropStartY;
+
+	if (fallen >= 2000 || across <= 600)
+	{
+		SayAboutTheStep("he dropped to " + step.name + ", falling " + std::to_string(fallen) + " mm, " + std::to_string(across) + " mm across from the place");
+		NextStep(true);
+		return;
+	}
+
+	if (now - dropStartedAt >= 20000)
+	{
+		SayAboutTheStep("he couldn't drop to " + step.name + " in 20 s, so he goes on");
+		NextStep(false);
+		return;
+	}
+
+	TurnTowards(status, dyn, toX, toZ);
+	WalkForward(status);
+}
+
 static void DoThePress(PLAYER_STATUS *status, DWORD now)
 {
 	HudsonPlayStep const &step = steps[stepAt];
@@ -3011,6 +3079,10 @@ static void DoTheStep(PLAYER_STATUS *status, DWORD now)
 			break;
 
 		// a place: done once he's there (the grid's way went all the way), or as near as the grid knows, which doesn't count as done
+		case kHudsonPlayDrop:
+			DoTheDrop(status, now);
+			break;
+
 		case kHudsonPlayGoTo:
 			SayAboutTheStep(wayGoesAllTheWay ? "he got to " + step.name : "he got as near to " + step.name + " as the grid knows, so he goes on");
 			NextStep(wayGoesAllTheWay);
@@ -3781,6 +3853,16 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 				break;
 			}
 
+			// DROP (Frost 2026-11-20, the full run: the drop through Genshd1's glass, which his grid didn't join even after its new grid): straight at the place, no
+			// grid, till he has fallen 2 m or is there (DoTheDrop)
+			if (step.kind == kHudsonPlayDrop)
+			{
+				dropStartedAt = now;
+				dropStartY = here.vy;
+				GetToDoingTheStep(now, "he walks straight off the edge, for ");
+				break;
+			}
+
 			// a goto is a place and nothing else: no object of its name is looked for (the lane probe v3)
 			if (!target && step.kind != kHudsonPlayGoTo)
 			{
@@ -3860,7 +3942,8 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 
 	// aimnearest=yes: his view on the nearest alien, except while he's doing a step (a press waits until he faces its switch: the full run's try 2 stood at genlev04
 	// for 240 s); then a flare that's due turns it to the one it's thrown at, for those frames
-	if (phase != kDoingTheStep)
+	// and not while he rides a lift or gets off one: he has to face the landing
+	if (phase != kDoingTheStep && rideStage == kNotRiding)
 	{
 		AimAtTheNearest(status);
 	}
