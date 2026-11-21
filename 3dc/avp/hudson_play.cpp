@@ -3256,6 +3256,27 @@ static void DoTheShooting(PLAYER_STATUS *status, DWORD now, DWORD patience)
 	FireAt(status, place);
 }
 
+// A pickup that has gone while he's on his way to it: he walked over it or landed on it (the medlab section run 2026-11-20-234549: bypass went as he landed on the
+// dais, and his way, with nothing there to walk onto, took him off it and away until the 90 s move). Done, as DoThePickUp says once he's there. Frost 2026-11-20
+static bool PickedUpOnHisWay()
+{
+	if (following || stepAt >= steps.size() || steps[stepAt].kind != kHudsonPlayPickUp)
+	{
+		return false;
+	}
+
+	STRATEGYBLOCK const *const target = HudsonStrategies_Find(steps[stepAt].name.c_str());
+
+	if (target && !target->SBflags.please_destroy_me)
+	{
+		return false;
+	}
+
+	SayAboutTheStep(steps[stepAt].name + " has gone from where it was, on his way to it: he walked over it");
+	NextStep(true);
+	return true;
+}
+
 static void DoThePickUp(PLAYER_STATUS *status, DWORD now)
 {
 	HudsonPlayStep const &step = steps[stepAt];
@@ -4438,6 +4459,12 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 
 		case kWalking:
 			if (RidingALift(status, now))
+			{
+				break;
+			}
+
+			// a pickup gone on his way is done (PickedUpOnHisWay)
+			if (PickedUpOnHisWay())
 			{
 				break;
 			}
