@@ -229,6 +229,7 @@ namespace
 		char crawl[16];              // which test in AlienShouldBeCrawling answers, asked as Hunt asks it, before its own search
 		bool searched;
 		int found, npcBoxes, targetBoxes;
+		int huntWent;                // HudsonLanes_HuntWent: which way its Hunt went this frame (kHudsonHuntNone if it didn't run)
 		char dropout[16];
 		VECTORCH searchedFor;
 		VECTORCH heading;            // NPCGetWaypointDirection's direction, when it steered (found)
@@ -464,6 +465,12 @@ namespace
 
 	// An alien's own extents, as NPCContainsPoint reads them (bh_waypoint.cpp 392): its display block's ObMinX..ObMaxX, Y and Z of the current pose, relative to
 	// its place; "-" with no display block (a far one). Frost 2026-11-20, Bishop 23:3x: the body model under Drake's candidate 4, for the game to confirm
+	// Hunt's way this frame, in words (HudsonLanes_HuntWent)
+	std::string HuntWords(int way)
+	{
+		return way == kHudsonHuntArrived ? "arrived" : way == kHudsonHuntTarget ? "target" : way == kHudsonHuntWander ? "wander" : "-";
+	}
+
 	std::string ExtentWords(STRATEGYBLOCK const *b)
 	{
 		if (!b || !b->SBdptr)
@@ -1510,6 +1517,7 @@ void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
 
 	// nothing searched yet this frame
 	w->searched = false;
+	w->huntWent = kHudsonHuntNone;
 	w->found = 0;
 	w->npcBoxes = 0;
 	w->targetBoxes = 0;
@@ -1525,6 +1533,21 @@ void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
 	Keep(w->tgt, sizeof(w->tgt), "?");
 	Keep(w->headsFor, sizeof(w->headsFor), "-");
 	w->targetPoint = none;
+}
+
+void HudsonLanes_HuntWent(const STRATEGYBLOCK *alien, int way)
+{
+	if (!HudsonRunIsOn || !asked || !alien || alien->I_SBtype != I_BehaviourAlien || !alien->SBdataptr)
+	{
+		return;
+	}
+
+	Watched *const w = Record(alien, true);
+
+	if (w && w->beforeFrame == thisFrame)
+	{
+		w->huntWent = way;
+	}
 }
 
 void HudsonLanes_Searched(const STRATEGYBLOCK *npc, const VECTORCH *target, const VECTORCH *heading, int found)
@@ -1676,7 +1699,7 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 		" point=" + (steered ? PlaceWords(w->targetPoint) : std::string("-")) + " link=" + w->link + " lb=" + w->linkBefore + " by=" + by + " enc=" + std::to_string(w->encSearch) +
 		" encb=" + std::to_string(w->encBefore) + " heading=" + (steered ? PlaceWords(w->heading) : std::string("-")) + " hup=" + (steered ? std::to_string(UpDot(w->heading)) : std::string("-")) +
 		" vel=" + PlaceWords(d->LinVelocity) + " vup=" + std::to_string(UpDot(d->LinVelocity)) + " rdot=" + (steered ? std::to_string(DotWith(d->GravityDirection, w->heading)) : std::string("-")) +
-		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string()) + " ext=" + ExtentWords(alien);
+		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string()) + " ext=" + ExtentWords(alien) + " hunt=" + HuntWords(w->huntWent);
 
 	Write(line);
 

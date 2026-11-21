@@ -2047,6 +2047,7 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 			#endif
 			// Modified 2026-11-08 by Melanikus for the AvP port: the watch on one alien says which way Hunt left (-alienwayswatch, alien_ways.h)
 			AlienWays_WatchNote(sbPtr, "Hunt found no next module by the marine scent, so it goes to Wander");
+			HudsonLanes_HuntWent(sbPtr, kHudsonHuntWander);   // the lane probe is told which way Hunt went (only tells; Frost 2026-11-21)
 			return;
 		}
 
@@ -2060,12 +2061,14 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 				alienStatusPointer->CurveTimeOut = 0;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
 				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent and has no target, so it goes to Wander");
+				HudsonLanes_HuntWent(sbPtr, kHudsonHuntWander);
 			} else {
 				alienStatusPointer->Target=NULL;
 				alienStatusPointer->BehaviourState = ABS_Hunt;
 				InitWaypointManager(&alienStatusPointer->waypointManager);
 				alienStatusPointer->CurveTimeOut = 0;
 				AlienWays_WatchNote(sbPtr, "Hunt is in the module with the most marine scent, so it lets its target go and stays in Hunt");
+				HudsonLanes_HuntWent(sbPtr, kHudsonHuntArrived);   // it has "arrived": it stands, and does this again next frame
 			}
 			return;
 		}
@@ -2092,6 +2095,8 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->wanderData.worldPosition.vz+=alienStatusPointer->huntingModule->m_world.vz;
 
 	}
+
+	HudsonLanes_HuntWent(sbPtr, kHudsonHuntTarget);   // it goes for a module
 
 	/* ok: should have a current target at this stage... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:

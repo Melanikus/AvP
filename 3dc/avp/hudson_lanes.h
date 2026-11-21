@@ -56,6 +56,10 @@ void HudsonLanes_SupplyGate(bool gate);
 // around (supplyat=around, Bishop 11-20): made around him as he moves instead, one every everySeconds while fewer than count are alive, each at the middle of a room he
 // can't see 15 to 25 m from him
 void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around);
+// Which way an alien's Hunt went this frame (bh_near.cpp's AlienNearState_Hunt; only tells the probe): the scent's module is its own (arrived), it goes for a module
+// (target), or no module by the scent (wander). Frost 2026-11-21, Bishop: Dietrich's read of SHED04's Hunt freeze
+enum HudsonHuntWay { kHudsonHuntNone, kHudsonHuntArrived, kHudsonHuntTarget, kHudsonHuntWander };
+void HudsonLanes_HuntWent(const STRATEGYBLOCK *alien, int way);
 void HudsonLanes_SupplyAhead(bool ahead, const char *openSky);   // supplyat=ahead: by his way 15-40 m along it; supplyopensky=: where the gate times out (Frost 2026-11-21)
 
 // supplyin= (added 2026-11-20 by Melanikus (Frost), the owner: "the extra alien spawners on those corridors"): the supply's aliens made only in these rooms, names with
