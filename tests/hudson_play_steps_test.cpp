@@ -220,16 +220,18 @@ static void TestGettingStuck()
 {
 	printf("Getting stuck\n");
 
-	Check(HudsonPlay_NextRescue(0) == kHudsonPlayBackUp, "first he backs up");
-	Check(HudsonPlay_NextRescue(1) == kHudsonPlayStepLeft, "then he steps left");
-	Check(HudsonPlay_NextRescue(2) == kHudsonPlayStepRight, "then right");
-	Check(HudsonPlay_NextRescue(3) == kHudsonPlayFindTheWayAgain, "then he looks for the way again");
-	Check(HudsonPlay_NextRescue(4) == kHudsonPlayCrouch, "then he crouches");
-	Check(HudsonPlay_NextRescue(5) == kHudsonPlayJump, "then he jumps");
-	Check(HudsonPlay_NextRescue(6) == kHudsonPlayBackUp, "then he has a second go, backing up");
-	Check(HudsonPlay_NextRescue(7) == kHudsonPlayStepRight, "stepping the other way first this time");
-	Check(HudsonPlay_NextRescue(8) == kHudsonPlayStepLeft, "then back");
-	Check(HudsonPlay_NextRescue(9) == kHudsonPlayFindTheWayAgain, "and looking again");
+	// THE ORDER (the owner 22:30: "he should just try to nudge himself left and right first before running back or move backward less"; both of the 22:26 run's falls
+	// into liftplt's shaft came from a first back-up): small nudges left and right first, a back-up last, and only with floor behind him (FloorBehindHim)
+	Check(HudsonPlay_NextRescue(0) == kHudsonPlayStepLeft, "first he nudges left");
+	Check(HudsonPlay_NextRescue(1) == kHudsonPlayStepRight, "then right");
+	Check(HudsonPlay_NextRescue(2) == kHudsonPlayFindTheWayAgain, "then he looks for the way again");
+	Check(HudsonPlay_NextRescue(3) == kHudsonPlayCrouch, "then he crouches");
+	Check(HudsonPlay_NextRescue(4) == kHudsonPlayJump, "then he jumps");
+	Check(HudsonPlay_NextRescue(5) == kHudsonPlayBackUp, "and only then backs up a little");
+	Check(HudsonPlay_NextRescue(6) == kHudsonPlayStepRight, "a second go: right first this time");
+	Check(HudsonPlay_NextRescue(7) == kHudsonPlayStepLeft, "then left");
+	Check(HudsonPlay_NextRescue(8) == kHudsonPlayFindTheWayAgain, "looking again");
+	Check(HudsonPlay_NextRescue(9) == kHudsonPlayBackUp, "and backing up");
 	Check(HudsonPlay_NextRescue(10) == kHudsonPlayTeleport, "and only then is he moved on, which is a cheat");
 	Check(kHudsonPlayStuckAfter <= 1000, "pushing and getting nowhere is noticed within a second");
 	Check(HudsonPlay_NextRescue(1000) == kHudsonPlayTeleport, "and that goes on for as long as he's stuck");
@@ -602,6 +604,12 @@ static void TestAimAndHold()
 
 	Check(drops.size() == 1 && drops[0].kind == kHudsonPlayDrop && drops[0].y == 7792, "drop, a place to walk straight at and fall to");
 	Check(play.find("case kHudsonPlayDrop:") != std::string::npos, "and it's done as a step of its own");
+	// a back-up only with floor behind him, and short; the nudges short too; and the step limit's move puts him by a switch, not on it (the 22:26 run: cheat 23 put
+	// him at opslev01's own point, in its console, and nothing got him out)
+	Check(play.find("if (rescue == kHudsonPlayBackUp && !FloorBehindHim())") != std::string::npos, "no back-up over an edge");
+	Check(play.find("rescueUntil = now + (rescue == kHudsonPlayStepLeft || rescue == kHudsonPlayStepRight || rescue == kHudsonPlayBackUp ? kNudgeLasts : kRescueLasts);") !=
+		std::string::npos, "a nudge or a back-up lasts only long enough for about half a metre");
+	Check(play.find("NearTheSwitchNotOnIt(place, &floor)") != std::string::npos, "the step limit puts him on the floor by a switch, within the use key's reach");
 	// The 22:20 run stopped at step 15 (the owner: "He got stuck now and I have no feedback why"): the lift planner's reach from each landing was worked out once, at
 	// the start (9 doors shut, his first grid), and kept through a door's opening and seven new grids; so liftplt's foot "couldn't" reach topshed01
 	size_t const forgets = play.find("reachedFromALanding.clear();   // the doors changed");
