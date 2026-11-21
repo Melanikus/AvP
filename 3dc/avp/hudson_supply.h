@@ -106,6 +106,67 @@ inline int HudsonSupply_PickIn(std::vector<HudsonSupplyRoom> const &rooms, int h
 	return best;
 }
 
+// THE MOVING FULL-RUN SUPPLY (supplyat=ahead; added 2026-11-21 by Melanikus (Frost), Bishop for the full Genshd1 run: "4 alive, made by the probe in rooms ON HIS
+// ROUTE about 15-40 m AHEAD; the room list moves with him"). The way he walks, each place on it with how far along it is from him (his grid's way, so round its
+// corners): of the rooms' middles out of his view, the one by a place of the way (within kHudsonSupplyAheadAcross across and on that place's level) that is
+// kHudsonSupplyAheadNear to kHudsonSupplyAheadFar along, the one whose place is nearest kHudsonSupplyAheadMiddle along. -1 if none fits
+struct HudsonSupplyWayPlace
+{
+	int x, y, z;          // a place of his way
+	int along;            // mm along the way from him to it
+};
+
+static const double kHudsonSupplyAheadNear = 15000;    // mm along his way
+static const double kHudsonSupplyAheadFar = 40000;
+static const double kHudsonSupplyAheadMiddle = 25000;
+static const double kHudsonSupplyAheadAcross = 5000;   // mm across from a place of the way
+static const int kHudsonSupplyAheadMostTimes = 10;     // a full run makes up to 10 times the cap
+static const long long kHudsonSupplyGateTimeOut = 30LL * 65536;   // 16.16 s: the gate held this long with the last one in open sky opens
+
+inline int HudsonSupply_PickAhead(std::vector<HudsonSupplyRoom> const &rooms, std::vector<HudsonSupplyWayPlace> const &way)
+{
+	int best = -1;
+	double bestOff = 1e300;
+
+	for (size_t i = 0; i < rooms.size(); i++)
+	{
+		HudsonSupplyRoom const &r = rooms[i];
+
+		if (r.inHisView)
+		{
+			continue;
+		}
+
+		for (HudsonSupplyWayPlace const &p : way)
+		{
+			double const ax = (double)r.x - p.x, az = (double)r.z - p.z;
+
+			if (p.along < kHudsonSupplyAheadNear || p.along > kHudsonSupplyAheadFar || ax * ax + az * az > kHudsonSupplyAheadAcross * kHudsonSupplyAheadAcross ||
+				fabs((double)r.y - p.y) > kHudsonSupplyLevel || fabs(p.along - kHudsonSupplyAheadMiddle) >= bestOff)
+			{
+				continue;
+			}
+
+			best = (int)i;
+			bestOff = fabs(p.along - kHudsonSupplyAheadMiddle);
+		}
+	}
+
+	return best;
+}
+
+inline int HudsonSupply_MostMadeAhead(int cap)
+{
+	return cap * kHudsonSupplyAheadMostTimes;
+}
+
+// The gate's time-out (supplyopensky=; Bishop: "plus a 30 s time-out when the last alien is in a module with no ceiling lane (open sky, from Dietrich's list)"): held
+// kHudsonSupplyGateTimeOut (16.16 s) with the last one made in an open-sky room, it opens
+inline bool HudsonSupply_GateTimesOut(bool lastIsInOpenSky, long long heldFor)
+{
+	return lastIsInOpenSky && heldFor >= kHudsonSupplyGateTimeOut;
+}
+
 // Whether one of the supply's aliens keeps its slot: while it is alive, however far from him (the distance stays in the call: a far one no longer frees it)
 inline bool HudsonSupply_HoldsASlot(bool alive, double distanceFromHim)
 {

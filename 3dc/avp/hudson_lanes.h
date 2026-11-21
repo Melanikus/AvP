@@ -56,6 +56,7 @@ void HudsonLanes_SupplyGate(bool gate);
 // around (supplyat=around, Bishop 11-20): made around him as he moves instead, one every everySeconds while fewer than count are alive, each at the middle of a room he
 // can't see 15 to 25 m from him
 void HudsonLanes_Supply(int count, int atX, int atY, int atZ, int everySeconds, bool around);
+void HudsonLanes_SupplyAhead(bool ahead, const char *openSky);   // supplyat=ahead: by his way 15-40 m along it; supplyopensky=: where the gate times out (Frost 2026-11-21)
 
 // supplyin= (added 2026-11-20 by Melanikus (Frost), the owner: "the extra alien spawners on those corridors"): the supply's aliens made only in these rooms, names with
 // commas between them, as around him otherwise (hudson_supply.h, HudsonSupply_PickIn)

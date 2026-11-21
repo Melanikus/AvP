@@ -511,7 +511,33 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 // as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
 static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
 {
-	if (WordIs(place, nameLength, "rearguard"))
+	if (WordIs(place, nameLength, "supplyopensky"))
+	{
+		// supplyopensky=room,room,...: the open-sky rooms, where the supply gate times out at 30 s (hudson_supply.h; added 2026-11-21 by Melanikus (Frost), Bishop)
+		if (plan->supplyOpenSky[0])
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (valueLength == 0 || valueLength >= sizeof(plan->supplyOpenSky))
+		{
+			return kHudsonRefusedSupplyInName;
+		}
+
+		for (size_t i = 0; i < valueLength; i++)
+		{
+			char const c = value[i];
+
+			if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '?' || c == ','))
+			{
+				return kHudsonRefusedSupplyInName;
+			}
+		}
+
+		memcpy(plan->supplyOpenSky, value, valueLength);
+		plan->supplyOpenSky[valueLength] = 0;
+	}
+	else if (WordIs(place, nameLength, "rearguard"))
 	{
 		// rearguard=MM: he sprints his way and looks back at the close ones, a ceiling's first (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner)
 		if (plan->rearGuard != 0)
@@ -2769,7 +2795,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		}
 		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
 			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon") ||
-			WordIs(place, nameLength, "filmclock") || WordIs(place, nameLength, "status") || WordIs(place, nameLength, "rearguard"))
+			WordIs(place, nameLength, "filmclock") || WordIs(place, nameLength, "status") || WordIs(place, nameLength, "rearguard") || WordIs(place, nameLength, "supplyopensky"))
 		{
 			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
 			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
@@ -2877,6 +2903,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			if (WordIs(value, valueLength, "around"))
 			{
 				plan->supplyAround = true;
+			}
+			// supplyat=ahead: in rooms by his way 15 to 40 m along it (the moving full-run supply, hudson_supply.h; Frost 2026-11-21)
+			else if (WordIs(value, valueLength, "ahead"))
+			{
+				plan->supplyAhead = true;
 			}
 			else if (!ReadPlace(value, valueLength, &plan->supplyAtX, &plan->supplyAtY, &plan->supplyAtZ))
 			{

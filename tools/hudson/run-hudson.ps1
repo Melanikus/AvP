@@ -205,6 +205,7 @@ param(
     [switch]$SupplyGate,   # with -Supply, the next alien only once the last one made has been on a ceiling (supplygate=ceiling; Frost 2026-11-20)
     [int]$DieRoll = -1,    # the game's own QUANTUM_ROLL before the level loads (0 to 65535): every alternate place the same each run (dieroll=; Frost 2026-11-20)
     [int]$WatchMost = 0,   # with -LanesWatch -Play, the watch plays for at most this many seconds of game time (60 to 7200), not 3 minutes: the full-level run (watchmost=; Frost 2026-11-20)
+    [string]$SupplyOpenSky = '',   # with -Supply -SupplyAt ahead, the open-sky rooms (commas between): the gate times out there at 30 s, supplyopensky= (Frost 2026-11-21)
     [string]$SupplyIn = '',   # with -Supply, the aliens made only in these rooms (names with commas between them): supplyin= (Frost 2026-11-20)
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
@@ -513,6 +514,7 @@ if ($Supply -gt 0) { $arguments += " supply=$Supply" }
 if ($SupplyAt) { $arguments += " supplyat=$($SupplyAt -replace 'm', '-')" }   # only when said: supplyin= says where instead
 if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
 if ($SupplyIn) { $arguments += " supplyin=$SupplyIn" }
+if ($SupplyOpenSky) { $arguments += " supplyopensky=$SupplyOpenSky" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 # The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied
 if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { Stop-Here "-StepSeconds is a whole number of seconds, from 10 to 600" }

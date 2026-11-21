@@ -4690,6 +4690,33 @@ bool HudsonPlay_FinishedTheList()
 	return phase == kFinishedTheList;
 }
 
+// The k-th place of his grid's way ahead of him, and how far along the way it is from where he stands (supplyat=ahead, the moving full-run supply). Frost 2026-11-21
+bool HudsonPlay_WayPointAhead(int k, int *x, int *y, int *z, int *along)
+{
+	if (k < 0 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr || phase == kStopped || phase == kFinishedTheList || wayAt + (size_t)k >= way.size())
+	{
+		return false;
+	}
+
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	double sum = 0.0, fromX = here.vx, fromZ = here.vz;
+
+	for (size_t i = wayAt; i <= wayAt + (size_t)k; i++)
+	{
+		double const dx = way[i].x - fromX, dz = way[i].z - fromZ;
+
+		sum += sqrt(dx * dx + dz * dz);
+		fromX = way[i].x;
+		fromZ = way[i].z;
+	}
+
+	*x = way[wayAt + (size_t)k].x;
+	*y = way[wayAt + (size_t)k].y;
+	*z = way[wayAt + (size_t)k].z;
+	*along = (int)sum;
+	return true;
+}
+
 bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z)
 {
 	size_t const at = stepAt + (size_t)(k < 0 ? 0 : k);

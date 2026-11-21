@@ -98,6 +98,7 @@ bool HudsonPlay_FinishedTheList();
 
 // The place of the step k after the one he is on now (0: the one he is walking to), for the lane probe's supplyat=around (Frost 2026-11-20); false past his list
 bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z);
+bool HudsonPlay_WayPointAhead(int k, int *x, int *y, int *z, int *along);   // the k-th place of his way ahead, and how far along it is from him (Frost 2026-11-21)
 
 // One line for the run's result: how many steps there were, how many worked, and how many cheats it took
 void HudsonPlay_ForTheResult(char *line, int size);

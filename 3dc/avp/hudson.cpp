@@ -1151,6 +1151,7 @@ int Hudson_CheckBeforeStarting()
 			HudsonLanes_PlayMost(plan.watchMost);
 			HudsonPlay_HoldFire(plan.lanesWatch);
 			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);
+			HudsonLanes_SupplyAhead(plan.supplyAhead, plan.supplyOpenSky);   // supplyat=ahead, supplyopensky= (Frost 2026-11-21)
 			HudsonLanes_SupplyIn(plan.supplyIn);
 			// supplygate=ceiling: the next alien only once the last one has been on a ceiling (Frost 11-20, the owner)
 			HudsonLanes_SupplyGate(plan.supplyGate);

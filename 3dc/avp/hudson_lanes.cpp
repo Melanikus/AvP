@@ -146,6 +146,11 @@ namespace
 	bool supplyAround = false;
 	bool supplyGate = false;                         // supplygate=ceiling (HudsonLanes_SupplyGate)
 	bool supplyGateHeld = false;                     // its last state, for one SUPPLY GATE line each time it changes
+	// AHEAD ON HIS WAY (supplyat=ahead, Bishop for the full run; Frost 2026-11-21): in rooms by his way 15 to 40 m along it (hudson_supply.h, HudsonSupply_PickAhead),
+	// up to 10 times the cap made; and the gate's 30 s time-out with the last one in an open-sky room (supplyopensky=)
+	bool supplyAhead = false;
+	std::vector<std::string> supplyOpenSkyNames;
+	long long supplyLastMadeAt = 0;                  // gameTime of the last one made, for the gate's time-out
 	// IN THE NAMED ROOMS (supplyin=, the owner 11-20: "We need the extra alien spawners on those corridors"): as around him, but only in these rooms (the corridors of his
 	// route), out of his sight, on his level, 10 to 40 m from him (hudson_supply.h, HudsonSupply_PickIn)
 	std::vector<std::string> supplyRoomNames;
@@ -1096,7 +1101,7 @@ namespace
 		}
 
 		// AROUND HIM: while fewer than supplyCount of its aliens are alive, one every supplyEvery, at the middle of a room he can't see 15 to 25 m from him
-		if ((supplyAround || !supplyRoomNames.empty()) && supplyCount > 0 && gameTime >= supplyNextAt)
+		if ((supplyAround || supplyAhead || !supplyRoomNames.empty()) && supplyCount > 0 && gameTime >= supplyNextAt)
 		{
 			int alive = 0;
 
@@ -1144,7 +1149,7 @@ namespace
 			// been on a ceiling (its on=ceiling frames), or is dead, so a run is never left with none
 			bool gateOpen = true;
 
-			if (supplyGate && !supplyNames.empty() && alive < supplyCount && supplyMade < HudsonSupply_MostMade(supplyCount))
+			if (supplyGate && !supplyNames.empty() && alive < supplyCount && supplyMade < (supplyAhead ? HudsonSupply_MostMadeAhead(supplyCount) : HudsonSupply_MostMade(supplyCount)))
 			{
 				STRATEGYBLOCK *lastBlock = nullptr;
 
@@ -1160,16 +1165,36 @@ namespace
 
 				gateOpen = dead || (lastMade && lastMade->ceilingFrames > 0);
 
+				// supplyopensky= (Bishop: "plus a 30 s time-out when the last alien is in a module with no ceiling lane"): held 30 s with the last one in an open-sky room,
+				// it opens, with its own SUPPLY GATE line
+				bool timedOut = false;
+				std::string openSkyRoom;
+
+				if (!gateOpen && lastBlock && lastBlock->containingModule && lastBlock->containingModule->name)
+				{
+					bool openSky = false;
+
+					for (std::string const &n : supplyOpenSkyNames)
+					{
+						openSky = openSky || n == lastBlock->containingModule->name;
+					}
+
+					timedOut = HudsonSupply_GateTimesOut(openSky, gameTime - supplyLastMadeAt);
+					openSkyRoom = lastBlock->containingModule->name;
+					gateOpen = timedOut;
+				}
+
 				if (gateOpen == supplyGateHeld)
 				{
 					supplyGateHeld = !gateOpen;
 					Write("SUPPLY GATE f=" + std::to_string(frame) + (gateOpen ? " opens: " : " holds: ") + (lastMade ? "a" + std::to_string(lastMade->number) : std::string("the last one")) +
-						(gateOpen ? (dead ? ", the last one made, is dead" : ", the last one made, has been on a ceiling (from f=" + std::to_string(lastMade->firstCeiling) + ")") :
+						(gateOpen ? (timedOut ? ", the last one made, has been 30 s in " + openSkyRoom + ", an open-sky room: a time-out" : dead ? std::string(", the last one made, is dead") :
+						", the last one made, has been on a ceiling (from f=" + std::to_string(lastMade->firstCeiling) + ")") :
 						", the last one made, hasn't been on a ceiling yet"));
 				}
 			}
 
-			if (gateOpen && alive < supplyCount && supplyMade < HudsonSupply_MostMade(supplyCount))
+			if (gateOpen && alive < supplyCount && supplyMade < (supplyAhead ? HudsonSupply_MostMadeAhead(supplyCount) : HudsonSupply_MostMade(supplyCount)))
 			{
 				// THE ROOM (hudson_supply.h): out of his view, 15 to 25 m from him, on his level, by the places he walks to next, the one nearest 20 m
 				VECTORCH const here = me->DynPtr->Position;
@@ -1199,7 +1224,23 @@ namespace
 					}
 				}
 
-				int const pick = supplyRoomNames.empty() ? HudsonSupply_Pick(rooms, here.vx, here.vy, here.vz, ahead) : HudsonSupply_PickIn(rooms, here.vx, here.vy, here.vz);
+				// supplyat=ahead: by his way 15 to 40 m along it (hudson_supply.h)
+				std::vector<HudsonSupplyWayPlace> wayAhead;
+
+				for (int k = 0; supplyAhead && k < 400; k++)
+				{
+					HudsonSupplyWayPlace p;
+
+					if (!HudsonPlay_WayPointAhead(k, &p.x, &p.y, &p.z, &p.along) || p.along > (int)kHudsonSupplyAheadFar)
+					{
+						break;
+					}
+
+					wayAhead.push_back(p);
+				}
+
+				int const pick = supplyAhead ? HudsonSupply_PickAhead(rooms, wayAhead) : supplyRoomNames.empty() ? HudsonSupply_Pick(rooms, here.vx, here.vy, here.vz, ahead) :
+					HudsonSupply_PickIn(rooms, here.vx, here.vy, here.vz);
 				VECTORCH const *const best = pick >= 0 ? &roomMiddles[(size_t)pick] : nullptr;
 				double bestD = 0;
 
@@ -1231,9 +1272,10 @@ namespace
 					_snprintf(howFar, sizeof(howFar) - 1, "%.1f m from him", bestD / 1000.0);
 					howFar[sizeof(howFar) - 1] = 0;
 					Event(frame, std::string("SUPPLY ") + std::to_string(supplyMade) + " of " + std::to_string(supplyCount) + (made ? " MADE at " : " NOT MADE (the game made none) at ") +
-						PlaceWords(spot) + " in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)) + (supplyRoomNames.empty() ? " (around him: " : " (in a named room: ") + howFar + ", out of his view; " + std::to_string(alive + (made ? 1 : 0)) +
+						PlaceWords(spot) + " in " + ModuleWords(ModuleFromPosition(&spot, (MODULE *)0)) + (supplyAhead ? " (ahead on his way: " : supplyRoomNames.empty() ? " (around him: " : " (in a named room: ") + howFar + ", out of his view; " + std::to_string(alive + (made ? 1 : 0)) +
 						" alive)");
 					supplyNextAt = gameTime + supplyEvery;
+					supplyLastMadeAt = gameTime;
 				}
 				else
 				{
@@ -1370,6 +1412,28 @@ void HudsonLanes_SupplyIn(const char *names)
 		{
 			one += *c;
 		}
+	}
+}
+
+void HudsonLanes_SupplyAhead(bool ahead, const char *openSky)
+{
+	supplyAhead = ahead;
+	supplyOpenSkyNames.clear();
+
+	std::string const names = openSky ? openSky : "";
+	size_t from = 0;
+
+	while (from < names.size())
+	{
+		size_t const comma = names.find(',', from);
+		size_t const end = comma == std::string::npos ? names.size() : comma;
+
+		if (end > from)
+		{
+			supplyOpenSkyNames.push_back(names.substr(from, end - from));
+		}
+
+		from = end + 1;
 	}
 }
 
