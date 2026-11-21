@@ -587,6 +587,14 @@ static void TestAimAndHold()
 
 	Check(drops.size() == 1 && drops[0].kind == kHudsonPlayDrop && drops[0].y == 7792, "drop, a place to walk straight at and fall to");
 	Check(play.find("case kHudsonPlayDrop:") != std::string::npos, "and it's done as a step of its own");
+	// THE GLASS (the owner 22:15: "Kill it and fix glass shooting"; the 22:14 run): all seven SHED04 panes read "is gone" at once and were never shot, because a
+	// one-hit Static (integrity 0) has no health to begin with; he touched SHED04A, D and E at the window. Gone is: not there, being taken away, or its health run
+	// out from more than none
+	Check(!HudsonPlay_TargetIsGone(true, false, 0, 0), "a pane with no health from the start, still there: not gone, he shoots it");
+	Check(HudsonPlay_TargetIsGone(true, true, 0, 0) && HudsonPlay_TargetIsGone(false, false, 0, 0), "one being taken away, or not there: gone");
+	Check(HudsonPlay_TargetIsGone(true, false, 100 << 16, 0) && !HudsonPlay_TargetIsGone(true, false, 100 << 16, 30 << 16), "one whose health ran out: gone; still some: not");
+	Check(play.find("if (HudsonPlay_TargetIsGone(target != 0, target && target->SBflags.please_destroy_me, targetHealthAtStart, target ? target->SBDamageBlock.Health : 0))") !=
+		std::string::npos, "the destroy and kill steps go by it");
 	Check(play.find("return n >= 0 && OnTheCarNow(lifts[(size_t)n]) &&") != std::string::npos || play.find("OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp") != std::string::npos,
 		"and on a moving car by the same test he doesn't walk");
 	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
