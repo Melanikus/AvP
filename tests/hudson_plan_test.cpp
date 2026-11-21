@@ -2944,6 +2944,14 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/d3d_render.cpp"), "HudsonPlay_StatusLine()"), "the renderer draws his line");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "char const *HudsonPlay_StatusLine()"), "which his play writes");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Status) { $arguments += \" status=on\" }"), "the run script can ask for it");
+	// rearguard=MM (the owner 22:24 and 22:27: "keep moving", "sprint to the end and just look back (and turn fast, 3x faster ...) if an alien comes within 5 meters
+	// and shoot him in 300ms", "run backwards ... following his plotted course focusing the closest wall crawling item? Focus on the ceiling ones")
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes rearguard=5000", &plan) == 0 && plan.rearGuard == 5000, "he can sprint his way and look back at aliens within 5 m");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && plan.rearGuard == 0, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes rearguard=999", kHudsonRefusedRearGuardOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 rearguard=5000", kHudsonRefusedRearGuardWithoutPlay);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RearGuard(plan.rearGuard);"), "the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RearGuard -gt 0) { $arguments += \" rearguard=$RearGuard\" }"), "the run script can ask for it");
 	// filmclock=off (Bishop 11-20, the films for the public: the machine's clock stamped in the corner of a playing Hudson's film, for join-films, isn't wanted in a
 	// solo film): no stamp; a siege's or a net pair's film keeps it unless asked
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes filmclock=off", &plan) == 0 && plan.filmClockOff, "the clock can be left out of a film");

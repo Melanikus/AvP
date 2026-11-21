@@ -574,6 +574,21 @@ static void TestAimAndHold()
 	Check(HudsonPlay_CarStandOffset(-2337, 1941) == 1941, "a car taller than he is: on its floor");
 	Check(play.find("at.standY = at.carY + HudsonPlay_CarStandOffset(shape->shapeminy, shape->shapemaxy);") != std::string::npos, "his lift finder stands him there");
 	Check(play.find("HudsonPlay_RideFailed(boardFailures, now - atTheLiftSince, rodeOnce, false))") != std::string::npos, "and his rides follow the rule");
+
+	// THE REAR GUARD (rearguard=; the owner 22:24 and 22:27): among the aliens within it, the nearest on a CEILING first, then on a WALL, then on the floor (the probe's
+	// own reading of its down: ceiling under -46000, floor over 46000, the rest wall or slope); his view turns to it 3x as fast as the aim did, he runs his way
+	// backwards as fast as forwards (a marine's backward run isn't halved: pmove.cpp halves a Predator's), and sprints, with no slowing for bends
+	Check(HudsonPlay_SurfaceRank(-60000) == 0 && HudsonPlay_SurfaceRank(0) == 1 && HudsonPlay_SurfaceRank(30000) == 1 && HudsonPlay_SurfaceRank(60000) == 2,
+		"ceiling first, then wall (and slope), then floor");
+	std::vector<HudsonPlayRearCandidate> rear = { { 0, 1000, 2 }, { 1, 4000, 0 }, { 2, 3000, 1 } };
+	Check(HudsonPlay_PickTheRearTarget(rear) == 1, "the one on the ceiling, though it's the furthest");
+	rear[1].rank = 2;
+	Check(HudsonPlay_PickTheRearTarget(rear) == 2, "with none on a ceiling, the one on a wall");
+	rear[2].rank = 2;
+	Check(HudsonPlay_PickTheRearTarget(rear) == 0 && HudsonPlay_PickTheRearTarget(std::vector<HudsonPlayRearCandidate>()) == -1, "all on the floor: the nearest; none: none");
+	Check(HudsonPlay_AimTurnControl(100, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(100, false, 2000, 4369) &&
+		HudsonPlay_AimTurnControl(-1800, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(-1800, false, 2000, 4369), "the rear guard turns three times as fast as the aim");
+	Check(play.find("rearGuardWithin > 0 ? ONE_FIXED : HudsonPlay_WalkControl(bend)") != std::string::npos, "and sprints his way, no slowing for bends");
 	// The full run at 22:12 (the owner: "he's using lifts as teleports to advance the map"): the lift rescue moved him 127 m and 74 m to lifts he had never walked to
 	// whenever his grid knew no way; and at liftplt's top, on the car at its stop, he counted "couldn't get onto the car" three times (Bishop's items 1-3)
 	Check(play.find("if (!PutHimWhereALiftGoesFrom(") == std::string::npos, "no way on his grid no longer moves him to a lift he never walked to");
