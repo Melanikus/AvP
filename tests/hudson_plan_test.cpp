@@ -2936,6 +2936,14 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 play=yes ribbon=on", kHudsonRefusedRibbonNotOff);
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RibbonOff(plan.playRibbonOff);"), "the run tells play");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RibbonOff) { $arguments += \" ribbon=off\" }"), "the run script can ask for it");
+	// status=on (Bishop 11-20, the owner: "He got stuck now and I have no feedback why"): one line on the screen, his step, its kind and target, and what he's doing
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes status=on", &plan) == 0 && plan.playStatus, "his play can say what he's doing on the screen");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playStatus, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes status=off", kHudsonRefusedStatusNotOn);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ShowStatus(plan.playStatus);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/d3d_render.cpp"), "HudsonPlay_StatusLine()"), "the renderer draws his line");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "char const *HudsonPlay_StatusLine()"), "which his play writes");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Status) { $arguments += \" status=on\" }"), "the run script can ask for it");
 	// filmclock=off (Bishop 11-20, the films for the public: the machine's clock stamped in the corner of a playing Hudson's film, for join-films, isn't wanted in a
 	// solo film): no stamp; a siege's or a net pair's film keeps it unless asked
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes filmclock=off", &plan) == 0 && plan.filmClockOff, "the clock can be left out of a film");
