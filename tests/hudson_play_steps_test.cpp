@@ -651,6 +651,9 @@ static void TestAimAndHold()
 	// into newhug03, where a facehugger got him): flat out till 1.5 m from the place, half speed nearer, nothing over it; up once he's on the floor within a step of its
 	// height and 1.5 m across
 	Check(HudsonPlay_JumpWalk(3000) == 65536 && HudsonPlay_JumpWalk(1000) == 32768 && HudsonPlay_JumpWalk(500) == 0, "flat out, then half speed, then nothing over the place");
+	// and a pickup that goes while he's on his way to it is done (the medlab section run 2026-11-20-234549: he jumped up onto the dais, bypass went as he landed, and his
+	// way, with nothing there to walk onto, took him off the dais and away until the 90 s move): checked each frame he walks, not only once he's there
+	Check(play.find("if (PickedUpOnHisWay())") != std::string::npos, "a pickup gone on his way is done");
 	Check(HudsonPlay_JumpedUp(1400, 20, true) && !HudsonPlay_JumpedUp(1400, 20, false) && !HudsonPlay_JumpedUp(1400, 778, true) && !HudsonPlay_JumpedUp(1600, 20, true),
 		"up: on the floor, at its height, within 1.5 m");
 	// A STEP HE CAN'T GET ONTO (shft21, three full runs: his grid joins the floor to the stair's first step across its side, 383 mm up, and the game stops him there:
