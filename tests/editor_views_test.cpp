@@ -116,7 +116,7 @@ int main()
 	// which drawing gives lines to which slot
 	Check(Has(render, "\nstatic int editorFinalLinesSlot = 0;"), "the frame's last drawing gives its lines to slot 0 until the editor says otherwise, as before");
 	Check(Has(render, "\nstatic int editorLinesThisFlush = -1;"), "and an early drawing gives lines to none unless R_EditorFlushWorldWithLines asks");
-	std::string const execute = SourceSlice(render, "static void ExecuteBuffer()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
+	std::string const execute = SourceSlice(render, "static bool ExecuteBuffer()\n{", "\n}\n", kSliceEndAfterTheStart, FailedSlice);
 	Check(Has(execute, "int const linesSlot = toyFinalFlush ? editorFinalLinesSlot : editorLinesThisFlush;") &&
 		Has(execute, "if (linesSlot >= 0 && linesSlot < kEditorLineSlots && !editorLineSlots[linesSlot].lines.empty())") &&
 		Has(execute, "DrawEditorWorldLines(editorLineSlots[linesSlot]);"),

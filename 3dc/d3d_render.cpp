@@ -467,12 +467,28 @@ static std::vector<float> normalLinesCorners;
 static int normalLinesNotNoted = 0;
 static void DrawNormalLines();
 static void DrawAlienWays();
-static void DrawEditorWorldLines();
+struct EditorLineSlot;
+static void DrawEditorWorldLines(EditorLineSlot &slot);
 static void DrawEditorWorldTriangles();
 static std::vector<EditorWorldTriangle> editorWorldTriangles;   // R_SetEditorWorldTriangles: the level editor's filled flat triangles in the 3D view (empty in the game)
-static std::vector<EditorWorldLine> editorWorldLines;   // R_SetEditorWorldLines: the level editor's lines in the 3D view (empty in the game)
-static bool editorWorldLinesChanged = false;   // the lines are not the ones on the card yet (DrawEditorWorldLines puts them there)
-static void LetGoOfEditorLinesBuffer();         // the card's copy of the lines is let go (none are drawn any more)
+// THE LEVEL EDITOR'S LINES, ONE LIST A VIEW (Frost 2026-11-21, the owner's live plot: "I want to see the modules updating on the map as they are build and the little image
+// should show progress as volumes are being placed on it"). Slot 0 is R_SetEditorWorldLines' own list, as before; slot 1 is a second list for a view drawn after the main view
+// (the plot's inset). Each slot keeps its own copy on the card, so one slot's lines changing never sends the other's again. A drawing gives lines only to the slot asked for:
+// the frame's last drawing to editorFinalLinesSlot's (0, as before, until the editor says otherwise), an R_EditorFlushWorldWithLines drawing to its own, and the game's own
+// early drawings (a list full in the middle of a frame) to none. Empty in the game: the game never sets lines.
+static const int kEditorLineSlots = 2;
+struct EditorLineSlot
+{
+	std::vector<EditorWorldLine> lines;   // the lines of one view, in the level's own places
+	bool changed;                         // the lines are not the ones on the card yet (DrawEditorWorldLines puts them there)
+	IDirect3DVertexBuffer9 *buffer;       // the card's copy (MANAGED: it lives through a lost device; the game's device is a plain IDirect3DDevice9)
+	size_t room;                          // how many lines it has room for
+	LPDIRECT3DDEVICE9 device;             // the device it was made on
+};
+static EditorLineSlot editorLineSlots[kEditorLineSlots] = {};
+static int editorFinalLinesSlot = 0;     // R_SetEditorFinalLinesSlot: the slot the frame's last drawing draws (-1: none)
+static int editorLinesThisFlush = -1;    // R_EditorFlushWorldWithLines: the slot the early drawing in hand draws (-1: none, as in every early drawing of the game's own)
+static void LetGoOfEditorLinesBuffer(EditorLineSlot &slot);   // the card's copy of a slot's lines is let go (none are drawn any more)
 extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
 char const *GetLoadedShapeName(int position);
@@ -955,10 +971,14 @@ static bool ExecuteBuffer()
 		DrawEditorWorldTriangles();
 	}
 
-	// The level editor's own lines in the world (R_SetEditorWorldLines): the same way, in the frame's last drawing. Empty in the game, so nothing here runs there.
-	if (toyFinalFlush && !editorWorldLines.empty())
+	// The level editor's own lines in the world: the frame's last drawing draws editorFinalLinesSlot's (0, R_SetEditorWorldLines' own list, as before), and an
+	// R_EditorFlushWorldWithLines drawing its own slot's, so the main view keeps its lines when a view is drawn after it (Frost 2026-11-21, the owner's live plot).
+	// Empty in the game, and the game's own early drawings ask for no slot, so nothing here runs there.
+	int const linesSlot = toyFinalFlush ? editorFinalLinesSlot : editorLinesThisFlush;
+
+	if (linesSlot >= 0 && linesSlot < kEditorLineSlots && !editorLineSlots[linesSlot].lines.empty())
 	{
-		DrawEditorWorldLines();
+		DrawEditorWorldLines(editorLineSlots[linesSlot]);
 	}
 
 	// Hudson on foot's ribbon. Only in a frame's last drawing, because earlier drawings don't have the whole level in the depth buffer yet. The gun clears the depth buffer, so this has to be ahead of it.
@@ -6493,6 +6513,65 @@ void R_EditorFlushWorld()
 	FlushLists();
 }
 
+// THE LIVE PLOT'S VIEWS (Frost 2026-11-21, the owner: "I want to see the modules updating on the map as they are build and the little image should show progress as volumes
+// are being placed on it"). The editor draws its main view and flushes it WITH its lines, then clears the inset's box of colour and depth, then draws the inset, which the
+// frame's last drawing finishes with the inset's own lines. renderer.h says each call; none of the game's own files names them (tests/editor_views_test.cpp).
+
+// Draws everything waiting now, as R_EditorFlushWorld, and gives this drawing the lines of the slot asked for. A slot outside 0..1 draws no lines.
+void R_EditorFlushWorldWithLines(int slot)
+{
+	if (slot < 0 || slot >= kEditorLineSlots)
+	{
+		slot = -1;
+	}
+
+	editorLinesThisFlush = slot;
+	FlushLists();
+	editorLinesThisFlush = -1;
+}
+
+// Which slot the frame's last drawing draws: -1 none, 0 (R_SetEditorWorldLines' own, as at the start) or 1. Anything else is refused and changes nothing.
+void R_SetEditorFinalLinesSlot(int slot)
+{
+	if (slot >= -1 && slot < kEditorLineSlots)
+	{
+		editorFinalLinesSlot = slot;
+	}
+}
+
+// Clears a box of the window NOW, colour AND depth, so a view drawn after the main view isn't hidden by the main view's walls. Only in an open frame, and only the part
+// of the box inside the window's viewport (between drawings it is the whole window). The edges are worked out in 64 bits, so a box far off the window can't wrap round.
+void R_EditorClearBox(int x, int y, int width, int height, unsigned int colour)
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+
+	if (!frameIsOpen || !device || width <= 0 || height <= 0)
+	{
+		return;
+	}
+
+	D3DVIEWPORT9 whole;
+
+	if (FAILED(device->GetViewport(&whole)))
+	{
+		return;
+	}
+
+	long long const left = x > (long long)whole.X ? (long long)x : (long long)whole.X;
+	long long const top = y > (long long)whole.Y ? (long long)y : (long long)whole.Y;
+	long long const right = (long long)x + width < (long long)whole.X + whole.Width ? (long long)x + width : (long long)whole.X + whole.Width;
+	long long const bottom = (long long)y + height < (long long)whole.Y + whole.Height ? (long long)y + height : (long long)whole.Y + whole.Height;
+
+	if (right <= left || bottom <= top)
+	{
+		return;
+	}
+
+	D3DRECT const box = { (LONG)left, (LONG)top, (LONG)right, (LONG)bottom };
+
+	device->Clear(1, &box, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, colour, 1.0f, 0);
+}
+
 void R_SetEditorOrtho(const EditorOrtho *settings)
 {
 	editorOrthoOn = settings && settings->on;
@@ -9218,30 +9297,45 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 	}
 }
 
-// The level editor's lines in the 3D view (R_SetEditorWorldLines): the same sums and the same card settings as DrawAlienWays, which this is made from, for lines the editor gave in the level's places.
+// The level editor's lines in the 3D view (R_SetEditorWorldLines): slot 0 of R_SetEditorWorldLinesSlot, so the editor's lines draw as they always have
+// (Frost 2026-11-21: one list a view, for the owner's live plot)
 void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
 {
-	// up to kEditorWorldLinesMost (renderer.h; it was 4096): the waypoint display draws every AI module's boxes and links at once (Frost 2026-11-19)
-	size_t const wanted = (lines && count > 0) ? (size_t)(count < kEditorWorldLinesMost ? count : kEditorWorldLinesMost) : 0;
+	R_SetEditorWorldLinesSlot(0, lines, count);
+}
 
-	// the editor gives its lines every frame: the same lines as the last time keep the card's copy (DrawEditorWorldLines)
-	if (wanted == editorWorldLines.size() && (wanted == 0 || memcmp(editorWorldLines.data(), lines, wanted * sizeof(EditorWorldLine)) == 0))
+// The level editor's lines for one view (renderer.h): the same sums and the same card settings as DrawAlienWays, which this is made from, for lines the editor gave in the
+// level's places. A slot outside 0..1 is refused: it names no list.
+void R_SetEditorWorldLinesSlot(int slot, const EditorWorldLine *lines, int count)
+{
+	if (slot < 0 || slot >= kEditorLineSlots)
 	{
 		return;
 	}
 
-	editorWorldLines.clear();
+	EditorLineSlot &kept = editorLineSlots[slot];
+
+	// up to kEditorWorldLinesMost (renderer.h; it was 4096): the waypoint display draws every AI module's boxes and links at once (Frost 2026-11-19)
+	size_t const wanted = (lines && count > 0) ? (size_t)(count < kEditorWorldLinesMost ? count : kEditorWorldLinesMost) : 0;
+
+	// the editor gives its lines every frame: the same lines as the last time keep the card's copy (DrawEditorWorldLines)
+	if (wanted == kept.lines.size() && (wanted == 0 || memcmp(kept.lines.data(), lines, wanted * sizeof(EditorWorldLine)) == 0))
+	{
+		return;
+	}
+
+	kept.lines.clear();
 
 	if (wanted > 0)
 	{
-		editorWorldLines.assign(lines, lines + wanted);
+		kept.lines.assign(lines, lines + wanted);
 	}
 	else
 	{
-		LetGoOfEditorLinesBuffer();   // nothing to draw: the card's copy (up to 32 MB) is let go
+		LetGoOfEditorLinesBuffer(kept);   // nothing to draw: the card's copy (up to 32 MB) is let go
 	}
 
-	editorWorldLinesChanged = true;
+	kept.changed = true;
 }
 
 // The occlusion queries of the editor's triangle groups (R_SetEditorWorldTriangles): the answers of the frame before are collected at the start of the next draw, then each group gets a query of its own
@@ -9429,54 +9523,51 @@ static void DrawEditorWorldTriangles()
 // - a line wholly behind the camera costs no CPU at all: the card turns its two ends and clips it away, as it does a line that crosses the near plane;
 // - the draws are as long as the card allows (D3DCAPS9 MaxPrimitiveCount), five of them for the whole set on a card that takes a million.
 // The depth test, the depth bias and every other card setting are as they were, and put back afterwards. Nothing here runs in the game (the game never sets lines).
-static IDirect3DVertexBuffer9 *editorLinesBuffer = 0;   // the card's copy of editorWorldLines (MANAGED: it lives through a lost device; the game's device is a plain IDirect3DDevice9)
-static size_t editorLinesBufferRoom = 0;                // how many lines it has room for
-static LPDIRECT3DDEVICE9 editorLinesDevice = 0;         // the device it was made on
-
-static void LetGoOfEditorLinesBuffer()
+// (Frost 2026-11-21: the card's copy is a slot's own, EditorLineSlot, so the main view's lines and the inset's are kept apart)
+static void LetGoOfEditorLinesBuffer(EditorLineSlot &slot)
 {
-	if (editorLinesBuffer)
+	if (slot.buffer)
 	{
-		editorLinesBuffer->Release();
-		editorLinesBuffer = 0;
+		slot.buffer->Release();
+		slot.buffer = 0;
 	}
 
-	editorLinesBufferRoom = 0;
-	editorLinesDevice = 0;
+	slot.room = 0;
+	slot.device = 0;
 }
 
-// The lines into the card's buffer: made bigger only when they no longer fit. False when the card can't take them
-static bool PutEditorLinesOnTheCard(LPDIRECT3DDEVICE9 device)
+// A slot's lines into its buffer on the card: made bigger only when they no longer fit. False when the card can't take them
+static bool PutEditorLinesOnTheCard(EditorLineSlot &slot, LPDIRECT3DDEVICE9 device)
 {
-	size_t const count = editorWorldLines.size();
+	size_t const count = slot.lines.size();
 
-	if (editorLinesBuffer && (editorLinesDevice != device || editorLinesBufferRoom < count))
+	if (slot.buffer && (slot.device != device || slot.room < count))
 	{
-		LetGoOfEditorLinesBuffer();
+		LetGoOfEditorLinesBuffer(slot);
 	}
 
-	if (!editorLinesBuffer)
+	if (!slot.buffer)
 	{
-		if (FAILED(device->CreateVertexBuffer((UINT)(count * 2 * sizeof(D3DLVERTEX)), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &editorLinesBuffer, NULL)))
+		if (FAILED(device->CreateVertexBuffer((UINT)(count * 2 * sizeof(D3DLVERTEX)), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &slot.buffer, NULL)))
 		{
-			editorLinesBuffer = 0;
+			slot.buffer = 0;
 			return false;
 		}
 
-		editorLinesBufferRoom = count;
-		editorLinesDevice = device;
+		slot.room = count;
+		slot.device = device;
 	}
 
 	D3DLVERTEX *vertices = 0;
 
-	if (FAILED(editorLinesBuffer->Lock(0, (UINT)(count * 2 * sizeof(D3DLVERTEX)), (void **)&vertices, 0)) || !vertices)
+	if (FAILED(slot.buffer->Lock(0, (UINT)(count * 2 * sizeof(D3DLVERTEX)), (void **)&vertices, 0)) || !vertices)
 	{
 		return false;
 	}
 
 	for (size_t i = 0; i < count; i++)
 	{
-		EditorWorldLine const &line = editorWorldLines[i];
+		EditorWorldLine const &line = slot.lines[i];
 		int const at[2][3] = { { line.x0, line.y0, line.z0 }, { line.x1, line.y1, line.z1 } };
 
 		for (int end = 0; end < 2; end++)
@@ -9493,22 +9584,22 @@ static bool PutEditorLinesOnTheCard(LPDIRECT3DDEVICE9 device)
 		}
 	}
 
-	editorLinesBuffer->Unlock();
-	editorWorldLinesChanged = false;
+	slot.buffer->Unlock();
+	slot.changed = false;
 	return true;
 }
 
-static void DrawEditorWorldLines()
+static void DrawEditorWorldLines(EditorLineSlot &slot)
 {
 	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
-	size_t const count = editorWorldLines.size();
+	size_t const count = slot.lines.size();
 
 	if (count == 0 || !device)
 	{
 		return;
 	}
 
-	if ((editorWorldLinesChanged || !editorLinesBuffer || editorLinesDevice != device) && !PutEditorLinesOnTheCard(device))
+	if ((slot.changed || !slot.buffer || slot.device != device) && !PutEditorLinesOnTheCard(slot, device))
 	{
 		return;
 	}
@@ -9546,7 +9637,7 @@ static void DrawEditorWorldLines()
 	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	device->SetStreamSource(0, editorLinesBuffer, 0, sizeof(D3DLVERTEX));
+	device->SetStreamSource(0, slot.buffer, 0, sizeof(D3DLVERTEX));
 
 	// the view as a matrix for a row (x y z 1) times it, as the game's own sums give it on the CPU: view x = ViewMatrix[0..3], view y = -(ViewMatrix[4..7]), view z = ViewMatrix[8..11]
 	R_MATRIX view;
