@@ -719,7 +719,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_binary_switch.cpp",
-					"from": "\t\tif (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &bs",
+					"from": "\t\tif (NearWakeOn && NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &bs",
 					"to": "\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &bs"
 				}
 			]
@@ -799,7 +799,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_link_switch.cpp",
-					"from": "\t\tif (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &ls",
+					"from": "\t\tif (NearWakeOn && NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &ls",
 					"to": "\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &ls"
 				}
 			]

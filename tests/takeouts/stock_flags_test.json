@@ -1,0 +1,158 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the words call it stock with nearwake on",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.h",
+					"from": "((floorIsLava || newDynamicCollisions || farLocsFourthCorner || pheromoneDoor || nearWake) ?",
+					"to": "((floorIsLava || newDynamicCollisions || farLocsFourthCorner || pheromoneDoor) ?"
+				}
+			]
+		},
+		{
+			"name": "the words say on for off",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.h",
+					"from": "std::string(on ? \"on\" : \"off\")",
+					"to": "std::string(on ? \"off\" : \"on\")"
+				}
+			]
+		},
+		{
+			"name": "the game starts with FARLOCS4THCORNER off",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "int FarLocsFourthCornerOn = 1;",
+					"to": "int FarLocsFourthCornerOn = 0;"
+				}
+			]
+		},
+		{
+			"name": "the switch leaves FARLOCS4THCORNER on",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "\tFarLocsFourthCornerOn = 0;",
+					"to": "\tFarLocsFourthCornerOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "the switch leaves PHEROMONEDOOR on",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "\tPheromoneDoorOn = 0;",
+					"to": "\tPheromoneDoorOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "the switch leaves NEARWAKE on",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "\tNearWakeOn = 0;",
+					"to": "\tNearWakeOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "the switch flips FLOORISLAVA instead of typing OFF",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "FloorIsLava_FromWords(\"OFF\", &FloorIsLavaAsked);",
+					"to": "FloorIsLava_FromWords(\"\", &FloorIsLavaAsked);"
+				}
+			]
+		},
+		{
+			"name": "the switch leaves NEWDYNAMICCOLLISIONS on",
+			"changes": [
+				{
+					"file": "3dc/avp/stock_flags.cpp",
+					"from": "NewDynamicCollisions_FromWords(\"OFF\", &NewDynamicCollisionsOn);",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "the ceiling's 4th corner no longer asks FARLOCS4THCORNER",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "a spot too low for a crouched alien could pass.\n\t\t\t\t\t\tif(FarLocsFourthCornerOn && polygonData.NumberOfVertices == 4)",
+					"to": "a spot too low for a crouched alien could pass.\n\t\t\t\t\t\tif(polygonData.NumberOfVertices == 4)"
+				}
+			]
+		},
+		{
+			"name": "the floor's 4th corner no longer asks FARLOCS4THCORNER",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "the room above it was counted as more than it is.\n\t\t\t\t\t\tif(FarLocsFourthCornerOn && polygonData.NumberOfVertices == 4)",
+					"to": "the room above it was counted as more than it is.\n\t\t\t\t\t\tif(polygonData.NumberOfVertices == 4)"
+				}
+			]
+		},
+		{
+			"name": "the door test no longer asks PHEROMONEDOOR",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "if (!PheromoneDoorOn)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the binary switch's near wake no longer asks NEARWAKE",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "if (NearWakeOn && NearWake_ThisMachineRunsNpcs())",
+					"to": "if (NearWake_ThisMachineRunsNpcs())"
+				}
+			]
+		},
+		{
+			"name": "the link switch's near wake no longer asks NEARWAKE",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "if (NearWakeOn && NearWake_ThisMachineRunsNpcs())",
+					"to": "if (NearWake_ThisMachineRunsNpcs())"
+				}
+			]
+		},
+		{
+			"name": "a Hudson run's stock=yes no longer turns them off",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tStockFlags_AllStock();\n",
+					"to": "\t\t(void)0;\n"
+				}
+			]
+		},
+		{
+			"name": "a Hudson run no longer writes the flags' words",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "LogString(std::string(\"hudson: \") + StockFlags_Words() + \"; \" + DebugView_Words());",
+					"to": "(void)0;"
+				}
+			]
+		}
+	]
+}

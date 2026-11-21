@@ -162,9 +162,44 @@ HudsonGrid::HudsonGrid(HudsonGridLimits const &limits) : limitPolygons(limits.po
 	Clear();
 }
 
+void HudsonGrid::SetShut(const std::vector<HudsonGridBox> &boxes)
+{
+	shutPlaces = 0;
+
+	if (boxes.empty() || !ready)
+	{
+		std::vector<uint8_t>().swap(placeShut);
+		return;
+	}
+
+	placeShut.assign(placeHeight.size(), 0);
+
+	HudsonGridCell cell;
+
+	for (int p = 0; p < (int)placeHeight.size(); p++)
+	{
+		if (!CellAt(p, &cell))
+		{
+			continue;
+		}
+
+		for (HudsonGridBox const &box : boxes)
+		{
+			if (cell.x >= box.minX && cell.x <= box.maxX && cell.y >= box.minY && cell.y <= box.maxY && cell.z >= box.minZ && cell.z <= box.maxZ)
+			{
+				placeShut[(size_t)p] = 1;
+				shutPlaces++;
+				break;
+			}
+		}
+	}
+}
+
 void HudsonGrid::Clear()
 {
 	ready = false;
+	std::vector<uint8_t>().swap(placeShut);
+	shutPlaces = 0;
 	minX = minZ = width = depth = 0;
 	drops = polygonsLeftOut = polygonsUsed = bitsBeforeJoining = 0;
 	searchNumber = 0;
@@ -182,6 +217,7 @@ void HudsonGrid::Clear()
 	std::vector<int>().swap(columnFirstSpan);
 	std::vector<Span>().swap(spans);
 	std::vector<int>().swap(columnFirstPlace);
+	std::vector<LowFloor>().swap(lowFloors);
 	std::vector<uint16_t>().swap(placeX);
 	std::vector<uint16_t>().swap(placeZ);
 	std::vector<int>().swap(placeHeight);
@@ -464,8 +500,21 @@ bool HudsonGrid::MakePlaces()
 					continue;
 				}
 
+				// Where only a crouched marine fits, whatever the floor's mark (OnlyCrouchedFits). Kept apart: it changes no place, so a search goes as before
+				if (lowFloors.size() < limitPlaces && InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + kHudsonGridMarineHeight) &&
+					!InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + kHudsonGridCrawlHeight))
+				{
+					LowFloor low;
+
+					low.ix = (uint16_t)ix;
+					low.iz = (uint16_t)row;
+					low.height = span.high;
+					lowFloors.push_back(low);
+				}
+
 				// He crawls as soon as he's in a duct, so the last stretch before its mouth, where his square is already under its roof, has to count as well
-				int const tall = CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight;
+				// crouchanywhere=yes (Frost 2026-11-20): wherever crouched fits, whatever the mark (SetCrouchAnywhere)
+				int const tall = crouchAnywhere || CrawlingHere(ix, row, span.high) ? kHudsonGridCrawlHeight : kHudsonGridMarineHeight;
 
 				if (InTheWay(ix, row, span.high + kHudsonGridStepUp, span.high + tall))
 				{
@@ -1079,6 +1128,13 @@ HudsonGridSearch HudsonGrid::Work(int placesAllowed)
 		{
 			uint32_t const move = moves[(size_t)m];
 			int const to = (int)(move / 2);
+
+			// doorwalls=yes: a place inside a shut door's box isn't gone to (SetShut)
+			if (shutPlaces && placeShut[(size_t)to])
+			{
+				continue;
+			}
+
 			int const acrossX = (int)placeX[(size_t)to] - ix, acrossZ = (int)placeZ[(size_t)to] - iz;
 			int const rise = placeHeight[(size_t)to] - height;
 			float step = sqrtf((float)(acrossX * acrossX + acrossZ * acrossZ)) * kHudsonGridCell;
@@ -1149,7 +1205,7 @@ bool HudsonGrid::MarkWhatCanBeReachedFrom(int x, int y, int z, std::vector<uint8
 		{
 			int const to = (int)(moves[(size_t)m] / 2);
 
-			if (!(*reached)[(size_t)to])
+			if (!(*reached)[(size_t)to] && !(shutPlaces && placeShut[(size_t)to]))
 			{
 				(*reached)[(size_t)to] = 1;
 				toLookAt.push_back(to);
@@ -1174,6 +1230,42 @@ bool HudsonGrid::IsMarked(const std::vector<uint8_t> &marks, int x, int y, int z
 	for (size_t i = 0; i < places.size(); i++)
 	{
 		if (marks[(size_t)places[i]])
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool HudsonGrid::OnlyCrouchedFits(int x, int y, int z) const
+{
+	if (!ready)
+	{
+		return false;
+	}
+
+	double const fx = floor((double)(x - minX) / kHudsonGridCell), fz = floor((double)(z - minZ) / kHudsonGridCell);
+
+	if (fx < 0.0 || fz < 0.0 || fx > 65535.0 || fz > 65535.0)
+	{
+		return false;
+	}
+
+	LowFloor key;
+
+	key.ix = (uint16_t)fx;
+	key.iz = (uint16_t)fz;
+	key.height = 0;
+
+	// in row, then column order, as MakePlaces wrote them
+	auto const before = [](LowFloor const &a, LowFloor const &b) { return a.iz != b.iz ? a.iz < b.iz : a.ix < b.ix; };
+	auto const range = std::equal_range(lowFloors.begin(), lowFloors.end(), key, before);
+	int const height = -y;
+
+	for (auto at = range.first; at != range.second; ++at)
+	{
+		if (abs(at->height - height) <= kHudsonGridStepUp)
 		{
 			return true;
 		}
@@ -1246,13 +1338,16 @@ void HudsonGrid::MakeTheWay(int lastPlace, bool arrived)
 		}
 	}
 
-	// The last point is the goal itself, if it's near enough to where the floor is, so that arriving at the end of the way is arriving
+	// The last point is the goal itself, if it's near enough to where the floor is, so that arriving at the end of the way is arriving. Only where he could stand there:
+	// a place in the goal's own column at about the last place's height. A switch on a console isn't (the medlab section run 2026-11-20-231007: 753 mm from opslev01,
+	// his one-point way went onto the switch, and he walked into the console for 90 s). Frost 2026-11-20
 	if (arrived && !way.empty())
 	{
 		HudsonGridPoint &last = way.back();
 		double const dx = (double)last.x - goalAskedX, dz = (double)last.z - goalAskedZ;
+		int const goalColumnX = (int)floor((double)(goalAskedX - minX) / kHudsonGridCell), goalColumnZ = (int)floor((double)(goalAskedZ - minZ) / kHudsonGridCell);
 
-		if (sqrt(dx * dx + dz * dz) <= kHudsonGridCell * 3)
+		if (sqrt(dx * dx + dz * dz) <= kHudsonGridCell * 3 && WalkableInto(goalColumnX, goalColumnZ, -last.y))
 		{
 			last.x = goalAskedX;
 			last.z = goalAskedZ;

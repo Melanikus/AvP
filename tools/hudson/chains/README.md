@@ -62,6 +62,7 @@ A line starting with `#` is a note, and blank lines don't count. Every other lin
 | `pickup X Y Z \| name` | Walks onto it until it's gone. |
 | `destroy X Y Z \| name` | Gets it in sight and in range, and fires until it's gone, or for 20 seconds. |
 | `kill X Y Z \| name` | The same for someone, for 90 seconds, going after them if they've moved. |
+| `goto X Y Z \| name` | Walks to the place, and that's the step: no object of that name is looked for, and the name is only for the log. It worked if the grid's way went all the way there. The lane probe's list uses it (added 2026-11-20). |
 
 A step that doesn't work doesn't stop him, because there may be another way, but the log says why and the count of steps that worked comes at the end. Anything hostile he can see comes first. The list has no line for the end of the level, because only the game says when that is.
 

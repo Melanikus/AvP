@@ -57,6 +57,7 @@ extern void NewOnScreenMessage(char *messagePtr);
 #include "menus.h"
 #include "detaillevels.h"
 #include "savegame.h"
+#include "hudson_saymarks.h"   // SAY marks: what he said, with -dev -saymarks only (Frost 2026-11-21)
 
 int DebuggingCommandsActive=0;
 extern void GimmeCharge(void);
@@ -233,6 +234,8 @@ extern void AddNetMsg_ChatBroadcast(char *string,BOOL same_species_only);
 
 static void DoMultiplayerSay(char* string)
 {
+	// SAY marks (-dev -saymarks only; hudson_saymarks.h): a MARK of his words in the probe's log. It only reads them; they go on as always.
+	HudsonSayMarks_Said(string);
 	AddNetMsg_ChatBroadcast(string,FALSE);
 }
 

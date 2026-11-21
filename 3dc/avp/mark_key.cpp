@@ -13,6 +13,7 @@
 #include "networking.h"
 #include "mark_key.h"
 #include "mark_files.h"
+#include "hudson_saymarks.h"   // SAY marks: the mark key makes one too, with -dev -saymarks only (Frost 2026-11-21)
 #include "logString.h"
 #include "utilities.h"
 
@@ -138,6 +139,9 @@ void Mark_ReadKey()
 	moment.weapon = (slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS) ? (int)status->WeaponSlot[slot].WeaponIDNumber : -1;
 	moment.network = momentNetwork[0] ? momentNetwork : NULL;
 	momentWaiting = true;
+
+	// SAY marks (-dev -saymarks only; hudson_saymarks.h): the mark key drops a MARK into the probe's log as well
+	HudsonSayMarks_Said("F2");
 }
 
 bool Mark_ThisPage(const char *page)
