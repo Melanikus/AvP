@@ -2789,6 +2789,11 @@ static void CheckLanesWord()
 	// each A line has the alien's own extents, its display block's ObMinX..ObMaxX, Y and Z of the current pose, relative to its place, as NPCContainsPoint reads them
 	// (bh_waypoint.cpp 392; Bishop 23:3x: Drake's candidate 4 rests on a body model, 450 half-width and about 1,030 off the face, that the game should confirm)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" ext=\" + ExtentWords(alien)"), "an A line has the alien's extents");
+	// and an A line tells no search this frame (in=? tgtin=? npcboxes=? tgtboxes=?) from a search that found it in no box (in=- npcboxes=0) (Bishop 00:5x: Dietrich
+	// withdrew a rule built on in=- npcboxes=0, when 881 of its 897 frames had had no search at all)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Keep(w->in, sizeof(w->in), \"?\");") &&
+		Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" npcboxes=\" + (w->searched ? std::to_string(w->npcBoxes) : std::string(\"?\"))"),
+		"no search this frame reads ?, a search in no box -");
 	// facehuggers (the owner 22:51): a LATCH line when one gets onto his face (a death in the real game, whatever his health), a hit by it, a refill it caused, and a
 	// SHOT line naming the kind
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"LATCH f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"facehugger (on his face)\"") &&
