@@ -554,7 +554,7 @@ static void TestAimAndHold()
 	Check(play.find("if (step.kind == kHudsonPlayMoveTo)") != std::string::npos, "a teleport step moves him, as a logged cheat, and goes on");
 	// The full Genshd1 run, try 2 (Frost 2026-11-20): he stood at genlev04's place for 240 s and never pressed it, because the aim turned his view to an alien each
 	// frame and a press waits until he faces the switch; and he walked off liftplt's moving car into a vent halfway up
-	Check(play.find("if (phase != kDoingTheStep && ") != std::string::npos, "the aim leaves his view to a step he's doing (a press faces its switch)");
+	Check(play.find("!HudsonPlay_StepTakesHisView(") != std::string::npos, "the aim leaves his view to a press or a destroy for every other second, so the press isn't starved");
 	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
 	Check(play.find("ShootTheCloseOne(status, now);") != std::string::npos, "each frame he may shoot the close one (shootwithin=), after the aim and before a flare");
 	// The full run's try 5 (Frost 2026-11-20): stepping onto liftplt's car, a frame with no collision report with the car read as "the car went before he was on it",
@@ -605,8 +605,16 @@ static void TestAimAndHold()
 	// THE AIM STAYS ON (Bishop 22:4x, from the 22:36 run: 35 of 46 hits on him came with his AIM "none", all in shft21 while he walked to liftplt's landing; the
 	// aim was off for the whole walk to a lift): he aims while stuck, unsticking, waiting at a door, walking to a lift or waiting for its car. Only getting on, riding
 	// and getting off a lift pause it
-	Check(play.find("if (phase != kDoingTheStep && rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff)") != std::string::npos,
-		"his aim is on everywhere but on a lift's car");
+	// and through every step (Bishop 23:4x: the medlab section run 232611's facehugger latch came in the jump step, which had no aim): a jump and a drop walk straight at
+	// their place whichever way he faces (WalkStraightAt), so his aim can be on the chaser; a press or a destroy has his view every other second (it has to face its
+	// switch or its glass: the full run's try 2 stood at genlev04 240 s when the aim never let go), the aim the seconds between
+	Check(play.find("if (rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff && !HudsonPlay_StepTakesHisView(") != std::string::npos,
+		"his aim is on everywhere but on a lift's car, and every other second of a press or a destroy");
+	Check(HudsonPlay_StepTakesHisView(true, 500) && !HudsonPlay_StepTakesHisView(true, 1500) && HudsonPlay_StepTakesHisView(true, 2400) && !HudsonPlay_StepTakesHisView(false, 500),
+		"a press or a destroy has his view in the even seconds, the aim in the odd; any other step never takes it");
+	Check(play.find("WalkStraightAt(status, dyn, toX, toZ, HudsonPlay_JumpWalk(across))") != std::string::npos && play.find("WalkStraightAt(status, dyn, toX, toZ, ONE_FIXED)") != std::string::npos,
+		"a jump and a drop walk straight at their place whichever way he faces");
+	Check(play.find("\"play: unaimed, with a chaser \"") != std::string::npos, "and a frame he's unaimed with a chaser near is logged, with its reason");
 	// and in shooting range the rear guard keeps its own 3x turn: the shot's plain turn put him back to 1x just where it mattered most
 	Check(play.find("bool const turnsHere = rearGuardWithin <= 0;") != std::string::npos, "the rear guard's turn isn't slowed by the shot");
 	// and why there's no shot (Bishop: "Log the crosshair-on time against the 300 ms each frame he's aimed"): how far off his crosshair is, and for how long it's been on
