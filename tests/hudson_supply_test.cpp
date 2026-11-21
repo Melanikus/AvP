@@ -93,9 +93,40 @@ static void TestInTheNamedRooms()
 	Check(HudsonSupply_PickIn(rooms, 0, 1948, 0) == -1, "none when none fits");
 }
 
+// THE MOVING FULL-RUN SUPPLY (Bishop 11-20 22:3x, for the full Genshd1 run: "4 alive, made by the probe in rooms ON HIS ROUTE about 15-40 m AHEAD; the room list
+// moves with him"): supplyat=ahead takes the way he walks, each place on it with how far along it is from him, and makes the next alien in the room by it
+// (out of his view, on that place's level, within 5 m across) whose place is 15 to 40 m along, the one nearest 25 m along
+static void TestAheadOnHisWay()
+{
+	std::vector<HudsonSupplyRoom> rooms;
+	std::vector<HudsonSupplyWayPlace> way;
+
+	for (int i = 0; i <= 50; i++)
+	{
+		way.push_back(HudsonSupplyWayPlace{ i * 1000, 1948, 0, i * 1000 });   // a straight way east, a place a metre
+	}
+
+	rooms.push_back(Room(10000, 1948, 0, false));          // 0: 10 m along: too near
+	rooms.push_back(Room(45000, 1948, 0, false));          // 1: 45 m along: too far
+	rooms.push_back(Room(20000, 1948, 9000, false));       // 2: 9 m off the way
+	rooms.push_back(Room(30000, -3000, 0, false));         // 3: a storey up
+	rooms.push_back(Room(26000, 1948, 2000, true));        // 4: in his view
+	rooms.push_back(Room(33000, 1948, 3000, false));       // 5: 33 m along, 3 m off: fits
+	rooms.push_back(Room(23000, 1948, -1000, false));      // 6: 23 m along, 1 m off: fits, nearer 25 m: THE ONE
+	Check(HudsonSupply_PickAhead(rooms, way) == 6, "the room by his way 15 to 40 m along it, out of his view, on its level, the one nearest 25 m along");
+	rooms[6].inHisView = true;
+	Check(HudsonSupply_PickAhead(rooms, way) == 5, "and the next when that one comes into view");
+	Check(HudsonSupply_PickAhead(rooms, std::vector<HudsonSupplyWayPlace>()) == -1, "none with no way ahead");
+	Check(HudsonSupply_MostMadeAhead(4) == 40, "a full run makes up to 10 times the cap");
+	// the gate's time-out (Bishop: "plus a 30 s time-out when the last alien is in a module with no ceiling lane (open sky, from Dietrich's list)")
+	Check(HudsonSupply_GateTimesOut(true, 30 * 65536LL) && !HudsonSupply_GateTimesOut(true, 29 * 65536LL) && !HudsonSupply_GateTimesOut(false, 300 * 65536LL),
+		"the gate opens after 30 s held with the last one in open sky, and only there");
+}
+
 int main()
 {
 	TestWhereTheNextOneIsMade();
+	TestAheadOnHisWay();
 	TestWhichOnesCountAsAlive();
 	TestInTheNamedRooms();
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all ok");

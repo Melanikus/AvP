@@ -2920,6 +2920,14 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyIn(plan.supplyIn);"), "the probe is told the rooms");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_PickIn("), "and picks among them by hudson_supply.h's rule");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyIn) { $arguments += \" supplyin=$SupplyIn\" }"), "the run script can ask for it");
+	// supplyat=ahead (Bishop 22:3x, the moving full-run supply): in rooms on his way 15 to 40 m ahead along it; supplyopensky=<rooms>: where the gate times out at 30 s
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=ahead supplygate=ceiling supplyopensky=yard19,OPEN?11", &plan) == 0 &&
+		plan.supplyAhead && !plan.supplyAround && std::string(plan.supplyOpenSky) == "yard19,OPEN?11", "aliens ahead on his way, the gate timing out in the open-sky rooms");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=ahead supplyopensky=yard19;del", kHudsonRefusedSupplyInName);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyAhead(plan.supplyAhead, plan.supplyOpenSky);"), "the probe is told");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_PickAhead(") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_GateTimesOut("),
+		"and picks by hudson_supply.h's rule, the gate timing out by it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyOpenSky) { $arguments += \" supplyopensky=$SupplyOpenSky\" }"), "the run script can ask for it");
 	// play's own flares in the run's result (the result's flares_thrown is flare='s, the holds' flares: it read 0 on runs that threw 16)
 	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "play_flares=%d"), "the run's result counts the flares he threw at aliens");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
