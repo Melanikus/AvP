@@ -162,9 +162,44 @@ HudsonGrid::HudsonGrid(HudsonGridLimits const &limits) : limitPolygons(limits.po
 	Clear();
 }
 
+void HudsonGrid::SetShut(const std::vector<HudsonGridBox> &boxes)
+{
+	shutPlaces = 0;
+
+	if (boxes.empty() || !ready)
+	{
+		std::vector<uint8_t>().swap(placeShut);
+		return;
+	}
+
+	placeShut.assign(placeHeight.size(), 0);
+
+	HudsonGridCell cell;
+
+	for (int p = 0; p < (int)placeHeight.size(); p++)
+	{
+		if (!CellAt(p, &cell))
+		{
+			continue;
+		}
+
+		for (HudsonGridBox const &box : boxes)
+		{
+			if (cell.x >= box.minX && cell.x <= box.maxX && cell.y >= box.minY && cell.y <= box.maxY && cell.z >= box.minZ && cell.z <= box.maxZ)
+			{
+				placeShut[(size_t)p] = 1;
+				shutPlaces++;
+				break;
+			}
+		}
+	}
+}
+
 void HudsonGrid::Clear()
 {
 	ready = false;
+	std::vector<uint8_t>().swap(placeShut);
+	shutPlaces = 0;
 	minX = minZ = width = depth = 0;
 	drops = polygonsLeftOut = polygonsUsed = bitsBeforeJoining = 0;
 	searchNumber = 0;
@@ -1093,6 +1128,13 @@ HudsonGridSearch HudsonGrid::Work(int placesAllowed)
 		{
 			uint32_t const move = moves[(size_t)m];
 			int const to = (int)(move / 2);
+
+			// doorwalls=yes: a place inside a shut door's box isn't gone to (SetShut)
+			if (shutPlaces && placeShut[(size_t)to])
+			{
+				continue;
+			}
+
 			int const acrossX = (int)placeX[(size_t)to] - ix, acrossZ = (int)placeZ[(size_t)to] - iz;
 			int const rise = placeHeight[(size_t)to] - height;
 			float step = sqrtf((float)(acrossX * acrossX + acrossZ * acrossZ)) * kHudsonGridCell;
@@ -1163,7 +1205,7 @@ bool HudsonGrid::MarkWhatCanBeReachedFrom(int x, int y, int z, std::vector<uint8
 		{
 			int const to = (int)(moves[(size_t)m] / 2);
 
-			if (!(*reached)[(size_t)to])
+			if (!(*reached)[(size_t)to] && !(shutPlaces && placeShut[(size_t)to]))
 			{
 				(*reached)[(size_t)to] = 1;
 				toLookAt.push_back(to);

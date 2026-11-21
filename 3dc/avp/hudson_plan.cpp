@@ -247,6 +247,10 @@ const char *const kHudsonRefusedShootWithinOutOfRange = "shootwithin= is how nea
 const char *const kHudsonRefusedShootDelayOutOfRange = "shootdelay= is how long it has to be that near first, from 0 to 5000 ms";
 const char *const kHudsonRefusedShootDelayWithoutWithin = "shootdelay= is the wait before he fires at a close alien, so it needs shootwithin=";
 const char *const kHudsonRefusedShootWithinWithoutPlay = "shootwithin= has him fire at close aliens as he plays, so it needs play=yes";
+// doorwalls=yes, ribbon=off (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, and the films for the public)
+const char *const kHudsonRefusedDoorWallsNotYes = "doorwalls= can only be yes";
+const char *const kHudsonRefusedDoorWallsWithoutPlay = "doorwalls= keeps his way to open doors as he plays, so it needs play=yes";
+const char *const kHudsonRefusedRibbonNotOff = "ribbon= can only be off";
 // supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
 const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
 const char *const kHudsonRefusedSupplyGateWithoutSupply = "supplygate= waits for the supply's last alien to reach a ceiling, so it needs supply=";
@@ -503,7 +507,25 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 // as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
 static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
 {
-	if (WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
+	if (WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
+	{
+		// doorwalls=yes: shut doors are walls on his grid; ribbon=off: no ribbon drawn (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
+		bool const doors = WordIs(place, nameLength, "doorwalls");
+		bool &asked = doors ? plan->playDoorWalls : plan->playRibbonOff;
+
+		if (asked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, doors ? "yes" : "off"))
+		{
+			return doors ? kHudsonRefusedDoorWallsNotYes : kHudsonRefusedRibbonNotOff;
+		}
+
+		asked = true;
+	}
+	else if (WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
 	{
 		// shootwithin=MM, shootdelay=MS: he fires at the nearest alien once one has been that near that long (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
 		bool const within = WordIs(place, nameLength, "shootwithin");
@@ -2698,7 +2720,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			plan->playFlares = true;
 		}
 		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
-			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
+			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
 		{
 			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
 			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
@@ -3632,6 +3654,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playCrouchAnywhere && !plan->play)
 	{
 		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->playDoorWalls && !plan->play)
+	{
+		return kHudsonRefusedDoorWallsWithoutPlay;
 	}
 
 	if (plan->shootDelayAsked && plan->shootWithin == 0)

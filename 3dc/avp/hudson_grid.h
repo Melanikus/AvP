@@ -102,6 +102,12 @@ enum HudsonGridKind
 	kHudsonGridDrop          // he can drop from here. link says where he lands
 };
 
+// A box in the world's numbers (mm, y down), for SetShut: a shut door's module, say
+struct HudsonGridBox
+{
+	int minX, minY, minZ, maxX, maxY, maxZ;
+};
+
 struct HudsonGridCell
 {
 	int x, y, z;             // the middle of its column, on the floor
@@ -154,6 +160,12 @@ public:
 	// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and with Airduct off no duct is marked at all): the next
 	// Build makes a place wherever a crouched marine fits, as it does in a marked duct, whatever the floor's mark. Off unless asked; kept across builds until asked off.
 	void SetCrouchAnywhere(bool on) { crouchAnywhere = on; }
+	bool CrouchesAnywhere() const { return crouchAnywhere; }
+
+	// doorwalls=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port, the full Genshd1 run: his way ran through doors that were shut): the places inside
+	// these boxes are left out of every search and every reach, until it's asked again without them. A Build forgets them, as its places are new.
+	void SetShut(const std::vector<HudsonGridBox> &boxes);
+	size_t ShutPlaces() const { return shutPlaces; }
 
 	// The places near a point, up to most of them. It gives back how many it wrote. This is what a drawing of the map reads, and it never looks further than radius, so it can't take long.
 	int CellsNear(int x, int y, int z, int radius, HudsonGridCell *cells, int most) const;
@@ -227,6 +239,8 @@ private:
 	std::vector<uint8_t> smallPatch;      // the floor this place is on is too small to count as anywhere: the top of a lamp, say
 	std::vector<LowFloor> lowFloors;      // the floors where only a crouched marine fits (OnlyCrouchedFits), in row, column and height order
 	bool crouchAnywhere = false;          // SetCrouchAnywhere: places wherever crouched fits (crouchanywhere=yes)
+	std::vector<uint8_t> placeShut;       // SetShut: 1 for a place inside a shut door's box (doorwalls=yes); empty while nothing is shut
+	size_t shutPlaces = 0;
 	size_t drops, polygonsLeftOut, polygonsUsed, bitsBeforeJoining;
 
 	// One search

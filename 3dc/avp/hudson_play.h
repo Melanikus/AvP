@@ -67,6 +67,14 @@ bool HudsonPlay_AimsOrHolds();
 // the nearest alien once one has been nearer than MM for MS, and holds his fire otherwise (hudson_play_steps.h, HudsonPlay_ShootNow). 0: never. Asked before he starts
 void HudsonPlay_ShootWithin(int within, int delay);
 
+// doorwalls=yes (added 2026-11-20 by Melanikus (Frost), the full Genshd1 run): a shut door (a lift or switch door not open, a locked proximity door) is a wall on
+// his grid till it opens (HudsonGrid::SetShut), looked at twice a second, and his way is looked for again when one changes; a prop he breaks with a destroy
+// step gets him a new grid, built on its own thread while he waits (HudsonNav_StartANewGrid). Asked before he starts
+void HudsonPlay_DoorWalls(bool walls);
+
+// ribbon=off (added 2026-11-20 by Melanikus (Frost), the films for the public): his route isn't drawn on the floor. Asked before he starts
+void HudsonPlay_RibbonOff(bool off);
+
 // For the lane probe's SHOT line: true once for each burst that has ended, with its alien's strategy name (SB_NAME_LENGTH bytes), how far it was when it began,
 // its health then and at the burst's last frame (the game's 16.16), and whether it died
 bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died);

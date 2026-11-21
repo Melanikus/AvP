@@ -6969,6 +6969,9 @@ void Hudson_PlayInput(void *playerStatus)
 		HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);
 		// shootwithin= shootdelay=: he fires at an alien that has been close that long (added 2026-11-20 by Melanikus (Frost), the owner)
 		HudsonPlay_ShootWithin(plan.shootWithin, plan.shootDelay);
+		// doorwalls=yes, ribbon=off (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_DoorWalls(plan.playDoorWalls);
+		HudsonPlay_RibbonOff(plan.playRibbonOff);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

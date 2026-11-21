@@ -23,6 +23,8 @@
 #include "gamedef.h"
 #include "logString.h"
 #include "bh_types.h"
+#include "bh_lift_door.h"     // doorwalls=yes: a lift door's state (Frost 2026-11-20)
+#include "bh_switch_door.h"   // and a switch door's
 #include "dynblock.h"
 #include "dynamics.h"
 #include "bh_alien.h"
@@ -245,6 +247,9 @@ static int flaresAtAliens = 0;        // the flares that went, at aliens
 static bool aimingAtTheNearest = false;      // HudsonPlay_AimAtTheNearest: aimnearest=yes (Frost 2026-11-20)
 static bool holdingHisGround = false;        // HudsonPlay_HoldHisGround: holdground=yes (Frost 2026-11-20)
 static bool crouchingAnywhere = false;       // HudsonPlay_CrouchAnywhere: crouchanywhere=yes (Frost 2026-11-20)
+static bool doorWalls = false;               // HudsonPlay_DoorWalls: doorwalls=yes (Frost 2026-11-20)
+static bool ribbonOff = false;               // HudsonPlay_RibbonOff: ribbon=off
+static std::string shutDoorsSaid;           // the shut doors as last given to his grid, so a change is seen
 static STRATEGYBLOCK const *aimedAt = 0;     // the alien his view is on, for the lane probe's AIM line
 static int aimedAtDistance = 0;
 static bool aimedAtSeen = false;
@@ -2832,6 +2837,14 @@ static void DoTheShooting(PLAYER_STATUS *status, DWORD now, DWORD patience)
 	{
 		SayAboutTheStep(step.name + " is gone");
 		NextStep(true);
+
+		// doorwalls=yes: the level has changed where it was, so a new grid without it, built on its own thread while he waits (it took 0.7 s on Genshd1)
+		if (doorWalls && HudsonNav_StartANewGrid())
+		{
+			LogString("play: a new grid, because " + step.name + " is gone");
+			phase = kWaitingForTheGrid;
+		}
+
 		return;
 	}
 
@@ -3112,7 +3125,7 @@ bool HudsonPlay_Start(const char *levelName)
 	stepAt = 0;
 	stepsThatWorked = 0;
 	cheatsUsed = 0;
-	ribbonIsOn = true;
+	ribbonIsOn = !ribbonOff;
 	phase = kWaitingForTheGrid;
 	HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);
 	HudsonNav_StartTheGrid();
@@ -3449,6 +3462,90 @@ bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore
 	return true;
 }
 
+// DOORS AS WALLS (doorwalls=yes; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run: his way to the levers ran through shdr01 and his way to opslev01
+// through shftdr02, doors that only those switches open). Twice a second: every lift or switch door that isn't open, and every locked proximity door (an unlocked
+// one opens as he comes), is a shut box on his grid, its module's extents and 300 mm round. When the list changes, his grid is told and his way looked for again.
+static void LookAtTheDoors(DWORD now)
+{
+	static DWORD lookedAt = 0;
+
+	if (!doorWalls || !HudsonNav_TheGrid().Ready() || now - lookedAt < 500)
+	{
+		return;
+	}
+
+	lookedAt = now;
+
+	std::vector<HudsonGridBox> boxes;
+	std::string said;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || !block->SBdataptr || !block->SBmoptr)
+		{
+			continue;
+		}
+
+		bool shut = false;
+
+		if (block->I_SBtype == I_BehaviourLiftDoor)
+		{
+			shut = ((LIFT_DOOR_BEHAV_BLOCK const *)block->SBdataptr)->door_state != I_door_open;
+		}
+		else if (block->I_SBtype == I_BehaviourSwitchDoor)
+		{
+			shut = ((SWITCH_DOOR_BEHAV_BLOCK const *)block->SBdataptr)->doorState != I_door_open;
+		}
+		else if (block->I_SBtype == I_BehaviourProximityDoor)
+		{
+			PROXDOOR_BEHAV_BLOCK const *const door = (PROXDOOR_BEHAV_BLOCK const *)block->SBdataptr;
+
+			shut = door->door_locked && door->door_state != I_door_open;
+		}
+
+		if (!shut)
+		{
+			continue;
+		}
+
+		MODULE const *const module = block->SBmoptr;
+		HudsonGridBox const box = { module->m_world.vx + module->m_minx - 300, module->m_world.vy + module->m_miny - 300, module->m_world.vz + module->m_minz - 300,
+			module->m_world.vx + module->m_maxx + 300, module->m_world.vy + module->m_maxy + 300, module->m_world.vz + module->m_maxz + 300 };
+
+		boxes.push_back(box);
+		said += (said.empty() ? "" : ", ") + HudsonStrategies_Title(block);
+	}
+
+	if (said == shutDoorsSaid)
+	{
+		return;
+	}
+
+	DWORD const startedAt = GetTickCount();
+
+	shutDoorsSaid = said;
+	HudsonNav_TheGridToSearch().SetShut(boxes);
+	LogString("play: doors: " + std::to_string((int)boxes.size()) + " shut (" + (said.empty() ? std::string("none") : said) + "), " +
+		std::to_string((int)HudsonNav_TheGrid().ShutPlaces()) + " places of his grid left out, in " + std::to_string((unsigned long)(GetTickCount() - startedAt)) + " ms");
+
+	if (phase == kWalking && !following)
+	{
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
+void HudsonPlay_DoorWalls(bool walls)
+{
+	doorWalls = walls;
+}
+
+void HudsonPlay_RibbonOff(bool off)
+{
+	ribbonOff = off;
+}
+
 void HudsonPlay_AimAtTheNearest(bool aim)
 {
 	aimingAtTheNearest = aim;
@@ -3513,6 +3610,22 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			return;
 		}
 
+		// doorwalls=yes: a new grid after a prop broke, swapped in once it's built; the lifts' reach and the shut doors are worked out again for its places
+		if (HudsonNav_NewGridIsBuilding())
+		{
+			unsigned long took = 0;
+
+			if (!HudsonNav_TookTheNewGrid(&took))
+			{
+				return;
+			}
+
+			LogString("play: the new grid is in, after " + std::to_string(took) + " ms");
+			liftsAreKnown = false;
+			rideStage = kNotRiding;
+			shutDoorsSaid.clear();
+		}
+
 		if (!HudsonNav_TheGrid().Ready())
 		{
 			LogString("play: there's no grid, so he can't find his way");
@@ -3544,6 +3657,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 	}
 
 	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+
+	// doorwalls=yes: shut doors are walls on his grid, and his way is looked for again when one changes
+	LookAtTheDoors(now);
 
 	switch (phase)
 	{

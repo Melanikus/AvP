@@ -197,6 +197,8 @@ param(
     [int]$SupplyEvery = 0,
     [int]$ShootWithin = 0, # with -Play, he fires at the nearest alien once one has been nearer than this (mm) for -ShootDelay ms (shootwithin=, shootdelay=; Frost 2026-11-20)
     [int]$ShootDelay = 0,
+    [switch]$DoorWalls,    # with -Play, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (doorwalls=yes; Frost 2026-11-20)
+    [switch]$RibbonOff,    # with -Play, his route isn't drawn on the floor: for films (ribbon=off; Frost 2026-11-20)
     [switch]$SupplyGate,   # with -Supply, the next alien only once the last one made has been on a ceiling (supplygate=ceiling; Frost 2026-11-20)
     [int]$DieRoll = -1,    # the game's own QUANTUM_ROLL before the level loads (0 to 65535): every alternate place the same each run (dieroll=; Frost 2026-11-20)
     [int]$WatchMost = 0,   # with -LanesWatch -Play, the watch plays for at most this many seconds of game time (60 to 7200), not 3 minutes: the full-level run (watchmost=; Frost 2026-11-20)
@@ -495,6 +497,8 @@ if ($CrouchAnywhere) { $arguments += " crouchanywhere=yes" }
 if ($WatchMost -gt 0) { $arguments += " watchmost=$WatchMost" }
 if ($DieRoll -ge 0) { $arguments += " dieroll=$DieRoll" }
 if ($SupplyGate) { $arguments += " supplygate=ceiling" }
+if ($DoorWalls) { $arguments += " doorwalls=yes" }
+if ($RibbonOff) { $arguments += " ribbon=off" }
 if ($ShootWithin -gt 0) { $arguments += " shootwithin=$ShootWithin shootdelay=$ShootDelay" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
