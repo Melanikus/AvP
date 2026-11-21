@@ -2917,6 +2917,25 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"REFILL f=\""), "and each time his health is filled up again, a REFILL line");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply\" }"), "the run script can ask for it");
+	// doorwalls=yes (Frost 11-20, Bishop for the owner: "He's choosing a closed door again, not shooting the galss"): a shut door is a wall on his grid till it opens,
+	// and a prop he breaks gets him a new grid, built on its own thread; off unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes doorwalls=yes", &plan) == 0 && plan.playDoorWalls, "his way can keep to open doors");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playDoorWalls, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 doorwalls=yes", kHudsonRefusedDoorWallsWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes doorwalls=no", kHudsonRefusedDoorWallsNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes doorwalls=yes doorwalls=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_DoorWalls(plan.playDoorWalls);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "LookAtTheDoors(now);") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_TheGridToSearch().SetShut(boxes);"),
+		"which looks at the doors and shuts them on his grid");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_StartANewGrid(") && Has(ReadSourceFile("3dc/avp/hudson_nav.cpp"), "bool HudsonNav_TookTheNewGrid("),
+		"and gets a new grid after a prop breaks, swapped in when it's built");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_grid_level.cpp"), "object->SBflags.please_destroy_me"), "which leaves out a prop the game is about to take away");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($DoorWalls) { $arguments += \" doorwalls=yes\" }"), "the run script can ask for it");
+	// ribbon=off (Bishop 11-20, the films for the public): his route isn't drawn on the floor
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes ribbon=off", &plan) == 0 && plan.playRibbonOff, "his ribbon can be left off a film");
+	Refused("-hudson level=genshd1 frames=9000 play=yes ribbon=on", kHudsonRefusedRibbonNotOff);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RibbonOff(plan.playRibbonOff);"), "the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RibbonOff) { $arguments += \" ribbon=off\" }"), "the run script can ask for it");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyAt) { $arguments += \" supplyat=$($SupplyAt -replace 'm', '-')\" }"),
 		"and supplyat= only when it's said (an empty one ended a supplyin= batch with exit 21), a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
 

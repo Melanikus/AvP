@@ -288,6 +288,29 @@ static void TestHeights()
 		grid.SetCrouchAnywhere(false);
 	}
 
+	// SHUT DOORS (doorwalls=yes; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the full Genshd1 run: "He's choosing a closed door again", his way to
+	// opslev01 ran through shftdr02, which only opslev01-04 open): the places inside a shut door's box are left out of every search until it opens
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "a corridor with nothing shut: his way goes along it");
+
+		std::vector<HudsonGridBox> const door = { { 5000, -4000, -1000, 6000, 2000, 4000 } };
+
+		grid.SetShut(door);
+		Check(grid.ShutPlaces() > 0 && Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "a shut door across it: no way through");
+		Check(Search(grid, 1000, 1000, 1500, 4000, 1000, 1500) == kHudsonGridFound, "but his side of it is as before");
+		grid.SetShut(std::vector<HudsonGridBox>());
+		Check(grid.ShutPlaces() == 0 && Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "and once it's open, through it again");
+		grid.SetShut(door);
+		grid.Build(world);
+		Check(grid.ShutPlaces() == 0, "a new build forgets the shut places (the caller says them again: the places are new)");
+	}
+
 	// Two floors, one over the other, are different places
 	{
 		World world;
