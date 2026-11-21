@@ -1520,8 +1520,9 @@ void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
 	w->routeLength = -1;
 	Keep(w->link, sizeof(w->link), "-");
 	w->encSearch = 0;
-	Keep(w->in, sizeof(w->in), "-");
-	Keep(w->tgt, sizeof(w->tgt), "-");
+	// "?" until a search runs (Bishop 00:5x): a search that finds it in no box writes "-", so the two read apart
+	Keep(w->in, sizeof(w->in), "?");
+	Keep(w->tgt, sizeof(w->tgt), "?");
 	Keep(w->headsFor, sizeof(w->headsFor), "-");
 	w->targetPoint = none;
 }
@@ -1670,8 +1671,8 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 		" pai=" + (inPlayersAi ? "1" : "0") + " pos=" + PlaceWords(d->Position) + " on=" + surface + " down=" + PlaceWords(d->GravityDirection) + " mat=" + std::to_string(d->OrientMat.mat21) + "," +
 		std::to_string(d->OrientMat.mat22) + "," + std::to_string(d->OrientMat.mat23) + " std=" + std::to_string(gravityOn) + " nocontact=" + std::to_string(d->TimeNotInContactWithFloor) +
 		" floor=" + (d->IsInContactWithFloor ? "1" : "0") + " contacts=" + std::to_string(contacts) + "/" + std::to_string(withNpc) + " cn=" + (touched.empty() ? std::string("-") : touched) + " crouch=" + (s->IAmCrouched ? "1" : "0") +
-		" crawl=" + w->crawl + " able=" + (able ? "1" : "0") + " tgt=" + target + " ep=" + ep + " go=" + go + " search=" + w->dropout + " npcboxes=" + std::to_string(w->npcBoxes) +
-		" tgtboxes=" + std::to_string(w->targetBoxes) + " in=" + w->in + " tgtin=" + w->tgt + " route=" + route + " heads=" + w->headsFor +
+		" crawl=" + w->crawl + " able=" + (able ? "1" : "0") + " tgt=" + target + " ep=" + ep + " go=" + go + " search=" + w->dropout + " npcboxes=" + (w->searched ? std::to_string(w->npcBoxes) : std::string("?")) +
+		" tgtboxes=" + (w->searched ? std::to_string(w->targetBoxes) : std::string("?")) + " in=" + w->in + " tgtin=" + w->tgt + " route=" + route + " heads=" + w->headsFor +
 		" point=" + (steered ? PlaceWords(w->targetPoint) : std::string("-")) + " link=" + w->link + " lb=" + w->linkBefore + " by=" + by + " enc=" + std::to_string(w->encSearch) +
 		" encb=" + std::to_string(w->encBefore) + " heading=" + (steered ? PlaceWords(w->heading) : std::string("-")) + " hup=" + (steered ? std::to_string(UpDot(w->heading)) : std::string("-")) +
 		" vel=" + PlaceWords(d->LinVelocity) + " vup=" + std::to_string(UpDot(d->LinVelocity)) + " rdot=" + (steered ? std::to_string(DotWith(d->GravityDirection, w->heading)) : std::string("-")) +
