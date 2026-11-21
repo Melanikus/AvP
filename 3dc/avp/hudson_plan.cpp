@@ -252,6 +252,8 @@ const char *const kHudsonRefusedDoorWallsNotYes = "doorwalls= can only be yes";
 const char *const kHudsonRefusedDoorWallsWithoutPlay = "doorwalls= keeps his way to open doors as he plays, so it needs play=yes";
 const char *const kHudsonRefusedRibbonNotOff = "ribbon= can only be off";
 const char *const kHudsonRefusedFilmClockNotOff = "filmclock= can only be off";
+const char *const kHudsonRefusedRearGuardOutOfRange = "rearguard= is how near an alien has to be for him to turn to it, from 1000 to 20000 mm";   // Frost 2026-11-20
+const char *const kHudsonRefusedRearGuardWithoutPlay = "rearguard= has him look back at close aliens as he plays, so it needs play=yes";
 const char *const kHudsonRefusedStatusNotOn = "status= can only be on";   // status=on (Frost 2026-11-20, the owner: "I have no feedback why")
 // supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
 const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
@@ -509,7 +511,21 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 // as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
 static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
 {
-	if (WordIs(place, nameLength, "status"))
+	if (WordIs(place, nameLength, "rearguard"))
+	{
+		// rearguard=MM: he sprints his way and looks back at the close ones, a ceiling's first (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner)
+		if (plan->rearGuard != 0)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!ReadNumber(value, valueLength, &plan->rearGuard) || plan->rearGuard < 1000 || plan->rearGuard > 20000)
+		{
+			plan->rearGuard = -1;
+			return kHudsonRefusedRearGuardOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "status"))
 	{
 		// status=on: his one line on the screen (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why")
 		if (plan->playStatus)
@@ -2753,7 +2769,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		}
 		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
 			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon") ||
-			WordIs(place, nameLength, "filmclock") || WordIs(place, nameLength, "status"))
+			WordIs(place, nameLength, "filmclock") || WordIs(place, nameLength, "status") || WordIs(place, nameLength, "rearguard"))
 		{
 			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
 			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
@@ -3687,6 +3703,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playCrouchAnywhere && !plan->play)
 	{
 		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->rearGuard > 0 && !plan->play)
+	{
+		return kHudsonRefusedRearGuardWithoutPlay;
 	}
 
 	if (plan->playDoorWalls && !plan->play)

@@ -461,6 +461,47 @@ inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long cros
 	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;
 }
 
+// THE REAR GUARD (rearguard=MM; added 2026-11-20 by Melanikus (Frost), the owner 22:24 and 22:27: "sprint to the end and just look back (and turn fast, 3x faster
+// than he does today) if an alien comes within 5 meters", "run backwards ... following his plotted course focusing the closest wall crawling item? Focus on the
+// ceiling ones"). An alien's surface by its down's y, as the lane probe reads it: under -46000 a ceiling (0), over 46000 the floor (2), else a wall or slope (1)
+inline int HudsonPlay_SurfaceRank(int downY)
+{
+	return downY < -46000 ? 0 : downY > 46000 ? 2 : 1;
+}
+
+struct HudsonPlayRearCandidate
+{
+	int id;
+	int distance;   // mm
+	int rank;       // HudsonPlay_SurfaceRank
+};
+
+// Of the aliens within the rear guard (the caller leaves out the rest): the nearest on a ceiling, else the nearest on a wall, else the nearest. -1: none
+inline int HudsonPlay_PickTheRearTarget(std::vector<HudsonPlayRearCandidate> const &aliens)
+{
+	int best = -1, bestRank = 3, bestDistance = 0;
+
+	for (size_t i = 0; i < aliens.size(); i++)
+	{
+		if (aliens[i].rank < bestRank || (aliens[i].rank == bestRank && aliens[i].distance < bestDistance))
+		{
+			best = aliens[i].id;
+			bestRank = aliens[i].rank;
+			bestDistance = aliens[i].distance;
+		}
+	}
+
+	return best;
+}
+
+// The aim's turn control this frame: a quarter of the angle (kHudsonPlayAimTurnsOneIn), at most the game's full key turn; the rear guard's three times that
+inline int HudsonPlay_AimTurnControl(int angle, bool rearGuard, int fullTurnsPerSecond, int frameTime)
+{
+	int const control = HudsonPlay_TurnControl(angle / kHudsonPlayAimTurnsOneIn, fullTurnsPerSecond, frameTime);
+
+	return rearGuard ? 3 * control : control;
+}
+
 // Is a destroy (or kill) step's target gone? Not there, being taken away (please_destroy_me), or its health run out from more than none. A one-hit Static
 // (integrity 0, Genshd1's SHED04 glass) has no health to begin with, so its health alone says nothing (the 22:14 run read all seven panes gone at once and
 // never shot them). Added 2026-11-20 by Melanikus (Frost)

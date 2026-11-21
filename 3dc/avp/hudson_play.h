@@ -78,6 +78,11 @@ void HudsonPlay_RibbonOff(bool off);
 // status=on (added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): one line on the screen, drawn by the renderer at the
 // top left: "15/22 press opslev01: no way on my grid - waiting, step limit in 42 s". Asked before he starts; StatusLine gives "" when it's off or he isn't playing
 void HudsonPlay_ShowStatus(bool show);
+
+// rearguard=MM (added 2026-11-20 by Melanikus (Frost), the owner 22:24, 22:27): he sprints his way (no slowing for bends) and, with an alien within MM, turns 3x
+// as fast as the aim to the nearest on a ceiling, then a wall, then the floor, his feet still on his way (backwards, as fast as forwards); shootwithin= fires at
+// that one. 0: off. Asked before he starts
+void HudsonPlay_RearGuard(int within);
 char const *HudsonPlay_StatusLine();
 
 // For the lane probe's SHOT line: true once for each burst that has ended, with its alien's strategy name (SB_NAME_LENGTH bytes), how far it was when it began,

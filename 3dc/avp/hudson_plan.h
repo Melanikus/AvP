@@ -323,6 +323,8 @@ struct HudsonPlan
 	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
 	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
 	bool playDoorWalls;   // doorwalls=yes: with play=yes, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (hudson_play.h; Frost 11-20)
+	int rearGuard;        // rearguard=MM: with play=yes, he sprints his way, and with an alien within MM (1000 to 20000) turns 3x as fast to the nearest on a ceiling,
+	                      //   then a wall, then the floor, running his way backwards; shootwithin= then fires at that one (hudson_play.h; the owner 11-20, 22:24, 22:27)
 	bool playStatus;      // status=on: with play=yes, one line on the screen: his step, its kind and target, and what he's doing (hudson_play.h; Frost 11-20)
 	bool filmClockOff;    // filmclock=off: no machine clock stamped in the film's corner (it's for join-films; the public films; Frost 11-20)
 	bool playRibbonOff;   // ribbon=off: with play=yes, his route isn't drawn on the floor (the public films; Frost 11-20)
@@ -645,6 +647,8 @@ extern const char *const kHudsonRefusedDoorWallsWithoutPlay;
 extern const char *const kHudsonRefusedRibbonNotOff;
 extern const char *const kHudsonRefusedFilmClockNotOff;
 extern const char *const kHudsonRefusedStatusNotOn;
+extern const char *const kHudsonRefusedRearGuardOutOfRange;
+extern const char *const kHudsonRefusedRearGuardWithoutPlay;
 extern const char *const kHudsonRefusedShootWithinOutOfRange;
 extern const char *const kHudsonRefusedShootDelayOutOfRange;
 extern const char *const kHudsonRefusedShootDelayWithoutWithin;

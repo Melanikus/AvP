@@ -6975,6 +6975,8 @@ void Hudson_PlayInput(void *playerStatus)
 		HudsonPlay_RibbonOff(plan.playRibbonOff);
 		// status=on: his one line on the screen (added 2026-11-20 by Melanikus (Frost))
 		HudsonPlay_ShowStatus(plan.playStatus);
+		// rearguard=MM: he sprints his way and looks back at the close ones (added 2026-11-20 by Melanikus (Frost), the owner)
+		HudsonPlay_RearGuard(plan.rearGuard);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

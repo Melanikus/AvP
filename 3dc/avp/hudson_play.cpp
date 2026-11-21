@@ -250,6 +250,7 @@ static bool crouchingAnywhere = false;       // HudsonPlay_CrouchAnywhere: crouc
 static bool doorWalls = false;               // HudsonPlay_DoorWalls: doorwalls=yes (Frost 2026-11-20)
 static bool ribbonOff = false;               // HudsonPlay_RibbonOff: ribbon=off
 static bool showingStatus = false;           // HudsonPlay_ShowStatus: status=on (Frost 2026-11-20)
+static int rearGuardWithin = 0;              // HudsonPlay_RearGuard: rearguard=MM (Frost 2026-11-20)
 static char statusLine[200] = "";            // what it says this frame
 static DWORD waitingForAWayAt = 0;           // the last frame WaitForAWay ran, for the status line
 static std::string shutDoorsSaid;           // the shut doors as last given to his grid, so a change is seen
@@ -663,7 +664,8 @@ static void SteerAlongTheWay(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 	int const bend = HudsonPlay_AngleToTurn((int)(toX * 65536.0 / length), (int)(toZ * 65536.0 / length), aim.furtherX - aim.x, aim.furtherZ - aim.z);
 	int forwardControl = 0, sideControl = 0;
 
-	HudsonPlay_WalkControls(ahead, side, HudsonPlay_WalkControl(bend), &forwardControl, &sideControl);
+	// rearguard=: he sprints, with no slowing for bends (the owner 22:24: "sprint to the end")
+	HudsonPlay_WalkControls(ahead, side, rearGuardWithin > 0 ? ONE_FIXED : HudsonPlay_WalkControl(bend), &forwardControl, &sideControl);
 
 	status->Mvt_MotionIncrement = forwardControl;
 	status->Mvt_SideStepIncrement = sideControl;
@@ -3386,12 +3388,14 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 {
 	static float tilt = 0.0f;   // his view's tilt, eased toward the alien's chest, in the game's 4096ths of a turn
 
-	if (!aimingAtTheNearest || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	if ((!aimingAtTheNearest && rearGuardWithin <= 0) || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
 	{
 		return;
 	}
 
 	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const within = rearGuardWithin > 0 ? rearGuardWithin : kHudsonPlayAimWithin;
+	std::vector<HudsonPlayRearCandidate> rear;   // rearguard=: the same aliens, by surface
 	std::vector<HudsonPlayAimCandidate> candidates;
 	std::vector<STRATEGYBLOCK *> blocks;
 	int current = -1;
@@ -3407,7 +3411,7 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 
 		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
 
-		if (distance >= kHudsonPlayAimWithin)
+		if (distance >= within)
 		{
 			continue;
 		}
@@ -3421,16 +3425,18 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 
 		current = block == aimedAt ? candidate.id : current;
 		candidates.push_back(candidate);
+		rear.push_back(HudsonPlayRearCandidate{ candidate.id, distance, HudsonPlay_SurfaceRank(block->DynPtr->GravityDirection.vy) });
 		blocks.push_back(block);
 	}
 
-	int const pick = HudsonPlay_PickTheNearest(candidates, current);
+	// rearguard=: the nearest on a ceiling first, then a wall, then the floor (the owner 22:27); else the aim's own pick
+	int const pick = rearGuardWithin > 0 ? HudsonPlay_PickTheRearTarget(rear) : HudsonPlay_PickTheNearest(candidates, current);
 
 	if (pick < 0)
 	{
 		if (aimedAt)
 		{
-			LogString("play: aims at nothing now: no alien within 20 m, so he faces along his way");
+			LogString("play: aims at nothing now: no alien within " + std::to_string(within / 1000) + " m, so he faces along his way");
 		}
 
 		aimedAt = 0;
@@ -3443,6 +3449,7 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	if (it != aimedAt)
 	{
 		LogString("play: aims at " + HudsonStrategies_Title(it) + ", " + std::to_string(candidates[pick].distance) + " mm from him" + (candidates[pick].seen ? "" : ", out of his sight") +
+			(rearGuardWithin > 0 ? std::string(", on ") + (rear[(size_t)pick].rank == 0 ? "the ceiling" : rear[(size_t)pick].rank == 1 ? "a wall" : "the floor") : std::string()) +
 			", " + RoomOf(Player->ObStrategyBlock));
 	}
 
@@ -3453,7 +3460,7 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	// his turn to it, a share each frame, and nothing else of this frame's turning
 	int const toX = it->DynPtr->Position.vx - dyn->Position.vx, toZ = it->DynPtr->Position.vz - dyn->Position.vz;
 	int const angle = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
-	int const control = HudsonPlay_TurnControl(angle / kHudsonPlayAimTurnsOneIn, kTurnsAtFull, NormalFrameTime);
+	int const control = HudsonPlay_AimTurnControl(angle, rearGuardWithin > 0, kTurnsAtFull, NormalFrameTime);
 
 	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = control < 0 ? 1 : 0;
 	status->Mvt_InputRequests.Flags.Rqst_TurnRight = control > 0 ? 1 : 0;
@@ -3468,7 +3475,7 @@ static void AimAtTheNearest(PLAYER_STATUS *status)
 	float const acrossX = (float)(chest.vx - eyes.vx), acrossZ = (float)(chest.vz - eyes.vz);
 	float const wanted = atan2f((float)(chest.vy - eyes.vy), sqrtf(acrossX * acrossX + acrossZ * acrossZ)) * (float)kHudsonPlayWholeTurn / 6.2831853f;
 
-	tilt += (wanted - tilt) / (float)kHudsonPlayAimTurnsOneIn;
+	tilt += (wanted - tilt) * (rearGuardWithin > 0 ? 3.0f : 1.0f) / (float)kHudsonPlayAimTurnsOneIn;
 	status->ViewPanX = ((int)tilt) & (kHudsonPlayWholeTurn - 1);
 }
 
@@ -3515,7 +3522,19 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 	STRATEGYBLOCK *nearest = 0;
 	int nearestDistance = -1;
 
-	for (int i = 0; i < NumActiveStBlocks; i++)
+	// rearguard=: the one his view is on, attacking him or not (the owner 22:24: "if an alien comes within 5 meters ... shoot him in 300ms")
+	if (rearGuardWithin > 0 && aimedAt && StillThere(aimedAt) && !IsAsleepOrDead(aimedAt) && aimedAt->DynPtr)
+	{
+		int const distance = DistanceTo(dyn->Position, aimedAt->DynPtr->Position);
+
+		if (distance < shootingWithin)
+		{
+			nearest = (STRATEGYBLOCK *)aimedAt;
+			nearestDistance = distance;
+		}
+	}
+
+	for (int i = 0; i < NumActiveStBlocks && rearGuardWithin <= 0; i++)
 	{
 		STRATEGYBLOCK *const block = ActiveStBlockList[i];
 
@@ -3709,6 +3728,21 @@ void HudsonPlay_DoorWalls(bool walls)
 void HudsonPlay_RibbonOff(bool off)
 {
 	ribbonOff = off;
+}
+
+void HudsonPlay_RearGuard(int within)
+{
+	rearGuardWithin = within > 0 ? within : 0;
+
+	if (rearGuardWithin > 0)
+	{
+		double const fullDegrees = (double)kTurnsAtFull * 360.0 / (double)kHudsonPlayWholeTurn;
+
+		LogString("play: rear guard within " + std::to_string(rearGuardWithin) + " mm: his aim turned a quarter of the angle a frame, at most " +
+			std::to_string((int)fullDegrees) + " deg/s (the game's full key turn); now three times that, at most " + std::to_string((int)(3.0 * fullDegrees)) +
+			" deg/s. He sprints (no slowing for bends) and runs his way backwards as fast as forwards: a marine's backward run isn't halved (pmove.cpp halves only a" +
+			" Predator's), the same " + std::to_string(15000) + " mm/s (MARINE_MOVESCALE)");
+	}
 }
 
 void HudsonPlay_ShowStatus(bool show)
