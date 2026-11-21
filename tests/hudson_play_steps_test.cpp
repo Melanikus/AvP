@@ -81,6 +81,13 @@ static void TestAGoodList()
 	Check(places.size() == 1 && places[0].kind == kHudsonPlayGoTo && places[0].x == 52902 && places[0].y == 595 && places[0].z == 15587 && places[0].name == "gold 1 of 10: gencor05",
 		"goto, a place with a name for the log");
 
+	// teleport: a logged cheat to a place, for a lift he can't board (the full Genshd1 run, Frost 2026-11-20: liftcar01's car has no landing at its foot, so he stood
+	// below it; Bishop: "ride it if he can, otherwise teleport to its far stop, and log it")
+	std::vector<HudsonPlayStep> const moves = Read("teleport -105091 -1949 -25315 | liftcar01's top: no landing at its foot\n", "a teleport line is read");
+
+	Check(moves.size() == 1 && moves[0].kind == kHudsonPlayMoveTo && moves[0].x == -105091 && moves[0].y == -1949 && moves[0].z == -25315 &&
+		moves[0].name == "liftcar01's top: no landing at its foot", "teleport, a place and why, for the log");
+
 	// FLARES (flares=yes, the lane probe; the owner 11-20: "throwing flares when aliens approach him"): one at an alien he can see within 8 m, once he faces it, and not
 	// again for a while
 	Check(HudsonPlay_FlareIsDue(7999, true, 0, false), "an alien he sees 8 m away or nearer: a flare, the first");
@@ -533,6 +540,7 @@ static void TestAimAndHold()
 	Check(ReadWholeFile("3dc/avp/hudson_play.cpp", &play), "3dc/avp/hudson_play.cpp is there");
 	Check(play.find("if (HoldingHisGround(status, dyn, aim, now))") != std::string::npos, "his walk asks whether he holds before it steers");
 	Check(play.find("AimAtTheNearest(status);") != std::string::npos, "and his view goes to the nearest each frame, before a flare's turn");
+	Check(play.find("if (step.kind == kHudsonPlayMoveTo)") != std::string::npos, "a teleport step moves him, as a logged cheat, and goes on");
 	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
 }
 

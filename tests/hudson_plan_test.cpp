@@ -2800,6 +2800,10 @@ static void CheckLanesWord()
 	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=600 watchmost=600", kHudsonRefusedAskedTwice);
 	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_PlayMost(plan.watchMost);"), "the run tells the probe");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "gameTime >= playMost ?"), "which ends his play there, not at 3 minutes");
+	// and with watchmost= the probe doesn't end the run on 15 s of no headway (the first full run ended at 26 s, stood below liftcar01): his own step limit
+	// (stepseconds=) moves him on, a logged cheat, so the probe waits longer than it
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const noHeadway = playMost == 180LL * 65536 ? kPlayNoHeadway : kPlayNoHeadwayFull;"),
+		"a full run's no-headway end waits past his own step limit");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchMost -gt 0) { $arguments += \" watchmost=$WatchMost\" }"), "the run script can ask for it");
 	// THE LEVEL'S OWN NPCs in a watch run (Bishop 11-20, the snowplow: the level's own "alieninoffice", a placed alien in Wait, was kept still and shoved down Object07
 	// in every supply run; Drake: no trigger wakes it, its own near state does): they act as stock; only the generators stay still, so the supply is the only one made
