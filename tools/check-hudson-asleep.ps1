@@ -32,6 +32,14 @@ A LINE THAT LOOKS LIKE A DECLARATION. Rules 5 and 6 let a declaration through, a
 has to have a declaration's form AND be outside every function's body. Modified 2026-11-10 by Melanikus for the AvP port (#212): until
 then the form alone was enough, so "return", "else" or "do" in front of a call or a write gave it that form, and it was let through, the
 check failing open. And a comment after a declaration kept its first "/", so the line no longer ended in ";" and was refused as a call.
+
+SAY MARKS, A SECOND SWITCH (added 2026-11-21 by Melanikus (Frost) for the AvP port; Bishop for the owner: "if I say 'stuck' in SAY log do you
+see it"). With -dev -saymarks the lane probe WATCHES a game he plays himself, with no run of Hudson's: it reads the near aliens and writes its
+log, and nothing else. Its switch, SayMarksAreOn, is held to rules 1 to 3 the same way (it starts false, only HudsonSayMarks_ReadCommandLine
+makes it true, once, and only when HudsonSayMarks_IsAskedFor finds both words), only Hudson's files may name it, and it may be read only in
+the first check of the few functions listed in $watchOnly, each read by a person: they only read the game and write the log. Everything
+that acts (Hudson's play, its supply, immortality, stock forcing, standat, a time end, a menu, window or video call) can't read it, so it
+stays asleep on HudsonRunIsOn alone, with or without SAY marks.
 #>
 param(
     [string]$Repository = ''
@@ -58,7 +66,20 @@ function Stop-Check([string]$why)
 $noCheckNeeded = @{
     'Hudson_ReadCommandLine' = 'it is what turns a run on, and rules 1 to 3 check it on its own';
     'HudsonVision_Count'     = 'it only adds up the pictures it is handed, in hudson_vision.cpp, which includes nothing of the game''s';
-    'HudsonVision_ScreenAt'  = 'it only reads the pixels it is handed, in hudson_vision.cpp, which includes nothing of the game''s'
+    'HudsonVision_ScreenAt'  = 'it only reads the pixels it is handed, in hudson_vision.cpp, which includes nothing of the game''s';
+    'HudsonSayMarks_ReadCommandLine' = 'it is what turns SAY marks on, and the SAY-marks rules check it on its own, as rules 1 to 3 check Hudson_ReadCommandLine'
+}
+
+# SAY marks (see above): the functions the game names that may start by giving up unless HudsonRunIsOn OR SayMarksAreOn, because each only
+# reads the game and writes the probe's log, and why. Test-StartsWatching says which first checks they may have. A new one only comes in
+# here once a person has read it, and everything it calls.
+$watchOnly = @{
+    'HudsonLanes_AlienBefore'   = 'notes what a near alien''s own code is about to read (its state, target, route); it changes nothing of the alien''s or the game''s';
+    'HudsonLanes_Searched'      = 'notes what an NPC''s waypoint search found; it changes nothing';
+    'HudsonLanes_HuntWent'      = 'notes which way an alien''s Hunt went; it changes nothing';
+    'HudsonLanes_AlienAfter'    = 'writes the A line of what a near alien did (into the 3 seconds kept for a mark, with SAY marks); it changes nothing of the alien''s or the game''s';
+    'HudsonSayMarks_EndOfFrame' = 'keeps the watch''s frame count and time, notes a new level, and opens its log once; it moves, keeps or changes nothing of the game';
+    'HudsonSayMarks_Said'       = 'writes a MARK line of his words (printable, 250 at most, as data) and the aliens near him; it changes nothing of the game'
 }
 
 # Objects of Hudson's built before WinMain whose constructors are Hudson's code, and why each is safe. A new one only comes in here once a
@@ -238,6 +259,22 @@ function Test-StartsAsleep([string]$body)
     return $false
 }
 
+# SAY marks: whether a body starts by doing nothing unless a run of Hudson's OR SAY marks is on, or unless SAY marks are on, in rule 4's
+# first form: "if ((!HudsonRunIsOn && !SayMarksAreOn) ...) return", the same without the brackets (C reads && before ||, so it means the
+# same), or "if (!SayMarksAreOn ...) return", each with more after || only, which can only add more ways to give up. Only the functions in
+# $watchOnly may start this way.
+function Test-StartsWatching([string]$body)
+{
+    $rest = ($body -replace '\s+', ' ').Trim()
+
+    while ($rest -match '^static [^;{}()]*; ?(.*)$')
+    {
+        $rest = $Matches[1]
+    }
+
+    return ($rest -match '^if \((?:\(!HudsonRunIsOn && !SayMarksAreOn\)|!HudsonRunIsOn && !SayMarksAreOn|!SayMarksAreOn)(?: \|\| [^{};]*)?\) (?:return\b[^;{}]*;|\{ ?(?:[^{};]*; ?)*?return\b[^;{}]*; ?\})')
+}
+
 # ---- What the game names of Hudson's
 
 $hudsonName = [regex]'\bHudson[A-Za-z0-9_]*'
@@ -341,6 +378,151 @@ if ($asking.Count -ne 1 -or (($asking[0].WithWords -replace '\s+', ' ').Trim()) 
     Stop-Check 'HudsonPlan_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-hudson");'
 }
 
+# ---- SAY marks: a second switch, SayMarksAreOn, held to rules 1 to 3 the same way, and read only where a watch-only function gives up
+# (Bishop for the owner, 2026-11-21: "if I say 'stuck' in SAY log do you see it". Added 2026-11-21 by Melanikus (Frost) for the AvP port.)
+# -dev -saymarks lets the lane probe WATCH a game he plays himself, with no run of Hudson's: it reads the near aliens and writes its log,
+# and does nothing else. So:
+#   a. only Hudson's files may name SayMarksAreOn;
+#   b. it starts false, defined once (a header may declare it extern);
+#   c. only HudsonSayMarks_ReadCommandLine makes it true, once, after giving up unless HudsonSayMarks_IsAskedFor(commandLine);
+#   d. HudsonSayMarks_IsAskedFor is exactly the line that asks for both words, -dev and -saymarks;
+#   e. anywhere else it may be read only in the first check of a function in $watchOnly (each read by a person: it only reads the game
+#      and writes the log), in one of the two forms Test-StartsWatching knows. Everything that acts (Hudson's play, its supply, immortality,
+#      stock forcing, standat, a time end, a menu, window or video call) can't read it, so it stays asleep on HudsonRunIsOn alone.
+# No folder check, unlike a run: the watch writes only its own log into the game's save folder, as the game's own log does, and changes
+# nothing in the game or the folder it runs from.
+
+$sayName = [regex]'\bSayMarksAreOn\b'
+$sayAt = @()   # every place SayMarksAreOn is named: file, index, line, the line's text
+
+foreach ($relative in $code.Keys)
+{
+    $text = $code[$relative]
+
+    foreach ($m in $sayName.Matches($text))
+    {
+        $lineStart = $text.LastIndexOf("`n", [Math]::Max(0, $m.Index - 1)) + 1
+        $lineEnd = $text.IndexOf("`n", $m.Index)
+        if ($lineEnd -lt 0) { $lineEnd = $text.Length }
+        $sayAt += [pscustomobject]@{ File = $relative; Index = $m.Index; Line = (Get-LineNumber $text $m.Index); Text = $text.Substring($lineStart, $lineEnd - $lineStart).Trim() }
+    }
+}
+
+$sayReaders = @(Get-Definitions 'HudsonSayMarks_ReadCommandLine')
+
+if ($sayAt.Count -gt 0 -or $sayReaders.Count -gt 0)
+{
+    # a. only Hudson's files name it
+    foreach ($at in $sayAt)
+    {
+        if (-not $hudsonFile[$at.File])
+        {
+            Stop-Check "$($at.File) line $($at.Line) names SayMarksAreOn: only Hudson's files may name it"
+        }
+    }
+
+    # b. it starts false, defined once
+    $sayStarts = @($sayAt | Where-Object { $_.Text -match '^bool SayMarksAreOn\b' })
+
+    if ($sayStarts.Count -ne 1 -or $sayStarts[0].Text -ne 'bool SayMarksAreOn = false;')
+    {
+        Stop-Check "SayMarksAreOn must be defined once, as bool SayMarksAreOn = false; it is: $(($sayStarts | ForEach-Object { "$($_.File) line $($_.Line): $($_.Text)" }) -join '; ')"
+    }
+
+    # c. only its reader makes it true, once, after giving up unless asked; the reader's body is found by place, so a change anywhere else is named
+    if ($sayReaders.Count -ne 1)
+    {
+        Stop-Check "HudsonSayMarks_ReadCommandLine must be defined exactly once; it's defined $($sayReaders.Count) times"
+    }
+
+    $readerPattern = [regex]('(?m)^[A-Za-z_][\w:<>,\*&\s]*?[\s\*&]HudsonSayMarks_ReadCommandLine\s*\([^;{]*?\)\s*\{')
+    $readerMatch = $readerPattern.Match($code[$sayReaders[0].File])
+    $readerFrom = $readerMatch.Index + $readerMatch.Length
+    $readerTo = $readerFrom + $sayReaders[0].Body.Length
+    $sayChanges = @()
+
+    foreach ($at in $sayAt)
+    {
+        $after = $code[$at.File].Substring($at.Index + 'SayMarksAreOn'.Length)
+        $before = $code[$at.File].Substring(0, $at.Index)
+
+        if ($after -match '^\s*(?:=(?!=)|\+\+|--|[-+*/|&^]=)' -or $before -match '(?:\+\+|--)\s*$' -or ($before -match '&\s*$' -and $before -notmatch '&&\s*$'))
+        {
+            if ($at.Text -match '^bool SayMarksAreOn\b') { continue }   # the definition, checked above
+
+            if ($at.File -ne $sayReaders[0].File -or $at.Index -lt $readerFrom -or $at.Index -gt $readerTo -or $at.Text -ne 'SayMarksAreOn = true;')
+            {
+                Stop-Check "$($at.File) line $($at.Line) changes SayMarksAreOn: only HudsonSayMarks_ReadCommandLine may, once, to true"
+            }
+
+            $sayChanges += $at
+        }
+    }
+
+    $sayReading = ($sayReaders[0].Body -replace '\s+', ' ').Trim()
+
+    if ($sayChanges.Count -ne 1)
+    {
+        Stop-Check "SayMarksAreOn must be made true exactly once, in HudsonSayMarks_ReadCommandLine; it's changed $($sayChanges.Count) times"
+    }
+
+    if ($sayReading -notmatch '^if \(!HudsonSayMarks_IsAskedFor\(commandLine\)\) \{ return; \}')
+    {
+        Stop-Check "HudsonSayMarks_ReadCommandLine ($($sayReaders[0].File) line $($sayReaders[0].Line)) must start by giving up unless HudsonSayMarks_IsAskedFor(commandLine)"
+    }
+
+    # d. both words, every time
+    $sayAsking = @(Get-Definitions 'HudsonSayMarks_IsAskedFor')
+
+    if ($sayAsking.Count -ne 1 -or (($sayAsking[0].WithWords -replace '\s+', ' ').Trim()) -ne 'return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-saymarks");')
+    {
+        Stop-Check 'HudsonSayMarks_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-saymarks");'
+    }
+
+    # e. read only in the first check of a watch-only function: from its { up to its first return, in a body Test-StartsWatching lets through
+    $allowed = @{}
+
+    foreach ($name in $watchOnly.Keys)
+    {
+        $pattern = [regex]('(?m)^[A-Za-z_][\w:<>,\*&\s]*?[\s\*&](?:\w+::)?' + [regex]::Escape($name) + '\s*\([^;{]*?\)\s*(?:const\s*)?\{')
+
+        foreach ($relative in $code.Keys)
+        {
+            if (-not $hudsonFile[$relative]) { continue }
+
+            foreach ($m in $pattern.Matches($code[$relative]))
+            {
+                $from = $m.Index + $m.Length
+                $body = Get-Block $code[$relative] ($from - 1)
+
+                if ($null -eq $body -or -not (Test-StartsWatching $body)) { continue }
+
+                $firstReturn = $body.IndexOf('return')
+                $allowed["$relative|$from|$($from + $firstReturn)"] = $true
+            }
+        }
+    }
+
+    foreach ($at in $sayAt)
+    {
+        if ($at.Text -match '^bool SayMarksAreOn\b' -or $at.Text -eq 'extern bool SayMarksAreOn;' -or $sayChanges -contains $at) { continue }
+
+        $inACheck = $false
+
+        foreach ($key in $allowed.Keys)
+        {
+            $parts = $key.Split('|')
+
+            if ($parts[0] -eq $at.File -and $at.Index -ge [int]$parts[1] -and $at.Index -lt [int]$parts[2]) { $inACheck = $true }
+        }
+
+        if (-not $inACheck)
+        {
+            Stop-Check "$($at.File) line $($at.Line) reads SayMarksAreOn: only the first check of one of the watch-only functions this check lists may"
+        }
+    }
+}
+
 # ---- Rules 4 to 8: each name the game uses, by what it is
 
 foreach ($name in @($named.Keys | Sort-Object))
@@ -358,6 +540,7 @@ foreach ($name in @($named.Keys | Sort-Object))
         foreach ($definition in $inHudson)
         {
             if ($noCheckNeeded.ContainsKey($name)) { continue }
+            if ($watchOnly.ContainsKey($name) -and (Test-StartsWatching $definition.Body)) { continue }   # SAY marks: a listed watch-only function
 
             if (-not (Test-StartsAsleep $definition.Body))
             {
