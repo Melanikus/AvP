@@ -602,6 +602,11 @@ static void TestAimAndHold()
 		HudsonPlay_MoveKind(0, 65536, 1000, 0) == kHudsonPlayMovedSideways && HudsonPlay_MoveKind(65536, 0, 900, -500) == kHudsonPlayMovedForwards,
 		"his move is forwards, backwards or sideways of his facing");
 	Check(play.find("SayHisSpeeds(") != std::string::npos, "and his measured speeds each way go in the log");
+	// (Bishop on 235943: "Backwards 8708 against forwards 11147 mm/s (78%) ... Inertia on turns, or steering?"): his turn in each second goes on the second's line, and the
+	// speeds line has the backward seconds with a turn over 90 degrees apart, where the game's inertia starts a flipped component from nothing again
+	Check(play.find(", turned %d deg") != std::string::npos && play.find(" of them turning over 90 deg") != std::string::npos, "his turns each second, and the backward seconds that turned");
+	// (and 1: "why didn't he get there in 90 s?": the 90 s move put him 15 m from bypass's place in the list): a pickup step's start says where the pickup really is
+	Check(play.find("\" is at \" + PlaceWords(where) + \", \"") != std::string::npos, "a pickup step says where its pickup really is, against the list's place");
 	// THE AIM STAYS ON (Bishop 22:4x, from the 22:36 run: 35 of 46 hits on him came with his AIM "none", all in shft21 while he walked to liftplt's landing; the
 	// aim was off for the whole walk to a lift): he aims while stuck, unsticking, waiting at a door, walking to a lift or waiting for its car. Only getting on, riding
 	// and getting off a lift pause it
