@@ -779,6 +779,14 @@ static const int kHudsonPlayStucksBeforeShutting = 3;
 // THE JUMP STEP (Frost 2026-11-20; the medlab section run 2026-11-20-232611: his jump at full speed, 812 mm from the place, carried him over the 3.9 m dais and off its
 // far side): how hard he walks at it, by how far across it is: flat out till 1.5 m, half speed nearer, nothing within 600 mm (over the place); and when he's up:
 // on the floor, a step or less under its height, within 1.5 m across
+// THE AIM THROUGH A STEP (Bishop 23:4x: only getting on, riding and getting off a lift pause the aim; the medlab section run's facehugger latch came in the jump step,
+// which had none): a press or a destroy has to face its switch or its glass, so it has his view in the even seconds and the aim the odd ones (the full run's try 2
+// stood at genlev04 240 s when the aim never let go of it); every other step leaves it to the aim. now in ms. Frost 2026-11-20
+inline bool HudsonPlay_StepTakesHisView(bool pressOrDestroy, unsigned long now)
+{
+	return pressOrDestroy && (now / 1000) % 2 == 0;
+}
+
 inline int HudsonPlay_JumpWalk(int across)
 {
 	return across > 1500 ? 65536 : across > 600 ? 32768 : 0;

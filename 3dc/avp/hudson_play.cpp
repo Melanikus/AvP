@@ -3049,6 +3049,32 @@ static void LookAtWhatsWatched(DWORD now)
 // ---- Doing the step, once he's there
 
 // The drop step (Frost 2026-11-20): straight at the place, no grid, till he has fallen 2 m or is within 600 mm of it across; 20 s at most, then he goes on
+// Walks him straight at a place whichever way he's facing, with forward and sidestep together, as SteerAlongTheWay does, so his aim can be on a chaser meanwhile
+// (a jump or a drop step; Bishop 23:4x). Frost 2026-11-20
+static void WalkStraightAt(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, int toX, int toZ, int howHard)
+{
+	double const length = sqrt((double)toX * toX + (double)toZ * toZ);
+
+	if (length < 1.0)
+	{
+		return;
+	}
+
+	double const ahead = ((double)toX * dyn->OrientMat.mat31 + (double)toZ * dyn->OrientMat.mat33) / (65536.0 * length);
+	double const side = ((double)toX * dyn->OrientMat.mat11 + (double)toZ * dyn->OrientMat.mat13) / (65536.0 * length);
+	int forwardControl = 0, sideControl = 0;
+
+	HudsonPlay_WalkControls(ahead, side, howHard, &forwardControl, &sideControl);
+	status->Mvt_MotionIncrement = forwardControl;
+	status->Mvt_SideStepIncrement = sideControl;
+	status->Mvt_InputRequests.Flags.Rqst_Forward = forwardControl > 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_Backward = forwardControl < 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepRight = sideControl > 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = sideControl < 0 ? 1 : 0;
+	walkedLastFrame = true;
+	CrouchWhereItsLow(status);
+}
+
 static void DoTheDrop(PLAYER_STATUS *status, DWORD now)
 {
 	HudsonPlayStep const &step = steps[stepAt];
@@ -3072,7 +3098,7 @@ static void DoTheDrop(PLAYER_STATUS *status, DWORD now)
 	}
 
 	TurnTowards(status, dyn, toX, toZ);
-	WalkForward(status);
+	WalkStraightAt(status, dyn, toX, toZ, ONE_FIXED);
 }
 
 // JUMP (Frost 2026-11-20; Drake 23:2x: bypass rests on a dais in med02, 780 mm tall with four vertical faces and no ramp, and a player jumps up onto it; every full
@@ -3105,7 +3131,7 @@ static void DoTheJump(PLAYER_STATUS *status, DWORD now)
 
 	if (HudsonPlay_JumpWalk(across) > 0)
 	{
-		WalkForward(status, HudsonPlay_JumpWalk(across));
+		WalkStraightAt(status, dyn, toX, toZ, HudsonPlay_JumpWalk(across));
 	}
 
 	if (dyn->IsInContactWithFloor && across <= 1200 && below > kHudsonGridStepUp && now - jumpedAt >= 1000)
@@ -3806,6 +3832,48 @@ static void EndTheBurst()
 // SHOOTING (shootwithin=, shootdelay=; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), the owner 21:33): the nearest alien nearer than
 // shootwithin that is attacking him. He turns his crosshair to it, and once it has been on it for more than shootdelay he fires (the fight's own FireAt). He holds
 // his fire otherwise, as lanes=watch has him, and keeps moving and observing. Hudson's code only.
+// rearguard=: a frame he isn't aimed, with a chaser near (an alien chasing him within the rear guard, or a facehugger within 10 m), once a second, with why (Bishop
+// 23:4x: "Log any frame he's unaimed with a chaser near, and its reason"). Frost 2026-11-20
+static void SayIfUnaimedWithAChaser(DWORD now, std::string const &why)
+{
+	static DWORD saidAt = 0;
+
+	if (rearGuardWithin <= 0 || now - saidAt < 1000 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	STRATEGYBLOCK const *nearest = 0;
+	int nearestDistance = 0;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(here, block->DynPtr->Position);
+		bool const chaser = (block->I_SBtype == I_BehaviourAlien && distance < rearGuardWithin && IsChasingHim(block, distance)) ||
+			(HuggerHeCanShoot(block) && distance < kHudsonPlayHuggerWithin);
+
+		if (chaser && (!nearest || distance < nearestDistance))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (nearest)
+	{
+		saidAt = now;
+		LogString("play: unaimed, with a chaser " + HudsonStrategies_Title(nearest) + " " + std::to_string(nearestDistance) + " mm from him: " + why);
+	}
+}
+
 // The shot's crosshair, for the lane probe's AIM line (Bishop 22:4x: "Why no shot?"): how far off the alien's chest, in tenths of a degree (-1 with none in
 // shooting range), and how long it's been on it (HudsonPlay_AimedWell), in ms. Frost 2026-11-20
 static int crosshairOffBy = -1;
@@ -4397,9 +4465,19 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 	// for 240 s); then a flare that's due turns it to the one it's thrown at, for those frames
 	// and not while he gets on a lift's car, rides it or gets off: he has to face the landing. Everywhere else it's on: stuck, unsticking, waiting at a door, walking
 	// to a lift or waiting for its car (Bishop 22:4x: the 22:36 run's aim was off for the whole walk to liftplt's landing, and 35 of 46 hits on him came then)
-	if (phase != kDoingTheStep && rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff)
+	// and through every step but a press's or a destroy's even seconds, when it faces its switch or its glass (HudsonPlay_StepTakesHisView; Bishop 23:4x)
+	bool const pressOrDestroy = phase == kDoingTheStep && !following && stepAt < steps.size() &&
+		(steps[stepAt].kind == kHudsonPlayPress || steps[stepAt].kind == kHudsonPlayDestroy);
+
+	if (rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff && !HudsonPlay_StepTakesHisView(pressOrDestroy, now))
 	{
 		AimAtTheNearest(status);
+	}
+	else
+	{
+		// the step's second: the aim lets go, so the shot doesn't take his view either
+		aimedAt = rideStage == kNotRiding ? 0 : aimedAt;
+		SayIfUnaimedWithAChaser(now, rideStage != kNotRiding ? std::string("he's on a lift's car") : "this second is the step's, to face " + steps[stepAt].name);
 	}
 
 	// shootwithin=: he fires at the close one, after its reaction delay (the owner 21:27)
