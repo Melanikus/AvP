@@ -591,6 +591,17 @@ static void TestAimAndHold()
 	Check(HudsonPlay_AimTurnControl(100, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(100, false, 2000, 4369) &&
 		HudsonPlay_AimTurnControl(-1800, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(-1800, false, 2000, 4369), "the rear guard turns three times as fast as the aim");
 	Check(play.find("rearGuardWithin > 0 ? ONE_FIXED : HudsonPlay_WalkControl(bend)") != std::string::npos, "and sprints his way, no slowing for bends");
+	// CHASERS (the owner 22:36: "run backwards faster always facing aliens chasing him"): an alien within the rear guard is chasing him when it's after him (Approach,
+	// Hunt or Attack with him its target) or nearer than it was half a second ago; only chasers are faced
+	Check(HudsonPlay_IsChasing(true, 9000, 9000) && HudsonPlay_IsChasing(false, 8000, 9000), "after him, or closing in: chasing");
+	Check(!HudsonPlay_IsChasing(false, 9000, 9000) && !HudsonPlay_IsChasing(false, 9500, 9000), "not after him and not closing in: not chasing");
+	Check(play.find("IsChasingHim(block, distance)") != std::string::npos, "the rear guard faces only chasers");
+	// HIS SPEEDS (the owner 22:41: "he should move looking at aliens as fast as he can run forward"): each second he walks is forwards (his move within 45 degrees
+	// of his facing), backwards (over 135) or sideways, and the log has what each came to
+	Check(HudsonPlay_MoveKind(0, 65536, 0, 1000) == kHudsonPlayMovedForwards && HudsonPlay_MoveKind(0, 65536, 0, -1000) == kHudsonPlayMovedBackwards &&
+		HudsonPlay_MoveKind(0, 65536, 1000, 0) == kHudsonPlayMovedSideways && HudsonPlay_MoveKind(65536, 0, 900, -500) == kHudsonPlayMovedForwards,
+		"his move is forwards, backwards or sideways of his facing");
+	Check(play.find("SayHisSpeeds(") != std::string::npos, "and his measured speeds each way go in the log");
 	// The full run at 22:12 (the owner: "he's using lifts as teleports to advance the map"): the lift rescue moved him 127 m and 74 m to lifts he had never walked to
 	// whenever his grid knew no way; and at liftplt's top, on the car at its stop, he counted "couldn't get onto the car" three times (Bishop's items 1-3)
 	Check(play.find("if (!PutHimWhereALiftGoesFrom(") == std::string::npos, "no way on his grid no longer moves him to a lift he never walked to");
