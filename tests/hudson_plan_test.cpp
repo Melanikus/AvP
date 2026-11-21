@@ -2781,6 +2781,9 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AimNearest) { $arguments += \" aimnearest=yes\" }") &&
 		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($HoldGround) { $arguments += \" holdground=yes\" }"), "the run script can ask for them");
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"AIM f=\""), "the lane probe logs whom he aims at, and his hold, each frame");
+	// and his view's tilt in degrees (down is plus, as the game's own look-down limit reads it) and whether he's crouched (the owner 11-20: "What's hudson doing dying
+	// looking up?")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
 	// crouchanywhere=yes (Frost 11-20: shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a crouched marine fits
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes crouchanywhere=yes", &plan) == 0 && plan.playCrouchAnywhere, "his way can go wherever he fits crouched");
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playCrouchAnywhere, "and doesn't unless asked");
