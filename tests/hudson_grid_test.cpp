@@ -136,6 +136,35 @@ static void TestAskedAgain()
 	Check(calls == grid.LastSearchLooks(), "looking at one place each go");
 }
 
+// A SWITCH ON A CONSOLE (Frost 2026-11-20; the medlab section run 2026-11-20-231007: put 753 mm from opslev01, a switch at the top of a console 2.3 m tall, his way
+// was one point, his own place, moved onto the switch itself because it was within 900 mm, so he walked into the console for 90 s, jumped onto its top and fell
+// off it, again and again). The end of the way goes to the goal asked only where he could stand there: a place in its column at about his own height.
+static void TestASwitchOnAConsole()
+{
+	World world;
+	HudsonGrid grid;
+
+	AddFloor(&world, 0, 0, 12000, 12000, 1000);
+	AddWall(&world, 6000, 6000, 6000, 7000, 1000, -1300);
+	AddWall(&world, 7000, 6000, 7000, 7000, 1000, -1300);
+	AddWall(&world, 6000, 6000, 7000, 6000, 1000, -1300);
+	AddWall(&world, 6000, 7000, 7000, 7000, 1000, -1300);
+	AddFloor(&world, 6000, 6000, 7000, 7000, -1300);
+	grid.Build(world);
+
+	for (int startX = 2000; startX <= 5000; startX += 1500)
+	{
+		Check(Search(grid, startX, 1000, 6500, 6150, -1150, 6500) != kHudsonGridSearching && !grid.Way().empty(), "a way toward a switch on a console from x " + std::to_string(startX));
+
+		HudsonGridPoint const &last = grid.Way().back();
+
+		Check(last.x <= 6000 - 300 || last.y < 0, "and it ends where he can stand, not inside the console: " + std::to_string(last.x) + " " + std::to_string(last.y));
+	}
+
+	// and on a plain floor the end is still the goal itself
+	Check(Search(grid, 2000, 1000, 2000, 4100, 1000, 3100) == kHudsonGridFound && grid.Way().back().x == 4100 && grid.Way().back().z == 3100, "a goal on the floor is still reached exactly");
+}
+
 static void TestAWall()
 {
 	World world;
@@ -1004,6 +1033,7 @@ int main()
 	TestAFloor();
 	TestAskedAgain();
 	TestAWall();
+	TestASwitchOnAConsole();
 	TestHeights();
 	TestStairs();
 	TestSlopes();
