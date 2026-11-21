@@ -342,7 +342,8 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		// The sleeping NPCs this box wakes
 		NearWakeSleepers sleepers;
 
-		if (NearWakeOn && NearWake_ThisMachineRunsNpcs())   // NEARWAKE off: no sleeper looked for, only the walk-in box wakes one, as in 1999 (stock_flags.h)
+		// NEARWAKE off: no sleeper looked for, only the walk-in box wakes one, as in 1999 (stock_flags.h)
+		if (NearWakeOn && NearWake_ThisMachineRunsNpcs())
 		{
 			NearWake_FindSleepers(sbptr, &ls_bhv->trigger_volume_min, &ls_bhv->trigger_volume_max, &sleepers);
 		}
