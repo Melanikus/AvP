@@ -365,6 +365,7 @@ static char const *KindWord(HudsonPlayKind kind)
 		case kHudsonPlayPickUp: return "pick up";
 		case kHudsonPlayDestroy: return "destroy";
 		case kHudsonPlayGoTo: return "go to";
+		case kHudsonPlayMoveTo: return "be moved to";
 		default: return "kill";
 	}
 }
@@ -3395,6 +3396,19 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			noLiftHelps = false;
 			ridesThisStep = 0;
 			SayAboutTheStep(StepTitle());
+
+			// TELEPORT (the full Genshd1 run, Frost 2026-11-20; Bishop: "ride it if he can, otherwise teleport to its far stop, and log it"): he's put on the floor
+			// nearest the place, a logged cheat, and goes on; its name says why (liftcar01's car has no landing at its foot, so he can't board it)
+			if (step.kind == kHudsonPlayMoveTo)
+			{
+				HudsonGridPoint floor;
+				VECTORCH const place = StepPlace();
+				HudsonGridPoint const asGiven = { place.vx, place.vy, place.vz };
+
+				MoveHimToTheFloorAt(FindTheFloorNear(place, &floor) ? floor : asGiven, "the list says so: " + step.name, now);
+				NextStep(true);
+				break;
+			}
 
 			// a goto is a place and nothing else: no object of its name is looked for (the lane probe v3)
 			if (!target && step.kind != kHudsonPlayGoTo)

@@ -127,6 +127,7 @@ namespace
 	bool hePlays = false;
 	int const kPlayHeadway = 1000;                   // mm
 	long long const kPlayNoHeadway = 15LL * 65536;
+	long long const kPlayNoHeadwayFull = 240LL * 65536;  // with watchmost= (the full run): past his own step limit (stepseconds=, 180 s at most by default), which moves him on
 	long long playMost = 180LL * 65536;               // laps of a stretch for at most 3 minutes (Bishop 11-20), or watchmost= (HudsonLanes_PlayMost: the full-level run)
 	VECTORCH headwayFrom = { 0, 0, 0 };              // where he was when he last made headway
 	long long headwayAt = 0;
@@ -1170,8 +1171,9 @@ namespace
 				headwayAt = gameTime;
 			}
 
-			char const *const end = HudsonPlay_FinishedTheList() ? "route done: he has been down his whole list" : gameTime - headwayAt >= kPlayNoHeadway ?
-				"no headway (1 m) for 15 s" : gameTime >= playMost ? (playMost == 180LL * 65536 ? "3 minutes of game time" : "watchmost= of game time") : frame >= mostFrames ? "frames= ran out" : nullptr;
+			long long const noHeadway = playMost == 180LL * 65536 ? kPlayNoHeadway : kPlayNoHeadwayFull;
+			char const *const end = HudsonPlay_FinishedTheList() ? "route done: he has been down his whole list" : gameTime - headwayAt >= noHeadway ?
+				(noHeadway == kPlayNoHeadway ? "no headway (1 m) for 15 s" : "no headway (1 m) for 240 s") : gameTime >= playMost ? (playMost == 180LL * 65536 ? "3 minutes of game time" : "watchmost= of game time") : frame >= mostFrames ? "frames= ran out" : nullptr;
 
 			if (end)
 			{

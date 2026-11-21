@@ -19,7 +19,8 @@ enum HudsonPlayKind
 	kHudsonPlayPickUp,    // walk onto something
 	kHudsonPlayDestroy,   // get within sight of something, and shoot it until it's gone
 	kHudsonPlayKill,      // the same, for someone
-	kHudsonPlayGoTo       // walk to a place, and nothing else: no object of its name (the lane probe v3's list, added 2026-11-20 by Melanikus (Frost))
+	kHudsonPlayGoTo,      // walk to a place, and nothing else: no object of its name (the lane probe v3's list, added 2026-11-20 by Melanikus (Frost))
+	kHudsonPlayMoveTo     // "teleport": he's put at a place, a logged cheat, for a lift he can't board (the full Genshd1 run, added 2026-11-20 by Melanikus (Frost))
 };
 
 struct HudsonPlayStep
@@ -155,6 +156,10 @@ inline std::string HudsonPlay_ReadLine(std::string const &line, std::vector<Huds
 	else if (words[0] == "goto")
 	{
 		step.kind = kHudsonPlayGoTo;
+	}
+	else if (words[0] == "teleport")
+	{
+		step.kind = kHudsonPlayMoveTo;
 	}
 	else
 	{
