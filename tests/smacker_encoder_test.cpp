@@ -974,7 +974,15 @@ static void TestStreamLong(std::string const &folder)
 	double const grewMb = (double)(after.PeakPagefileUsage - before.PeakPagefileUsage) / (1024.0 * 1024.0);
 
 	Check(result == SMACKER_ENCODE_DONE && OwnFilesGone(path), std::string("streamed and written: ") + Smacker_EncodeWords(result));
+	// The bound holds in the plain build only. Under the address sanitizer (CI's sanitizer parts) freed memory waits in its quarantine and its shadow memory
+	// is counted too, so the process's peak grows with everything allocated, freed or not (88.6 MB in run 44622741033): there it would measure the
+	// sanitizer, not the encoder. The plain unit build, which CI runs as well, keeps the proof, with the same bound. (Frost 2026-11-21, Bishop's order)
+#if defined(__SANITIZE_ADDRESS__)
+	printf("  skipped the bounded-memory check under the address sanitizer (its quarantine and shadow memory count in the process's peak; the plain build "
+		"checks it): here the peak grew by %.1f MB\n", grewMb);
+#else
 	Check(grewMb < 16.0, "the process's peak private memory grew by " + std::to_string(grewMb) + " MB (under 16: the frames are 73.7 MB)");
+#endif
 
 	// and the same film whole, in memory: the same file
 	std::vector<uint8_t> rgb(frameBytes * frames), whole, streamed;
