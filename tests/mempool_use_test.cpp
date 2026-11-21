@@ -17,8 +17,9 @@
 #include <string>
 
 // The game's own calls mempool.cpp makes, here without the game: its memory is malloc and free, and the rest does nothing
-void *AllocMem(size_t size) { return malloc(size ? size : 1); }
-void DeallocMem(void *at) { free(at); }
+extern "C" void *AllocMem(size_t size) { return malloc(size ? size : 1); }   // mem3dc.h declares them C
+extern "C" void DeallocMem(void *at) { free(at); }
+void LogString(const std::string &) {}
 void StaticLevel_Release() {}
 void ShadowShoot_LevelEnded() {}
 void LogErrorString(const std::string &) {}
@@ -80,11 +81,11 @@ int main()
 
 	PoolAllocateMem(64);
 	use = Now();
-	Check(use.blocksTaken == 40 && use.extraBytes == 3 * block, "with all 40 taken, the next goes to an extra block outside them (the 1999 game writes a 41st past its list)");
+	Check(use.blocksTaken == 40 && use.extraBytes == 2 * block + 64 && use.leftInBlock == 0, "with all 40 taken, the next goes to an extra block outside them (the 1999 game writes a 41st past its list): its 64 bytes counted outside");
 
 	char words[256];
 	LevelMemoryPool_Words(&use, words, sizeof(words));
-	Check(strcmp(words, "level memory: 40 of 40 blocks taken (1 MB each), 0.00 MB left in the last; 43.00 MB handed out, 3.00 MB of it outside the 40 blocks") == 0,
+	Check(strcmp(words, "level memory: 40 of 40 blocks taken (1 MB each), 0.00 MB left in the last; 41.00 MB handed out, 2.00 MB of it outside the 40 blocks") == 0,
 		std::string("its log line, with what went outside the blocks: ") + words);
 
 	char small[16];

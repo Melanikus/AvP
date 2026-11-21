@@ -1029,6 +1029,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// after StartGame, because that's when every module that's controlled by something has been told so
 		StaticLevel_BuildThisLevel();
 
+		// what the level takes of its 40 blocks of memory, once it's loaded (mempool.h; Frost 2026-11-21, the owner's track import)
+		LevelMemoryPool_Say();
+
 		/* JH 28/5/97 */
 		/* remove resident loaded 'fast' files */
 //		ffcloseall();

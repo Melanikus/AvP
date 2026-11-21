@@ -40,6 +40,11 @@ union ExtraAllocationHeader
 };
 
 static union ExtraAllocationHeader *ExtraAllocations = 0;
+
+// What the level has been given, for LevelMemoryPool_Use: every byte handed out, and those given outside the blocks (Frost 2026-11-21)
+static size_t BytesHandedOut = 0;
+static size_t ExtraBytes = 0;
+static bool InExtraBlock = false;   // the 40 are all taken: the block in use is an extra one
 static bool LoggedLargeRequest = false;
 static bool LoggedPoolFull = false;
 
@@ -68,6 +73,8 @@ void* PoolAllocateMem(size_t amount)
 
 	GLOBALASSERT(amount <= MEMORY_BLOCK_SIZE)
 
+	BytesHandedOut += amount;
+
 	if (amount > MEMORY_BLOCK_SIZE)
 	{
 		// it can never fit a block (MemoryLeft -= amount would wrap): give it an allocation of its own, and leave
@@ -78,6 +85,7 @@ void* PoolAllocateMem(size_t amount)
 			LoggedLargeRequest = true;
 		}
 
+		ExtraBytes += amount;
 		return (void*)AllocateExtra(amount);
 	}
 
@@ -103,10 +111,16 @@ void* PoolAllocateMem(size_t amount)
 			}
 
 			block = AllocateExtra(MEMORY_BLOCK_SIZE);
+			InExtraBlock = true;
 		}
 
 		MemoryLeft = MEMORY_BLOCK_SIZE;
 		MemoryPoolPtr = block;
+	}
+
+	if (InExtraBlock)
+	{
+		ExtraBytes += amount;
 	}
 
 	retval = MemoryPoolPtr;
@@ -132,6 +146,10 @@ void ClearMemoryPool()
 	MemoryPoolPtr = 0;
 	MemoryLeft = 0;
 
+	BytesHandedOut = 0;
+	ExtraBytes = 0;
+	InExtraBlock = false;
+
 	while (ExtraAllocations)
 	{
 		union ExtraAllocationHeader *next = ExtraAllocations->next;
@@ -140,6 +158,55 @@ void ClearMemoryPool()
 	}
 	LoggedLargeRequest = false;
 	LoggedPoolFull = false;
+}
+
+// How much of the level's memory is used (mempool.h). Read only. Added 2026-11-21 by Melanikus (Frost) for the AvP port, the owner's track import.
+void LevelMemoryPool_Use(struct LevelMemoryPoolUse *use)
+{
+	if (!use)
+	{
+		return;
+	}
+
+	use->blocksTaken = CurrentMemoryBlock + 1;
+	use->blocksMost = MAX_NUM_MEMORY_BLOCK;
+	use->blockBytes = MEMORY_BLOCK_SIZE;
+	// with the 40 taken, the block in use is an extra one outside them: none of the 40 has anything left
+	use->leftInBlock = InExtraBlock ? 0 : MemoryLeft;
+	use->bytesHandedOut = BytesHandedOut;
+	use->extraBytes = ExtraBytes;
+}
+
+void LevelMemoryPool_Words(const struct LevelMemoryPoolUse *use, char *words, size_t size)
+{
+	if (!words || size == 0)
+	{
+		return;
+	}
+
+	words[0] = '\0';
+
+	if (!use)
+	{
+		return;
+	}
+
+	double const mb = 1024.0 * 1024.0;
+
+	// _snprintf cuts at size - 1 and may leave no zero: the last byte is always set
+	_snprintf(words, size - 1, "level memory: %d of %d blocks taken (1 MB each), %.2f MB left in the last; %.2f MB handed out, %.2f MB of it outside the %d blocks",
+		use->blocksTaken, use->blocksMost, use->leftInBlock / mb, use->bytesHandedOut / mb, use->extraBytes / mb, use->blocksMost);
+	words[size - 1] = '\0';
+}
+
+void LevelMemoryPool_Say(void)
+{
+	struct LevelMemoryPoolUse use;
+	char words[256];
+
+	LevelMemoryPool_Use(&use);
+	LevelMemoryPool_Words(&use, words, sizeof(words));
+	LogString(words);
 }
 
 #endif
