@@ -342,6 +342,8 @@ static DWORD saidThisSecondAt = 0;
 static int secondsSaid = 0;
 static int movedEachWay[3] = { 0, 0, 0 };     // SayHisSpeeds: mm walked forwards, sideways and backwards of his facing, by HudsonPlayMoveKind (Frost 2026-11-20)
 static int secondsEachWay[3] = { 0, 0, 0 };   // and the seconds of it
+static int secondsBackTurning = 0, movedBackTurning = 0;   // the backward seconds with a turn over 90 degrees, and how far they went (inertia; Bishop on 235943)
+static int facingXASecondAgo = 0, facingZASecondAgo = 65536;   // his facing at the last second's line, for its turn
 static VECTORCH placeASecondAgo = { 0, 0, 0 };
 
 static int cheatsUsed = 0;
@@ -359,6 +361,12 @@ static const char *endWords = "";
 static std::string RoomOf(const STRATEGYBLOCK *block)
 {
 	return block && block->containingModule && block->containingModule->name ? block->containingModule->name : "(no room)";
+}
+
+// A place in the log's words, millimetres, y down. Frost 2026-11-20
+static std::string PlaceWords(VECTORCH const &v)
+{
+	return std::to_string(v.vx) + " " + std::to_string(v.vy) + " " + std::to_string(v.vz);
 }
 
 static void SayAboutTheStep(std::string const &what)
@@ -3425,6 +3433,11 @@ static void SayHisSpeeds()
 			std::to_string(secondsEachWay[i]) + " s";
 	}
 
+	if (secondsBackTurning > 0)
+	{
+		line += " (" + std::to_string(secondsBackTurning) + " of them turning over 90 deg, at " + std::to_string(movedBackTurning / secondsBackTurning) + " mm/s)";
+	}
+
 	LogString(line + "; asked " + std::to_string(rearGuardWithin > 0 ? 15000 : 0) + (rearGuardWithin > 0 ? " mm/s every way (sprinting, MARINE_MOVESCALE)" :
 		" (no rear guard: he slows for bends)"));
 }
@@ -3449,6 +3462,12 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 
 	placeASecondAgo = placeNow;
 
+	// how far his facing turned this second (Bishop on 235943: "Inertia on turns, or steering?")
+	int const turned = abs(HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, facingXASecondAgo, facingZASecondAgo)) * 360 / kHudsonPlayWholeTurn;
+
+	facingXASecondAgo = dyn->OrientMat.mat31;
+	facingZASecondAgo = dyn->OrientMat.mat33;
+
 	// his speeds each way of his facing, for SayHisSpeeds: only a second he was walking, on the floor and not riding
 	if (walkedLastFrame && dyn->IsInContactWithFloor && rideStage == kNotRiding && moved < 30000)
 	{
@@ -3456,6 +3475,12 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 
 		movedEachWay[kind] += moved;
 		secondsEachWay[kind]++;
+
+		if (kind == kHudsonPlayMovedBackwards && turned > 90)
+		{
+			secondsBackTurning++;
+			movedBackTurning += moved;
+		}
 	}
 
 	if (secondsSaid % 30 == 0)
@@ -3468,12 +3493,12 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 		HudsonGridPoint const &point = way[wayAt];
 		int const toX = point.x - placeNow.vx, toZ = point.z - placeNow.vz;
 
-		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, point %d of %d at %d %d %d, %d mm across, %d up or down, %d off the way, turn off by %d, walk asked %d, speed asked %d, moved %d, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, (int)wayAt + 1, (int)way.size(), point.x, point.y, point.z, (int)sqrt((double)toX * toX + (double)toZ * toZ), point.y - placeNow.vy, offTheWayNow,
-			HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ), walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, point %d of %d at %d %d %d, %d mm across, %d up or down, %d off the way, turn off by %d, walk asked %d, speed asked %d, moved %d, turned %d deg, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, (int)wayAt + 1, (int)way.size(), point.x, point.y, point.z, (int)sqrt((double)toX * toX + (double)toZ * toZ), point.y - placeNow.vy, offTheWayNow,
+			HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ), walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, turned, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 	}
 	else
 	{
-		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, no point to walk to, walk asked %d, speed asked %d, moved %d, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, no point to walk to, walk asked %d, speed asked %d, moved %d, turned %d deg, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, turned, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 	}
 
 	text[sizeof(text) - 1] = 0;
@@ -4430,6 +4455,15 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 
 			stateBefore = target ? HudsonStrategies_State(target) : std::string();
 			targetHealthAtStart = target ? target->SBDamageBlock.Health : 0;   // for HudsonPlay_TargetIsGone (a one-hit Static has none)
+
+			// a pickup: where it really is, against the list's place (Bishop on 235943: the 90 s move put him 15 m from bypass's listed place)
+			if (step.kind == kHudsonPlayPickUp && target && target->DynPtr)
+			{
+				VECTORCH const where = target->DynPtr->Position;
+
+				SayAboutTheStep(step.name + " is at " + PlaceWords(where) + ", " + std::to_string(DistanceTo(where, StepPlace())) + " mm from the list's place" +
+					(target->SBdptr ? std::string() : std::string(", not drawn")));
+			}
 			StartFindingTheWay(here);
 			break;
 		}
