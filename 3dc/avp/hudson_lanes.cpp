@@ -460,6 +460,18 @@ namespace
 		return std::to_string(v.vx) + "," + std::to_string(v.vy) + "," + std::to_string(v.vz);
 	}
 
+	// His view's tilt (PLAYER_STATUS ViewPanX, 4096 a turn, kept 0..4095) in degrees, down plus: the game's own look-down limit (pmove.cpp, AllowedLookDownAngle)
+	// lets it grow to +90 and the look-up one to -90 (Frost 2026-11-20, for the AIM line)
+	std::string PitchWords(int viewPanX)
+	{
+		int const signedPan = (viewPanX & 4095) >= 2048 ? (viewPanX & 4095) - 4096 : (viewPanX & 4095);
+		char text[16];
+
+		_snprintf(text, sizeof(text) - 1, "%+.1f", signedPan * 360.0 / 4096.0);
+		text[sizeof(text) - 1] = 0;
+		return text;
+	}
+
 	// its surface by its down's y (down is +y): Vasquez's bands (11-20), FLOOR over 46000, WALL within 20000 of level, CEILING under -46000, a slope between
 	char const *SurfaceOf(DYNAMICSBLOCK const *d)
 	{
@@ -999,7 +1011,8 @@ namespace
 				Watched const *const aimedW = aimed ? Record(aimed, true) : nullptr;
 
 				Write("AIM f=" + std::to_string(frame) + " " + (aimedW ? "a" + std::to_string(aimedW->number) + " " + std::to_string(aimDistance) + " mm " + (aimSeen ? "seen" : "unseen") :
-					std::string("none")) + " hold=" + hold);
+					std::string("none")) + " hold=" + hold + " pitch=" + PitchWords(((PLAYER_STATUS *)me->SBdataptr)->ViewPanX) + " crouched=" +
+					(((PLAYER_STATUS *)me->SBdataptr)->ShapeState != PMph_Standing ? "1" : "0"));
 			}
 
 			if (healthSeen && health > lastHealth)
