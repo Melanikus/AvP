@@ -457,6 +457,21 @@ namespace
 		return (int)sqrt(dx * dx + dy * dy + dz * dz);
 	}
 
+	// An alien's own extents, as NPCContainsPoint reads them (bh_waypoint.cpp 392): its display block's ObMinX..ObMaxX, Y and Z of the current pose, relative to
+	// its place; "-" with no display block (a far one). Frost 2026-11-20, Bishop 23:3x: the body model under Drake's candidate 4, for the game to confirm
+	std::string ExtentWords(STRATEGYBLOCK const *b)
+	{
+		if (!b || !b->SBdptr)
+		{
+			return "-";
+		}
+
+		DISPLAYBLOCK const *const o = b->SBdptr;
+
+		return std::to_string(o->ObMinX) + ".." + std::to_string(o->ObMaxX) + "," + std::to_string(o->ObMinY) + ".." + std::to_string(o->ObMaxY) + "," +
+			std::to_string(o->ObMinZ) + ".." + std::to_string(o->ObMaxZ);
+	}
+
 	std::string PlaceWords(VECTORCH const &v)
 	{
 		return std::to_string(v.vx) + "," + std::to_string(v.vy) + "," + std::to_string(v.vz);
@@ -1596,7 +1611,7 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 		" point=" + (steered ? PlaceWords(w->targetPoint) : std::string("-")) + " link=" + w->link + " lb=" + w->linkBefore + " by=" + by + " enc=" + std::to_string(w->encSearch) +
 		" encb=" + std::to_string(w->encBefore) + " heading=" + (steered ? PlaceWords(w->heading) : std::string("-")) + " hup=" + (steered ? std::to_string(UpDot(w->heading)) : std::string("-")) +
 		" vel=" + PlaceWords(d->LinVelocity) + " vup=" + std::to_string(UpDot(d->LinVelocity)) + " rdot=" + (steered ? std::to_string(DotWith(d->GravityDirection, w->heading)) : std::string("-")) +
-		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string());
+		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string()) + " ext=" + ExtentWords(alien);
 
 	Write(line);
 
