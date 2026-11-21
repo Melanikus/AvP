@@ -1338,13 +1338,16 @@ void HudsonGrid::MakeTheWay(int lastPlace, bool arrived)
 		}
 	}
 
-	// The last point is the goal itself, if it's near enough to where the floor is, so that arriving at the end of the way is arriving
+	// The last point is the goal itself, if it's near enough to where the floor is, so that arriving at the end of the way is arriving. Only where he could stand there:
+	// a place in the goal's own column at about the last place's height. A switch on a console isn't (the medlab section run 2026-11-20-231007: 753 mm from opslev01,
+	// his one-point way went onto the switch, and he walked into the console for 90 s). Frost 2026-11-20
 	if (arrived && !way.empty())
 	{
 		HudsonGridPoint &last = way.back();
 		double const dx = (double)last.x - goalAskedX, dz = (double)last.z - goalAskedZ;
+		int const goalColumnX = (int)floor((double)(goalAskedX - minX) / kHudsonGridCell), goalColumnZ = (int)floor((double)(goalAskedZ - minZ) / kHudsonGridCell);
 
-		if (sqrt(dx * dx + dz * dz) <= kHudsonGridCell * 3)
+		if (sqrt(dx * dx + dz * dz) <= kHudsonGridCell * 3 && WalkableInto(goalColumnX, goalColumnZ, -last.y))
 		{
 			last.x = goalAskedX;
 			last.z = goalAskedZ;
