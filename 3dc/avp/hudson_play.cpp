@@ -1536,7 +1536,7 @@ static void FindTheLifts()
 		{
 			LiftEnd &at = lift.ends[end];
 
-			at.standY = at.carY + shape->shapeminy;
+			at.standY = at.carY + HudsonPlay_CarStandOffset(shape->shapeminy, shape->shapemaxy);
 			at.hasLanding = FindTheLanding(lift, at.standY, &at.landing);
 			said += std::string(", the ") + EndWord(end) + " stop with its top at " + std::to_string(at.standY) + (at.hasLanding ? " and a landing at " + std::to_string(at.landing.x) + " " + std::to_string(at.landing.y) + " " + std::to_string(at.landing.z) : std::string(" and no landing beside it"));
 		}
@@ -1761,8 +1761,16 @@ static void SetRideStage(RideStage stage, std::string const &what, DWORD now)
 }
 
 // Starts a ride that's been planned: first, the way to the landing
+// THE LIFT RULE (hudson_play_steps.h, HudsonPlay_RideFailed; Frost 2026-11-20, the owner: "have him not teleport until he fails to get in the lift")
+static int boardFailures = 0;
+static DWORD atTheLiftSince = 0;
+static bool rodeOnce = false;
+
 static void StartTheRide(VECTORCH const &here, DWORD now)
 {
+	boardFailures = 0;
+	atTheLiftSince = now;
+	rodeOnce = false;
 	ridesThisStep++;
 	farBehindSince = 0;
 	SetRideStage(kWalkingToTheLift, std::string("walks to its landing at the ") + EndWord(rideFrom), now);
@@ -1770,8 +1778,37 @@ static void StartTheRide(VECTORCH const &here, DWORD now)
 }
 
 // The ride didn't work. What he does instead is what he'd have done without a lift: the first walks as near as the grid gets and is put at the step, and the second is moved up in time.
+// He has failed the lift (HudsonPlay_RideFailed): he's put on the landing of the stop he needed, a logged cheat naming the lift, and his way is looked for from there
+static void MoveHimPastTheLift(std::string const &why, DWORD now)
+{
+	Lift const &lift = lifts[(size_t)rideLift];
+	int const needed = 1 - rideFrom;
+
+	SayAboutTheLift(lift, "he failed it (" + why + "), so he's put on the landing at its " + EndWord(needed));
+	rideStage = kNotRiding;
+	plannedARideAt = now;
+
+	if (lift.ends[needed].hasLanding)
+	{
+		MoveHimToTheFloorAt(lift.ends[needed].landing, "he failed " + HudsonStrategies_Title(lift.car) + ": " + why, now);
+		lookAgainNextFrame = true;
+	}
+	else
+	{
+		noLiftHelps = true;
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
 static void GiveUpTheRide(std::string const &why, DWORD now)
 {
+	// the lift rule: a give-up is a failed lift, so he's put on the landing he needed
+	if (rideLift >= 0 && rideLift < (int)lifts.size() && lifts[(size_t)rideLift].ends[1 - rideFrom].hasLanding)
+	{
+		MoveHimPastTheLift(why, now);
+		return;
+	}
+
 	SayAboutTheLift(lifts[(size_t)rideLift], "gives up and hops, because " + why + ". The hop is the cheat he'd have had without the lift");
 	rideStage = kNotRiding;
 	noLiftHelps = true;
@@ -1798,6 +1835,16 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		placeLastChangedAt = now;
 	}
 
+	// THE LIFT RULE: failed it (3 boardings, a minute at it, or a ride already and waiting again), so he's put on the landing he needed. Riding and getting off
+	// have their own limits
+	if (rideStage != kWalkingToTheLift && rideStage != kRiding && rideStage != kGettingOff &&
+		HudsonPlay_RideFailed(boardFailures, now - atTheLiftSince, rodeOnce, false))
+	{
+		MoveHimPastTheLift(boardFailures >= kHudsonPlayMostBoardings ? std::to_string(boardFailures) + " failed boardings" :
+			rodeOnce ? std::string("he rode it, and is waiting for it again") : std::string("a minute at it without riding"), now);
+		return false;
+	}
+
 	switch (rideStage)
 	{
 		case kWalkingToTheLift:
@@ -1805,6 +1852,8 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			{
 				return true;
 			}
+
+			atTheLiftSince = now;   // at the lift from here: the lift rule's minute
 
 			if (!wayGoesAllTheWay)
 			{
@@ -1866,7 +1915,9 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))
 			{
 				// It went before he was on it. He stops at once, which leaves him on the landing, and waits for it to come back.
-				SetRideStage(kWaitingForTheCar, "the car went before he was on it, so he stops, and waits for the car again", now);
+				boardFailures++;
+				SetRideStage(kWaitingForTheCar, "the car went before he was on it, so he stops, and waits for the car again (" + std::to_string(boardFailures) + " of " +
+					std::to_string(kHudsonPlayMostBoardings) + " failed boardings)", now);
 				return true;
 			}
 
@@ -1878,7 +1929,9 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 
 			if (inThisStage >= kGetOnAtMost)
 			{
-				SetRideStage(kWaitingForTheCar, "couldn't get onto the car in " + std::to_string((int)(kGetOnAtMost / 1000)) + " seconds, so he waits for the car again", now);
+				boardFailures++;
+				SetRideStage(kWaitingForTheCar, "couldn't get onto the car in " + std::to_string((int)(kGetOnAtMost / 1000)) + " seconds, so he waits for the car again (" +
+					std::to_string(boardFailures) + " of " + std::to_string(kHudsonPlayMostBoardings) + " failed boardings)", now);
 				return true;
 			}
 
@@ -1889,6 +1942,8 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		}
 
 		case kRiding:
+			rodeOnce = true;
+
 			// No keys at all: he stands where he is on top of it
 			if (CarIsStoppedAt(lift, rideTo) && inThisStage > 500)
 			{
@@ -1929,9 +1984,9 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			// It went back with him still on it, so he rides it back, and gets off at the end he got on at
 			if (!CarIsStoppedAt(lift, rideTo))
 			{
-				rideFrom = rideTo;
-				SetRideStage(kRiding, "the car went back with him still on it, so he rides it back", now);
-				return true;
+				// the lift rule: one ride and no getting off at his stop is a failed lift
+				MoveHimPastTheLift(std::string("he rode it and didn't get off at its ") + EndWord(rideTo), now);
+				return false;
 			}
 
 			if (inThisStage >= kGetOffAtMost)

@@ -456,6 +456,26 @@ inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long cros
 	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;
 }
 
+// THE LIFT RULE (added 2026-11-20 by Melanikus (Frost), the owner: "have him not teleport until he fails to get in the lift"): he's moved past a lift, to the landing
+// of the stop he needed (a logged cheat), only when he has failed it: kHudsonPlayMostBoardings failed boardings, or kHudsonPlayMostAtALift at it without riding,
+// or one ride without getting off at his stop
+static const int kHudsonPlayMostBoardings = 3;
+static const unsigned long kHudsonPlayMostAtALift = 60000;   // ms
+
+inline bool HudsonPlay_RideFailed(int boardFailures, unsigned long atTheLiftFor, bool rodeOnce, bool gotOff)
+{
+	return boardFailures >= kHudsonPlayMostBoardings || (!rodeOnce && atTheLiftFor >= kHudsonPlayMostAtALift) || (rodeOnce && !gotOff);
+}
+
+// Where he stands on a lift's car, from its shape's top and bottom (y down): on a flat car, its top; on a car taller than kHudsonPlayCageTaller (a cage, Genshd1's
+// liftcar01, 4.3 m), its floor, the shape's bottom. Added 2026-11-20 by Melanikus (Frost): his finder took liftcar01's roof for its floor, so its foot had no landing
+static const int kHudsonPlayCageTaller = 2500;   // mm
+
+inline int HudsonPlay_CarStandOffset(int shapeMinY, int shapeMaxY)
+{
+	return shapeMaxY - shapeMinY >= kHudsonPlayCageTaller ? shapeMaxY : shapeMinY;
+}
+
 // heldFor: how long this hold has lasted (0: he isn't holding); sinceTheLast: since the last hold ended
 inline HudsonPlayHold HudsonPlay_Hold(bool aheadOnHisWay, int distance, unsigned long heldFor, unsigned long sinceTheLast)
 {
