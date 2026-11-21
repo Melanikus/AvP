@@ -5107,7 +5107,8 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 
 		if (SUCCEEDED(hr))
 		{
-			if ((plan.siegeRoom[0] || plan.play) && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
+			// filmclock=off (Frost 2026-11-20, the films for the public): no clock in the corner
+			if ((plan.siegeRoom[0] || plan.play) && !plan.filmClockOff && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
 			{
 				HudsonPlan_StampNumber((unsigned char *)locked.pBits, locked.Pitch, (int)filmSize.Width, (int)filmSize.Height, GetTickCount());
 			}

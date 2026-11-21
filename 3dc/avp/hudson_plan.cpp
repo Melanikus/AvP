@@ -251,6 +251,7 @@ const char *const kHudsonRefusedShootWithinWithoutPlay = "shootwithin= has him f
 const char *const kHudsonRefusedDoorWallsNotYes = "doorwalls= can only be yes";
 const char *const kHudsonRefusedDoorWallsWithoutPlay = "doorwalls= keeps his way to open doors as he plays, so it needs play=yes";
 const char *const kHudsonRefusedRibbonNotOff = "ribbon= can only be off";
+const char *const kHudsonRefusedFilmClockNotOff = "filmclock= can only be off";
 // supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
 const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
 const char *const kHudsonRefusedSupplyGateWithoutSupply = "supplygate= waits for the supply's last alien to reach a ceiling, so it needs supply=";
@@ -507,7 +508,22 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 // as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
 static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
 {
-	if (WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
+	if (WordIs(place, nameLength, "filmclock"))
+	{
+		// filmclock=off: no machine clock in the film's corner (hudson.cpp's film writer; added 2026-11-20 by Melanikus (Frost), the public films)
+		if (plan->filmClockOff)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "off"))
+		{
+			return kHudsonRefusedFilmClockNotOff;
+		}
+
+		plan->filmClockOff = true;
+	}
+	else if (WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
 	{
 		// doorwalls=yes: shut doors are walls on his grid; ribbon=off: no ribbon drawn (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
 		bool const doors = WordIs(place, nameLength, "doorwalls");
@@ -2720,7 +2736,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			plan->playFlares = true;
 		}
 		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
-			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
+			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon") ||
+			WordIs(place, nameLength, "filmclock"))
 		{
 			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
 			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);

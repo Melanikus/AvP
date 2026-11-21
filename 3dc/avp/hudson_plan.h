@@ -323,6 +323,7 @@ struct HudsonPlan
 	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
 	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
 	bool playDoorWalls;   // doorwalls=yes: with play=yes, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (hudson_play.h; Frost 11-20)
+	bool filmClockOff;    // filmclock=off: no machine clock stamped in the film's corner (it's for join-films; the public films; Frost 11-20)
 	bool playRibbonOff;   // ribbon=off: with play=yes, his route isn't drawn on the floor (the public films; Frost 11-20)
 	bool playCrouchAnywhere;  // crouchanywhere=yes: with play=yes, his grid has a place wherever a crouched marine fits (hudson_grid.h; Frost 11-20, shft21)
 	int shootWithin;      // shootwithin=MM: with play=yes, he fires at the nearest alien once one has been nearer than this (1000 to 20000) for shootdelay= (hudson_play.h;
@@ -641,6 +642,7 @@ extern const char *const kHudsonRefusedSupplyGateNotCeiling;
 extern const char *const kHudsonRefusedDoorWallsNotYes;
 extern const char *const kHudsonRefusedDoorWallsWithoutPlay;
 extern const char *const kHudsonRefusedRibbonNotOff;
+extern const char *const kHudsonRefusedFilmClockNotOff;
 extern const char *const kHudsonRefusedShootWithinOutOfRange;
 extern const char *const kHudsonRefusedShootDelayOutOfRange;
 extern const char *const kHudsonRefusedShootDelayWithoutWithin;
