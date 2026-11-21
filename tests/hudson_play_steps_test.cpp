@@ -587,6 +587,11 @@ static void TestAimAndHold()
 
 	Check(drops.size() == 1 && drops[0].kind == kHudsonPlayDrop && drops[0].y == 7792, "drop, a place to walk straight at and fall to");
 	Check(play.find("case kHudsonPlayDrop:") != std::string::npos, "and it's done as a step of its own");
+	// The 22:20 run stopped at step 15 (the owner: "He got stuck now and I have no feedback why"): the lift planner's reach from each landing was worked out once, at
+	// the start (9 doors shut, his first grid), and kept through a door's opening and seven new grids; so liftplt's foot "couldn't" reach topshed01
+	size_t const forgets = play.find("reachedFromALanding.clear();   // the doors changed");
+	Check(forgets != std::string::npos && play.find("reachedFromALanding.clear();   // a new grid", forgets + 1) != std::string::npos,
+		"what each landing reaches is worked out again when a door changes and when a new grid comes in");
 	// THE GLASS (the owner 22:15: "Kill it and fix glass shooting"; the 22:14 run): all seven SHED04 panes read "is gone" at once and were never shot, because a
 	// one-hit Static (integrity 0) has no health to begin with; he touched SHED04A, D and E at the window. Gone is: not there, being taken away, or its health run
 	// out from more than none
