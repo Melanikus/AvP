@@ -46,6 +46,11 @@ void HudsonLanes_HePlays();
 // watchmost=S (added 2026-11-20 by Melanikus (Frost), the full Genshd1 run): his play is watched for at most S s of game time instead of 3 minutes; 0 leaves it
 void HudsonLanes_PlayMost(int seconds);
 
+// supplygate=ceiling (added 2026-11-20 by Melanikus (Frost), the owner: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the supply makes its next
+// alien only once the last one made has been on a ceiling (its on=ceiling frames, the scorecard's reading), or is dead, so a run is never left with none; a SUPPLY
+// GATE line each time it holds or opens
+void HudsonLanes_SupplyGate(bool gate);
+
 // supply= (added 2026-11-20 by Melanikus (Frost), Bishop: a fixed alien supply, so two plots compare fairly in one run each): with lanes=watch play=yes, the probe makes
 // count aliens at the place, one every everySeconds of game time from the watch's start, the console's own way; the level's own NPCs, generators and hive are kept still
 // around (supplyat=around, Bishop 11-20): made around him as he moves instead, one every everySeconds while fewer than count are alive, each at the middle of a room he

@@ -333,6 +333,7 @@ struct HudsonPlan
 	int supplyAtX, supplyAtY, supplyAtZ;
 	int supplyEvery;      // supplyevery=: seconds between them, 1 to 120; 10 when not said
 	bool supplyAround;    // supplyat=around: made around him as he moves, each in a room he can't see 15 to 25 m from him, while fewer than supply= are alive (Frost 11-20)
+	bool supplyGate;      // supplygate=ceiling: the supply's next alien only once the last one made has been on a ceiling, or is dead (hudson_lanes.h; the owner 11-20)
 	char supplyIn[512];   // supplyin=room,room,...: made only in these rooms (the corridors of his route), out of his sight, on his level (hudson_supply.h; Frost 11-20)
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
@@ -631,6 +632,8 @@ extern const char *const kHudsonRefusedNormalColoursNotYes;
 extern const char *const kHudsonRefusedSupplyWithoutPlay;
 extern const char *const kHudsonRefusedSupplyNeedsPlace;
 extern const char *const kHudsonRefusedSupplyOutOfRange;
+extern const char *const kHudsonRefusedSupplyGateNotCeiling;
+extern const char *const kHudsonRefusedSupplyGateWithoutSupply;
 extern const char *const kHudsonRefusedSupplyInAndAt;
 extern const char *const kHudsonRefusedSupplyInName;
 extern const char *const kHudsonRefusedLampUnknown;

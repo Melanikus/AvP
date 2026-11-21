@@ -195,6 +195,7 @@ param(
     [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
     [string]$SupplyAt = '',
     [int]$SupplyEvery = 0,
+    [switch]$SupplyGate,   # with -Supply, the next alien only once the last one made has been on a ceiling (supplygate=ceiling; Frost 2026-11-20)
     [int]$DieRoll = -1,    # the game's own QUANTUM_ROLL before the level loads (0 to 65535): every alternate place the same each run (dieroll=; Frost 2026-11-20)
     [int]$WatchMost = 0,   # with -LanesWatch -Play, the watch plays for at most this many seconds of game time (60 to 7200), not 3 minutes: the full-level run (watchmost=; Frost 2026-11-20)
     [string]$SupplyIn = '',   # with -Supply, the aliens made only in these rooms (names with commas between them): supplyin= (Frost 2026-11-20)
@@ -491,6 +492,7 @@ if ($HoldGround) { $arguments += " holdground=yes" }
 if ($CrouchAnywhere) { $arguments += " crouchanywhere=yes" }
 if ($WatchMost -gt 0) { $arguments += " watchmost=$WatchMost" }
 if ($DieRoll -ge 0) { $arguments += " dieroll=$DieRoll" }
+if ($SupplyGate) { $arguments += " supplygate=ceiling" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
 if ($Wireframe) { $arguments += " wireframe=yes" }

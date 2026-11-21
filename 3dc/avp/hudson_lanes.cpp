@@ -144,6 +144,8 @@ namespace
 	// 15 to 25 m from him, on his level, by the places he walks to next, the one nearest 20 m, so the same walk makes the same aliens; a far-away (40 m) or dead one
 	// frees its slot. A room's middle is HudsonNav_MiddleOfRoom's (FarLoc_IsAPlaceToStand)
 	bool supplyAround = false;
+	bool supplyGate = false;                         // supplygate=ceiling (HudsonLanes_SupplyGate)
+	bool supplyGateHeld = false;                     // its last state, for one SUPPLY GATE line each time it changes
 	// IN THE NAMED ROOMS (supplyin=, the owner 11-20: "We need the extra alien spawners on those corridors"): as around him, but only in these rooms (the corridors of his
 	// route), out of his sight, on his level, 10 to 40 m from him (hudson_supply.h, HudsonSupply_PickIn)
 	std::vector<std::string> supplyRoomNames;
@@ -1074,7 +1076,36 @@ namespace
 				}
 			}
 
-			if (alive < supplyCount && supplyMade < HudsonSupply_MostMade(supplyCount))
+			// supplygate=ceiling (the owner 21:13: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the next one only once the last one made has
+			// been on a ceiling (its on=ceiling frames), or is dead, so a run is never left with none
+			bool gateOpen = true;
+
+			if (supplyGate && !supplyNames.empty() && alive < supplyCount && supplyMade < HudsonSupply_MostMade(supplyCount))
+			{
+				STRATEGYBLOCK *lastBlock = nullptr;
+
+				for (int i = 0; i < NumActiveStBlocks && !lastBlock; i++)
+				{
+					STRATEGYBLOCK *const b = ActiveStBlockList[i];
+
+					lastBlock = b && memcmp(b->SBname, supplyNames.back().data(), SB_NAME_LENGTH) == 0 ? b : nullptr;
+				}
+
+				Watched const *const lastMade = lastBlock ? Record(lastBlock, false) : nullptr;
+				bool const dead = !lastBlock || NPC_IsDead(lastBlock);
+
+				gateOpen = dead || (lastMade && lastMade->ceilingFrames > 0);
+
+				if (gateOpen == supplyGateHeld)
+				{
+					supplyGateHeld = !gateOpen;
+					Write("SUPPLY GATE f=" + std::to_string(frame) + (gateOpen ? " opens: " : " holds: ") + (lastMade ? "a" + std::to_string(lastMade->number) : std::string("the last one")) +
+						(gateOpen ? (dead ? ", the last one made, is dead" : ", the last one made, has been on a ceiling (from f=" + std::to_string(lastMade->firstCeiling) + ")") :
+						", the last one made, hasn't been on a ceiling yet"));
+				}
+			}
+
+			if (gateOpen && alive < supplyCount && supplyMade < HudsonSupply_MostMade(supplyCount))
 			{
 				// THE ROOM (hudson_supply.h): out of his view, 15 to 25 m from him, on his level, by the places he walks to next, the one nearest 20 m
 				VECTORCH const here = me->DynPtr->Position;
@@ -1234,6 +1265,11 @@ void HudsonLanes_Begin(int alienAtX, int alienAtY, int alienAtZ, int standAtX, i
 void HudsonLanes_HePlays()
 {
 	hePlays = true;
+}
+
+void HudsonLanes_SupplyGate(bool gate)
+{
+	supplyGate = gate;
 }
 
 void HudsonLanes_PlayMost(int seconds)

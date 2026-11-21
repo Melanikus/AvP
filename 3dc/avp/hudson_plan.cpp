@@ -242,6 +242,9 @@ const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him sta
 const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
 const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
 // watchmost=S (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, as long as the level takes)
+// supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
+const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
+const char *const kHudsonRefusedSupplyGateWithoutSupply = "supplygate= waits for the supply's last alien to reach a ceiling, so it needs supply=";
 // dieroll=N (added 2026-11-20 by Melanikus (Frost) for the AvP port: Bishop, the same layout on every A/B and full run)
 const char *const kHudsonRefusedDieRollOutOfRange = "dieroll= is the game's QUANTUM_ROLL, a whole number from 0 to 65535";
 const char *const kHudsonRefusedWatchMostOutOfRange = "watchmost= is the most seconds of game time the watch plays, from 60 to 7200";
@@ -489,6 +492,74 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 			return false;
 		}
 	}
+}
+
+// The lane probe's later words (supplygate=, dieroll=, watchmost=, crouchanywhere=), read here and not in HudsonPlan_Read's chain of words, which is as deep
+// as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
+static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
+{
+	if (WordIs(place, nameLength, "supplygate"))
+	{
+		// supplygate=ceiling: the next alien only once the last one made has been on a ceiling (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost))
+		if (plan->supplyGate)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "ceiling"))
+		{
+			return kHudsonRefusedSupplyGateNotCeiling;
+		}
+
+		plan->supplyGate = true;
+	}
+	else if (WordIs(place, nameLength, "dieroll"))
+	{
+		// dieroll=N: the game's own QUANTUM_ROLL console variable, set before the level loads (hudson.cpp; added 2026-11-20 by Melanikus (Frost))
+		if (plan->dieRollAsked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		plan->dieRollAsked = true;
+
+		if (!ReadNumber(value, valueLength, &plan->dieRoll) || plan->dieRoll < 0 || plan->dieRoll > 65535)
+		{
+			return kHudsonRefusedDieRollOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "watchmost"))
+	{
+		// watchmost=S: the watch plays for at most S s of game time (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run)
+		if (*seenWatchMost)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		*seenWatchMost = true;
+
+		if (!ReadNumber(value, valueLength, &plan->watchMost) || plan->watchMost < 60 || plan->watchMost > 7200)
+		{
+			return kHudsonRefusedWatchMostOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "crouchanywhere"))
+	{
+		// crouchanywhere=yes: his grid has a place wherever a crouched marine fits, whatever the floor's mark (hudson_grid.h; added 2026-11-20 by Melanikus (Frost))
+		if (plan->playCrouchAnywhere)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "yes"))
+		{
+			return kHudsonRefusedCrouchAnywhereNotYes;
+		}
+
+		plan->playCrouchAnywhere = true;
+	}
+
+	return 0;
 }
 
 const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
@@ -2602,50 +2673,15 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->playFlares = true;
 		}
-		else if (WordIs(place, nameLength, "dieroll"))
+		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere"))
 		{
-			// dieroll=N: the game's own QUANTUM_ROLL console variable, set before the level loads (hudson.cpp; added 2026-11-20 by Melanikus (Frost))
-			if (plan->dieRollAsked)
-			{
-				return kHudsonRefusedAskedTwice;
-			}
+			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
+			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
 
-			plan->dieRollAsked = true;
-
-			if (!ReadNumber(value, valueLength, &plan->dieRoll) || plan->dieRoll < 0 || plan->dieRoll > 65535)
+			if (refused)
 			{
-				return kHudsonRefusedDieRollOutOfRange;
+				return refused;
 			}
-		}
-		else if (WordIs(place, nameLength, "watchmost"))
-		{
-			// watchmost=S: the watch plays for at most S s of game time (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run)
-			if (seenWatchMost)
-			{
-				return kHudsonRefusedAskedTwice;
-			}
-
-			seenWatchMost = true;
-
-			if (!ReadNumber(value, valueLength, &plan->watchMost) || plan->watchMost < 60 || plan->watchMost > 7200)
-			{
-				return kHudsonRefusedWatchMostOutOfRange;
-			}
-		}
-		else if (WordIs(place, nameLength, "crouchanywhere"))
-		{
-			// crouchanywhere=yes: his grid has a place wherever a crouched marine fits, whatever the floor's mark (hudson_grid.h; added 2026-11-20 by Melanikus (Frost))
-			if (plan->playCrouchAnywhere)
-			{
-				return kHudsonRefusedAskedTwice;
-			}
-
-			if (!WordIs(value, valueLength, "yes"))
-			{
-				return kHudsonRefusedCrouchAnywhereNotYes;
-			}
-
-			plan->playCrouchAnywhere = true;
 		}
 		else if (WordIs(place, nameLength, "aimnearest") || WordIs(place, nameLength, "holdground"))
 		{
@@ -3571,6 +3607,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->playCrouchAnywhere && !plan->play)
 	{
 		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->supplyGate && plan->supply <= 0)
+	{
+		return kHudsonRefusedSupplyGateWithoutSupply;
 	}
 
 	if (plan->watchMost > 0 && !plan->lanesWatch)
