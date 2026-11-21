@@ -6973,6 +6973,8 @@ void Hudson_PlayInput(void *playerStatus)
 		// doorwalls=yes, ribbon=off (added 2026-11-20 by Melanikus (Frost))
 		HudsonPlay_DoorWalls(plan.playDoorWalls);
 		HudsonPlay_RibbonOff(plan.playRibbonOff);
+		// status=on: his one line on the screen (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_ShowStatus(plan.playStatus);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

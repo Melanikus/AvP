@@ -686,6 +686,7 @@ extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
+static void HudsonStatus_Draw();
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
@@ -3431,6 +3432,7 @@ void ThisFramesRenderingHasFinished()
 		frameIsOpen = false;
 
 		ShadowStatus_Draw();
+		HudsonStatus_Draw();   // status=on: Hudson's play's one line, top left (Frost 2026-11-20)
 
 		ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
 
@@ -9016,6 +9018,49 @@ static void ShadowStatus_Draw()
 	{
 		DrawStatusLine(lines[i], rightX, margin + i * lineHeight, scale);
 	}
+}
+
+// Hudson's play's one line (status=on; added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): his step and what he's
+// doing, top left, white on a dark backing, in the tag's font. Nothing when it's off or he isn't playing (HudsonPlay_StatusLine gives "")
+static void HudsonStatus_Draw()
+{
+	char const *const said = HudsonPlay_StatusLine();
+
+	if (!said || !*said)
+	{
+		return;
+	}
+
+	char line[200];
+	int characters = 0;
+
+	_snprintf(line, sizeof(line) - 1, "%s", said);
+	line[sizeof(line) - 1] = 0;
+
+	for (char *p = line; *p; p++, characters++)
+	{
+		if ((unsigned char)*p < 32 || (unsigned char)*p > 126)
+		{
+			*p = '?';
+		}
+	}
+
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	int width = 0;
+
+	for (char const *p = line; *p; p++)
+	{
+		width += MUL_FIXED(sizes.scale, AAFontWidths[(unsigned char)*p]);
+	}
+
+	if (!orthoList->Check(2048 + 4 + characters * 4) || width + sizes.margin * 2 > (int)ScreenDescriptorBlock.SDB_Width)
+	{
+		return;
+	}
+
+	// DrawStatusLine puts a line's right end at rightX, so the left end lands at the margin
+	DrawQuad(sizes.margin / 2, sizes.margin / 2, width + sizes.margin, sizes.lineHeight + sizes.margin, NO_TEXTURE, RCOLOR_ARGB(150, 0, 0, 0), TRANSLUCENCY_NORMAL);
+	DrawStatusLine(line, sizes.margin + width, sizes.margin, sizes.scale);
 }
 
 // Puts the shoot tool's words on the screen, if it has any.

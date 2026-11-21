@@ -75,6 +75,11 @@ void HudsonPlay_DoorWalls(bool walls);
 // ribbon=off (added 2026-11-20 by Melanikus (Frost), the films for the public): his route isn't drawn on the floor. Asked before he starts
 void HudsonPlay_RibbonOff(bool off);
 
+// status=on (added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): one line on the screen, drawn by the renderer at the
+// top left: "15/22 press opslev01: no way on my grid - waiting, step limit in 42 s". Asked before he starts; StatusLine gives "" when it's off or he isn't playing
+void HudsonPlay_ShowStatus(bool show);
+char const *HudsonPlay_StatusLine();
+
 // For the lane probe's SHOT line: true once for each burst that has ended, with its alien's strategy name (SB_NAME_LENGTH bytes), how far it was when it began,
 // its health then and at the burst's last frame (the game's 16.16), and whether it died
 bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died);

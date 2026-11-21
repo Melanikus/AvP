@@ -249,6 +249,9 @@ static bool holdingHisGround = false;        // HudsonPlay_HoldHisGround: holdgr
 static bool crouchingAnywhere = false;       // HudsonPlay_CrouchAnywhere: crouchanywhere=yes (Frost 2026-11-20)
 static bool doorWalls = false;               // HudsonPlay_DoorWalls: doorwalls=yes (Frost 2026-11-20)
 static bool ribbonOff = false;               // HudsonPlay_RibbonOff: ribbon=off
+static bool showingStatus = false;           // HudsonPlay_ShowStatus: status=on (Frost 2026-11-20)
+static char statusLine[200] = "";            // what it says this frame
+static DWORD waitingForAWayAt = 0;           // the last frame WaitForAWay ran, for the status line
 static std::string shutDoorsSaid;           // the shut doors as last given to his grid, so a change is seen
 static STRATEGYBLOCK const *aimedAt = 0;     // the alien his view is on, for the lane probe's AIM line
 static int aimedAtDistance = 0;
@@ -1249,6 +1252,7 @@ static void WaitForAWay(DWORD now)
 	static size_t saidForStep = (size_t)-1;
 
 	placeLastChangedAt = now;
+	waitingForAWayAt = now;
 
 	if (saidForStep != stepAt)
 	{
@@ -3707,6 +3711,70 @@ void HudsonPlay_RibbonOff(bool off)
 	ribbonOff = off;
 }
 
+void HudsonPlay_ShowStatus(bool show)
+{
+	showingStatus = show;
+}
+
+char const *HudsonPlay_StatusLine()
+{
+	return showingStatus && !(steps.empty() && !following) ? statusLine : "";
+}
+
+// THE STATUS LINE (status=on; Frost 2026-11-20, the owner: "He got stuck now and I have no feedback why"): his step of the list, its kind and target, and what he's
+// doing now, with the time left before the step limit moves him
+static void SayTheStatus(DWORD now)
+{
+	if (!showingStatus)
+	{
+		return;
+	}
+
+	std::string doing;
+
+	if (phase == kFinishedTheList)
+	{
+		doing = "done: he has been down his whole list";
+	}
+	else if (phase == kWaitingForTheGrid)
+	{
+		doing = HudsonNav_NewGridIsBuilding() ? "a new grid is being made (a prop broke)" : "his grid is being made";
+	}
+	else if (rideStage != kNotRiding && rideLift >= 0 && rideLift < (int)lifts.size())
+	{
+		std::string const lift = HudsonStrategies_Title(lifts[(size_t)rideLift].car);
+
+		doing = rideStage == kWalkingToTheLift ? "walking to " + lift : rideStage == kWaitingForTheCar ? "waiting for " + lift + "'s car" :
+			rideStage == kGettingOn ? "getting on " + lift : rideStage == kRiding ? "riding " + lift : "getting off " + lift;
+	}
+	else if (now - waitingForAWayAt < 500)
+	{
+		doing = "no way on my grid - waiting";
+	}
+	else if (bursting)
+	{
+		doing = "shooting " + burstTitle;
+	}
+	else if (std::string(holdWord) != "-")
+	{
+		doing = std::string(holdWord) == "back" ? "backing off an alien" : "holding his ground";
+	}
+	else
+	{
+		doing = phase == kFindingTheWay ? "looking for a way" : phase == kDoingTheStep ? "doing it" : "walking";
+	}
+
+	std::string said = following ? std::string("following: ") + doing : std::to_string((int)(stepAt + 1)) + "/" + std::to_string((int)steps.size()) + " " + StepTitle() + ": " + doing;
+
+	if (!following && stepAt < steps.size() && phase != kFinishedTheList && !movedToThisStep && now - stepStartedAt < aStepHasTakenTooLong)
+	{
+		said += ", step limit in " + std::to_string((int)((aStepHasTakenTooLong - (now - stepStartedAt)) / 1000)) + " s";
+	}
+
+	_snprintf(statusLine, sizeof(statusLine) - 1, "%s", said.c_str());
+	statusLine[sizeof(statusLine) - 1] = 0;
+}
+
 void HudsonPlay_AimAtTheNearest(bool aim)
 {
 	aimingAtTheNearest = aim;
@@ -3748,6 +3816,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 	}
 
 	KeepHimAlive(status, now);
+	SayTheStatus(now);
 	AddToTheTrail();
 	SayThisSecond(status, now);
 	SeeToHisGun(status);

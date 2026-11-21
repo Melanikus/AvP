@@ -198,6 +198,7 @@ param(
     [int]$ShootWithin = 0, # with -Play, he fires at the nearest alien once one has been nearer than this (mm) for -ShootDelay ms (shootwithin=, shootdelay=; Frost 2026-11-20)
     [int]$ShootDelay = 0,
     [switch]$DoorWalls,    # with -Play, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (doorwalls=yes; Frost 2026-11-20)
+    [switch]$Status,       # with -Play, one line on the screen: his step and what he's doing (status=on; Frost 2026-11-20)
     [switch]$FilmClockOff, # no machine clock stamped in the film's corner: for public films (filmclock=off; Frost 2026-11-20)
     [switch]$RibbonOff,    # with -Play, his route isn't drawn on the floor: for films (ribbon=off; Frost 2026-11-20)
     [switch]$SupplyGate,   # with -Supply, the next alien only once the last one made has been on a ceiling (supplygate=ceiling; Frost 2026-11-20)
@@ -501,6 +502,7 @@ if ($SupplyGate) { $arguments += " supplygate=ceiling" }
 if ($DoorWalls) { $arguments += " doorwalls=yes" }
 if ($RibbonOff) { $arguments += " ribbon=off" }
 if ($FilmClockOff) { $arguments += " filmclock=off" }
+if ($Status) { $arguments += " status=on" }
 if ($ShootWithin -gt 0) { $arguments += " shootwithin=$ShootWithin shootdelay=$ShootDelay" }
 if ($Normals) { $arguments += " normals=yes" }
 if ($NormalColours) { $arguments += " normalcolours=yes" }
