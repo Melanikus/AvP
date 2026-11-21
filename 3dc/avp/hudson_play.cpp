@@ -3086,7 +3086,7 @@ static void DoTheJump(PLAYER_STATUS *status, DWORD now)
 	int const across = (int)sqrt((double)toX * toX + (double)toZ * toZ);
 	int const below = dyn->Position.vy - step.y;   // y goes down: how far under the place his feet are
 
-	if (across <= 600 && below <= kHudsonGridStepUp && dyn->IsInContactWithFloor)
+	if (HudsonPlay_JumpedUp(across, below, dyn->IsInContactWithFloor != 0))
 	{
 		SayAboutTheStep("he jumped up onto " + step.name + ", " + std::to_string(across) + " mm across from the place");
 		NextStep(true);
@@ -3100,8 +3100,13 @@ static void DoTheJump(PLAYER_STATUS *status, DWORD now)
 		return;
 	}
 
+	// flat out, half speed near it, nothing over it: a jump at full speed carries him over a 3.9 m dais (HudsonPlay_JumpWalk)
 	TurnTowards(status, dyn, toX, toZ);
-	WalkForward(status);
+
+	if (HudsonPlay_JumpWalk(across) > 0)
+	{
+		WalkForward(status, HudsonPlay_JumpWalk(across));
+	}
 
 	if (dyn->IsInContactWithFloor && across <= 1200 && below > kHudsonGridStepUp && now - jumpedAt >= 1000)
 	{
