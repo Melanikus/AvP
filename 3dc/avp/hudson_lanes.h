@@ -82,3 +82,10 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode);
 void HudsonLanes_AlienBefore(const struct strategyblock *alien);
 void HudsonLanes_AlienAfter(const struct strategyblock *alien);
 void HudsonLanes_Searched(const struct strategyblock *npc, const struct vectorch *target, const struct vectorch *heading, int found);
+
+// SAY MARKS (-dev -saymarks; hudson_saymarks.h; Frost 2026-11-21): called only by hudson_saymarks.cpp, never by the game, and they only watch:
+// each frame of his play, the watch's frame and game time, a new level noticed (its table of aliens started again), say-marks.txt opened once
+// (in the game's save folder, added to, never past kSayMarksFileMostBytes); and a MARK of his words (already made safe by say_words.h) with
+// every alien within 20 m and the lines of the seconds before it. Nothing here moves, keeps, makes or changes anything of the game's.
+void HudsonLanes_SayMarksFrame();
+void HudsonLanes_SayMark(const char *cleanWords);

@@ -435,6 +435,7 @@
     <ClCompile Include="..\..\3dc\avp\hudson_lanes.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_play.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_saymarks.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_video.cpp" />

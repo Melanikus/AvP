@@ -30,6 +30,8 @@
 #include "hudson_nav.h"      // supplyat=around: the middle of a room, where a marine can stand (HudsonNav_MiddleOfRoom)
 #include "hudson_supply.h"   // supplyat=around: which room, and which ones keep their slot (on his level, by his route ahead)
 #include "shoulder_lamp.h"   // the LAMP line
+#include "hudson_saymarks.h" // SAY marks: SayMarksAreOn, read only in the watch-only first checks below (Frost 2026-11-21)
+#include "say_words.h"       // SAY marks: the MARK line and its limits
 
 #include <math.h>
 #include <stdlib.h>
@@ -37,6 +39,8 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include <deque>
+#include <map>
 
 extern void CreateAlienBot(VECTORCH *Position, int type);   // bh_alien.cpp: the console's own way of making one
 extern int NormalFrameTime;
@@ -74,6 +78,37 @@ namespace
 	char alienName[SB_NAME_LENGTH] = { 0 };
 	long madeAtFrame = 0;
 	long long gameTime = 0;                          // 16.16 seconds since the alien was made, by the game's own frame times
+
+	// SAY MARKS (-dev -saymarks, hudson_saymarks.h; Frost 2026-11-21): the probe watches a game he plays himself. Its lines are kept here, the last
+	// kSayMarksSecondsBefore seconds of them (at most kSayMarksLinesKept), and written only with a mark, into say-marks.txt
+	bool sayMarks = false;
+	std::deque<std::pair<long long, std::string>> recentLines;   // game time, line
+	std::map<int, std::string> lastLineOf;                       // each watched alien's last A line, by its number
+	STRATEGYBLOCK const *sayPlayer = nullptr;                    // the player's block the watch started with: another means another level
+	int sayEnv = -2;                                             // and the level it started on
+	long sayFrames = 0;
+	int marksMade = 0;
+	unsigned long lastMarkAt = 0;
+
+	void Remember(std::string const &line)
+	{
+		recentLines.push_back(std::make_pair(gameTime, line));
+
+		while (!recentLines.empty() && (recentLines.size() > kSayMarksLinesKept || gameTime - recentLines.front().first > (long long)kSayMarksSecondsBefore * 65536))
+		{
+			recentLines.pop_front();
+		}
+	}
+
+	// A mark's own lines go straight to say-marks.txt, never past its most bytes
+	void WriteNow(std::string const &line)
+	{
+		if (file && ftell(file) >= 0 && ftell(file) < kSayMarksFileMostBytes)
+		{
+			fputs(line.c_str(), file);
+			fputs("\n", file);
+		}
+	}
 
 	// the run's end on an event (Bishop 11-20, see where they are used)
 	int const kRunMoved = 1000;                      // mm: moved at all, and headway toward him
@@ -309,6 +344,13 @@ namespace
 
 	void Write(std::string const &line)
 	{
+		// SAY marks: a line is kept for the next mark, not written (only a mark writes, with the seconds before it)
+		if (sayMarks)
+		{
+			Remember(line);
+			return;
+		}
+
 		if (file)
 		{
 			fputs(line.c_str(), file);
@@ -1481,7 +1523,8 @@ bool HudsonLanes_IsTheAlien(const STRATEGYBLOCK *block)
 // What the alien's own code read, at the moment it read it (hudson_lanes.h, "EVERY ALIEN'S LINE" above). They only read and keep: nothing here changes the alien.
 void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
 {
-	if (!HudsonRunIsOn || !asked || !block || !block->SBdataptr || !block->DynPtr)
+	// a run of Hudson's, or SAY marks (watch only: this only reads the alien; tools/check-hudson-asleep.ps1 lists it)
+	if ((!HudsonRunIsOn && !SayMarksAreOn) || !asked || !block || !block->SBdataptr || !block->DynPtr)
 	{
 		return;
 	}
@@ -1537,7 +1580,8 @@ void HudsonLanes_AlienBefore(const STRATEGYBLOCK *block)
 
 void HudsonLanes_HuntWent(const STRATEGYBLOCK *alien, int way)
 {
-	if (!HudsonRunIsOn || !asked || !alien || alien->I_SBtype != I_BehaviourAlien || !alien->SBdataptr)
+	// a run of Hudson's, or SAY marks (watch only: this only notes which way Hunt went; tools/check-hudson-asleep.ps1 lists it)
+	if ((!HudsonRunIsOn && !SayMarksAreOn) || !asked || !alien || alien->I_SBtype != I_BehaviourAlien || !alien->SBdataptr)
 	{
 		return;
 	}
@@ -1552,7 +1596,8 @@ void HudsonLanes_HuntWent(const STRATEGYBLOCK *alien, int way)
 
 void HudsonLanes_Searched(const STRATEGYBLOCK *npc, const VECTORCH *target, const VECTORCH *heading, int found)
 {
-	if (!HudsonRunIsOn || !asked || !npc)
+	// a run of Hudson's, or SAY marks (watch only: this only notes what the search found; tools/check-hudson-asleep.ps1 lists it)
+	if ((!HudsonRunIsOn && !SayMarksAreOn) || !asked || !npc)
 	{
 		return;
 	}
@@ -1620,7 +1665,8 @@ void HudsonLanes_Searched(const STRATEGYBLOCK *npc, const VECTORCH *target, cons
 
 void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 {
-	if (!HudsonRunIsOn || !asked || !block || !block->SBdataptr || !block->DynPtr)
+	// a run of Hudson's, or SAY marks (watch only: this only reads the alien; tools/check-hudson-asleep.ps1 lists it)
+	if ((!HudsonRunIsOn && !SayMarksAreOn) || !asked || !block || !block->SBdataptr || !block->DynPtr)
 	{
 		return;
 	}
@@ -1702,6 +1748,11 @@ void HudsonLanes_AlienAfter(const STRATEGYBLOCK *block)
 		" why=" + kWhy[why].code + (why == WhyUnexplained ? std::string("(read ") + kWhy[read].code + ")" : std::string()) + " ext=" + ExtentWords(alien) + " hunt=" + HuntWords(w->huntWent);
 
 	Write(line);
+
+	if (sayMarks)
+	{
+		lastLineOf[w->number] = line;   // for a mark's NEAR lines
+	}
 
 	// its own events (written only, not in the game's log: a level of aliens makes many)
 	std::string const who = "EVENT f=" + std::to_string(thisFrame) + " a" + std::to_string(w->number) + " ";
@@ -2221,4 +2272,133 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 	}
 
 	return false;
+}
+
+// ---- SAY MARKS (Frost 2026-11-21; hudson_saymarks.h says what they are). The probe watching a game he plays himself. Only hudson_saymarks.cpp
+// calls these two, each frame and at a mark, and they only read the game: the alien hooks above make the lines (kept in recentLines, not
+// written), and a mark writes them out. Nothing here moves, keeps, makes or changes anything of the game's: no immortality, no stock forcing,
+// no standat, no supply, no time end. Those are in HudsonLanes_EndOfFrame, which only a run of Hudson's calls.
+
+// The watch starts again: on a new level (its aliens are new blocks), or when its table of aliens is full
+static void SayMarks_StartAgain(STRATEGYBLOCK const *me, int env)
+{
+	static_assert(kSayMarksSecondsBefore > 0, "a mark keeps some seconds before it");
+	sayPlayer = me;
+	sayEnv = env;
+	sayFrames = 0;
+	thisFrame = 1;
+	gameTime = 0;
+	watchedCount = 0;
+	watchedFull = false;
+	recentLines.clear();
+	lastLineOf.clear();
+	asked = true;
+	sayMarks = true;
+}
+
+void HudsonLanes_SayMarksFrame()
+{
+	STRATEGYBLOCK const *const me = Player ? Player->ObStrategyBlock : nullptr;
+
+	// no level being played (a menu, a level loading): nothing to watch
+	if (!me || !me->DynPtr)
+	{
+		return;
+	}
+
+	// say-marks.txt in the game's save folder, beside its log, opened once a game and added to: its name is fixed, never made from his words
+	if (!file)
+	{
+		char const *const folder = GetSaveFolderPath();
+		std::string const path = std::string(folder ? folder : "") + "say-marks.txt";
+
+		file = fopen(path.c_str(), "a");
+	}
+
+	int const env = AvP.CurrentEnv;
+
+	if (me != sayPlayer || env != sayEnv || watchedFull)
+	{
+		bool const full = watchedFull && me == sayPlayer && env == sayEnv;
+		char const *const level = (env >= 0 && env < I_Num_Environments && Env_List[env]) ? Env_List[env]->main : "a level of its own";
+
+		SayMarks_StartAgain(me, env);
+		WriteNow(std::string(full ? "WATCH STARTED AGAIN (its table of aliens was full) in " : "LEVEL ") + Clean(level, 64) +
+			(full ? "" : ": the watch starts (-dev -saymarks): SAY <words> or F2 writes a MARK here"));
+
+		if (file)
+		{
+			fflush(file);
+		}
+	}
+
+	// the alien code's calls until the next call here are of the next frame, as in a run
+	sayFrames++;
+	thisFrame = sayFrames + 1;
+	gameTime += NormalFrameTime;
+}
+
+void HudsonLanes_SayMark(const char *cleanWords)
+{
+	STRATEGYBLOCK const *const me = Player ? Player->ObStrategyBlock : nullptr;
+
+	if (!sayMarks || !file || !me || !me->DynPtr || marksMade >= kSayMarksMost)
+	{
+		return;
+	}
+
+	// at most one a second, as the tester's mark key (mark_files.h), so a held key can't fill the disk
+	unsigned long const now = GetTickCount();
+
+	if (lastMarkAt != 0 && now - lastMarkAt < 1000)
+	{
+		return;
+	}
+
+	lastMarkAt = now ? now : 1;
+	marksMade++;
+
+	PLAYER_STATUS const *const status = (PLAYER_STATUS const *)me->SBdataptr;
+	VECTORCH const at = me->DynPtr->Position;
+
+	WriteNow(SayWords_MarkLine(marksMade, (double)gameTime / 65536.0, thisFrame, cleanWords ? cleanWords : "", at.vx, at.vy, at.vz, Player->ObEuler.EulerY & 4095,
+		status ? status->Health >> 16 : 0, ModuleWords(me->containingModule)));
+
+	// every alien within 20 m of him, with its last A line (a far one has none: its own code isn't the near alien's)
+	int nearHim = 0;   // not "near": windows.h makes that a word of its own
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->DynPtr)
+		{
+			continue;
+		}
+
+		int const apart = Apart(at, block->DynPtr->Position);
+
+		if (apart > kSayMarksNearMm)
+		{
+			continue;
+		}
+
+		nearHim++;
+
+		Watched *const w = Record(block, false);
+		std::map<int, std::string>::const_iterator const last = w ? lastLineOf.find(w->number) : lastLineOf.end();
+
+		WriteNow("NEAR " + (w ? "a" + std::to_string(w->number) : std::string("-")) + " dist=" + std::to_string(apart) + " | " +
+			(last != lastLineOf.end() ? last->second : "no A line yet (a far alien: its own code isn't the near alien's) mod=" + ModuleWords(block->containingModule)));
+	}
+
+	WriteNow("BEFORE " + std::to_string(recentLines.size()) + " lines, the last " + std::to_string(kSayMarksSecondsBefore) + " s of game time, oldest first");
+
+	for (std::pair<long long, std::string> const &line : recentLines)
+	{
+		WriteNow(line.second);
+	}
+
+	WriteNow("MARK " + std::to_string(marksMade) + " END: " + std::to_string(nearHim) + " aliens within " + std::to_string(kSayMarksNearMm / 1000) + " m");
+	fflush(file);
 }

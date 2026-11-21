@@ -267,6 +267,9 @@
     <ClCompile Include="..\..\3dc\avp\hudson_play.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\hudson_saymarks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
