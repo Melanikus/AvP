@@ -461,6 +461,14 @@ inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long cros
 	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;
 }
 
+// Is a destroy (or kill) step's target gone? Not there, being taken away (please_destroy_me), or its health run out from more than none. A one-hit Static
+// (integrity 0, Genshd1's SHED04 glass) has no health to begin with, so its health alone says nothing (the 22:14 run read all seven panes gone at once and
+// never shot them). Added 2026-11-20 by Melanikus (Frost)
+inline bool HudsonPlay_TargetIsGone(bool there, bool beingTakenAway, int healthAtStart, int healthNow)
+{
+	return !there || beingTakenAway || (healthAtStart > 0 && healthNow <= 0);
+}
+
 // THE LIFT RULE (added 2026-11-20 by Melanikus (Frost), the owner: "have him not teleport until he fails to get in the lift"): he's moved past a lift, to the landing
 // of the stop he needed (a logged cheat), only when he has failed it: kHudsonPlayMostBoardings failed boardings, or kHudsonPlayMostAtALift at it without riding,
 // or one ride without getting off at his stop

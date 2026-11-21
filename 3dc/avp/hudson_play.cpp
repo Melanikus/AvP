@@ -337,6 +337,7 @@ static VECTORCH placeASecondAgo = { 0, 0, 0 };
 
 static int cheatsUsed = 0;
 static DWORD stepStartedAt = 0;
+static int targetHealthAtStart = 0;   // the step's target's health when the step began (HudsonPlay_TargetIsGone; Frost 2026-11-20)
 static bool movedToThisStep = false;
 static bool moveIsWanted = false;
 static VECTORCH moveHimTo = { 0, 0, 0 };
@@ -2973,7 +2974,7 @@ static void DoTheShooting(PLAYER_STATUS *status, DWORD now, DWORD patience)
 	HudsonPlayStep const &step = steps[stepAt];
 	STRATEGYBLOCK *const target = HudsonStrategies_Find(step.name.c_str());
 
-	if (!target || target->SBflags.please_destroy_me || target->SBDamageBlock.Health <= 0)
+	if (HudsonPlay_TargetIsGone(target != 0, target && target->SBflags.please_destroy_me, targetHealthAtStart, target ? target->SBDamageBlock.Health : 0))
 	{
 		SayAboutTheStep(step.name + " is gone");
 		NextStep(true);
@@ -3872,6 +3873,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			}
 
 			stateBefore = target ? HudsonStrategies_State(target) : std::string();
+			targetHealthAtStart = target ? target->SBDamageBlock.Health : 0;   // for HudsonPlay_TargetIsGone (a one-hit Static has none)
 			StartFindingTheWay(here);
 			break;
 		}
