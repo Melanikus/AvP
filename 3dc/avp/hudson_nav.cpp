@@ -260,6 +260,72 @@ static void BuildTheGridAndSaveIt()
 	InterlockedExchange(&gridIsDone, 1);
 }
 
+// doorwalls=yes: the next grid, built beside the one in use and swapped in (Frost 2026-11-20)
+static HudsonGrid nextGrid;
+static std::vector<HudsonGridPolygon> nextGridPolygons;
+static volatile LONG nextGridIsDone = 0;
+static bool nextGridIsBuilding = false;
+static DWORD nextGridStartedAt = 0;
+
+static unsigned __stdcall NextGridThread(void *)
+{
+	HudsonGridLevel_Build(&nextGrid, nextGridPolygons);
+	std::vector<HudsonGridPolygon>().swap(nextGridPolygons);
+	InterlockedExchange(&nextGridIsDone, 1);
+	return 0;
+}
+
+bool HudsonNav_StartANewGrid()
+{
+	if (nextGridIsBuilding || !theGrid.Ready() || HudsonGridLevel_ListPolygons(&nextGridPolygons))
+	{
+		return false;
+	}
+
+	nextGrid.SetCrouchAnywhere(theGrid.CrouchesAnywhere());
+	InterlockedExchange(&nextGridIsDone, 0);
+	nextGridIsBuilding = true;
+	nextGridStartedAt = GetTickCount();
+
+	uintptr_t const thread = _beginthreadex(NULL, 0, NextGridThread, NULL, 0, NULL);
+
+	if (thread)
+	{
+		CloseHandle((HANDLE)thread);
+	}
+	else
+	{
+		NextGridThread(NULL);
+	}
+
+	return true;
+}
+
+bool HudsonNav_NewGridIsBuilding()
+{
+	return nextGridIsBuilding;
+}
+
+bool HudsonNav_TookTheNewGrid(unsigned long *milliseconds)
+{
+	if (!nextGridIsBuilding || !nextGridIsDone)
+	{
+		return false;
+	}
+
+	nextGridIsBuilding = false;
+	*milliseconds = GetTickCount() - nextGridStartedAt;
+
+	if (nextGrid.Ready())
+	{
+		std::swap(theGrid, nextGrid);
+		nextGrid.Clear();
+		theMap.UseGrid(&theGrid);
+	}
+
+	return true;
+}
+
 static unsigned __stdcall GridThread(void *)
 {
 	BuildTheGridAndSaveIt();

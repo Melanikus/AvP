@@ -333,7 +333,7 @@ static void TestTheGameUsesIt()
 		std::string const name = names[i];
 		std::string const whole = std::string("if (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))\n\t\t\t\t{\n\t\t\t\t\t") + requests[i];
 
-		Check(ComesBefore(behaviour, flags[i], "if (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(") && Has(behaviour, finds[i]),
+		Check(ComesBefore(behaviour, flags[i], "if (NearWakeOn && NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(") && Has(behaviour, finds[i]),
 			name + ": a walk-in box finds its sleepers, on a machine that runs the NPCs");
 		Check(Has(behaviour, "int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance,\n\t\t\t\t[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); });")
 			&& Has(behaviour, "MODULE *const playerModule = sbPtr->containingModule;"), name + ": a player near a sleeper counts only in its room or in view of it");

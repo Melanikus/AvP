@@ -40,6 +40,66 @@ void HudsonPlay_HoldGun(int slot);
 // stepseconds=: how long one step may take before he's moved to it, a logged cheat, from 10 to 600 (the plan reader checks it). Without it, 180.
 void HudsonPlay_SetStepSeconds(int seconds);
 
+// lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he holds his fire, so nothing he sees is a fight and he walks on; asked for before he starts
+void HudsonPlay_HoldFire(bool hold);
+
+// flares=yes (added 2026-11-20 by Melanikus (Frost), the owner: "throwing flares when aliens approach him"): as he plays, a flare at an alien he sees coming within 8 m,
+// with the player's own flare action (hudson_play_steps.h says when); asked for before he starts
+void HudsonPlay_ThrowFlares(bool throwThem);
+
+// aimnearest=yes (added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not firing) always at the nearest alien"): as he plays,
+// his view and gun on the nearest alien within 20 m (hudson_play_steps.h says which), his feet on his way; he never fires for it. Asked for before he starts
+void HudsonPlay_AimAtTheNearest(bool aim);
+
+// holdground=yes (added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow): an alien within 1.5 m ahead on his way, and he stands, or under 1 m backs
+// off, instead of walking through it, 4 s at a time (hudson_play_steps.h says when). Asked for before he starts
+void HudsonPlay_HoldHisGround(bool hold);
+
+// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost): shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a
+// crouched marine fits, whatever the floor's mark (HudsonGrid::SetCrouchAnywhere), and he crouches there as before (CrouchWhereItsLow). Asked for before he starts
+void HudsonPlay_CrouchAnywhere(bool crouch);
+
+// For the lane probe's AIM line each frame: whether either is on; the alien (a STRATEGYBLOCK) his view is on, 0 for none, how far, whether he sees it, and his hold
+// ("-", "stand" or "back")
+bool HudsonPlay_AimsOrHolds();
+
+// shootwithin=MM shootdelay=MS (added 2026-11-20 by Melanikus (Frost), the owner: "start shooting only if he's less than 4m away with a delay of 500ms"): he fires at
+// the nearest alien once one has been nearer than MM for MS, and holds his fire otherwise (hudson_play_steps.h, HudsonPlay_ShootNow). 0: never. Asked before he starts
+void HudsonPlay_ShootWithin(int within, int delay);
+
+// doorwalls=yes (added 2026-11-20 by Melanikus (Frost), the full Genshd1 run): a shut door (a lift or switch door not open, a locked proximity door) is a wall on
+// his grid till it opens (HudsonGrid::SetShut), looked at twice a second, and his way is looked for again when one changes; a prop he breaks with a destroy
+// step gets him a new grid, built on its own thread while he waits (HudsonNav_StartANewGrid). Asked before he starts
+void HudsonPlay_DoorWalls(bool walls);
+
+// ribbon=off (added 2026-11-20 by Melanikus (Frost), the films for the public): his route isn't drawn on the floor. Asked before he starts
+void HudsonPlay_RibbonOff(bool off);
+
+// status=on (added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): one line on the screen, drawn by the renderer at the
+// top left: "15/22 press opslev01: no way on my grid - waiting, step limit in 42 s". Asked before he starts; StatusLine gives "" when it's off or he isn't playing
+void HudsonPlay_ShowStatus(bool show);
+
+// rearguard=MM (added 2026-11-20 by Melanikus (Frost), the owner 22:24, 22:27): he sprints his way (no slowing for bends) and, with an alien within MM, turns 3x
+// as fast as the aim to the nearest on a ceiling, then a wall, then the floor, his feet still on his way (backwards, as fast as forwards); shootwithin= fires at
+// that one. 0: off. Asked before he starts
+void HudsonPlay_RearGuard(int within);
+char const *HudsonPlay_StatusLine();
+
+// For the lane probe's SHOT line: true once for each burst that has ended, with its alien's strategy name (SB_NAME_LENGTH bytes), how far it was when it began,
+// its health then and at the burst's last frame (the game's 16.16), and whether it died
+bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died);
+void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold);
+bool HudsonPlay_AHuggerIsOnHim();             // a facehugger on his face: a death in the real game (Frost 2026-11-20)
+bool HudsonPlay_LastBurstWasAtAHugger();      // the burst HudsonPlay_TakeTheBurst gives was at a facehugger
+void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay);   // the shot's crosshair: tenths of a degree off (-1: none in range), ms on it, the delay
+
+// True once he's been down his whole list (the lane probe's watch ends there: "route done")
+bool HudsonPlay_FinishedTheList();
+
+// The place of the step k after the one he is on now (0: the one he is walking to), for the lane probe's supplyat=around (Frost 2026-11-20); false past his list
+bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z);
+bool HudsonPlay_WayPointAhead(int k, int *x, int *y, int *z, int *along);   // the k-th place of his way ahead, and how far along it is from him (Frost 2026-11-21)
+
 // One line for the run's result: how many steps there were, how many worked, and how many cheats it took
 void HudsonPlay_ForTheResult(char *line, int size);
 

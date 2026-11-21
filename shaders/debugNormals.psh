@@ -1,0 +1,30 @@
+// THE NORMALS VIEW's pixel half (see debugNormals.vsh). Which way the polygon faces, from how its place changes from this pixel to the next one across (ddx) and the
+// next one down (ddy): the two lie in the polygon, so their cross product stands straight out of it. That direction, in the view's space, is the colour: each of its
+// three parts from -1 .. 1 to 0 .. 1 (red: facing right, green: facing up or down, blue: facing the viewer or away). Full brightness, no texture and no light, so a
+// polygon in the dark shows as plainly as one in the light. Shader model 3 (ddx and ddy need it), with its vertex half.
+struct PS_INPUT
+{
+    float3 Place : TEXCOORD0;
+};
+
+struct PS_OUTPUT
+{
+    float4 Color : COLOR0;
+};
+
+PS_OUTPUT ps_main(in PS_INPUT In)
+{
+    PS_OUTPUT Out;
+
+    float3 across = ddx(In.Place);
+    float3 down   = ddy(In.Place);
+    float3 facing = cross(down, across);
+    float  size   = length(facing);
+
+    // a polygon seen exactly edge-on (no size across the screen) has no direction: grey
+    facing = size > 0.0 ? facing / size : float3(0.0, 0.0, 0.0);
+
+    Out.Color = float4(facing * 0.5 + 0.5, 1.0);
+
+    return Out;
+}

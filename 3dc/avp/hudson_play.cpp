@@ -23,9 +23,12 @@
 #include "gamedef.h"
 #include "logString.h"
 #include "bh_types.h"
+#include "bh_lift_door.h"     // doorwalls=yes: a lift door's state (Frost 2026-11-20)
+#include "bh_switch_door.h"   // and a switch door's
 #include "dynblock.h"
 #include "dynamics.h"
 #include "bh_alien.h"
+#include "bh_facehugger.h"   // facehuggers as targets, and one on his face (Frost 2026-11-20)
 #include "pvisible.h"
 #include "weapons.h"
 #include "pldghost.h"
@@ -37,6 +40,7 @@
 #include "hudson_play.h"
 #include "hudson_play_steps.h"
 #include "hudson_play_ribbon.h"
+#include "pmove.h"   // ThrowAFlare: the player's own flare action, as the key (flares=yes)
 
 #include <stdio.h>
 #include <map>
@@ -80,6 +84,7 @@ static const DWORD kWaitToPickUp = 6000;
 static const DWORD kTimeBetweenPresses = 2000;
 static const int kMostPresses = 3;
 static const DWORD kRescueLasts = 500;
+static const DWORD kNudgeLasts = 150;   // a nudge left or right, or a back-up, at half his speed: about half a metre (Frost 2026-11-20, the owner: "move backward less")
 static const DWORD kSayWhereHeIsEvery = 10000;
 static const int kPlacesToSearchEachFrame = 3000;
 
@@ -238,6 +243,33 @@ static DWORD lookedAtWhatsWatchedAt = 0;
 static bool saidHesOnALift = false;
 static bool heWasJustMoved = false;   // the first Hudson was moved by a cheat, and the second hasn't done anything about it yet
 static int gunToHold = 0;             // playgun=: the slot of the gun he's given, or 0
+static bool holdingFire = false;      // HudsonPlay_HoldFire: under the lane probe's watch he never fights (probe v3, Frost 2026-11-20)
+static bool throwingFlares = false;   // HudsonPlay_ThrowFlares: flares=yes (Frost 2026-11-20)
+static int flaresAtAliens = 0;        // the flares that went, at aliens
+static bool aimingAtTheNearest = false;      // HudsonPlay_AimAtTheNearest: aimnearest=yes (Frost 2026-11-20)
+static bool holdingHisGround = false;        // HudsonPlay_HoldHisGround: holdground=yes (Frost 2026-11-20)
+static bool crouchingAnywhere = false;       // HudsonPlay_CrouchAnywhere: crouchanywhere=yes (Frost 2026-11-20)
+static bool doorWalls = false;               // HudsonPlay_DoorWalls: doorwalls=yes (Frost 2026-11-20)
+static bool ribbonOff = false;               // HudsonPlay_RibbonOff: ribbon=off
+static bool showingStatus = false;           // HudsonPlay_ShowStatus: status=on (Frost 2026-11-20)
+static int rearGuardWithin = 0;              // HudsonPlay_RearGuard: rearguard=MM (Frost 2026-11-20)
+static char statusLine[200] = "";            // what it says this frame
+static DWORD waitingForAWayAt = 0;           // the last frame WaitForAWay ran, for the status line
+static std::string shutDoorsSaid;           // the shut doors as last given to his grid, so a change is seen
+static STRATEGYBLOCK const *aimedAt = 0;     // the alien his view is on, for the lane probe's AIM line
+static int aimedAtDistance = 0;
+static bool aimedAtSeen = false;
+static char const *holdWord = "-";           // "-", "stand" or "back", for the AIM line
+static int holdsMade = 0;
+static int shootingWithin = 0;               // HudsonPlay_ShootWithin: shootwithin= (Frost 2026-11-20)
+static unsigned long shootingDelay = 0;      // shootdelay=
+static bool bursting = false, burstWaiting = false;   // a burst going on; one ended and not yet taken for the SHOT line
+static STRATEGYBLOCK const *burstAt = 0;
+static char burstName[SB_NAME_LENGTH];         // its strategy name: SB_NAME_LENGTH bytes, not text, compared as bytes only
+static std::string burstTitle;                // what the log calls it (HudsonStrategies_Title), taken when the burst began
+static bool burstAtAHugger = false;           // and whether it was at a facehugger, for the SHOT line (Frost 2026-11-20)
+static int burstDistance = 0, burstHealthBefore = 0, burstHealthAfter = 0;
+static bool burstDied = false;
 static bool gunGiven = false;
 static bool gunInHand = false;
 static int gunSlotSaid = -2;
@@ -265,6 +297,7 @@ static std::vector<Lift> lifts;
 // Further down, with the rest of the lifts
 static bool OverTheCar(Lift const &lift, VECTORCH const &place, int toSpare = 0);
 static bool OverACarThatIsntLevelWith(VECTORCH const &place, int feetY);
+static bool OnACarThatsMoving();
 static bool liftsAreKnown = false;
 static std::map<int, std::vector<uint8_t> > reachedFromALanding;   // what can be walked to from each landing, by lift number times 2 plus the end. The grid never changes, so neither does this
 
@@ -307,10 +340,15 @@ static DWORD lastFrameAt = 0;
 
 static DWORD saidThisSecondAt = 0;
 static int secondsSaid = 0;
+static int movedEachWay[3] = { 0, 0, 0 };     // SayHisSpeeds: mm walked forwards, sideways and backwards of his facing, by HudsonPlayMoveKind (Frost 2026-11-20)
+static int secondsEachWay[3] = { 0, 0, 0 };   // and the seconds of it
+static int secondsBackTurning = 0, movedBackTurning = 0;   // the backward seconds with a turn over 90 degrees, and how far they went (inertia; Bishop on 235943)
+static int facingXASecondAgo = 0, facingZASecondAgo = 65536;   // his facing at the last second's line, for its turn
 static VECTORCH placeASecondAgo = { 0, 0, 0 };
 
 static int cheatsUsed = 0;
 static DWORD stepStartedAt = 0;
+static int targetHealthAtStart = 0;   // the step's target's health when the step began (HudsonPlay_TargetIsGone; Frost 2026-11-20)
 static bool movedToThisStep = false;
 static bool moveIsWanted = false;
 static VECTORCH moveHimTo = { 0, 0, 0 };
@@ -323,6 +361,12 @@ static const char *endWords = "";
 static std::string RoomOf(const STRATEGYBLOCK *block)
 {
 	return block && block->containingModule && block->containingModule->name ? block->containingModule->name : "(no room)";
+}
+
+// A place in the log's words, millimetres, y down. Frost 2026-11-20
+static std::string PlaceWords(VECTORCH const &v)
+{
+	return std::to_string(v.vx) + " " + std::to_string(v.vy) + " " + std::to_string(v.vz);
 }
 
 static void SayAboutTheStep(std::string const &what)
@@ -352,6 +396,10 @@ static char const *KindWord(HudsonPlayKind kind)
 		case kHudsonPlayWalkInto: return "walk into";
 		case kHudsonPlayPickUp: return "pick up";
 		case kHudsonPlayDestroy: return "destroy";
+		case kHudsonPlayGoTo: return "go to";
+		case kHudsonPlayMoveTo: return "be moved to";
+		case kHudsonPlayDrop: return "drop to";
+		case kHudsonPlayJumpUp: return "jump up onto";
 		default: return "kill";
 	}
 }
@@ -471,15 +519,81 @@ static bool FindTheFloorNear(VECTORCH const &place, HudsonGridPoint *floor)
 
 // Puts him on the floor nearest the step, once for each step. If there's none, he's left where he is, because being put at the place on the list could put him inside a wall. A walk-in
 // switch is different: it's a box of air, and that place is inside it, as long as it's in a room. He just falls from there.
+// Is there floor behind him to back up onto: a grid floor about 700 mm behind him, at his height (a step up or down at most)? Frost 2026-11-20
+static bool FloorBehindHim()
+{
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	VECTORCH const behind = { dyn->Position.vx - (int)((double)dyn->OrientMat.mat31 * 700.0 / 65536.0), dyn->Position.vy,
+		dyn->Position.vz - (int)((double)dyn->OrientMat.mat33 * 700.0 / 65536.0) };
+	HudsonGridPoint floor;
+
+	if (!FindTheFloorNear(behind, &floor))
+	{
+		return false;
+	}
+
+	double const acrossX = (double)floor.x - behind.vx, acrossZ = (double)floor.z - behind.vz;
+
+	return sqrt(acrossX * acrossX + acrossZ * acrossZ) <= 400.0 && floor.y - dyn->Position.vy <= kHudsonPlayPointReachedUpOrDown &&
+		dyn->Position.vy - floor.y <= kHudsonPlayPointReachedUpOrDown;
+}
+
+// A floor of his grid by a switch, within the use key's reach and not under or on it: of 8 places 1.2 m round it, the floors 0.5 to 2.5 m across from it and
+// at or under its height (2.5 m at most), the nearest to him. The 22:26 run's step limit put him at opslev01's own point, in its console. Frost 2026-11-20
+static bool NearTheSwitchNotOnIt(VECTORCH const &place, HudsonGridPoint *best)
+{
+	static const int kRound[8][2] = { { 10, 0 }, { -10, 0 }, { 0, 10 }, { 0, -10 }, { 7, 7 }, { 7, -7 }, { -7, 7 }, { -7, -7 } };
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	bool found = false;
+	double nearest = 0.0;
+
+	for (int i = 0; i < 8; i++)
+	{
+		VECTORCH const probe = { place.vx + kRound[i][0] * 120, place.vy, place.vz + kRound[i][1] * 120 };
+		HudsonGridPoint floor;
+
+		if (!FindTheFloorNear(probe, &floor))
+		{
+			continue;
+		}
+
+		double const acrossX = (double)floor.x - place.vx, acrossZ = (double)floor.z - place.vz;
+		double const across = sqrt(acrossX * acrossX + acrossZ * acrossZ);
+		int const under = floor.y - place.vy;   // y goes down: the floor under the switch is the larger
+
+		if (across < 500.0 || across > 2500.0 || under < -500 || under > 2500)
+		{
+			continue;
+		}
+
+		double const toHimX = (double)floor.x - here.vx, toHimZ = (double)floor.z - here.vz;
+		double const toHim = sqrt(toHimX * toHimX + toHimZ * toHimZ);
+
+		if (!found || toHim < nearest)
+		{
+			found = true;
+			nearest = toHim;
+			*best = floor;
+		}
+	}
+
+	return found;
+}
+
 static void MoveHimToTheStep(std::string const &why, DWORD now)
 {
 	movedToThisStep = true;
 
 	HudsonPlayStep const &step = steps[stepAt];
-	VECTORCH place = step.kind == kHudsonPlayWalkInto ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
+	VECTORCH place = step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
 	HudsonGridPoint floor;
 
-	if (FindTheFloorNear(place, &floor))
+	// a switch: on the floor by it, within the use key's reach, not on it
+	if (step.kind == kHudsonPlayPress && NearTheSwitchNotOnIt(place, &floor))
+	{
+		MoveHimToTheFloorAt(floor, why + ", for " + StepTitle() + " (by it, not on it)", now);
+	}
+	else if (FindTheFloorNear(place, &floor))
 	{
 		MoveHimToTheFloorAt(floor, why + ", for " + StepTitle(), now);
 	}
@@ -515,6 +629,33 @@ static void KillItForHim(STRATEGYBLOCK *target, std::string const &name, std::st
 	CauseDamageToObject(target, &certainDeath, ONE_FIXED, NULL);
 }
 
+// Is a facehugger on his face (FHNS_Attack, after him)? It kills him there, again each FACEHUGGER_NEARATTACKTIME, and in the real game that's his death whatever his
+// health (the owner 22:51: "we died to face huggers, we're cheating"). For the refill's cause and the lane probe's LATCH line. Frost 2026-11-20
+bool HudsonPlay_AHuggerIsOnHim()
+{
+	if (!Player || !Player->ObStrategyBlock)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (block && block->I_SBtype == I_BehaviourFaceHugger && block->SBdataptr)
+		{
+			FACEHUGGER_STATUS_BLOCK const *const hugger = (FACEHUGGER_STATUS_BLOCK const *)block->SBdataptr;
+
+			if (hugger->nearBehaviourState == FHNS_Attack && (!hugger->Target || hugger->Target == Player->ObStrategyBlock))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 // He can't die in this run. A player would have, so every time his health runs out it's counted and logged, and it's filled up again. In something that kills every frame, it's
 // only counted once a second, so that the log can still be read.
 static void KeepHimAlive(PLAYER_STATUS *status, DWORD now)
@@ -531,7 +672,8 @@ static void KeepHimAlive(PLAYER_STATUS *status, DWORD now)
 	if (me->SBDamageBlock.Health <= 0 && now - filledHisHealthAt >= kLeastTimeBetweenFillingHisHealth)
 	{
 		filledHisHealthAt = now;
-		SayTheCheat("his health is filled up again", "it ran out, and a player would be dead here");
+		SayTheCheat("his health is filled up again", HudsonPlay_AHuggerIsOnHim() ? "a facehugger is on his face, and a player would be dead here" :
+			"it ran out, and a player would be dead here");
 		me->SBDamageBlock.Health = healthAtTheStart;
 		status->Health = healthAtTheStart;
 	}
@@ -566,9 +708,37 @@ static void LookUpOrDownAt(PLAYER_STATUS *status, VECTORCH const &point)
 	status->ViewPanX = ((int)(atan2f((float)(point.vy - eyes.vy), across) * (float)kHudsonPlayWholeTurn / 6.2831853f)) & (kHudsonPlayWholeTurn - 1);
 }
 
-static void CrouchInADuct(PLAYER_STATUS *status)
+// He crouches where only a crouched marine fits, measured on his grid (HudsonGrid::OnlyCrouchedFits) where he is and a stride ahead, the way he's going. Not by a room's
+// airduct flag: the owner 11-20, watching the lane probe on test levels whose rooms are marked as ducts: "he's crouching like aliens", "hudson doesn't need to follow
+// that flag". The game's own marines still crawl by it (bh_marine.cpp, unchanged). Changed 2026-11-20 by Melanikus (Frost) for the AvP port.
+static const int kLowCeilingLookAhead = 600;   // mm
+
+static void CrouchWhereItsLow(PLAYER_STATUS *status)
 {
-	if (Player->ObStrategyBlock->containingModule && (Player->ObStrategyBlock->containingModule->m_flags & MODULEFLAG_AIRDUCT))
+	HudsonGrid const &grid = HudsonNav_TheGrid();
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+
+	if (!dyn || !grid.Ready())
+	{
+		return;
+	}
+
+	// the way he's going: his speed's, or, standing, the way he faces
+	VECTORCH const here = dyn->Position;
+	double wayX = (double)dyn->LinVelocity.vx, wayZ = (double)dyn->LinVelocity.vz;
+	double length = sqrt(wayX * wayX + wayZ * wayZ);
+
+	if (length < 100.0)
+	{
+		wayX = (double)dyn->OrientMat.mat31;
+		wayZ = (double)dyn->OrientMat.mat33;
+		length = sqrt(wayX * wayX + wayZ * wayZ);
+	}
+
+	int const aheadX = length > 0.0 ? here.vx + (int)(wayX * kLowCeilingLookAhead / length) : here.vx;
+	int const aheadZ = length > 0.0 ? here.vz + (int)(wayZ * kLowCeilingLookAhead / length) : here.vz;
+
+	if (grid.OnlyCrouchedFits(here.vx, here.vy, here.vz) || grid.OnlyCrouchedFits(aheadX, here.vy, aheadZ))
 	{
 		status->Mvt_InputRequests.Flags.Rqst_Crouch = 1;
 	}
@@ -580,7 +750,7 @@ static void WalkForward(PLAYER_STATUS *status, int howHard = ONE_FIXED)
 	status->Mvt_InputRequests.Flags.Rqst_Forward = 1;
 	status->Mvt_MotionIncrement = howHard;
 	walkedLastFrame = true;
-	CrouchInADuct(status);
+	CrouchWhereItsLow(status);
 }
 
 // He goes where the way goes, with forward and sidestep together, whichever way he's facing, and his view swings round after him. So putting his feet right doesn't need him to look round.
@@ -602,7 +772,8 @@ static void SteerAlongTheWay(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 	int const bend = HudsonPlay_AngleToTurn((int)(toX * 65536.0 / length), (int)(toZ * 65536.0 / length), aim.furtherX - aim.x, aim.furtherZ - aim.z);
 	int forwardControl = 0, sideControl = 0;
 
-	HudsonPlay_WalkControls(ahead, side, HudsonPlay_WalkControl(bend), &forwardControl, &sideControl);
+	// rearguard=: he sprints, with no slowing for bends (the owner 22:24: "sprint to the end")
+	HudsonPlay_WalkControls(ahead, side, rearGuardWithin > 0 ? ONE_FIXED : HudsonPlay_WalkControl(bend), &forwardControl, &sideControl);
 
 	status->Mvt_MotionIncrement = forwardControl;
 	status->Mvt_SideStepIncrement = sideControl;
@@ -625,7 +796,7 @@ static void SteerAlongTheWay(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 		status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 1;
 	}
 
-	CrouchInADuct(status);
+	CrouchWhereItsLow(status);
 	walkedLastFrame = true;
 
 	// His view goes after where the way is heading, a share each frame
@@ -722,6 +893,19 @@ static bool IsAsleepOrDead(const STRATEGYBLOCK *block)
 	return false;
 }
 
+// A facehugger he can shoot: not one on his face already (bh_facehugger.cpp stops drawing it there), dying or gone (the owner 22:51). Frost 2026-11-20
+static bool HuggerHeCanShoot(STRATEGYBLOCK const *block)
+{
+	if (block->I_SBtype != I_BehaviourFaceHugger || !block->SBdataptr || IsAsleepOrDead(block))
+	{
+		return false;
+	}
+
+	FACEHUGGER_STATUS_BLOCK const *const hugger = (FACEHUGGER_STATUS_BLOCK const *)block->SBdataptr;
+
+	return hugger->nearBehaviourState != FHNS_Attack && hugger->nearBehaviourState != FHNS_Dying;
+}
+
 // The nearest he can see, but he stays on the one he's fighting for as long as he can see it. Someone who keeps swapping between two hits neither, and the time he's allowed on one would never run out.
 static STRATEGYBLOCK *NearestThreat(const STRATEGYBLOCK *leftAlone, const STRATEGYBLOCK *fightingNow)
 {
@@ -801,6 +985,12 @@ static void FireAt(PLAYER_STATUS *status, VECTORCH const &point)
 // that won't go down, is killed for him after longer, and if even that doesn't work he leaves it alone.
 static bool Fighting(PLAYER_STATUS *status, DWORD now)
 {
+	// lanes=watch (probe v3, HudsonPlay_HoldFire): he holds his fire, so nothing is a fight and he walks on; the aliens are what is watched
+	if (holdingFire)
+	{
+		return false;
+	}
+
 	static const STRATEGYBLOCK *lastThreat = 0;
 	static const STRATEGYBLOCK *leftAlone = 0;
 	static DWORD fightingItSince = 0;
@@ -912,7 +1102,7 @@ static void StartFindingTheWay(VECTORCH const &here)
 	}
 
 	HudsonPlayStep const &step = steps[stepAt];
-	bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto;
+	bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo;
 	VECTORCH const place = staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
 
 	HudsonNav_TheGridToSearch().StartSearch(here.vx, here.vy, here.vz, place.vx, place.vy, place.vz);
@@ -941,6 +1131,34 @@ static void SayWhatsHoldingHim()
 }
 
 // Has he got anywhere lately? He's stuck if he hasn't, and what he tries next depends how many times that's happened here.
+// The steps he couldn't get onto, left out of his grid with the shut doors (LookAtTheDoors), and the way point he's been stuck at (HudsonPlay_ShutsTheStepAhead).
+// Frost 2026-11-20
+static std::vector<HudsonGridBox> learnedShut;
+static std::string learnedShutSaid;
+static HudsonGridPoint stuckPoint = { 0, 0, 0 };
+static int stucksAtThePoint = 0;
+
+static void LearnAShutStep(HudsonGridPoint const &point, DWORD now)
+{
+	HudsonGridBox const box = { point.x - 350, point.y - 300, point.z - 350, point.x + 350, point.y + 300, point.z + 350 };
+	VECTORCH const goal = !following && stepAt < steps.size() ? StepPlace() : VECTORCH{ 0, 0, 0 };
+	bool const holdsTheGoal = !following && stepAt < steps.size() && goal.vx >= box.minX && goal.vx <= box.maxX && goal.vy >= box.minY && goal.vy <= box.maxY &&
+		goal.vz >= box.minZ && goal.vz <= box.maxZ;
+
+	(void)now;
+
+	// not the step's own place, and a few at most
+	if (holdsTheGoal || learnedShut.size() >= 16)
+	{
+		return;
+	}
+
+	learnedShut.push_back(box);
+	learnedShutSaid += ", the step he couldn't get onto at " + std::to_string(point.x) + " " + std::to_string(point.y) + " " + std::to_string(point.z);
+	SayAboutTheStep("he couldn't get up onto the step at " + std::to_string(point.x) + " " + std::to_string(point.y) + " " + std::to_string(point.z) +
+		" in " + std::to_string(kHudsonPlayStucksBeforeShutting) + " tries, so his grid leaves it out (a learned shut box) and he looks for the way again");
+}
+
 static void CheckHesGettingSomewhere(DWORD now)
 {
 	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
@@ -961,6 +1179,30 @@ static void CheckHesGettingSomewhere(DWORD now)
 	placeLastChangedAt = now;
 	stuckTimes++;
 	rescue = HudsonPlay_NextRescue(timesStuckHere++);
+
+	// the same way point ahead, stuck again: a step up he can't get onto is left out of his grid (HudsonPlay_ShutsTheStepAhead)
+	if (!following && wayAt < way.size())
+	{
+		HudsonGridPoint const point = way[wayAt];
+		double const acrossX = (double)point.x - here.vx, acrossZ = (double)point.z - here.vz;
+
+		stucksAtThePoint = point.x == stuckPoint.x && point.y == stuckPoint.y && point.z == stuckPoint.z ? stucksAtThePoint + 1 : 1;
+		stuckPoint = point;
+
+		if (HudsonPlay_ShutsTheStepAhead(stucksAtThePoint, (int)sqrt(acrossX * acrossX + acrossZ * acrossZ), here.vy - point.y))
+		{
+			LearnAShutStep(point, now);
+			stucksAtThePoint = 0;
+		}
+	}
+
+	// a back-up only with floor behind him: not over a lift's shaft or a ledge (the 22:26 run fell 15.6 m twice)
+	if (rescue == kHudsonPlayBackUp && !FloorBehindHim())
+	{
+		SayAboutTheStep("no floor behind him to back up onto, so he looks for the way again instead");
+		rescue = kHudsonPlayFindTheWayAgain;
+	}
+
 	SayAboutTheStep(std::string("stuck, on the way to ") + StepTitle() + ", so " + HudsonPlay_RescueWords(rescue));
 	SayWhatsHoldingHim();
 
@@ -976,7 +1218,7 @@ static void CheckHesGettingSomewhere(DWORD now)
 		return;
 	}
 
-	rescueUntil = now + kRescueLasts;
+	rescueUntil = now + (rescue == kHudsonPlayStepLeft || rescue == kHudsonPlayStepRight || rescue == kHudsonPlayBackUp ? kNudgeLasts : kRescueLasts);
 }
 
 // What he's trying to get out of being stuck by doing, for as long as it lasts
@@ -991,17 +1233,17 @@ static bool DoingARescue(PLAYER_STATUS *status, DWORD now)
 	{
 		case kHudsonPlayBackUp:
 			status->Mvt_InputRequests.Flags.Rqst_Backward = 1;
-			status->Mvt_MotionIncrement = -ONE_FIXED;
+			status->Mvt_MotionIncrement = -ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayStepLeft:
 			status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 1;
-			status->Mvt_SideStepIncrement = -ONE_FIXED;
+			status->Mvt_SideStepIncrement = -ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayStepRight:
 			status->Mvt_InputRequests.Flags.Rqst_SideStepRight = 1;
-			status->Mvt_SideStepIncrement = ONE_FIXED;
+			status->Mvt_SideStepIncrement = ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayCrouch:
@@ -1075,6 +1317,138 @@ static void GetToDoingTheStep(DWORD now, std::string const &why)
 	SayAboutTheStep(why + StepTitle());
 }
 
+// Is this alien attacking him: in its Attack state (bh_near.cpp's, the one that claws)? The owner 21:33: only those are shot, and only those hold him
+static bool AttackingHim(STRATEGYBLOCK const *alien)
+{
+	return alien && alien->I_SBtype == I_BehaviourAlien && alien->SBdataptr && ((ALIEN_STATUS_BLOCK const *)alien->SBdataptr)->BehaviourState == ABS_Attack;
+}
+
+// HOLD HIS GROUND (holdground=yes; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow): an alien close ahead on his
+// way, and he stands, or backs off straight away from it, instead of walking through it. True: he held this frame and his feet are set here. Hudson's code only: nothing
+// of the game or of an alien changes.
+static bool HoldingHisGround(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, HudsonPlayAim const &aim, DWORD now)
+{
+	static DWORD holdStartedAt = 0, holdEndedAt = 0;
+	static bool holding = false, heldBefore = false;
+
+	if (!holdingHisGround)
+	{
+		return false;
+	}
+
+	STRATEGYBLOCK const *nearest = 0;
+	int nearestDistance = kHudsonPlayHoldWithin + 1;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance < nearestDistance)
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	int const toX = nearest ? nearest->DynPtr->Position.vx - dyn->Position.vx : 0, toZ = nearest ? nearest->DynPtr->Position.vz - dyn->Position.vz : 0;
+	bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(toX, toZ, aim.x - dyn->Position.vx, aim.z - dyn->Position.vz, nearestDistance);
+	unsigned long const heldFor = holding ? (now - holdStartedAt > 0 ? now - holdStartedAt : 1) : 0;
+	unsigned long const sinceTheLast = heldBefore ? now - holdEndedAt : 0xffffffffUL;
+	HudsonPlayHold const hold = HudsonPlay_Hold(ahead, nearestDistance, heldFor, sinceTheLast);
+
+	if (hold == kHudsonPlayWalkOn)
+	{
+		if (holding)
+		{
+			holding = false;
+			heldBefore = true;
+			holdEndedAt = now;
+			LogString("play: hold " + std::to_string(holdsMade) + " ended after " + std::to_string(heldFor) + " ms (" + (ahead ? "4 s at most, so he walks on" : "nothing close ahead now") + ")");
+		}
+
+		holdWord = "-";
+		return false;
+	}
+
+	if (!holding)
+	{
+		holding = true;
+		holdStartedAt = now;
+		holdsMade++;
+		LogString("play: hold " + std::to_string(holdsMade) + ": " + HudsonStrategies_Title(nearest) + " " + std::to_string(nearestDistance) + " mm ahead on his way, so he " +
+			(hold == kHudsonPlayBackOff ? "backs off" : "stands") + ", " + RoomOf(Player->ObStrategyBlock));
+	}
+
+	holdWord = hold == kHudsonPlayBackOff ? "back" : "stand";
+	status->Mvt_InputRequests.Flags.Rqst_Forward = 0;
+	status->Mvt_InputRequests.Flags.Rqst_Backward = 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepRight = 0;
+	status->Mvt_MotionIncrement = 0;
+	status->Mvt_SideStepIncrement = 0;
+
+	double const across = sqrt((double)toX * toX + (double)toZ * toZ);
+
+	if (hold == kHudsonPlayBackOff && across >= 1.0)
+	{
+		// straight away from it, with forward and sidestep together as SteerAlongTheWay goes, whichever way he faces
+		double const forward = -((double)toX * dyn->OrientMat.mat31 + (double)toZ * dyn->OrientMat.mat33) / (65536.0 * across);
+		double const side = -((double)toX * dyn->OrientMat.mat11 + (double)toZ * dyn->OrientMat.mat13) / (65536.0 * across);
+		int forwardControl = 0, sideControl = 0;
+
+		HudsonPlay_WalkControls(forward, side, ONE_FIXED, &forwardControl, &sideControl);
+		status->Mvt_MotionIncrement = forwardControl;
+		status->Mvt_SideStepIncrement = sideControl;
+		status->Mvt_InputRequests.Flags.Rqst_Forward = forwardControl > 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_Backward = forwardControl < 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_SideStepRight = sideControl > 0 ? 1 : 0;
+		status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = sideControl < 0 ? 1 : 0;
+	}
+
+	return true;
+}
+
+// The drop step's start (DoTheDrop)
+static DWORD dropStartedAt = 0;
+static int dropStartY = 0;
+
+// The jump step's start, and his last jump (DoTheJump)
+static DWORD jumpStartedAt = 0;
+static DWORD jumpedAt = 0;
+
+// His grid knows no way to the step yet: he stands at the end of the way it has, and looks again every 10 s (a door can open: doorwalls=yes looks again at once).
+// Not being stuck. Frost 2026-11-20, in place of the lift rescue's long moves
+static void WaitForAWay(DWORD now)
+{
+	static DWORD lookedAt = 0;
+	static size_t saidForStep = (size_t)-1;
+
+	placeLastChangedAt = now;
+	waitingForAWayAt = now;
+
+	if (saidForStep != stepAt)
+	{
+		saidForStep = stepAt;
+		lookedAt = now;
+		SayAboutTheStep("his grid knows no way there yet: he waits at the end of his way and looks again every 10 s and when a door changes; the step limit moves him at " +
+			std::to_string((int)(aStepHasTakenTooLong / 1000)) + " s");
+		return;
+	}
+
+	if (now - lookedAt >= 10000)
+	{
+		lookedAt = now;
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
 // One frame of walking along the way. False if he's at the end of it.
 static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 {
@@ -1109,6 +1483,21 @@ static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 	VECTORCH const aimingAt = { aim.x, dyn->Position.vy, aim.z };
 
 	if (OverACarThatIsntLevelWith(aimingAt, dyn->Position.vy))
+	{
+		placeLastChangedAt = now;
+		return true;
+	}
+
+	// On a platform lift's car while it moves, he stays put on it: walking would take him off it part way (the full Genshd1 run, Frost 2026-11-20: he steered
+	// off liftplt's moving car into hole02, a vent halfway up its shaft). Riding isn't being stuck
+	if (OnACarThatsMoving())
+	{
+		placeLastChangedAt = now;
+		return true;
+	}
+
+	// holdground=yes: an alien close ahead on his way, and he stands or backs off instead of walking through it; that isn't being stuck
+	if (HoldingHisGround(status, dyn, aim, now))
 	{
 		placeLastChangedAt = now;
 		return true;
@@ -1174,13 +1563,9 @@ static void WalkAlongTheWay(PLAYER_STATUS *status, DWORD now)
 
 	if (!wayGoesAllTheWay && !movedToThisStep)
 	{
-		bool const staysPut = step.kind == kHudsonPlayPress || step.kind == kHudsonPlayWalkInto;
-
-		if (!PutHimWhereALiftGoesFrom(staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace()), now))
-		{
-			MoveHimToTheStep("the grid knows no way there from here", now);
-		}
-
+		// No way on his grid: he doesn't go to a lift he never walked to (the owner: "he's using lifts as teleports to advance the map"). He waits at the end of
+		// his way and looks again, every 10 s and at a door's change; the 90 s step limit above is the one long move
+		WaitForAWay(now);
 		return;
 	}
 
@@ -1361,7 +1746,7 @@ static void FindTheLifts()
 		{
 			LiftEnd &at = lift.ends[end];
 
-			at.standY = at.carY + shape->shapeminy;
+			at.standY = at.carY + HudsonPlay_CarStandOffset(shape->shapeminy, shape->shapemaxy);
 			at.hasLanding = FindTheLanding(lift, at.standY, &at.landing);
 			said += std::string(", the ") + EndWord(end) + " stop with its top at " + std::to_string(at.standY) + (at.hasLanding ? " and a landing at " + std::to_string(at.landing.x) + " " + std::to_string(at.landing.y) + " " + std::to_string(at.landing.z) : std::string(" and no landing beside it"));
 		}
@@ -1417,6 +1802,30 @@ static int TheLiftHesOn()
 	}
 
 	return -1;
+}
+
+// Is he standing on a platform lift's car while it goes up or down?
+// Is he on this lift's car now: touching it, or over it with his feet within 600 mm of its top? A frame can come with no collision report with the car (the full
+// run's try 5: that read as "the car went before he was on it", and he walked off the rising car into hole02). Frost 2026-11-20
+static bool OnTheCarNow(Lift const &lift)
+{
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	int const carTop = lift.car->DynPtr->Position.vy + (lift.ends[0].standY - lift.ends[0].carY);
+
+	return TouchingTheCar(lift) || (OverTheCar(lift, here) && here.vy - carTop <= 600 && carTop - here.vy <= 600);
+}
+
+static bool OnACarThatsMoving()
+{
+	for (Lift const &lift : lifts)
+	{
+		if (OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp || CarOf(lift)->state == PLBS_GoingDown))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // Is a place over a car that isn't stopped level with this height? Walking there would be walking into the shaft.
@@ -1562,8 +1971,16 @@ static void SetRideStage(RideStage stage, std::string const &what, DWORD now)
 }
 
 // Starts a ride that's been planned: first, the way to the landing
+// THE LIFT RULE (hudson_play_steps.h, HudsonPlay_RideFailed; Frost 2026-11-20, the owner: "have him not teleport until he fails to get in the lift")
+static int boardFailures = 0;
+static DWORD atTheLiftSince = 0;
+static bool rodeOnce = false;
+
 static void StartTheRide(VECTORCH const &here, DWORD now)
 {
+	boardFailures = 0;
+	atTheLiftSince = now;
+	rodeOnce = false;
 	ridesThisStep++;
 	farBehindSince = 0;
 	SetRideStage(kWalkingToTheLift, std::string("walks to its landing at the ") + EndWord(rideFrom), now);
@@ -1571,8 +1988,37 @@ static void StartTheRide(VECTORCH const &here, DWORD now)
 }
 
 // The ride didn't work. What he does instead is what he'd have done without a lift: the first walks as near as the grid gets and is put at the step, and the second is moved up in time.
+// He has failed the lift (HudsonPlay_RideFailed): he's put on the landing of the stop he needed, a logged cheat naming the lift, and his way is looked for from there
+static void MoveHimPastTheLift(std::string const &why, DWORD now)
+{
+	Lift const &lift = lifts[(size_t)rideLift];
+	int const needed = 1 - rideFrom;
+
+	SayAboutTheLift(lift, "he failed it (" + why + "), so he's put on the landing at its " + EndWord(needed));
+	rideStage = kNotRiding;
+	plannedARideAt = now;
+
+	if (lift.ends[needed].hasLanding)
+	{
+		MoveHimToTheFloorAt(lift.ends[needed].landing, "he failed " + HudsonStrategies_Title(lift.car) + ": " + why, now);
+		lookAgainNextFrame = true;
+	}
+	else
+	{
+		noLiftHelps = true;
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
 static void GiveUpTheRide(std::string const &why, DWORD now)
 {
+	// the lift rule: a give-up is a failed lift, so he's put on the landing he needed
+	if (rideLift >= 0 && rideLift < (int)lifts.size() && lifts[(size_t)rideLift].ends[1 - rideFrom].hasLanding)
+	{
+		MoveHimPastTheLift(why, now);
+		return;
+	}
+
 	SayAboutTheLift(lifts[(size_t)rideLift], "gives up and hops, because " + why + ". The hop is the cheat he'd have had without the lift");
 	rideStage = kNotRiding;
 	noLiftHelps = true;
@@ -1599,6 +2045,24 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		placeLastChangedAt = now;
 	}
 
+	// On the car at the stop he needs: he steps off (the 22:12 run: on liftplt's car at its top, he counted "couldn't get onto the car" three times)
+	if (rideStage != kGettingOff && rideStage != kWalkingToTheLift && OnTheCarNow(lift) && CarIsStoppedAt(lift, rideTo))
+	{
+		rodeOnce = true;
+		SetRideStage(kGettingOff, std::string("he's on the car at the ") + EndWord(rideTo) + ", where he's going, so he steps off", now);
+		return true;
+	}
+
+	// THE LIFT RULE: failed it (3 boardings, a minute at it, or a ride already and waiting again), so he's put on the landing he needed. Riding and getting off
+	// have their own limits
+	if (rideStage != kWalkingToTheLift && rideStage != kRiding && rideStage != kGettingOff &&
+		HudsonPlay_RideFailed(boardFailures, now - atTheLiftSince, rodeOnce, false))
+	{
+		MoveHimPastTheLift(boardFailures >= kHudsonPlayMostBoardings ? std::to_string(boardFailures) + " failed boardings" :
+			rodeOnce ? std::string("he rode it, and is waiting for it again") : std::string("a minute at it without riding"), now);
+		return false;
+	}
+
 	switch (rideStage)
 	{
 		case kWalkingToTheLift:
@@ -1606,6 +2070,8 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			{
 				return true;
 			}
+
+			atTheLiftSince = now;   // at the lift from here: the lift rule's minute
 
 			if (!wayGoesAllTheWay)
 			{
@@ -1664,10 +2130,19 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			// At the far side, where his whole square is on the car
 			int const onWithin = 300;
 
-			if (!CarIsStoppedAt(lift, rideFrom) && !TouchingTheCar(lift))
+			// On the car as it moves: he's riding, wherever on it he is, and stands still
+			if (!CarIsStoppedAt(lift, rideFrom) && OnTheCarNow(lift))
+			{
+				SetRideStage(kRiding, "rides, the car going with him on it", now);
+				return true;
+			}
+
+			if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))
 			{
 				// It went before he was on it. He stops at once, which leaves him on the landing, and waits for it to come back.
-				SetRideStage(kWaitingForTheCar, "the car went before he was on it, so he stops, and waits for the car again", now);
+				boardFailures++;
+				SetRideStage(kWaitingForTheCar, "the car went before he was on it, so he stops, and waits for the car again (" + std::to_string(boardFailures) + " of " +
+					std::to_string(kHudsonPlayMostBoardings) + " failed boardings)", now);
 				return true;
 			}
 
@@ -1679,7 +2154,9 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 
 			if (inThisStage >= kGetOnAtMost)
 			{
-				SetRideStage(kWaitingForTheCar, "couldn't get onto the car in " + std::to_string((int)(kGetOnAtMost / 1000)) + " seconds, so he waits for the car again", now);
+				boardFailures++;
+				SetRideStage(kWaitingForTheCar, "couldn't get onto the car in " + std::to_string((int)(kGetOnAtMost / 1000)) + " seconds, so he waits for the car again (" +
+					std::to_string(boardFailures) + " of " + std::to_string(kHudsonPlayMostBoardings) + " failed boardings)", now);
 				return true;
 			}
 
@@ -1690,6 +2167,8 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 		}
 
 		case kRiding:
+			rodeOnce = true;
+
 			// No keys at all: he stands where he is on top of it
 			if (CarIsStoppedAt(lift, rideTo) && inThisStage > 500)
 			{
@@ -1730,9 +2209,9 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			// It went back with him still on it, so he rides it back, and gets off at the end he got on at
 			if (!CarIsStoppedAt(lift, rideTo))
 			{
-				rideFrom = rideTo;
-				SetRideStage(kRiding, "the car went back with him still on it, so he rides it back", now);
-				return true;
+				// the lift rule: one ride and no getting off at his stop is a failed lift
+				MoveHimPastTheLift(std::string("he rode it and didn't get off at its ") + EndWord(rideTo), now);
+				return false;
 			}
 
 			if (inThisStage >= kGetOffAtMost)
@@ -2577,6 +3056,100 @@ static void LookAtWhatsWatched(DWORD now)
 
 // ---- Doing the step, once he's there
 
+// The drop step (Frost 2026-11-20): straight at the place, no grid, till he has fallen 2 m or is within 600 mm of it across; 20 s at most, then he goes on
+// Walks him straight at a place whichever way he's facing, with forward and sidestep together, as SteerAlongTheWay does, so his aim can be on a chaser meanwhile
+// (a jump or a drop step; Bishop 23:4x). Frost 2026-11-20
+static void WalkStraightAt(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, int toX, int toZ, int howHard)
+{
+	double const length = sqrt((double)toX * toX + (double)toZ * toZ);
+
+	if (length < 1.0)
+	{
+		return;
+	}
+
+	double const ahead = ((double)toX * dyn->OrientMat.mat31 + (double)toZ * dyn->OrientMat.mat33) / (65536.0 * length);
+	double const side = ((double)toX * dyn->OrientMat.mat11 + (double)toZ * dyn->OrientMat.mat13) / (65536.0 * length);
+	int forwardControl = 0, sideControl = 0;
+
+	HudsonPlay_WalkControls(ahead, side, howHard, &forwardControl, &sideControl);
+	status->Mvt_MotionIncrement = forwardControl;
+	status->Mvt_SideStepIncrement = sideControl;
+	status->Mvt_InputRequests.Flags.Rqst_Forward = forwardControl > 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_Backward = forwardControl < 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepRight = sideControl > 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = sideControl < 0 ? 1 : 0;
+	walkedLastFrame = true;
+	CrouchWhereItsLow(status);
+}
+
+static void DoTheDrop(PLAYER_STATUS *status, DWORD now)
+{
+	HudsonPlayStep const &step = steps[stepAt];
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const toX = step.x - dyn->Position.vx, toZ = step.z - dyn->Position.vz;
+	int const across = (int)sqrt((double)toX * toX + (double)toZ * toZ);
+	int const fallen = dyn->Position.vy - dropStartY;
+
+	if (fallen >= 2000 || across <= 600)
+	{
+		SayAboutTheStep("he dropped to " + step.name + ", falling " + std::to_string(fallen) + " mm, " + std::to_string(across) + " mm across from the place");
+		NextStep(true);
+		return;
+	}
+
+	if (now - dropStartedAt >= 20000)
+	{
+		SayAboutTheStep("he couldn't drop to " + step.name + " in 20 s, so he goes on");
+		NextStep(false);
+		return;
+	}
+
+	TurnTowards(status, dyn, toX, toZ);
+	WalkStraightAt(status, dyn, toX, toZ, ONE_FIXED);
+}
+
+// JUMP (Frost 2026-11-20; Drake 23:2x: bypass rests on a dais in med02, 780 mm tall with four vertical faces and no ramp, and a player jumps up onto it; every full
+// run ended that step with the 90 s move): straight at the place, no grid, jumping when he's within 1.2 m of it across and on the floor (once a second at most), till
+// he's up there: within 600 mm across, on the floor, a step or less under its height. 15 s at most
+static void DoTheJump(PLAYER_STATUS *status, DWORD now)
+{
+	HudsonPlayStep const &step = steps[stepAt];
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const toX = step.x - dyn->Position.vx, toZ = step.z - dyn->Position.vz;
+	int const across = (int)sqrt((double)toX * toX + (double)toZ * toZ);
+	int const below = dyn->Position.vy - step.y;   // y goes down: how far under the place his feet are
+
+	if (HudsonPlay_JumpedUp(across, below, dyn->IsInContactWithFloor != 0))
+	{
+		SayAboutTheStep("he jumped up onto " + step.name + ", " + std::to_string(across) + " mm across from the place");
+		NextStep(true);
+		return;
+	}
+
+	if (now - jumpStartedAt >= 15000)
+	{
+		SayAboutTheStep("he couldn't jump up onto " + step.name + " in 15 s, so he goes on");
+		NextStep(false);
+		return;
+	}
+
+	// flat out, half speed near it, nothing over it: a jump at full speed carries him over a 3.9 m dais (HudsonPlay_JumpWalk)
+	TurnTowards(status, dyn, toX, toZ);
+
+	if (HudsonPlay_JumpWalk(across) > 0)
+	{
+		WalkStraightAt(status, dyn, toX, toZ, HudsonPlay_JumpWalk(across));
+	}
+
+	if (dyn->IsInContactWithFloor && across <= 1200 && below > kHudsonGridStepUp && now - jumpedAt >= 1000)
+	{
+		status->Mvt_InputRequests.Flags.Rqst_Jump = 1;
+		jumpedAt = now;
+		SayAboutTheStep("he jumps, " + std::to_string(across) + " mm across from " + step.name + " and " + std::to_string(below) + " mm under it");
+	}
+}
+
 static void DoThePress(PLAYER_STATUS *status, DWORD now)
 {
 	HudsonPlayStep const &step = steps[stepAt];
@@ -2651,10 +3224,18 @@ static void DoTheShooting(PLAYER_STATUS *status, DWORD now, DWORD patience)
 	HudsonPlayStep const &step = steps[stepAt];
 	STRATEGYBLOCK *const target = HudsonStrategies_Find(step.name.c_str());
 
-	if (!target || target->SBflags.please_destroy_me || target->SBDamageBlock.Health <= 0)
+	if (HudsonPlay_TargetIsGone(target != 0, target && target->SBflags.please_destroy_me, targetHealthAtStart, target ? target->SBDamageBlock.Health : 0))
 	{
 		SayAboutTheStep(step.name + " is gone");
 		NextStep(true);
+
+		// doorwalls=yes: the level has changed where it was, so a new grid without it, built on its own thread while he waits (it took 0.7 s on Genshd1)
+		if (doorWalls && HudsonNav_StartANewGrid())
+		{
+			LogString("play: a new grid, because " + step.name + " is gone");
+			phase = kWaitingForTheGrid;
+		}
+
 		return;
 	}
 
@@ -2681,6 +3262,27 @@ static void DoTheShooting(PLAYER_STATUS *status, DWORD now, DWORD patience)
 
 	GetTargetingPointOfObject_Far(target, &place);
 	FireAt(status, place);
+}
+
+// A pickup that has gone while he's on his way to it: he walked over it or landed on it (the medlab section run 2026-11-20-234549: bypass went as he landed on the
+// dais, and his way, with nothing there to walk onto, took him off it and away until the 90 s move). Done, as DoThePickUp says once he's there. Frost 2026-11-20
+static bool PickedUpOnHisWay()
+{
+	if (following || stepAt >= steps.size() || steps[stepAt].kind != kHudsonPlayPickUp)
+	{
+		return false;
+	}
+
+	STRATEGYBLOCK const *const target = HudsonStrategies_Find(steps[stepAt].name.c_str());
+
+	if (target && !target->SBflags.please_destroy_me)
+	{
+		return false;
+	}
+
+	SayAboutTheStep(steps[stepAt].name + " has gone from where it was, on his way to it: he walked over it");
+	NextStep(true);
+	return true;
 }
 
 static void DoThePickUp(PLAYER_STATUS *status, DWORD now)
@@ -2748,6 +3350,20 @@ static void DoTheStep(PLAYER_STATUS *status, DWORD now)
 			DoTheShooting(status, now, kGiveUpOnShootingSomething);
 			break;
 
+		// a place: done once he's there (the grid's way went all the way), or as near as the grid knows, which doesn't count as done
+		case kHudsonPlayDrop:
+			DoTheDrop(status, now);
+			break;
+
+		case kHudsonPlayJumpUp:
+			DoTheJump(status, now);
+			break;
+
+		case kHudsonPlayGoTo:
+			SayAboutTheStep(wayGoesAllTheWay ? "he got to " + step.name : "he got as near to " + step.name + " as the grid knows, so he goes on");
+			NextStep(wayGoesAllTheWay);
+			break;
+
 		default:
 			DoTheShooting(status, now, kGiveUpOnAKill);
 			break;
@@ -2804,6 +3420,28 @@ static void MeasureHowWellHesFollowing(DWORD now)
 	}
 }
 
+// His speeds so far, walked forwards, backwards and sideways of his facing, against what's asked: the marine's 15000 mm/s every way while he sprints (the owner
+// 22:41: "he should move looking at aliens as fast as he can run forward"). Frost 2026-11-20
+static void SayHisSpeeds()
+{
+	static char const *const kWays[3] = { "forwards", "sideways", "backwards" };
+	std::string line = "play: his speeds so far:";
+
+	for (int i = 0; i < 3; i++)
+	{
+		line += std::string(i ? "," : "") + " " + kWays[i] + " " + std::to_string(secondsEachWay[i] ? movedEachWay[i] / secondsEachWay[i] : 0) + " mm/s over " +
+			std::to_string(secondsEachWay[i]) + " s";
+	}
+
+	if (secondsBackTurning > 0)
+	{
+		line += " (" + std::to_string(secondsBackTurning) + " of them turning over 90 deg, at " + std::to_string(movedBackTurning / secondsBackTurning) + " mm/s)";
+	}
+
+	LogString(line + "; asked " + std::to_string(rearGuardWithin > 0 ? 15000 : 0) + (rearGuardWithin > 0 ? " mm/s every way (sprinting, MARINE_MOVESCALE)" :
+		" (no rear guard: he slows for bends)"));
+}
+
 // One line a second, for reading a stall afterwards: where he is, where he's making for, how fast the game is asked to move him and how far he really went, and what he's touching.
 static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 {
@@ -2824,17 +3462,43 @@ static void SayThisSecond(PLAYER_STATUS const *status, DWORD now)
 
 	placeASecondAgo = placeNow;
 
+	// how far his facing turned this second (Bishop on 235943: "Inertia on turns, or steering?")
+	int const turned = abs(HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, facingXASecondAgo, facingZASecondAgo)) * 360 / kHudsonPlayWholeTurn;
+
+	facingXASecondAgo = dyn->OrientMat.mat31;
+	facingZASecondAgo = dyn->OrientMat.mat33;
+
+	// his speeds each way of his facing, for SayHisSpeeds: only a second he was walking, on the floor and not riding
+	if (walkedLastFrame && dyn->IsInContactWithFloor && rideStage == kNotRiding && moved < 30000)
+	{
+		HudsonPlayMoveKind const kind = HudsonPlay_MoveKind(dyn->OrientMat.mat31, dyn->OrientMat.mat33, movedX, movedZ);
+
+		movedEachWay[kind] += moved;
+		secondsEachWay[kind]++;
+
+		if (kind == kHudsonPlayMovedBackwards && turned > 90)
+		{
+			secondsBackTurning++;
+			movedBackTurning += moved;
+		}
+	}
+
+	if (secondsSaid % 30 == 0)
+	{
+		SayHisSpeeds();
+	}
+
 	if (wayAt < way.size())
 	{
 		HudsonGridPoint const &point = way[wayAt];
 		int const toX = point.x - placeNow.vx, toZ = point.z - placeNow.vz;
 
-		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, point %d of %d at %d %d %d, %d mm across, %d up or down, %d off the way, turn off by %d, walk asked %d, speed asked %d, moved %d, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, (int)wayAt + 1, (int)way.size(), point.x, point.y, point.z, (int)sqrt((double)toX * toX + (double)toZ * toZ), point.y - placeNow.vy, offTheWayNow,
-			HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ), walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, point %d of %d at %d %d %d, %d mm across, %d up or down, %d off the way, turn off by %d, walk asked %d, speed asked %d, moved %d, turned %d deg, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, (int)wayAt + 1, (int)way.size(), point.x, point.y, point.z, (int)sqrt((double)toX * toX + (double)toZ * toZ), point.y - placeNow.vy, offTheWayNow,
+			HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ), walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, turned, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 	}
 	else
 	{
-		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, no point to walk to, walk asked %d, speed asked %d, moved %d, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
+		_snprintf(text, sizeof(text) - 1, "second %d: at %d %d %d, no point to walk to, walk asked %d, speed asked %d, moved %d, turned %d deg, on the floor %d, health %d", secondsSaid, placeNow.vx, placeNow.vy, placeNow.vz, walkedLastFrame ? 1 : 0, (int)sqrt(speedX * speedX + speedZ * speedZ), moved, turned, dyn->IsInContactWithFloor ? 1 : 0, Player->ObStrategyBlock->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 	}
 
 	text[sizeof(text) - 1] = 0;
@@ -2929,8 +3593,9 @@ bool HudsonPlay_Start(const char *levelName)
 	stepAt = 0;
 	stepsThatWorked = 0;
 	cheatsUsed = 0;
-	ribbonIsOn = true;
+	ribbonIsOn = !ribbonOff;
 	phase = kWaitingForTheGrid;
+	HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);
 	HudsonNav_StartTheGrid();
 
 	return true;
@@ -2953,6 +3618,699 @@ void HudsonPlay_StartFollowing(const char *levelName)
 	HudsonNav_StartTheGrid();
 }
 
+// FLARES (flares=yes; added 2026-11-20 by Melanikus (Frost), the owner: "hudson to walk with lamp on, throwing flares when aliens approach him"). An alien he can see
+// within kHudsonPlayFlareWithin, and no flare for a while (HudsonPlay_FlareIsDue): he turns his view to it, his feet still on his way (forward and sidestep go wherever
+// he faces), and once he faces it (HudsonPlay_FacesItToThrow) he throws one with the player's own flare action, pmove.cpp's ThrowAFlare, which the key calls. The game
+// keeps 4 flares in the world at most, so a throw may make none: it's counted only when one went. Hudson's code only: nothing of the game or of an alien changes.
+static void FlareAtAnAlien(PLAYER_STATUS *status, DWORD now)
+{
+	static DWORD lastFlareAt = 0;
+	static bool thrownBefore = false;
+
+	if (!throwingFlares || AvP.PlayerType != I_Marine || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	VECTORCH const here = dyn->Position;
+	STRATEGYBLOCK *nearest = 0;
+	int nearestDistance = kHudsonPlayFlareWithin;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(here, block->DynPtr->Position);
+
+		if (distance >= nearestDistance)
+		{
+			continue;
+		}
+
+		// seen from its chest, as a fight sees it
+		VECTORCH chest;
+
+		GetTargetingPointOfObject_Far(block, &chest);
+
+		if (IsThisObjectVisibleFromThisPosition_WithIgnore(Player, block->SBdptr, &chest, kHudsonPlayFlareWithin))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (!nearest || !HudsonPlay_FlareIsDue(nearestDistance, true, now - lastFlareAt, thrownBefore))
+	{
+		return;
+	}
+
+	int const toX = nearest->DynPtr->Position.vx - here.vx, toZ = nearest->DynPtr->Position.vz - here.vz;
+	int const angle = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+
+	// his view to it, and nothing else of this frame's turning
+	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
+	status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
+	TurnTowards(status, dyn, toX, toZ);
+
+	if (!HudsonPlay_FacesItToThrow(angle))
+	{
+		return;
+	}
+
+	extern int NumberOfFlaresActive;
+	int const before = NumberOfFlaresActive;
+
+	ThrowAFlare();
+	lastFlareAt = now;
+	thrownBefore = true;
+
+	bool const went = NumberOfFlaresActive > before;
+
+	flaresAtAliens += went ? 1 : 0;
+	LogString(std::string("play: flare ") + (went ? std::to_string(flaresAtAliens) + " thrown" : "not thrown (the game's 4 are out)") + " at " + HudsonStrategies_Title(nearest) + ", " +
+		std::to_string(nearestDistance) + " mm from him, t=" + std::to_string((unsigned long)timeGetTime()) + ", " + RoomOf(Player->ObStrategyBlock));
+}
+
+// AIM AT THE NEAREST (aimnearest=yes; hudson_play_steps.h says which; added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not
+// firing) always at the nearest alien"): his view, and so his gun, on the nearest alien each frame, his feet still on his way (forward and sidestep go wherever he faces,
+// so he backpedals or strafes as it needs). It turns him and tilts his view a share of the way each frame, as his view goes after his way, so a recording isn't jittery.
+// AimAtTheNearest never fires: his fire stays held (lanes=watch) and nothing here asks for it. Hudson's code only: nothing of the game or of an alien changes.
+// rearguard=: the distance of each alien near him half a second ago and now, for HudsonPlay_IsChasing. Frost 2026-11-20
+struct HudsonChaseSample
+{
+	int older;       // the distance at the reading before: half a second to a second ago (0: none yet)
+	int newer;       // the distance at the last reading
+	DWORD newerAt;   // when that was
+};
+
+static std::map<STRATEGYBLOCK const *, HudsonChaseSample> chaseSamples;
+
+// Is this alien chasing him: after him (Approach, Hunt or Attack with him its target), or closing in over the last half second? (the owner 22:36)
+static bool IsChasingHim(STRATEGYBLOCK const *block, int distance)
+{
+	DWORD const now = GetTickCount();
+	HudsonChaseSample &sample = chaseSamples[block];
+
+	// new, or not near him for a while (or a dead one's block used again): no reading from before
+	if (sample.newerAt == 0 || now - sample.newerAt > 2000)
+	{
+		sample.older = 0;
+		sample.newer = distance;
+		sample.newerAt = now;
+	}
+	else if (now - sample.newerAt >= 500)
+	{
+		sample.older = sample.newer;
+		sample.newer = distance;
+		sample.newerAt = now;
+	}
+
+	ALIEN_STATUS_BLOCK const *const alien = (ALIEN_STATUS_BLOCK const *)block->SBdataptr;
+	bool const afterHim = alien && alien->Target == Player->ObStrategyBlock &&
+		(alien->BehaviourState == ABS_Approach || alien->BehaviourState == ABS_Hunt || alien->BehaviourState == ABS_Attack);
+
+	return HudsonPlay_IsChasing(afterHim, distance, sample.older);
+}
+
+static void AimAtTheNearest(PLAYER_STATUS *status)
+{
+	static float tilt = 0.0f;   // his view's tilt, eased toward the alien's chest, in the game's 4096ths of a turn
+
+	if ((!aimingAtTheNearest && rearGuardWithin <= 0) || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const within = rearGuardWithin > 0 ? rearGuardWithin : kHudsonPlayAimWithin;
+	std::vector<HudsonPlayRearCandidate> rear;   // rearguard=: the same aliens, by surface
+	std::vector<HudsonPlayAimCandidate> candidates;
+	std::vector<STRATEGYBLOCK *> blocks;
+	int current = -1;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		// a facehugger within 10 m comes first, before any alien (the owner 22:51: "He must kill facehuggers")
+		bool const hugger = block && block->SBdptr && block->DynPtr && HuggerHeCanShoot(block);
+
+		if (!block || (block->I_SBtype != I_BehaviourAlien && !hugger) || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance >= (hugger ? kHudsonPlayHuggerWithin : within))
+		{
+			continue;
+		}
+
+		// rearguard=: only an alien that's chasing him is faced; with none, he faces along his way and sprints (the owner 22:36)
+		if (rearGuardWithin > 0 && !hugger && !IsChasingHim(block, distance))
+		{
+			continue;
+		}
+
+		// seen from its chest, as a fight sees it
+		VECTORCH chest;
+
+		GetTargetingPointOfObject_Far(block, &chest);
+
+		HudsonPlayAimCandidate const candidate = { (int)blocks.size(), distance, IsThisObjectVisibleFromThisPosition_WithIgnore(Player, block->SBdptr, &chest, kHudsonPlayAimWithin) != 0 };
+
+		// a hugger beyond 3 m only if he can see it: one behind a wall would hold his aim from the aliens after him
+		if (hugger && distance > kHudsonPlayHuggerSeenWithin && !candidate.seen)
+		{
+			continue;
+		}
+
+		current = block == aimedAt ? candidate.id : current;
+		candidates.push_back(candidate);
+		rear.push_back(HudsonPlayRearCandidate{ candidate.id, distance, hugger ? kHudsonPlayHuggerRank : HudsonPlay_SurfaceRank(block->DynPtr->GravityDirection.vy) });
+		blocks.push_back(block);
+	}
+
+	// rearguard=: the nearest on a ceiling first, then a wall, then the floor (the owner 22:27); else the aim's own pick
+	int const pick = rearGuardWithin > 0 ? HudsonPlay_PickTheRearTarget(rear) : HudsonPlay_PickTheNearest(candidates, current);
+
+	if (pick < 0)
+	{
+		if (aimedAt)
+		{
+			LogString("play: aims at nothing now: no alien " + std::string(rearGuardWithin > 0 ? "chasing him " : "") + "within " + std::to_string(within / 1000) + " m, so he faces along his way");
+		}
+
+		aimedAt = 0;
+		tilt = 0.0f;
+		return;
+	}
+
+	STRATEGYBLOCK *const it = blocks[pick];
+
+	if (it != aimedAt)
+	{
+		LogString("play: aims at " + HudsonStrategies_Title(it) + ", " + std::to_string(candidates[pick].distance) + " mm from him" + (candidates[pick].seen ? "" : ", out of his sight") +
+			(rearGuardWithin > 0 ? std::string(", ") + (rear[(size_t)pick].rank == kHudsonPlayHuggerRank ? "a facehugger" : rear[(size_t)pick].rank == 0 ? "on the ceiling" :
+				rear[(size_t)pick].rank == 1 ? "on a wall" : "on the floor") : std::string()) +
+			", " + RoomOf(Player->ObStrategyBlock));
+	}
+
+	aimedAt = it;
+	aimedAtDistance = candidates[pick].distance;
+	aimedAtSeen = candidates[pick].seen;
+
+	// his turn to it, a share each frame, and nothing else of this frame's turning
+	int const toX = it->DynPtr->Position.vx - dyn->Position.vx, toZ = it->DynPtr->Position.vz - dyn->Position.vz;
+	int const angle = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+	int const control = HudsonPlay_AimTurnControl(angle, rearGuardWithin > 0, kTurnsAtFull, NormalFrameTime);
+
+	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = control < 0 ? 1 : 0;
+	status->Mvt_InputRequests.Flags.Rqst_TurnRight = control > 0 ? 1 : 0;
+	status->Mvt_TurnIncrement = control;
+
+	// his view's tilt to its chest, eased the same way (a ceiling alien is above him)
+	VECTORCH chest;
+
+	GetTargetingPointOfObject_Far(it, &chest);
+
+	VECTORCH const eyes = Global_VDB_Ptr->VDB_World;
+	float const acrossX = (float)(chest.vx - eyes.vx), acrossZ = (float)(chest.vz - eyes.vz);
+	float const wanted = atan2f((float)(chest.vy - eyes.vy), sqrtf(acrossX * acrossX + acrossZ * acrossZ)) * (float)kHudsonPlayWholeTurn / 6.2831853f;
+
+	tilt += (wanted - tilt) * (rearGuardWithin > 0 ? 3.0f : 1.0f) / (float)kHudsonPlayAimTurnsOneIn;
+	status->ViewPanX = ((int)tilt) & (kHudsonPlayWholeTurn - 1);
+}
+
+// Is this block still one of the game's? A killed alien's block can go, so a burst's alien is looked for before it's read
+static bool StillThere(STRATEGYBLOCK const *block)
+{
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		if (ActiveStBlockList[i] == block)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void EndTheBurst()
+{
+	bool const there = StillThere(burstAt);
+
+	burstHealthAfter = there ? burstAt->SBDamageBlock.Health : burstHealthAfter;
+	burstDied = !there || burstHealthAfter <= 0 || IsAsleepOrDead(burstAt);
+	bursting = false;
+	burstWaiting = true;
+	LogString("play: a burst at " + burstTitle + " from " + std::to_string(burstDistance) + " mm: its health " +
+		std::to_string(burstHealthBefore >> ONE_FIXED_SHIFT) + " -> " + std::to_string(burstHealthAfter >> ONE_FIXED_SHIFT) + (burstDied ? ", and it died" : ""));
+}
+
+// SHOOTING (shootwithin=, shootdelay=; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), the owner 21:33): the nearest alien nearer than
+// shootwithin that is attacking him. He turns his crosshair to it, and once it has been on it for more than shootdelay he fires (the fight's own FireAt). He holds
+// his fire otherwise, as lanes=watch has him, and keeps moving and observing. Hudson's code only.
+// rearguard=: a frame he isn't aimed, with a chaser near (an alien chasing him within the rear guard, or a facehugger within 10 m), once a second, with why (Bishop
+// 23:4x: "Log any frame he's unaimed with a chaser near, and its reason"). Frost 2026-11-20
+static void SayIfUnaimedWithAChaser(DWORD now, std::string const &why)
+{
+	static DWORD saidAt = 0;
+
+	if (rearGuardWithin <= 0 || now - saidAt < 1000 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	STRATEGYBLOCK const *nearest = 0;
+	int nearestDistance = 0;
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(here, block->DynPtr->Position);
+		bool const chaser = (block->I_SBtype == I_BehaviourAlien && distance < rearGuardWithin && IsChasingHim(block, distance)) ||
+			(HuggerHeCanShoot(block) && distance < kHudsonPlayHuggerWithin);
+
+		if (chaser && (!nearest || distance < nearestDistance))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (nearest)
+	{
+		saidAt = now;
+		LogString("play: unaimed, with a chaser " + HudsonStrategies_Title(nearest) + " " + std::to_string(nearestDistance) + " mm from him: " + why);
+	}
+}
+
+// The shot's crosshair, for the lane probe's AIM line (Bishop 22:4x: "Why no shot?"): how far off the alien's chest, in tenths of a degree (-1 with none in
+// shooting range), and how long it's been on it (HudsonPlay_AimedWell), in ms. Frost 2026-11-20
+static int crosshairOffBy = -1;
+static int crosshairOnFor = 0;
+
+void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)
+{
+	*offBy = shootingWithin > 0 ? crosshairOffBy : -1;
+	*onFor = crosshairOnFor;
+	*delay = (int)shootingDelay;
+}
+
+// Half a target's width, from its display block's extents (the probe's ext=), for HudsonPlay_OnTarget; 200 mm with none. Frost 2026-11-20
+static int HalfWidthOf(STRATEGYBLOCK const *block)
+{
+	if (!block || !block->SBdptr)
+	{
+		return 200;
+	}
+
+	int const acrossX = block->SBdptr->ObMaxX - block->SBdptr->ObMinX, acrossZ = block->SBdptr->ObMaxZ - block->SBdptr->ObMinZ;
+	int const half = (acrossX < acrossZ ? acrossX : acrossZ) / 2;
+
+	return half < 100 ? 100 : half > 600 ? 600 : half;
+}
+
+static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
+{
+	static DWORD crosshairOnSince = 0;
+	static STRATEGYBLOCK const *crosshairOn = 0;
+
+	if (shootingWithin <= 0 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	STRATEGYBLOCK *nearest = 0;
+	int nearestDistance = -1;
+
+	// rearguard=: the one his view is on, attacking him or not (the owner 22:24: "if an alien comes within 5 meters ... shoot him in 300ms")
+	if (rearGuardWithin > 0 && aimedAt && StillThere(aimedAt) && !IsAsleepOrDead(aimedAt) && aimedAt->DynPtr)
+	{
+		int const distance = DistanceTo(dyn->Position, aimedAt->DynPtr->Position);
+
+		// a facehugger from 10 m (the owner 22:51)
+		if (distance < HudsonPlay_ShootsFrom(aimedAt->I_SBtype == I_BehaviourFaceHugger, shootingWithin))
+		{
+			nearest = (STRATEGYBLOCK *)aimedAt;
+			nearestDistance = distance;
+		}
+	}
+
+	for (int i = 0; i < NumActiveStBlocks && rearGuardWithin <= 0; i++)
+	{
+		STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+		if (!block || block->I_SBtype != I_BehaviourAlien || !block->SBdptr || !block->DynPtr || IsAsleepOrDead(block) || !AttackingHim(block))
+		{
+			continue;
+		}
+
+		int const distance = DistanceTo(dyn->Position, block->DynPtr->Position);
+
+		if (distance < shootingWithin && (nearestDistance < 0 || distance < nearestDistance))
+		{
+			nearest = block;
+			nearestDistance = distance;
+		}
+	}
+
+	if (!nearest)
+	{
+		crosshairOn = 0;
+		crosshairOnSince = 0;
+		crosshairOffBy = -1;
+		crosshairOnFor = 0;
+
+		if (bursting)
+		{
+			EndTheBurst();
+		}
+
+		return;
+	}
+
+	// his crosshair to it, and how long it has been on it
+	VECTORCH chest;
+
+	GetTargetingPointOfObject_Far(nearest, &chest);
+
+	int const toX = chest.vx - dyn->Position.vx, toZ = chest.vz - dyn->Position.vz;
+	int const angleToIt = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+	bool const onIt = HudsonPlay_OnTarget(angleToIt, nearestDistance, HalfWidthOf(nearest));   // its width at its distance (235943)
+
+	crosshairOnSince = onIt && crosshairOn == nearest ? (crosshairOnSince ? crosshairOnSince : now) : 0;
+	crosshairOn = nearest;
+	crosshairOffBy = (angleToIt < 0 ? -angleToIt : angleToIt) * 3600 / kHudsonPlayWholeTurn;
+	crosshairOnFor = crosshairOnSince ? (int)(now - crosshairOnSince) : 0;
+
+	// rearguard=: AimAtTheNearest has turned him already, three times as fast; the plain turn here put him back to 1x within shooting range, just where it mattered
+	bool const turnsHere = rearGuardWithin <= 0;
+
+	if (turnsHere)
+	{
+		status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
+		status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
+		TurnTowards(status, dyn, toX, toZ);
+	}
+
+	LookUpOrDownAt(status, chest);
+
+	// a burst that has begun holds while he's within 3 times the window (HudsonPlay_KeepsFiring; 235943: facer01's lasted one frame)
+	if (!HudsonPlay_ShootNow(nearestDistance, true, crosshairOnSince ? now - crosshairOnSince : 0, shootingWithin, shootingDelay) &&
+		!HudsonPlay_KeepsFiring(bursting && nearest == burstAt, angleToIt))
+	{
+		if (bursting)
+		{
+			EndTheBurst();
+		}
+
+		return;
+	}
+
+	if (bursting && nearest != burstAt)
+	{
+		EndTheBurst();
+	}
+
+	if (!bursting)
+	{
+		bursting = true;
+		burstAt = nearest;
+		memcpy(burstName, nearest->SBname, SB_NAME_LENGTH);
+		burstTitle = HudsonStrategies_Title(nearest);
+		burstAtAHugger = nearest->I_SBtype == I_BehaviourFaceHugger;
+		burstDistance = nearestDistance;
+		burstHealthBefore = nearest->SBDamageBlock.Health;
+	}
+
+	burstHealthAfter = nearest->SBDamageBlock.Health;
+	FireAt(status, chest);
+}
+
+void HudsonPlay_ShootWithin(int within, int delay)
+{
+	shootingWithin = within;
+	shootingDelay = delay > 0 ? (unsigned long)delay : 0;
+}
+
+bool HudsonPlay_LastBurstWasAtAHugger()
+{
+	return burstAtAHugger;
+}
+
+bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died)
+{
+	if (!burstWaiting)
+	{
+		return false;
+	}
+
+	burstWaiting = false;
+	*name = burstName;
+	*distance = burstDistance;
+	*healthBefore = burstHealthBefore;
+	*healthAfter = burstHealthAfter;
+	*died = burstDied;
+	return true;
+}
+
+// DOORS AS WALLS (doorwalls=yes; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run: his way to the levers ran through shdr01 and his way to opslev01
+// through shftdr02, doors that only those switches open). Twice a second: every lift or switch door that isn't open, and every locked proximity door (an unlocked
+// one opens as he comes), is a shut box on his grid, its module's extents and 300 mm round. When the list changes, his grid is told and his way looked for again.
+static bool InTheBox(HudsonGridBox const &box, VECTORCH const &place)
+{
+	return place.vx >= box.minX && place.vx <= box.maxX && place.vy >= box.minY && place.vy <= box.maxY && place.vz >= box.minZ && place.vz <= box.maxZ;
+}
+
+static void LookAtTheDoors(DWORD now)
+{
+	static DWORD lookedAt = 0;
+
+	if (!doorWalls || !HudsonNav_TheGrid().Ready() || now - lookedAt < 500)
+	{
+		return;
+	}
+
+	lookedAt = now;
+
+	std::vector<HudsonGridBox> boxes;
+	std::string said;
+	// a door whose box holds the step's own place isn't shut for that step: he has to get to it (try 5: RAMP-01AB's switch is beside MNDR01)
+	bool const stepHere = !following && stepAt < steps.size();
+	VECTORCH const stepPlace = stepHere ? StepPlace() : VECTORCH{ 0, 0, 0 };
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const block = ActiveStBlockList[i];
+
+		if (!block || !block->SBdataptr || !block->SBmoptr)
+		{
+			continue;
+		}
+
+		bool shut = false;
+
+		if (block->I_SBtype == I_BehaviourLiftDoor)
+		{
+			shut = ((LIFT_DOOR_BEHAV_BLOCK const *)block->SBdataptr)->door_state != I_door_open;
+		}
+		else if (block->I_SBtype == I_BehaviourSwitchDoor)
+		{
+			shut = ((SWITCH_DOOR_BEHAV_BLOCK const *)block->SBdataptr)->doorState != I_door_open;
+		}
+		else if (block->I_SBtype == I_BehaviourProximityDoor)
+		{
+			PROXDOOR_BEHAV_BLOCK const *const door = (PROXDOOR_BEHAV_BLOCK const *)block->SBdataptr;
+
+			shut = door->door_locked && door->door_state != I_door_open;
+		}
+
+		if (!shut)
+		{
+			continue;
+		}
+
+		MODULE const *const module = block->SBmoptr;
+		HudsonGridBox const box = { module->m_world.vx + module->m_minx - 300, module->m_world.vy + module->m_miny - 300, module->m_world.vz + module->m_minz - 300,
+			module->m_world.vx + module->m_maxx + 300, module->m_world.vy + module->m_maxy + 300, module->m_world.vz + module->m_maxz + 300 };
+
+		if (stepHere && InTheBox(box, stepPlace))
+		{
+			continue;
+		}
+
+		boxes.push_back(box);
+		said += (said.empty() ? "" : ", ") + HudsonStrategies_Title(block);
+	}
+
+	// and the steps he couldn't get onto (LearnAShutStep)
+	boxes.insert(boxes.end(), learnedShut.begin(), learnedShut.end());
+	said += learnedShutSaid;
+
+	if (said == shutDoorsSaid)
+	{
+		return;
+	}
+
+	DWORD const startedAt = GetTickCount();
+
+	shutDoorsSaid = said;
+	HudsonNav_TheGridToSearch().SetShut(boxes);
+	reachedFromALanding.clear();   // the doors changed: what each lift landing reaches is worked out again (the 22:20 run stopped at step 15 on old marks)
+	noLiftHelps = false;           // and a lift may help now where it didn't
+	LogString("play: doors: " + std::to_string((int)boxes.size()) + " shut (" + (said.empty() ? std::string("none") : said) + "), " +
+		std::to_string((int)HudsonNav_TheGrid().ShutPlaces()) + " places of his grid left out, in " + std::to_string((unsigned long)(GetTickCount() - startedAt)) + " ms");
+
+	if (phase == kWalking && !following)
+	{
+		StartFindingTheWay(Player->ObStrategyBlock->DynPtr->Position);
+	}
+}
+
+void HudsonPlay_DoorWalls(bool walls)
+{
+	doorWalls = walls;
+}
+
+void HudsonPlay_RibbonOff(bool off)
+{
+	ribbonOff = off;
+}
+
+void HudsonPlay_RearGuard(int within)
+{
+	rearGuardWithin = within > 0 ? within : 0;
+	chaseSamples.clear();
+
+	if (rearGuardWithin > 0)
+	{
+		double const fullDegrees = (double)kTurnsAtFull * 360.0 / (double)kHudsonPlayWholeTurn;
+
+		LogString("play: rear guard within " + std::to_string(rearGuardWithin) + " mm: his aim turned a quarter of the angle a frame, at most " +
+			std::to_string((int)fullDegrees) + " deg/s (the game's full key turn); now three times that, at most " + std::to_string((int)(3.0 * fullDegrees)) +
+			" deg/s. He sprints (no slowing for bends) and runs his way backwards as fast as forwards: a marine's backward run isn't halved (pmove.cpp halves only a" +
+			" Predator's), the same " + std::to_string(15000) + " mm/s (MARINE_MOVESCALE). He faces only an alien chasing him (after him in Approach, Hunt or Attack," +
+			" or nearer by " + std::to_string(kHudsonPlayClosingBy) + " mm in half a second): on the ceiling first, then a wall, then the floor; with none, he faces his way");
+	}
+}
+
+void HudsonPlay_ShowStatus(bool show)
+{
+	showingStatus = show;
+}
+
+// The game's drawing asks for this every frame (d3d_render.cpp DrawTheStatusLineOfHudsonsPlay), so it starts asleep like every way into Hudson the game
+// names (tools/check-hudson-asleep.ps1, rule 4): with no run it gives "" before it reads anything of Hudson's. (Modified 2026-11-21 by
+// Melanikus (Frost): it read showingStatus first, which only a run can set, but the check rightly refused a way in that doesn't say so itself.)
+char const *HudsonPlay_StatusLine()
+{
+	if (!HudsonRunIsOn || !showingStatus || (steps.empty() && !following))
+	{
+		return "";
+	}
+
+	return statusLine;
+}
+
+// THE STATUS LINE (status=on; Frost 2026-11-20, the owner: "He got stuck now and I have no feedback why"): his step of the list, its kind and target, and what he's
+// doing now, with the time left before the step limit moves him
+static void SayTheStatus(DWORD now)
+{
+	if (!showingStatus)
+	{
+		return;
+	}
+
+	std::string doing;
+
+	if (phase == kFinishedTheList)
+	{
+		doing = "done: he has been down his whole list";
+	}
+	else if (phase == kWaitingForTheGrid)
+	{
+		doing = HudsonNav_NewGridIsBuilding() ? "a new grid is being made (a prop broke)" : "his grid is being made";
+	}
+	else if (rideStage != kNotRiding && rideLift >= 0 && rideLift < (int)lifts.size())
+	{
+		std::string const lift = HudsonStrategies_Title(lifts[(size_t)rideLift].car);
+
+		doing = rideStage == kWalkingToTheLift ? "walking to " + lift : rideStage == kWaitingForTheCar ? "waiting for " + lift + "'s car" :
+			rideStage == kGettingOn ? "getting on " + lift : rideStage == kRiding ? "riding " + lift : "getting off " + lift;
+	}
+	else if (now - waitingForAWayAt < 500)
+	{
+		doing = "no way on my grid - waiting";
+	}
+	else if (bursting)
+	{
+		doing = "shooting " + burstTitle;
+	}
+	else if (std::string(holdWord) != "-")
+	{
+		doing = std::string(holdWord) == "back" ? "backing off an alien" : "holding his ground";
+	}
+	else
+	{
+		doing = phase == kFindingTheWay ? "looking for a way" : phase == kDoingTheStep ? "doing it" : "walking";
+	}
+
+	std::string said = following ? std::string("following: ") + doing : std::to_string((int)(stepAt + 1)) + "/" + std::to_string((int)steps.size()) + " " + StepTitle() + ": " + doing;
+
+	if (!following && stepAt < steps.size() && phase != kFinishedTheList && !movedToThisStep && now - stepStartedAt < aStepHasTakenTooLong)
+	{
+		said += ", step limit in " + std::to_string((int)((aStepHasTakenTooLong - (now - stepStartedAt)) / 1000)) + " s";
+	}
+
+	_snprintf(statusLine, sizeof(statusLine) - 1, "%s", said.c_str());
+	statusLine[sizeof(statusLine) - 1] = 0;
+}
+
+void HudsonPlay_AimAtTheNearest(bool aim)
+{
+	aimingAtTheNearest = aim;
+}
+
+void HudsonPlay_HoldHisGround(bool hold)
+{
+	holdingHisGround = hold;
+}
+
+void HudsonPlay_CrouchAnywhere(bool crouch)
+{
+	crouchingAnywhere = crouch;
+}
+
+bool HudsonPlay_AimsOrHolds()
+{
+	return aimingAtTheNearest || holdingHisGround;
+}
+
+void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold)
+{
+	*distance = aimedAt ? aimedAtDistance : 0;
+	*seen = aimedAt ? aimedAtSeen : false;
+	*hold = holdWord;
+	return aimedAt;
+}
+
 void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 {
 	PLAYER_STATUS *const status = (PLAYER_STATUS *)playerStatus;
@@ -2966,6 +4324,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 	}
 
 	KeepHimAlive(status, now);
+	SayTheStatus(now);
 	AddToTheTrail();
 	SayThisSecond(status, now);
 	SeeToHisGun(status);
@@ -2987,6 +4346,23 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 		if (HudsonNav_TheGridIsStillBuilding())
 		{
 			return;
+		}
+
+		// doorwalls=yes: a new grid after a prop broke, swapped in once it's built; the lifts' reach and the shut doors are worked out again for its places
+		if (HudsonNav_NewGridIsBuilding())
+		{
+			unsigned long took = 0;
+
+			if (!HudsonNav_TookTheNewGrid(&took))
+			{
+				return;
+			}
+
+			LogString("play: the new grid is in, after " + std::to_string(took) + " ms");
+			liftsAreKnown = false;
+			rideStage = kNotRiding;
+			shutDoorsSaid.clear();
+			reachedFromALanding.clear();   // a new grid: its places are new, so the landings' reach is worked out again
 		}
 
 		if (!HudsonNav_TheGrid().Ready())
@@ -3021,6 +4397,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 
 	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
 
+	// doorwalls=yes: shut doors are walls on his grid, and his way is looked for again when one changes
+	LookAtTheDoors(now);
+
 	switch (phase)
 	{
 		case kStartingAStep:
@@ -3042,14 +4421,57 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			ridesThisStep = 0;
 			SayAboutTheStep(StepTitle());
 
-			if (!target)
+			// TELEPORT (the full Genshd1 run, Frost 2026-11-20; Bishop: "ride it if he can, otherwise teleport to its far stop, and log it"): he's put on the floor
+			// nearest the place, a logged cheat, and goes on; its name says why (liftcar01's car has no landing at its foot, so he can't board it)
+			if (step.kind == kHudsonPlayMoveTo)
+			{
+				HudsonGridPoint floor;
+				VECTORCH const place = StepPlace();
+				HudsonGridPoint const asGiven = { place.vx, place.vy, place.vz };
+
+				MoveHimToTheFloorAt(FindTheFloorNear(place, &floor) ? floor : asGiven, "the list says so: " + step.name, now);
+				NextStep(true);
+				break;
+			}
+
+			// DROP (Frost 2026-11-20, the full run: the drop through Genshd1's glass, which his grid didn't join even after its new grid): straight at the place, no
+			// grid, till he has fallen 2 m or is there (DoTheDrop)
+			if (step.kind == kHudsonPlayDrop)
+			{
+				dropStartedAt = now;
+				dropStartY = here.vy;
+				GetToDoingTheStep(now, "he walks straight off the edge, for ");
+				break;
+			}
+
+			// JUMP (Frost 2026-11-20, the bypass dais): straight at the place, no grid, jumping up onto it (DoTheJump)
+			if (step.kind == kHudsonPlayJumpUp)
+			{
+				jumpStartedAt = now;
+				jumpedAt = 0;
+				GetToDoingTheStep(now, "he goes straight at it to jump up, for ");
+				break;
+			}
+
+			// a goto is a place and nothing else: no object of its name is looked for (the lane probe v3)
+			if (!target && step.kind != kHudsonPlayGoTo)
 			{
 				SayAboutTheStep("there's nothing called " + step.name + " here, so he goes on");
 				NextStep(false);
 				break;
 			}
 
-			stateBefore = HudsonStrategies_State(target);
+			stateBefore = target ? HudsonStrategies_State(target) : std::string();
+			targetHealthAtStart = target ? target->SBDamageBlock.Health : 0;   // for HudsonPlay_TargetIsGone (a one-hit Static has none)
+
+			// a pickup: where it really is, against the list's place (Bishop on 235943: the 90 s move put him 15 m from bypass's listed place)
+			if (step.kind == kHudsonPlayPickUp && target && target->DynPtr)
+			{
+				VECTORCH const where = target->DynPtr->Position;
+
+				SayAboutTheStep(step.name + " is at " + PlaceWords(where) + ", " + std::to_string(DistanceTo(where, StepPlace())) + " mm from the list's place" +
+					(target->SBdptr ? std::string() : std::string(", not drawn")));
+			}
 			StartFindingTheWay(here);
 			break;
 		}
@@ -3074,7 +4496,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 				&& otherPlayer->DynPtr->Position.vy - here.vy <= kSameLevelWithin && here.vy - otherPlayer->DynPtr->Position.vy <= kSameLevelWithin))
 			{
 				HudsonPlayStep const *const step = following ? 0 : &steps[stepAt];
-				bool const staysPut = step && (step->kind == kHudsonPlayPress || step->kind == kHudsonPlayWalkInto);
+				bool const staysPut = step && (step->kind == kHudsonPlayPress || step->kind == kHudsonPlayWalkInto || step->kind == kHudsonPlayGoTo);
 				VECTORCH const there = following ? otherPlayer->DynPtr->Position : staysPut ? StepPlace() : WhereItIs(HudsonStrategies_Find(step->name.c_str()), StepPlace());
 
 				if (TryALift(here, there, now))
@@ -3099,6 +4521,12 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 				break;
 			}
 
+			// a pickup gone on his way is done (PickedUpOnHisWay)
+			if (PickedUpOnHisWay())
+			{
+				break;
+			}
+
 			if (following)
 			{
 				FollowHim(status, now);
@@ -3117,6 +4545,31 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 		default:
 			break;
 	}
+
+	// aimnearest=yes: his view on the nearest alien, except while he's doing a step (a press waits until he faces its switch: the full run's try 2 stood at genlev04
+	// for 240 s); then a flare that's due turns it to the one it's thrown at, for those frames
+	// and not while he gets on a lift's car, rides it or gets off: he has to face the landing. Everywhere else it's on: stuck, unsticking, waiting at a door, walking
+	// to a lift or waiting for its car (Bishop 22:4x: the 22:36 run's aim was off for the whole walk to liftplt's landing, and 35 of 46 hits on him came then)
+	// and through every step but a press's or a destroy's even seconds, when it faces its switch or its glass (HudsonPlay_StepTakesHisView; Bishop 23:4x)
+	bool const pressOrDestroy = phase == kDoingTheStep && !following && stepAt < steps.size() &&
+		(steps[stepAt].kind == kHudsonPlayPress || steps[stepAt].kind == kHudsonPlayDestroy);
+
+	if (rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff && !HudsonPlay_StepTakesHisView(pressOrDestroy, now))
+	{
+		AimAtTheNearest(status);
+	}
+	else
+	{
+		// the step's second: the aim lets go, so the shot doesn't take his view either
+		aimedAt = rideStage == kNotRiding ? 0 : aimedAt;
+		SayIfUnaimedWithAChaser(now, rideStage != kNotRiding ? std::string("he's on a lift's car") : "this second is the step's, to face " + steps[stepAt].name);
+	}
+
+	// shootwithin=: he fires at the close one, after its reaction delay (the owner 21:27)
+	ShootTheCloseOne(status, now);
+
+	// last, so that turning to an alien for a flare is what this frame does with his view; his feet still go along his way
+	FlareAtAnAlien(status, now);
 }
 
 int HudsonPlay_EndOfFrame(const char **howItEnded)
@@ -3230,6 +4683,63 @@ void HudsonPlay_KeepHimAliveWhileHeWaits(void *playerStatus)
 	}
 }
 
+void HudsonPlay_HoldFire(bool hold)
+{
+	holdingFire = hold;
+}
+
+void HudsonPlay_ThrowFlares(bool throwThem)
+{
+	throwingFlares = throwThem;
+}
+
+bool HudsonPlay_FinishedTheList()
+{
+	return phase == kFinishedTheList;
+}
+
+// The k-th place of his grid's way ahead of him, and how far along the way it is from where he stands (supplyat=ahead, the moving full-run supply). Frost 2026-11-21
+bool HudsonPlay_WayPointAhead(int k, int *x, int *y, int *z, int *along)
+{
+	if (k < 0 || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr || phase == kStopped || phase == kFinishedTheList || wayAt + (size_t)k >= way.size())
+	{
+		return false;
+	}
+
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	double sum = 0.0, fromX = here.vx, fromZ = here.vz;
+
+	for (size_t i = wayAt; i <= wayAt + (size_t)k; i++)
+	{
+		double const dx = way[i].x - fromX, dz = way[i].z - fromZ;
+
+		sum += sqrt(dx * dx + dz * dz);
+		fromX = way[i].x;
+		fromZ = way[i].z;
+	}
+
+	*x = way[wayAt + (size_t)k].x;
+	*y = way[wayAt + (size_t)k].y;
+	*z = way[wayAt + (size_t)k].z;
+	*along = (int)sum;
+	return true;
+}
+
+bool HudsonPlay_PlaceAhead(int k, int *x, int *y, int *z)
+{
+	size_t const at = stepAt + (size_t)(k < 0 ? 0 : k);
+
+	if (phase == kStopped || phase == kFinishedTheList || at >= steps.size())
+	{
+		return false;
+	}
+
+	*x = steps[at].x;
+	*y = steps[at].y;
+	*z = steps[at].z;
+	return true;
+}
+
 void HudsonPlay_SetStepSeconds(int seconds)
 {
 	// The plan reader only takes 10 to 600; anything else here keeps the usual limit, so a mistake can't make a step endless or instant
@@ -3243,6 +4753,6 @@ void HudsonPlay_HoldGun(int slot)
 
 void HudsonPlay_ForTheResult(char *line, int size)
 {
-	_snprintf(line, size - 1, "play_steps=%d play_steps_worked=%d play_cheats=%d play_stray_most=%d play_stray_average=%d play_big_turns=%d play_stuck_times=%d play_stuck_seconds=%.1f play_waits=%d play_waited_seconds=%.1f play_rides=%d", (int)steps.size(), stepsThatWorked, cheatsUsed, strayMost, strayFrames ? (int)(strayAdded / strayFrames) : 0, bigTurns, stuckTimes, stuckMilliseconds / 1000.0, waitsDone, waitedMilliseconds / 1000.0, ridesDone);
+	_snprintf(line, size - 1, "play_steps=%d play_steps_worked=%d play_cheats=%d play_stray_most=%d play_stray_average=%d play_big_turns=%d play_stuck_times=%d play_stuck_seconds=%.1f play_waits=%d play_waited_seconds=%.1f play_rides=%d play_flares=%d", (int)steps.size(), stepsThatWorked, cheatsUsed, strayMost, strayFrames ? (int)(strayAdded / strayFrames) : 0, bigTurns, stuckTimes, stuckMilliseconds / 1000.0, waitsDone, waitedMilliseconds / 1000.0, ridesDone, flaresAtAliens);
 	line[size - 1] = 0;
 }

@@ -30,6 +30,10 @@
 //   the level editor's missing pictures: R_SetEditorDrawPolylines, R_SetEditorCountMissingPictures, R_EditorMissingPictures
 // Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
 //   the level editor's polygon view distance: R_SetEditorFarPlane; Prefer .BMP over .RIM: R_SetEditorPreferBmp
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   the level editor's world lines: up to kEditorWorldLinesMost, 524288 (it was 4096)
+// Modified 2026-11-21 by Melanikus (Frost) for the AvP port:
+//   the level editor's views for the live plot: R_SetEditorWorldLinesSlot, R_EditorFlushWorldWithLines, R_SetEditorFinalLinesSlot, R_EditorClearBox
 
 #ifndef _renderer_h_
 #define _renderer_h_
@@ -107,6 +111,12 @@ bool R_UnsetVertexShader();
 
 // pixel shader functions
 bool R_CreatePixelShader  (const std::string &fileName, r_PixelShader &pixelShader);
+
+// Where a shader's text comes from (AVP_OpenInteng, its shaders baked in, 2026-11-19). Unset, as the game leaves it: the file shaders/<name>, as always. Set, only by the
+// level editor's own code (never by a setting): it gives the text of <name>, a .vsh, a .psh or an .fxh one of them includes, and its length in bytes, or false when it has
+// none, which fails that shader as a missing file does. No file is read then; the compile is the same call in its in-memory form, with the same entry, profile and flags.
+typedef bool (*R_ShaderTextSource)(const char *name, const char **text, size_t *length);
+void R_SetShaderTextSource(R_ShaderTextSource source);
 bool R_SetPixelShader     (r_PixelShader &pixelShader);
 void R_ReleasePixelShader (r_PixelShader &pixelShader);
 bool R_SetPixelShaderConstant (r_PixelShader &pixelShader, uint32_t registerIndex, enum SHADER_CONSTANT type, const void *constantData);
@@ -193,7 +203,10 @@ struct EditorOrthoLine
 	unsigned int colour;
 };
 void R_SetEditorOrthoLines		(const EditorOrthoLine *lines, int count);
-// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to 4096; count 0 none. They are
+// The most lines R_SetEditorWorldLines takes; more are left out. The waypoint display draws every AI module's boxes and links at once (genshd1 v2d: about 235,000 lines);
+// the editor's side (level_view.cpp) keeps to the same number. It was 4096. (Frost 2026-11-19, the owner's waypoint display.)
+static const int kEditorWorldLinesMost = 524288;
+// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to kEditorWorldLinesMost; count 0 none. They are
 // drawn in the last drawing of a frame, after the whole level is in the depth buffer, so a wall hides a line behind it, about three pixels wide, and everything the drawing changes on the card is
 // put back. EDITOR ONLY: the game never calls this, and with no lines set no game draw path does anything different. Added 2026-11-15 by Melanikus (Drake) for the AvP port (the waypoint boxes and the
 // entry-point markers of the level editor's Waypoint mode).
@@ -224,6 +237,19 @@ void R_SetEditorMainViewport	(bool on, int x, int y, int width, int height);
 // Editor-only: draws everything waiting in the lists NOW, into the box set by R_SetEditorMainViewport, and starts them again (the frame stays open). The editor's split screen draws each extra
 // camera's world this way inside one frame, then the main view as usual. Does nothing when no frame is open.
 void R_EditorFlushWorld			(void);
+// THE LIVE PLOT'S VIEWS, editor only (Frost 2026-11-21, the owner: "I want to see the modules updating on the map as they are build and the little image should show
+// progress as volumes are being placed on it"). The editor's lines are kept in two slots: 0 is R_SetEditorWorldLines' own list (R_SetEditorWorldLines(l, n) is
+// R_SetEditorWorldLinesSlot(0, l, n)), 1 a second list for a view drawn after the main view. Each slot keeps its own copy on the card, sent again only when its lines
+// change. A slot outside 0..1 is refused. With none of these called, every drawing is as before: the frame's last drawing draws slot 0, an early drawing draws none.
+void R_SetEditorWorldLinesSlot	(int slot, const EditorWorldLine *lines, int count);
+// As R_EditorFlushWorld (everything waiting drawn now, into the box set by R_SetEditorMainViewport, with the view drawn last), and with this slot's lines, so the main view
+// keeps its lines when another view is drawn after it in the same frame. Does nothing when no frame is open.
+void R_EditorFlushWorldWithLines	(int slot);
+// Which slot the frame's last drawing draws: 0 at the start (as before), 1, or -1 for none. Anything else changes nothing.
+void R_SetEditorFinalLinesSlot	(int slot);
+// Clears this box of the window now (x, y, width, height in pixels), colour (ARGB) AND depth, so a view drawn after the main view isn't hidden by the main view's walls.
+// Only in an open frame, only inside the window. For the live plot: the main view flushed with its lines, then this box cleared, then the inset drawn into it.
+void R_EditorClearBox			(int x, int y, int width, int height, unsigned int colour);
 // The level editor's Untextured: every polygon of the level is drawn with one plain texel of the colour given (ARGB), so it is as the level's light makes it,
 // whatever the draw mode. Off (false) draws the textures as the game does. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
 void R_SetEditorUntextured		(bool on, unsigned int colour);

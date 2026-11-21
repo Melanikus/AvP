@@ -97,6 +97,11 @@
       <!-- /MD: the C runtime comes from Microsoft's own DLLs, as the game's does. The game and this DLL each keep their own memory: the game
            passes its own buffers in, and the encoder hands back what it made for Smacker_FreeEncoded to free. -->
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <!-- /Brepro: the same source and the same compiler make the same bytes (no time or random number written into the objects). The
+           editor pins this DLL's SHA-256 into its build, so an exe built later from the same avpx still loads the DLL built before.
+           /pathmap (which needs /experimental:deterministic) names the library's folder libsmackerenc wherever it is checked out: the
+           encoder's code layout followed the checkout's path text (one path gave other bytes, every time) until it did. -->
+      <AdditionalOptions>/Brepro /experimental:deterministic /pathmap:$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))\=\libsmackerenc\ %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <!-- Symbols: a .pdb and a .map beside the library, so the place of a crash can be named. They stay with the build and are
@@ -106,7 +111,9 @@
            symbols. -->
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
+      <!-- /Brepro: the library's time stamp and its .pdb's GUID come from its contents, not the clock, so two links of the same objects are
+           the same bytes (two builds from two worktrees gave the same SHA-256; without it, two from one folder already differed). -->
+      <AdditionalOptions>/PDBALTPATH:%_PDB% /Brepro %(AdditionalOptions)</AdditionalOptions>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>../smackerenc.def</ModuleDefinitionFile>

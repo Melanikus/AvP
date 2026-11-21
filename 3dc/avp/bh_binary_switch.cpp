@@ -24,6 +24,7 @@
 #include "plat_shp.h"
 #include "psnd.h"
 #include "near_wake_game.h"
+#include "stock_flags.h"   // NEARWAKE (Vasquez 2026-11-20)
 
 extern int ReturnPlayerSecurityClearance(STRATEGYBLOCK *sbPtr, unsigned int securityLevel);
 
@@ -331,7 +332,8 @@ void BinarySwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		// The sleeping NPCs this box wakes
 		NearWakeSleepers sleepers;
 
-		if (NearWake_ThisMachineRunsNpcs())
+		// NEARWAKE off: no sleeper looked for, only the walk-in box wakes one, as in 1999 (stock_flags.h)
+		if (NearWakeOn && NearWake_ThisMachineRunsNpcs())
 		{
 			NearWake_FindSleepers(sbptr, &bs_bhv->trigger_volume_min, &bs_bhv->trigger_volume_max, &sleepers);
 		}
