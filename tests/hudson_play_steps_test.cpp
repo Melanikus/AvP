@@ -556,6 +556,11 @@ static void TestAimAndHold()
 		play.find("if (phase != kDoingTheStep)\n\t{\n\t\tAimAtTheNearest(status);") != std::string::npos, "the aim leaves his view to a step he's doing (a press faces its switch)");
 	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
 	Check(play.find("ShootTheCloseOne(status, now);") != std::string::npos, "each frame he may shoot the close one (shootwithin=), after the aim and before a flare");
+	// The full run's try 5 (Frost 2026-11-20): stepping onto liftplt's car, a frame with no collision report with the car read as "the car went before he was on it",
+	// so he went back to waiting and walked off the rising car into hole02. Over the car and at its top counts as on it
+	Check(play.find("if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))") != std::string::npos, "getting on, he's on the car when he's over it at its top, touching or not");
+	Check(play.find("return n >= 0 && OnTheCarNow(lifts[(size_t)n]) &&") != std::string::npos || play.find("OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp") != std::string::npos,
+		"and on a moving car by the same test he doesn't walk");
 	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
 		"and he holds his ground only while the one ahead is attacking him (the owner 21:33: else he keeps moving)");
 	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
