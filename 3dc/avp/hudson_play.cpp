@@ -391,6 +391,7 @@ static char const *KindWord(HudsonPlayKind kind)
 		case kHudsonPlayGoTo: return "go to";
 		case kHudsonPlayMoveTo: return "be moved to";
 		case kHudsonPlayDrop: return "drop to";
+		case kHudsonPlayJumpUp: return "jump up onto";
 		default: return "kill";
 	}
 }
@@ -1365,6 +1366,10 @@ static bool HoldingHisGround(PLAYER_STATUS *status, DYNAMICSBLOCK const *dyn, Hu
 // The drop step's start (DoTheDrop)
 static DWORD dropStartedAt = 0;
 static int dropStartY = 0;
+
+// The jump step's start, and his last jump (DoTheJump)
+static DWORD jumpStartedAt = 0;
+static DWORD jumpedAt = 0;
 
 // His grid knows no way to the step yet: he stands at the end of the way it has, and looks again every 10 s (a door can open: doorwalls=yes looks again at once).
 // Not being stuck. Frost 2026-11-20, in place of the lift rescue's long moves
@@ -3026,6 +3031,42 @@ static void DoTheDrop(PLAYER_STATUS *status, DWORD now)
 	WalkForward(status);
 }
 
+// JUMP (Frost 2026-11-20; Drake 23:2x: bypass rests on a dais in med02, 780 mm tall with four vertical faces and no ramp, and a player jumps up onto it; every full
+// run ended that step with the 90 s move): straight at the place, no grid, jumping when he's within 1.2 m of it across and on the floor (once a second at most), till
+// he's up there: within 600 mm across, on the floor, a step or less under its height. 15 s at most
+static void DoTheJump(PLAYER_STATUS *status, DWORD now)
+{
+	HudsonPlayStep const &step = steps[stepAt];
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	int const toX = step.x - dyn->Position.vx, toZ = step.z - dyn->Position.vz;
+	int const across = (int)sqrt((double)toX * toX + (double)toZ * toZ);
+	int const below = dyn->Position.vy - step.y;   // y goes down: how far under the place his feet are
+
+	if (across <= 600 && below <= kHudsonGridStepUp && dyn->IsInContactWithFloor)
+	{
+		SayAboutTheStep("he jumped up onto " + step.name + ", " + std::to_string(across) + " mm across from the place");
+		NextStep(true);
+		return;
+	}
+
+	if (now - jumpStartedAt >= 15000)
+	{
+		SayAboutTheStep("he couldn't jump up onto " + step.name + " in 15 s, so he goes on");
+		NextStep(false);
+		return;
+	}
+
+	TurnTowards(status, dyn, toX, toZ);
+	WalkForward(status);
+
+	if (dyn->IsInContactWithFloor && across <= 1200 && below > kHudsonGridStepUp && now - jumpedAt >= 1000)
+	{
+		status->Mvt_InputRequests.Flags.Rqst_Jump = 1;
+		jumpedAt = now;
+		SayAboutTheStep("he jumps, " + std::to_string(across) + " mm across from " + step.name + " and " + std::to_string(below) + " mm under it");
+	}
+}
+
 static void DoThePress(PLAYER_STATUS *status, DWORD now)
 {
 	HudsonPlayStep const &step = steps[stepAt];
@@ -3208,6 +3249,10 @@ static void DoTheStep(PLAYER_STATUS *status, DWORD now)
 		// a place: done once he's there (the grid's way went all the way), or as near as the grid knows, which doesn't count as done
 		case kHudsonPlayDrop:
 			DoTheDrop(status, now);
+			break;
+
+		case kHudsonPlayJumpUp:
+			DoTheJump(status, now);
 			break;
 
 		case kHudsonPlayGoTo:
@@ -4205,6 +4250,15 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 				dropStartedAt = now;
 				dropStartY = here.vy;
 				GetToDoingTheStep(now, "he walks straight off the edge, for ");
+				break;
+			}
+
+			// JUMP (Frost 2026-11-20, the bypass dais): straight at the place, no grid, jumping up onto it (DoTheJump)
+			if (step.kind == kHudsonPlayJumpUp)
+			{
+				jumpStartedAt = now;
+				jumpedAt = 0;
+				GetToDoingTheStep(now, "he goes straight at it to jump up, for ");
 				break;
 			}
 

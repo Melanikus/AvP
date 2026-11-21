@@ -134,7 +134,7 @@ static void TestBadFiles()
 	Refused(std::string("press 1 2 3 | a\x7f" "b\n"), "line 1: that can't be a name");
 	Refused(std::string("press 1 2 3 | a\xc3\xa9\n"), "line 1: that can't be a name");
 	Refused("press 1 2 3 | a | b\n", "line 1: that can't be a name");
-	Refused("jump 1 2 3 | a\n", "line 1: this file doesn't use that word");
+	Refused("leap 1 2 3 | a\n", "line 1: this file doesn't use that word");   // ("jump" is a step now: the bypass dais, Frost 2026-11-20)
 	Refused("Press 1 2 3 | a\n", "line 1: this file doesn't use that word");
 	Refused(" | a\n", "line 1: this file doesn't use that word");
 	Refused(std::string("\xef\xbb\xbfpress 1 2 3 | a\n"), "line 1: this file doesn't use that word");
