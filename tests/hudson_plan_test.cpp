@@ -2795,6 +2795,20 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY GATE f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "lastMade->ceilingFrames > 0"),
 		"which makes the next one only once the last one made has been on a ceiling, and says so");
 	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyGate) { $arguments += \" supplygate=ceiling\" }"), "the run script can ask for it");
+	// shootwithin=MM shootdelay=MS (the owner 21:27: "I want hudson to start shooting only if he's less than 4m away with a delay of 500ms"): he fires at the nearest alien
+	// once one has been that close for that long, and holds his fire otherwise; a SHOT line a burst
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes shootwithin=4000 shootdelay=500", &plan) == 0 && plan.shootWithin == 4000 && plan.shootDelay == 500,
+		"he can shoot what comes within 4 m, after half a second");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.shootWithin == 0, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=999", kHudsonRefusedShootWithinOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=20001", kHudsonRefusedShootWithinOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=4000 shootdelay=5001", kHudsonRefusedShootDelayOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootdelay=500", kHudsonRefusedShootDelayWithoutWithin);
+	Refused("-hudson level=genshd1 frames=9000 shootwithin=4000", kHudsonRefusedShootWithinWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=4000 shootwithin=4000", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ShootWithin(plan.shootWithin, plan.shootDelay);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SHOT f=\""), "the lane probe writes a SHOT line a burst");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($ShootWithin -gt 0) { $arguments += \" shootwithin=$ShootWithin shootdelay=$ShootDelay\" }"), "the run script can ask for it");
 	// crouchanywhere=yes (Frost 11-20: shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a crouched marine fits
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes crouchanywhere=yes", &plan) == 0 && plan.playCrouchAnywhere, "his way can go wherever he fits crouched");
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playCrouchAnywhere, "and doesn't unless asked");

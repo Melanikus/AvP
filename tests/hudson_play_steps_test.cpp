@@ -535,6 +535,13 @@ static void TestAimAndHold()
 	Check(HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest - 1) == kHudsonPlayWalkOn && HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest) == kHudsonPlayStand,
 		"and holds again only after 2 s, under the snowplow check's 3 s");
 
+	// SHOOTING THE CLOSE ONE (shootwithin=, shootdelay=; the owner 21:27: "I want hudson to start shooting only if he's less than 4m away with a delay of 500ms"): he
+	// fires at the nearest alien once one has been within shootwithin for shootdelay (a player's reaction), and holds his fire otherwise
+	Check(HudsonPlay_ShootNow(3900, 500, 4000, 500), "an alien 3.9 m off for half a second: he fires");
+	Check(!HudsonPlay_ShootNow(3900, 499, 4000, 500), "not before the half second is up");
+	Check(!HudsonPlay_ShootNow(4000, 900, 4000, 500) && !HudsonPlay_ShootNow(-1, 900, 4000, 500), "nor at one 4 m off or more, nor with none");
+	Check(HudsonPlay_ShootNow(100, 0, 4000, 0), "with no delay asked, at once");
+
 	std::string play;
 
 	Check(ReadWholeFile("3dc/avp/hudson_play.cpp", &play), "3dc/avp/hudson_play.cpp is there");
@@ -546,6 +553,7 @@ static void TestAimAndHold()
 	Check(play.find("if (phase != kDoingTheStep)\r\n\t{\r\n\t\tAimAtTheNearest(status);") != std::string::npos ||
 		play.find("if (phase != kDoingTheStep)\n\t{\n\t\tAimAtTheNearest(status);") != std::string::npos, "the aim leaves his view to a step he's doing (a press faces its switch)");
 	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
+	Check(play.find("ShootTheCloseOne(status, now);") != std::string::npos, "each frame he may shoot the close one (shootwithin=), after the aim and before a flare");
 	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
 }
 
