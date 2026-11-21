@@ -1595,11 +1595,27 @@ static int TheLiftHesOn()
 }
 
 // Is he standing on a platform lift's car while it goes up or down?
+// Is he on this lift's car now: touching it, or over it with his feet within 600 mm of its top? A frame can come with no collision report with the car (the full
+// run's try 5: that read as "the car went before he was on it", and he walked off the rising car into hole02). Frost 2026-11-20
+static bool OnTheCarNow(Lift const &lift)
+{
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	int const carTop = lift.car->DynPtr->Position.vy + (lift.ends[0].standY - lift.ends[0].carY);
+
+	return TouchingTheCar(lift) || (OverTheCar(lift, here) && here.vy - carTop <= 600 && carTop - here.vy <= 600);
+}
+
 static bool OnACarThatsMoving()
 {
-	int const n = TheLiftHesOn();
+	for (Lift const &lift : lifts)
+	{
+		if (OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp || CarOf(lift)->state == PLBS_GoingDown))
+		{
+			return true;
+		}
+	}
 
-	return n >= 0 && (CarOf(lifts[(size_t)n])->state == PLBS_GoingUp || CarOf(lifts[(size_t)n])->state == PLBS_GoingDown);
+	return false;
 }
 
 // Is a place over a car that isn't stopped level with this height? Walking there would be walking into the shaft.
@@ -1847,7 +1863,7 @@ static bool RidingALift(PLAYER_STATUS *status, DWORD now)
 			// At the far side, where his whole square is on the car
 			int const onWithin = 300;
 
-			if (!CarIsStoppedAt(lift, rideFrom) && !TouchingTheCar(lift))
+			if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))
 			{
 				// It went before he was on it. He stops at once, which leaves him on the landing, and waits for it to come back.
 				SetRideStage(kWaitingForTheCar, "the car went before he was on it, so he stops, and waits for the car again", now);
