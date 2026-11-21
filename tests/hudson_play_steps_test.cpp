@@ -619,6 +619,15 @@ static void TestAimAndHold()
 	Check(play.find("bool const turnsHere = rearGuardWithin <= 0;") != std::string::npos, "the rear guard's turn isn't slowed by the shot");
 	// and why there's no shot (Bishop: "Log the crosshair-on time against the 300 ms each frame he's aimed"): how far off his crosshair is, and for how long it's been on
 	Check(play.find("void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)") != std::string::npos, "the shot's crosshair facts, for the AIM line");
+	// A BURST THAT HOLDS (the full run 2026-11-20-235943: facer01 had his crosshair 328 ms at 3.2 m, the burst began, and ended the next frame when its leap put the
+	// crosshair past the 5.3 degree window: "5.0 -> 5.0, alive"; the 300 ms began again at every wobble and it latched at 1.1 m): a burst goes on while his crosshair
+	// is within 3 times the window, and he's on a target when the miss across is under its half-width at its distance, not only within the window
+	Check(HudsonPlay_KeepsFiring(true, 170) && HudsonPlay_KeepsFiring(true, -170) && !HudsonPlay_KeepsFiring(true, 200) && !HudsonPlay_KeepsFiring(false, 10),
+		"a burst holds within 3 times the window, and only one that has begun");
+	Check(HudsonPlay_OnTarget(100, 1100, 200) && !HudsonPlay_OnTarget(100, 3200, 200) && HudsonPlay_OnTarget(50, 9000, 200) && !HudsonPlay_OnTarget(-300, 1100, 200),
+		"on target: within the window, or a miss across under its half-width");
+	Check(play.find("HudsonPlay_KeepsFiring(bursting && nearest == burstAt, angleToIt)") != std::string::npos &&
+		play.find("HudsonPlay_OnTarget(angleToIt, nearestDistance, HalfWidthOf(nearest))") != std::string::npos, "and the shot uses both");
 	// FACEHUGGERS (the owner 22:51: "we died to face huggers, we're cheating", "He must kill facehuggers"; the 22:52 run had 15 refills at step 20, seven in newhug02,
 	// about a second apart: one on his face, killing him again each time): a hugger within 10 m comes first, before any alien, and he shoots it from there
 	std::vector<HudsonPlayRearCandidate> withAHugger = { { 0, 3000, 0 }, { 1, 8000, kHudsonPlayHuggerRank } };
