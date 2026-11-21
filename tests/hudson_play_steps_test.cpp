@@ -675,6 +675,9 @@ static void TestAimAndHold()
 	// shut box, like a shut door's) and looks for the way again, round by the stair's foot
 	Check(HudsonPlay_ShutsTheStepAhead(3, 870, 383) && !HudsonPlay_ShutsTheStepAhead(2, 870, 383), "a step up 870 mm ahead, stuck at it 3 times: left out");
 	Check(!HudsonPlay_ShutsTheStepAhead(3, 870, 50) && !HudsonPlay_ShutsTheStepAhead(3, 2500, 383), "but not a point on his level, nor one far off");
+	// and one 2.4 m ahead (the lap run 2026-11-21-004422: after the first step was left out, his way went onto the second from the side, 2142 mm across and 774 up,
+	// and the probe's 15 s no-headway rule ended the run before anything got him out)
+	Check(HudsonPlay_ShutsTheStepAhead(3, 2142, 774), "the second step, 2.1 m ahead and two steps up: left out too");
 	Check(play.find("LearnAShutStep(point, now)") != std::string::npos && play.find("boxes.insert(boxes.end(), learnedShut.begin(), learnedShut.end());") != std::string::npos,
 		"and the learned box goes on his grid with the doors' boxes");
 	// a back-up only with floor behind him, and short; the nudges short too; and the step limit's move puts him by a switch, not on it (the 22:26 run: cheat 23 put
