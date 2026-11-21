@@ -535,12 +535,14 @@ static void TestAimAndHold()
 	Check(HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest - 1) == kHudsonPlayWalkOn && HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest) == kHudsonPlayStand,
 		"and holds again only after 2 s, under the snowplow check's 3 s");
 
-	// SHOOTING THE CLOSE ONE (shootwithin=, shootdelay=; the owner 21:27: "I want hudson to start shooting only if he's less than 4m away with a delay of 500ms"): he
-	// fires at the nearest alien once one has been within shootwithin for shootdelay (a player's reaction), and holds his fire otherwise
-	Check(HudsonPlay_ShootNow(3900, 500, 4000, 500), "an alien 3.9 m off for half a second: he fires");
-	Check(!HudsonPlay_ShootNow(3900, 499, 4000, 500), "not before the half second is up");
-	Check(!HudsonPlay_ShootNow(4000, 900, 4000, 500) && !HudsonPlay_ShootNow(-1, 900, 4000, 500), "nor at one 4 m off or more, nor with none");
-	Check(HudsonPlay_ShootNow(100, 0, 4000, 0), "with no delay asked, at once");
+	// SHOOTING (shootwithin=, shootdelay=; the owner 21:33, which replaces 21:27's 4 m: "his crosshair on top of an alien for more tha 500ms", "attack things tha are
+	// really close ( less than say 2m) and attackihg him", "If they are not attacking hi keeps moving and observing"): he fires only at an alien nearer than shootwithin
+	// that is attacking him (in Attack), once his crosshair has been on it for more than shootdelay
+	Check(HudsonPlay_ShootNow(1900, true, 501, 2000, 500), "one 1.9 m off, attacking him, his crosshair on it for over half a second: he fires");
+	Check(!HudsonPlay_ShootNow(1900, true, 500, 2000, 500), "not at half a second exactly: more than it");
+	Check(!HudsonPlay_ShootNow(1900, false, 5000, 2000, 500), "not at one that isn't attacking him: he keeps moving and observing");
+	Check(!HudsonPlay_ShootNow(2000, true, 5000, 2000, 500) && !HudsonPlay_ShootNow(-1, true, 5000, 2000, 500), "nor at one 2 m off or more, nor with none");
+	Check(HudsonPlay_ShootNow(100, true, 1, 2000, 0), "with no delay asked, as soon as his crosshair is on it");
 
 	std::string play;
 
@@ -554,6 +556,8 @@ static void TestAimAndHold()
 		play.find("if (phase != kDoingTheStep)\n\t{\n\t\tAimAtTheNearest(status);") != std::string::npos, "the aim leaves his view to a step he's doing (a press faces its switch)");
 	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
 	Check(play.find("ShootTheCloseOne(status, now);") != std::string::npos, "each frame he may shoot the close one (shootwithin=), after the aim and before a flare");
+	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
+		"and he holds his ground only while the one ahead is attacking him (the owner 21:33: else he keeps moving)");
 	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
 }
 
