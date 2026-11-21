@@ -639,6 +639,13 @@ static void TestAimAndHold()
 
 	Check(jumps.size() == 1 && jumps[0].kind == kHudsonPlayJumpUp && jumps[0].y == -6624, "jump, a place to jump up onto");
 	Check(play.find("case kHudsonPlayJumpUp:") != std::string::npos && play.find("static void DoTheJump(") != std::string::npos, "and it's done as a step of its own");
+	// A STEP HE CAN'T GET ONTO (shft21, three full runs: his grid joins the floor to the stair's first step across its side, 383 mm up, and the game stops him there:
+	// Drake 23:0x, poly 99 and the step sides): stuck 3 times with the same way point ahead, a step up within 1.5 m, he leaves that step out of his grid (a learned
+	// shut box, like a shut door's) and looks for the way again, round by the stair's foot
+	Check(HudsonPlay_ShutsTheStepAhead(3, 870, 383) && !HudsonPlay_ShutsTheStepAhead(2, 870, 383), "a step up 870 mm ahead, stuck at it 3 times: left out");
+	Check(!HudsonPlay_ShutsTheStepAhead(3, 870, 50) && !HudsonPlay_ShutsTheStepAhead(3, 2500, 383), "but not a point on his level, nor one far off");
+	Check(play.find("LearnAShutStep(point, now)") != std::string::npos && play.find("boxes.insert(boxes.end(), learnedShut.begin(), learnedShut.end());") != std::string::npos,
+		"and the learned box goes on his grid with the doors' boxes");
 	// a back-up only with floor behind him, and short; the nudges short too; and the step limit's move puts him by a switch, not on it (the 22:26 run: cheat 23 put
 	// him at opslev01's own point, in its console, and nothing got him out)
 	Check(play.find("if (rescue == kHudsonPlayBackUp && !FloorBehindHim())") != std::string::npos, "no back-up over an edge");
