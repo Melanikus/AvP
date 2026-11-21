@@ -22,9 +22,9 @@
  *
  * Modified 2026-11-18 by Melanikus for the AvP port: an ENCODER, the other way round from Barry's decoder. It writes what his
  * SmackerDecoder reads (the same header, the same header trees in his DecodeTree / DecodeBigTree layouts, the same frame chunks), so
- * the game's own player plays it. The first version writes: Smacker 2 ("SMK2"), one palette per frame (left out when it is the
- * frame before's), every 4 x 4 block FULL, and 8-bit mono sound compressed as his DecodeAudio reads it (his decoder plays only
- * compressed sound: raw sound is skipped, SM-P14).
+ * the game's own player plays it. It writes: Smacker 2 ("SMK2"), one palette for the whole film (in frame 0 only, as AvP's own films
+ * have it), every 4 x 4 block FULL, and 8-bit mono sound compressed as his DecodeAudio reads it (his decoder plays only compressed
+ * sound: raw sound is skipped, SM-P14).
  */
 
 /* THE CALL. Everything the caller gives is checked before anything is made; nothing is written past what it gives.
@@ -39,8 +39,8 @@
  *   Smacker_FreeEncoded(smk);                                 // the bytes are this library's: only it frees them
  *
  * AvP's message videos (FMVs\messageNNN.smk) are 128 x 96 at 15 frames a second with 22050 Hz 8-bit mono sound.
- * THE PICTURE: each frame gets its own palette of at most 255 colours (Smacker's palette holds 64 levels a colour, smk_pal), chosen by
- * median cut when the frame has more. A frame of 255 colours or fewer, each on those levels, comes back exactly.
+ * THE PICTURE: the film gets one palette of at most 255 colours (Smacker's palette holds 64 levels a colour, smk_pal), chosen by
+ * median cut when the film has more. A film of 255 colours or fewer in all, each on those levels, comes back exactly.
  * THE SOUND: the decoder's player sizes its sound buffer from the first frame, so the first frame carries one second more than the
  * others (as AvP's own films do: message100.smk's first frame holds 16 frames' worth at 15 a second). Sound past the end of that
  * (the frames' time plus that second) is not kept.
@@ -87,7 +87,8 @@ enum
 	SMACKER_ENCODE_BAD_PIXELS,    /* no pixels, or rgbBytes is not frameCount x width x height x 3 */
 	SMACKER_ENCODE_BAD_SOUND,     /* samples given with a rate out of range, fewer than 8 samples, or null samples */
 	SMACKER_ENCODE_TOO_BIG,       /* the file would pass 4 GB, or a frame what a frame size can say */
-	SMACKER_ENCODE_NO_MEMORY      /* the memory for the work could not be had */
+	SMACKER_ENCODE_NO_MEMORY,     /* the memory for the work could not be had */
+	SMACKER_ENCODE_FILE           /* the stream's file, or one of its own files beside it, could not be made, written or read */
 };
 
 /* Encodes the video. On SMACKER_ENCODE_DONE *smk is the file's bytes (free them with Smacker_FreeEncoded) and *smkBytes how many;
@@ -99,6 +100,46 @@ void Smacker_FreeEncoded(uint8_t *smk);
 
 /* What a result means, in words: static text, never null */
 const char *Smacker_EncodeWords(int result);
+
+/* THE STREAM: a film of any length, a frame at a time, in memory that does not grow with it (Smacker_Encode holds the whole film).
+ *
+ *   SmackerStreamSettings s = {};
+ *   s.width = 128; s.height = 96; s.fps = 15; s.sampleRate = 22050;   // sampleRate 0: no sound
+ *   SmackerStream *stream = 0;
+ *   int r = Smacker_Begin(&s, L"C:\\...\\message101.smk", &stream);
+ *   for each frame: r = Smacker_AddFrame(stream, rgb, 128 * 96 * 3, samples, sampleCount);   // any number of samples with each frame, 0 too
+ *   r = Smacker_End(stream);                  // writes the file; the stream is gone after it, whatever it gives
+ *   (or Smacker_Abandon(stream): nothing written, the file taken away)
+ *
+ * The file is the very same as Smacker_Encode would make of the same frames and sound (one palette for the whole film, in frame 0, as AvP's
+ * own films have it): so the frames are kept until End in a file of the stream's own beside the film (the film's name with ".frames.tmp"),
+ * and the sound in another (".sound.tmp"), and End reads them three times. Those two files are made new (never over a file that is there)
+ * and Windows takes them away when the stream closes them, after a crash too. They take frames x width x height x 3 bytes on the disk. */
+typedef struct SmackerStream SmackerStream;
+
+typedef struct SmackerStreamSettings
+{
+	uint32_t width;          /* pixels, a multiple of 4 */
+	uint32_t height;         /* pixels, a multiple of 4 */
+	uint32_t fps;            /* frames a second, 1 to SMACKER_ENCODE_MOST_FPS */
+	uint32_t sampleRate;     /* 0 for a film with no sound, else SMACKER_ENCODE_LEAST_RATE to SMACKER_ENCODE_MOST_RATE */
+} SmackerStreamSettings;
+
+/* Starts a stream that will write the film to path (made, or made again: a film there already is replaced). On anything but
+ * SMACKER_ENCODE_DONE *stream is null, nothing is made, and a file already at path is left as it was. */
+int Smacker_Begin(const SmackerStreamSettings *settings, const wchar_t *path, SmackerStream **stream);
+
+/* The next frame (width x height pixels, R G B, rgbBytes exactly width x height x 3) and the sound that goes on from the last (8-bit unsigned
+ * mono; pcm may be null when pcmBytes is 0). A refused call adds nothing, and the stream goes on; a file that cannot be written fails the
+ * stream (End then gives SMACKER_ENCODE_FILE). */
+int Smacker_AddFrame(SmackerStream *stream, const uint8_t *rgb, size_t rgbBytes, const uint8_t *pcm, size_t pcmBytes);
+
+/* Writes the film and ends the stream. SMACKER_ENCODE_DONE: the film is written. Anything else says why not (no frame, fewer than 8 samples,
+ * a file error, ...), and the film's file is taken away. The stream is freed either way. */
+int Smacker_End(SmackerStream *stream);
+
+/* Ends the stream with nothing written: the film's file is taken away. Null is nothing to end. */
+void Smacker_Abandon(SmackerStream *stream);
 
 #ifdef __cplusplus
 }
