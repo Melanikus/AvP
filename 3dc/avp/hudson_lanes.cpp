@@ -2386,7 +2386,7 @@ void HudsonLanes_SayMark(const char *cleanWords)
 		nearHim++;
 
 		Watched *const w = Record(block, false);
-		std::map<int, std::string>::const_iterator const last = w ? lastLineOf.find(w->number) : lastLineOf.end();
+		const auto last = w ? lastLineOf.find(w->number) : lastLineOf.end();   // const first (CODING-STANDARD.md rule 1: Snyk Code can't read the other way)
 
 		WriteNow("NEAR " + (w ? "a" + std::to_string(w->number) : std::string("-")) + " dist=" + std::to_string(apart) + " | " +
 			(last != lastLineOf.end() ? last->second : "no A line yet (a far alien: its own code isn't the near alien's) mod=" + ModuleWords(block->containingModule)));
