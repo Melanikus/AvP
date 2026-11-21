@@ -3483,6 +3483,11 @@ bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore
 // DOORS AS WALLS (doorwalls=yes; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run: his way to the levers ran through shdr01 and his way to opslev01
 // through shftdr02, doors that only those switches open). Twice a second: every lift or switch door that isn't open, and every locked proximity door (an unlocked
 // one opens as he comes), is a shut box on his grid, its module's extents and 300 mm round. When the list changes, his grid is told and his way looked for again.
+static bool InTheBox(HudsonGridBox const &box, VECTORCH const &place)
+{
+	return place.vx >= box.minX && place.vx <= box.maxX && place.vy >= box.minY && place.vy <= box.maxY && place.vz >= box.minZ && place.vz <= box.maxZ;
+}
+
 static void LookAtTheDoors(DWORD now)
 {
 	static DWORD lookedAt = 0;
@@ -3496,6 +3501,9 @@ static void LookAtTheDoors(DWORD now)
 
 	std::vector<HudsonGridBox> boxes;
 	std::string said;
+	// a door whose box holds the step's own place isn't shut for that step: he has to get to it (try 5: RAMP-01AB's switch is beside MNDR01)
+	bool const stepHere = !following && stepAt < steps.size();
+	VECTORCH const stepPlace = stepHere ? StepPlace() : VECTORCH{ 0, 0, 0 };
 
 	for (int i = 0; i < NumActiveStBlocks; i++)
 	{
@@ -3531,6 +3539,11 @@ static void LookAtTheDoors(DWORD now)
 		MODULE const *const module = block->SBmoptr;
 		HudsonGridBox const box = { module->m_world.vx + module->m_minx - 300, module->m_world.vy + module->m_miny - 300, module->m_world.vz + module->m_minz - 300,
 			module->m_world.vx + module->m_maxx + 300, module->m_world.vy + module->m_maxy + 300, module->m_world.vz + module->m_maxz + 300 };
+
+		if (stepHere && InTheBox(box, stepPlace))
+		{
+			continue;
+		}
 
 		boxes.push_back(box);
 		said += (said.empty() ? "" : ", ") + HudsonStrategies_Title(block);
