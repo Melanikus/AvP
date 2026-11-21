@@ -771,6 +771,16 @@ static const int kHudsonPlayViewTurnsOneIn = 6;
 // ---- Getting stuck. Every so often it's asked how far he's come. Someone who's trying to walk and hasn't got anywhere is stuck, and the
 // answer is a list of things to try before he gives up. A fight isn't trying to walk, so it doesn't count.
 
+// A STEP HE CAN'T GET ONTO (Frost 2026-11-20; shft21 in three full runs: his grid joins the floor to a stair's first step across its side, 383 mm up, and the game
+// stops him there, Drake: poly 99 and the step sides): stuck kHudsonPlayStucksBeforeShutting times with the same way point ahead, a step up (more than 150 mm)
+// within 1.5 m across, and that step is left out of his grid, a learned shut box like a shut door's, so the way goes round (by the stair's foot)
+static const int kHudsonPlayStucksBeforeShutting = 3;
+
+inline bool HudsonPlay_ShutsTheStepAhead(int stucksAtThePoint, int across, int rise)
+{
+	return stucksAtThePoint >= kHudsonPlayStucksBeforeShutting && across <= 1500 && rise > 150;
+}
+
 static const int kHudsonPlayStuckWithin = 800;          // mm: he hasn't really moved if he's still this close
 static const unsigned int kHudsonPlayStuckAfter = 1000; // milliseconds of trying to walk. At his speed that's about 13 m, so he isn't just slow.
 

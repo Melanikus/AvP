@@ -1123,6 +1123,34 @@ static void SayWhatsHoldingHim()
 }
 
 // Has he got anywhere lately? He's stuck if he hasn't, and what he tries next depends how many times that's happened here.
+// The steps he couldn't get onto, left out of his grid with the shut doors (LookAtTheDoors), and the way point he's been stuck at (HudsonPlay_ShutsTheStepAhead).
+// Frost 2026-11-20
+static std::vector<HudsonGridBox> learnedShut;
+static std::string learnedShutSaid;
+static HudsonGridPoint stuckPoint = { 0, 0, 0 };
+static int stucksAtThePoint = 0;
+
+static void LearnAShutStep(HudsonGridPoint const &point, DWORD now)
+{
+	HudsonGridBox const box = { point.x - 350, point.y - 300, point.z - 350, point.x + 350, point.y + 300, point.z + 350 };
+	VECTORCH const goal = !following && stepAt < steps.size() ? StepPlace() : VECTORCH{ 0, 0, 0 };
+	bool const holdsTheGoal = !following && stepAt < steps.size() && goal.vx >= box.minX && goal.vx <= box.maxX && goal.vy >= box.minY && goal.vy <= box.maxY &&
+		goal.vz >= box.minZ && goal.vz <= box.maxZ;
+
+	(void)now;
+
+	// not the step's own place, and a few at most
+	if (holdsTheGoal || learnedShut.size() >= 16)
+	{
+		return;
+	}
+
+	learnedShut.push_back(box);
+	learnedShutSaid += ", the step he couldn't get onto at " + std::to_string(point.x) + " " + std::to_string(point.y) + " " + std::to_string(point.z);
+	SayAboutTheStep("he couldn't get up onto the step at " + std::to_string(point.x) + " " + std::to_string(point.y) + " " + std::to_string(point.z) +
+		" in " + std::to_string(kHudsonPlayStucksBeforeShutting) + " tries, so his grid leaves it out (a learned shut box) and he looks for the way again");
+}
+
 static void CheckHesGettingSomewhere(DWORD now)
 {
 	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
@@ -1143,6 +1171,22 @@ static void CheckHesGettingSomewhere(DWORD now)
 	placeLastChangedAt = now;
 	stuckTimes++;
 	rescue = HudsonPlay_NextRescue(timesStuckHere++);
+
+	// the same way point ahead, stuck again: a step up he can't get onto is left out of his grid (HudsonPlay_ShutsTheStepAhead)
+	if (!following && wayAt < way.size())
+	{
+		HudsonGridPoint const point = way[wayAt];
+		double const acrossX = (double)point.x - here.vx, acrossZ = (double)point.z - here.vz;
+
+		stucksAtThePoint = point.x == stuckPoint.x && point.y == stuckPoint.y && point.z == stuckPoint.z ? stucksAtThePoint + 1 : 1;
+		stuckPoint = point;
+
+		if (HudsonPlay_ShutsTheStepAhead(stucksAtThePoint, (int)sqrt(acrossX * acrossX + acrossZ * acrossZ), here.vy - point.y))
+		{
+			LearnAShutStep(point, now);
+			stucksAtThePoint = 0;
+		}
+	}
 
 	// a back-up only with floor behind him: not over a lift's shaft or a ledge (the 22:26 run fell 15.6 m twice)
 	if (rescue == kHudsonPlayBackUp && !FloorBehindHim())
@@ -3980,6 +4024,10 @@ static void LookAtTheDoors(DWORD now)
 		boxes.push_back(box);
 		said += (said.empty() ? "" : ", ") + HudsonStrategies_Title(block);
 	}
+
+	// and the steps he couldn't get onto (LearnAShutStep)
+	boxes.insert(boxes.end(), learnedShut.begin(), learnedShut.end());
+	said += learnedShutSaid;
 
 	if (said == shutDoorsSaid)
 	{
