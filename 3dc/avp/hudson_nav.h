@@ -44,6 +44,12 @@ const HudsonGrid &HudsonNav_TheGrid();
 // For anything else that walks by the grid. Start builds it on its own thread, and it's ready when StillBuilding says no.
 void HudsonNav_StartTheGrid();
 bool HudsonNav_TheGridIsStillBuilding();
+
+// doorwalls=yes (added 2026-11-20 by Melanikus (Frost)): a new grid of the level as it is now (a prop he broke is gone), built on its own thread while the game
+// goes on; TookTheNewGrid swaps it in once it's built (true once, with how long it took) and keeps the crouch setting. False to start: one is building already
+bool HudsonNav_StartANewGrid();
+bool HudsonNav_NewGridIsBuilding();
+bool HudsonNav_TookTheNewGrid(unsigned long *milliseconds);
 HudsonGrid &HudsonNav_TheGridToSearch();
 
 // How many times a rescue put him somewhere he couldn't stay, and he was put back: nothing to stand on, or the game pushed him out.

@@ -93,6 +93,7 @@
 //   an animated polygon's corners are read in 16.16, as CreateTxAnimUVArray now gives them, so flowing animated textures move smoothly
 //   (#97, reported by Bobblen). See texture_animation.h
 #include "console.h"
+#include "debug_view.h"      // the normals view (Drake 11-20)
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
 #include "r2base.h"
@@ -705,6 +706,7 @@ extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
+static void DrawTheStatusLineOfHudsonsPlay();   // not named Hudson...: it is the game's own drawing, which check-hudson-asleep.ps1 would take for Hudson's
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
@@ -854,13 +856,16 @@ static bool ExecuteBuffer()
 		}
 		else
 		{
-		// set main shaders to active
-		d3d.effectSystem->SetActive(d3d.mainEffect);
+		// set main shaders to active; THE NORMAL COLOURS VIEW (debug_view.h, a run's normalcolours=yes): its own pair in their place, when they loaded, the same constant in
+		// the same register. Render only: the list, its vertices and its order are the same either way
+		effectID_t const listEffect = DebugView_NormalColours() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect;
+
+		d3d.effectSystem->SetActive(listEffect);
 
 		// we don't need world matrix here as avp has done all the world transforms itself
 		R_MATRIX matWorldViewProj = /*d3d.matView **/ d3d.matProjection;
 
-		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matWorldViewProj);
+		d3d.effectSystem->SetVertexShaderConstant(listEffect, 0, CONST_MATRIX, &matWorldViewProj);
 
 		// draw our main list (level geometry, player weapon etc)
 		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
@@ -3451,6 +3456,7 @@ void ThisFramesRenderingHasFinished()
 		frameIsOpen = false;
 
 		ShadowStatus_Draw();
+		DrawTheStatusLineOfHudsonsPlay();   // status=on: Hudson's play's one line, top left (Frost 2026-11-20)
 
 		ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
 
@@ -9095,6 +9101,49 @@ static void ShadowStatus_Draw()
 	{
 		DrawStatusLine(lines[i], rightX, margin + i * lineHeight, scale);
 	}
+}
+
+// Hudson's play's one line (status=on; added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): his step and what he's
+// doing, top left, white on a dark backing, in the tag's font. Nothing when it's off or he isn't playing (HudsonPlay_StatusLine gives "")
+static void DrawTheStatusLineOfHudsonsPlay()
+{
+	char const *const said = HudsonPlay_StatusLine();
+
+	if (!said || !*said)
+	{
+		return;
+	}
+
+	char line[200];
+	int characters = 0;
+
+	_snprintf(line, sizeof(line) - 1, "%s", said);
+	line[sizeof(line) - 1] = 0;
+
+	for (char *p = line; *p; p++, characters++)
+	{
+		if ((unsigned char)*p < 32 || (unsigned char)*p > 126)
+		{
+			*p = '?';
+		}
+	}
+
+	ShadowStatusSizes const sizes = ShadowStatus_Sizes();
+	int width = 0;
+
+	for (char const *p = line; *p; p++)
+	{
+		width += MUL_FIXED(sizes.scale, AAFontWidths[(unsigned char)*p]);
+	}
+
+	if (!orthoList->Check(2048 + 4 + characters * 4) || width + sizes.margin * 2 > (int)ScreenDescriptorBlock.SDB_Width)
+	{
+		return;
+	}
+
+	// DrawStatusLine puts a line's right end at rightX, so the left end lands at the margin
+	DrawQuad(sizes.margin / 2, sizes.margin / 2, width + sizes.margin, sizes.lineHeight + sizes.margin, NO_TEXTURE, RCOLOR_ARGB(150, 0, 0, 0), TRANSLUCENCY_NORMAL);
+	DrawStatusLine(line, sizes.margin + width, sizes.margin, sizes.scale);
 }
 
 // Puts the shoot tool's words on the screen, if it has any.

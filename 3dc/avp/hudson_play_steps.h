@@ -18,7 +18,11 @@ enum HudsonPlayKind
 	kHudsonPlayWalkInto,  // walk to a place, because going there sets something off
 	kHudsonPlayPickUp,    // walk onto something
 	kHudsonPlayDestroy,   // get within sight of something, and shoot it until it's gone
-	kHudsonPlayKill       // the same, for someone
+	kHudsonPlayKill,      // the same, for someone
+	kHudsonPlayGoTo,      // walk to a place, and nothing else: no object of its name (the lane probe v3's list, added 2026-11-20 by Melanikus (Frost))
+	kHudsonPlayMoveTo,    // "teleport": he's put at a place, a logged cheat, for a lift he can't board (the full Genshd1 run, added 2026-11-20 by Melanikus (Frost))
+	kHudsonPlayJumpUp,    // "jump": he walks straight at a place higher than a step, no grid, and jumps up onto it (the bypass dais in med02, 780 mm; Drake, Frost 2026-11-20)
+	kHudsonPlayDrop       // "drop": he walks straight at a place, no grid, till he has fallen 2 m or is there (a ledge's edge: Genshd1's glass; Frost 2026-11-20)
 };
 
 struct HudsonPlayStep
@@ -150,6 +154,22 @@ inline std::string HudsonPlay_ReadLine(std::string const &line, std::vector<Huds
 	else if (words[0] == "kill")
 	{
 		step.kind = kHudsonPlayKill;
+	}
+	else if (words[0] == "goto")
+	{
+		step.kind = kHudsonPlayGoTo;
+	}
+	else if (words[0] == "teleport")
+	{
+		step.kind = kHudsonPlayMoveTo;
+	}
+	else if (words[0] == "jump")
+	{
+		step.kind = kHudsonPlayJumpUp;
+	}
+	else if (words[0] == "drop")
+	{
+		step.kind = kHudsonPlayDrop;
 	}
 	else
 	{
@@ -340,6 +360,223 @@ inline bool HudsonPlay_CantHurtIt(unsigned long fightingFor, int healthAtStart, 
 	return fightingFor >= kHudsonPlayCantHurtItAfter && healthNow >= healthAtStart;
 }
 
+// FLARES (flares=yes; added 2026-11-20 by Melanikus (Frost), the owner, watching the lane probe: "throwing flares when aliens approach him"): one at an alien he can
+// see within kHudsonPlayFlareWithin, once he faces it within kHudsonPlayFlareFacing (the game throws a flare along his view), and none again for kHudsonPlayFlareEvery.
+// The game keeps 4 flares in the world at most (pmove.cpp's ThrowAFlare).
+static const int kHudsonPlayFlareWithin = 8000;              // mm
+static const int kHudsonPlayFlareFacing = 256;               // of a whole turn's 4096: 22.5 degrees either way
+static const unsigned long kHudsonPlayFlareEvery = 6000;     // ms
+
+inline bool HudsonPlay_FlareIsDue(int distance, bool seen, unsigned long sinceTheLast, bool thrownBefore)
+{
+	return seen && distance < kHudsonPlayFlareWithin && (!thrownBefore || sinceTheLast >= kHudsonPlayFlareEvery);
+}
+
+// angleToTurn as HudsonPlay_AngleToTurn gives it: how far he still has to turn to face it
+inline bool HudsonPlay_FacesItToThrow(int angleToTurn)
+{
+	return angleToTurn <= kHudsonPlayFlareFacing && angleToTurn >= -kHudsonPlayFlareFacing;
+}
+
+// AIM AT THE NEAREST (aimnearest=yes; added 2026-11-20 by Melanikus (Frost), the owner: "I want hudson to run backwards pointing (but not firing) always at the nearest
+// alien"): of the aliens within kHudsonPlayAimWithin, the nearest he can see, else the nearest. He keeps the one he has unless another is under
+// kHudsonPlayAimSwitchShare of its distance, or he has lost sight of his and sees another, so his view doesn't flick between two. -1: none near, and he faces along his
+// way as before. His view turns kHudsonPlayAimTurnsOneIn of the way to it each frame, as his view goes after his way, so a recording isn't jittery.
+static const int kHudsonPlayAimWithin = 20000;            // mm
+static const double kHudsonPlayAimSwitchShare = 0.75;
+static const int kHudsonPlayAimTurnsOneIn = 4;
+
+struct HudsonPlayAimCandidate
+{
+	int id;
+	int distance;   // mm
+	bool seen;
+};
+
+inline int HudsonPlay_PickTheNearest(std::vector<HudsonPlayAimCandidate> const &aliens, int current)
+{
+	int seenId = -1, seenDistance = kHudsonPlayAimWithin, anyId = -1, anyDistance = kHudsonPlayAimWithin;
+	HudsonPlayAimCandidate const *kept = 0;
+
+	for (size_t i = 0; i < aliens.size(); i++)
+	{
+		HudsonPlayAimCandidate const &a = aliens[i];
+
+		if (a.distance >= kHudsonPlayAimWithin)
+		{
+			continue;
+		}
+
+		kept = a.id == current ? &a : kept;
+
+		if (a.seen && a.distance < seenDistance)
+		{
+			seenId = a.id;
+			seenDistance = a.distance;
+		}
+
+		if (a.distance < anyDistance)
+		{
+			anyId = a.id;
+			anyDistance = a.distance;
+		}
+	}
+
+	int const pick = seenId >= 0 ? seenId : anyId;
+	int const pickDistance = seenId >= 0 ? seenDistance : anyDistance;
+	bool const lostSightOfHis = kept && !kept->seen && seenId >= 0;
+
+	if (kept && pick != current && !lostSightOfHis && !(pickDistance < kept->distance * kHudsonPlayAimSwitchShare))
+	{
+		return current;
+	}
+
+	return pick;
+}
+
+// HOLD HIS GROUND (holdground=yes; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the snowplow: an alien in Attack is held still by its own state, and he,
+// unkillable, walked it 50 to 100 m down a corridor, twice in run 200126): while an alien within kHudsonPlayHoldWithin is ahead of him on his way (on his way's side of
+// him), he doesn't walk on: under kHudsonPlayBackOffWithin he backs off from it, else he stands, as a clawed player would. At most kHudsonPlayHoldMost at a time, then he
+// walks on for kHudsonPlayHoldRest before he holds again: a clawed player pushes past or dies, and the run mustn't stand still for good. The snowplow check
+// (snowplow.cjs) needs 3 s of shoving, more than the rest.
+static const int kHudsonPlayHoldWithin = 1500;              // mm
+static const int kHudsonPlayBackOffWithin = 1000;           // mm
+static const unsigned long kHudsonPlayHoldMost = 4000;      // ms
+static const unsigned long kHudsonPlayHoldRest = 2000;      // ms
+
+enum HudsonPlayHold
+{
+	kHudsonPlayWalkOn,
+	kHudsonPlayStand,
+	kHudsonPlayBackOff
+};
+
+// toAlien: from him to it, across; way: the way he's going (to the point he aims at along it); distance: to it
+inline bool HudsonPlay_AlienAheadOnHisWay(int toAlienX, int toAlienZ, int wayX, int wayZ, int distance)
+{
+	return distance <= kHudsonPlayHoldWithin && (double)toAlienX * wayX + (double)toAlienZ * wayZ > 0.0;
+}
+
+// SHOOTING (shootwithin=, shootdelay=; added 2026-11-20 by Melanikus (Frost), the owner 21:33: "his crosshair on top of an alien for more tha 500ms", "attack things
+// tha are really close ( less than say 2m) and attackihg him", "If they are not attacking hi keeps moving and observing"): he fires only at an alien nearer than
+// within that is attacking him (in Attack), once his crosshair has been on it for more than delay; he holds his fire otherwise.
+// distance: -1 for none; crosshairOnFor: how long his aim has been on it (HudsonPlay_AimedWell)
+// A BURST THAT HOLDS (Frost 2026-11-20; the full run 2026-11-20-235943: facer01's burst began at 3.2 m and ended the next frame when its leap put his crosshair past
+// the 5.3 degree window, "5.0 -> 5.0, alive", and it latched): a burst that has begun goes on while his crosshair is within 3 times HudsonPlay_AimedWell's window.
+// And he's on a target when he's within that window, or when the miss across, at its distance, is under its half-width (a facehugger at 1.1 m is 10 degrees wide)
+inline bool HudsonPlay_KeepsFiring(bool begun, int angle)
+{
+	return begun && angle > -180 && angle < 180;
+}
+
+inline bool HudsonPlay_OnTarget(int angle, int distance, int halfWidth)
+{
+	if (angle > -60 && angle < 60)
+	{
+		return true;
+	}
+
+	double const radians = (double)angle * 6.2831853 / 4096.0;
+
+	return angle > -1024 && angle < 1024 && (double)distance * fabs(sin(radians)) <= (double)halfWidth;
+}
+
+inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long crosshairOnFor, int within, unsigned long delay)
+{
+	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;
+}
+
+// THE REAR GUARD (rearguard=MM; added 2026-11-20 by Melanikus (Frost), the owner 22:24 and 22:27: "sprint to the end and just look back (and turn fast, 3x faster
+// than he does today) if an alien comes within 5 meters", "run backwards ... following his plotted course focusing the closest wall crawling item? Focus on the
+// ceiling ones"). An alien's surface by its down's y, as the lane probe reads it: under -46000 a ceiling (0), over 46000 the floor (2), else a wall or slope (1)
+inline int HudsonPlay_SurfaceRank(int downY)
+{
+	return downY < -46000 ? 0 : downY > 46000 ? 2 : 1;
+}
+
+struct HudsonPlayRearCandidate
+{
+	int id;
+	int distance;   // mm
+	int rank;       // HudsonPlay_SurfaceRank
+};
+
+// Of the aliens within the rear guard (the caller leaves out the rest): the nearest on a ceiling, else the nearest on a wall, else the nearest. -1: none
+// FACEHUGGERS (the owner 22:51: "He must kill facehuggers"): a hugger within kHudsonPlayHuggerWithin comes first for the rear guard, before any alien (its rank
+// is under the ceiling's), and he shoots it from there; an alien from shootwithin=. Beyond kHudsonPlayHuggerSeenWithin only one he can see counts. Frost 2026-11-20
+static const int kHudsonPlayHuggerRank = -1;
+static const int kHudsonPlayHuggerWithin = 10000;       // mm
+static const int kHudsonPlayHuggerSeenWithin = 3000;    // mm
+
+inline int HudsonPlay_ShootsFrom(bool hugger, int shootingWithin)
+{
+	return hugger && shootingWithin < kHudsonPlayHuggerWithin ? kHudsonPlayHuggerWithin : shootingWithin;
+}
+
+inline int HudsonPlay_PickTheRearTarget(std::vector<HudsonPlayRearCandidate> const &aliens)
+{
+	int best = -1, bestRank = 3, bestDistance = 0;
+
+	for (size_t i = 0; i < aliens.size(); i++)
+	{
+		if (aliens[i].rank < bestRank || (aliens[i].rank == bestRank && aliens[i].distance < bestDistance))
+		{
+			best = aliens[i].id;
+			bestRank = aliens[i].rank;
+			bestDistance = aliens[i].distance;
+		}
+	}
+
+	return best;
+}
+
+// The aim's turn control this frame: a quarter of the angle (kHudsonPlayAimTurnsOneIn), at most the game's full key turn; the rear guard's three times that
+inline int HudsonPlay_AimTurnControl(int angle, bool rearGuard, int fullTurnsPerSecond, int frameTime)
+{
+	int const control = HudsonPlay_TurnControl(angle / kHudsonPlayAimTurnsOneIn, fullTurnsPerSecond, frameTime);
+
+	return rearGuard ? 3 * control : control;
+}
+
+// Is a destroy (or kill) step's target gone? Not there, being taken away (please_destroy_me), or its health run out from more than none. A one-hit Static
+// (integrity 0, Genshd1's SHED04 glass) has no health to begin with, so its health alone says nothing (the 22:14 run read all seven panes gone at once and
+// never shot them). Added 2026-11-20 by Melanikus (Frost)
+inline bool HudsonPlay_TargetIsGone(bool there, bool beingTakenAway, int healthAtStart, int healthNow)
+{
+	return !there || beingTakenAway || (healthAtStart > 0 && healthNow <= 0);
+}
+
+// THE LIFT RULE (added 2026-11-20 by Melanikus (Frost), the owner: "have him not teleport until he fails to get in the lift"): he's moved past a lift, to the landing
+// of the stop he needed (a logged cheat), only when he has failed it: kHudsonPlayMostBoardings failed boardings, or kHudsonPlayMostAtALift at it without riding,
+// or one ride without getting off at his stop
+static const int kHudsonPlayMostBoardings = 3;
+static const unsigned long kHudsonPlayMostAtALift = 60000;   // ms
+
+inline bool HudsonPlay_RideFailed(int boardFailures, unsigned long atTheLiftFor, bool rodeOnce, bool gotOff)
+{
+	return boardFailures >= kHudsonPlayMostBoardings || (!rodeOnce && atTheLiftFor >= kHudsonPlayMostAtALift) || (rodeOnce && !gotOff);
+}
+
+// Where he stands on a lift's car, from its shape's top and bottom (y down): on a flat car, its top; on a car taller than kHudsonPlayCageTaller (a cage, Genshd1's
+// liftcar01, 4.3 m), its floor, the shape's bottom. Added 2026-11-20 by Melanikus (Frost): his finder took liftcar01's roof for its floor, so its foot had no landing
+static const int kHudsonPlayCageTaller = 2500;   // mm
+
+inline int HudsonPlay_CarStandOffset(int shapeMinY, int shapeMaxY)
+{
+	return shapeMaxY - shapeMinY >= kHudsonPlayCageTaller ? shapeMaxY : shapeMinY;
+}
+
+// heldFor: how long this hold has lasted (0: he isn't holding); sinceTheLast: since the last hold ended
+inline HudsonPlayHold HudsonPlay_Hold(bool aheadOnHisWay, int distance, unsigned long heldFor, unsigned long sinceTheLast)
+{
+	if (!aheadOnHisWay || heldFor >= kHudsonPlayHoldMost || (heldFor == 0 && sinceTheLast < kHudsonPlayHoldRest))
+	{
+		return kHudsonPlayWalkOn;
+	}
+
+	return distance < kHudsonPlayBackOffWithin ? kHudsonPlayBackOff : kHudsonPlayStand;
+}
+
 // Has he reached a point on his way? Across, he has to be close. Up and down it's more generous, because where the game says he is and where the grid says
 // the floor is differ by about his height. But a point on the floor above isn't one he's reached, however close it is across.
 inline bool HudsonPlay_ReachedPoint(int acrossX, int acrossZ, int upOrDown, int closeAcross, int closeUpOrDown)
@@ -515,11 +752,75 @@ inline void HudsonPlay_WalkControls(double ahead, double side, int howHard, int 
 	*sideControl = (int)(side * howHard);
 }
 
+// rearguard=: is an alien within the rear guard chasing him (the owner 22:36: "always facing aliens chasing him")? It is when it's after him (Approach, Hunt or
+// Attack with him its target), or when it's nearer now than half a second ago by more than kHudsonPlayClosingBy. 0 for then means there's no reading yet.
+// Frost 2026-11-20
+static const int kHudsonPlayClosingBy = 250;   // mm in half a second: half a metre a second, more than an idle alien's shuffle
+
+inline bool HudsonPlay_IsChasing(bool afterHim, int distanceNow, int distanceHalfASecondAgo)
+{
+	return afterHim || (distanceHalfASecondAgo > 0 && distanceHalfASecondAgo - distanceNow > kHudsonPlayClosingBy);
+}
+
+// Which way of his facing a second's move went (the owner 22:41: "he should move looking at aliens as fast as he can run forward"): forwards within 45 degrees of
+// it, backwards over 135, else sideways. facingX and facingZ are his view's ahead (OrientMat mat31, mat33). Frost 2026-11-20
+enum HudsonPlayMoveKind
+{
+	kHudsonPlayMovedForwards,
+	kHudsonPlayMovedSideways,
+	kHudsonPlayMovedBackwards
+};
+
+inline HudsonPlayMoveKind HudsonPlay_MoveKind(int facingX, int facingZ, double movedX, double movedZ)
+{
+	double const facing = sqrt((double)facingX * facingX + (double)facingZ * facingZ), moved = sqrt(movedX * movedX + movedZ * movedZ);
+
+	if (facing <= 0.0 || moved <= 0.0)
+	{
+		return kHudsonPlayMovedSideways;
+	}
+
+	double const along = ((double)facingX * movedX + (double)facingZ * movedZ) / (facing * moved);
+
+	return along >= 0.7071 ? kHudsonPlayMovedForwards : along <= -0.7071 ? kHudsonPlayMovedBackwards : kHudsonPlayMovedSideways;
+}
+
 // How much of the way to where he should be looking his view turns each frame. A small share, so that it swings round smoothly and the small corrections his feet make don't shake it.
 static const int kHudsonPlayViewTurnsOneIn = 6;
 
 // ---- Getting stuck. Every so often it's asked how far he's come. Someone who's trying to walk and hasn't got anywhere is stuck, and the
 // answer is a list of things to try before he gives up. A fight isn't trying to walk, so it doesn't count.
+
+// A STEP HE CAN'T GET ONTO (Frost 2026-11-20; shft21 in three full runs: his grid joins the floor to a stair's first step across its side, 383 mm up, and the game
+// stops him there, Drake: poly 99 and the step sides): stuck kHudsonPlayStucksBeforeShutting times with the same way point ahead, a step up (more than 150 mm)
+// within 2.4 m across, and that step is left out of his grid, a learned shut box like a shut door's, so the way goes round (by the stair's foot)
+static const int kHudsonPlayStucksBeforeShutting = 3;
+
+// THE JUMP STEP (Frost 2026-11-20; the medlab section run 2026-11-20-232611: his jump at full speed, 812 mm from the place, carried him over the 3.9 m dais and off its
+// far side): how hard he walks at it, by how far across it is: flat out till 1.5 m, half speed nearer, nothing within 600 mm (over the place); and when he's up:
+// on the floor, a step or less under its height, within 1.5 m across
+// THE AIM THROUGH A STEP (Bishop 23:4x: only getting on, riding and getting off a lift pause the aim; the medlab section run's facehugger latch came in the jump step,
+// which had none): a press or a destroy has to face its switch or its glass, so it has his view in the even seconds and the aim the odd ones (the full run's try 2
+// stood at genlev04 240 s when the aim never let go of it); every other step leaves it to the aim. now in ms. Frost 2026-11-20
+inline bool HudsonPlay_StepTakesHisView(bool pressOrDestroy, unsigned long now)
+{
+	return pressOrDestroy && (now / 1000) % 2 == 0;
+}
+
+inline int HudsonPlay_JumpWalk(int across)
+{
+	return across > 1500 ? 65536 : across > 600 ? 32768 : 0;
+}
+
+inline bool HudsonPlay_JumpedUp(int across, int below, bool onTheFloor)
+{
+	return onTheFloor && across <= 1500 && below <= 450;
+}
+
+inline bool HudsonPlay_ShutsTheStepAhead(int stucksAtThePoint, int across, int rise)
+{
+	return stucksAtThePoint >= kHudsonPlayStucksBeforeShutting && across <= 2400 && rise > 150;   // 2.4 m: 004422's second step was 2142 mm ahead
+}
 
 static const int kHudsonPlayStuckWithin = 800;          // mm: he hasn't really moved if he's still this close
 static const unsigned int kHudsonPlayStuckAfter = 1000; // milliseconds of trying to walk. At his speed that's about 13 m, so he isn't just slow.
@@ -540,16 +841,18 @@ inline HudsonPlayRescue HudsonPlay_NextRescue(int timesStuckHere)
 	switch (timesStuckHere)
 	{
 		// The small things first, because they're usually enough and looking for a new way can send him a long way round. He gets a second go at them before he's moved, because being moved is a cheat.
-		case 0: return kHudsonPlayBackUp;
-		case 1: return kHudsonPlayStepLeft;
-		case 2: return kHudsonPlayStepRight;
-		case 3: return kHudsonPlayFindTheWayAgain;
-		case 4: return kHudsonPlayCrouch;
-		case 5: return kHudsonPlayJump;
-		case 6: return kHudsonPlayBackUp;
-		case 7: return kHudsonPlayStepRight;
-		case 8: return kHudsonPlayStepLeft;
-		case 9: return kHudsonPlayFindTheWayAgain;
+		// Nudges left and right first, a back-up last (the owner 11-20: "he should just try to nudge himself left and right first before running back or move
+		// backward less"; a first back-up dropped him into a lift's shaft twice). Changed 2026-11-20 by Melanikus (Frost)
+		case 0: return kHudsonPlayStepLeft;
+		case 1: return kHudsonPlayStepRight;
+		case 2: return kHudsonPlayFindTheWayAgain;
+		case 3: return kHudsonPlayCrouch;
+		case 4: return kHudsonPlayJump;
+		case 5: return kHudsonPlayBackUp;
+		case 6: return kHudsonPlayStepRight;
+		case 7: return kHudsonPlayStepLeft;
+		case 8: return kHudsonPlayFindTheWayAgain;
+		case 9: return kHudsonPlayBackUp;
 		default: return kHudsonPlayTeleport;
 	}
 }

@@ -1433,13 +1433,15 @@ static void TestTheRealGame()
 
 	std::string const game = ReadSourceFile("3dc/avp/game.cpp");
 
-	std::string const stoppedInARun = Between(game, "if (!HudsonMarineIsOn || HudsonWorldIsLive)", "\n\t}\n");
+	// a lane probe (lanes=yes, hudson_lanes.h) keeps them still as well (2026-11-19, Frost)
+	std::string const stoppedInARun = Between(game, "if ((!HudsonMarineIsOn && !HudsonLanesAreOn) || HudsonWorldIsLive)", "\n\t}\n");
 
-	Check(Has(stoppedInARun, "DoHive();") && Has(stoppedInARun, "DoSquad();"), "only a run with a marine stops the hive and the squad");
+	Check(Has(stoppedInARun, "DoHive();") && Has(stoppedInARun, "DoSquad();"), "only a run with a marine, or a lane probe, stops the hive and the squad");
 
 	std::string const behaviours = Between(ReadSourceFile("3dc/avp/bh_types.cpp"), "void ExecuteBehaviour(STRATEGYBLOCK* sbptr)", "switch(sbptr->I_SBtype)");
 
-	Check(Has(behaviours, "if (HudsonMarineIsOn && Hudson_KeepsStill(sbptr))"), "and only such a run keeps anyone still");
+	Check(Has(behaviours, "if ((HudsonMarineIsOn || HudsonLanesAreOn) && Hudson_KeepsStill(sbptr))"), "and only such a run keeps anyone still");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (HudsonLanes_IsTheAlien(block))\n\t{\n\t\treturn false;\n\t}\n") || Has(ReadSourceFile("3dc/avp/hudson.cpp"), "\tif (HudsonLanes_IsTheAlien(block))\r\n\t{\r\n\t\treturn false;\r\n\t}\r\n"), "and a lane probe's own alien is the one thing it lets move");
 
 	std::string const keepsStill = Between(hudson, "bool Hudson_KeepsStill(STRATEGYBLOCK *block)", "void Hudson_EndOfFrame()");
 
@@ -2684,6 +2686,344 @@ static void CheckFloorIsLavaWord()
 	Check(!Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "' -alienways'"), "and passes no -alienways, which the game no longer has");
 }
 
+// lanes=yes: the lane probe (hudson_lanes.h), one alien at alienat= coming for the player standing still at standat=, as 1999's game.
+// Added 2026-11-19 by Melanikus (Frost) for the AvP port (the owner's ceiling lanes).
+static void CheckLanesWord()
+{
+	puts("lanes=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=-1000,2000,-3000 standat=4000,-5000,6000", &plan) == 0 && plan.lanes, "a run can be a lane probe");
+	Check(plan.alienAtSaid && plan.alienAtPlaces == 1 && plan.alienAtX == -1000 && plan.alienAtY == 2000 && plan.alienAtZ == -3000, "its alien's place is alienat='s");
+	Check(plan.standAtSaid && plan.standAtX == 4000 && plan.standAtY == -5000 && plan.standAtZ == 6000, "and the player's standat='s");
+	Check(plan.floorIsLavaOff, "a lane probe plays 1999's aliens: the alien ways are off, as floorislava=off asks");
+	Check(plan.rooms == 0 && !plan.combatAlien, "with no marine of Hudson's and no fight");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000", &plan) == 0 && !plan.lanes, "without the word, it isn't one");
+	Refused("-hudson level=genshd1 frames=9000 lanes=no alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Refused("-hudson level=genshd1 frames=9000 lanes= alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes lanes=yes alienat=1,2,3 standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes standat=4,5,6", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3/7,8,9 standat=4,5,6", kHudsonRefusedLanesNeedsPlaces);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 rooms=1", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 rooms=1 combat=alien", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 alienat=1,2,3 standat=4,5,6", kHudsonRefusedWatchWordsWithoutCombat);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Lanes) { $arguments += \" lanes=yes\" }"), "the run script can ask for it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "$laneNotes = Join-Path $saves 'hudson-lanes.txt'"), "and keeps what it wrote with the run");
+
+	// alienon=: where its alien is made (added 2026-11-19 by Melanikus (Frost), Drake's run of the lane alone)
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.alienOnCeiling, "a lane probe's alien is made on the floor unless it says");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienon=ceiling alienat=1,2,3 standat=4,5,6", &plan) == 0 && plan.alienOnCeiling, "alienon=ceiling hangs it from the ceiling");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienon=floor alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.alienOnCeiling, "alienon=floor is the floor");
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon=wall alienat=1,2,3 standat=4,5,6", kHudsonRefusedAlienOnNotFloorOrCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon= alienat=1,2,3 standat=4,5,6", kHudsonRefusedAlienOnNotFloorOrCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienon=ceiling alienon=floor alienat=1,2,3 standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 alienon=ceiling", kHudsonRefusedAlienOnWithoutLanes);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienOn) { $arguments += \" alienon=$AlienOn\" }"), "the run script can ask for it");
+
+	// lanes=watch: the level as he plays it, every alien a line a frame, nothing kept still and no alien made (Bishop 11-20: in the owner's Steam play the aliens ran at
+	// the walls and never reached a ceiling). Added 2026-11-20 by Melanikus (Frost) for the AvP port.
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=watch standat=4000,-5000,6000", &plan) == 0 && plan.lanes && plan.lanesWatch, "a lane probe can watch the level as it plays");
+	Check(plan.standAtSaid && plan.standAtX == 4000 && !plan.alienAtSaid, "the player at standat=, and no alien of its own");
+	Check(plan.floorIsLavaOff, "1999's aliens, as lanes=yes");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && !plan.lanesWatch, "lanes=yes is still the one alien");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch", kHudsonRefusedLanesWatchNeedsStand);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienat=1,2,3 standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch alienon=floor standat=4,5,6", kHudsonRefusedLanesWatchNoAlien);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 rooms=1", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 play=yes", kHudsonRefusedLanesPlayNoStand);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch lanes=yes standat=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 lanes=Watch standat=4,5,6", kHudsonRefusedLanesNotYes);
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LanesWatch) { $arguments += \" lanes=watch\" }"), "the run script can ask for it");
+
+	// lanes=watch with play=yes (probe v3, the owner 11-20: "get hudson to walk it", "with shoulder lamp on so we can see stuff"): Hudson plays the level from its own start,
+	// on foot, by his grid's ways to each place of his list (hudson_play.cpp), holding his fire, the level live and him unable to die; every lane probe is stock (stock=yes,
+	// stock_flags.h); the watch ends when his list is done or he makes no headway for 15 s. Added 2026-11-20 by Melanikus (Frost) for the AvP port.
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes lamp=on lampkind=real", &plan) == 0 && plan.lanes && plan.lanesWatch && plan.play,
+		"a lane probe can watch Hudson play the level");
+	Check(plan.lampOn && plan.lampReal && !plan.standAtSaid, "the shoulder lamp on, a real light; from the level's own start");
+	Check(plan.stock && plan.floorIsLavaOff, "stock: every flag of stock_flags.h off");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6", &plan) == 0 && plan.stock, "every lane probe is stock");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6", &plan) == 0 && plan.stock, "lanes=watch standing still is stock too");
+	Refused("-hudson level=genshd1 frames=9000 lanes=yes alienat=1,2,3 standat=4,5,6 play=yes", kHudsonRefusedLanesNotAlone);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes gun=3", kHudsonRefusedLanesNotAlone);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_HoldFire(plan.lanesWatch);"), "under lanes=watch he holds his fire: the aliens are what is watched");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (holdingFire)"), "holding his fire, nothing is a fight");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_HePlays();"), "the probe is told he plays");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_FinishedTheList()"), "the watch ends when his list is done");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words()"), "its first line reads every flag back");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ShoulderLamp_IsOn()"), "and the lamp");
+	// flares=yes (the owner 11-20: "hudson to walk with lamp on, throwing flares when aliens approach him"): Hudson's own switch, playing only
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes flares=yes", &plan) == 0 && plan.playFlares, "he can throw flares at aliens as he plays");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.playFlares, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 flares=yes", kHudsonRefusedFlaresWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes flares=no", kHudsonRefusedFlaresNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes flares=yes flares=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ThrowFlares(plan.playFlares);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonPlay_FlareIsDue(") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "ThrowAFlare();"),
+		"the player's own flare action, when one is due");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Flares) { $arguments += \" flares=yes\" }"), "the run script can ask for it");
+	// aimnearest=yes (the owner 11-20: "I want hudson to run backwards pointing (but not firing) always at the nearest alien") and holdground=yes (Bishop 11-20, the
+	// snowplow: an alien close ahead on his way, and he holds his ground or backs off instead of walking through it): Hudson's own switches, playing only, off unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes aimnearest=yes holdground=yes", &plan) == 0 && plan.playAimNearest && plan.playHoldGround,
+		"he can aim at the nearest alien and hold his ground as he plays");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.playAimNearest && !plan.playHoldGround, "and does neither unless asked");
+	Refused("-hudson level=genshd1 frames=9000 aimnearest=yes", kHudsonRefusedAimNearestWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 holdground=yes", kHudsonRefusedHoldGroundWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes aimnearest=no", kHudsonRefusedAimNearestNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes holdground=no", kHudsonRefusedHoldGroundNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes aimnearest=yes aimnearest=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=genshd1 frames=9000 play=yes holdground=yes holdground=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_AimAtTheNearest(plan.playAimNearest);") && Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_HoldHisGround(plan.playHoldGround);"),
+		"the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AimNearest) { $arguments += \" aimnearest=yes\" }") &&
+		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($HoldGround) { $arguments += \" holdground=yes\" }"), "the run script can ask for them");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"AIM f=\""), "the lane probe logs whom he aims at, and his hold, each frame");
+	// and his view's tilt in degrees (down is plus, as the game's own look-down limit reads it) and whether he's crouched (the owner 11-20: "What's hudson doing dying
+	// looking up?")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
+	// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" off=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" on=\""), "with his crosshair's miss and its time on");
+	// each A line has the alien's own extents, its display block's ObMinX..ObMaxX, Y and Z of the current pose, relative to its place, as NPCContainsPoint reads them
+	// (bh_waypoint.cpp 392; Bishop 23:3x: Drake's candidate 4 rests on a body model, 450 half-width and about 1,030 off the face, that the game should confirm)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" ext=\" + ExtentWords(alien)"), "an A line has the alien's extents");
+	// and an A line tells no search this frame (in=? tgtin=? npcboxes=? tgtboxes=?) from a search that found it in no box (in=- npcboxes=0) (Bishop 00:5x: Dietrich
+	// withdrew a rule built on in=- npcboxes=0, when 881 of its 897 frames had had no search at all)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Keep(w->in, sizeof(w->in), \"?\");") &&
+		Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" npcboxes=\" + (w->searched ? std::to_string(w->npcBoxes) : std::string(\"?\"))"),
+		"no search this frame reads ?, a search in no box -");
+	// HUNT'S WAY (Bishop 04:0x, Dietrich's read of SHED04's Hunt freeze: with Hudson in SHED06's pit, the marine scent can't reach SHED04, so Hunt takes SHED04 itself
+	// as its target, "arrives" and returns with no move every frame, bh_near.cpp's AlienNearState_Hunt, FarNPC_GetTargetAIModuleForGlobalHunt: stock, not a waypoint
+	// stall): an A line in Hunt says hunt=arrived (the scent's module is its own), hunt=target (it goes for a module), or hunt=wander (no module by the scent)
+	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntArrived);") &&
+		Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntTarget);") &&
+		Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntWander);"), "Hunt tells the probe which way it went");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" hunt=\" + HuntWords("), "and an A line says it");
+	// facehuggers (the owner 22:51): a LATCH line when one gets onto his face (a death in the real game, whatever his health), a hit by it, a refill it caused, and a
+	// SHOT line naming the kind
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"LATCH f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"facehugger (on his face)\"") &&
+		Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" cause=facehugger\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "std::string(\"facehugger\")"),
+		"the lane probe names a facehugger's latch, hits, refills and the bursts at one");
+	// supplygate=ceiling (the owner 21:13: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the supply's next alien only once the last one made
+	// has been on a ceiling (its on=ceiling frames, the reading the scorecard counts), or is dead; a SUPPLY GATE line each time it holds or opens
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=around supplygate=ceiling", &plan) == 0 && plan.supplyGate, "the supply can wait for a ceiling");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=around", &plan) == 0 && !plan.supplyGate, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplygate=ceiling", kHudsonRefusedSupplyGateWithoutSupply);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=around supplygate=floor", kHudsonRefusedSupplyGateNotCeiling);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=around supplygate=ceiling supplygate=ceiling", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyGate(plan.supplyGate);"), "the run tells the probe");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY GATE f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "lastMade->ceilingFrames > 0"),
+		"which makes the next one only once the last one made has been on a ceiling, and says so");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyGate) { $arguments += \" supplygate=ceiling\" }"), "the run script can ask for it");
+	// shootwithin=MM shootdelay=MS (the owner 21:27: "I want hudson to start shooting only if he's less than 4m away with a delay of 500ms"): he fires at the nearest alien
+	// once one has been that close for that long, and holds his fire otherwise; a SHOT line a burst
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes shootwithin=4000 shootdelay=500", &plan) == 0 && plan.shootWithin == 4000 && plan.shootDelay == 500,
+		"he can shoot what comes within 4 m, after half a second");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.shootWithin == 0, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=999", kHudsonRefusedShootWithinOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=20001", kHudsonRefusedShootWithinOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=4000 shootdelay=5001", kHudsonRefusedShootDelayOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootdelay=500", kHudsonRefusedShootDelayWithoutWithin);
+	Refused("-hudson level=genshd1 frames=9000 shootwithin=4000", kHudsonRefusedShootWithinWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes shootwithin=4000 shootwithin=4000", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ShootWithin(plan.shootWithin, plan.shootDelay);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SHOT f=\""), "the lane probe writes a SHOT line a burst");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($ShootWithin -gt 0) { $arguments += \" shootwithin=$ShootWithin shootdelay=$ShootDelay\" }"), "the run script can ask for it");
+	// crouchanywhere=yes (Frost 11-20: shft21's crouch-only walkway, and no duct marked with Airduct off): his grid has a place wherever a crouched marine fits
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes crouchanywhere=yes", &plan) == 0 && plan.playCrouchAnywhere, "his way can go wherever he fits crouched");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playCrouchAnywhere, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 crouchanywhere=yes", kHudsonRefusedCrouchAnywhereWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes crouchanywhere=no", kHudsonRefusedCrouchAnywhereNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes crouchanywhere=yes crouchanywhere=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_TheGridToSearch().SetCrouchAnywhere(crouchingAnywhere);"), "which tells his grid before it's built");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($CrouchAnywhere) { $arguments += \" crouchanywhere=yes\" }"), "the run script can ask for it");
+	// watchmost=S (Bishop 11-20, the owner: "have him run the level, identify genshd's triggers, go hit them all"): the full-level run plays as long as the level takes,
+	// so the watch's 3 minutes of play can be asked longer: 60 to 7200 s of game time
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=500000 lanes=watch play=yes watchmost=3600", &plan) == 0 && plan.watchMost == 3600, "the watch can play for an hour");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.watchMost == 0, "and for 3 minutes unless asked");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=59", kHudsonRefusedWatchMostOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=7201", kHudsonRefusedWatchMostOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes watchmost=600", kHudsonRefusedWatchMostWithoutWatch);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes watchmost=600 watchmost=600", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_PlayMost(plan.watchMost);"), "the run tells the probe");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "gameTime >= playMost ?"), "which ends his play there, not at 3 minutes");
+	// and with watchmost= the probe doesn't end the run on 15 s of no headway (the first full run ended at 26 s, stood below liftcar01): his own step limit
+	// (stepseconds=) moves him on, a logged cheat, so the probe waits longer than it
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long const noHeadway = playMost == 180LL * 65536 ? kPlayNoHeadway : kPlayNoHeadwayFull;"),
+		"a full run's no-headway end waits past his own step limit");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchMost -gt 0) { $arguments += \" watchmost=$WatchMost\" }"), "the run script can ask for it");
+	// THE LEVEL'S OWN NPCs in a watch run (Bishop 11-20, the snowplow: the level's own "alieninoffice", a placed alien in Wait, was kept still and shoved down Object07
+	// in every supply run; Drake: no trigger wakes it, its own near state does): they act as stock; only the generators stay still, so the supply is the only one made
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (HudsonLanes_Watching() && block->I_SBtype != I_BehaviourGenerator)"), "in a watch run, only the level's generators are kept still");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "bool HudsonLanes_Watching()"), "the probe says whether it watches");
+	Check(!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), " made; the level's own NPCs, generators and hive kept still") &&
+		!Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "the console's own); the level's own NPCs, generators and hive kept still"),
+		"and its SUPPLY lines no longer say the level's NPCs are (lanes=yes, the one-alien probe, still keeps them all)");
+	// dieroll=N (Bishop 11-20: "on every A/B and every full run", Drake: alieninoffice has 3 places, one rolled per run): the game's own QUANTUM_ROLL console variable,
+	// QuantumObjectDieRollOveride, set before the level loads, so every alternate-location group takes place N mod its count and two runs have the same layout
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes dieroll=2", &plan) == 0 && plan.dieRollAsked && plan.dieRoll == 2, "the level's layout can be fixed");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.dieRollAsked, "and is the game's own random one unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=65536", kHudsonRefusedDieRollOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=two", kHudsonRefusedDieRollOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 play=yes dieroll=1 dieroll=1", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "QuantumObjectDieRollOveride = plan.dieRoll;"), "the run sets the game's own roll before the level loads");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"; quantum roll \""), "and the probe's MODE line reads it back");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($DieRoll -ge 0) { $arguments += \" dieroll=$DieRoll\" }"), "the run script can ask for it");
+	// normals=yes, wireframe=yes (Bishop 11-20 for the owner: "when testing with hudson, can we turn on some wireframe or debug mode that allows me to see the aliens in
+	// the dark?", "Showing normals would be enough/look cool"): the debug views, render only, off unless asked (3dc/debug_view.h; Drake). They change how a pixel looks,
+	// never what the game decides, so a stock run stays one: each is a renderer flag set before any level and read back in the run's first lines beside the stock flags
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes normals=yes", &plan) == 0 && plan.viewNormals && !plan.viewWireframe, "a run can ask for the normals view");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 wireframe=yes", &plan) == 0 && plan.viewWireframe && !plan.viewNormals, "or the wireframe, with or without play");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && !plan.viewNormals && !plan.viewWireframe, "and has neither unless it asks");
+	Refused("-hudson level=genshd1 frames=9000 normals=no", kHudsonRefusedNormalsNotYes);
+	Refused("-hudson level=genshd1 frames=9000 wireframe=on", kHudsonRefusedWireframeNotYes);
+	Refused("-hudson level=genshd1 frames=9000 normals=yes normals=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "DebugView_Set(plan.viewNormals, plan.viewNormalColours, plan.viewWireframe);"), "the run sets the views before any level");
+	// the owner's correction 11-20: "When I said normal mode I meant display normals like we did on debugging shaders, not the ugly normal maps view": normals=yes is the
+	// NORMAL LINES view (normal_lines.h, J with -dev: each polygon's normals stood up as lines over the lit scene), and the colours are their own word
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if (plan.viewNormals)\n\t{\n\t\tNormalLinesOn = 1;"), "normals=yes switches the NORMAL LINES view on");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 normalcolours=yes", &plan) == 0 && plan.viewNormalColours && !plan.viewNormals, "normalcolours=yes is the colours, alone");
+	Refused("-hudson level=genshd1 frames=9000 normalcolours=no", kHudsonRefusedNormalColoursNotYes);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "StockFlags_Words() + \"; \" + DebugView_Words()"), "the run's first log line reads them back beside the stock flags");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"MODE \" + StockFlags_Words() + \"; \" + DebugView_Words()"), "and the lane probe's MODE line");
+	Check(Has(ReadSourceFile("3dc/d3d_render.cpp"), "DebugView_NormalColours() && d3d.debugNormalsEffect != kNullEffectID ? d3d.debugNormalsEffect : d3d.mainEffect"),
+		"the main list is drawn with the normals view's shaders only when asked, and they loaded");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Normals) { $arguments += \" normals=yes\" }") &&
+		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Wireframe) { $arguments += \" wireframe=yes\" }") &&
+		Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($NormalColours) { $arguments += \" normalcolours=yes\" }"), "the run script can ask for them");
+
+	// supply= (Bishop 11-20: "the probe makes a FIXED supply per run ... so two plots compare fairly in one run each"): with lanes=watch play=yes, the probe makes that many
+	// aliens at supplyat=, one every supplyevery= seconds (10 without it), the console's own way, awake; the level's own NPCs, generators and hive are kept still
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=11000,1628,26302", &plan) == 0 && plan.supply == 4 && plan.supplyAtX == 11000 &&
+		plan.supplyAtZ == 26302 && plan.supplyEvery == 10, "a fixed supply: 4 aliens at a place, one every 10 s");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=2 supplyat=1,2,3 supplyevery=30", &plan) == 0 && plan.supplyEvery == 30, "every 30 s if asked");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes", &plan) == 0 && plan.supply == 0, "none unless asked: the level's own");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch standat=4,5,6 supply=4 supplyat=1,2,3", kHudsonRefusedSupplyWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplyat=1,2,3", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=0 supplyat=1,2,3", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=9 supplyat=1,2,3", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=1,2,3 supplyevery=0", kHudsonRefusedSupplyOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supply=4 supplyat=1,2,3", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;"), "with a supply the level's own are kept still, the supply's aliens move");
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);"), "the probe is told the supply");
+	// supplyat=around (Bishop 11-20, the owner's second stretch: "while you guys spawn aliens around him"): made around Hudson as he moves, in a room he can't see 15 to
+	// 25 m from him, one every supplyevery= seconds while fewer than supply= are alive
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=3 supplyat=around supplyevery=8", &plan) == 0 && plan.supply == 3 && plan.supplyAround &&
+		plan.supplyEvery == 8, "aliens around him: up to 3 alive, one every 8 s");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=3 supplyat=1,2,3", &plan) == 0 && !plan.supplyAround, "a place is a place");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=3 supplyat=Around", kHudsonRefusedPlaceNotThreeNumbers);
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "ModuleCurrVisArray"), "a room he can't see: the game's own list of the rooms in his view");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonNav_MiddleOfRoom("), "the middle of a room, where a marine can stand (the game's own test)");
+	// on his level, by his route ahead (hudson_supply.h; the first around run made them a storey up), and a far-away one frees its slot
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_Pick(") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_HoldsASlot("),
+		"the room is chosen by hudson_supply.h's rule, and a slot freed by it");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonPlay_PlaceAhead("), "the places he walks to next come from his list");
+	// supplyin= (the owner 11-20: "We need the extra alien spawners on those corridors"): made only in the named rooms of his route, out of his sight, on his level
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=6 supplyin=pipes05,Object03,OPEN?11 supplyevery=5", &plan) == 0 && plan.supply == 6 &&
+		std::string(plan.supplyIn) == "pipes05,Object03,OPEN?11" && plan.supplyEvery == 5, "aliens in the named rooms: up to 6, one every 5 s");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=pipes05 supplyat=1,2,3", kHudsonRefusedSupplyInAndAt);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supplyin=pipes05", kHudsonRefusedSupplyNeedsPlace);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=pipes05;del", kHudsonRefusedSupplyInName);
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=6 supplyin=", kHudsonRefusedSupplyInName);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyIn(plan.supplyIn);"), "the probe is told the rooms");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_PickIn("), "and picks among them by hudson_supply.h's rule");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyIn) { $arguments += \" supplyin=$SupplyIn\" }"), "the run script can ask for it");
+	// supplyat=ahead (Bishop 22:3x, the moving full-run supply): in rooms on his way 15 to 40 m ahead along it; supplyopensky=<rooms>: where the gate times out at 30 s
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=ahead supplygate=ceiling supplyopensky=yard19,OPEN?11", &plan) == 0 &&
+		plan.supplyAhead && !plan.supplyAround && std::string(plan.supplyOpenSky) == "yard19,OPEN?11", "aliens ahead on his way, the gate timing out in the open-sky rooms");
+	Refused("-hudson level=genshd1 frames=9000 lanes=watch play=yes supply=4 supplyat=ahead supplyopensky=yard19;del", kHudsonRefusedSupplyInName);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonLanes_SupplyAhead(plan.supplyAhead, plan.supplyOpenSky);"), "the probe is told");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_PickAhead(") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "HudsonSupply_GateTimesOut("),
+		"and picks by hudson_supply.h's rule, the gate timing out by it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyOpenSky) { $arguments += \" supplyopensky=$SupplyOpenSky\" }"), "the run script can ask for it");
+	// play's own flares in the run's result (the result's flares_thrown is flare='s, the holds' flares: it read 0 on runs that threw 16)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "play_flares=%d"), "the run's result counts the flares he threw at aliens");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"SUPPLY \""), "and says it, a SUPPLY line");
+	// every hit on Hudson and every refill, a line each (the owner 11-20: "more ceiling crawling aliens him faster"; "hudson's getting more and more hurt")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"HIT f=\""), "each frame his health or armour goes down is a HIT line, with the alien nearest him");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"REFILL f=\""), "and each time his health is filled up again, a REFILL line");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Supply -gt 0) { $arguments += \" supply=$Supply\" }"), "the run script can ask for it");
+	// doorwalls=yes (Frost 11-20, Bishop for the owner: "He's choosing a closed door again, not shooting the galss"): a shut door is a wall on his grid till it opens,
+	// and a prop he breaks gets him a new grid, built on its own thread; off unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes doorwalls=yes", &plan) == 0 && plan.playDoorWalls, "his way can keep to open doors");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playDoorWalls, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 doorwalls=yes", kHudsonRefusedDoorWallsWithoutPlay);
+	Refused("-hudson level=genshd1 frames=9000 play=yes doorwalls=no", kHudsonRefusedDoorWallsNotYes);
+	Refused("-hudson level=genshd1 frames=9000 play=yes doorwalls=yes doorwalls=yes", kHudsonRefusedAskedTwice);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_DoorWalls(plan.playDoorWalls);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "LookAtTheDoors(now);") && Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_TheGridToSearch().SetShut(boxes);"),
+		"which looks at the doors and shuts them on his grid");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "HudsonNav_StartANewGrid(") && Has(ReadSourceFile("3dc/avp/hudson_nav.cpp"), "bool HudsonNav_TookTheNewGrid("),
+		"and gets a new grid after a prop breaks, swapped in when it's built");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_grid_level.cpp"), "object->SBflags.please_destroy_me"), "which leaves out a prop the game is about to take away");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($DoorWalls) { $arguments += \" doorwalls=yes\" }"), "the run script can ask for it");
+	// ribbon=off (Bishop 11-20, the films for the public): his route isn't drawn on the floor
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes ribbon=off", &plan) == 0 && plan.playRibbonOff, "his ribbon can be left off a film");
+	Refused("-hudson level=genshd1 frames=9000 play=yes ribbon=on", kHudsonRefusedRibbonNotOff);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RibbonOff(plan.playRibbonOff);"), "the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RibbonOff) { $arguments += \" ribbon=off\" }"), "the run script can ask for it");
+	// status=on (Bishop 11-20, the owner: "He got stuck now and I have no feedback why"): one line on the screen, his step, its kind and target, and what he's doing
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes status=on", &plan) == 0 && plan.playStatus, "his play can say what he's doing on the screen");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.playStatus, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes status=off", kHudsonRefusedStatusNotOn);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_ShowStatus(plan.playStatus);"), "the run tells play");
+	Check(Has(ReadSourceFile("3dc/d3d_render.cpp"), "HudsonPlay_StatusLine()"), "the renderer draws his line");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "char const *HudsonPlay_StatusLine()"), "which his play writes");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Status) { $arguments += \" status=on\" }"), "the run script can ask for it");
+	// rearguard=MM (the owner 22:24 and 22:27: "keep moving", "sprint to the end and just look back (and turn fast, 3x faster ...) if an alien comes within 5 meters
+	// and shoot him in 300ms", "run backwards ... following his plotted course focusing the closest wall crawling item? Focus on the ceiling ones")
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes rearguard=5000", &plan) == 0 && plan.rearGuard == 5000, "he can sprint his way and look back at aliens within 5 m");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && plan.rearGuard == 0, "and doesn't unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes rearguard=999", kHudsonRefusedRearGuardOutOfRange);
+	Refused("-hudson level=genshd1 frames=9000 rearguard=5000", kHudsonRefusedRearGuardWithoutPlay);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "HudsonPlay_RearGuard(plan.rearGuard);"), "the run tells play");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($RearGuard -gt 0) { $arguments += \" rearguard=$RearGuard\" }"), "the run script can ask for it");
+	// filmclock=off (Bishop 11-20, the films for the public: the machine's clock stamped in the corner of a playing Hudson's film, for join-films, isn't wanted in a
+	// solo film): no stamp; a siege's or a net pair's film keeps it unless asked
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes filmclock=off", &plan) == 0 && plan.filmClockOff, "the clock can be left out of a film");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 play=yes", &plan) == 0 && !plan.filmClockOff, "and is in it unless asked");
+	Refused("-hudson level=genshd1 frames=9000 play=yes filmclock=on", kHudsonRefusedFilmClockNotOff);
+	Check(Has(ReadSourceFile("3dc/avp/hudson.cpp"), "if ((plan.siegeRoom[0] || plan.play) && !plan.filmClockOff &&"), "the film writer leaves the stamp out");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($FilmClockOff) { $arguments += \" filmclock=off\" }"), "the run script can ask for it");
+	Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SupplyAt) { $arguments += \" supplyat=$($SupplyAt -replace 'm', '-')\" }"),
+		"and supplyat= only when it's said (an empty one ended a supplyin= batch with exit 21), a minus written m as -StandAt's (a word starting with - would read as a parameter's name)");
+
+	// his laps of the stretch for at most 3 minutes (Bishop 11-20, with Drake's test generator)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "long long playMost = 180LL * 65536;"), "he plays for at most 3 minutes of game time, unless watchmost= says longer");
+	// his list is goto lines (hudson_play_steps.h): the first v3 run (11-20 16:08) went past every "walk" step unwalked, as no switch had its name
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "if (!target && step.kind != kHudsonPlayGoTo)"), "a goto needs no object of its name: he walks there");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "case kHudsonPlayGoTo:"), "and the step is done when he gets there");
+	// he crouches by the measured ceiling, not by a room's airduct flag (the owner 11-20: "he's crouching like aliens"; "hudson doesn't need to follow that flag")
+	Check(!Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "MODULEFLAG_AIRDUCT"), "playing, he never reads a room's airduct flag");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_play.cpp"), "OnlyCrouchedFits("), "he crouches where only a crouched marine fits, measured on his grid");
+	Check(Has(ReadSourceFile("3dc/avp/bh_marine.cpp"), "MODULEFLAG_AIRDUCT"), "the game's own marines still crawl by the flag (bh_marine.cpp unchanged)");
+
+	// what each alien read, told to the probe by the alien's own code at the moment it read it (one alien's route is gone by the frame's end when several search)
+	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienBefore(sbPtr);") && Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_AlienAfter(sbPtr);"), "the near alien tells the probe before and after its state runs");
+	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "HudsonLanes_Searched(sbPtr, targetPosition, velocityDirection, found);"), "and each waypoint search what it found");
+}
+
+// stock=yes: every flag of stock_flags.h off before any level, 1999's aliens for the lane probe (the owner 2026-11-20, through Bishop: "we need any new
+// behavior we added behind a flag in AVPX or these tests mean nothing"). Added 2026-11-20 by Melanikus (Vasquez) for the AvP port.
+static void CheckStockWord()
+{
+	puts("stock=");
+
+	HudsonPlan plan;
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5 stock=yes", &plan) == 0 && plan.stock, "a run can play with every flag off");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5", &plan) == 0 && !plan.stock, "without the word, every flag is on, as for every player");
+	Check(HudsonPlan_Read("-hudson level=genshd1 frames=5 stock=yes floorislava=off", &plan) == 0 && plan.stock && plan.floorIsLavaOff,
+		"and with floorislava=off beside it (the switch turns that one off too, through the same OFF)");
+	Refused("-hudson level=genshd1 frames=5 stock=no", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=YES!", kHudsonRefusedStockNotYes);
+	Refused("-hudson level=genshd1 frames=5 stock=yes stock=yes", kHudsonRefusedAskedTwice);
+}
+
 // What tools/hudson/join-films believes about its command line and about a film, which are both from outside
 static void SecondsAre(const char *text, long expected)
 {
@@ -2804,6 +3144,8 @@ int main()
 	CheckBotFight();
 	CheckFriendlyFire();
 	CheckFloorIsLavaWord();
+	CheckLanesWord();
+	CheckStockWord();
 	TestTheGridInTheGame();
 	TestEachAliensOwnBlows();
 	printf("What a Hudson run has been asked to do:\n");

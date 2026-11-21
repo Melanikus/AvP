@@ -29,6 +29,7 @@ static_assert(MDT_NotADoor == kAIModuleNotADoor && MDT_ProxDoor == kAIModuleProx
 
 #define UseLocalAssert TRUE
 #include "ourasert.h"
+#include "stock_flags.h"   // FARLOCS4THCORNER (Vasquez 2026-11-20)
 #include <cassert> // remove
 
 /* prototypes for this file */
@@ -1269,7 +1270,7 @@ static void GetFarLocHeight(FARVALIDATEDLOCATION *location, MODULE *thisModule)
 						// Modified 2026-11-09 by Melanikus for the AvP port (#161): a four-cornered ceiling's 4th corner is taken when it's the
 						// lowest, as the line means. The 1999 code took the 3rd corner's height there (a slip of one digit), so a ceiling
 						// sloping down at its 4th corner was read as higher than it is, and a spot too low for a crouched alien could pass.
-						if(polygonData.NumberOfVertices == 4)
+						if(FarLocsFourthCornerOn && polygonData.NumberOfVertices == 4)   // FARLOCS4THCORNER off: 1999's (stock_flags.h)
 						{
 							if(polygonData.PolyPoint[3].vy > tmpHeight) tmpHeight = polygonData.PolyPoint[3].vy;
 						}
@@ -1290,7 +1291,7 @@ static void GetFarLocHeight(FARVALIDATEDLOCATION *location, MODULE *thisModule)
 						// Modified 2026-11-09 by Melanikus for the AvP port (#161): and a four-cornered floor's 4th corner when it's the
 						// highest. The 1999 code took the 3rd corner's height here too, so a creature's spot on a floor rising at its 4th
 						// corner could be put below that corner, inside the floor, and the room above it was counted as more than it is.
-						if(polygonData.NumberOfVertices == 4)
+						if(FarLocsFourthCornerOn && polygonData.NumberOfVertices == 4)   // FARLOCS4THCORNER off: 1999's (stock_flags.h)
 						{
 							if(polygonData.PolyPoint[3].vy < tmpHeight) tmpHeight = polygonData.PolyPoint[3].vy;
 						}

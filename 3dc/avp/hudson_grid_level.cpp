@@ -185,7 +185,9 @@ static void AddStillObjects(std::vector<HudsonGridPolygon> *polygons, Counts *co
 	{
 		STRATEGYBLOCK const *const object = ActiveStBlockList[i];
 
-		if (!object || !object->DynPtr || object->containingModule == 0 || object->shapeIndex < 0 || object->DynPtr->DynamicsType == DYN_TYPE_NO_COLLISIONS)
+		// a prop the game is about to take away (shot glass: please_destroy_me) isn't in his way (Frost 2026-11-20, doorwalls=yes's new grid after a prop breaks)
+		if (!object || !object->DynPtr || object->containingModule == 0 || object->shapeIndex < 0 || object->DynPtr->DynamicsType == DYN_TYPE_NO_COLLISIONS ||
+			object->SBflags.please_destroy_me)
 		{
 			continue;
 		}
