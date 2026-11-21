@@ -618,7 +618,7 @@ static void TestAimAndHold()
 	Check(play.find("if (rideStage != kGettingOff && rideStage != kWalkingToTheLift && OnTheCarNow(lift) && CarIsStoppedAt(lift, rideTo))") != std::string::npos,
 		"on the car at the stop he needs, he steps off");
 	Check(play.find("if (!CarIsStoppedAt(lift, rideFrom) && OnTheCarNow(lift))") != std::string::npos, "on the car as it moves, he's riding, wherever on the car he is");
-	Check(play.find("if (phase != kDoingTheStep && rideStage == kNotRiding)") != std::string::npos, "and the aim doesn't turn him while he rides or gets off");
+	Check(play.find("rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff)") != std::string::npos, "and the aim doesn't turn him while he gets on, rides or gets off");
 	// a DROP step: straight at a point, no grid, till he has fallen 2 m or is there (the glass's drop, cheat 1 of 22:12)
 	std::vector<HudsonPlayStep> const drops = Read("drop 22640 7792 -4500 | SHED06's lever floor, through the glass\n", "a drop line is read");
 

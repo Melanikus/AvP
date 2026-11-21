@@ -3659,6 +3659,18 @@ static void EndTheBurst()
 // SHOOTING (shootwithin=, shootdelay=; hudson_play_steps.h says when; added 2026-11-20 by Melanikus (Frost), the owner 21:33): the nearest alien nearer than
 // shootwithin that is attacking him. He turns his crosshair to it, and once it has been on it for more than shootdelay he fires (the fight's own FireAt). He holds
 // his fire otherwise, as lanes=watch has him, and keeps moving and observing. Hudson's code only.
+// The shot's crosshair, for the lane probe's AIM line (Bishop 22:4x: "Why no shot?"): how far off the alien's chest, in tenths of a degree (-1 with none in
+// shooting range), and how long it's been on it (HudsonPlay_AimedWell), in ms. Frost 2026-11-20
+static int crosshairOffBy = -1;
+static int crosshairOnFor = 0;
+
+void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)
+{
+	*offBy = shootingWithin > 0 ? crosshairOffBy : -1;
+	*onFor = crosshairOnFor;
+	*delay = (int)shootingDelay;
+}
+
 static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 {
 	static DWORD crosshairOnSince = 0;
@@ -3707,6 +3719,8 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 	{
 		crosshairOn = 0;
 		crosshairOnSince = 0;
+		crosshairOffBy = -1;
+		crosshairOnFor = 0;
 
 		if (bursting)
 		{
@@ -3722,13 +3736,24 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 	GetTargetingPointOfObject_Far(nearest, &chest);
 
 	int const toX = chest.vx - dyn->Position.vx, toZ = chest.vz - dyn->Position.vz;
-	bool const onIt = HudsonPlay_AimedWell(HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ));
+	int const angleToIt = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
+	bool const onIt = HudsonPlay_AimedWell(angleToIt);
 
 	crosshairOnSince = onIt && crosshairOn == nearest ? (crosshairOnSince ? crosshairOnSince : now) : 0;
 	crosshairOn = nearest;
-	status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
-	status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
-	TurnTowards(status, dyn, toX, toZ);
+	crosshairOffBy = (angleToIt < 0 ? -angleToIt : angleToIt) * 3600 / kHudsonPlayWholeTurn;
+	crosshairOnFor = crosshairOnSince ? (int)(now - crosshairOnSince) : 0;
+
+	// rearguard=: AimAtTheNearest has turned him already, three times as fast; the plain turn here put him back to 1x within shooting range, just where it mattered
+	bool const turnsHere = rearGuardWithin <= 0;
+
+	if (turnsHere)
+	{
+		status->Mvt_InputRequests.Flags.Rqst_TurnLeft = 0;
+		status->Mvt_InputRequests.Flags.Rqst_TurnRight = 0;
+		TurnTowards(status, dyn, toX, toZ);
+	}
+
 	LookUpOrDownAt(status, chest);
 
 	if (!HudsonPlay_ShootNow(nearestDistance, true, crosshairOnSince ? now - crosshairOnSince : 0, shootingWithin, shootingDelay))
@@ -4203,8 +4228,9 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 
 	// aimnearest=yes: his view on the nearest alien, except while he's doing a step (a press waits until he faces its switch: the full run's try 2 stood at genlev04
 	// for 240 s); then a flare that's due turns it to the one it's thrown at, for those frames
-	// and not while he rides a lift or gets off one: he has to face the landing
-	if (phase != kDoingTheStep && rideStage == kNotRiding)
+	// and not while he gets on a lift's car, rides it or gets off: he has to face the landing. Everywhere else it's on: stuck, unsticking, waiting at a door, walking
+	// to a lift or waiting for its car (Bishop 22:4x: the 22:36 run's aim was off for the whole walk to liftplt's landing, and 35 of 46 hits on him came then)
+	if (phase != kDoingTheStep && rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff)
 	{
 		AimAtTheNearest(status);
 	}

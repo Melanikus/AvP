@@ -89,6 +89,7 @@ char const *HudsonPlay_StatusLine();
 // its health then and at the burst's last frame (the game's 16.16), and whether it died
 bool HudsonPlay_TakeTheBurst(char const **name, int *distance, int *healthBefore, int *healthAfter, bool *died);
 void const *HudsonPlay_AimedAt(int *distance, bool *seen, char const **hold);
+void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay);   // the shot's crosshair: tenths of a degree off (-1: none in range), ms on it, the delay
 
 // True once he's been down his whole list (the lane probe's watch ends there: "route done")
 bool HudsonPlay_FinishedTheList();

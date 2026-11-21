@@ -1035,9 +1035,16 @@ namespace
 				STRATEGYBLOCK const *const aimed = (STRATEGYBLOCK const *)HudsonPlay_AimedAt(&aimDistance, &aimSeen, &hold);
 				Watched const *const aimedW = aimed ? Record(aimed, true) : nullptr;
 
+				// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
+				int offBy = -1, onFor = 0, delay = 0;
+
+				HudsonPlay_CrosshairFacts(&offBy, &onFor, &delay);
+
+				std::string const off = offBy < 0 ? std::string("-") : std::to_string(offBy / 10) + "." + std::to_string(offBy % 10);
+
 				Write("AIM f=" + std::to_string(frame) + " " + (aimedW ? "a" + std::to_string(aimedW->number) + " " + std::to_string(aimDistance) + " mm " + (aimSeen ? "seen" : "unseen") :
 					std::string("none")) + " hold=" + hold + " pitch=" + PitchWords(((PLAYER_STATUS *)me->SBdataptr)->ViewPanX) + " crouched=" +
-					(((PLAYER_STATUS *)me->SBdataptr)->ShapeState != PMph_Standing ? "1" : "0"));
+					(((PLAYER_STATUS *)me->SBdataptr)->ShapeState != PMph_Standing ? "1" : "0") + " off=" + off + " on=" + std::to_string(onFor) + "/" + std::to_string(delay));
 			}
 
 			if (healthSeen && health > lastHealth)
