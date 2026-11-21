@@ -65,7 +65,9 @@ $noCheckNeeded = @{
 # person has read its constructor.
 $builtBeforeTheGame = @{
     '3dc/avp/hudson_nav.cpp theMap'  = 'HudsonNavGraph() only calls Clear(), which sets its numbers back and empties its lists';
-    '3dc/avp/hudson_nav.cpp theGrid' = 'HudsonGrid() only keeps its limits and calls Clear(), which sets its numbers back and empties its lists'
+    '3dc/avp/hudson_nav.cpp theGrid' = 'HudsonGrid() only keeps its limits and calls Clear(), which sets its numbers back and empties its lists';
+    # doorwalls=yes (Frost 2026-11-20): the grid built beside the one in use; the same HudsonGrid() as theGrid, read again 2026-11-21 (hudson_grid.cpp 160-163)
+    '3dc/avp/hudson_nav.cpp nextGrid' = 'the same HudsonGrid() as theGrid: it only keeps its limits and calls Clear(), which sets its numbers back and empties its lists'
 }
 
 # ---- Reading the code

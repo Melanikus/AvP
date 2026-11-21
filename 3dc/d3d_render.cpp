@@ -686,7 +686,7 @@ extern int EditorHighlightedCount;
 static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
-static void HudsonStatus_Draw();
+static void DrawTheStatusLineOfHudsonsPlay();   // not named Hudson...: it is the game's own drawing, which check-hudson-asleep.ps1 would take for Hudson's
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
@@ -3432,7 +3432,7 @@ void ThisFramesRenderingHasFinished()
 		frameIsOpen = false;
 
 		ShadowStatus_Draw();
-		HudsonStatus_Draw();   // status=on: Hudson's play's one line, top left (Frost 2026-11-20)
+		DrawTheStatusLineOfHudsonsPlay();   // status=on: Hudson's play's one line, top left (Frost 2026-11-20)
 
 		ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
 
@@ -9022,7 +9022,7 @@ static void ShadowStatus_Draw()
 
 // Hudson's play's one line (status=on; added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why"): his step and what he's
 // doing, top left, white on a dark backing, in the tag's font. Nothing when it's off or he isn't playing (HudsonPlay_StatusLine gives "")
-static void HudsonStatus_Draw()
+static void DrawTheStatusLineOfHudsonsPlay()
 {
 	char const *const said = HudsonPlay_StatusLine();
 

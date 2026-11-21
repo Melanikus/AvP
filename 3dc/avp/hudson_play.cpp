@@ -4216,9 +4216,17 @@ void HudsonPlay_ShowStatus(bool show)
 	showingStatus = show;
 }
 
+// The game's drawing asks for this every frame (d3d_render.cpp DrawTheStatusLineOfHudsonsPlay), so it starts asleep like every way into Hudson the game
+// names (tools/check-hudson-asleep.ps1, rule 4): with no run it gives "" before it reads anything of Hudson's. (Modified 2026-11-21 by
+// Melanikus (Frost): it read showingStatus first, which only a run can set, but the check rightly refused a way in that doesn't say so itself.)
 char const *HudsonPlay_StatusLine()
 {
-	return showingStatus && !(steps.empty() && !following) ? statusLine : "";
+	if (!HudsonRunIsOn || !showingStatus || (steps.empty() && !following))
+	{
+		return "";
+	}
+
+	return statusLine;
 }
 
 // THE STATUS LINE (status=on; Frost 2026-11-20, the owner: "He got stuck now and I have no feedback why"): his step of the list, its kind and target, and what he's
