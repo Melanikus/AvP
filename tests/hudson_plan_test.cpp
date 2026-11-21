@@ -2794,6 +2794,13 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Keep(w->in, sizeof(w->in), \"?\");") &&
 		Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" npcboxes=\" + (w->searched ? std::to_string(w->npcBoxes) : std::string(\"?\"))"),
 		"no search this frame reads ?, a search in no box -");
+	// HUNT'S WAY (Bishop 04:0x, Dietrich's read of SHED04's Hunt freeze: with Hudson in SHED06's pit, the marine scent can't reach SHED04, so Hunt takes SHED04 itself
+	// as its target, "arrives" and returns with no move every frame, bh_near.cpp's AlienNearState_Hunt, FarNPC_GetTargetAIModuleForGlobalHunt: stock, not a waypoint
+	// stall): an A line in Hunt says hunt=arrived (the scent's module is its own), hunt=target (it goes for a module), or hunt=wander (no module by the scent)
+	Check(Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntArrived);") &&
+		Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntTarget);") &&
+		Has(ReadSourceFile("3dc/avp/bh_near.cpp"), "HudsonLanes_HuntWent(sbPtr, kHudsonHuntWander);"), "Hunt tells the probe which way it went");
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" hunt=\" + HuntWords("), "and an A line says it");
 	// facehuggers (the owner 22:51): a LATCH line when one gets onto his face (a death in the real game, whatever his health), a hit by it, a refill it caused, and a
 	// SHOT line naming the kind
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"LATCH f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"facehugger (on his face)\"") &&
