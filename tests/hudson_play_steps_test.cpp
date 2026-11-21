@@ -611,6 +611,15 @@ static void TestAimAndHold()
 	Check(play.find("bool const turnsHere = rearGuardWithin <= 0;") != std::string::npos, "the rear guard's turn isn't slowed by the shot");
 	// and why there's no shot (Bishop: "Log the crosshair-on time against the 300 ms each frame he's aimed"): how far off his crosshair is, and for how long it's been on
 	Check(play.find("void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)") != std::string::npos, "the shot's crosshair facts, for the AIM line");
+	// FACEHUGGERS (the owner 22:51: "we died to face huggers, we're cheating", "He must kill facehuggers"; the 22:52 run had 15 refills at step 20, seven in newhug02,
+	// about a second apart: one on his face, killing him again each time): a hugger within 10 m comes first, before any alien, and he shoots it from there
+	std::vector<HudsonPlayRearCandidate> withAHugger = { { 0, 3000, 0 }, { 1, 8000, kHudsonPlayHuggerRank } };
+	Check(HudsonPlay_PickTheRearTarget(withAHugger) == 1, "a facehugger comes before any alien, even a nearer one on the ceiling");
+	Check(HudsonPlay_ShootsFrom(true, 5000) == kHudsonPlayHuggerWithin && kHudsonPlayHuggerWithin == 10000 && HudsonPlay_ShootsFrom(false, 5000) == 5000,
+		"he shoots a facehugger from 10 m, an alien from shootwithin=");
+	Check(play.find("HuggerHeCanShoot(block)") != std::string::npos, "the rear guard's targets have the facehuggers in them, but not one already on his face");
+	Check(play.find("bool HudsonPlay_AHuggerIsOnHim()") != std::string::npos, "whether one is on his face, for the lane probe");
+	Check(play.find("\"a facehugger is on his face, and a player would be dead here\"") != std::string::npos, "and a refill says when that's what it's for");
 	// The full run at 22:12 (the owner: "he's using lifts as teleports to advance the map"): the lift rescue moved him 127 m and 74 m to lifts he had never walked to
 	// whenever his grid knew no way; and at liftplt's top, on the car at its stop, he counted "couldn't get onto the car" three times (Bishop's items 1-3)
 	Check(play.find("if (!PutHimWhereALiftGoesFrom(") == std::string::npos, "no way on his grid no longer moves him to a lift he never walked to");

@@ -2786,6 +2786,11 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
 	// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" off=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" on=\""), "with his crosshair's miss and its time on");
+	// facehuggers (the owner 22:51): a LATCH line when one gets onto his face (a death in the real game, whatever his health), a hit by it, a refill it caused, and a
+	// SHOT line naming the kind
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"LATCH f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"facehugger (on his face)\"") &&
+		Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" cause=facehugger\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "std::string(\"facehugger\")"),
+		"the lane probe names a facehugger's latch, hits, refills and the bursts at one");
 	// supplygate=ceiling (the owner 21:13: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the supply's next alien only once the last one made
 	// has been on a ceiling (its on=ceiling frames, the reading the scorecard counts), or is dead; a SUPPLY GATE line each time it holds or opens
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=around supplygate=ceiling", &plan) == 0 && plan.supplyGate, "the supply can wait for a ceiling");
