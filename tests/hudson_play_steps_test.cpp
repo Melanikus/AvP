@@ -541,6 +541,11 @@ static void TestAimAndHold()
 	Check(play.find("if (HoldingHisGround(status, dyn, aim, now))") != std::string::npos, "his walk asks whether he holds before it steers");
 	Check(play.find("AimAtTheNearest(status);") != std::string::npos, "and his view goes to the nearest each frame, before a flare's turn");
 	Check(play.find("if (step.kind == kHudsonPlayMoveTo)") != std::string::npos, "a teleport step moves him, as a logged cheat, and goes on");
+	// The full Genshd1 run, try 2 (Frost 2026-11-20): he stood at genlev04's place for 240 s and never pressed it, because the aim turned his view to an alien each
+	// frame and a press waits until he faces the switch; and he walked off liftplt's moving car into a vent halfway up
+	Check(play.find("if (phase != kDoingTheStep)\r\n\t{\r\n\t\tAimAtTheNearest(status);") != std::string::npos ||
+		play.find("if (phase != kDoingTheStep)\n\t{\n\t\tAimAtTheNearest(status);") != std::string::npos, "the aim leaves his view to a step he's doing (a press faces its switch)");
+	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
 	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
 }
 
