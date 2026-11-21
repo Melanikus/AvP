@@ -741,16 +741,18 @@ inline HudsonPlayRescue HudsonPlay_NextRescue(int timesStuckHere)
 	switch (timesStuckHere)
 	{
 		// The small things first, because they're usually enough and looking for a new way can send him a long way round. He gets a second go at them before he's moved, because being moved is a cheat.
-		case 0: return kHudsonPlayBackUp;
-		case 1: return kHudsonPlayStepLeft;
-		case 2: return kHudsonPlayStepRight;
-		case 3: return kHudsonPlayFindTheWayAgain;
-		case 4: return kHudsonPlayCrouch;
-		case 5: return kHudsonPlayJump;
-		case 6: return kHudsonPlayBackUp;
-		case 7: return kHudsonPlayStepRight;
-		case 8: return kHudsonPlayStepLeft;
-		case 9: return kHudsonPlayFindTheWayAgain;
+		// Nudges left and right first, a back-up last (the owner 11-20: "he should just try to nudge himself left and right first before running back or move
+		// backward less"; a first back-up dropped him into a lift's shaft twice). Changed 2026-11-20 by Melanikus (Frost)
+		case 0: return kHudsonPlayStepLeft;
+		case 1: return kHudsonPlayStepRight;
+		case 2: return kHudsonPlayFindTheWayAgain;
+		case 3: return kHudsonPlayCrouch;
+		case 4: return kHudsonPlayJump;
+		case 5: return kHudsonPlayBackUp;
+		case 6: return kHudsonPlayStepRight;
+		case 7: return kHudsonPlayStepLeft;
+		case 8: return kHudsonPlayFindTheWayAgain;
+		case 9: return kHudsonPlayBackUp;
 		default: return kHudsonPlayTeleport;
 	}
 }

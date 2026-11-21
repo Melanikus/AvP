@@ -83,6 +83,7 @@ static const DWORD kWaitToPickUp = 6000;
 static const DWORD kTimeBetweenPresses = 2000;
 static const int kMostPresses = 3;
 static const DWORD kRescueLasts = 500;
+static const DWORD kNudgeLasts = 150;   // a nudge left or right, or a back-up, at half his speed: about half a metre (Frost 2026-11-20, the owner: "move backward less")
 static const DWORD kSayWhereHeIsEvery = 10000;
 static const int kPlacesToSearchEachFrame = 3000;
 
@@ -505,6 +506,67 @@ static bool FindTheFloorNear(VECTORCH const &place, HudsonGridPoint *floor)
 
 // Puts him on the floor nearest the step, once for each step. If there's none, he's left where he is, because being put at the place on the list could put him inside a wall. A walk-in
 // switch is different: it's a box of air, and that place is inside it, as long as it's in a room. He just falls from there.
+// Is there floor behind him to back up onto: a grid floor about 700 mm behind him, at his height (a step up or down at most)? Frost 2026-11-20
+static bool FloorBehindHim()
+{
+	DYNAMICSBLOCK const *const dyn = Player->ObStrategyBlock->DynPtr;
+	VECTORCH const behind = { dyn->Position.vx - (int)((double)dyn->OrientMat.mat31 * 700.0 / 65536.0), dyn->Position.vy,
+		dyn->Position.vz - (int)((double)dyn->OrientMat.mat33 * 700.0 / 65536.0) };
+	HudsonGridPoint floor;
+
+	if (!FindTheFloorNear(behind, &floor))
+	{
+		return false;
+	}
+
+	double const acrossX = (double)floor.x - behind.vx, acrossZ = (double)floor.z - behind.vz;
+
+	return sqrt(acrossX * acrossX + acrossZ * acrossZ) <= 400.0 && floor.y - dyn->Position.vy <= kHudsonPlayPointReachedUpOrDown &&
+		dyn->Position.vy - floor.y <= kHudsonPlayPointReachedUpOrDown;
+}
+
+// A floor of his grid by a switch, within the use key's reach and not under or on it: of 8 places 1.2 m round it, the floors 0.5 to 2.5 m across from it and
+// at or under its height (2.5 m at most), the nearest to him. The 22:26 run's step limit put him at opslev01's own point, in its console. Frost 2026-11-20
+static bool NearTheSwitchNotOnIt(VECTORCH const &place, HudsonGridPoint *best)
+{
+	static const int kRound[8][2] = { { 10, 0 }, { -10, 0 }, { 0, 10 }, { 0, -10 }, { 7, 7 }, { 7, -7 }, { -7, 7 }, { -7, -7 } };
+	VECTORCH const here = Player->ObStrategyBlock->DynPtr->Position;
+	bool found = false;
+	double nearest = 0.0;
+
+	for (int i = 0; i < 8; i++)
+	{
+		VECTORCH const probe = { place.vx + kRound[i][0] * 120, place.vy, place.vz + kRound[i][1] * 120 };
+		HudsonGridPoint floor;
+
+		if (!FindTheFloorNear(probe, &floor))
+		{
+			continue;
+		}
+
+		double const acrossX = (double)floor.x - place.vx, acrossZ = (double)floor.z - place.vz;
+		double const across = sqrt(acrossX * acrossX + acrossZ * acrossZ);
+		int const under = floor.y - place.vy;   // y goes down: the floor under the switch is the larger
+
+		if (across < 500.0 || across > 2500.0 || under < -500 || under > 2500)
+		{
+			continue;
+		}
+
+		double const toHimX = (double)floor.x - here.vx, toHimZ = (double)floor.z - here.vz;
+		double const toHim = sqrt(toHimX * toHimX + toHimZ * toHimZ);
+
+		if (!found || toHim < nearest)
+		{
+			found = true;
+			nearest = toHim;
+			*best = floor;
+		}
+	}
+
+	return found;
+}
+
 static void MoveHimToTheStep(std::string const &why, DWORD now)
 {
 	movedToThisStep = true;
@@ -513,7 +575,12 @@ static void MoveHimToTheStep(std::string const &why, DWORD now)
 	VECTORCH place = step.kind == kHudsonPlayWalkInto || step.kind == kHudsonPlayGoTo ? StepPlace() : WhereItIs(HudsonStrategies_Find(step.name.c_str()), StepPlace());
 	HudsonGridPoint floor;
 
-	if (FindTheFloorNear(place, &floor))
+	// a switch: on the floor by it, within the use key's reach, not on it
+	if (step.kind == kHudsonPlayPress && NearTheSwitchNotOnIt(place, &floor))
+	{
+		MoveHimToTheFloorAt(floor, why + ", for " + StepTitle() + " (by it, not on it)", now);
+	}
+	else if (FindTheFloorNear(place, &floor))
 	{
 		MoveHimToTheFloorAt(floor, why + ", for " + StepTitle(), now);
 	}
@@ -1030,6 +1097,14 @@ static void CheckHesGettingSomewhere(DWORD now)
 	placeLastChangedAt = now;
 	stuckTimes++;
 	rescue = HudsonPlay_NextRescue(timesStuckHere++);
+
+	// a back-up only with floor behind him: not over a lift's shaft or a ledge (the 22:26 run fell 15.6 m twice)
+	if (rescue == kHudsonPlayBackUp && !FloorBehindHim())
+	{
+		SayAboutTheStep("no floor behind him to back up onto, so he looks for the way again instead");
+		rescue = kHudsonPlayFindTheWayAgain;
+	}
+
 	SayAboutTheStep(std::string("stuck, on the way to ") + StepTitle() + ", so " + HudsonPlay_RescueWords(rescue));
 	SayWhatsHoldingHim();
 
@@ -1045,7 +1120,7 @@ static void CheckHesGettingSomewhere(DWORD now)
 		return;
 	}
 
-	rescueUntil = now + kRescueLasts;
+	rescueUntil = now + (rescue == kHudsonPlayStepLeft || rescue == kHudsonPlayStepRight || rescue == kHudsonPlayBackUp ? kNudgeLasts : kRescueLasts);
 }
 
 // What he's trying to get out of being stuck by doing, for as long as it lasts
@@ -1060,17 +1135,17 @@ static bool DoingARescue(PLAYER_STATUS *status, DWORD now)
 	{
 		case kHudsonPlayBackUp:
 			status->Mvt_InputRequests.Flags.Rqst_Backward = 1;
-			status->Mvt_MotionIncrement = -ONE_FIXED;
+			status->Mvt_MotionIncrement = -ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayStepLeft:
 			status->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 1;
-			status->Mvt_SideStepIncrement = -ONE_FIXED;
+			status->Mvt_SideStepIncrement = -ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayStepRight:
 			status->Mvt_InputRequests.Flags.Rqst_SideStepRight = 1;
-			status->Mvt_SideStepIncrement = ONE_FIXED;
+			status->Mvt_SideStepIncrement = ONE_FIXED / 2;
 			break;
 
 		case kHudsonPlayCrouch:
