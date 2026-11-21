@@ -149,7 +149,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "LogString(std::string(\"hudson: \") + StockFlags_Words());",
+					"from": "LogString(std::string(\"hudson: \") + StockFlags_Words() + \"; \" + DebugView_Words());",
 					"to": "(void)0;"
 				}
 			]

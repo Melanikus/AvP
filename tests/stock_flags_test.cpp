@@ -160,8 +160,13 @@ static void TestTheGamesFiles()
 	}
 
 	std::string const hudson = StockFlagsGameFile("3dc/avp/hudson.cpp");
-	Check(TimesIn(hudson, "\tif (plan.stock)\n\t{\n\t\tStockFlags_AllStock();\n\t}\n\n\tLogString(std::string(\"hudson: \") + StockFlags_Words());") == 1,
-		"a Hudson run's stock=yes turns all five off before any level, and every run writes their words to the log");
+	// Since the debug views (6b57cf9f) the run sets them between the two, and its log line gives their words beside the flags' (Frost 2026-11-21, merging this test
+	// into frost-saymarks for PR #275): the switch is still turned before the line, and the line is still written by every run
+	size_t const stockAt = hudson.find("\tif (plan.stock)\n\t{\n\t\tStockFlags_AllStock();\n\t}\n");
+	size_t const wordsAt = hudson.find("\tLogString(std::string(\"hudson: \") + StockFlags_Words() + \"; \" + DebugView_Words());");
+	Check(TimesIn(hudson, "\tif (plan.stock)\n\t{\n\t\tStockFlags_AllStock();\n\t}\n") == 1 && TimesIn(hudson, "StockFlags_Words()") == 1 && stockAt != std::string::npos &&
+		wordsAt != std::string::npos && stockAt < wordsAt,
+		"a Hudson run's stock=yes turns all five off before any level, and every run then writes their words to the log");
 }
 
 int main()
