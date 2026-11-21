@@ -259,7 +259,8 @@ static int shootingWithin = 0;               // HudsonPlay_ShootWithin: shootwit
 static unsigned long shootingDelay = 0;      // shootdelay=
 static bool bursting = false, burstWaiting = false;   // a burst going on; one ended and not yet taken for the SHOT line
 static STRATEGYBLOCK const *burstAt = 0;
-static char burstName[SB_NAME_LENGTH];
+static char burstName[SB_NAME_LENGTH];         // its strategy name: SB_NAME_LENGTH bytes, not text, compared as bytes only
+static std::string burstTitle;                // what the log calls it (HudsonStrategies_Title), taken when the burst began
 static int burstDistance = 0, burstHealthBefore = 0, burstHealthAfter = 0;
 static bool burstDied = false;
 static bool gunGiven = false;
@@ -3345,7 +3346,7 @@ static void EndTheBurst()
 	burstDied = !there || burstHealthAfter <= 0 || IsAsleepOrDead(burstAt);
 	bursting = false;
 	burstWaiting = true;
-	LogString("play: a burst at " + std::string(burstName, strnlen(burstName, SB_NAME_LENGTH)) + " from " + std::to_string(burstDistance) + " mm: its health " +
+	LogString("play: a burst at " + burstTitle + " from " + std::to_string(burstDistance) + " mm: its health " +
 		std::to_string(burstHealthBefore >> ONE_FIXED_SHIFT) + " -> " + std::to_string(burstHealthAfter >> ONE_FIXED_SHIFT) + (burstDied ? ", and it died" : ""));
 }
 
@@ -3432,6 +3433,7 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 		bursting = true;
 		burstAt = nearest;
 		memcpy(burstName, nearest->SBname, SB_NAME_LENGTH);
+		burstTitle = HudsonStrategies_Title(nearest);
 		burstDistance = nearestDistance;
 		burstHealthBefore = nearest->SBDamageBlock.Health;
 	}
