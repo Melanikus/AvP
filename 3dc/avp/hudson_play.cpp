@@ -277,6 +277,7 @@ static std::vector<Lift> lifts;
 // Further down, with the rest of the lifts
 static bool OverTheCar(Lift const &lift, VECTORCH const &place, int toSpare = 0);
 static bool OverACarThatIsntLevelWith(VECTORCH const &place, int feetY);
+static bool OnACarThatsMoving();
 static bool liftsAreKnown = false;
 static std::map<int, std::vector<uint8_t> > reachedFromALanding;   // what can be walked to from each landing, by lift number times 2 plus the end. The grid never changes, so neither does this
 
@@ -1254,6 +1255,14 @@ static bool WalkOn(PLAYER_STATUS *status, DWORD now)
 		return true;
 	}
 
+	// On a platform lift's car while it moves, he stays put on it: walking would take him off it part way (the full Genshd1 run, Frost 2026-11-20: he steered
+	// off liftplt's moving car into hole02, a vent halfway up its shaft). Riding isn't being stuck
+	if (OnACarThatsMoving())
+	{
+		placeLastChangedAt = now;
+		return true;
+	}
+
 	// holdground=yes: an alien close ahead on his way, and he stands or backs off instead of walking through it; that isn't being stuck
 	if (HoldingHisGround(status, dyn, aim, now))
 	{
@@ -1564,6 +1573,14 @@ static int TheLiftHesOn()
 	}
 
 	return -1;
+}
+
+// Is he standing on a platform lift's car while it goes up or down?
+static bool OnACarThatsMoving()
+{
+	int const n = TheLiftHesOn();
+
+	return n >= 0 && (CarOf(lifts[(size_t)n])->state == PLBS_GoingUp || CarOf(lifts[(size_t)n])->state == PLBS_GoingDown);
 }
 
 // Is a place over a car that isn't stopped level with this height? Walking there would be walking into the shaft.
@@ -3487,8 +3504,12 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			break;
 	}
 
-	// aimnearest=yes: his view on the nearest alien; then a flare that's due turns it to the one it's thrown at, for those frames
-	AimAtTheNearest(status);
+	// aimnearest=yes: his view on the nearest alien, except while he's doing a step (a press waits until he faces its switch: the full run's try 2 stood at genlev04
+	// for 240 s); then a flare that's due turns it to the one it's thrown at, for those frames
+	if (phase != kDoingTheStep)
+	{
+		AimAtTheNearest(status);
+	}
 
 	// last, so that turning to an alien for a flare is what this frame does with his view; his feet still go along his way
 	FlareAtAnAlien(status, now);
