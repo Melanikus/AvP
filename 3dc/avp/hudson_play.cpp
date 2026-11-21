@@ -3686,6 +3686,8 @@ static void LookAtTheDoors(DWORD now)
 
 	shutDoorsSaid = said;
 	HudsonNav_TheGridToSearch().SetShut(boxes);
+	reachedFromALanding.clear();   // the doors changed: what each lift landing reaches is worked out again (the 22:20 run stopped at step 15 on old marks)
+	noLiftHelps = false;           // and a lift may help now where it didn't
 	LogString("play: doors: " + std::to_string((int)boxes.size()) + " shut (" + (said.empty() ? std::string("none") : said) + "), " +
 		std::to_string((int)HudsonNav_TheGrid().ShutPlaces()) + " places of his grid left out, in " + std::to_string((unsigned long)(GetTickCount() - startedAt)) + " ms");
 
@@ -3783,6 +3785,7 @@ void HudsonPlay_Input(void *playerStatus, const void *theOtherPlayer)
 			liftsAreKnown = false;
 			rideStage = kNotRiding;
 			shutDoorsSaid.clear();
+			reachedFromALanding.clear();   // a new grid: its places are new, so the landings' reach is worked out again
 		}
 
 		if (!HudsonNav_TheGrid().Ready())
