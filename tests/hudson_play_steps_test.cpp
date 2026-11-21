@@ -562,6 +562,19 @@ static void TestAimAndHold()
 	// The full run's try 5: RAMP-01AB's switch is beside the shut door MNDR01, inside its box, so his grid found no way to it and he was moved 75 m. A door whose box
 	// holds the step's own place isn't shut for that step: he has to get to it
 	Check(play.find("if (stepHere && InTheBox(box, stepPlace))") != std::string::npos, "a door beside the step's switch isn't a wall for that step");
+
+	// THE LIFT RULE (the owner 22:03: "have him not teleport until he fails to get in the lift"; Bishop): he's moved past a lift, to the landing of the stop he needed,
+	// only when he has failed it: 3 failed boardings, or 60 s at it without riding, or one ride without getting off at his stop
+	Check(!HudsonPlay_RideFailed(2, 59999, false, false), "two failed boardings in under a minute: he goes on trying");
+	Check(HudsonPlay_RideFailed(3, 1000, false, false), "the third failed boarding: he's moved");
+	Check(HudsonPlay_RideFailed(0, 60000, false, false), "a minute at the lift without riding: he's moved");
+	Check(HudsonPlay_RideFailed(0, 1000, true, false) && !HudsonPlay_RideFailed(0, 1000, true, true), "a ride without getting off at his stop: he's moved; one he got off: not");
+	// A CAGE CAR (try 7, the owner: "HE had a valid path, probably would make the genshd lift"): liftcar01's car is 4.3 m tall, so its top isn't what he stands on, and
+	// its foot had no landing; he stands on a cage's floor, its shape's bottom
+	Check(HudsonPlay_CarStandOffset(-120, 0) == -120, "a flat car: he stands on its top");
+	Check(HudsonPlay_CarStandOffset(-2337, 1941) == 1941, "a car taller than he is: on its floor");
+	Check(play.find("at.standY = at.carY + HudsonPlay_CarStandOffset(shape->shapeminy, shape->shapemaxy);") != std::string::npos, "his lift finder stands him there");
+	Check(play.find("HudsonPlay_RideFailed(boardFailures, now - atTheLiftSince, rodeOnce, false))") != std::string::npos, "and his rides follow the rule");
 	Check(play.find("return n >= 0 && OnTheCarNow(lifts[(size_t)n]) &&") != std::string::npos || play.find("OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp") != std::string::npos,
 		"and on a moving car by the same test he doesn't walk");
 	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
