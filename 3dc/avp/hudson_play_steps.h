@@ -793,7 +793,7 @@ static const int kHudsonPlayViewTurnsOneIn = 6;
 
 // A STEP HE CAN'T GET ONTO (Frost 2026-11-20; shft21 in three full runs: his grid joins the floor to a stair's first step across its side, 383 mm up, and the game
 // stops him there, Drake: poly 99 and the step sides): stuck kHudsonPlayStucksBeforeShutting times with the same way point ahead, a step up (more than 150 mm)
-// within 1.5 m across, and that step is left out of his grid, a learned shut box like a shut door's, so the way goes round (by the stair's foot)
+// within 2.4 m across, and that step is left out of his grid, a learned shut box like a shut door's, so the way goes round (by the stair's foot)
 static const int kHudsonPlayStucksBeforeShutting = 3;
 
 // THE JUMP STEP (Frost 2026-11-20; the medlab section run 2026-11-20-232611: his jump at full speed, 812 mm from the place, carried him over the 3.9 m dais and off its
@@ -819,7 +819,7 @@ inline bool HudsonPlay_JumpedUp(int across, int below, bool onTheFloor)
 
 inline bool HudsonPlay_ShutsTheStepAhead(int stucksAtThePoint, int across, int rise)
 {
-	return stucksAtThePoint >= kHudsonPlayStucksBeforeShutting && across <= 1500 && rise > 150;
+	return stucksAtThePoint >= kHudsonPlayStucksBeforeShutting && across <= 2400 && rise > 150;   // 2.4 m: 004422's second step was 2142 mm ahead
 }
 
 static const int kHudsonPlayStuckWithin = 800;          // mm: he hasn't really moved if he's still this close
